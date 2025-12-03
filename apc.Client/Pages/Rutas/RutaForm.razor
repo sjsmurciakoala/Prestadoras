@@ -1,0 +1,78 @@
+@using DevExpress.Blazor
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Ciclo *">
+            <DxComboBox TData="CicloLookupDto"
+                        TValue="int"
+                        Data="@Ciclos"
+                        ValueFieldName="@nameof(CicloLookupDto.Id)"
+                        TextFieldName="@nameof(CicloLookupDto.Descripcion)"
+                        @bind-Value="Model.CodCiclo"
+                        NullText="Seleccione un ciclo"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                        DropDownStyle="DropDownStyle.DropDownList" />
+            <ValidationMessage For="() => Model.CodCiclo" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Codigo *">
+            <DxTextBox @bind-Text="Model.CodRuta"
+                       NullText="Codigo de referencia"
+                       MaxLength="50" />
+            <ValidationMessage For="() => Model.CodRuta" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Descripcion *">
+            <DxTextBox @bind-Text="Model.Descripcion"
+                       NullText="Descripcion de la ruta"
+                       MaxLength="200" />
+            <ValidationMessage For="() => Model.Descripcion" />
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <DxValidationSummary CssClass="mb-3" />
+
+    <div class="d-flex justify-content-end">
+        <DxButton ButtonType="ButtonType.Submit"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar"
+                  Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal"
+                  CssClass="ms-2"
+                  Text="Cancelar"
+                  Enabled="@(!IsBusy)"
+                  Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public RutaUpsertDto Model { get; set; } = default!;
+
+    [Parameter]
+    public IEnumerable<CicloLookupDto> Ciclos { get; set; } = Array.Empty<CicloLookupDto>();
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}

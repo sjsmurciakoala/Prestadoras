@@ -1,0 +1,573 @@
+@page "/facturacion/miscelaneos"
+@attribute [Authorize]
+@using System.Text.Json
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Common
+@using SIAD.Core.DTOs.FacturacionMiscelaneos
+@using apc.Client.Services.Facturacion
+@inject FacturacionMiscelaneosClient FacturacionClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
+
+<DxScrollView Height="100%">
+    <DxToastProvider Name="@ToastName" MaxToastCount="4" />
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(info))
+    {
+        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@info</DxAlert>
+    }
+
+    <DxCard CssClass="mb-4">
+        <HeaderTemplate>
+            <h5 class="mb-0">Datos del cliente</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Buscar cliente">
+                    <div class="d-flex gap-2 flex-wrap">
+                        <DxTextBox @bind-Text="criterioCliente"
+                                   NullText="Clave, nombre o RTN"
+                                   Width="300px"
+                                   Enabled="@(clienteSeleccionado is null || !generandoRecibo)" />
+                        <DxButton Text="Buscar"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  ButtonType="ButtonType.Normal"
+                                  Enabled="@(!buscandoClientes && !generandoRecibo)"
+                                  Click="BuscarClientesAsync" />
+                        <DxButton Text="Limpiar"
+                                  ButtonType="ButtonType.Normal"
+                                  RenderStyle="ButtonRenderStyle.Link"
+                                  Enabled="@(!generandoRecibo)"
+                                  Click="@( _ => LimpiarCliente())" />
+                    </div>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cliente seleccionado">
+                    <DxTextBox Text="@clienteSeleccionado?.Nombre"
+                               ReadOnly="true"
+                               NullText="Sin seleccionar" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="RTN">
+                    <DxTextBox Text="@clienteSeleccionado?.Rtn"
+                               NullText="Sin definir"
+                               Enabled="@(!generandoRecibo && clienteSeleccionado is not null)"
+                               TextChanged="OnRtnChanged" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Dirección">
+                    <DxMemo Text="@clienteSeleccionado?.Direccion"
+                            NullText="Sin definir"
+                            Rows="2"
+                            Enabled="@(!generandoRecibo && clienteSeleccionado is not null)"
+                            TextChanged="OnDireccionChanged" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha">
+                    <DxDateEdit T="DateTime"
+                                Date="@fechaEmision"
+                                Enabled="false"
+                                DisplayFormat="d" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </BodyTemplate>
+    </DxCard>
+
+    <DxCard CssClass="mb-4">
+        <HeaderTemplate>
+            <div class="d-flex justify-content-between align-items-center">
+                <h5 class="mb-0">Conceptos misceláneos</h5>
+                <DxButton Text="Agregar misceláneos"
+                          CssClass="ms-auto"
+                          SizeMode="SizeMode.Small"
+                          ButtonType="ButtonType.Normal"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@PuedeAgregarConceptos"
+                          Click="@MostrarCatalogo" />
+            </div>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <DxGrid Data="@detalles"
+                    KeyFieldName="@nameof(MiscelaneoDetalleVm.Codigo)"
+                    ShowPager="false"
+                    ShowGroupPanel="false"
+                    ShowFilterRow="false">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Codigo)"
+                                      Caption="Código"
+                                      Width="140px"
+                                      AllowEdit="false"
+                                      AllowSort="false"
+                                      AllowFilter="false" />
+                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Nombre)"
+                                      Caption="Concepto"
+                                      Width="260px"
+                                      AllowSort="false"
+                                      AllowFilter="false" />
+                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Unidad)"
+                                      Caption="Unidad"
+                                      Width="120px">
+                        <CellDisplayTemplate Context="cellContext">
+                            @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
+                            {
+                                <DxSpinEdit TValue="decimal"
+                                            CssClass="w-100"
+                                            Value="@detalle.Unidad"
+                                            Min="@(0.01M)"
+                                            Increment="1"
+                                            DisplayFormat="n2"
+                                            Enabled="@PuedeEditarDetalles"
+                                            ValueChanged="@((decimal value) => OnUnidadChanged(detalle, value))"
+                                            ValueExpression="@(() => detalle.Unidad)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.ValorUnitario)"
+                                      Caption="Valor Unit."
+                                      Width="140px">
+                        <CellDisplayTemplate Context="cellContext">
+                            @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
+                            {
+                                <DxSpinEdit TValue="decimal"
+                                            CssClass="w-100"
+                                            Value="@detalle.ValorUnitario"
+                                            Min="@(0.01M)"
+                                            Increment="1"
+                                            DisplayFormat="c2"
+                                            Enabled="@PuedeEditarDetalles"
+                                            ValueChanged="@((decimal value) => OnValorUnitarioChanged(detalle, value))"
+                                            ValueExpression="@(() => detalle.ValorUnitario)" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.ValorTotal)"
+                                      Caption="Valor Total"
+                                      DisplayFormat="c2"
+                                      Width="150px"
+                                      AllowEdit="false"
+                                      AllowSort="false"
+                                      AllowFilter="false" />
+                    <DxGridCommandColumn Width="90px">
+                        <CellDisplayTemplate Context="cellContext">
+                            @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
+                            {
+                                <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                          ButtonType="ButtonType.Normal"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="oi oi-trash"
+                                          Disabled="@(!PuedeEditarDetalles)"
+                                          Click="@(() => RemoverDetalle(detalle))" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <DxAlert AlertType="AlertType.Info">
+                        Aún no se han agregado conceptos misceláneos. Usa el botón "Agregar misceláneos" para seleccionar del catálogo.
+                    </DxAlert>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+
+            <div class="d-flex justify-content-end align-items-center mt-3">
+                <strong class="me-3">Total:</strong>
+                <span class="fs-4">@Total.ToString("C2")</span>
+            </div>
+
+            <DxButton Text="Generar recibo"
+                      CssClass="mt-3"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@PuedeGenerarRecibo"
+                      Click="GenerarReciboAsync"
+                      SubmitForm="false"
+                      ButtonType="ButtonType.Normal"
+                      IconCssClass="oi oi-check"
+                      IsBusy="@generandoRecibo"
+                      BusyText="Generando..." />
+        </BodyTemplate>
+    </DxCard>
+
+    @if (ultimoRecibo is not null)
+    {
+        <DxAlert AlertType="AlertType.Success">
+            Recibo @ultimoRecibo.NumeroRecibo generado para el cliente @ultimoRecibo.ClienteClave el @ultimoRecibo.FechaEmision:d. Total @ultimoRecibo.Total.ToString("C2").
+        </DxAlert>
+    }
+</DxScrollView>
+
+<DxPopup Title="Resultados de clientes"
+         Visible="@selectorClientesVisible"
+         Width="700px"
+         Height="400px"
+         ShowFooter="false"
+         CloseButtonDisplayMode="PopupCloseButtonDisplayMode.Visible"
+         CloseOnOutsideClick="true"
+         VisibleChanged="@OnSelectorClientesVisibleChanged">
+    <DxGrid Data="@clientesEncontrados"
+            KeyFieldName="@nameof(ClienteLookupDto.Clave)"
+            ShowFilterRow="false"
+            ShowGroupPanel="false"
+            ShowPager="false">
+        <Columns>
+            <DxGridDataColumn FieldName="@nameof(ClienteLookupDto.Clave)" Caption="Clave" Width="120px" />
+            <DxGridDataColumn FieldName="@nameof(ClienteLookupDto.Nombre)" Caption="Nombre" />
+            <DxGridDataColumn FieldName="@nameof(ClienteLookupDto.Rtn)" Caption="RTN" Width="140px" />
+            <DxGridCommandColumn Caption="" Width="120px">
+                <CellDisplayTemplate Context="cellContext">
+                    @if (cellContext.DataItem is ClienteLookupDto cliente)
+                    {
+                        <DxButton Text="Seleccionar"
+                                  SizeMode="SizeMode.Small"
+                                  Click="@(() => SeleccionarCliente(cliente))" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+        <EmptyDataAreaTemplate>
+            <DxAlert AlertType="AlertType.Info">
+                No se encontraron clientes que coincidan con el criterio proporcionado.
+            </DxAlert>
+        </EmptyDataAreaTemplate>
+    </DxGrid>
+</DxPopup>
+
+<DxPopup Title="Catálogo de misceláneos"
+         Visible="@catalogoVisible"
+         Width="800px"
+         Height="500px"
+         ShowFooter="false"
+         CloseButtonDisplayMode="PopupCloseButtonDisplayMode.Visible"
+         CloseOnOutsideClick="true"
+         VisibleChanged="@OnCatalogoVisibleChanged">
+    <DxGrid Data="@catalogo"
+                KeyFieldName="@nameof(MiscelaneoCatalogoDto.Id)"
+                ShowFilterRow="true"
+                FilterRowOperatorType="FilterRowOperatorType.Contains"
+                FilterRowValueChangedDelay="250"
+                PageSize="10">
+        <Columns>
+            <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.Codigo)"
+                              Caption="Código"
+                              Width="120px" />
+            <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.Nombre)"
+                              Caption="Concepto" />
+            <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.ValorUnitario)"
+                              Caption="Valor"
+                              DisplayFormat="c2"
+                              Width="140px"
+                              AllowEdit="false" />
+            <DxGridCommandColumn Caption="" Width="100px">
+                <CellDisplayTemplate Context="cellContext">
+                    @if (cellContext.DataItem is MiscelaneoCatalogoDto item)
+                    {
+                        <DxButton RenderStyle="ButtonRenderStyle.Secondary"
+                                  SizeMode="SizeMode.Small"
+                                  Text="Agregar"
+                                  Click="@(() => AgregarDetalle(item))" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridCommandColumn>
+        </Columns>
+    </DxGrid>
+</DxPopup>
+
+@code {
+    private const string ToastName = "facturacion-miscelaneos";
+
+    private string? error;
+    private string? info;
+    private string? criterioCliente;
+    private bool buscandoClientes;
+    private bool selectorClientesVisible;
+    private bool catalogoVisible;
+    private bool generandoRecibo;
+    private string usuarioActual = "sistema";
+    private DateTime fechaEmision = DateTime.Today;
+
+    private ClienteMiscelaneoDto? clienteSeleccionado;
+    private readonly List<MiscelaneoDetalleVm> detalles = [];
+    private List<ClienteLookupDto> clientesEncontrados = new();
+    private List<MiscelaneoCatalogoDto> catalogo = new();
+    private FacturaMiscelaneoResponseDto? ultimoRecibo;
+
+    private decimal Total => detalles.Sum(d => d.ValorTotal);
+
+    private bool PuedeAgregarConceptos => clienteSeleccionado is not null && catalogo.Count > 0 && !generandoRecibo;
+
+    private bool PuedeGenerarRecibo => !generandoRecibo && clienteSeleccionado is not null && detalles.Count > 0;
+
+    private bool PuedeEditarDetalles => !generandoRecibo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCatalogoAsync();
+        await CargarUsuarioAsync();
+    }
+
+    private async Task CargarUsuarioAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        usuarioActual = authState.User?.Identity?.Name ?? "sistema";
+    }
+
+    private async Task CargarCatalogoAsync()
+    {
+        try
+        {
+            catalogo = (await FacturacionClient.GetCatalogoAsync()).OrderBy(c => c.Nombre).ToList();
+            if (catalogo.Count == 0)
+            {
+                info = "No hay conceptos misceláneos configurados. Ejecuta el seed 2025-11-11_facturacion_miscelaneos.sql para cargar datos de ejemplo.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo cargar el catálogo de misceláneos: {ex.Message}";
+            MostrarToast("Facturación miscelánea", error, ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task BuscarClientesAsync()
+    {
+        error = null;
+        clientesEncontrados = new List<ClienteLookupDto>();
+        var criterio = criterioCliente?.Trim();
+        if (string.IsNullOrWhiteSpace(criterio) || criterio.Length < 3)
+        {
+            error = "Indica al menos 3 caracteres para buscar clientes.";
+            MostrarToast("Facturación miscelánea", error, ToastRenderStyle.Warning);
+            return;
+        }
+
+        buscandoClientes = true;
+        selectorClientesVisible = true;
+        try
+        {
+            clientesEncontrados = (await FacturacionClient.SearchClientesAsync(criterio)).ToList();
+
+            if (clientesEncontrados.Count == 1)
+            {
+                SeleccionarCliente(clientesEncontrados[0]);
+            }
+            else if (clientesEncontrados.Count == 0)
+            {
+                info = "No se encontraron clientes. Ajusta el criterio de búsqueda.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo buscar clientes: {ex.Message}";
+            MostrarToast("Facturación miscelánea", error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            buscandoClientes = false;
+        }
+    }
+
+    private void SeleccionarCliente(ClienteLookupDto seleccionado)
+    {
+        clienteSeleccionado = new ClienteMiscelaneoDto
+        {
+            Clave = seleccionado.Clave,
+            Nombre = seleccionado.Nombre,
+            Direccion = seleccionado.Direccion,
+            Rtn = seleccionado.Rtn
+        };
+        criterioCliente = seleccionado.Clave;
+        selectorClientesVisible = false;
+        detalles.Clear();
+    }
+
+    private void LimpiarCliente()
+    {
+        clienteSeleccionado = null;
+        criterioCliente = null;
+        detalles.Clear();
+        ultimoRecibo = null;
+    }
+
+    private void OnSelectorClientesVisibleChanged(bool visible)
+    {
+        selectorClientesVisible = visible;
+    }
+
+    private void OnCatalogoVisibleChanged(bool visible)
+    {
+        catalogoVisible = visible;
+    }
+
+    private void MostrarCatalogo()
+    {
+        catalogoVisible = true;
+    }
+
+    private void AgregarDetalle(MiscelaneoCatalogoDto item)
+    {
+        catalogoVisible = false;
+        var codigo = item.Codigo ?? string.Empty;
+        var nombre = string.IsNullOrWhiteSpace(item.Nombre) ? codigo : item.Nombre;
+        var existente = detalles.FirstOrDefault(d => d.Codigo.Equals(codigo, StringComparison.OrdinalIgnoreCase));
+        if (existente is not null)
+        {
+            existente.Unidad += 1;
+            existente.ValorUnitario = item.ValorUnitario;
+        }
+        else
+        {
+            detalles.Add(new MiscelaneoDetalleVm
+            {
+                Codigo = codigo,
+                Nombre = nombre,
+                Unidad = 1,
+                ValorUnitario = item.ValorUnitario
+            });
+        }
+
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnUnidadChanged(MiscelaneoDetalleVm detalle, decimal value)
+    {
+        detalle.Unidad = value <= 0 ? 0.01M : value;
+        StateHasChanged();
+    }
+
+    private void OnValorUnitarioChanged(MiscelaneoDetalleVm detalle, decimal value)
+    {
+        detalle.ValorUnitario = value <= 0 ? 0.01M : value;
+        StateHasChanged();
+    }
+
+    private void RemoverDetalle(MiscelaneoDetalleVm detalle)
+    {
+        detalles.Remove(detalle);
+        InvokeAsync(StateHasChanged);
+    }
+
+    private async Task GenerarReciboAsync()
+    {
+        if (clienteSeleccionado is null)
+        {
+            error = "Selecciona un cliente antes de generar el recibo.";
+            MostrarToast("Facturación miscelánea", error, ToastRenderStyle.Warning);
+            return;
+        }
+
+        if (detalles.Count == 0)
+        {
+            error = "Agrega al menos un concepto misceláneo.";
+            MostrarToast("Facturación miscelánea", error, ToastRenderStyle.Warning);
+            return;
+        }
+
+        generandoRecibo = true;
+        error = null;
+
+        try
+        {
+            var dto = new FacturaMiscelaneoCrearDto
+            {
+                ClienteClave = clienteSeleccionado.Clave,
+                Rtn = clienteSeleccionado.Rtn,
+                Direccion = clienteSeleccionado.Direccion,
+                Usuario = usuarioActual,
+                Detalles = detalles.Select(d => new MiscelaneoDetalleDto
+                {
+                    Codigo = d.Codigo,
+                    Nombre = d.Nombre,
+                    Unidad = d.Unidad,
+                    ValorUnitario = d.ValorUnitario,
+                    ValorTotal = d.ValorTotal
+                }).ToList()
+            };
+
+            var resultado = await FacturacionClient.CrearReciboAsync(dto);
+            if (!resultado.Success)
+            {
+                error = string.IsNullOrWhiteSpace(resultado.Message)
+                    ? "No se pudo generar el recibo."
+                    : resultado.Message;
+                MostrarToast("Facturación miscelánea", error, ToastRenderStyle.Danger);
+                return;
+            }
+
+            var numeroRecibo = ExtraerNumeroRecibo(resultado);
+            if (numeroRecibo.HasValue)
+            {
+                ultimoRecibo = await FacturacionClient.GetReciboAsync(numeroRecibo.Value);
+            }
+            else
+            {
+                ultimoRecibo = null;
+            }
+
+            detalles.Clear();
+            info = "Recibo generado correctamente.";
+            MostrarToast("Facturación miscelánea", info, ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo generar el recibo: {ex.Message}";
+            MostrarToast("Facturación miscelánea", error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            generandoRecibo = false;
+        }
+    }
+
+    private static int? ExtraerNumeroRecibo(ResponseModelDto resultado)
+    {
+        if (resultado.Data is JsonElement json)
+        {
+            if (json.TryGetProperty("numrecibo", out var reciboProp) && reciboProp.TryGetInt32(out var numero))
+            {
+                return numero;
+            }
+            if (json.TryGetProperty("numRecibo", out var camelRecibo) && camelRecibo.TryGetInt32(out numero))
+            {
+                return numero;
+            }
+        }
+
+        return null;
+    }
+
+    private void OnRtnChanged(string? value)
+    {
+        if (clienteSeleccionado is not null)
+        {
+            clienteSeleccionado.Rtn = value;
+        }
+    }
+
+    private void OnDireccionChanged(string? value)
+    {
+        if (clienteSeleccionado is not null)
+        {
+            clienteSeleccionado.Direccion = value;
+        }
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+
+    private sealed class MiscelaneoDetalleVm
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public decimal Unidad { get; set; } = 1;
+        public decimal ValorUnitario { get; set; }
+        public decimal ValorTotal => Math.Round(Unidad * ValorUnitario, 2, MidpointRounding.AwayFromZero);
+    }
+}
+
+
+

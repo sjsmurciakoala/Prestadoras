@@ -1,0 +1,101 @@
+<div>
+    <DxMenu Orientation="@Orientation.Vertical" CssClass="menu display-mobile">
+        <Items>
+            <AuthorizeView Context="authContext">
+                <Authorized>
+                    <DxMenuItem NavigateUrl="Account/Manage"
+                                Text="@authContext.User.Identity?.Name"
+                                CssClass="menu-item"
+                                IconCssClass="bi bi-person-circle" />
+                    <DxMenuItem NavigateUrl="Account/Logout"
+                                Text="Log out"
+                                CssClass="menu-item"
+                                IconCssClass="bi bi-box-arrow-right" />
+                </Authorized>
+                <NotAuthorized>
+                    <DxMenuItem NavigateUrl="Account/Login"
+                                Text="Log in"
+                                CssClass="menu-item"
+                                IconCssClass="bi bi-box-arrow-in-right" />
+                </NotAuthorized>
+            </AuthorizeView>
+        </Items>
+    </DxMenu>
+
+    <DxMenu Orientation="@Orientation.Vertical" CssClass="menu">
+        <Items>
+            <DxMenuItem NavigateUrl="/"
+                        Text="Home"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-house" />
+            <DxMenuItem NavigateUrl="/counter"
+                        Text="Counter"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-plus-circle" />
+            <DxMenuItem NavigateUrl="/weather"
+                        Text="Weather"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-cloud-sun" />
+            <DxMenuItem NavigateUrl="Account/Manage"
+                        Text="Settings"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-gear" />
+            <DxMenuItem NavigateUrl="/clientes"
+                        Text="Clientes"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-people" />
+            <DxMenuItem NavigateUrl="/ordenes"
+                        Text="Órdenes"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-list-check" />
+            <DxMenuItem NavigateUrl="/rutas"
+                        Text="Rutas"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-map" />
+            <DxMenuItem NavigateUrl="/facturacion/captacion/caja"
+                        Text="Captación de Pagos"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-cash-stack" />
+            <DxMenuItem NavigateUrl="/facturacion/miscelaneos"
+                        Text="Facturación Misceláneos"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-receipt" />
+            <DxMenuItem NavigateUrl="/facturacion/notas"
+                        Text="Notas Crédito/Débito"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-journal-text" />
+            <DxMenuItem NavigateUrl="/facturacion/cobranza"
+                        Text="Cobranza"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-collection" />
+            <DxMenuItem NavigateUrl="/facturacion/captacion/reverso"
+                        Text="Reversos"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-arrow-counterclockwise" />
+            <DxMenuItem Text="Contabilidad"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-journal">
+                <Items>
+                    <DxMenuItem NavigateUrl="/contabilidad/empresas/configuracion"
+                                Text="Configuración Sistema"
+                                CssClass="menu-item" />
+                    <DxMenuItem NavigateUrl="/contabilidad/empresas/nueva"
+                                Text="Crear empresa"
+                                CssClass="menu-item" />
+                    <DxMenuItem NavigateUrl="/contabilidad/plan-cuentas"
+                                Text="Plan de cuentas"
+                                CssClass="menu-item"/>
+                    <DxMenuItem NavigateUrl="/contabilidad/centros-costo"
+                                Text="Centros de costo"
+                                CssClass="menu-item"/>
+                    <DxMenuItem NavigateUrl="/contabilidad/diarios"
+                                Text="Diarios contables"
+                                CssClass="menu-item"/>
+                    <DxMenuItem NavigateUrl="/contabilidad/periodos"
+                                Text="Períodos contables"
+                                CssClass="menu-item"/>
+                </Items>
+            </DxMenuItem>
+        </Items>
+    </DxMenu>
+</div>

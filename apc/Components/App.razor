@@ -1,0 +1,50 @@
+﻿@using Microsoft.AspNetCore.Mvc.ViewFeatures
+@using apc.Services
+@inject IFileVersionProvider FileVersionProvider
+@inject DxThemesService ThemesService
+
+<!DOCTYPE html>
+<html lang="es" data-bs-theme="@(ThemesService.IsBootstrapDarkActive ? "dark" : null)"
+    data-fluent-darkmode="@(ThemesService.IsFluentDarkModeActive ? "" : null)">
+
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <base href="/" />
+    @DxResourceManager.RegisterTheme(ThemesService.ActiveTheme)
+    @DxResourceManager.RegisterScripts()
+    <link href=@AppendVersion("css/site.css") rel="stylesheet" />
+    <link href=@AppendVersion("apc.styles.css") rel="stylesheet" />
+    <link href=@AppendVersion("lib/bootstrap-icons/font/bootstrap-icons.min.css") rel="stylesheet" />
+
+    @if (ThemesService.IsFluentActive)
+    {
+        <link href=@AppendVersion("_content/DevExpress.Blazor.Viewer/css/dx-blazor-viewer-components.fluent.css")
+            rel="stylesheet" />
+    }
+    else
+    {
+        <link href=@AppendVersion("_content/DevExpress.Blazor.Viewer/css/dx-blazor-viewer-components.bs5.css")
+            rel="stylesheet" />
+    }
+    <HeadOutlet @rendermode="PageRenderMode" />
+</head>
+
+<body>
+    <Routes @rendermode="PageRenderMode" />
+    <script src="_framework/blazor.web.js"></script>
+</body>
+
+</html>
+
+@code {
+    private string AppendVersion(string path) => FileVersionProvider.AddFileVersionToPath("/", path);
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    private IComponentRenderMode? PageRenderMode =>
+        HttpContext.Request.Path.StartsWithSegments("/Account")
+            ? null
+            : InteractiveServer;
+}

@@ -1,0 +1,162 @@
+@page "/contabilidad/centros-costo"
+@attribute [Authorize]
+@inject HttpClient Http
+
+<div class="contabilidad-page contabilidad-content">
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger">@errorMessage</DxAlert>
+    }
+
+    <DxStackLayout Orientation="Orientation.Vertical" Spacing="15px">
+        <DxStackLayoutItem>
+            <DxButton Text="Nuevo" RenderStyle="ButtonRenderStyle.Primary" Click="@(() => OpenForm(null))" />
+            <DxButton Text="Actualizar" CssClass="ms-2" Click="LoadCentrosAsync" />
+        </DxStackLayoutItem>
+        <DxStackLayoutItem>
+            <DxGrid Data="@centros"
+                    KeyFieldName="@nameof(CentroCostoDto.CostCenterId)"
+                    ShowFilterRow="true">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Code)" Caption="Código" />
+                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Name)" Caption="Nombre" />
+                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Description)" Caption="Descripción" />
+                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Status)" Caption="Estado" />
+                    <DxGridCommandColumn Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CentroCostoDto item)
+                            {
+                                <DxButton Text="Editar" Click="@(() => OpenForm(item))" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+            </DxGrid>
+        </DxStackLayoutItem>
+    </DxStackLayout>
+</div>
+
+<DxPopup @bind-Visible="isFormVisible"
+         Width="500px"
+         ShowCloseButton="true"
+         HeaderText="@popupTitle">
+    <BodyTemplate Context="popupContext">
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Código">
+                <DxTextBox @bind-Text="formModel.Code" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Nombre">
+                <DxTextBox @bind-Text="formModel.Name" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Descripción">
+                <DxMemo @bind-Text="formModel.Description" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado">
+                <DxComboBox Data="@statusOptions"
+                            @bind-Value="formModel.Status"
+                            AllowUserInput="false" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </BodyTemplate>
+    <FooterTemplate>
+        <DxButton Text="Cancelar" CssClass="me-2" Click="@(() => isFormVisible = false)" />
+        <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="SaveCentroAsync" Enabled="@( !isSaving )" />
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private readonly string[] statusOptions = new[] { "ACTIVE", "INACTIVE" };
+    private CentroCostoDto[] centros = Array.Empty<CentroCostoDto>();
+    private CentroCostoFormModel formModel = new();
+    private string popupTitle = "Nuevo centro";
+    private bool isFormVisible;
+    private bool isSaving;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCentrosAsync();
+    }
+
+    private async Task LoadCentrosAsync()
+    {
+        try
+        {
+            errorMessage = null;
+            centros = await Http.GetFromJsonAsync<CentroCostoDto[]>("api/contabilidad/catalogos/centros-costo")
+                ?? Array.Empty<CentroCostoDto>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            centros = Array.Empty<CentroCostoDto>();
+        }
+    }
+
+    private void OpenForm(CentroCostoDto? centro)
+    {
+        if (centro is null)
+        {
+            formModel = new CentroCostoFormModel { Status = "ACTIVE" };
+            popupTitle = "Nuevo centro";
+        }
+        else
+        {
+            formModel = new CentroCostoFormModel
+            {
+                CostCenterId = centro.CostCenterId,
+                Code = centro.Code,
+                Name = centro.Name,
+                Description = centro.Description,
+                Status = centro.Status
+            };
+            popupTitle = $"Editar {centro.Code}";
+        }
+
+        isFormVisible = true;
+    }
+
+    private async Task SaveCentroAsync()
+    {
+        if (string.IsNullOrWhiteSpace(formModel.Code) || string.IsNullOrWhiteSpace(formModel.Name))
+        {
+            errorMessage = "Código y nombre son obligatorios.";
+            return;
+        }
+
+        var payload = new CentroCostoUpsertDto(
+            formModel.Code.Trim(),
+            formModel.Name.Trim(),
+            string.IsNullOrWhiteSpace(formModel.Status) ? "ACTIVE" : formModel.Status!,
+            string.Empty,
+            formModel.CostCenterId,
+            string.IsNullOrWhiteSpace(formModel.Description) ? null : formModel.Description.Trim());
+
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/centros-costo", payload);
+            response.EnsureSuccessStatusCode();
+            isFormVisible = false;
+            await LoadCentrosAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    class CentroCostoFormModel
+    {
+        public long? CostCenterId { get; set; }
+        public string? Code { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public string? Status { get; set; } = "ACTIVE";
+    }
+}

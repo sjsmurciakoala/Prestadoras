@@ -1,0 +1,210 @@
+                        }
+                        else if (empresas.Count == 0)
+                        {
+                            <div class="text-muted small">No hay empresas registradas.</div>
+                        }
+                        else
+                        {
+                            <table class="table table-sm align-middle mb-0">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th scope="col">Código</th>
+                                        <th scope="col">Descripción</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var empresa in empresas)
+                                    {
+                                        <tr>
+                                            <td class="fw-semibold">@empresa.Code</td>
+                                            <td>@empresa.Name</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+                        }
+                    </div>
+                </div>
+            </div>
+        </DxCardBody>
+    </DxCard>
+
+    <DxPopup @bind-Visible="mostrarConfirmacion"
+             Width="520px"
+             ShowCloseButton="true"
+             CloseOnOutsideClick="true"
+             CloseOnEscape="true"
+             HeaderText="Confirmar creacion">
+        <BodyTemplate Context="popupContext">
+            <DxStackLayout Orientation="Orientation.Vertical" Spacing="10px">
+                <DxStackLayoutItem>
+                    <DxMessageBox Type="MessageBoxType.Alert"
+                                  RenderStyle="MessageBoxRenderStyle.Warning"
+                                  ShowIcon="true"
+                                  ShowCloseButton="false">
+                        Deseas crear la empresa con los datos proporcionados?
+                    </DxMessageBox>
+                </DxStackLayoutItem>
+                <DxStackLayoutItem>
+                    <DxFormLayout ColumnCountMd="2" CssClass="mb-2">
+                        <DxFormLayoutItem Caption="Codigo">
+                            <DxTextBox Text="@model.Codigo" ReadOnly="true" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Nombre">
+                            <DxTextBox Text="@model.Descripcion" ReadOnly="true" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Tipo">
+                            <DxTextBox Text="@model.TipoEmpresa" ReadOnly="true" />
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+                </DxStackLayoutItem>
+                <DxStackLayoutItem HorizontalAlignment="HorizontalAlignment.Right">
+                    <DxButton RenderStyle="ButtonRenderStyle.Secondary"
+                              Text="Cancelar"
+                              CssClass="me-2"
+                              Click="@(() => mostrarConfirmacion = false)" />
+                    <DxButton RenderStyle="ButtonRenderStyle.Primary"
+                              Text="Crear empresa"
+                              IconCssClass="bi bi-check2-square"
+                              Enabled="@(!guardando)"
+                              Click="@OnGuardarConfirmadoAsync" />
+                </DxStackLayoutItem>
+            </DxStackLayout>
+        </BodyTemplate>
+    </DxPopup>
+</div>
+
+@code {
+    private CompanyCreationDto model = null!;
+    private EditContext? editContext;
+    private bool guardando;
+    private string? alertaMensaje;
+    private MessageBoxRenderStyle alertaTipo = MessageBoxRenderStyle.Info;
+    private IReadOnlyList<EnumOption<CompanySizeType>> sizeOptions = Array.Empty<EnumOption<CompanySizeType>>();
+    private IReadOnlyList<EnumOption<CompanyCapitalType>> capitalOptions = Array.Empty<EnumOption<CompanyCapitalType>>();
+    private List<TenantCompanyDto> empresas = new();
+    private bool cargandoEmpresas = true;
+    private bool mostrarConfirmacion;
+    private bool mostrarMensajeCreacion;
+    private string? mensajeCreacion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        sizeOptions = Enum.GetValues<CompanySizeType>()
+            .Select(value => new EnumOption<CompanySizeType>(value, ObtenerTextoTamano(value)))
+            .ToArray();
+        capitalOptions = Enum.GetValues<CompanyCapitalType>()
+            .Select(value => new EnumOption<CompanyCapitalType>(value, ObtenerTextoCapital(value)))
+            .ToArray();
+
+        model = CrearModeloInicial();
+        ConfigurarEditContext();
+        await CargarEmpresasAsync();
+    }
+
+    private async Task AbrirConfirmacionAsync()
+    {
+        if (guardando || editContext is null)
+        {
+            return;
+        }
+
+        alertaMensaje = null;
+        mostrarMensajeCreacion = false;
+
+        if (!editContext.Validate())
+        {
+            await MostrarErroresAsync(editContext);
+            return;
+        }
+
+        mostrarConfirmacion = true;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task OnGuardarConfirmadoAsync()
+    {
+        if (!mostrarConfirmacion)
+        {
+            return;
+        }
+
+        mostrarConfirmacion = false;
+        await CrearEmpresaAsync();
+    }
+
+    private void CerrarConfirmacion()
+    {
+        mostrarConfirmacion = false;
+    }
+
+    private void OnConfirmacionCerrada(bool visible)
+    {
+        mostrarConfirmacion = visible;
+    }
+
+    private async Task CrearEmpresaAsync()
+    {
+        if (editContext is null || guardando)
+        {
+            return;
+        }
+
+        alertaMensaje = null;
+        mostrarMensajeCreacion = false;
+        guardando = true;
+
+        try
+        {
+            var creada = await EmpresasClient.CrearAsync(model);
+            mensajeCreacion = $"La empresa \"{creada.Descripcion}\" se creó correctamente (ID {creada.CompanyId}).";
+            mostrarMensajeCreacion = true;
+            model = CrearModeloInicial();
+            ConfigurarEditContext();
+            await InvokeAsync(StateHasChanged);
+            await CargarEmpresasAsync();
+        }
+        catch (HttpRequestException ex)
+        {
+            alertaTipo = MessageBoxRenderStyle.Danger;
+            alertaMensaje = ex.Message;
+        }
+        catch (InvalidOperationException ex)
+        {
+            alertaTipo = MessageBoxRenderStyle.Danger;
+            alertaMensaje = ex.Message;
+        }
+        catch (Exception ex)
+        {
+            alertaTipo = MessageBoxRenderStyle.Danger;
+            alertaMensaje = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            guardando = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private Task MostrarErroresAsync(EditContext context)
+    {
+        var errores = context.GetValidationMessages().ToList();
+        if (errores.Count == 0)
+        {
+            alertaMensaje = "Hay campos con datos incompletos o inválidos.";
+        }
+        else
+        {
+            alertaMensaje = string.Join(Environment.NewLine, errores.Select(m => $"• {m}"));
+        }
+
+        alertaTipo = MessageBoxRenderStyle.Warning;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private Task OnAlertaClosedAsync(bool _)
+    {
+        alertaMensaje = null;
+        StateHasChanged();
+        return Task.CompletedTask;

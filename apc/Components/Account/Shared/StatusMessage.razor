@@ -1,0 +1,32 @@
+﻿@if(!string.IsNullOrEmpty(DisplayMessage)) {
+    var statusMessageClass = DisplayMessage.StartsWith("Error") ? "danger" : "success";
+    <div class="alert alert-@statusMessageClass" role="alert">
+        @DisplayMessage
+    </div>
+}
+
+@code {
+    private string? messageFromCookie;
+
+    [Parameter]
+    public string? Message { get; set; }
+
+    [CascadingParameter]
+    private HttpContext? HttpContext { get; set; }
+
+    private string? DisplayMessage => Message ?? messageFromCookie;
+
+    protected override void OnInitialized()
+    {
+        if (HttpContext is null)
+        {
+            return; // no hay contexto (ej. renderizado WASM); simplemente no mostramos nada
+        }
+
+        if (HttpContext.Request.Cookies.TryGetValue(IdentityRedirectManager.StatusCookieName, out var cookieValue))
+        {
+            messageFromCookie = cookieValue;
+            HttpContext.Response.Cookies.Delete(IdentityRedirectManager.StatusCookieName);
+        }
+    }
+}

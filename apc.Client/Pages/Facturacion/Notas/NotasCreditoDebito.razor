@@ -1,0 +1,512 @@
+@page "/facturacion/notas"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.NotasCreditoDebito
+@inject NotasCreditoDebitoClient NotasClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
+
+<DxScrollView Height="100%">
+    <DxToastProvider Name="@ToastName" MaxToastCount="3" />
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(info))
+    {
+        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@info</DxAlert>
+    }
+
+    <DxCard CssClass="mb-4">
+        <HeaderTemplate>
+            <h5 class="mb-0">Buscar cliente</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Criterio">
+                    <div class="d-flex gap-2 flex-wrap align-items-end">
+                        <DxTextBox @bind-Text="criterioBusqueda"
+                                   Width="260px"
+                                   NullText="Clave, nombre o RTN"
+                                   ReadOnly="@buscandoCliente" />
+                        <DxButton Text="Buscar"
+                                  ButtonType="ButtonType.Normal"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  Enabled="@( !buscandoCliente && !string.IsNullOrWhiteSpace(criterioBusqueda))"
+                                  Click="@BuscarClientesAsync" />
+                        <DxButton Text="Limpiar"
+                                  ButtonType="ButtonType.Normal"
+                                  RenderStyle="ButtonRenderStyle.Link"
+                                  Enabled="@((clienteSeleccionado != null || !string.IsNullOrWhiteSpace(criterioBusqueda)) && !buscandoCliente)"
+                                  Click="@(_ => LimpiarCliente())" />
+                    </div>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cliente seleccionado">
+                    <DxTextBox Text="@clienteSeleccionado?.Nombre"
+                               ReadOnly="true"
+                               NullText="Sin seleccionar" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Clave / RTN">
+                    <DxTextBox Text="@clienteSeleccionado?.Clave"
+                               ReadOnly="true"
+                               NullText="N/A" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Dirección">
+                    <DxMemo Text="@clienteSeleccionado?.Direccion"
+                            NullText="Sin definir"
+                            ReadOnly="true"
+                            Rows="2" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Documento sugerido">
+                    <DxTextBox Text="@numeroDocumento"
+                               NullText="Esperando configuración"
+                               ReadOnly="true" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </BodyTemplate>
+    </DxCard>
+
+    <DxCard CssClass="mb-4">
+        <HeaderTemplate>
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+                <h5 class="mb-0">Conceptos a ajustar</h5>
+                <DxTextBox Text="@($"Total: L. {TotalNota:n2}")"
+                           ReadOnly="true"
+                           Style="width:180px;font-weight:bold;" />
+            </div>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <DxFormLayout CssClass="mb-3">
+                <DxFormLayoutItem Caption="Concepto"
+                                  ColSpanMd="4">
+                    <DxComboBox Data="@configuracion?.Tarifas"
+                                @bind-Value="detalleCodigoSeleccionado"
+                                TextFieldName="@nameof(NotaTarifaDto.ServicioDescripcion)"
+                                ValueFieldName="@nameof(NotaTarifaDto.ServicioCodigo)"
+                                NullText="Seleccione un concepto"
+                                Enabled="@(configuracion?.Tarifas?.Any() == true)" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Descripción"
+                                  ColSpanMd="4">
+                    <DxTextBox @bind-Text="detalleDescripcion"
+                               NullText="Descripción del ajuste"
+                               ReadOnly="@(configuracion?.Tarifas?.Any(t => t.ServicioCodigo == detalleCodigoSeleccionado) == true)" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Monto"
+                                  ColSpanMd="2">
+                    <DxSpinEdit @bind-Value="detalleMonto"
+                                Decimals="2"
+                                Max="1000000"
+                                Min="0"
+                                Increment="50" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption=" "
+                                  ColSpanMd="2">
+                    <DxButton Text="@(editandoDetalle ? "Actualizar" : "Agregar")"
+                              CssClass="mt-2"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              Enabled="@PuedeAgregarDetalle"
+                              Click="@(_ => AgregarDetalle())" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <DxGrid Data="@detalles"
+                    ShowGroupPanel="false"
+                    ShowFilterRow="false"
+                    PageSize="10"
+                    CssClass="mb-3">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(NotaDetalleVm.ServicioCodigo)" Caption="Código" />
+                    <DxGridDataColumn FieldName="@nameof(NotaDetalleVm.Descripcion)" Caption="Descripción" />
+                    <DxGridDataColumn FieldName="@nameof(NotaDetalleVm.Monto)" Caption="Monto" DisplayFormat="n2" Width="120px" />
+                    <DxGridDataColumn Caption="Acciones" Width="160px">
+                        <CellDisplayTemplate Context="cellContext">
+                            <div class="d-flex gap-2">
+                                <DxButton Text="Editar"
+                                          ButtonType="ButtonType.Normal"
+                                          SizeMode="SizeMode.Small"
+                                          Click="@(() => EditarDetalle((NotaDetalleVm)cellContext.DataItem))" />
+                                <DxButton Text="Quitar"
+                                          ButtonType="ButtonType.Normal"
+                                          RenderStyle="ButtonRenderStyle.Danger"
+                                          SizeMode="SizeMode.Small"
+                                          Click="@(() => QuitarDetalle((NotaDetalleVm)cellContext.DataItem))" />
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </BodyTemplate>
+    </DxCard>
+
+    <DxCard>
+        <HeaderTemplate>
+            <h5 class="mb-0">Detalle de la nota</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Tipo de nota" ColSpanMd="3">
+                    <DxComboBox Data="@tiposNota"
+                                @bind-Value="tipoNota"
+                                TextFieldName="@nameof(NotaTipoOption.Texto)"
+                                ValueFieldName="@nameof(NotaTipoOption.Valor)" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Motivo" ColSpanMd="3">
+                    <DxComboBox Data="@motivos"
+                                @bind-Value="motivoId"
+                                TextFieldName="@nameof(NotaMotivoDto.Descripcion)"
+                                ValueFieldName="@nameof(NotaMotivoDto.Id)"
+                                NullText="Seleccione un motivo" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Periodo" ColSpanMd="2">
+                    <DxTextBox @bind-Text="periodo" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Lectura" ColSpanMd="2">
+                    <DxSpinEdit @bind-Value="lectura"
+                                Decimals="2"
+                                Min="0"
+                                NullText="Opcional" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="6">
+                    <DxMemo @bind-Text="descripcion"
+                            NullText="Descripción adicional"
+                            Rows="3" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption=" " ColSpanMd="12">
+                    <DxButton Text="Registrar nota"
+                              ButtonType="ButtonType.Normal"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              Enabled="@PuedeRegistrar"
+                              Click="@RegistrarNotaAsync"
+                              SubmitFormOnClick="false" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </BodyTemplate>
+    </DxCard>
+
+    <DxPopup @bind-Visible="mostrandoResultados"
+             ShowCloseButton="true"
+             Width="700px"
+             HeaderText="Resultados de búsqueda">
+        <ChildContent>
+            <DxGrid Data="@clientes"
+                    ShowGroupPanel="false"
+                    ShowFilterRow="false"
+                    PageSize="10">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Clave)" Caption="Clave" Width="120px" />
+                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Nombre)" Caption="Nombre" />
+                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Rtn)" Caption="RTN" />
+                    <DxGridDataColumn Caption="Acciones" Width="120px">
+                        <CellDisplayTemplate Context="cellContext">
+                            <DxButton Text="Usar"
+                                      ButtonType="ButtonType.Normal"
+                                      SizeMode="SizeMode.Small"
+                                      Click="@(
+                                          async () => await SeleccionarClienteAsync((NotaClienteLookupDto)cellContext.DataItem))" />
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </ChildContent>
+    </DxPopup>
+</DxScrollView>
+
+@code {
+    private const string ToastName = "notas-credito-debito";
+    private string? criterioBusqueda;
+    private List<NotaClienteLookupDto> clientes = new();
+    private NotaClienteLookupDto? clienteSeleccionado;
+    private NotaClienteConfiguracionDto? configuracion;
+    private List<NotaDetalleVm> detalles = new();
+    private IReadOnlyList<NotaMotivoDto> motivos = Array.Empty<NotaMotivoDto>();
+    private NotaTipoDto tipoNota = NotaTipoDto.Debito;
+    private readonly IReadOnlyList<NotaTipoOption> tiposNota = Enum
+        .GetValues<NotaTipoDto>()
+        .Select(v => new NotaTipoOption { Valor = v, Texto = v.ToString() })
+        .ToList();
+    private int? motivoId;
+    private string? descripcion;
+    private string? periodo = DateTime.UtcNow.ToString("yyyyMM");
+    private string? numeroDocumento;
+    private decimal? lectura;
+    private string? _detalleCodigoSeleccionado;
+    private string? detalleCodigoSeleccionado
+    {
+        get => _detalleCodigoSeleccionado;
+        set
+        {
+            if (_detalleCodigoSeleccionado == value)
+            {
+                return;
+            }
+
+            _detalleCodigoSeleccionado = value;
+            ActualizarDetalleConcepto(value);
+        }
+    }
+    private string? detalleDescripcion;
+    private decimal detalleMonto;
+    private bool editandoDetalle;
+    private string? codigoEditado;
+    private bool buscandoCliente;
+    private bool mostrandoResultados;
+    private bool registrando;
+    private string? error;
+    private string? info;
+    private string usuarioActual = "system";
+
+    private bool PuedeAgregarDetalle =>
+        !string.IsNullOrWhiteSpace(detalleCodigoSeleccionado) &&
+        detalleMonto > 0 &&
+        clienteSeleccionado is not null;
+
+    private bool PuedeRegistrar =>
+        clienteSeleccionado is not null &&
+        motivoId.HasValue &&
+        detalles.Count > 0 &&
+        !registrando;
+
+    private decimal TotalNota => Math.Round(detalles.Sum(d => d.Monto), 2, MidpointRounding.AwayFromZero);
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        usuarioActual = authState.User.Identity?.Name ?? "system";
+        motivos = await NotasClient.ListarMotivosAsync();
+    }
+
+    private async Task BuscarClientesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(criterioBusqueda))
+        {
+            return;
+        }
+
+        error = null;
+        buscandoCliente = true;
+        try
+        {
+            clientes = (await NotasClient.BuscarClientesAsync(criterioBusqueda)).ToList();
+            mostrandoResultados = clientes.Count > 0;
+            if (clientes.Count == 0)
+            {
+                MostrarToast("Notas crédito/débito", "No se encontraron clientes con ese criterio.", ToastRenderStyle.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo buscar clientes: {ex.Message}";
+            MostrarToast("Notas crédito/débito", error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            buscandoCliente = false;
+        }
+    }
+
+    private async Task SeleccionarClienteAsync(NotaClienteLookupDto cliente)
+    {
+        clienteSeleccionado = cliente;
+        mostrandoResultados = false;
+        await CargarConfiguracionAsync();
+    }
+
+    private async Task CargarConfiguracionAsync()
+    {
+        if (clienteSeleccionado is null)
+        {
+            return;
+        }
+
+        try
+        {
+            configuracion = await NotasClient.ObtenerConfiguracionAsync(clienteSeleccionado.Clave);
+            numeroDocumento = configuracion?.ProximoDocumento > 0
+                ? configuracion!.ProximoDocumento.ToString("D6")
+                : null;
+            LimpiarDetalleForm();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo obtener la configuración del cliente: {ex.Message}";
+            MostrarToast("Notas crédito/débito", error, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void ActualizarDetalleConcepto(string? valor)
+    {
+        detalleCodigoSeleccionado = valor;
+        if (configuracion?.Tarifas is null)
+        {
+            return;
+        }
+
+        var concepto = configuracion.Tarifas.FirstOrDefault(t => t.ServicioCodigo == valor);
+        if (concepto is not null)
+        {
+            detalleDescripcion = concepto.ServicioDescripcion;
+            detalleMonto = concepto.MontoSugerido;
+        }
+    }
+
+    private void AgregarDetalle()
+    {
+        if (!PuedeAgregarDetalle || clienteSeleccionado is null)
+        {
+            return;
+        }
+
+        var descripcionFinal = string.IsNullOrWhiteSpace(detalleDescripcion)
+            ? detalleCodigoSeleccionado!
+            : detalleDescripcion!;
+
+        var existente = detalles.FirstOrDefault(d => d.ServicioCodigo == detalleCodigoSeleccionado);
+        if (existente is not null && !editandoDetalle)
+        {
+            existente.Monto = detalleMonto;
+            existente.Descripcion = descripcionFinal;
+        }
+        else if (editandoDetalle && codigoEditado is not null)
+        {
+            var editar = detalles.FirstOrDefault(d => d.ServicioCodigo == codigoEditado);
+            if (editar is not null)
+            {
+                editar.ServicioCodigo = detalleCodigoSeleccionado!;
+                editar.Descripcion = descripcionFinal;
+                editar.Monto = detalleMonto;
+            }
+        }
+        else
+        {
+            detalles.Add(new NotaDetalleVm
+            {
+                ServicioCodigo = detalleCodigoSeleccionado!,
+                Descripcion = descripcionFinal,
+                Monto = detalleMonto
+            });
+        }
+
+        LimpiarDetalleForm();
+    }
+
+    private void EditarDetalle(NotaDetalleVm detalle)
+    {
+        detalleCodigoSeleccionado = detalle.ServicioCodigo;
+        detalleDescripcion = detalle.Descripcion;
+        detalleMonto = detalle.Monto;
+        editandoDetalle = true;
+        codigoEditado = detalle.ServicioCodigo;
+    }
+
+    private void QuitarDetalle(NotaDetalleVm detalle)
+    {
+        detalles.Remove(detalle);
+    }
+
+    private void LimpiarDetalleForm()
+    {
+        detalleCodigoSeleccionado = null;
+        detalleDescripcion = null;
+        detalleMonto = 0;
+        editandoDetalle = false;
+        codigoEditado = null;
+    }
+
+    private void LimpiarCliente()
+    {
+        clienteSeleccionado = null;
+        configuracion = null;
+        clientes.Clear();
+        detalles.Clear();
+        numeroDocumento = null;
+        criterioBusqueda = null;
+        descripcion = null;
+        lectura = null;
+        motivoId = null;
+        info = null;
+        error = null;
+        LimpiarDetalleForm();
+    }
+
+    private async Task RegistrarNotaAsync()
+    {
+        if (!PuedeRegistrar || clienteSeleccionado is null || !motivoId.HasValue)
+        {
+            return;
+        }
+
+        registrando = true;
+        error = null;
+
+        try
+        {
+            var dto = new NotaCrearRequestDto
+            {
+                ClienteClave = clienteSeleccionado.Clave,
+                TipoNota = tipoNota,
+                MotivoId = motivoId.Value,
+                Descripcion = descripcion,
+                Periodo = periodo,
+                NumeroDocumento = numeroDocumento,
+                Lectura = lectura,
+                Usuario = usuarioActual,
+                Detalles = detalles.Select(d => new NotaDetalleRequestDto
+                {
+                    ServicioCodigo = d.ServicioCodigo,
+                    ServicioDescripcion = d.Descripcion,
+                    Monto = d.Monto
+                }).ToList()
+            };
+
+            var resultado = await NotasClient.RegistrarNotaAsync(dto);
+            if (!resultado.Success)
+            {
+                error = string.IsNullOrWhiteSpace(resultado.Message)
+                    ? "No se pudo registrar la nota."
+                    : resultado.Message;
+                MostrarToast("Notas crédito/débito", error, ToastRenderStyle.Danger);
+                return;
+            }
+
+            info = resultado.Message;
+            MostrarToast("Notas crédito/débito", info ?? "Nota registrada.", ToastRenderStyle.Success);
+            detalles.Clear();
+            descripcion = null;
+            lectura = null;
+            await CargarConfiguracionAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo registrar la nota: {ex.Message}";
+            MostrarToast("Notas crédito/débito", error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            registrando = false;
+        }
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+
+    private sealed class NotaDetalleVm
+    {
+        public string ServicioCodigo { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
+        public decimal Monto { get; set; }
+    }
+
+    private sealed class NotaTipoOption
+    {
+        public NotaTipoDto Valor { get; set; }
+        public string Texto { get; set; } = string.Empty;
+    }
+}

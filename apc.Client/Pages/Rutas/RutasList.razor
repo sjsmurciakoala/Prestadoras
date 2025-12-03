@@ -1,0 +1,209 @@
+@page "/rutas"
+@attribute [Authorize]
+@inject apc.Client.Services.Rutas.RutasClient Client
+
+<DxScrollView Height="100%">
+    <h3 class="mb-3">Rutas de lectura y cuadrillas</h3>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <DxFormLayout CssClass="mb-3">
+        <DxFormLayoutItem Caption="Ciclo">
+            <DxComboBox TData="CicloLookupDto"
+                        TValue="int?"
+                        Data="@ciclos"
+                        ValueFieldName="@nameof(CicloLookupDto.Id)"
+                        TextFieldName="@nameof(CicloLookupDto.Descripcion)"
+                        @bind-Value="filtro.CodCiclo"
+                        NullText="Todos los ciclos"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                        DropDownStyle="DropDownStyle.DropDownList" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Codigo ruta">
+            <DxTextBox @bind-Text="filtro.CodRuta"
+                       NullText="Buscar por codigo"
+                       MaxLength="50" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
+            <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
+            <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <div class="d-flex justify-content-between mb-2">
+        <DxButton Text="Nueva ruta"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="@(() => OpenFormAsync(null))" />
+        <DxButton Text="Actualizar"
+                  CssClass="ms-2"
+                  Click="LoadRutasAsync" />
+    </div>
+
+    @if (isLoading)
+    {
+        <p>Cargando rutas...</p>
+    }
+
+    <DxGrid Data="@rutas"
+            PageSize="15"
+            KeyboardNavigationEnabled="true">
+        <Columns>
+            <DxGridDataColumn FieldName="@nameof(RutaListItemDto.CodCiclo)" Caption="Ciclo" Width="120px" />
+            <DxGridDataColumn FieldName="@nameof(RutaListItemDto.CodRuta)" Caption="Codigo" Width="160px" />
+            <DxGridDataColumn FieldName="@nameof(RutaListItemDto.Descripcion)" Caption="Descripcion" />
+            <DxGridDataColumn Caption="Acciones" Width="140px">
+                <CellDisplayTemplate Context="cellContext">
+                    @if (cellContext.DataItem is RutaListItemDto item)
+                    {
+                        <DxButton Text="Editar"
+                                  Size="ButtonSize.Small"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="@(() => OpenFormAsync(item))" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+        </Columns>
+    </DxGrid>
+</DxScrollView>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="520px"
+         HeaderText="@PopupTitle"
+         CloseOnOutsideClick="false"
+         ShowCloseButton="true">
+    <RutaForm Model="rutaEdit"
+              Ciclos="ciclos"
+              OnValidSubmit="SaveRutaAsync"
+              OnCancel="CloseForm"
+              IsBusy="@isSaving" />
+</DxPopup>
+
+@code {
+    private readonly List<RutaListItemDto> rutas = new();
+    private readonly List<CicloLookupDto> ciclos = new();
+    private RutaFilterDto filtro = new();
+    private RutaUpsertDto rutaEdit = new();
+    private bool isLoading;
+    private bool isSaving;
+    private bool formVisible;
+    private string? errorMessage;
+
+    private string PopupTitle => rutaEdit.Id.HasValue ? "Editar ruta" : "Nueva ruta";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCiclosAsync();
+        await LoadRutasAsync();
+    }
+
+    private async Task LoadCiclosAsync()
+    {
+        try
+        {
+            var data = await Client.GetCiclosAsync();
+            ciclos.Clear();
+            ciclos.AddRange(data ?? Enumerable.Empty<CicloLookupDto>());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar la lista de ciclos: {ex.Message}";
+        }
+    }
+
+    private async Task LoadRutasAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            var data = await Client.GetAsync(filtro);
+            rutas.Clear();
+            rutas.AddRange(data ?? Enumerable.Empty<RutaListItemDto>());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar el catalogo de rutas: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task BuscarAsync() => LoadRutasAsync();
+
+    private async Task LimpiarAsync()
+    {
+        filtro = new RutaFilterDto();
+        await LoadRutasAsync();
+    }
+
+    private async Task OpenFormAsync(RutaListItemDto? ruta)
+    {
+        errorMessage = null;
+
+        if (ruta is null)
+        {
+            rutaEdit = new RutaUpsertDto();
+        }
+        else
+        {
+            var detail = await Client.GetAsync(ruta.Id);
+            rutaEdit = detail is null
+                ? new RutaUpsertDto
+                {
+                    Id = ruta.Id,
+                    CodCiclo = ruta.CodCiclo,
+                    CodRuta = ruta.CodRuta,
+                    Descripcion = ruta.Descripcion ?? string.Empty
+                }
+                : new RutaUpsertDto
+                {
+                    Id = detail.Id,
+                    CodCiclo = detail.CodCiclo,
+                    CodRuta = detail.CodRuta,
+                    Descripcion = detail.Descripcion ?? string.Empty
+                };
+        }
+
+        formVisible = true;
+    }
+
+    private void CloseForm()
+    {
+        formVisible = false;
+        rutaEdit = new RutaUpsertDto();
+    }
+
+    private async Task SaveRutaAsync()
+    {
+        try
+        {
+            isSaving = true;
+            if (rutaEdit.Id.HasValue)
+            {
+                await Client.UpdateAsync(rutaEdit.Id.Value, rutaEdit);
+            }
+            else
+            {
+                await Client.CreateAsync(rutaEdit);
+            }
+
+            formVisible = false;
+            rutaEdit = new RutaUpsertDto();
+            await LoadRutasAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo guardar la ruta: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

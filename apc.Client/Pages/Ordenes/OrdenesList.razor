@@ -1,0 +1,906 @@
+@page "/ordenes"
+@attribute [Authorize]
+@inject apc.Client.Services.Ordenes.OrdenesClient OrdenesClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
+
+<style>
+    .combo-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .combo-item-text {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .combo-item-hint {
+        font-size: 0.75rem;
+        color: #6c757d;
+        white-space: nowrap;
+    }
+
+    .estado-badge-warning {
+        background-color: #fff3cd;
+        color: #5c3c00;
+    }
+
+    .estado-badge-info {
+        background-color: #cfe2ff;
+        color: #04307c;
+    }
+
+    .estado-badge-success {
+        background-color: #d1e7dd;
+        color: #0f5132;
+    }
+
+    .estado-badge-dark {
+        background-color: #495057;
+        color: #fff;
+    }
+
+    .estado-badge-default {
+        background-color: #e2e3e5;
+        color: #41464b;
+    }
+</style>
+
+<DxScrollView Height="100%">
+    <DxToastProvider Name="OrdenesToast" MaxToastCount="4" />
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
+    }
+    else if (!string.IsNullOrEmpty(mensaje))
+    {
+        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@mensaje</DxAlert>
+    }
+
+    <DxTabs ActiveTabIndex="@tabIndex" ActiveTabIndexChanged="OnTabChanged" CssClass="mb-3">
+        <Tabs>
+            <DxTab Text="Órdenes de Trabajo Agua" />
+            <DxTab Text="Órdenes de Corte" />
+            <DxTab Text="Órdenes Alcantarillado" />
+        </Tabs>
+    </DxTabs>
+
+    <DxFormLayout CssClass="mb-3">
+        <DxFormLayoutItem Caption="Búsqueda">
+            <DxTextBox @bind-Text="filtro.Busqueda" NullText="Clave, concepto, usuario o empleado" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Estado">
+            <DxComboBox TData="OrdenTrabajoEstadoDto"
+                        TValue="string"
+                        Data="@estados"
+                        ValueFieldName="@nameof(OrdenTrabajoEstadoDto.Codigo)"
+                        TextFieldName="@nameof(OrdenTrabajoEstadoDto.Nombre)"
+                        DropDownStyle="DropDownStyle.DropDown"
+                        AllowUserInput="true"
+                        @bind-Value="filtro.Estado"
+                        Text="@estadoFiltroTexto"
+                        TextChanged="OnEstadoFiltroTextChanged"
+                        NullText="Todos los estados"
+                        FilterCondition="DataEditorFilterCondition.Contains"
+                        FilterMinLength="0"
+                        FilterDelay="250"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Tipo">
+            <DxComboBox TData="OrdenTrabajoTipoDto"
+                        TValue="string"
+                        Data="@tipos"
+                        ValueFieldName="@nameof(OrdenTrabajoTipoDto.Tipo)"
+                        TextFieldName="@nameof(OrdenTrabajoTipoDto.Descripcion)"
+                        DropDownStyle="DropDownStyle.DropDown"
+                        AllowUserInput="true"
+                        @bind-Value="filtro.Tipo"
+                        Text="@tipoFiltroTexto"
+                        TextChanged="OnTipoFiltroTextChanged"
+                        NullText="Todos los tipos"
+                        FilterCondition="DataEditorFilterCondition.Contains"
+                        FilterMinLength="0"
+                        FilterDelay="250"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                <ItemTemplate Context="tipo">
+                    <div class="combo-item">
+                        <span class="combo-item-text">@tipo.Descripcion</span>
+                        <small class="combo-item-hint">@tipo.Tipo</small>
+                    </div>
+                </ItemTemplate>
+            </DxComboBox>
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Fecha desde">
+            <DxDateEdit @bind-Date="filtro.FechaDesde" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Fecha hasta">
+            <DxDateEdit @bind-Date="filtro.FechaHasta" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Cliente (clave)">
+            <DxComboBox TData="OrdenTrabajoPropietarioDto"
+                        TValue="string"
+                        Data="@propietarios"
+                        ValueFieldName="@nameof(OrdenTrabajoPropietarioDto.Clave)"
+                        TextFieldName="@nameof(OrdenTrabajoPropietarioDto.Nombre)"
+                        DropDownStyle="DropDownStyle.DropDown"
+                        AllowUserInput="true"
+                        @bind-Value="filtro.ClienteClave"
+                        Text="@clienteFiltroTexto"
+                        TextChanged="OnClienteFiltroTextChanged"
+                        NullText="Escribe para buscar"
+                        FilterCondition="DataEditorFilterCondition.Contains"
+                        FilterMinLength="0"
+                        FilterDelay="250"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                <ItemTemplate Context="propietario">
+                    <div class="combo-item">
+                        <span class="combo-item-text">@propietario.Nombre</span>
+                        <small class="combo-item-hint">@propietario.Clave</small>
+                    </div>
+                </ItemTemplate>
+            </DxComboBox>
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
+            <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
+            <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <DxStack CssClass="mb-3" Orientation="Orientation.Horizontal">
+        <DxButton Text="Nueva orden" RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirCrear" />
+        <DxButton Text="Asignar órdenes seleccionadas" RenderStyle="ButtonRenderStyle.Secondary" CssClass="ms-2"
+            Click="AbrirAsignacion" />
+    </DxStack>
+
+    <DxGrid Data="@ordenes" @bind-SelectedDataItems="seleccionadasObjetos" SelectionMode="GridSelectionMode.Multiple"
+        KeyboardNavigationEnabled="true" PageSize="15">
+        <Columns>
+            <DxGridSelectionColumn Width="45px" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Numero)" Caption="Orden">
+                <CellDisplayTemplate Context="cell">
+                    @if (cell.DataItem is OrdenTrabajoListItemDto item)
+                    {
+                        <NavLink href="@($"/ordenes/{item.Id}")">@item.Numero</NavLink>
+                    }
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.ClienteClave)" Caption="Clave cliente" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Propietario)" Caption="Propietario" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Direccion)" Caption="Dirección" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.FechaCreacion)" Caption="Creación"
+                DisplayFormat="g" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Concepto)" Caption="Concepto" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.TipoDescripcion)" Caption="Tipo" />
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.EstadoDescripcion)" Caption="Estado">
+                <CellDisplayTemplate Context="cell">
+                    @if (cell.DataItem is OrdenTrabajoListItemDto item)
+                    {
+                        <DxBadge Text="@item.EstadoDescripcion" CssClass="@($"px-2 {GetEstadoBadgeCss(item.Estado)}")" />
+                    }
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.UsuarioAsignado)" Caption="Usuario asignado" />
+        </Columns>
+    </DxGrid>
+</DxScrollView>
+
+<DxPopup @bind-Visible="mostrarCrear" Width="640px" ShowCloseButton="true" HeaderText="Nueva orden de trabajo">
+    <TemplateContext>
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Cliente *">
+                <DxComboBox TData="OrdenTrabajoPropietarioDto"
+                            TValue="string"
+                            Data="propietarios"
+                            ValueFieldName="@nameof(OrdenTrabajoPropietarioDto.Clave)"
+                            TextFieldName="@nameof(OrdenTrabajoPropietarioDto.Nombre)"
+                            DropDownStyle="DropDownStyle.DropDown"
+                            AllowUserInput="true"
+                            @bind-Value="nuevo.ClienteClave"
+                            Text="@clienteCrearTexto"
+                            TextChanged="OnClienteCrearTextChanged"
+                            NullText="Escribe para buscar"
+                            FilterCondition="DataEditorFilterCondition.Contains"
+                            FilterMinLength="0"
+                            FilterDelay="250"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                    <ItemTemplate Context="propietario">
+                        <div class="combo-item">
+                            <span class="combo-item-text">@propietario.Nombre</span>
+                            <small class="combo-item-hint">@propietario.Clave</small>
+                        </div>
+                    </ItemTemplate>
+                </DxComboBox>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha *">
+                <DxDateEdit @bind-Date="nuevo.Fecha"
+                            MinDate="@DateTime.Today"
+                            AllowUserInput="false" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tipo *">
+                <DxComboBox TData="OrdenTrabajoTipoDto"
+                            TValue="string"
+                            Data="tipos"
+                            ValueFieldName="@nameof(OrdenTrabajoTipoDto.Tipo)"
+                            TextFieldName="@nameof(OrdenTrabajoTipoDto.Descripcion)"
+                            DropDownStyle="DropDownStyle.DropDown"
+                            AllowUserInput="true"
+                            @bind-Value="nuevo.Tipo"
+                            Text="@tipoCrearTexto"
+                            TextChanged="OnTipoCrearTextChanged"
+                            NullText="Selecciona o escribe"
+                            FilterCondition="DataEditorFilterCondition.Contains"
+                            FilterMinLength="0"
+                            FilterDelay="250"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                    <ItemTemplate Context="tipo">
+                        <div class="combo-item">
+                            <span class="combo-item-text">@tipo.Descripcion</span>
+                            <small class="combo-item-hint">@tipo.Tipo</small>
+                        </div>
+                    </ItemTemplate>
+                </DxComboBox>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Concepto *">
+                <DxMemo @bind-Text="nuevo.Concepto" Rows="3" @ref="conceptoMemo" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Personas">
+                <DxTextBox @bind-Text="nuevo.Personas" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Empleado">
+                <DxComboBox TData="UsuarioMiOrdenDto"
+                            TValue="string"
+                            Data="usuarios"
+                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Usuario)"
+                            TextFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
+                            DropDownStyle="DropDownStyle.DropDown"
+                            AllowUserInput="true"
+                            @bind-Value="nuevo.Empleado"
+                            Text="@empleadoCrearTexto"
+                            TextChanged="OnEmpleadoCrearTextChanged"
+                            NullText="Escribe para buscar"
+                            FilterCondition="DataEditorFilterCondition.Contains"
+                            FilterMinLength="0"
+                            FilterDelay="250"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Usuario">
+                <DxTextBox @bind-Text="nuevo.Usuario" ReadOnly="true" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Saldo estimado">
+                <DxSpinEdit @bind-Value="nuevo.Saldo" Increment="0.10m" DisplayFormat="n2" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
+                <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="GuardarNuevaOrdenAsync" />
+                <DxButton Text="Cancelar" CssClass="ms-2" Click="CerrarCrear" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </TemplateContext>
+</DxPopup>
+
+<DxPopup @bind-Visible="mostrarAsignar" Width="500px" ShowCloseButton="true" HeaderText="Asignar órdenes seleccionadas">
+    <TemplateContext>
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Usuario">
+                <DxComboBox TData="UsuarioMiOrdenDto"
+                            TValue="string"
+                            Data="usuarios"
+                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Usuario)"
+                            TextFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
+                            DropDownStyle="DropDownStyle.DropDown"
+                            AllowUserInput="true"
+                            @bind-Value="usuarioAsignacion"
+                            Text="@usuarioAsignacionTexto"
+                            TextChanged="OnUsuarioAsignacionTextChanged"
+                            NullText="Escribe para buscar"
+                            FilterCondition="DataEditorFilterCondition.Contains"
+                            FilterMinLength="0"
+                            FilterDelay="250"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado">
+                <DxComboBox TData="OrdenTrabajoEstadoDto"
+                            TValue="string"
+                            Data="@estadosAsignacion"
+                            ValueFieldName="@nameof(OrdenTrabajoEstadoDto.Codigo)"
+                            TextFieldName="@nameof(OrdenTrabajoEstadoDto.Nombre)"
+                            DropDownStyle="DropDownStyle.DropDown"
+                            AllowUserInput="true"
+                            @bind-Value="estadoAsignacion"
+                            Text="@estadoAsignacionTexto"
+                            TextChanged="OnEstadoAsignacionTextChanged"
+                            NullText="Selecciona un estado"
+                            FilterCondition="DataEditorFilterCondition.Contains"
+                            FilterMinLength="0"
+                            FilterDelay="250"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Empleado">
+                <DxComboBox TData="UsuarioMiOrdenDto"
+                            TValue="string"
+                            Data="usuarios"
+                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Usuario)"
+                            TextFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
+                            DropDownStyle="DropDownStyle.DropDown"
+                            AllowUserInput="true"
+                            @bind-Value="empleadoAsignacion"
+                            Text="@empleadoAsignacionTexto"
+                            TextChanged="OnEmpleadoAsignacionTextChanged"
+                            NullText="Escribe para buscar"
+                            FilterCondition="DataEditorFilterCondition.Contains"
+                            FilterMinLength="0"
+                            FilterDelay="250"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Resumen">
+                <p>@($"Se asignarán {SeleccionadasOrdenes.Count()} orden(es).")</p>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
+                <DxButton Text="Asignar" RenderStyle="ButtonRenderStyle.Primary" Click="ConfirmarAsignacionAsync" />
+                <DxButton Text="Cancelar" CssClass="ms-2" Click="CerrarAsignacion" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </TemplateContext>
+</DxPopup>
+
+@code {
+    private const string ToastProviderName = "OrdenesToast";
+
+    private readonly OrdenTrabajoFilterDto filtro = new();
+    private IReadOnlyList<OrdenTrabajoListItemDto> ordenes = Array.Empty<OrdenTrabajoListItemDto>();
+    private IReadOnlyList<object> seleccionadasObjetos = Array.Empty<object>();
+    private IEnumerable<OrdenTrabajoListItemDto> SeleccionadasOrdenes =>
+    seleccionadasObjetos.OfType<OrdenTrabajoListItemDto>();
+    private IReadOnlyList<UsuarioMiOrdenDto> usuarios = Array.Empty<UsuarioMiOrdenDto>();
+    private IReadOnlyList<OrdenTrabajoEstadoDto> estados = Array.Empty<OrdenTrabajoEstadoDto>();
+    private IReadOnlyList<OrdenTrabajoEstadoDto> estadosAsignacion = Array.Empty<OrdenTrabajoEstadoDto>();
+    private IReadOnlyList<OrdenTrabajoTipoDto> tipos = Array.Empty<OrdenTrabajoTipoDto>();
+    private IReadOnlyList<OrdenTrabajoPropietarioDto> propietarios = Array.Empty<OrdenTrabajoPropietarioDto>();
+    private CrearOrdenTrabajoDto nuevo = new();
+    private bool mostrarCrear;
+    private bool mostrarAsignar;
+    private string? error;
+    private string? mensaje;
+    private int tabIndex;
+    private string departamentoActivo = "01";
+    private string? usuarioActual;
+    private string? usuarioAsignacion;
+    private string? empleadoAsignacion;
+    private string? estadoAsignacion;
+    private string tipoFiltroTexto = string.Empty;
+    private string clienteFiltroTexto = string.Empty;
+    private string estadoFiltroTexto = string.Empty;
+    private string clienteCrearTexto = string.Empty;
+    private string tipoCrearTexto = string.Empty;
+    private string empleadoCrearTexto = string.Empty;
+    private string usuarioAsignacionTexto = string.Empty;
+    private string empleadoAsignacionTexto = string.Empty;
+    private string estadoAsignacionTexto = string.Empty;
+
+    private bool clienteInvalido;
+    private bool tipoInvalido;
+    private bool fechaInvalida;
+    private bool conceptoInvalido;
+    private bool empleadoInvalido;
+
+    private DxMemo? conceptoMemo;
+
+    private CancellationTokenSource? tiposFiltroCts;
+    private CancellationTokenSource? clientesFiltroCts;
+    private CancellationTokenSource? estadosFiltroCts;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarUsuarioActualAsync();
+        await CargarCatalogosInicialesAsync();
+        await BuscarAsync();
+    }
+
+    private async Task CargarUsuarioActualAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        usuarioActual = authState.User.Identity?.Name;
+    }
+
+    private async Task CargarCatalogosInicialesAsync()
+    {
+        try
+        {
+            filtro.Departamento = departamentoActivo;
+
+            estados = await OrdenesClient.BuscarEstadosAsync(null, 20);
+            estadosAsignacion = estados.Where(e => e.PermiteAsignacion).Any()
+            ? estados.Where(e => e.PermiteAsignacion).ToList()
+            : estados;
+
+            if (string.IsNullOrWhiteSpace(estadoAsignacion) || !estadosAsignacion.Any(e => e.Codigo == estadoAsignacion))
+            {
+                estadoAsignacion = estadosAsignacion.FirstOrDefault()?.Codigo;
+            }
+
+            tipos = await OrdenesClient.BuscarTiposAsync(departamentoActivo, null, 20);
+            propietarios = await OrdenesClient.BuscarPropietariosAsync(null, 20);
+            usuarios = await OrdenesClient.GetUsuariosAsync(MapearTipoNumerico(tabIndex));
+        }
+        catch (Exception ex)
+        {
+            ManejarErrorCatalogo("cargar catálogos iniciales", ex);
+            estados = Array.Empty<OrdenTrabajoEstadoDto>();
+            estadosAsignacion = Array.Empty<OrdenTrabajoEstadoDto>();
+            tipos = Array.Empty<OrdenTrabajoTipoDto>();
+            propietarios = Array.Empty<OrdenTrabajoPropietarioDto>();
+            usuarios = Array.Empty<UsuarioMiOrdenDto>();
+        }
+    }
+
+    private async Task BuscarAsync()
+    {
+        try
+        {
+            error = null;
+            mensaje = null;
+            filtro.Departamento = departamentoActivo;
+            ordenes = await OrdenesClient.GetOrdenesAsync(filtro);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            ordenes = Array.Empty<OrdenTrabajoListItemDto>();
+        }
+    }
+
+    private async Task LimpiarAsync()
+    {
+        filtro.Busqueda = null;
+        filtro.Estado = null;
+        filtro.Tipo = null;
+        filtro.FechaDesde = null;
+        filtro.FechaHasta = null;
+        filtro.ClienteClave = null;
+        tipoFiltroTexto = string.Empty;
+        clienteFiltroTexto = string.Empty;
+        estadoFiltroTexto = string.Empty;
+        await BuscarAsync();
+    }
+
+    private void AbrirCrear()
+    {
+        clienteInvalido = false;
+        tipoInvalido = false;
+        fechaInvalida = false;
+        conceptoInvalido = false;
+        empleadoInvalido = false;
+
+        nuevo = new CrearOrdenTrabajoDto
+        {
+            Fecha = DateTime.Today,
+            Usuario = usuarioActual ?? string.Empty,
+            Tipo = string.Empty,
+            Estado = "P"
+        };
+        clienteCrearTexto = string.Empty;
+        tipoCrearTexto = string.Empty;
+        empleadoCrearTexto = string.Empty;
+
+        mostrarCrear = true;
+        mensaje = null;
+        error = null;
+    }
+
+    private async Task GuardarNuevaOrdenAsync()
+    {
+        if (!await ValidarNuevaOrdenAsync())
+        {
+            return;
+        }
+
+        var resultado = await OrdenesClient.CrearOrdenAsync(nuevo);
+        if (resultado.Exitoso)
+        {
+            mensaje = resultado.Mensaje;
+            mostrarCrear = false;
+            ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Success);
+            await BuscarAsync();
+        }
+        else
+        {
+            error = resultado.Mensaje;
+            ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void CerrarCrear()
+    {
+        mostrarCrear = false;
+    }
+
+    private void AbrirAsignacion()
+    {
+        if (!SeleccionadasOrdenes.Any())
+        {
+            error = "Seleccione al menos una orden para asignar.";
+            ShowToast("Órdenes de trabajo", error, ToastRenderStyle.Danger);
+            return;
+        }
+
+        usuarioAsignacion = usuarios.FirstOrDefault()?.Usuario ?? usuarioActual;
+        empleadoAsignacion = usuarioAsignacion;
+        estadoAsignacion ??= estadosAsignacion.FirstOrDefault()?.Codigo;
+        usuarioAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == usuarioAsignacion)?.Nombre ?? string.Empty;
+        empleadoAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == empleadoAsignacion)?.Nombre ?? string.Empty;
+        estadoAsignacionTexto = estadosAsignacion.FirstOrDefault(e => e.Codigo == estadoAsignacion)?.Nombre ?? string.Empty;
+        mostrarAsignar = true;
+        mensaje = null;
+        error = null;
+    }
+
+    private async Task ConfirmarAsignacionAsync()
+    {
+        var dto = new OrdenTrabajoAsignacionDto
+        {
+            NumerosOrden = SeleccionadasOrdenes.Select(o => o.Numero).Distinct().ToList(),
+            Usuario = usuarioAsignacion ?? usuarioActual ?? string.Empty,
+            Estado = estadoAsignacion,
+            Empleado = empleadoAsignacion
+        };
+
+        var resultado = await OrdenesClient.AsignarOrdenesAsync(dto);
+        if (resultado.Exitoso)
+        {
+            mensaje = resultado.Mensaje;
+            mostrarAsignar = false;
+            ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Success);
+            await BuscarAsync();
+        }
+        else
+        {
+            error = resultado.Mensaje;
+            ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void CerrarAsignacion()
+    {
+        mostrarAsignar = false;
+    }
+
+    private async Task OnTabChanged(int index)
+    {
+        tabIndex = index;
+        departamentoActivo = index switch
+        {
+            0 => "01",
+            1 => "03",
+            2 => "02",
+            _ => "01"
+        };
+
+        await CargarCatalogosInicialesAsync();
+        await BuscarAsync();
+    }
+
+    private async Task<bool> ValidarNuevaOrdenAsync()
+    {
+        var clienteExiste = !string.IsNullOrWhiteSpace(nuevo.ClienteClave) && propietarios.Any(p => p.Clave == nuevo.ClienteClave);
+        var tipoExiste = !string.IsNullOrWhiteSpace(nuevo.Tipo) && tipos.Any(t => t.Tipo == nuevo.Tipo);
+        var empleadoTieneValor = !string.IsNullOrWhiteSpace(nuevo.Empleado);
+        var empleadoExiste = empleadoTieneValor && usuarios.Any(u => u.Usuario == nuevo.Empleado);
+
+        clienteInvalido = !clienteExiste;
+        tipoInvalido = !tipoExiste;
+        fechaInvalida = nuevo.Fecha == default;
+        conceptoInvalido = string.IsNullOrWhiteSpace(nuevo.Concepto);
+        empleadoInvalido = empleadoTieneValor && !empleadoExiste;
+
+        if (!clienteInvalido && !tipoInvalido && !fechaInvalida && !conceptoInvalido && !empleadoInvalido)
+        {
+            return true;
+        }
+
+        var faltantes = new List<string>();
+        if (clienteInvalido)
+        {
+            faltantes.Add("cliente");
+        }
+
+        if (tipoInvalido)
+        {
+            faltantes.Add("tipo");
+        }
+
+        if (fechaInvalida)
+        {
+            faltantes.Add("fecha");
+        }
+
+        if (conceptoInvalido)
+        {
+            faltantes.Add("concepto");
+        }
+
+        if (empleadoInvalido)
+        {
+            faltantes.Add("empleado");
+        }
+
+        ShowToast("Órdenes de trabajo", $"Completa los campos obligatorios: {string.Join(", ", faltantes)}.",
+        ToastRenderStyle.Danger);
+
+        if (conceptoInvalido && conceptoMemo is not null)
+        {
+            await conceptoMemo.FocusAsync();
+        }
+
+        return false;
+    }
+
+    private void OnEstadoFiltroTextChanged(string texto)
+    {
+        estadoFiltroTexto = texto;
+        _ = RecargarEstadosAsync(texto);
+    }
+
+    private void OnEstadoAsignacionTextChanged(string texto)
+    {
+        estadoAsignacionTexto = texto;
+        _ = RecargarEstadosAsync(texto);
+    }
+
+    private void OnTipoFiltroTextChanged(string texto)
+    {
+        tipoFiltroTexto = texto;
+        _ = RecargarTiposAsync(texto);
+    }
+
+    private void OnTipoCrearTextChanged(string texto)
+    {
+        tipoCrearTexto = texto;
+        _ = RecargarTiposAsync(texto);
+    }
+
+    private void OnClienteFiltroTextChanged(string texto)
+    {
+        clienteFiltroTexto = texto;
+        _ = RecargarPropietariosAsync(texto);
+    }
+
+    private void OnClienteCrearTextChanged(string texto)
+    {
+        clienteCrearTexto = texto;
+        _ = RecargarPropietariosAsync(texto);
+    }
+
+    private void OnEmpleadoCrearTextChanged(string texto)
+    {
+        empleadoCrearTexto = texto;
+        _ = RecargarUsuariosAsync(texto);
+    }
+
+    private void OnUsuarioAsignacionTextChanged(string texto)
+    {
+        usuarioAsignacionTexto = texto;
+        _ = RecargarUsuariosAsync(texto);
+    }
+
+    private void OnEmpleadoAsignacionTextChanged(string texto)
+    {
+        empleadoAsignacionTexto = texto;
+        _ = RecargarUsuariosAsync(texto);
+    }
+
+    private async Task RecargarEstadosAsync(string? texto)
+    {
+        estadosFiltroCts?.Cancel();
+        estadosFiltroCts = new CancellationTokenSource();
+        var token = estadosFiltroCts.Token;
+
+        try
+        {
+            var catalogo = await OrdenesClient.BuscarEstadosAsync(texto, 20, token);
+            if (!token.IsCancellationRequested)
+            {
+                estados = catalogo;
+                estadosAsignacion = catalogo.Where(e => e.PermiteAsignacion).Any()
+                    ? catalogo.Where(e => e.PermiteAsignacion).ToList()
+                    : catalogo;
+
+                if (!string.IsNullOrWhiteSpace(filtro.Estado) && !estados.Any(e => e.Codigo == filtro.Estado))
+                {
+                    filtro.Estado = null;
+                    estadoFiltroTexto = string.Empty;
+                }
+
+                if (!string.IsNullOrWhiteSpace(estadoAsignacion) && !estadosAsignacion.Any(e => e.Codigo == estadoAsignacion))
+                {
+                    estadoAsignacion = null;
+                }
+
+                if (string.IsNullOrWhiteSpace(estadoAsignacion))
+                {
+                    estadoAsignacion = estadosAsignacion.FirstOrDefault()?.Codigo;
+                }
+
+                estadoAsignacionTexto = estadosAsignacion
+                    .FirstOrDefault(e => e.Codigo == estadoAsignacion)?.Nombre ?? string.Empty;
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            ManejarErrorCatalogo("cargar estados", ex);
+        }
+    }
+
+    private async Task RecargarTiposAsync(string? texto)
+    {
+        tiposFiltroCts?.Cancel();
+        tiposFiltroCts = new CancellationTokenSource();
+        var token = tiposFiltroCts.Token;
+
+        try
+        {
+            var catalogo = await OrdenesClient.BuscarTiposAsync(departamentoActivo, texto, 20, token);
+            if (!token.IsCancellationRequested)
+            {
+                tipos = catalogo;
+                if (!string.IsNullOrWhiteSpace(filtro.Tipo) && tipos.All(t => t.Tipo != filtro.Tipo))
+                {
+                    filtro.Tipo = null;
+                    tipoFiltroTexto = string.Empty;
+                }
+
+                if (!string.IsNullOrWhiteSpace(nuevo.Tipo) && tipos.All(t => t.Tipo != nuevo.Tipo))
+                {
+                    nuevo.Tipo = null;
+                    tipoCrearTexto = string.Empty;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            ManejarErrorCatalogo("cargar tipos", ex);
+        }
+    }
+
+    private async Task RecargarPropietariosAsync(string? texto)
+    {
+        clientesFiltroCts?.Cancel();
+        clientesFiltroCts = new CancellationTokenSource();
+        var token = clientesFiltroCts.Token;
+
+        try
+        {
+            var catalogo = await OrdenesClient.BuscarPropietariosAsync(texto, 20, token);
+            if (!token.IsCancellationRequested)
+            {
+                propietarios = catalogo;
+                if (!string.IsNullOrWhiteSpace(filtro.ClienteClave) && propietarios.All(p => p.Clave != filtro.ClienteClave))
+                {
+                    filtro.ClienteClave = null;
+                    clienteFiltroTexto = string.Empty;
+                }
+
+                if (!string.IsNullOrWhiteSpace(nuevo.ClienteClave) && propietarios.All(p => p.Clave != nuevo.ClienteClave))
+                {
+                    nuevo.ClienteClave = null;
+                    clienteCrearTexto = string.Empty;
+                }
+
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            ManejarErrorCatalogo("cargar propietarios", ex);
+        }
+    }
+
+    private async Task RecargarUsuariosAsync(string? texto)
+    {
+        try
+        {
+            var tipoNumerico = MapearTipoNumerico(tabIndex);
+            var lista = await OrdenesClient.GetUsuariosAsync(tipoNumerico);
+
+            if (!string.IsNullOrWhiteSpace(texto))
+            {
+                lista = lista
+                    .Where(u => (!string.IsNullOrWhiteSpace(u.Nombre) && u.Nombre.Contains(texto, StringComparison.OrdinalIgnoreCase))
+                        || (!string.IsNullOrWhiteSpace(u.Usuario) && u.Usuario.Contains(texto, StringComparison.OrdinalIgnoreCase)))
+                    .ToList();
+            }
+
+            usuarios = lista;
+            if (!string.IsNullOrWhiteSpace(nuevo.Empleado) && usuarios.All(u => u.Usuario != nuevo.Empleado))
+            {
+                nuevo.Empleado = null;
+                empleadoCrearTexto = string.Empty;
+            }
+            else if (!string.IsNullOrWhiteSpace(nuevo.Empleado))
+            {
+                empleadoCrearTexto = usuarios.FirstOrDefault(u => u.Usuario == nuevo.Empleado)?.Nombre ?? string.Empty;
+            }
+            else
+            {
+                empleadoCrearTexto = string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(usuarioAsignacion) && usuarios.All(u => u.Usuario != usuarioAsignacion))
+            {
+                usuarioAsignacion = usuarios.FirstOrDefault()?.Usuario ?? usuarioActual;
+            }
+
+            if (!string.IsNullOrWhiteSpace(empleadoAsignacion) && usuarios.All(u => u.Usuario != empleadoAsignacion))
+            {
+                empleadoAsignacion = usuarioAsignacion;
+            }
+
+            usuarioAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == usuarioAsignacion)?.Nombre ?? string.Empty;
+            empleadoAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == empleadoAsignacion)?.Nombre ?? string.Empty;
+
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            ManejarErrorCatalogo("cargar usuarios", ex);
+        }
+    }
+
+    private static string GetEstadoBadgeCss(string estado) =>
+    estado switch
+    {
+        "P" => "estado-badge-warning",
+        "A" => "estado-badge-info",
+        "E" => "estado-badge-success",
+        "C" => "estado-badge-dark",
+        _ => "estado-badge-default"
+    };
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastProviderName,
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+    }
+
+    private static int? MapearTipoNumerico(int indice)
+    {
+        return indice switch
+        {
+            0 => 1,
+            1 => 2,
+            2 => 3,
+            _ => null
+        };
+    }
+
+    private void ManejarErrorCatalogo(string contexto, Exception ex)
+    {
+        var mensajeError = $"No se pudo {contexto}. {ex.Message}";
+        error = mensajeError;
+        ShowToast("Órdenes de trabajo", mensajeError, ToastRenderStyle.Danger);
+    }
+}

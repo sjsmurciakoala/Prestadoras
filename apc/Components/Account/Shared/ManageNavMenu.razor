@@ -1,0 +1,58 @@
+﻿@using Microsoft.AspNetCore.Identity
+@using apc.Data
+
+@inject SignInManager<ApplicationUser> SignInManager
+@inject NavigationManager NavigationManager
+@rendermode InteractiveServer
+
+<DxTabs ActiveTabIndex="ActiveTabIndex"
+        ActiveTabIndexChanged="@OnTabIndexChanged">
+    @foreach(var tab in tabs) {
+        <DxTab TabIconCssClass="@($"tab-icon icon {tab.IconCssClass}")"
+        Text="@tab.Text"
+        Visible="@tab.Visible" />
+    }
+</DxTabs>
+
+@code {
+    [SupplyParameterFromQuery(Name = UrlGenerator.ToggleSidebarName)]
+    public bool ToggledSidebar { get; set; }
+
+    bool hasExternalLogins;
+    ManageNavMenuTabModel[] tabs = Array.Empty<ManageNavMenuTabModel>();
+
+    int ActiveTabIndex { get; set; }
+
+    protected override async Task OnInitializedAsync() {
+        hasExternalLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync()).Any();
+
+        tabs = [
+            new("Profile", "Account/Manage", "icon-profile"),
+            new("Email", "Account/Manage/Email", "icon-email"),
+            new("Password", "Account/Manage/ChangePassword", "icon-password"),
+            new("External login", "Account/Manage/ExternalLogins", "icon-external") { Visible = hasExternalLogins },
+            new("Two-factor authentication", "Account/Manage/TwoFactorAuthentication", "icon-two-factor"),
+            new("Personal Data", "Account/Manage/PersonalData", "icon-personal")
+        ];
+    }
+
+    protected override void OnAfterRender(bool firstRender) {
+        ActiveTabIndex = Array.FindLastIndex(tabs, tab => NavigationManager.Uri.Contains(tab.Uri));
+        if(ActiveTabIndex >= 0)
+            StateHasChanged();
+    }
+
+    private void OnTabIndexChanged(int index) {
+        if(index != ActiveTabIndex) {
+            ActiveTabIndex = index;
+            NavigationManager.NavigateTo(UrlGenerator.GetUrl(tabs[index].Uri, ToggledSidebar));
+        }
+    }
+
+    class ManageNavMenuTabModel(string text, string uri, string iconCssClass) {
+        public string Text { get; } = text;
+        public string Uri { get; } = uri;
+        public string IconCssClass { get; } = iconCssClass;
+        public bool Visible { get; init; } = true;
+    }
+}

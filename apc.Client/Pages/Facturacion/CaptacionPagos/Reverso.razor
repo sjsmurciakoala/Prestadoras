@@ -1,0 +1,215 @@
+@page "/facturacion/captacion/reverso"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@inject apc.Client.Services.CaptacionPagos.CaptacionPagosClient CaptacionClient
+@inject IToastNotificationService ToastService
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<DxScrollView Height="100%">
+    <DxToastProvider Name="@ToastName" MaxToastCount="3" />
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+    }
+
+    <DxCard CssClass="mb-4">
+        <HeaderTemplate>
+            <h5 class="mb-0">Reverso de pago</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <EditForm Model="@reverso" OnValidSubmit="BuscarPagoAsync" Context="reversoContext">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Factura">
+                        <DxTextBox @bind-Text="reverso.NumFactura" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Cliente">
+                        <DxTextBox @bind-Text="reverso.ClienteClave" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem>
+                        <DxButton Text="Consultar" ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Secondary" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </EditForm>
+
+            @if (pagoActual is not null)
+            {
+                <div class="mt-4">
+                    <div><strong>Factura:</strong> @pagoActual.Header.NumFactura</div>
+                    <div><strong>Cliente:</strong> @pagoActual.Header.ClienteClave</div>
+                    <div><strong>Total:</strong> @pagoActual.Header.Total.ToString("C2")</div>
+                    <div><strong>Estado:</strong> @pagoActual.Header.Estado</div>
+                    <div><strong>Caja:</strong> @(pagoActual.Header.CajaNombre ?? pagoActual.Header.CajaId?.ToString() ?? "N/D")</div>
+                </div>
+
+                <DxDataGrid Data="@pagoActual.Detalles" CssClass="mt-3">
+                    <Columns>
+                        <DxDataGridColumn FieldName="@nameof(CaptacionDetailDto.Linea)" Caption="Linea" />
+                        <DxDataGridColumn FieldName="@nameof(CaptacionDetailDto.Servicio)" Caption="Servicio" />
+                        <DxDataGridSpinEditColumn FieldName="@nameof(CaptacionDetailDto.MontoValor)" Caption="Monto" DisplayFormat="c2" />
+                    </Columns>
+                </DxDataGrid>
+
+                <DxButton CssClass="mt-3"
+                          Text="Reversar pago"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          Click="ConfirmarReversoAsync"
+                          Enabled="@(!procesando)"
+                          IconCssClass="bi bi-arrow-counterclockwise" />
+            }
+        </BodyTemplate>
+    </DxCard>
+
+    <DxCard>
+        <HeaderTemplate>
+            <h5 class="mb-0">Pagos miscelaneos recientes</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Cliente">
+                    <DxTextBox @bind-Text="clienteMiscelaneo" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem>
+                    <DxButton Text="Filtrar" Click="CargarMiscelaneosAsync" RenderStyle="ButtonRenderStyle.Secondary" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <DxDataGrid Data="@miscelaneos" ShowFilterRow="false" PageSize="10">
+                <Columns>
+                    <DxDataGridColumn FieldName="@nameof(ReciboMiscelaneoDto.Recibo)" Caption="Recibo" />
+                    <DxDataGridColumn FieldName="@nameof(ReciboMiscelaneoDto.Cliente)" Caption="Cliente" />
+                    <DxDataGridColumn FieldName="@nameof(ReciboMiscelaneoDto.Fecha)" Caption="Fecha" DisplayFormat="g" />
+                    <DxDataGridSpinEditColumn FieldName="@nameof(ReciboMiscelaneoDto.Total)" Caption="Total" DisplayFormat="c2" />
+                    <DxDataGridColumn FieldName="@nameof(ReciboMiscelaneoDto.Estado)" Caption="Estado" />
+                </Columns>
+            </DxDataGrid>
+            @if (miscelaneos.Count == 0 && string.IsNullOrWhiteSpace(error))
+            {
+                <DxAlert AlertType="AlertType.Info" CssClass="mt-2">
+                    No se encontraron pagos misceláneos recientes para los criterios indicados.
+                </DxAlert>
+            }
+        </BodyTemplate>
+    </DxCard>
+</DxScrollView>
+
+@code {
+    private const String ToastName = "CaptacionReversoToast";
+    private readonly ReversoFormModel reverso = new();
+    private CaptacionPagoResponseDto? pagoActual;
+    private List<ReciboMiscelaneoDto> miscelaneos = new();
+    private string? clienteMiscelaneo;
+    private string? error;
+    private bool procesando;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await EstablecerUsuarioAsync();
+        await CargarMiscelaneosAsync();
+    }
+
+    private async Task EstablecerUsuarioAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        reverso.Usuario = auth.User?.Identity?.Name ?? "sistema";
+    }
+
+    private async Task BuscarPagoAsync()
+    {
+        error = null;
+        pagoActual = null;
+        try
+        {
+            pagoActual = await CaptacionClient.GetPagoAsync(reverso.NumFactura);
+            if (pagoActual is null)
+            {
+                error = $"No se encontro el pago {reverso.NumFactura}.";
+                MostrarToast("Reverso", error, ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo consultar el pago: {ex.Message}";
+            MostrarToast("Reverso", error, ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task ConfirmarReversoAsync()
+    {
+        if (pagoActual is null || procesando)
+        {
+            return;
+        }
+
+        procesando = true;
+        error = null;
+
+        try
+        {
+            var request = new ReversoRequestDto
+            {
+                NumFactura = pagoActual.Header.NumFactura,
+                ClienteClave = reverso.ClienteClave,
+                Usuario = reverso.Usuario
+            };
+
+            var respuesta = await CaptacionClient.ReversarPagoAsync(request);
+            if (!respuesta.Success)
+            {
+                error = respuesta.Message;
+                MostrarToast("Reverso", respuesta.Message, ToastRenderStyle.Danger);
+                return;
+            }
+
+            MostrarToast("Reverso", "Pago reversado correctamente.", ToastRenderStyle.Success);
+            pagoActual = null;
+            reverso.NumFactura = string.Empty;
+            reverso.ClienteClave = string.Empty;
+            await CargarMiscelaneosAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo reversar el pago: {ex.Message}";
+            MostrarToast("Reverso", error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            procesando = false;
+        }
+    }
+
+    private async Task CargarMiscelaneosAsync()
+    {
+        try
+        {
+            miscelaneos = (await CaptacionClient.GetMiscelaneosAsync(clienteMiscelaneo)).ToList();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo cargar el listado de miscelaneos: {ex.Message}";
+            MostrarToast("Reverso", error, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+
+    private sealed class ReversoFormModel
+    {
+        [Required]
+        public string NumFactura { get; set; } = string.Empty;
+
+        [Required]
+        public string ClienteClave { get; set; } = string.Empty;
+
+        public string Usuario { get; set; } = string.Empty;
+    }
+}

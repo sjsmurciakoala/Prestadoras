@@ -1,0 +1,48 @@
+﻿.nav-buttons-container .dxbl-btn.dxbl-btn-icon-only {
+    --dxbl-btn-padding-x: 0.75rem;
+    --dxbl-btn-padding-y: 0.25rem;
+}
+
+.icon {
+    --icon-width: 1rem;
+    --icon-height: 1rem;
+    --icon-back-mask-image: url("/images/back.svg");
+    --icon-close-mask-image: url("/images/close.svg");
+    --icon-menu-mask-image: url("/images/menu.svg");
+    --icon-docs-mask-image: url("/images/doc.svg");
+    --icon-demos-mask-image: url("/images/demos.svg");
+    --icon-home-mask-image: url("/images/home.svg");
+    --icon-weather-mask-image: url("/images/weather.svg");
+    --icon-counter-mask-image: url("/images/counter.svg");
+    --icon-log-in-mask-image: url("/images/account/log-in.svg");
+    --icon-log-out-mask-image: url("/images/account/log-out.svg");
+    --icon-user-mask-image: url("/images/account/user.svg");
+    --icon-profile-mask-image: url("/images/account/manage-profile.svg");
+    --icon-email-mask-image: url("/images/account/manage-email.svg");
+    --icon-two-factor-mask-image: url("/images/account/manage-two-factor.svg");
+    --icon-password-mask-image: url("/images/account/manage-password.svg");
+    --icon-personal-mask-image: url("/images/account/manage-personal.svg");
+    --icon-external-mask-image: url("/images/account/user.svg");
+    --icon-settings-mask-image: url("/images/account/settings.svg");
+}
+
+.icon-external-provider {
+    --icon-provider-width: 1rem;
+    --icon-provider-height: 1rem;
+}
+
+.icon-google {
+    --icon-provider-background-image: url("/images/account/providers/google-logo.svg");
+}
+
+.icon-facebook {
+    --icon-provider-background-image: url("/images/account/providers/facebook-logo.svg");
+}
+
+.icon-microsoft {
+    --icon-provider-background-image: url("/images/account/providers/microsoft-logo.svg");
+}
+
+.icon-twitter {
+    --icon-provider-background-image: url("/images/account/providers/x-logo.svg");
+}

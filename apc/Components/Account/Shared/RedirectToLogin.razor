@@ -1,0 +1,13 @@
+﻿@inject NavigationManager NavigationManager
+
+@code {
+    [SupplyParameterFromQuery(Name = "toggledSidebar")]
+    public bool ToggledSidebar { get; set; }
+
+    protected override void OnInitialized() {
+        var uri = new Uri(NavigationManager.Uri);
+        var relativeUrl = uri.PathAndQuery;
+
+        NavigationManager.NavigateTo($"Account/Login?toggledSidebar={ToggledSidebar}&returnUrl={Uri.EscapeDataString(relativeUrl)}", forceLoad: true);
+    }
+}

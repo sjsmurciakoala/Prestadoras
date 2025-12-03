@@ -1,0 +1,545 @@
+@page "/facturacion/cobranza"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Cobranza
+@inject CobranzaClient CobranzaClient
+@inject NotasCreditoDebitoClient NotasClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
+
+<DxScrollView Height="100%">
+    <DxToastProvider Name="@ToastName" MaxToastCount="3" />
+
+    @if (!string.IsNullOrWhiteSpace(errorCobranza))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorCobranza</DxAlert>
+    }
+
+    <DxTabs @bind-ActiveTabIndex="tabActivo" CssClass="mb-3">
+        <DxTabPage Text="Crear plan de pago">
+            <ContentTemplate>
+                <DxCard CssClass="mb-3">
+                    <HeaderTemplate>
+                        <h5 class="mb-0">Cliente</h5>
+                    </HeaderTemplate>
+                    <BodyTemplate>
+                        <DxFormLayout>
+                            <DxFormLayoutItem Caption="Buscar">
+                                <div class="d-flex gap-2 flex-wrap align-items-end">
+                                    <DxTextBox @bind-Text="criterioBusqueda"
+                                               Width="280px"
+                                               NullText="Clave, nombre o RTN"
+                                               ReadOnly="@buscandoClientes" />
+                                    <DxButton Text="Buscar"
+                                              ButtonType="ButtonType.Normal"
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              Enabled="@(!buscandoClientes && !string.IsNullOrWhiteSpace(criterioBusqueda))"
+                                              Click="@BuscarClientesAsync" />
+                                    <DxButton Text="Limpiar"
+                                              ButtonType="ButtonType.Normal"
+                                              RenderStyle="ButtonRenderStyle.Link"
+                                              Enabled="@(!buscandoClientes && clienteSeleccionado is not null)"
+                                              Click="@(_ => LimpiarPlan())" />
+                                </div>
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Cliente seleccionado">
+                                <DxTextBox Text="@clienteSeleccionado?.Nombre"
+                                           ReadOnly="true"
+                                           NullText="Sin seleccionar" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Clave / RTN">
+                                <DxTextBox Text="@clienteSeleccionado?.Clave"
+                                           ReadOnly="true"
+                                           NullText="N/A" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Total deuda">
+                                <DxTextBox Text="@($"L. {totalSaldo:n2}")"
+                                           ReadOnly="true" />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </BodyTemplate>
+                </DxCard>
+
+                @if (bloqueado)
+                {
+                    <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                        El cliente está bloqueado por cobranza. Revisa la situación antes de registrar un plan.
+                    </DxAlert>
+                }
+
+                <DxGrid Data="@saldos"
+                        PageSize="10"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false"
+                        CssClass="mb-3">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.Descripcion)" Caption="Descripción" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.SaldoDetalle)" Caption="Saldo" DisplayFormat="n2" Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.Periodo)" Caption="Periodo" Width="120px" />
+                    </Columns>
+                </DxGrid>
+
+                <DxCard CssClass="mb-3">
+                    <HeaderTemplate>
+                        <h5 class="mb-0">Parámetros del plan</h5>
+                    </HeaderTemplate>
+                    <BodyTemplate>
+                        <DxFormLayout>
+                            <DxFormLayoutItem Caption="Meses">
+                                <DxSpinEdit @bind-Value="MesesBindable"
+                                            Min="1"
+                                            Max="60"
+                                            Increment="1" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="% Prima">
+                                <DxSpinEdit @bind-Value="PorcentajePrimaBindable"
+                                            Min="0"
+                                            Max="100"
+                                            Decimals="2" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Prima">
+                                <DxTextBox Text="@($"L. {montoPrima:n2}")"
+                                           ReadOnly="true" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Monto a financiar">
+                                <DxTextBox Text="@($"L. {montoFinanciar:n2}")"
+                                           ReadOnly="true" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Fecha plan">
+                                <DxDateEdit @bind-Date="fechaPlan" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Primer pago">
+                                <DxDateEdit @bind-Date="fechaPrimerPago" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Representante">
+                                <DxTextBox @bind-Text="representante" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Identidad representante">
+                                <DxTextBox @bind-Text="docRepresentante" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Contacto representante">
+                                <DxTextBox @bind-Text="numRepresentante" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Comentario" ColSpanMd="6">
+                                <DxMemo @bind-Text="comentario" Rows="3" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption=" ">
+                                <DxButton Text="Calcular plan"
+                                          ButtonType="ButtonType.Normal"
+                                          RenderStyle="ButtonRenderStyle.Primary"
+                                          Enabled="@PuedeCalcular"
+                                          Click="@GenerarPreviewAsync" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption=" ">
+                                <DxButton Text="Guardar plan"
+                                          ButtonType="ButtonType.Normal"
+                                          RenderStyle="ButtonRenderStyle.Success"
+                                          Enabled="@PuedeGuardar"
+                                          Click="@GuardarPlanAsync" />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </BodyTemplate>
+                </DxCard>
+
+                @if (preview.Cuotas?.Count > 0)
+                {
+                    <DxCard>
+                        <HeaderTemplate>
+                            <h6 class="mb-0">Previsualización de cuotas</h6>
+                        </HeaderTemplate>
+                        <BodyTemplate>
+                            <DxGrid Data="@preview.Cuotas"
+                                    PageSize="10"
+                                    ShowGroupPanel="false"
+                                    ShowFilterRow="false">
+                                <Columns>
+                                    <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Numero)" Caption="Cuota" Width="90px" />
+                                    <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
+                                    <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Valor)" Caption="Valor" DisplayFormat="n2" />
+                                </Columns>
+                            </DxGrid>
+                        </BodyTemplate>
+                    </DxCard>
+                }
+            </ContentTemplate>
+        </DxTabPage>
+        <DxTabPage Text="Consulta de planes">
+            <ContentTemplate>
+                <DxGrid Data="@planes"
+                        PageSize="10"
+                        ShowGroupPanel="false"
+                        ShowFilterRow="false">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Correlativo)" Caption="Correlativo" Width="130px" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Cliente)" Caption="Cliente" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Estado)" Caption="Estado" Width="120px" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Total)" Caption="Total" DisplayFormat="n2" Width="120px" />
+                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                            <CellDisplayTemplate Context="ctx">
+                                <DxButton Text="Detalle"
+                                          ButtonType="ButtonType.Normal"
+                                          SizeMode="SizeMode.Small"
+                                          Click="@(
+                                              async () => await MostrarDetallePlan(
+                                                  (CobranzaPlanResumenDto)ctx.DataItem))" />
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </ContentTemplate>
+        </DxTabPage>
+    </DxTabs>
+
+    <DxPopup @bind-Visible="mostrandoPopupClientes"
+             Width="700px"
+             HeaderText="Resultados de búsqueda">
+        <ChildContent>
+            <DxGrid Data="@clientes"
+                    PageSize="10"
+                    ShowFilterRow="false"
+                    ShowGroupPanel="false">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Clave)" Caption="Clave" Width="120px" />
+                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Nombre)" Caption="Nombre" />
+                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Rtn)" Caption="RTN" Width="150px" />
+                    <DxGridDataColumn Caption="Acciones" Width="120px">
+                        <CellDisplayTemplate Context="ctx">
+                            <DxButton Text="Seleccionar"
+                                      ButtonType="ButtonType.Normal"
+                                      SizeMode="SizeMode.Small"
+                                      Click="@(
+                                          async () => await SeleccionarCliente((NotaClienteLookupDto)ctx.DataItem))" />
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </ChildContent>
+    </DxPopup>
+
+    <DxPopup @bind-Visible="mostrandoDetalle"
+             Width="700px"
+             HeaderText="@($"Plan {detalle?.Correlativo ?? string.Empty}")">
+        <ChildContent>
+            @if (detalle is not null)
+            {
+                <div class="mb-3">
+                    <p class="mb-1"><strong>Cliente:</strong> @detalle.ClienteClave - @detalle.ClienteNombre</p>
+                    <p class="mb-1"><strong>Monto:</strong> L. @detalle.Monto:n2</p>
+                    <p class="mb-1"><strong>Meses:</strong> @detalle.Meses</p>
+                    <p class="mb-1"><strong>Estado:</strong> @detalle.Estado</p>
+                </div>
+                <DxGrid Data="@detalle.Cuotas"
+                        PageSize="10"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Numero)" Caption="Cuota" Width="80px" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Valor)" Caption="Valor" DisplayFormat="n2" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Estado)" Caption="Estado" Width="140px" />
+                    </Columns>
+                </DxGrid>
+            }
+        </ChildContent>
+    </DxPopup>
+</DxScrollView>
+
+@code {
+    private const string ToastName = "cobranza-plan";
+    private int tabActivo;
+    private string? usuarioActual;
+
+    private string? criterioBusqueda;
+    private bool buscandoClientes;
+    private bool mostrandoPopupClientes;
+    private List<NotaClienteLookupDto> clientes = new();
+    private NotaClienteLookupDto? clienteSeleccionado;
+
+    private IReadOnlyList<CobranzaSaldoDetalleDto> saldos = Array.Empty<CobranzaSaldoDetalleDto>();
+    private decimal totalSaldo;
+    private bool bloqueado;
+    private decimal? reciboReferencia;
+    private int? cicloIdReferencia;
+
+    private int meses = 6;
+    private int MesesBindable
+    {
+        get => meses;
+        set
+        {
+            if (meses == value)
+            {
+                return;
+            }
+
+            meses = value;
+            ReiniciarPreview();
+        }
+    }
+
+    private decimal porcentajePrima;
+    private decimal PorcentajePrimaBindable
+    {
+        get => porcentajePrima;
+        set
+        {
+            if (porcentajePrima == value)
+            {
+                return;
+            }
+
+            porcentajePrima = value;
+            RecalcularMontos();
+        }
+    }
+    private decimal montoPrima;
+    private decimal montoFinanciar;
+    private DateTime fechaPlan = DateTime.Today;
+    private DateTime fechaPrimerPago = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
+    private string? representante;
+    private string? docRepresentante;
+    private string? numRepresentante;
+    private string? comentario;
+
+    private CobranzaPlanPreviewDto preview = new();
+    private bool generandoPreview;
+    private bool guardandoPlan;
+    private string? errorCobranza;
+
+    private List<CobranzaPlanResumenDto> planes = new();
+    private CobranzaPlanDetalleDto? detalle;
+    private bool mostrandoDetalle;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        usuarioActual = auth.User.Identity?.Name ?? "system";
+        await CargarPlanesAsync();
+    }
+
+    private bool PuedeCalcular =>
+        clienteSeleccionado is not null &&
+        meses > 0 &&
+        montoFinanciar > 0 &&
+        !generandoPreview;
+
+    private bool PuedeGuardar =>
+        PuedeCalcular &&
+        preview.Cuotas?.Count > 0 &&
+        !guardandoPlan;
+
+    private async Task BuscarClientesAsync()
+    {
+        if (string.IsNullOrWhiteSpace(criterioBusqueda))
+        {
+            return;
+        }
+
+        buscandoClientes = true;
+        try
+        {
+            clientes = (await NotasClient.BuscarClientesAsync(criterioBusqueda)).ToList();
+            mostrandoPopupClientes = clientes.Count > 0;
+            if (clientes.Count == 0)
+            {
+                MostrarToast("Cobranza", "No se encontraron clientes.", ToastRenderStyle.Info);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorCobranza = $"No se pudo buscar clientes: {ex.Message}";
+            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            buscandoClientes = false;
+        }
+    }
+
+    private async Task SeleccionarCliente(NotaClienteLookupDto cliente)
+    {
+        clienteSeleccionado = cliente;
+        mostrandoPopupClientes = false;
+        await CargarSaldosAsync();
+    }
+
+    private async Task CargarSaldosAsync()
+    {
+        if (clienteSeleccionado is null)
+        {
+            return;
+        }
+
+        try
+        {
+            saldos = await CobranzaClient.ObtenerSaldosAsync(clienteSeleccionado.Clave);
+            totalSaldo = saldos.Sum(s => s.SaldoDetalle);
+            bloqueado = saldos.FirstOrDefault()?.Bloqueado ?? false;
+            reciboReferencia = saldos.FirstOrDefault()?.Recibo;
+            cicloIdReferencia = saldos.FirstOrDefault()?.CicloId;
+            RecalcularMontos();
+        }
+        catch (Exception ex)
+        {
+            errorCobranza = $"No se pudo obtener los saldos: {ex.Message}";
+            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void RecalcularMontos()
+    {
+        montoPrima = Math.Round(totalSaldo * (porcentajePrima / 100m), 2, MidpointRounding.AwayFromZero);
+        montoFinanciar = Math.Max(0, totalSaldo - montoPrima);
+        preview = new CobranzaPlanPreviewDto();
+    }
+
+    private void ReiniciarPreview()
+    {
+        preview = new CobranzaPlanPreviewDto();
+    }
+
+    private async Task GenerarPreviewAsync()
+    {
+        if (!PuedeCalcular)
+        {
+            return;
+        }
+
+        generandoPreview = true;
+        try
+        {
+            preview = await CobranzaClient.CalcularPlanAsync(new CobranzaPlanPreviewRequestDto
+            {
+                Meses = meses,
+                MontoFinanciar = montoFinanciar,
+                PorcentajePrima = porcentajePrima,
+                Total = totalSaldo,
+                FechaPrimerPago = fechaPrimerPago
+            });
+        }
+        catch (Exception ex)
+        {
+            errorCobranza = $"No se pudo calcular el plan: {ex.Message}";
+            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            generandoPreview = false;
+        }
+    }
+
+    private async Task GuardarPlanAsync()
+    {
+        if (!PuedeGuardar || clienteSeleccionado is null)
+        {
+            return;
+        }
+
+        if (reciboReferencia is null)
+        {
+            MostrarToast("Cobranza", "No existe recibo base (transacción 101) para el cliente seleccionado.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        guardandoPlan = true;
+        try
+        {
+            var dto = new CobranzaPlanGuardarDto
+            {
+                ClienteClave = clienteSeleccionado.Clave,
+                ClienteNombre = clienteSeleccionado.Nombre,
+                Direccion = clienteSeleccionado.Direccion ?? string.Empty,
+                Meses = meses,
+                PorcentajePrima = porcentajePrima,
+                Total = totalSaldo,
+                ValorPrima = montoPrima,
+                MontoFinanciar = montoFinanciar,
+                Fecha = fechaPlan,
+                FechaPrimerPago = fechaPrimerPago,
+                NomRepresentante = representante,
+                DocRepresentante = docRepresentante,
+                NumRepresentante = numRepresentante,
+                Comentario = comentario,
+                Recibo = reciboReferencia,
+                CicloId = cicloIdReferencia,
+                Usuario = usuarioActual ?? "system"
+            };
+
+            var respuesta = await CobranzaClient.GuardarPlanAsync(dto);
+            if (!respuesta.Success)
+            {
+                errorCobranza = string.IsNullOrWhiteSpace(respuesta.Message)
+                    ? "No se pudo guardar el plan."
+                    : respuesta.Message;
+                MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+                return;
+            }
+
+            MostrarToast("Cobranza", respuesta.Message ?? "Plan guardado correctamente.", ToastRenderStyle.Success);
+            await CargarPlanesAsync();
+            LimpiarPlan();
+        }
+        catch (Exception ex)
+        {
+            errorCobranza = $"Ocurrió un problema al guardar el plan: {ex.Message}";
+            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardandoPlan = false;
+        }
+    }
+
+    private async Task CargarPlanesAsync()
+    {
+        try
+        {
+            planes = (await CobranzaClient.ListarPlanesAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorCobranza = $"No se pudo cargar el listado de planes: {ex.Message}";
+            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task MostrarDetallePlan(CobranzaPlanResumenDto resumen)
+    {
+        try
+        {
+            detalle = await CobranzaClient.ObtenerPlanAsync(resumen.Correlativo);
+            mostrandoDetalle = detalle is not null;
+        }
+        catch (Exception ex)
+        {
+            errorCobranza = $"No se pudo obtener el detalle del plan: {ex.Message}";
+            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void LimpiarPlan()
+    {
+        clienteSeleccionado = null;
+        saldos = Array.Empty<CobranzaSaldoDetalleDto>();
+        totalSaldo = 0;
+        porcentajePrima = 0;
+        montoPrima = 0;
+        montoFinanciar = 0;
+        meses = 6;
+        comentario = null;
+        representante = null;
+        docRepresentante = null;
+        numRepresentante = null;
+        preview = new CobranzaPlanPreviewDto();
+        reciboReferencia = null;
+        cicloIdReferencia = null;
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+}

@@ -1,0 +1,96 @@
+@page "/clientes"
+@attribute [Authorize]
+@inject HttpClient Http
+@using DevExpress.Blazor;
+
+@using Microsoft.AspNetCore.Authorization
+@using SIAD.Core.DTOs.Clientes;
+<DxScrollView Height="100%">
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
+    }
+    else
+    {
+        <DxFormLayout CssClass="mb-3">
+            <DxFormLayoutItem Caption="Código">
+                <DxTextBox @bind-Text="filtroCodigo" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Nombre">
+                <DxTextBox @bind-Text="filtroNombre" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Barrio">
+                <DxTextBox @bind-Text="filtroBarrio" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Solo activos">
+                <DxCheckBox @bind-Checked="filtroSoloActivos" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12">
+                <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
+                <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
+            </DxFormLayoutItem>
+
+        </DxFormLayout>
+
+
+        <DxGrid Data="@clientes">
+            <Columns>
+                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Codigo)" Caption="Código">
+                    <CellDisplayTemplate Context="cellData">
+                        @if (cellData.DataItem is ClienteListItemDto item)
+                        {
+                            <NavLink href="@($"/clientes/{item.Id}")">@item.Codigo</NavLink>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Nombre)" Caption="Nombre" />
+                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Barrio)" Caption="Barrio" />
+                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Activo)" Caption="Activo" />
+            </Columns>
+        </DxGrid>
+    }
+</DxScrollView>
+@code {
+    private ClienteListItemDto[] clientes = Array.Empty<ClienteListItemDto>();
+    private string? error;
+    private string filtroCodigo = string.Empty;
+    private string filtroNombre = string.Empty;
+    private string filtroBarrio = string.Empty;
+    private bool filtroSoloActivos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await BuscarAsync();
+    }
+
+    private async Task BuscarAsync()
+    {
+        try
+        {
+            error = null;
+            var query =
+            $"api/clientes/search?codigo={Uri.EscapeDataString(filtroCodigo ?? string.Empty)}" +
+            $"&nombre={Uri.EscapeDataString(filtroNombre ?? string.Empty)}" +
+            $"&barrio={Uri.EscapeDataString(filtroBarrio ?? string.Empty)}" +
+            $"&soloActivos={filtroSoloActivos}";
+
+            clientes = await Http.GetFromJsonAsync<ClienteListItemDto[]>(query)
+            ?? Array.Empty<ClienteListItemDto>();
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            clientes = Array.Empty<ClienteListItemDto>();
+        }
+    }
+
+    private async Task LimpiarAsync()
+    {
+        filtroCodigo = string.Empty;
+        filtroNombre = string.Empty;
+        filtroBarrio = string.Empty;
+        filtroSoloActivos = false;
+
+        await BuscarAsync();
+    }
+}

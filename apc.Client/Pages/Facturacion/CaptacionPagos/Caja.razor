@@ -1,0 +1,400 @@
+@page "/facturacion/captacion/caja"
+@attribute [Authorize]
+@using System.ComponentModel.DataAnnotations
+@inject apc.Client.Services.CaptacionPagos.CaptacionPagosClient CaptacionClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
+
+<DxScrollView Height="100%">
+    <DxToastProvider Name="@ToastName" MaxToastCount="4" />
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(info))
+    {
+        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@info</DxAlert>
+    }
+
+    <DxCard CssClass="mb-4">
+        <HeaderTemplate>
+            <h5 class="mb-0">Arqueo diario</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Caja">
+                    <DxComboBox TData="CajaDto" TValue="int?" Data="@cajas"
+                                TextFieldName="Nombre"
+                                ValueFieldName="Id"
+                                @bind-Value="filtro.CajaId"
+                                NullText="Todas las cajas"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Desde">
+                    <DxDateEdit T="DateTime?"
+                                @bind-Date="filtro.FechaInicio"
+                                DisplayFormat="d"
+                                NullText="Seleccione fecha" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Hasta">
+                    <DxDateEdit T="DateTime?"
+                                @bind-Date="filtro.FechaFin"
+                                DisplayFormat="d"
+                                NullText="Seleccione fecha" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem>
+                    <DxButton Text="Buscar"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              Enabled="@(!buscandoArqueos)"
+                              Click="BuscarArqueosAsync" />
+                    <DxButton Text="Limpiar filtros"
+                              CssClass="ms-2"
+                              RenderStyle="ButtonRenderStyle.Link"
+                              Enabled="@(!buscandoArqueos)"
+                              Click="LimpiarFiltrosAsync" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <DxDataGrid Data="@arqueos"
+                        KeyFieldName="@nameof(ArqueoDto.RowKey)"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false"
+                        PageSize="8">
+                <Columns>
+                    <DxDataGridColumn FieldName="@nameof(ArqueoDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
+                    <DxDataGridColumn FieldName="@nameof(ArqueoDto.CajaNombre)" Caption="Caja" />
+                    <DxDataGridSpinEditColumn FieldName="@nameof(ArqueoDto.ConteoPagos)" Caption="# Pagos" />
+                    <DxDataGridSpinEditColumn FieldName="@nameof(ArqueoDto.TotalPagos)" Caption="Total" DisplayFormat="c2" />
+                </Columns>
+            </DxDataGrid>
+            @if (arqueos.Count == 0 && string.IsNullOrWhiteSpace(error))
+            {
+                <DxAlert AlertType="AlertType.Info" CssClass="mt-2">
+                    No hay registros que coincidan con los filtros actuales.
+                </DxAlert>
+            }
+        </BodyTemplate>
+    </DxCard>
+
+    <DxCard CssClass="mb-4">
+        <HeaderTemplate>
+            <h5 class="mb-0">Registro rápido</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <EditForm Model="@nuevoPago"
+                      OnValidSubmit="RegistrarPagoAsync"
+                      OnInvalidSubmit="RegistrarPagoInvalido"
+                      Context="editContext">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Factura/Recibo">
+                        <DxTextBox @bind-Text="nuevoPago.NumFactura" NullText="Ingresa factura o recibo" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Cliente">
+                        <DxTextBox @bind-Text="nuevoPago.ClienteClave" NullText="Clave del cliente" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Monto">
+                        <DxSpinEdit @bind-Value="nuevoPago.Monto" Min="0" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Servicio">
+                        <DxTextBox @bind-Text="nuevoPago.Servicio" NullText="Descripción del servicio" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Caja">
+                        <DxComboBox TData="CajaDto" TValue="int?" @bind-Value="nuevoPago.CajaId"
+                                    Data="@cajas"
+                                    ValueFieldName="Id"
+                                    TextFieldName="Nombre"
+                                    NullText="Seleccione una caja" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Banco (opcional)">
+                        <DxTextBox @bind-Text="nuevoPago.Banco" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem>
+                        <DxButton Text="Registrar pago"
+                                  ButtonType="ButtonType.Submit"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Enabled="@(!registrandoPago)" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </EditForm>
+        </BodyTemplate>
+    </DxCard>
+
+    <DxCard>
+        <HeaderTemplate>
+            <h5 class="mb-0">Consulta de pagos</h5>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <EditForm Model="@consulta"
+                      OnValidSubmit="ConsultarPagoAsync"
+                      OnInvalidSubmit="ConsultaPagoInvalida"
+                      Context="consultContext">
+                <DataAnnotationsValidator />
+                <ValidationSummary />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Factura">
+                        <DxTextBox @bind-Text="consulta.NumFactura" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem>
+                        <DxButton Text="Consultar" ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Secondary" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </EditForm>
+
+            @if (pagoSeleccionado is not null)
+            {
+                <div class="mt-4">
+                    <strong>Factura:</strong> @pagoSeleccionado.Header.NumFactura |
+                    <strong>Cliente:</strong> @pagoSeleccionado.Header.ClienteClave |
+                    <strong>Total:</strong> @pagoSeleccionado.Header.Total.ToString("C2") |
+                    <strong>Estado:</strong> @pagoSeleccionado.Header.Estado
+                </div>
+                <DxDataGrid Data="@pagoSeleccionado.Detalles"
+                            ShowFilterRow="false"
+                            ShowGroupPanel="false"
+                            CssClass="mt-3">
+                    <Columns>
+                        <DxDataGridColumn FieldName="@nameof(CaptacionDetailDto.Linea)" Caption="Linea" />
+                        <DxDataGridColumn FieldName="@nameof(CaptacionDetailDto.Servicio)" Caption="Servicio" />
+                        <DxDataGridSpinEditColumn FieldName="@nameof(CaptacionDetailDto.MontoValor)" Caption="Monto" DisplayFormat="c2" />
+                    </Columns>
+                </DxDataGrid>
+            }
+        </BodyTemplate>
+    </DxCard>
+</DxScrollView>
+
+@code {
+    private const string ToastName = "CaptacionCajaToast";
+    private readonly CaptacionArqueoFilterDto filtro = new();
+
+    private readonly PagoFormModel nuevoPago = new();
+    private readonly ConsultaPagoForm consulta = new();
+    private List<CajaDto> cajas = new();
+    private List<ArqueoDto> arqueos = new();
+    private CaptacionPagoResponseDto? pagoSeleccionado;
+    private string? error;
+    private string? info;
+    private bool registrandoPago;
+    private bool buscandoArqueos;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await EstablecerUsuarioAsync();
+        await CargarCajasAsync();
+        nuevoPago.CajaId ??= cajas.FirstOrDefault()?.Id;
+        await BuscarArqueosAsync();
+    }
+
+    private async Task EstablecerUsuarioAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var usuario = authState.User?.Identity?.Name ?? "sistema";
+        nuevoPago.Usuario = usuario;
+    }
+
+    private async Task CargarCajasAsync()
+    {
+        cajas = (await CaptacionClient.GetCajasAsync()).ToList();
+
+        if (cajas.Count == 0)
+        {
+            info = "No existen cajas registradas. Ejecuta el seed 2025-10-23_captacion_pagos.sql para cargar datos de ejemplo.";
+            MostrarToast("Captacion de pagos", info, ToastRenderStyle.Warning);
+        }
+        else
+        {
+            info = null;
+            if (nuevoPago.CajaId is null)
+            {
+                nuevoPago.CajaId = cajas[0].Id;
+            }
+        }
+    }
+
+    private async Task BuscarArqueosAsync()
+    {
+        error = null;
+        buscandoArqueos = true;
+        try
+        {
+            arqueos = (await CaptacionClient.GetArqueosAsync(filtro)).ToList();
+            info = arqueos.Count == 0
+                ? "No se encontraron pagos para los filtros seleccionados. Ajusta el rango de fechas o limpia los filtros."
+                : null;
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo cargar el arqueo: {ex.Message}";
+            MostrarToast("Error", error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            buscandoArqueos = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task LimpiarFiltrosAsync()
+    {
+        if (buscandoArqueos)
+        {
+            return;
+        }
+
+        filtro.CajaId = null;
+        filtro.FechaInicio = null;
+        filtro.FechaFin = null;
+        await BuscarArqueosAsync();
+    }
+
+    private async Task RegistrarPagoAsync()
+    {
+        if (registrandoPago)
+        {
+            return;
+        }
+
+        registrandoPago = true;
+        error = null;
+        try
+        {
+            var dto = nuevoPago.ToDto();
+            var respuesta = await CaptacionClient.RegistrarPagoAsync(dto);
+            if (!respuesta.Success)
+            {
+                error = respuesta.Message;
+                MostrarToast("Captacion de pagos", respuesta.Message, ToastRenderStyle.Danger);
+                return;
+            }
+
+            MostrarToast("Captacion de pagos", "Pago registrado correctamente.", ToastRenderStyle.Success);
+            nuevoPago.Reset();
+            nuevoPago.CajaId = cajas.FirstOrDefault()?.Id;
+            await BuscarArqueosAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo registrar el pago: {ex.Message}";
+            MostrarToast("Captacion de pagos", error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            registrandoPago = false;
+        }
+    }
+
+    private void RegistrarPagoInvalido(EditContext editContext)
+    {
+        var mensaje = string.Join("; ", editContext.GetValidationMessages());
+        if (string.IsNullOrWhiteSpace(mensaje))
+        {
+            mensaje = "Completa los campos requeridos para registrar un pago.";
+        }
+        error = mensaje;
+        MostrarToast("Captacion de pagos", mensaje, ToastRenderStyle.Warning);
+    }
+
+    private async Task ConsultarPagoAsync()
+    {
+        error = null;
+        if (string.IsNullOrWhiteSpace(consulta.NumFactura))
+        {
+            error = "Ingrese un número de factura.";
+            return;
+        }
+
+        try
+        {
+            pagoSeleccionado = await CaptacionClient.GetPagoAsync(consulta.NumFactura) ?? null;
+            if (pagoSeleccionado is null)
+            {
+                error = $"No se encontró el pago {consulta.NumFactura}.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo obtener el pago: {ex.Message}";
+        }
+    }
+
+    private void ConsultaPagoInvalida(EditContext editContext)
+    {
+        var mensaje = string.Join("; ", editContext.GetValidationMessages());
+        if (string.IsNullOrWhiteSpace(mensaje))
+        {
+            mensaje = "Indica el número de factura para consultar.";
+        }
+        error = mensaje;
+        MostrarToast("Captacion de pagos", mensaje, ToastRenderStyle.Warning);
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+
+    private sealed class PagoFormModel
+    {
+        [Required]
+        public string NumFactura { get; set; } = string.Empty;
+
+        [Required]
+        public string ClienteClave { get; set; } = string.Empty;
+
+        [Range(0.01, double.MaxValue, ErrorMessage = "El monto debe ser mayor a cero.")]
+        public decimal Monto { get; set; } = 0.01m;
+
+        [Required]
+        public string Servicio { get; set; } = "Pago manual";
+
+        [Required]
+        [Range(1, int.MaxValue, ErrorMessage = "Seleccione una caja.")]
+        public int? CajaId { get; set; }
+
+        public string? Banco { get; set; }
+
+        public string Usuario { get; set; } = string.Empty;
+
+        public PagoCrearDto ToDto()
+        {
+            var caja = CajaId ?? throw new InvalidOperationException("Seleccione una caja.");
+
+            return new PagoCrearDto
+            {
+                NumFactura = NumFactura,
+                ClienteClave = ClienteClave,
+                Monto = Monto,
+                CajaId = caja,
+                Banco = Banco,
+                Usuario = Usuario,
+                Detalles = new List<PagoCrearDetalleDto>
+                {
+                    new() { Servicio = Servicio, MontoValor = Monto }
+                }
+            };
+        }
+
+        public void Reset()
+        {
+            NumFactura = string.Empty;
+            ClienteClave = string.Empty;
+            Servicio = "Pago manual";
+            Banco = null;
+            Monto = 0.01m;
+        }
+    }
+
+    private sealed class ConsultaPagoForm
+    {
+        [Required]
+        public string NumFactura { get; set; } = string.Empty;
+    }
+}

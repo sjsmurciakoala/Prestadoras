@@ -1,0 +1,247 @@
+@page "/Account/Login"
+@layout AccountLayout
+
+@using System.ComponentModel.DataAnnotations
+@using System.Linq
+@using Microsoft.AspNetCore.Http
+@using Microsoft.AspNetCore.Identity
+@using apc
+@using apc.Client.Services
+@using apc.Data
+@using SIAD.Core.Constants
+
+@inject BrandingClient BrandingClient
+@inject SignInManager<ApplicationUser> SignInManager
+@inject apc.Components.Account.IdentityRedirectManager RedirectManager
+@inject ILogger<Login> Logger
+
+<PageTitle>Iniciar sesion</PageTitle>
+
+<div class="login-page">
+    <div class="login-card">
+        <!-- Branding -->
+        <header class="login-branding" aria-label="Marca">
+            <div class="brand-row">
+                <img src="@(BrandingLogo ?? "/images/logo.svg")" alt="@($"Logo {BrandingCompanyName}")" class="brand-logo" />
+
+                <div class="brand-text">
+                    <span class="brand-apc">@BrandingShortName</span>
+                    <span class="brand-divider" aria-hidden="true"></span>
+                    <span class="brand-name">@BrandingCompanyName</span>
+                </div>
+            </div>
+        </header>
+
+        <!-- Heading -->
+        <div class="login-heading">
+            <h1>Iniciar sesion</h1>
+            <p>Accede a tu cuenta del portal @BrandingCompanyName.</p>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="validation-summary" role="alert">@errorMessage</div>
+        }
+
+        <!-- Formulario -->
+        <EditForm Model="@Input"
+                  method="post"
+                  FormName="login"
+                  OnValidSubmit="@OnValidSubmitAsync"
+                  class="login-form">
+            <DataAnnotationsValidator />
+
+            <!-- Correo -->
+            <div class="form-field">
+                <label for="email">Correo electronico</label>
+
+                <div class="input-icon">
+                    <i class="bi bi-envelope" aria-hidden="true"></i>
+                    <InputText id="email" class="form-control" @bind-Value="Input.Email" autocomplete="username"
+                        placeholder="Correo electronico" />
+                </div>
+            </div>
+
+            <!-- Contrasena -->
+            <div class="form-field">
+                <label for="password">Contrasena</label>
+
+                <div class="password-wrapper input-icon">
+                    <i class="bi bi-lock" aria-hidden="true"></i>
+                    <InputText id="password" class="form-control" @bind-Value="Input.Password" type="password"
+                        autocomplete="current-password" placeholder="Contrasena" />
+
+                    <button type="button" class="show-password-btn"
+                        onclick="togglePasswordVisibility('password', this)">
+                        Mostrar
+                    </button>
+                </div>
+            </div>
+
+            <!-- Recordarme + Crear cuenta -->
+            <div class="form-options">
+                <div class="form-check">
+                    <InputCheckbox id="remember" class="form-check-input" @bind-Value="Input.RememberMe" />
+                    <label class="form-check-label" for="remember">Recordarme</label>
+                </div>
+
+                <a class="link-secondary" href="/Account/ForgotPassword">Olvide mi contrasena</a>
+            </div>
+
+            <!-- Submit -->
+            <button class="login-submit" type="submit">Iniciar sesion</button>
+        </EditForm>
+
+        <!-- Footer -->
+        <footer class="login-footer">
+            <i class="bi bi-c-circle"></i> 2025 APC <i class="bi bi-dot"></i> Aguas de Puerto Cortes <i class="bi bi-dot"></i> Koala Outsourcing
+        </footer>
+
+    </div>
+</div>
+
+<script>
+    function togglePasswordVisibility(inputId, button) {
+        var input = document.getElementById(inputId);
+        if (!input) {
+            return;
+        }
+
+        var isPassword = input.type === 'password';
+        input.type = isPassword ? 'text' : 'password';
+        button.textContent = isPassword ? 'Ocultar' : 'Mostrar';
+    }
+</script>
+
+@code {
+    private string? errorMessage;
+    private string? BrandingLogo;
+
+    [CascadingParameter]
+    private HttpContext HttpContext { get; set; } = default!;
+
+    [SupplyParameterFromForm]
+    private InputModel Input { get; set; } = new();
+
+    [SupplyParameterFromQuery]
+    private string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = UrlGenerator.ToggleSidebarName)]
+    public bool ToggledSidebar { get; set; }
+
+    private string BrandingCompanyName { get; set; } = "Aguas de Puerto Cortes";
+    private string BrandingShortName { get; set; } = "APC";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBrandingAsync();
+    }
+
+    private async Task LoadBrandingAsync()
+    {
+        try
+        {
+            var branding = await BrandingClient.GetBrandingAsync();
+            if (branding is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(branding.CompanyName))
+                {
+                    BrandingCompanyName = branding.CompanyName;
+                }
+
+                if (!string.IsNullOrWhiteSpace(branding.CompanyShortName))
+                {
+                    BrandingShortName = branding.CompanyShortName;
+                }
+                else if (!string.IsNullOrWhiteSpace(BrandingCompanyName))
+                {
+                    var initials = BrandingCompanyName
+                        .Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                        .Select(word => char.ToUpperInvariant(word[0]));
+                    BrandingShortName = string.Concat(initials);
+                }
+
+                BrandingLogo = string.IsNullOrWhiteSpace(branding.LogoBase64)
+                    ? null
+                    : $"data:{branding.LogoMime};base64,{branding.LogoBase64}";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Logger.LogWarning(ex, "No se pudo cargar la informacion de branding.");
+        }
+    }
+
+    private async Task OnValidSubmitAsync()
+    {
+        errorMessage = null;
+
+        var result = await SignInManager.PasswordSignInAsync(
+        Input.Email,
+        Input.Password,
+        Input.RememberMe,
+        lockoutOnFailure: false);
+
+        if (result.Succeeded)
+        {
+            var user = await SignInManager.UserManager.FindByEmailAsync(Input.Email);
+            if (user is null)
+            {
+                await SignInManager.SignOutAsync();
+                errorMessage = "No se pudo completar el inicio de sesion.";
+                return;
+            }
+
+            var claims = await SignInManager.UserManager.GetClaimsAsync(user);
+            var hasCompanyClaim = claims.Any(c => c.Type == TenantClaimTypes.CompanyId &&
+                                                  long.TryParse(c.Value, out var companyId) && companyId > 0);
+
+            if (!hasCompanyClaim)
+            {
+                await SignInManager.SignOutAsync();
+                errorMessage = "Tu usuario no tiene una empresa asignada. Contacta al administrador.";
+                return; 
+            }
+            Logger.LogInformation("User logged in.");
+            RedirectManager.RedirectTo(ReturnUrl);
+            return;
+        }
+
+        if (result.RequiresTwoFactor)
+        {
+            RedirectManager.RedirectTo(
+            "Account/LoginWith2fa",
+            new()
+            {
+                ["returnUrl"] = ReturnUrl,
+                ["rememberMe"] = Input.RememberMe
+            });
+            return;
+        }
+
+        if (result.IsLockedOut)
+        {
+            Logger.LogWarning("User account locked out.");
+            RedirectManager.RedirectTo("Account/Lockout");
+            return;
+        }
+
+        errorMessage = "Error: Intento de inicio de sesion no valido.";
+    }
+
+    private sealed class InputModel
+    {
+        [Required, EmailAddress, Display(Name = "Correo electronico")]
+        public string Email { get; set; } = string.Empty;
+
+        [Required, DataType(DataType.Password), Display(Name = "Contrasena")]
+        public string Password { get; set; } = string.Empty;
+
+        [Display(Name = "Recordarme")]
+        public bool RememberMe { get; set; }
+    }
+}
+
+
+
+

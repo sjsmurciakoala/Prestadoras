@@ -1,0 +1,28 @@
+.configuracion-sistema-page .configuracion-sticky-header {
+    position: sticky;
+    top: 64px;
+    z-index: 6;
+    background-color: #fff;
+    box-shadow: 0 8px 18px rgba(0, 0, 0, 0.05);
+    border-bottom: 1px solid #e9ecef;
+}
+
+.configuracion-sistema-page .dx-card {
+    overflow: visible;
+}
+
+.configuracion-sistema-page .dx-tabs {
+    border: 0;
+}
+
+.configuracion-sistema-page .dx-grid-header {
+    font-weight: 600;
+}
+
+.configuracion-sistema-page .estado-resultados-grid .dx-grid-table {
+    font-size: 0.95rem;
+}
+
+.configuracion-sistema-page .dx-button {
+    white-space: nowrap;
+}

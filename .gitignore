@@ -1,0 +1,84 @@
+# .gitignore generado para el proyecto "apc"
+# Entradas comunes: sistema operativo, editores, lenguajes y artefactos de build
+
+# --- Sistemas operativos ---
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# --- Editores / IDEs ---
+.vs/
+.vscode/
+.idea/
+*.iml
+*.sublime-workspace
+*.sublime-project
+
+# --- Node.js ---
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg-info/
+.eggs/
+*.egg
+env/
+venv/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+
+# --- Java / JVM / Gradle / Maven ---
+target/
+*.class
+*.jar
+*.war
+*.ear
+.gradle/
+.mvn/
+build/
+
+# --- .NET / Visual Studio ---
+bin/
+obj/
+*.user
+*.suo
+*.userosscache
+.vs/
+*.csproj.user
+*.dbmdl
+
+# --- Artefactos de build / empaquetado ---
+dist/
+out/
+build/
+
+# --- Logs / reports / cobertura ---
+*.log
+logs/
+coverage/
+coverage.xml
+htmlcov/
+
+# --- Entornos / variables sensibles ---
+.env
+.env.*
+!.env.example
+
+# --- Docker ---
+.docker/
+docker-compose.override.yml
+
+# --- Archivos temporales / swap ---
+*.tmp
+*.swp
+*~
+*.lock

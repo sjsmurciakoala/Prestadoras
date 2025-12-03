@@ -1,0 +1,29 @@
+﻿::deep .tab-icon {
+    min-width: var(--icon-width);
+    min-height: var(--icon-height);
+    background-size: contain;
+}
+
+::deep .icon-profile {
+    --icon-mask-image: var(--icon-profile-mask-image);
+}
+
+::deep .icon-email {
+    --icon-mask-image: var(--icon-email-mask-image);
+}
+
+::deep .icon-two-factor {
+    --icon-mask-image: var(--icon-two-factor-mask-image);
+}
+
+::deep .icon-password {
+    --icon-mask-image: var(--icon-password-mask-image);
+}
+
+::deep .icon-personal {
+    --icon-mask-image: var(--icon-personal-mask-image);
+}
+
+::deep .icon-external {
+    --icon-mask-image: var(--icon-external-mask-image);
+}

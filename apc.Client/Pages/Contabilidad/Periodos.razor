@@ -1,0 +1,204 @@
+@page "/contabilidad/periodos"
+@attribute [Authorize]
+@inject HttpClient Http
+
+<div class="contabilidad-page contabilidad-content">
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger">@errorMessage</DxAlert>
+    }
+
+    <DxStackLayout Orientation="Orientation.Vertical" Spacing="15px">
+        <DxStackLayoutItem>
+            <DxButton Text="Nuevo" RenderStyle="ButtonRenderStyle.Primary" Click="@(() => OpenForm(null))" />
+            <DxButton Text="Actualizar" CssClass="ms-2" Click="LoadPeriodosAsync" />
+        </DxStackLayoutItem>
+        <DxStackLayoutItem>
+            <DxGrid Data="@periodos"
+                    KeyFieldName="@nameof(PeriodoContableDto.PeriodId)"
+                    PageSize="12">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.Code)" Caption="Código" />
+                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.Name)" Caption="Nombre" />
+                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.StartDate)" Caption="Inicio" DisplayFormat="d" />
+                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.EndDate)" Caption="Fin" DisplayFormat="d" />
+                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.Status)" Caption="Estado" />
+                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.ClosedAt)" Caption="Cerrado" DisplayFormat="g" />
+                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.ClosedBy)" Caption="Cerrado por" />
+                    <DxGridCommandColumn Width="180px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PeriodoContableDto item)
+                            {
+                                <DxButton Text="Editar" CssClass="me-2" Click="@(() => OpenForm(item))" />
+                                <DxButton Text="Cerrar"
+                                          Disabled="@string.Equals(item.Status, "CLOSED", StringComparison.OrdinalIgnoreCase)"
+                                          Click="@(() => ClosePeriodoAsync(item.PeriodId))" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+            </DxGrid>
+        </DxStackLayoutItem>
+    </DxStackLayout>
+</div>
+
+<DxPopup @bind-Visible="isFormVisible"
+         Width="500px"
+         ShowCloseButton="true"
+         HeaderText="@popupTitle">
+    <BodyTemplate Context="popupContext">
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Código">
+                <DxTextBox @bind-Text="formModel.Code" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Nombre">
+                <DxTextBox @bind-Text="formModel.Name" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Inicio">
+                <DxDateEdit @bind-Date="formModel.StartDate" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fin">
+                <DxDateEdit @bind-Date="formModel.EndDate" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado">
+                <DxComboBox Data="@statusOptions"
+                            @bind-Value="formModel.Status"
+                            AllowUserInput="false" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </BodyTemplate>
+    <FooterTemplate>
+        <DxButton Text="Cancelar" CssClass="me-2" Click="@(() => isFormVisible = false)" />
+        <DxButton Text="Guardar"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Click="SavePeriodoAsync"
+                  Enabled="@( !isSaving )" />
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private readonly string[] statusOptions = new[] { "OPEN", "LOCKED", "CLOSED" };
+    private PeriodoContableDto[] periodos = Array.Empty<PeriodoContableDto>();
+    private PeriodoFormModel formModel = new();
+    private bool isFormVisible;
+    private bool isSaving;
+    private string popupTitle = "Nuevo período";
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPeriodosAsync();
+    }
+
+    private async Task LoadPeriodosAsync()
+    {
+        try
+        {
+            errorMessage = null;
+            periodos = await Http.GetFromJsonAsync<PeriodoContableDto[]>("api/contabilidad/catalogos/periodos")
+                ?? Array.Empty<PeriodoContableDto>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            periodos = Array.Empty<PeriodoContableDto>();
+        }
+    }
+
+    private void OpenForm(PeriodoContableDto? periodo)
+    {
+        if (periodo is null)
+        {
+            formModel = new PeriodoFormModel
+            {
+                Status = "OPEN",
+                StartDate = DateTime.Today,
+                EndDate = DateTime.Today
+            };
+            popupTitle = "Nuevo período";
+        }
+        else
+        {
+            formModel = new PeriodoFormModel
+            {
+                PeriodId = periodo.PeriodId,
+                Code = periodo.Code,
+                Name = periodo.Name,
+                StartDate = periodo.StartDate,
+                EndDate = periodo.EndDate,
+                Status = periodo.Status
+            };
+            popupTitle = $"Editar {periodo.Code}";
+        }
+
+        isFormVisible = true;
+    }
+
+    private async Task SavePeriodoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(formModel.Code) || string.IsNullOrWhiteSpace(formModel.Name))
+        {
+            errorMessage = "Código y nombre son obligatorios.";
+            return;
+        }
+
+        if (formModel.EndDate < formModel.StartDate)
+        {
+            errorMessage = "La fecha final debe ser posterior al inicio.";
+            return;
+        }
+
+        var payload = new PeriodoContableUpsertDto(
+            formModel.Code.Trim(),
+            formModel.Name.Trim(),
+            formModel.StartDate,
+            formModel.EndDate,
+            string.IsNullOrWhiteSpace(formModel.Status) ? "OPEN" : formModel.Status!,
+            string.Empty,
+            formModel.PeriodId);
+
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/periodos", payload);
+            response.EnsureSuccessStatusCode();
+            isFormVisible = false;
+            await LoadPeriodosAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task ClosePeriodoAsync(long periodId)
+    {
+        try
+        {
+            errorMessage = null;
+            var response = await Http.PostAsync($"api/contabilidad/catalogos/periodos/{periodId}/cerrar", null);
+            response.EnsureSuccessStatusCode();
+            await LoadPeriodosAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    class PeriodoFormModel
+    {
+        public long? PeriodId { get; set; }
+        public string? Code { get; set; }
+        public string? Name { get; set; }
+        public DateTime StartDate { get; set; } = DateTime.Today;
+        public DateTime EndDate { get; set; } = DateTime.Today;
+        public string? Status { get; set; } = "OPEN";
+    }
+
+}

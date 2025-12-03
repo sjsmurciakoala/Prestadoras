@@ -1,0 +1,118 @@
+﻿@page "/ordenes/{Id:int}"
+@attribute [Authorize]
+@inject apc.Client.Services.Ordenes.OrdenesClient OrdenesClient
+@inject NavigationManager NavigationManager
+
+<DxScrollView Height="100%">
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
+    }
+    else if (detalle is null)
+    {
+        <p>Cargando...</p>
+    }
+    else
+    {
+        <DxButton Text="Volver" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => NavigationManager.NavigateTo("/ordenes"))" CssClass="mb-3" />
+
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Número">
+                <span>@detalle.Numero</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Cliente">
+                <span>@detalle.ClienteClave</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Propietario">
+                <span>@detalle.Propietario</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Dirección">
+                <span>@detalle.Direccion</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha">
+                <span>@detalle.Fecha.ToString("dd/MM/yyyy")</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Creada">
+                <span>@detalle.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Concepto">
+                <span>@detalle.Concepto</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado">
+                <span>@detalle.EstadoDescripcion (@detalle.Estado)</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tipo">
+                <span>@detalle.TipoDescripcion (@detalle.Tipo)</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Empleado">
+                <span>@detalle.Empleado</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Usuario asignado">
+                <span>@detalle.UsuarioAsignado</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Personas">
+                <span>@detalle.Personas</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Saldo">
+                <span>@detalle.Saldo?.ToString("C2")</span>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Informe">
+                <DxMemo Text="@detalle.Informe" Rows="4" ReadOnly="true" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+
+        <h5 class="mt-4">Materiales</h5>
+        <DxGrid Data="@detalle.Materiales" PageSize="10">
+            <Columns>
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CuentaContable)" Caption="Cuenta" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CodigoProducto)" Caption="Código" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Descripcion)" Caption="Descripción" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Cantidad)" Caption="Cantidad" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Fecha)" Caption="Fecha" DisplayFormat="g" />
+            </Columns>
+        </DxGrid>
+
+        <h5 class="mt-4">Adjuntos</h5>
+        <DxGrid Data="@detalle.Adjuntos" PageSize="10">
+            <Columns>
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Nombre)" Caption="Nombre" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Tipo)" Caption="Tipo" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Latitud)" Caption="Latitud" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Longitud)" Caption="Longitud" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaInicio)" Caption="Fecha inicio" DisplayFormat="g" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaFin)" Caption="Fecha fin" DisplayFormat="g" />
+                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaSincronizacion)" Caption="Fecha sincronización" DisplayFormat="g" />
+            </Columns>
+        </DxGrid>
+    }
+</DxScrollView>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private OrdenTrabajoDetailDto? detalle;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarDetalleAsync();
+    }
+
+    private async Task CargarDetalleAsync()
+    {
+        try
+        {
+            error = null;
+            detalle = await OrdenesClient.GetOrdenAsync(Id);
+            if (detalle is null)
+            {
+                error = "No se encontró la orden solicitada.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            detalle = null;
+        }
+    }
+}

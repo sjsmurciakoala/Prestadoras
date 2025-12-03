@@ -1,0 +1,176 @@
+@page "/contabilidad/diarios"
+@attribute [Authorize]
+@inject HttpClient Http
+
+<div class="contabilidad-page contabilidad-content">
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger">@errorMessage</DxAlert>
+    }
+
+    <DxStackLayout Orientation="Orientation.Vertical" Spacing="15px">
+        <DxStackLayoutItem>
+            <DxButton Text="Nuevo" RenderStyle="ButtonRenderStyle.Primary" Click="@(() => OpenForm(null))" />
+            <DxButton Text="Actualizar" CssClass="ms-2" Click="LoadDiariosAsync" />
+        </DxStackLayoutItem>
+        <DxStackLayoutItem>
+            <DxGrid Data="@diarios"
+                    KeyFieldName="@nameof(DiarioDto.JournalId)">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(DiarioDto.Code)" Caption="Código" />
+                    <DxGridDataColumn FieldName="@nameof(DiarioDto.Name)" Caption="Nombre" />
+                    <DxGridDataColumn FieldName="@nameof(DiarioDto.Description)" Caption="Descripción" />
+                    <DxGridDataColumn FieldName="@nameof(DiarioDto.SequencePrefix)" Caption="Prefijo" />
+                    <DxGridDataColumn FieldName="@nameof(DiarioDto.LastSequence)" Caption="Secuencia" />
+                    <DxGridDataColumn FieldName="@nameof(DiarioDto.IsActive)" Caption="Activo" />
+                    <DxGridDataColumn FieldName="@nameof(DiarioDto.AllowsManual)" Caption="Permite manual" />
+                    <DxGridCommandColumn Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DiarioDto item)
+                            {
+                                <DxButton Text="Editar" Click="@(() => OpenForm(item))" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+            </DxGrid>
+        </DxStackLayoutItem>
+    </DxStackLayout>
+</div>
+
+<DxPopup @bind-Visible="isFormVisible"
+         Width="500px"
+         ShowCloseButton="true"
+         HeaderText="@popupTitle">
+    <BodyTemplate Context="popupContext">
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="Código">
+                <DxTextBox @bind-Text="formModel.Code" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Nombre">
+                <DxTextBox @bind-Text="formModel.Name" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Descripción">
+                <DxMemo @bind-Text="formModel.Description" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Prefijo">
+                <DxTextBox @bind-Text="formModel.SequencePrefix" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Activo">
+                <DxCheckBox @bind-Checked="formModel.IsActive" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Permite manual">
+                <DxCheckBox @bind-Checked="formModel.AllowsManual" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </BodyTemplate>
+    <FooterTemplate>
+        <DxButton Text="Cancelar" CssClass="me-2" Click="@(() => isFormVisible = false)" />
+        <DxButton Text="Guardar"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Click="SaveDiarioAsync"
+                  Enabled="@( !isSaving )" />
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private DiarioDto[] diarios = Array.Empty<DiarioDto>();
+    private DiarioFormModel formModel = new();
+    private bool isFormVisible;
+    private bool isSaving;
+    private string popupTitle = "Nuevo diario";
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadDiariosAsync();
+    }
+
+    private async Task LoadDiariosAsync()
+    {
+        try
+        {
+            errorMessage = null;
+            diarios = await Http.GetFromJsonAsync<DiarioDto[]>("api/contabilidad/catalogos/diarios")
+                ?? Array.Empty<DiarioDto>();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            diarios = Array.Empty<DiarioDto>();
+        }
+    }
+
+    private void OpenForm(DiarioDto? diario)
+    {
+        if (diario is null)
+        {
+            formModel = new DiarioFormModel { IsActive = true, AllowsManual = true };
+            popupTitle = "Nuevo diario";
+        }
+        else
+        {
+            formModel = new DiarioFormModel
+            {
+                JournalId = diario.JournalId,
+                Code = diario.Code,
+                Name = diario.Name,
+                Description = diario.Description,
+                SequencePrefix = diario.SequencePrefix,
+                IsActive = diario.IsActive,
+                AllowsManual = diario.AllowsManual
+            };
+            popupTitle = $"Editar {diario.Code}";
+        }
+
+        isFormVisible = true;
+    }
+
+    private async Task SaveDiarioAsync()
+    {
+        if (string.IsNullOrWhiteSpace(formModel.Code) || string.IsNullOrWhiteSpace(formModel.Name))
+        {
+            errorMessage = "Código y nombre son obligatorios.";
+            return;
+        }
+
+        var payload = new DiarioUpsertDto(
+            formModel.Code.Trim(),
+            formModel.Name.Trim(),
+            formModel.IsActive,
+            formModel.AllowsManual,
+            string.Empty,
+            formModel.JournalId,
+            string.IsNullOrWhiteSpace(formModel.Description) ? null : formModel.Description.Trim(),
+            string.IsNullOrWhiteSpace(formModel.SequencePrefix) ? null : formModel.SequencePrefix.Trim());
+
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/diarios", payload);
+            response.EnsureSuccessStatusCode();
+            isFormVisible = false;
+            await LoadDiariosAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    class DiarioFormModel
+    {
+        public long? JournalId { get; set; }
+        public string? Code { get; set; }
+        public string? Name { get; set; }
+        public string? Description { get; set; }
+        public string? SequencePrefix { get; set; }
+        public bool IsActive { get; set; } = true;
+        public bool AllowsManual { get; set; } = true;
+    }
+}

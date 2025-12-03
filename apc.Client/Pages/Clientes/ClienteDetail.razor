@@ -1,0 +1,1492 @@
+@page "/clientes/{id:int}"
+@attribute [Authorize]
+@using DevExpress.Blazor
+@using System.Collections.Generic
+@using System.Linq
+@using System.Globalization
+@using System.ComponentModel.DataAnnotations
+@using SIAD.Core.DTOs.Clientes
+@using SIAD.Core.DTOs.Solicitudes
+@using SIAD.Core.DTOs.AuxiliarLectura
+@inject HttpClient Http
+@inject NavigationManager Navigation
+@inject ILogger<ClienteDetail> Logger
+@inject IToastNotificationService ToastService
+
+<DxScrollView Height="100%">
+    <DxToastProvider Name="MainToast"
+                     MaxToastCount="4" />
+    <DxToolbar>
+        <Items>
+            <DxToolbarItem CssClass="m-2" Text="Regresar a la lista" IconCssClass="oi oi-arrow-left"
+                Click="BackToList" />
+        </Items>
+    </DxToolbar>
+
+    @if (isLoading)
+    {
+        <DxSkeletonLine />
+        <DxSkeletonLine />
+        <DxSkeletonLine />
+    }
+    else if (!string.IsNullOrEmpty(error))
+    {
+        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
+    }
+    else if (cliente is null)
+    {
+        <DxAlert AlertType="AlertType.Warning">Cliente no encontrado.</DxAlert>
+    }
+    else
+    {
+        <DxTabs>
+            <DxTab Text="Datos generales">
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Código">@cliente.Codigo</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Nombre">@cliente.Nombre</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Identidad">@cliente.Identidad</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="RTN">@cliente.Rtn</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Dirección">@cliente.Direccion</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Teléfono">@cliente.Telefono</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Barrio">@cliente.Barrio</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Ciclo">@cliente.Ciclo</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Activo">
+                        @(cliente.Activo ? "Sí" : "No")
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </DxTab>
+            <DxTab Text="Tarifas">
+                <div class="d-flex flex-column gap-3">
+                    @if (!tarifasLoaded)
+                    {
+                        <DxButton Text="Cargar tarifas" RenderStyle="ButtonRenderStyle.Primary" Click="LoadTarifasAsync" />
+                    }
+                    @if (!string.IsNullOrEmpty(tarifasError))
+                    {
+                        <DxAlert AlertType="AlertType.Danger">@tarifasError</DxAlert>
+                    }
+                    else if (tarifasLoaded && tarifas.Length == 0)
+                    {
+                        <DxAlert AlertType="AlertType.Info">Sin configuraciones de tarifa.</DxAlert>
+                    }
+                    else if (tarifasLoaded)
+                    {
+                        <DxGrid Data="@tarifas" KeyFieldName="@nameof(ClienteTarifaDto.ConfiguracionId)">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(ClienteTarifaDto.TarifaNombre)" Caption="Tarifa" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteTarifaDto.PrecioBase)" Caption="Precio base" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteTarifaDto.CargoFijo)" Caption="Cargo fijo" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteTarifaDto.MontoConfigurado)"
+                                    Caption="Monto configurado" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteTarifaDto.FechaCreacion)" Caption="Creado" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteTarifaDto.FechaModificacion)"
+                                    Caption="Modificado" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteTarifaDto.Activa)" Caption="Activa" />
+                            </Columns>
+                        </DxGrid>
+                    }
+                </div>
+            </DxTab>
+            <DxTab Text="Estado de cuenta">
+                <div class="d-flex flex-column gap-3">
+                    @if (!estadoCuentaLoaded)
+                    {
+                        <DxButton Text="Cargar estado de cuenta" RenderStyle="ButtonRenderStyle.Primary"
+                            Click="LoadEstadoCuentaAsync" />
+                    }
+                    @if (!string.IsNullOrEmpty(estadoCuentaError))
+                    {
+                        <DxAlert AlertType="AlertType.Danger">@estadoCuentaError</DxAlert>
+                    }
+                    else if (estadoCuentaLoaded && estadoCuenta is not null)
+                    {
+                        <DxFormLayout>
+                            <DxFormLayoutItem Caption="Saldo actual">@((estadoCuenta.SaldoActual ?? 0).ToString("C2"))
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Fecha último pago">@(estadoCuenta.FechaUltimoPago?.ToString("dd/MM/yyyy")
+                                                        ?? "-")</DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Monto último pago">@((estadoCuenta.UltimoPagoMonto ?? 0).ToString("C2"))
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Consumo promedio">@((estadoCuenta.ConsumoPromedio ?? 0).ToString("0.##"))
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    }
+
+                    @if (!movimientosLoaded)
+                    {
+                        <DxButton Text="Cargar movimientos" RenderStyle="ButtonRenderStyle.Secondary"
+                            Click="LoadMovimientosAsync" />
+                    }
+                    @if (!string.IsNullOrEmpty(movimientosError))
+                    {
+                        <DxAlert AlertType="AlertType.Danger">@movimientosError</DxAlert>
+                    }
+                    else if (movimientosLoaded && movimientos.Length == 0)
+                    {
+                        <DxAlert AlertType="AlertType.Info">Sin movimientos registrados.</DxAlert>
+                    }
+                    else if (movimientosLoaded)
+                    {
+                        <DxGrid Data="@movimientos" KeyFieldName="@nameof(ClienteMovimientoDto.MovimientoId)">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Fecha)" Caption="Fecha" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Tipo)" Caption="Tipo" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Descripcion)" Caption="Descripción" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Monto)" Caption="Monto" />
+                                <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.SaldoInline)" Caption="Saldo" />
+                            </Columns>
+                        </DxGrid>
+                    }
+                </div>
+            </DxTab>
+            <DxTab Text="Solicitudes">
+                <div class="d-flex flex-column gap-3">
+                    <DxButton Text="Cargar solicitudes" SizeMode="SizeMode.Medium" RenderStyle="ButtonRenderStyle.Secondary" Click="LoadSolicitudesAsync"
+                        Enabled="@(!solicitudesLoaded)" />
+
+                    @if (!string.IsNullOrEmpty(solicitudesError))
+                    {
+                        <DxAlert AlertType="AlertType.Danger">@solicitudesError</DxAlert>
+                    }
+                    else if (solicitudesLoaded && solicitudes.Count == 0)
+                    {
+                        <DxAlert AlertType="AlertType.Info">Sin solicitudes registradas.</DxAlert>
+                    }
+                    else if (solicitudesLoaded)
+                    {
+                        <DxGrid Data="@solicitudes" KeyFieldName="Id">
+                            <Columns>
+                                <DxGridDataColumn FieldName="Id" Caption="Solicitud #" Width="120" />
+                                <DxGridDataColumn FieldName="IdentificacionCliente" Caption="Identidad" />
+                                <DxGridDataColumn FieldName="NombreCliente" Caption="Nombre" />
+                                <DxGridDataColumn FieldName="CategoriaServicioNombre" Caption="Categoría" />
+                                <DxGridDataColumn FieldName="Fecha" Caption="Fecha">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{
+                                            var item = (SolicitudListDto)cell.DataItem;
+                                        }
+                                        @item.Fecha.ToString("dd/MM/yyyy HH:mm")
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn FieldName="Estado" Caption="Activa">
+                                    <CellDisplayTemplate Context="cell">
+                                        @(((SolicitudListDto)cell.DataItem).Estado ? "Sí" : "No")
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn Caption="Acciones">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{
+                                            var item = (SolicitudListDto)cell.DataItem;
+                                        }
+                                        <DxButton Text="Ver detalle" RenderStyle="ButtonRenderStyle.Link"
+                                            Click="@(() => MostrarDetalleSolicitudAsync(item))" />
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                            </Columns>
+                        </DxGrid>
+                    }
+
+                    <DxCard>
+                        <DxCardHeader>Registrar nueva solicitud</DxCardHeader>
+                        <DxCardBody>
+                            @if (!string.IsNullOrEmpty(categoriasError))
+                            {
+                                <DxAlert AlertType="AlertType.Danger">@categoriasError</DxAlert>
+                            }
+                            else if (categoriasLoaded && categorias.Count == 0)
+                            {
+                                <DxAlert AlertType="AlertType.Warning">No hay categorías activas disponibles para registrar
+                                    solicitudes.</DxAlert>
+                            }
+                            <DxFormLayout CssClass="mb-2">
+                                <DxFormLayoutItem Caption="Teléfono *">
+                                    <DxTextBox @bind-Text="nuevaSolicitud.Telefono"
+                                               NullText="Ingresa un teléfono de contacto" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Dirección *">
+                                    <DxTextBox @bind-Text="nuevaSolicitud.Direccion"
+                                               NullText="Ingresa una dirección válida" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Correo *">
+                                    <DxTextBox @bind-Text="nuevaSolicitud.Correo"
+                                               NullText="usuario@dominio.com" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Observación">
+                                    <DxMemo @bind-Text="nuevaSolicitud.Observacion" Rows="3" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Categoría">
+                                    <DxComboBox TData="SolicitudCategoriaDto" TValue="int" Data="@categorias"
+                                        ValueFieldName="Id" TextFieldName="Nombre" NullText="Seleccione una categoría"
+                                        @bind-Value="nuevaSolicitud.CategoriaServicioId"
+                                        Enabled="@(categorias.Count > 0 && string.IsNullOrEmpty(categoriasError))" />
+                                </DxFormLayoutItem>
+                            </DxFormLayout>
+                            <DxButton renderStyle="ButtonRenderStyle.Primary"
+                                RenderStyleMode="ButtonRenderStyleMode.Contained" Text="Guardar solicitud"
+                                Click="CrearSolicitudAsync" />
+                        </DxCardBody>
+                    </DxCard>
+
+                    <DxPopup ShowCloseButton="true" CloseOnOutsideClick="true" Visible="detalleSolicitudVisible"
+                        VisibleChanged="@(v => detalleSolicitudVisible = v)">
+                        <HeaderContent>Detalle de solicitud</HeaderContent>
+                        <BodyContent>
+                            @if (detalleSolicitudCargando)
+                            {
+                                <DxSkeletonLine />
+                            }
+                            else if (!string.IsNullOrEmpty(detalleSolicitudError))
+                            {
+                                <DxAlert AlertType="AlertType.Danger">@detalleSolicitudError</DxAlert>
+                            }
+                            else if (solicitudSeleccionada is not null)
+                            {
+                                <DxFormLayout>
+                                    <DxFormLayoutItem Caption="Solicitud #">@solicitudSeleccionada.Id</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Identidad">@solicitudSeleccionada.IdentificacionCliente
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Nombre">@solicitudSeleccionada.NombreCliente</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Teléfono">@solicitudSeleccionada.Telefono</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Dirección">@solicitudSeleccionada.Direccion</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Correo">@solicitudSeleccionada.Correo</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Categoría">
+                                        @(solicitudSeleccionada.CategoriaServicioNombre
+                                                                        ?? categorias.FirstOrDefault(c => c.Id ==
+                                                                        solicitudSeleccionada.CategoriaServicioId)?.Nombre
+                                                                        ?? solicitudSeleccionada.CategoriaServicioId.ToString())
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Observación">
+                                        @(!string.IsNullOrWhiteSpace(solicitudSeleccionada.Observacion) ?
+                                                                        solicitudSeleccionada.Observacion : "-")
+                                    </DxFormLayoutItem>
+                                    @if (!string.IsNullOrWhiteSpace(solicitudSeleccionada.EmpresaNombre))
+                                    {
+                                        <DxFormLayoutItem Caption="Empresa">@solicitudSeleccionada.EmpresaNombre</DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(solicitudSeleccionada.EmpresaTelefono))
+                                    {
+                                        <DxFormLayoutItem Caption="Teléfono empresa">@solicitudSeleccionada.EmpresaTelefono
+                                        </DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(solicitudSeleccionada.EmpresaDireccion))
+                                    {
+                                        <DxFormLayoutItem Caption="Dirección empresa">@solicitudSeleccionada.EmpresaDireccion
+                                        </DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(solicitudSeleccionada.NegocioNombre))
+                                    {
+                                        <DxFormLayoutItem Caption="Negocio">@solicitudSeleccionada.NegocioNombre</DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(solicitudSeleccionada.NegocioTelefono))
+                                    {
+                                        <DxFormLayoutItem Caption="Teléfono negocio">@solicitudSeleccionada.NegocioTelefono
+                                        </DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(solicitudSeleccionada.NegocioClaveCatastral))
+                                    {
+                                        <DxFormLayoutItem Caption="Clave catastral">@solicitudSeleccionada.NegocioClaveCatastral
+                                        </DxFormLayoutItem>
+                                    }
+                                    <DxFormLayoutItem Caption="Fecha">@solicitudSeleccionada.Fecha.ToString("dd/MM/yyyy HH:mm")
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Activa">@(solicitudSeleccionada.Estado ? "Sí" : "No")
+                                    </DxFormLayoutItem>
+                                </DxFormLayout>
+                            }
+                        </BodyContent>
+                    </DxPopup>
+                </div>
+            </DxTab>
+
+
+            <DxTab Text="Medidores">
+                <div class="d-flex flex-column gap-3">
+                    <div class="d-flex flex-wrap gap-2">
+                        <DxButton Text="Cargar medidores" SizeMode="SizeMode.Medium"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="LoadMedidoresAsync"
+                                  Enabled="@(cliente is not null && !medidoresLoading)" />
+                        <DxButton Text="Asignar medidor" SizeMode="SizeMode.Medium"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Click="AsignarMedidorPopupAsync"
+                                  Enabled="@(cliente is not null)" />
+                        <DxButton Text="Registrar lectura sin medidor" SizeMode="SizeMode.Medium"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="AbrirLecturaSinMedidorAsync"
+                                  Enabled="@(cliente is not null)" />
+                    </div>
+
+                    @if (!string.IsNullOrEmpty(medidoresError))
+                    {
+                        <DxAlert AlertType="AlertType.Danger">@medidoresError</DxAlert>
+                    }
+                    else if (medidoresLoading)
+                    {
+                        <DxSkeletonLine />
+                    }
+                    else if (medidoresLoaded && medidores.Count == 0)
+                    {
+                        <DxAlert AlertType="AlertType.Info">Sin medidores asociados.</DxAlert>
+                    }
+                    else if (medidores.Count > 0)
+                    {
+                        <DxGrid Data="@medidores" KeyFieldName="Id" ShowFilterRow="true">
+                            <Columns>
+                                <DxGridDataColumn FieldName="Numero" Caption="N�mero" />
+                                <DxGridDataColumn FieldName="Marca" Caption="Marca" />
+                                <DxGridDataColumn FieldName="Diametro" Caption="Di�metro" />
+                                <DxGridDataColumn FieldName="FechaInstalacion" Caption="Instalado">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{
+                                            var medidor = (MedidorListDto)cell.DataItem;
+                                        }
+                                        @(medidor.FechaInstalacion?.ToString("dd/MM/yyyy") ?? "-")
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn FieldName="Acueducto" Caption="Acueducto" />
+                                <DxGridDataColumn FieldName="Estado" Caption="Activo">
+                                    <CellDisplayTemplate Context="cell">
+                                        @(((MedidorListDto)cell.DataItem).Estado ? "S�" : "No")
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn FieldName="ClienteNombre" Caption="Cliente" />
+                                <DxGridDataColumn Caption="Acciones">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{
+                                            var item = (MedidorListDto)cell.DataItem;
+                                        }
+                                        <DxButton Text="Ver detalle" RenderStyle="ButtonRenderStyle.Link"
+                                                  Click="@(() => MostrarDetalleMedidorAsync(item))" />
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                            </Columns>
+                        </DxGrid>
+                    }
+
+                    <DxPopup ShowCloseButton="true" CloseOnOutsideClick="true"
+                             Visible="medidorDetalleVisible"
+                             VisibleChanged="@(v => medidorDetalleVisible = v)">
+                        <HeaderContent>Detalle de medidor</HeaderContent>
+                        <BodyContent>
+                            @if (medidorDetalleCargando)
+                            {
+                                <DxSkeletonLine />
+                            }
+                            else if (!string.IsNullOrEmpty(medidorDetalleError))
+                            {
+                                <DxAlert AlertType="AlertType.Danger">@medidorDetalleError</DxAlert>
+                            }
+                            else if (medidorDetalle is not null)
+                            {
+                                <DxFormLayout>
+                                    <DxFormLayoutItem Caption="N�mero">@medidorDetalle.Numero</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Marca">@medidorDetalle.Marca</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Di�metro">@medidorDetalle.Diametro</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Instalado">@(
+                                        medidorDetalle.FechaInstalacion?.ToString("dd/MM/yyyy") ?? "-")</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Acueducto">@medidorDetalle.Acueducto</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Activo">@(medidorDetalle.Estado ? "S�" : "No")</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Cliente clave">@medidorDetalle.ClienteClave</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Cliente nombre">@medidorDetalle.ClienteNombre</DxFormLayoutItem>
+                                    <DxFormLayoutItem Caption="Barrio">@medidorDetalle.ClienteBarrio</DxFormLayoutItem>
+                                </DxFormLayout>
+
+                                <DxGrid Data="@medidorDetalle.Historial" KeyFieldName="Fecha" CssClass="mt-3">
+                                    <Columns>
+                                        <DxGridDataColumn FieldName="Fecha" Caption="Fecha">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{
+                                                    var historico = (MedidorHistorialDto)cell.DataItem;
+                                                }
+                                                @(historico.Fecha?.ToString("dd/MM/yyyy") ?? "-")
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="LecturaActual" Caption="Lectura actual" />
+                                        <DxGridDataColumn FieldName="LecturaAnterior" Caption="Lectura anterior" />
+                                        <DxGridDataColumn FieldName="Consumo" Caption="Consumo" />
+                                        <DxGridDataColumn FieldName="Condicion" Caption="Condici�n" />
+                                        <DxGridDataColumn FieldName="Observaciones" Caption="Observaciones" />
+                                        <DxGridDataColumn FieldName="Usuario" Caption="Usuario" />
+                                    </Columns>
+                                </DxGrid>
+
+                                @if (medidorDetalle.ConfiguracionesApp?.Count > 0)
+                                {
+                                    <DxAlert CssClass="mt-3" AlertType="AlertType.Info">
+                                        <strong>Configuraciones app:</strong>
+                                        <ul>
+                                            @foreach (var cfg in medidorDetalle.ConfiguracionesApp)
+                                            {
+                                                <li>@cfg</li>
+                                            }
+                                        </ul>
+                                    </DxAlert>
+                                }
+                            }
+                        </BodyContent>
+                    </DxPopup>
+
+                    <DxPopup ShowCloseButton="true" CloseOnOutsideClick="true"
+                             Visible="asignacionPopupVisible"
+                             VisibleChanged="@(v => asignacionPopupVisible = v)">
+                        <HeaderContent>Asignar medidor al cliente</HeaderContent>
+                        <BodyContent>
+                            @if (!string.IsNullOrEmpty(asignacionError))
+                            {
+                                <DxAlert AlertType="AlertType.Danger">@asignacionError</DxAlert>
+                            }
+
+                            @if (medidoresDisponiblesLoading)
+                            {
+                                <DxSkeletonLine />
+                            }
+                            else
+                            {
+                                @if (!string.IsNullOrEmpty(medidoresDisponiblesError))
+                                {
+                                    <DxAlert AlertType="AlertType.Danger">@medidoresDisponiblesError</DxAlert>
+                                }
+                                else if (medidoresDisponibles.Count == 0)
+                                {
+                                    <DxAlert AlertType="AlertType.Info">No hay medidores disponibles para asignar.</DxAlert>
+                                }
+                                else
+                                {
+                                    <DxFormLayout>
+                                        <DxFormLayoutItem Caption="Medidor">
+                                            <DxComboBox Data="@medidoresDisponibles"
+                                                        @bind-Value="asignacionModel.MedidorId"
+                                                        ValueFieldName="Id"
+                                                        TextFieldName="Numero"
+                                                        NullText="Seleccione un medidor"
+                                                        DropDownWidth="320px" />
+                                        </DxFormLayoutItem>
+                                    </DxFormLayout>
+                                }
+                            }
+
+                            <div class="d-flex gap-2 mt-3">
+                                <DxButton Text="Asignar" RenderStyle="ButtonRenderStyle.Primary"
+                                          Click="GuardarAsignacionMedidorAsync"
+                                          Enabled="@(asignacionModel.MedidorId.HasValue && !asignacionGuardando)" />
+                                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="@(() => asignacionPopupVisible = false)" />
+                            </div>
+                        </BodyContent>
+                    </DxPopup>
+
+                    <DxPopup ShowCloseButton="true" CloseOnOutsideClick="true"
+                             Visible="lecturaPopupVisible"
+                             VisibleChanged="@(v => lecturaPopupVisible = v)">
+                        <HeaderContent>Registrar lectura sin medidor</HeaderContent>
+                        <BodyContent>
+                            @if (!string.IsNullOrEmpty(lecturaError))
+                            {
+                                <DxAlert AlertType="AlertType.Danger">@lecturaError</DxAlert>
+                            }
+
+                            <DxFormLayout>
+                                <DxFormLayoutItem Caption="Cuenta *">
+                                    <DxTextBox @bind-Text="lecturaModel.Clave" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Fecha *">
+                                    <DxDateEdit @bind-Date="lecturaModel.Fecha" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Lectura *">
+                                    <DxSpinEdit @bind-Value="lecturaModel.Lectura" Min="0" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Usuario">
+                                    <DxTextBox @bind-Text="lecturaModel.Usuario" />
+                                </DxFormLayoutItem>
+                            </DxFormLayout>
+
+                            <div class="d-flex gap-2 mt-3">
+                                <DxButton Text="Registrar" RenderStyle="ButtonRenderStyle.Primary"
+                                          Click="RegistrarLecturaSinMedidorAsync"
+                                          Enabled="@(lecturaModel.Lectura >= 0 && !lecturaGuardando)" />
+                                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="@(() => lecturaPopupVisible = false)" />
+                            </div>
+                        </BodyContent>
+                    </DxPopup>
+                </div>
+            </DxTab>
+            <DxTab Text="Auxiliar de Lectura">
+                <DxFormLayout CssClass="mb-3">
+                    <DxFormLayoutItem Caption="A\u00f1o">
+                        <DxSpinEdit @bind-Value="auxiliarFiltro.Anio" Min="2000" Max="2100" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Mes">
+                        <DxSpinEdit @bind-Value="auxiliarFiltro.Mes" Min="1" Max="12" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Ciclo">
+                        <DxTextBox @bind-Text="auxiliarFiltro.Ciclo" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Solo pendientes">
+                        <DxCheckBox @bind-Checked="auxiliarFiltro.SoloPendientes" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+                <div class="d-flex gap-2 mb-3">
+                    <DxButton Text="Cargar lecturas" Click="LoadAuxiliarLecturasAsync" />
+                    <DxButton Text="Generar periodo" Click="MostrarPopupGenerarPeriodo" RenderStyle="ButtonRenderStyle.Primary" />
+                    <DxButton Text="Cerrar periodo" Click="CerrarPeriodoAsync" RenderStyle="ButtonRenderStyle.Secondary" />
+                    <DxButton Text="Eliminar periodo" Click="EliminarPeriodoAsync" RenderStyle="ButtonRenderStyle.Danger" />
+                    <DxButton Text="Carga masiva" Click="MostrarPopupCargaMasiva" />
+                </div>
+
+                @if (auxiliarLoading)
+                {
+                    <DxSkeletonLine CssClass="mb-2" />
+                    <DxSkeletonLine CssClass="mb-2" />
+                    <DxSkeletonLine CssClass="mb-4" />
+                }
+                else if (!string.IsNullOrEmpty(auxiliarError))
+                {
+                    <DxAlert AlertType="AlertType.Danger">@auxiliarError</DxAlert>
+                }
+                else if (auxiliarLecturas.Count == 0)
+                {
+                    <DxAlert AlertType="AlertType.Info">No se encontraron lecturas para los filtros seleccionados.</DxAlert>
+                }
+                else
+                {
+                    <DxGrid Data="@auxiliarLecturas" KeyFieldName="Clave" ShowFilterRow="true">
+                        <Columns>
+                            <DxGridDataColumn FieldName="Clave" Caption="Clave" />
+                            <DxGridDataColumn FieldName="Cliente" Caption="Cliente" />
+                            <DxGridDataColumn FieldName="Ruta" Caption="Ruta" />
+                            <DxGridDataColumn FieldName="Contador" Caption="Contador" />
+                            <DxGridDataColumn FieldName="LecturaAnterior" Caption="Lect. anterior" />
+                            <DxGridDataColumn FieldName="LecturaActual" Caption="Lect. actual" />
+                            <DxGridDataColumn FieldName="Consumo" Caption="Consumo" />
+                            <DxGridDataColumn FieldName="Condicion" Caption="Condici\u00f3n" />
+                            <DxGridDataColumn FieldName="FechaLectura" Caption="Fecha">
+                                <CellDisplayTemplate Context="cell">
+                                    @{
+                                        var item = (AuxiliarLecturaDto)cell.DataItem;
+                                    }
+                                    @(item.FechaLectura?.ToString("dd/MM/yyyy") ?? "-")
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="Usuario" Caption="Usuario" />
+                        </Columns>
+                    </DxGrid>
+                }
+
+                <DxPopup Visible="@generarPopupVisible" VisibleChanged="@(v => generarPopupVisible = v)">
+                    <HeaderContent>Generar nuevo periodo</HeaderContent>
+                    <BodyContent>
+                        <DxFormLayout>
+                            <DxFormLayoutItem Caption="A\u00f1o">
+                                <DxSpinEdit @bind-Value="generarPeriodoModel.Anio" Min="2000" Max="2100" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Mes">
+                                <DxSpinEdit @bind-Value="generarPeriodoModel.Mes" Min="1" Max="12" />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                        <div class="mt-3 d-flex gap-2">
+                            <DxButton Text="Generar" Click="GenerarPeriodoAsync" RenderStyle="ButtonRenderStyle.Primary" />
+                            <DxButton Text="Cancelar" Click="@(() => generarPopupVisible = false)" />
+                        </div>
+                    </BodyContent>
+                </DxPopup>
+
+                <DxPopup Visible="@cargaMasivaPopupVisible" VisibleChanged="@(v => cargaMasivaPopupVisible = v)" Width="600px">
+                    <HeaderContent>Carga masiva de lecturas</HeaderContent>
+                    <BodyContent>
+                        <DxFormLayout>
+                            <DxFormLayoutItem Caption="A\u00f1o">
+                                <DxSpinEdit @bind-Value="cargaMasivaModel.Anio" Min="2000" Max="2100" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Mes">
+                                <DxSpinEdit @bind-Value="cargaMasivaModel.Mes" Min="1" Max="12" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Ciclo">
+                                <DxTextBox @bind-Text="cargaMasivaModel.Ciclo" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Lecturas (clave;contador;anterior;actual;usuario)">
+                                <DxTextArea Text="@cargaMasivaModel.Contenido"
+                                            TextChanged="@OnCargaMasivaContenidoChanged"
+                                            Rows="8"
+                                            Placeholder="Ejemplo:&#10;CLI-001;MED-001;120;135;LECT01" />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+
+                        @if (!string.IsNullOrEmpty(cargaMasivaError))
+                        {
+                            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@cargaMasivaError</DxAlert>
+                        }
+
+                        <div class="mt-3 d-flex gap-2">
+                            <DxButton Text="Enviar"
+                                      Click="EnviarCargaMasivaAsync"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Enabled="@( !cargaMasivaGuardando )" />
+                            <DxButton Text="Cancelar"
+                                      Click="@CancelarCargaMasiva"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      Enabled="@( !cargaMasivaGuardando )" />
+                        </div>
+                    </BodyContent>
+                </DxPopup>
+            </DxTab>
+
+
+        </DxTabs>
+    }
+</DxScrollView>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private ClienteDetailDto? cliente;
+    private ClienteTarifaDto[] tarifas = Array.Empty<ClienteTarifaDto>();
+    private bool tarifasLoaded;
+    private string? tarifasError;
+
+    private ClienteEstadoCuentaDto? estadoCuenta;
+    private bool estadoCuentaLoaded;
+    private string? estadoCuentaError;
+
+    private ClienteMovimientoDto[] movimientos = Array.Empty<ClienteMovimientoDto>();
+    private bool movimientosLoaded;
+    private string? movimientosError;
+
+    private string? error;
+    private bool isLoading = true;
+
+    private List<SolicitudListDto> solicitudes = new();
+    private bool solicitudesLoaded;
+    private string? solicitudesError;
+    private List<SolicitudCategoriaDto> categorias = new();
+    private bool categoriasLoaded;
+    private string? categoriasError;
+    private SolicitudDetailDto? solicitudSeleccionada;
+    private bool detalleSolicitudVisible;
+    private bool detalleSolicitudCargando;
+    private string? detalleSolicitudError;
+
+    private List<MedidorListDto> medidores = new();
+    private bool medidoresLoaded;
+    private bool medidoresLoading;
+    private string? medidoresError;
+
+    private MedidorDetailDto? medidorDetalle;
+    private bool medidorDetalleVisible;
+    private bool medidorDetalleCargando;
+    private string? medidorDetalleError;
+
+    private List<MedidorListDto> medidoresDisponibles = new();
+    private bool medidoresDisponiblesLoading;
+    private string? medidoresDisponiblesError;
+
+    private bool asignacionPopupVisible;
+    private bool asignacionGuardando;
+    private string? asignacionError;
+    private MedidorAssignModel asignacionModel = new();
+
+    private bool lecturaPopupVisible;
+    private bool lecturaGuardando;
+    private string? lecturaError;
+    private LecturaSinMedidorModel lecturaModel = new();
+
+    private const string ToastProviderName = "MainToast";
+    private static readonly EmailAddressAttribute EmailValidator = new();
+
+    private SolicitudCreateModel nuevaSolicitud = new();
+
+    private AuxiliarLecturaFilterDto auxiliarFiltro = new()
+    {
+        Anio = DateTime.Now.Year,
+        Mes = DateTime.Now.Month,
+        SoloPendientes = false
+    };
+    private bool auxiliarLoading;
+    private bool generarPopupVisible;
+    private bool cargaMasivaPopupVisible;
+    private string? auxiliarError;
+    private string? cargaMasivaError;
+    private bool cargaMasivaGuardando;
+    private readonly GenerarPeriodoModel generarPeriodoModel = new(DateTime.Now.Year, DateTime.Now.Month);
+    private List<AuxiliarLecturaDto> auxiliarLecturas = new();
+    private CargaMasivaModel cargaMasivaModel = new();
+
+    private class GenerarPeriodoModel
+    {
+        public int Anio { get; set; }
+        public int Mes { get; set; }
+
+        public GenerarPeriodoModel(int anio, int mes)
+        {
+            Anio = anio;
+            Mes = mes;
+        }
+    }
+
+    private List<CargaMasivaItem>? ParseLecturasMasivas(string? contenido)
+    {
+        if (string.IsNullOrWhiteSpace(contenido))
+        {
+            cargaMasivaError = "Ingresa al menos una linea con lecturas.";
+            return null;
+        }
+
+        var result = new List<CargaMasivaItem>();
+        var lines = contenido.Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries);
+
+        for (var index = 0; index < lines.Length; index++)
+        {
+            var line = lines[index].Trim();
+            if (string.IsNullOrEmpty(line))
+                continue;
+
+            var parts = line.Split(';');
+            if (parts.Length < 5)
+            {
+                cargaMasivaError = $"Linea {index + 1}: formato invalido. Usa clave;contador;anterior;actual;usuario.";
+                return null;
+            }
+
+            if (!decimal.TryParse(parts[2], NumberStyles.Number, CultureInfo.InvariantCulture, out var anterior))
+            {
+                cargaMasivaError = $"Linea {index + 1}: lectura anterior invalida.";
+                return null;
+            }
+
+            if (!decimal.TryParse(parts[3], NumberStyles.Number, CultureInfo.InvariantCulture, out var actual))
+            {
+                cargaMasivaError = $"Linea {index + 1}: lectura actual invalida.";
+                return null;
+            }
+
+            result.Add(new CargaMasivaItem(
+                parts[0].Trim(),
+                parts[1].Trim(),
+                anterior,
+                actual,
+                parts[4].Trim()));
+        }
+
+        if (result.Count == 0)
+        {
+            cargaMasivaError = "No se encontraron lecturas para procesar.";
+            return null;
+        }
+
+        return result;
+    }
+
+    private class CargaMasivaModel
+    {
+        public int Anio { get; set; } = DateTime.Now.Year;
+        public int Mes { get; set; } = DateTime.Now.Month;
+        public string? Ciclo { get; set; }
+        public string Contenido { get; set; } = string.Empty;
+    }
+
+    private record CargaMasivaItem(
+        string Clave,
+        string Contador,
+        decimal LecturaAnterior,
+        decimal LecturaActual,
+        string Usuario);
+
+    private async Task LoadAuxiliarLecturasAsync()
+    {
+        if (auxiliarLoading)
+            return;
+
+        auxiliarLoading = true;
+        auxiliarError = null;
+
+        try
+        {
+            var queryParts = new List<string>();
+            if (auxiliarFiltro.Anio is { } anio) queryParts.Add($"anio={anio}");
+            if (auxiliarFiltro.Mes is { } mes) queryParts.Add($"mes={mes}");
+            if (!string.IsNullOrWhiteSpace(auxiliarFiltro.Ciclo))
+                queryParts.Add($"ciclo={Uri.EscapeDataString(auxiliarFiltro.Ciclo)}");
+            if (auxiliarFiltro.SoloPendientes is { } soloPendientes)
+                queryParts.Add($"soloPendientes={soloPendientes.ToString().ToLowerInvariant()}");
+
+            var url = queryParts.Count > 0
+                ? $"api/auxiliarlectura?{string.Join("&", queryParts)}"
+                : "api/auxiliarlectura";
+
+            var result = await Http.GetFromJsonAsync<List<AuxiliarLecturaDto>>(url);
+            auxiliarLecturas = result ?? new List<AuxiliarLecturaDto>();
+        }
+        catch (Exception ex)
+        {
+            auxiliarError = "Error al cargar lecturas. " + ex.Message;
+        }
+        finally
+        {
+            auxiliarLoading = false;
+        }
+    }
+
+    private async Task LoadSolicitudesAsync()
+    {
+        if (cliente is null)
+            return;
+
+        await EnsureCategoriasAsync();
+
+        if (solicitudesLoaded)
+            return;
+
+        try
+        {
+            var query = string.IsNullOrWhiteSpace(cliente.Identidad)
+                ? string.Empty
+                : $"?clienteIdentidad={Uri.EscapeDataString(cliente.Identidad)}";
+            var url = $"api/solicitudes{query}";
+            solicitudes = (await Http.GetFromJsonAsync<List<SolicitudListDto>>(url)) ?? new List<SolicitudListDto>();
+            solicitudesError = null;
+            solicitudesLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            solicitudesError = "Error al cargar las solicitudes del cliente. " + ex.Message;
+            solicitudesLoaded = false;
+        }
+    }
+
+    private void MostrarPopupGenerarPeriodo()
+    {
+        generarPeriodoModel.Anio = auxiliarFiltro.Anio ?? DateTime.Now.Year;
+        generarPeriodoModel.Mes = auxiliarFiltro.Mes ?? DateTime.Now.Month;
+        generarPopupVisible = true;
+    }
+
+    private void MostrarPopupCargaMasiva()
+    {
+        cargaMasivaModel = new CargaMasivaModel
+        {
+            Anio = auxiliarFiltro.Anio ?? DateTime.Now.Year,
+            Mes = auxiliarFiltro.Mes ?? DateTime.Now.Month,
+            Ciclo = auxiliarFiltro.Ciclo
+        };
+        cargaMasivaError = null;
+        cargaMasivaGuardando = false;
+        cargaMasivaPopupVisible = true;
+    }
+
+    private void CancelarCargaMasiva()
+    {
+        cargaMasivaPopupVisible = false;
+        cargaMasivaGuardando = false;
+        cargaMasivaError = null;
+        cargaMasivaModel = new CargaMasivaModel();
+    }
+
+    private void OnCargaMasivaContenidoChanged(string value)
+    {
+        cargaMasivaModel.Contenido = value ?? string.Empty;
+    }
+
+    private async Task EnviarCargaMasivaAsync()
+    {
+        if (cargaMasivaGuardando)
+            return;
+
+        cargaMasivaError = null;
+
+        if (cargaMasivaModel.Anio <= 0 || cargaMasivaModel.Mes <= 0)
+        {
+            cargaMasivaError = "Indica anio y mes validos.";
+            return;
+        }
+
+        var items = ParseLecturasMasivas(cargaMasivaModel.Contenido);
+        if (items is null)
+            return;
+
+        var payload = new
+        {
+            Anio = cargaMasivaModel.Anio,
+            Mes = cargaMasivaModel.Mes,
+            Ciclo = string.IsNullOrWhiteSpace(cargaMasivaModel.Ciclo) ? null : cargaMasivaModel.Ciclo,
+            Lecturas = items.Select(i => new
+            {
+                i.Clave,
+                i.Contador,
+                i.LecturaAnterior,
+                i.LecturaActual,
+                i.Usuario
+            }).ToArray()
+        };
+
+        cargaMasivaGuardando = true;
+
+        try
+        {
+            var response = await Http.PostAsJsonAsync("api/auxiliarlectura/masivo", payload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                ShowToast("Auxiliar de lectura", "Lecturas registradas correctamente.", ToastRenderStyle.Success);
+                cargaMasivaPopupVisible = false;
+                cargaMasivaModel = new CargaMasivaModel();
+                await LoadAuxiliarLecturasAsync();
+            }
+            else
+            {
+                var detail = await response.Content.ReadAsStringAsync();
+                cargaMasivaError = string.IsNullOrWhiteSpace(detail)
+                    ? "No se pudo registrar la carga masiva."
+                    : detail;
+            }
+        }
+        catch (Exception ex)
+        {
+            cargaMasivaError = "Error al enviar la carga masiva. " + ex.Message;
+        }
+        finally
+        {
+            cargaMasivaGuardando = false;
+        }
+    }
+
+    private async Task GenerarPeriodoAsync()
+    {
+        if (generarPeriodoModel.Anio <= 0 || generarPeriodoModel.Mes <= 0)
+        {
+            ShowToast("Auxiliar de lectura", "Indica anio y mes validos.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var payload = new { Anio = generarPeriodoModel.Anio, Mes = generarPeriodoModel.Mes, Usuario = "sistema" };
+        var response = await Http.PostAsJsonAsync("api/auxiliarlectura", payload);
+
+        if (response.IsSuccessStatusCode)
+        {
+            generarPopupVisible = false;
+            ShowToast("Auxiliar de lectura", "Periodo generado correctamente.", ToastRenderStyle.Success);
+            await LoadAuxiliarLecturasAsync();
+        }
+        else
+        {
+            var detail = await response.Content.ReadAsStringAsync();
+            ShowToast("Auxiliar de lectura", string.IsNullOrWhiteSpace(detail) ? "No se pudo generar el periodo." : detail, ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task CerrarPeriodoAsync()
+    {
+        if (auxiliarFiltro.Anio is null || auxiliarFiltro.Mes is null)
+        {
+            ShowToast("Auxiliar de lectura", "Selecciona anio y mes antes de cerrar.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var response = await Http.PostAsJsonAsync("api/auxiliarlectura/cierre", new { Anio = auxiliarFiltro.Anio, Mes = auxiliarFiltro.Mes });
+        if (response.IsSuccessStatusCode)
+        {
+            ShowToast("Auxiliar de lectura", "Periodo cerrado.", ToastRenderStyle.Success);
+            await LoadAuxiliarLecturasAsync();
+        }
+        else
+        {
+            var detail = await response.Content.ReadAsStringAsync();
+            ShowToast("Auxiliar de lectura", string.IsNullOrWhiteSpace(detail) ? "No se pudo cerrar el periodo." : detail, ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task EliminarPeriodoAsync()
+    {
+        if (auxiliarFiltro.Anio is null || auxiliarFiltro.Mes is null)
+        {
+            ShowToast("Auxiliar de lectura", "Selecciona anio y mes antes de eliminar.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var parameters = new List<string>();
+        if (auxiliarFiltro.Anio is { } anio) parameters.Add($"anio={anio}");
+        if (auxiliarFiltro.Mes is { } mes) parameters.Add($"mes={mes}");
+
+        var url = parameters.Count > 0
+            ? $"api/auxiliarlectura?{string.Join("&", parameters)}"
+            : "api/auxiliarlectura";
+
+        var response = await Http.DeleteAsync(url);
+        if (response.IsSuccessStatusCode)
+        {
+            auxiliarLecturas.Clear();
+            ShowToast("Auxiliar de lectura", "Periodo eliminado.", ToastRenderStyle.Success);
+        }
+        else
+        {
+            var detail = await response.Content.ReadAsStringAsync();
+            ShowToast("Auxiliar de lectura", string.IsNullOrWhiteSpace(detail) ? "No se pudo eliminar el periodo." : detail, ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task EnsureCategoriasAsync()
+    {
+        if (categoriasLoaded)
+            return;
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<SolicitudCategoriaDto>>("api/solicitudes/categorias");
+            categorias = result?
+                .Where(c => c.Activa)
+                .OrderBy(c => c.Nombre)
+                .ToList()
+                ?? new List<SolicitudCategoriaDto>();
+
+            categoriasError = categorias.Count == 0
+                ? "No hay categorias activas configuradas en la base de datos."
+                : null;
+
+            if (categorias.Count > 0 &&
+                (nuevaSolicitud.CategoriaServicioId == 0 ||
+                 categorias.All(c => c.Id != nuevaSolicitud.CategoriaServicioId)))
+            {
+                nuevaSolicitud.CategoriaServicioId = categorias[0].Id;
+            }
+
+            categoriasLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            categoriasError = "Error al cargar las categorias de servicio. " + ex.Message;
+            categorias = new List<SolicitudCategoriaDto>();
+            categoriasLoaded = false;
+        }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastProviderName,
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+    }
+
+    private async Task LoadMedidoresAsync()
+    {
+        if (cliente is null || medidoresLoading)
+            return;
+
+        medidoresLoading = true;
+        medidoresError = null;
+
+        try
+        {
+            var url = string.IsNullOrWhiteSpace(cliente.Codigo)
+                ? "api/medidores"
+                : $"api/medidores?ClienteClave={Uri.EscapeDataString(cliente.Codigo)}";
+            var result = await Http.GetFromJsonAsync<List<MedidorListDto>>(url);
+            medidores = result ?? new List<MedidorListDto>();
+            medidoresLoaded = true;
+        }
+        catch (Exception ex)
+        {
+            medidoresError = "Error al cargar los medidores. " + ex.Message;
+            medidoresLoaded = false;
+        }
+        finally
+        {
+            medidoresLoading = false;
+        }
+    }
+
+    private async Task MostrarDetalleMedidorAsync(MedidorListDto item)
+    {
+        medidorDetalleVisible = true;
+        medidorDetalleCargando = true;
+        medidorDetalleError = null;
+
+        try
+        {
+            medidorDetalle = await Http.GetFromJsonAsync<MedidorDetailDto>($"api/medidores/{item.Id}");
+        }
+        catch (Exception ex)
+        {
+            medidorDetalleError = "Error al cargar el detalle del medidor. " + ex.Message;
+        }
+        finally
+        {
+            medidorDetalleCargando = false;
+        }
+    }
+
+    private async Task AsignarMedidorPopupAsync()
+    {
+        if (cliente is null)
+            return;
+
+        asignacionError = null;
+        asignacionModel = new MedidorAssignModel();
+        asignacionPopupVisible = true;
+        await LoadMedidoresDisponiblesAsync();
+    }
+
+    private async Task LoadMedidoresDisponiblesAsync()
+    {
+        medidoresDisponiblesLoading = true;
+        medidoresDisponiblesError = null;
+
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<MedidorListDto>>("api/medidores?Asignado=false");
+            medidoresDisponibles = result ?? new List<MedidorListDto>();
+        }
+        catch (Exception ex)
+        {
+            medidoresDisponiblesError = "Error al cargar los medidores disponibles. " + ex.Message;
+            medidoresDisponibles = new List<MedidorListDto>();
+        }
+        finally
+        {
+            medidoresDisponiblesLoading = false;
+        }
+    }
+
+    private async Task GuardarAsignacionMedidorAsync()
+    {
+        if (cliente is null)
+            return;
+
+        if (!asignacionModel.MedidorId.HasValue)
+        {
+            asignacionError = "Seleccione un medidor.";
+            return;
+        }
+
+        asignacionGuardando = true;
+        asignacionError = null;
+
+        try
+        {
+            var payload = new
+            {
+                MedidorId = asignacionModel.MedidorId.Value,
+                ClienteId = cliente.Id
+            };
+
+            var response = await Http.PostAsJsonAsync("api/medidores/asignar", payload);
+
+            if (response.IsSuccessStatusCode)
+            {
+                ShowToast("Medidores", "Medidor asignado correctamente.", ToastRenderStyle.Success);
+                asignacionPopupVisible = false;
+                medidoresLoaded = false;
+                await LoadMedidoresAsync();
+            }
+            else
+            {
+                var detail = await response.Content.ReadAsStringAsync();
+                asignacionError = string.IsNullOrWhiteSpace(detail)
+                    ? "No se pudo asignar el medidor."
+                    : detail;
+            }
+        }
+        catch (Exception ex)
+        {
+            asignacionError = "Error al asignar el medidor. " + ex.Message;
+        }
+        finally
+        {
+            asignacionGuardando = false;
+        }
+    }
+
+    private Task AbrirLecturaSinMedidorAsync()
+    {
+        if (cliente is null)
+            return Task.CompletedTask;
+
+        lecturaError = null;
+        lecturaModel = new LecturaSinMedidorModel
+        {
+            Clave = cliente.Codigo,
+            Fecha = DateTime.Today
+        };
+        lecturaPopupVisible = true;
+        return Task.CompletedTask;
+    }
+
+    private async Task RegistrarLecturaSinMedidorAsync()
+    {
+        if (string.IsNullOrWhiteSpace(lecturaModel.Clave))
+        {
+            lecturaError = "La cuenta es obligatoria.";
+            return;
+        }
+
+        lecturaGuardando = true;
+        lecturaError = null;
+
+        try
+        {
+            var payload = new
+            {
+                Clave = lecturaModel.Clave.Trim(),
+                Fecha = lecturaModel.Fecha,
+                Lectura = lecturaModel.Lectura,
+                Usuario = string.IsNullOrWhiteSpace(lecturaModel.Usuario) ? "app" : lecturaModel.Usuario.Trim()
+            };
+
+            var response = await Http.PostAsJsonAsync("api/medidores/lecturas-sin-medidor", payload);
+            if (response.IsSuccessStatusCode)
+            {
+                ShowToast("Medidores", "Lectura registrada correctamente.", ToastRenderStyle.Success);
+                lecturaPopupVisible = false;
+                lecturaModel = new LecturaSinMedidorModel();
+            }
+            else
+            {
+                var detail = await response.Content.ReadAsStringAsync();
+                lecturaError = string.IsNullOrWhiteSpace(detail)
+                    ? "No se pudo registrar la lectura."
+                    : detail;
+            }
+        }
+        catch (Exception ex)
+        {
+            lecturaError = "Error al registrar la lectura. " + ex.Message;
+        }
+        finally
+        {
+            lecturaGuardando = false;
+        }
+    }
+
+    private async Task MostrarDetalleSolicitudAsync(SolicitudListDto item)
+    {
+        detalleSolicitudError = null;
+        detalleSolicitudCargando = true;
+        detalleSolicitudVisible = true;
+
+        try
+        {
+            await EnsureCategoriasAsync();
+            solicitudSeleccionada = await Http.GetFromJsonAsync<SolicitudDetailDto>($"api/solicitudes/{item.Id}");
+        }
+        catch (Exception ex)
+        {
+            detalleSolicitudError = "Error al cargar el detalle de la solicitud. " + ex.Message;
+        }
+        finally
+        {
+            detalleSolicitudCargando = false;
+        }
+    }
+
+    private async Task CrearSolicitudAsync()
+    {
+        if (cliente is null)
+            return;
+
+        await EnsureCategoriasAsync();
+
+        if (!categoriasLoaded || categorias.Count == 0)
+        {
+            ShowToast("Solicitudes", "No hay categorías activas disponibles para crear solicitudes.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var categoriaSeleccionada = categorias.FirstOrDefault(c => c.Id == nuevaSolicitud.CategoriaServicioId);
+        if (categoriaSeleccionada is null)
+        {
+            ShowToast("Solicitudes", "Seleccione una categoría válida.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        try
+        {
+            var telefono = (nuevaSolicitud.Telefono ?? string.Empty).Trim();
+            var direccion = (nuevaSolicitud.Direccion ?? string.Empty).Trim();
+            var correo = (nuevaSolicitud.Correo ?? string.Empty).Trim();
+
+            if (string.IsNullOrWhiteSpace(telefono) || string.IsNullOrWhiteSpace(direccion))
+            {
+                ShowToast("Solicitudes", "Teléfono y dirección son obligatorios.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(correo))
+            {
+                ShowToast("Solicitudes", "El correo es obligatorio.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            if (!EmailValidator.IsValid(correo))
+            {
+                ShowToast("Solicitudes", "El correo no tiene un formato válido.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            var dto = new SolicitudDetailDto(
+            0,
+            cliente.Identidad ?? string.Empty,
+            cliente.Nombre,
+            nuevaSolicitud.CategoriaServicioId,
+            telefono,
+            direccion,
+            correo,
+            string.IsNullOrWhiteSpace(nuevaSolicitud.Observacion) ? null : nuevaSolicitud.Observacion?.Trim(),
+            DateTime.UtcNow,
+            true,
+            categoriaSeleccionada.Nombre);
+
+            var response = await Http.PostAsJsonAsync("api/solicitudes", dto);
+            response.EnsureSuccessStatusCode();
+
+            solicitudesLoaded = false;
+            solicitudes.Clear();
+            await LoadSolicitudesAsync();
+
+            var solicitudNueva = solicitudes
+                .OrderByDescending(s => s.Fecha)
+                .FirstOrDefault();
+            var mensaje = solicitudNueva is not null
+                ? $"Solicitud #{solicitudNueva.Id} registrada correctamente."
+                : "Solicitud registrada correctamente.";
+            ShowToast("Solicitudes", mensaje, ToastRenderStyle.Success);
+
+            nuevaSolicitud = CrearModeloInicial();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Solicitudes", "Error al registrar la solicitud. " + ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            cliente = await Http.GetFromJsonAsync<ClienteDetailDto>($"api/clientes/{Id}");
+            if (cliente is not null)
+            {
+                nuevaSolicitud = CrearModeloInicial();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            error = ex.Message;
+            Logger.LogError(ex, "Error al cargar cliente {ClienteId}", Id);
+        }
+        catch (Exception ex)
+        {
+            error = "Ocurrió un error inesperado.";
+            Logger.LogError(ex, "Error inesperado al cargar cliente {ClienteId}", Id);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void BackToList() => Navigation.NavigateTo("/clientes");
+
+    private async Task LoadTarifasAsync()
+    {
+        if (tarifasLoaded || cliente is null)
+            return;
+
+        try
+        {
+            tarifas = await Http.GetFromJsonAsync<ClienteTarifaDto[]>($"api/clientes/{cliente.Id}/tarifas")
+            ?? Array.Empty<ClienteTarifaDto>();
+            tarifasError = null;
+        }
+        catch (Exception ex)
+        {
+            tarifasError = "Error al cargar las tarifas del cliente. " + ex.Message;
+        }
+        finally
+        {
+            tarifasLoaded = true;
+        }
+    }
+
+    private async Task LoadEstadoCuentaAsync()
+    {
+        if (estadoCuentaLoaded || cliente is null)
+            return;
+
+        try
+        {
+            estadoCuenta = await Http.GetFromJsonAsync<ClienteEstadoCuentaDto>($"api/clientes/{cliente.Id}/estado-cuenta");
+            estadoCuentaError = null;
+        }
+        catch (Exception ex)
+        {
+            estadoCuentaError = "Error al cargar el estado de cuenta. " + ex.Message;
+        }
+        finally
+        {
+            estadoCuentaLoaded = true;
+        }
+    }
+
+    private async Task LoadMovimientosAsync()
+    {
+        if (movimientosLoaded || cliente is null)
+            return;
+
+        try
+        {
+            movimientos = await Http.GetFromJsonAsync<ClienteMovimientoDto[]>($"api/clientes/{cliente.Id}/movimientos")
+            ?? Array.Empty<ClienteMovimientoDto>();
+            movimientosError = null;
+        }
+        catch (Exception ex)
+        {
+            movimientosError = "Error al cargar los movimientos. " + ex.Message;
+        }
+        finally
+        {
+            movimientosLoaded = true;
+        }
+    }
+
+    private SolicitudCreateModel CrearModeloInicial() => new()
+    {
+        Telefono = cliente?.Telefono ?? string.Empty,
+        Direccion = cliente?.Direccion ?? string.Empty,
+        Correo = string.Empty,
+        Observacion = null,
+        CategoriaServicioId = categorias.FirstOrDefault()?.Id ?? 0
+    };
+
+    private class SolicitudCreateModel
+    {
+        public string Telefono { get; set; } = string.Empty;
+        public string Direccion { get; set; } = string.Empty;
+        public string? Correo { get; set; }
+        public string? Observacion { get; set; }
+        public int CategoriaServicioId { get; set; }
+    }
+
+    private class MedidorAssignModel
+    {
+        public int? MedidorId { get; set; }
+    }
+
+    private class LecturaSinMedidorModel
+    {
+        public string Clave { get; set; } = string.Empty;
+        public DateTime Fecha { get; set; } = DateTime.Today;
+        public decimal Lectura { get; set; }
+        public string Usuario { get; set; } = string.Empty;
+    }
+}
+
+
+
+
+
+

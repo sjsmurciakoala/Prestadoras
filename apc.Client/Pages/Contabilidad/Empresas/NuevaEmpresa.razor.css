@@ -1,0 +1,19 @@
+﻿.popup-summary-grid {
+    display: grid;
+    grid-template-columns: 110px 1fr;
+    row-gap: 8px;
+    column-gap: 10px;
+    font-size: 0.9rem;
+}
+
+    .popup-summary-grid .label {
+        font-weight: 600;
+        color: #666;
+    }
+
+    .popup-summary-grid .value {
+        background: #f8f9fa;
+        border: 1px solid #e1e1e1;
+        padding: 4px 8px;
+        border-radius: 4px;
+    }
