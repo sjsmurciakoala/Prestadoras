@@ -1,0 +1,50 @@
+USE [MD_CONTAB]
+GO
+
+/****** Object:  Table [dbo].[C01FixedSerial]    Script Date: 10/12/2025 13:39:33 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[C01FixedSerial](
+	[ID_Fix] [varchar](15) NOT NULL,
+	[Serial] [varchar](20) NOT NULL,
+	[ID_AddFix] [varchar](10) NULL,
+	[ID_LocFix] [varchar](6) NOT NULL,
+	[NLine] [int] IDENTITY(1,1) NOT NULL,
+	[Status] [smallint] NOT NULL,
+ CONSTRAINT [C01FixedSerial0] PRIMARY KEY CLUSTERED 
+(
+	[ID_Fix] ASC,
+	[Serial] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[C01FixedSerial] ADD  DEFAULT ((1)) FOR [Status]
+GO
+
+ALTER TABLE [dbo].[C01FixedSerial]  WITH CHECK ADD  CONSTRAINT [C01FixedSerialFK01] FOREIGN KEY([ID_Fix])
+REFERENCES [dbo].[C01FixedAssest] ([ID_Fix])
+GO
+
+ALTER TABLE [dbo].[C01FixedSerial] CHECK CONSTRAINT [C01FixedSerialFK01]
+GO
+
+ALTER TABLE [dbo].[C01FixedSerial]  WITH CHECK ADD  CONSTRAINT [C01FixedSerialFK02] FOREIGN KEY([ID_LocFix])
+REFERENCES [dbo].[C01FixedLoc] ([ID_LocFix])
+GO
+
+ALTER TABLE [dbo].[C01FixedSerial] CHECK CONSTRAINT [C01FixedSerialFK02]
+GO
+
+ALTER TABLE [dbo].[C01FixedSerial]  WITH CHECK ADD  CONSTRAINT [C01FixedSerialFK03] FOREIGN KEY([ID_AddFix])
+REFERENCES [dbo].[C01FixedAdd] ([ID_AddFix])
+GO
+
+ALTER TABLE [dbo].[C01FixedSerial] CHECK CONSTRAINT [C01FixedSerialFK03]
+GO
+
+

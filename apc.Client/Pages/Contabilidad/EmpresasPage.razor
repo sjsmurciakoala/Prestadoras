@@ -1,0 +1,75 @@
+@page "/contabilidad/empresas"
+
+@using SIAD.Core.DTOs.Tenant
+@using DevExpress.Blazor
+@inject TenantCompaniesClient TenantCompaniesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Empresas</PageTitle>
+
+<div class="d-flex justify-content-between align-items-center mb-3">
+	<div>
+		<h3 class="mb-1">Empresas</h3>
+		<p class="text-muted mb-0">Listado de empresas</p>
+	</div>
+	<DxButton Text="Crear nueva" CssClass="mb-0" NavigateUrl="/contabilidad/empresas/nueva" />
+</div>
+
+@if (loading)
+{
+	<p>Cargando...</p>
+}
+else if (!string.IsNullOrWhiteSpace(error))
+{
+	<p class="text-danger">@error</p>
+}
+else
+{
+	    <DxGrid Data="@companies"
+		    PageSize="10">
+		<Columns>
+			<DxGridDataColumn FieldName="@nameof(TenantCompanyDto.Code)" Caption="Código" Width="140px" />
+			<DxGridDataColumn FieldName="@nameof(TenantCompanyDto.Name)" Caption="Nombre" />
+			<DxGridDataColumn Caption="Acciones" Width="140px">
+				<CellDisplayTemplate Context="cellContext">
+					@if (cellContext.DataItem is TenantCompanyDto company)
+					{
+						<DxButton Text="Editar"
+								  Size="ButtonSize.Small"
+								  RenderStyle="ButtonRenderStyle.Secondary"
+								  Click="@(async () => await NavegarEditarAsync(company.CompanyId))" />
+					}
+				</CellDisplayTemplate>
+			</DxGridDataColumn>
+		</Columns>
+	</DxGrid>
+}
+
+@code {
+	private List<TenantCompanyDto> companies = new();
+	private bool loading = true;
+	private string? error;
+
+	protected override async Task OnInitializedAsync()
+	{
+		try
+		{
+			var resultado = await TenantCompaniesClient.ObtenerAsync();
+			companies = resultado.ToList();
+		}
+		catch (Exception ex)
+		{
+			error = ex.Message;
+		}
+		finally
+		{
+			loading = false;
+		}
+	}
+
+	private Task NavegarEditarAsync(long companyId)
+	{
+		NavigationManager.NavigateTo($"/contabilidad/empresas/editar/{companyId}", forceLoad: true);
+		return Task.CompletedTask;
+	}
+}

@@ -11,4 +11,16 @@ public record PlanCuentaDto(
     bool AllowsPosting,
     string Status,
     string? Description,
-    string? CurrencyCode);
+    string? CurrencyCode,
+    string? ShortDescription,
+    string? ExternalReference,
+    bool AllowsBudget,
+    bool AllowsCostCenter,
+    bool AllowsThird,
+    bool AllowsBank,
+    bool IsTaxBase,
+    bool AllowsAmount,
+    bool AllowsMultiCurrency,
+    decimal? BudgetAmount,
+    string CreatedBy = "SYSTEM",
+    string? UpdatedBy = null);

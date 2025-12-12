@@ -7,100 +7,45 @@
     {
         <DxAlert AlertType="AlertType.Danger">@errorMessage</DxAlert>
     }
+
     <DxStackLayout Orientation="Orientation.Vertical" Spacing="15px">
         <DxStackLayoutItem>
-            <DxButton Text="Nuevo" RenderStyle="ButtonRenderStyle.Primary" Click="@(() => OpenForm(null))" />
-            <DxButton Text="Actualizar" CssClass="ms-2" Click="LoadPlanCuentasAsync" />
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="LoadPlanCuentasAsync"
+                      Enabled="@( !isLoading )" />
         </DxStackLayoutItem>
         <DxStackLayoutItem>
-            <DxGrid Data="@planCuentas"
-                    KeyFieldName="@nameof(PlanCuentaDto.AccountId)"
-                    ShowFilterRow="true"
-                    PageSize="15">
+            <div class="text-muted small">Total cuentas: @planCuentas.Length</div>
+        </DxStackLayoutItem>
+        <DxStackLayoutItem>
+            <DxTreeList Data="@planCuentas"
+                        KeyFieldName="@nameof(PlanCuentaDto.AccountId)"
+                        ParentKeyFieldName="@nameof(PlanCuentaDto.ParentAccountId)"
+                        ShowFilterRow="true"
+                        ShowColumnLines="true"
+                        ShowBorders="true"
+                        AllowColumnResize="true"
+                        KeyboardNavigationEnabled="true">
                 <Columns>
-                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Code)" Caption="Código" />
-                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Name)" Caption="Nombre" />
-                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.AccountType)" Caption="Tipo" />
-                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Category)" Caption="Categoría" />
-                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Level)" Caption="Nivel" />
-                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.AllowsPosting)" Caption="Permite asientos" />
-                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Status)" Caption="Estado" />
-                    <DxGridCommandColumn Width="130px">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is PlanCuentaDto cuenta)
-                            {
-                                <DxButton Text="Editar" Click="@(() => OpenForm(cuenta))" ButtonType="ButtonType.Normal" />
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridCommandColumn>
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Code)" Caption="Codigo" />
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Name)" Caption="Nombre" />
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.AccountType)" Caption="Tipo" />
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Category)" Caption="Categoria" />
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Level)" Caption="Nivel" />
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.AllowsPosting)" Caption="Permite movimientos" />
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Status)" Caption="Estado" />
+                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.CurrencyCode)" Caption="Moneda" />
                 </Columns>
-            </DxGrid>
+            </DxTreeList>
         </DxStackLayoutItem>
     </DxStackLayout>
 </div>
 
-<DxPopup @bind-Visible="isFormVisible"
-         Width="600px"
-         ShowCloseButton="true"
-         HeaderText="@popupTitle">
-    <BodyTemplate Context="popupContext">
-        <DxFormLayout>
-            <DxFormLayoutItem Caption="Código" ColSpanMd="6">
-                <DxTextBox @bind-Text="formModel.Code" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Nombre" ColSpanMd="6">
-                <DxTextBox @bind-Text="formModel.Name" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Tipo" ColSpanMd="6">
-                <DxComboBox Data="@accountTypes"
-                            @bind-Value="formModel.AccountType"
-                            AllowUserInput="false" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Padre" ColSpanMd="6">
-                <DxComboBox Data="@planCuentas"
-                            TextFieldName="@nameof(PlanCuentaDto.Name)"
-                            ValueFieldName="@nameof(PlanCuentaDto.AccountId)"
-                            @bind-Value="formModel.ParentAccountId"
-                            AllowUserInput="false"
-                            NullText="(ninguno)" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Categoría" ColSpanMd="6">
-                <DxTextBox @bind-Text="formModel.Category" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Moneda" ColSpanMd="6">
-                <DxTextBox @bind-Text="formModel.CurrencyCode" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
-                <DxMemo @bind-Text="formModel.Description" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Permite asientos" ColSpanMd="6">
-                <DxCheckBox @bind-Checked="formModel.AllowsPosting" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Estado" ColSpanMd="6">
-                <DxComboBox Data="@statusOptions"
-                            @bind-Value="formModel.Status"
-                            AllowUserInput="false" />
-            </DxFormLayoutItem>
-        </DxFormLayout>
-    </BodyTemplate>
-    <FooterTemplate>
-        <DxButton Text="Cancelar" CssClass="me-2" Click="@(() => isFormVisible = false)" />
-        <DxButton Text="Guardar"
-                  RenderStyle="ButtonRenderStyle.Secondary"
-                  Click="SavePlanCuentaAsync"
-                  Enabled="@( !isSaving )" />
-    </FooterTemplate>
-</DxPopup>
-
 @code {
-    private readonly string[] accountTypes = new[] { "ACTIVO", "PASIVO", "CAPITAL", "INGRESO", "GASTO", "MEMORANDA" };
-    private readonly string[] statusOptions = new[] { "ACTIVE", "INACTIVE" };
     private PlanCuentaDto[] planCuentas = Array.Empty<PlanCuentaDto>();
-    private bool isFormVisible;
-    private bool isSaving;
-    private string popupTitle = "Nueva cuenta";
     private string? errorMessage;
-    private PlanCuentaFormModel formModel = new();
+    private bool isLoading;
 
     protected override async Task OnInitializedAsync()
     {
@@ -111,6 +56,7 @@
     {
         try
         {
+            isLoading = true;
             errorMessage = null;
             planCuentas = await Http.GetFromJsonAsync<PlanCuentaDto[]>("api/contabilidad/catalogos/plan-cuentas")
                 ?? Array.Empty<PlanCuentaDto>();
@@ -120,91 +66,9 @@
             errorMessage = ex.Message;
             planCuentas = Array.Empty<PlanCuentaDto>();
         }
-    }
-
-    private void OpenForm(PlanCuentaDto? cuenta)
-    {
-        if (cuenta is null)
-        {
-            formModel = new PlanCuentaFormModel
-            {
-                AllowsPosting = true,
-                Status = "ACTIVE"
-            };
-            popupTitle = "Nueva cuenta";
-        }
-        else
-        {
-            formModel = new PlanCuentaFormModel
-            {
-                AccountId = cuenta.AccountId,
-                Code = cuenta.Code,
-                Name = cuenta.Name,
-                Description = cuenta.Description,
-                AccountType = cuenta.AccountType,
-                Category = cuenta.Category,
-                CurrencyCode = cuenta.CurrencyCode,
-                AllowsPosting = cuenta.AllowsPosting,
-                Status = cuenta.Status,
-                ParentAccountId = cuenta.ParentAccountId
-            };
-            popupTitle = $"Editar {cuenta.Code}";
-        }
-
-        isFormVisible = true;
-    }
-
-    private async Task SavePlanCuentaAsync()
-    {
-        if (string.IsNullOrWhiteSpace(formModel.Code) || string.IsNullOrWhiteSpace(formModel.Name) || string.IsNullOrWhiteSpace(formModel.AccountType))
-        {
-            errorMessage = "Complete código, nombre y tipo de cuenta.";
-            return;
-        }
-
-        var payload = new PlanCuentaUpsertDto(
-            formModel.Code.Trim(),
-            formModel.Name.Trim(),
-            formModel.AccountType,
-            formModel.AllowsPosting,
-            string.IsNullOrWhiteSpace(formModel.Status) ? "ACTIVE" : formModel.Status!,
-            string.Empty,
-            formModel.AccountId,
-            formModel.ParentAccountId,
-            string.IsNullOrWhiteSpace(formModel.Category) ? null : formModel.Category.Trim(),
-            string.IsNullOrWhiteSpace(formModel.Description) ? null : formModel.Description.Trim(),
-            string.IsNullOrWhiteSpace(formModel.CurrencyCode) ? null : formModel.CurrencyCode.Trim());
-
-        try
-        {
-            isSaving = true;
-            errorMessage = null;
-            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/plan-cuentas", payload);
-            response.EnsureSuccessStatusCode();
-            isFormVisible = false;
-            await LoadPlanCuentasAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
-        }
         finally
         {
-            isSaving = false;
+            isLoading = false;
         }
-    }
-
-    class PlanCuentaFormModel
-    {
-        public long? AccountId { get; set; }
-        public string? Code { get; set; }
-        public string? Name { get; set; }
-        public string AccountType { get; set; } = "ACTIVO";
-        public string? Category { get; set; }
-        public string? Description { get; set; }
-        public string? CurrencyCode { get; set; }
-        public bool AllowsPosting { get; set; } = true;
-        public string? Status { get; set; } = "ACTIVE";
-        public long? ParentAccountId { get; set; }
     }
 }

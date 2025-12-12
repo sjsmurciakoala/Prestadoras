@@ -1,0 +1,27 @@
+USE [MD_CONTAB]
+GO
+
+/****** Object:  Table [dbo].[EntityPrefix]    Script Date: 10/12/2025 13:58:09 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[EntityPrefix](
+	[Prefix] [smallint] NOT NULL,
+	[IDParam] [binary](400) NULL,
+ CONSTRAINT [EntityPrefix0] PRIMARY KEY CLUSTERED 
+(
+	[Prefix] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[EntityPrefix] ADD  DEFAULT ((1)) FOR [Prefix]
+GO
+
+ALTER TABLE [dbo].[EntityPrefix]  WITH CHECK ADD CHECK  (([Prefix]>(0)))
+GO
+
+

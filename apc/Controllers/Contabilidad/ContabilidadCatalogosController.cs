@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Services.Contabilidad;
 
@@ -7,7 +8,7 @@ namespace apc.Controllers.Contabilidad;
 
 [ApiController]
 [Route("api/contabilidad/catalogos")]
-[Authorize]
+[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
 public class ContabilidadCatalogosController : ControllerBase
 {
     private readonly IContabilidadCatalogosService _catalogosService;

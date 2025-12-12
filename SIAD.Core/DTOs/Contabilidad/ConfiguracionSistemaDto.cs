@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.Linq;
 using System.Text.Json.Serialization;
+using SIAD.Core.Constants;
 
 namespace SIAD.Core.DTOs.Contabilidad;
 
@@ -150,13 +151,13 @@ public sealed class CuentasUtilidadDto
 
 public sealed class EstadoSituacionFinancieraDto
 {
-    // Activos - ahora con códigos
+    // Activos - ahora con cï¿½digos
     public string? CodigoActivoCortoPlazo1 { get; set; }
     public string? CodigoActivoCortoPlazo2 { get; set; }
     public string? CodigoActivoLargoPlazo1 { get; set; }
     public string? CodigoActivoLargoPlazo2 { get; set; }
     
-    // Pasivos - ahora con códigos
+    // Pasivos - ahora con cï¿½digos
     public string? CodigoPasivoCortoPlazo1 { get; set; }
     public string? CodigoPasivoCortoPlazo2 { get; set; }
     public string? CodigoPasivoLargoPlazo1 { get; set; }

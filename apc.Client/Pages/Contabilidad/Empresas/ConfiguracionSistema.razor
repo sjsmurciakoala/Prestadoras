@@ -1,5 +1,5 @@
 @page "/contabilidad/empresas/configuracion"
-@attribute [Authorize(Roles = RoleNames.AdminContabilidad + "," + RoleNames.SuperAdministrador)]
+@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Components.Forms
 @using apc.Client.Services.Contabilidad
@@ -11,42 +11,42 @@
 @inject TenantCompaniesClient TenantCompaniesClient
 
 <div class="contabilidad-page contabilidad-content configuracion-sistema-page">
-    <DxCard CssClass="shadow-sm border-0 rounded">
-        <DxCardHeader>
-            <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
-                <div>
-                    <div class="fs-5 fw-semibold mb-1">Configuracion del sistema contable</div>
-                    <p class="text-muted mb-0 small">Define parametros base para la empresa seleccionada.</p>
-                </div>
-                <div class="d-flex flex-wrap align-items-center gap-2">
-                    <DxComboBox Data="empresas"
-                                TData="TenantCompanyDto"
-                                TValue="long"
-                                Value="@empresaSeleccionadaId"
-                                ValueChanged="@OnEmpresaChangedAsync"
-                                ValueExpression="@(() => empresaSeleccionadaId)"
-                                ValueFieldName="@nameof(TenantCompanyDto.CompanyId)"
-                                TextFieldName="@nameof(TenantCompanyDto.Name)"
-                                NullText="Selecciona empresa"
-                                Enabled="@(!cargando && empresas.Count > 0)">
-                        <ItemTemplate Context="e">
-                            <div class="d-flex flex-column">
-                                <span class="fw-semibold">@e.Code - @e.Name</span>
-                                <small class="text-muted">Codigo: @e.CompanyId</small>
-                            </div>
-                        </ItemTemplate>
-                    </DxComboBox>
-
-                    <DxButton Text="Recargar"
-                              IconCssClass="bi bi-arrow-clockwise"
-                              RenderStyle="ButtonRenderStyle.Secondary"
-                              Enabled="@(!cargando)"
-                              Click="@RecargarAsync" />
-                </div>
+<div class="card shadow-sm border-0 rounded">
+    <div class="card-header bg-light">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div>
+                <div class="fs-5 fw-semibold mb-1">Configuracion del sistema contable</div>
+                <p class="text-muted mb-0 small">Define parametros base para la empresa seleccionada.</p>
             </div>
-        </DxCardHeader>
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <DxComboBox Data="empresas"
+                            TData="TenantCompanyDto"
+                            TValue="long"
+                            Value="@empresaSeleccionadaId"
+                            ValueChanged="@OnEmpresaChangedAsync"
+                            ValueExpression="@(() => empresaSeleccionadaId)"
+                            ValueFieldName="@nameof(TenantCompanyDto.CompanyId)"
+                            TextFieldName="@nameof(TenantCompanyDto.Name)"
+                            NullText="Selecciona empresa"
+                            Enabled="@(!cargando && empresas.Count > 0)">
+                    <ItemTemplate Context="e">
+                        <div class="d-flex flex-column">
+                            <span class="fw-semibold">@e.Code - @e.Name</span>
+                            <small class="text-muted">Codigo: @e.CompanyId</small>
+                        </div>
+                    </ItemTemplate>
+                </DxComboBox>
 
-        <DxCardBody class="p-4">
+                <DxButton Text="Recargar"
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(!cargando)"
+                          Click="@RecargarAsync" />
+            </div>
+        </div>
+    </div>
+
+    <div class="card-body p-4">
             @if (!string.IsNullOrWhiteSpace(alerta))
             {
                 <DxMessageBox Type="MessageBoxType.Alert"
@@ -71,8 +71,8 @@
                     <div class="d-flex align-items-center gap-3">
                         <i class="bi bi-info-circle-fill fs-4"></i>
                         <div>
-                            <h5 class="alert-heading mb-1">Configuración no disponible</h5>
-                            <p class="mb-0">Esta empresa aún no tiene configuración del sistema contable. Complete el formulario a continuación para configurarla.</p>
+                            <h5 class="alert-heading mb-1">Configuracion no disponible</h5>
+                            <p class="mb-0">Esta empresa aun no tiene configuracion del sistema contable. Complete el formulario a continuacion para configurarla.</p>
                         </div>
                     </div>
                 </div>
@@ -172,93 +172,93 @@
                                 <DxFormLayout ColumnCountMd="12" ReadOnly="@cargando">
                                     <DxFormLayoutGroup Caption="Historicas" ColSpanMd="12">
                                         <DxFormLayoutItem Caption="Utilidad acumulada" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaUtilAcumuladaHistorica"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaUtilAcumuladaHistorica"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
 
                                         <DxFormLayoutItem Caption="Perdida acumulada" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaPerdidaAcumuladaHistorica"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaPerdidaAcumuladaHistorica"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
 
                                         <DxFormLayoutItem Caption="Utilidad del ejercicio" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaUtilEjercicioHistorica"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaUtilEjercicioHistorica"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
 
                                         <DxFormLayoutItem Caption="Perdidas del ejercicio" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaPerdidaEjercicioHistorica"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaPerdidaEjercicioHistorica"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
                                     </DxFormLayoutGroup>
 
                                     <DxFormLayoutGroup Caption="De ajustes por inflacion" ColSpanMd="12">
                                         <DxFormLayoutItem Caption="Utilidad acumulada" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaUtilAcumuladaInflacion"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaUtilAcumuladaInflacion"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
 
                                         <DxFormLayoutItem Caption="Perdida acumulada" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaPerdidaAcumuladaInflacion"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaPerdidaAcumuladaInflacion"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
 
                                         <DxFormLayoutItem Caption="Utilidad del ejercicio" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaUtilEjercicioInflacion"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaUtilEjercicioInflacion"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
 
                                         <DxFormLayoutItem Caption="Perdidas del ejercicio" ColSpanMd="6">
-                                            <DxComboBox Data="@cuentasDisponibles"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long?"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        @bind-Value="modelo.CuentasUtilidad.CuentaPerdidaEjercicioInflacion"
-                                                        NullText="Seleccione cuenta"
-                                                        DropDownWidth="420px" />
+                                        <DxComboBox Data="@cuentasDisponibles"
+                                                    TData="CuentaContableLookupDto"
+                                                    TValue="string"
+                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                    @bind-Value="modelo.CuentasUtilidad.CodigoCuentaPerdidaEjercicioInflacion"
+                                                    NullText="Seleccione cuenta"
+                                                    DropDownWidth="420px" />
                                         </DxFormLayoutItem>
                                     </DxFormLayoutGroup>
                                 </DxFormLayout>
@@ -266,350 +266,176 @@
                         </DxTabPage>
 
                         <DxTabPage Text="Estado situacion financiera">
-                            <div class="mt-3">
-                                <DxFormLayout ColumnCountMd="12" ReadOnly="@cargando">
-                                    <DxFormLayoutItem ColSpanMd="12">
-                                        <div class="row fw-semibold mb-2">
-                                            <div class="col-md-4">Cuentas del balance</div>
-                                            <div class="col-md-3">Código</div>
-                                            <div class="col-md-5">Descripción de la cuenta</div>
-                                        </div>
-                                    </DxFormLayoutItem>
+                            <div class="mt-4">
+                                <div class="grid-container">
+                                    <DxGrid Data="@balancePreviewData"
+                                            ShowGroupPanel="false"
+                                            TextWrapEnabled="false"
+                                            HighlightRowOnHover="true"
+                                            ShowAllRows="true"
+                                            PagerVisible="false"
+                                            CssClass="estado-sf-grid">
+                                        <Columns>
+                                            <DxGridDataColumn FieldName="@nameof(BalancePreviewRow.Categoria)"
+                                                              Caption="Cuentas del balance"
+                                                              Width="240px">
+                                                <CellDisplayTemplate>
+                                                    @{
+                                                        var row = (BalancePreviewRow)context.DataItem;
+                                                    }
+                                                    @if (row.EsTitulo)
+                                                    {
+                                                        <strong>@row.Cuenta</strong>
+                                                    }
+                                                    else if (row.Categoria.Equals("Orden", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        <span class="form-control-plaintext px-2 py-1 fw-semibold">@row.Cuenta</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span></span>
+                                                    }
+                                                </CellDisplayTemplate>
+                                            </DxGridDataColumn>
 
-                                    <DxFormLayoutGroup Caption="Activos" ColSpanMd="12">
-                                        <DxFormLayoutItem Caption="Activo corto plazo 1" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.ActivoCortoPlazo1"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descActivoCortoPlazo1"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
+                                            <DxGridDataColumn FieldName="@nameof(BalancePreviewRow.Codigo)" 
+                                                              Caption="Codigo" 
+                                                              MinWidth="140"
+                                                              Width="160px">
+                                                <CellDisplayTemplate>
+                                                    @{
+                                                        var row = (BalancePreviewRow)context.DataItem;
+                                                    }
+                                                    @if (row.EsTitulo)
+                                                    {
+                                                        <span class="form-control-plaintext px-2 py-1">&nbsp;</span>
+                                                    }
+                                                    else
+                                                    {
+                                                        <DxComboBox Data="@cuentasDisponibles"
+                                                                    TData="CuentaContableLookupDto"
+                                                                    TValue="string"
+                                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                                    Value="@row.Codigo"
+                                                                    ValueChanged="@(code => OnCuentaSeleccionada(row, code))"
+                                                                    ValueExpression="@(() => row.Codigo)"
+                                                                    NullText="Seleccione cuenta"
+                                                                    EnableValidation="false"
+                                                                    DropDownWidth="420px"
+                                                                    SearchMode="ListSearchMode.AutoSearch"
+                                                                    SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                                                    }
+                                                </CellDisplayTemplate>
+                                            </DxGridDataColumn>
 
-                                        <DxFormLayoutItem Caption="Activo corto plazo 2" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.ActivoCortoPlazo2"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descActivoCortoPlazo2"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Activo largo plazo 1" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.ActivoLargoPlazo1"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descActivoLargoPlazo1"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Activo largo plazo 2" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.ActivoLargoPlazo2"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descActivoLargoPlazo2"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-                                    </DxFormLayoutGroup>
-
-                                    <DxFormLayoutGroup Caption="Pasivos" ColSpanMd="12">
-                                        <DxFormLayoutItem Caption="Pasivo corto plazo 1" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.PasivoCortoPlazo1"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descPasivoCortoPlazo1"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Pasivo corto plazo 2" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.PasivoCortoPlazo2"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descPasivoCortoPlazo2"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Pasivo largo plazo 1" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.PasivoLargoPlazo1"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descPasivoLargoPlazo1"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Pasivo largo plazo 2" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.PasivoLargoPlazo2"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descPasivoLargoPlazo2"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-                                    </DxFormLayoutGroup>
-
-                                    <DxFormLayoutGroup Caption="Capital" ColSpanMd="12">
-                                        <DxFormLayoutItem Caption="Capital aportado" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.CapitalAportado"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descCapitalAportado"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Resultados acumulados" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.ResultadosAcumulados"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descResultadosAcumulados"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Utilidad / Perdida del ejercicio" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.UtilidadPerdidaEjercicio"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descUtilidadPerdida"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-
-                                        <DxFormLayoutItem Caption="Sobrevaluaciones" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.Sobrevaluaciones"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descSobrevaluaciones"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-                                    </DxFormLayoutGroup>
-
-                                    <DxFormLayoutGroup Caption="Pasivo y Capital" ColSpanMd="12">
-                                        <DxFormLayoutItem Caption="Pasivo y capital" ColSpanMd="12">
-                                            <div class="row g-2 align-items-center">
-                                                <div class="col-md-3">
-                                                    <DxComboBox Data="@cuentasDisponibles"
-                                                                TData="CuentaContableLookupDto"
-                                                                TValue="long?"
-                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                                TextFieldName="@nameof(CuentaContableLookupDto.Code)"
-                                                                @bind-Value="modelo.EstadoSituacionFinanciera.PasivoyCapital"
-                                                                NullText="Codigo"
-                                                                DropDownWidth="420px" />
-                                                </div>
-                                                <div class="col-md-5">
-                                                    <DxTextBox @bind-Text="descPasivoyCapital"
-                                                               ValidationEnabled="false"
-                                                               NullText="Descripcion" />
-                                                </div>
-                                            </div>
-                                        </DxFormLayoutItem>
-                                    </DxFormLayoutGroup>
-
-                                    <DxFormLayoutGroup Caption="Opciones de presentacion" ColSpanMd="12">
-                                        <DxFormLayoutItem Caption="Mostrar en orden" ColSpanMd="6">
-                                            <DxCheckBox @bind-Checked="modelo.EstadoSituacionFinanciera.MostrarOrden" />
-                                        </DxFormLayoutItem>
-                                        <DxFormLayoutItem Caption="Mostrar per contra" ColSpanMd="6">
-                                            <DxCheckBox @bind-Checked="modelo.EstadoSituacionFinanciera.MostrarPercontra" />
-                                        </DxFormLayoutItem>
-                                    </DxFormLayoutGroup>
-                                </DxFormLayout>
+                                            <DxGridDataColumn FieldName="@nameof(BalancePreviewRow.Descripcion)" 
+                                                              Caption="Descripcion de la cuenta" 
+                                                              MinWidth="260"
+                                                              Width="420px">
+                                                <CellDisplayTemplate>
+                                                    @{
+                                                        var row = (BalancePreviewRow)context.DataItem;
+                                                    }
+                                                    @if (row.EsTitulo)
+                                                    {
+                                                        <DxTextBox @bind-Text="row.Descripcion"
+                                                                   NullText="Descripcion manual" />
+                                                    }
+                                                    else if (row.Categoria.Equals("Orden", StringComparison.OrdinalIgnoreCase))
+                                                    {
+                                                        <DxTextBox @bind-Text="row.Descripcion"
+                                                                   NullText="Descripcion de la cuenta"
+                                                                   ReadOnly="true" />
+                                                    }
+                                                    else
+                                                    {
+                                                        <DxTextBox @bind-Text="row.Descripcion"
+                                                                   NullText="Descripcion de la cuenta" />
+                                                    }
+                                                </CellDisplayTemplate>
+                                            </DxGridDataColumn>
+                                        </Columns>
+                                    </DxGrid>
+                                </div>
                             </div>
                         </DxTabPage>
 
                         <DxTabPage Text="Estado resultados">
-                            <div class="d-flex flex-wrap justify-content-between align-items-center mb-2">
-                                <DxButton Text="Agregar linea"
-                                          IconCssClass="bi bi-plus-lg"
-                                          RenderStyle="ButtonRenderStyle.Secondary"
-                                          Click="@AgregarLineaResultado"
-                                          Enabled="@(!cargando)" />
-                                <small class="text-muted">Tipos permitidos: Ingreso, Costo, Gasto.</small>
-                            </div>
+                            <div class="mt-4">
+                                <div class="d-flex flex-wrap justify-content-between align-items-center mb-3">
+                                    <DxButton Text="Agregar linea"
+                                              IconCssClass="bi bi-plus-lg"
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              Click="@AgregarLineaResultado"
+                                              Enabled="@(!cargando)" />
+                                    <small class="text-muted">Tipos permitidos: Ingreso, Costo, Gasto.</small>
+                                </div>
 
-                            <DxScrollView Height="420px">
-                                @if (modelo.EstadoResultados.Count == 0)
+                                @if (modelo.LineasResultado.Count == 0)
                                 {
-                                    <DxAlert AlertType="AlertType.Info">Agrega al menos una linea para el estado de resultados.</DxAlert>
+                                    <DxMessageBox Type="MessageBoxType.Alert"
+                                                  RenderStyle="MessageBoxRenderStyle.Info"
+                                                  ShowIcon="true"
+                                                  Text="Agrega al menos una linea para el estado de resultados."
+                                                  Visible="true" />
                                 }
                                 else
                                 {
-                                    <DxFormLayout ColumnCountMd="12" ReadOnly="@cargando">
-                                        @foreach (var linea in modelo.EstadoResultados)
-                                        {
-                                            <DxFormLayoutItem ColSpanMd="12">
-                                                <div class="row g-2 align-items-center">
-                                                    <div class="col-md-2">
+                                    <DxGrid Data="@modelo.LineasResultado"
+                                            ShowAllRows="true"
+                                            EditMode="GridEditMode.EditRow">
+                                        <Columns>
+                                            <DxGridDataColumn FieldName="@nameof(LineaResultadoDto.Tipo)" 
+                                                            Caption="Tipo" 
+                                                            Width="120px">
+                                                <CellEditTemplate>
+                                                    @{
+                                                        var linea = (LineaResultadoDto)context.EditModel;
                                                         <DxComboBox Data="@tiposResultado"
                                                                     TData="string"
                                                                     TValue="string"
                                                                     @bind-Value="linea.Tipo"
-                                                                    NullText="Tipo" />
-                                                        <ValidationMessage For="@(() => linea.Tipo)" />
-                                                    </div>
-                                                    <div class="col-md-3">
-                                                        <DxTextBox @bind-Text="linea.Codigo"
-                                                                   NullText="Codigo" />
-                                                        <ValidationMessage For="@(() => linea.Codigo)" />
-                                                    </div>
-                                                    <div class="col-md-5">
+                                                                    NullText="Selecciona" />
+                                                    }
+                                                </CellEditTemplate>
+                                            </DxGridDataColumn>
+
+                                            <DxGridDataColumn FieldName="@nameof(LineaResultadoDto.CodigoCuenta)" 
+                                                            Caption="Codigo" 
+                                                            Width="140px">
+                                                <CellEditTemplate>
+                                                    @{
+                                                        var linea = (LineaResultadoDto)context.EditModel;
+                                                        <DxComboBox Data="@cuentasDisponibles"
+                                                                    TData="CuentaContableLookupDto"
+                                                                    TValue="string"
+                                                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                                    @bind-Value="linea.CodigoCuenta"
+                                                                    NullText="Selecciona"
+                                                                    DropDownWidth="350px" />
+                                                    }
+                                                </CellEditTemplate>
+                                            </DxGridDataColumn>
+
+                                            <DxGridDataColumn FieldName="@nameof(LineaResultadoDto.Descripcion)" 
+                                                            Caption="Descripcion">
+                                                <CellEditTemplate>
+                                                    @{
+                                                        var linea = (LineaResultadoDto)context.EditModel;
                                                         <DxTextBox @bind-Text="linea.Descripcion"
                                                                    NullText="Descripcion" />
-                                                        <ValidationMessage For="@(() => linea.Descripcion)" />
-                                                    </div>
-                                                    <div class="col-md-2 d-flex gap-2">
-                                                        <DxButton IconCssClass="bi bi-trash"
-                                                                  RenderStyle="ButtonRenderStyle.Secondary"
-                                                                  ToolTip="Eliminar linea"
-                                                                  Click="@(() => EliminarLineaResultado(linea.RowId))" />
-                                                    </div>
-                                                </div>
-                                            </DxFormLayoutItem>
-                                        }
-                                    </DxFormLayout>
-                                }
-                            </DxScrollView>
-                        </DxTabPage>
+                                                    }
+                                                </CellEditTemplate>
+                                            </DxGridDataColumn>
 
+                                            <DxGridCommandColumn Width="100px" />
+                                        </Columns>
+                                    </DxGrid>
+                                }
+                            </div>
+                        </DxTabPage>
                         <DxTabPage Text="Correlativos" Visible="false" />
                     </DxTabs>
 
@@ -627,8 +453,8 @@
                     </div>
                 </EditForm>
             }
-        </DxCardBody>
-    </DxCard>
+    </div>
+</div>
 </div>
 
 <DxPopup @bind-Visible="popupGuardadoVisible"
@@ -655,6 +481,20 @@
     </DxFormLayout>
 </DxPopup>
 
+<style>
+    .grid-container {
+        margin-top: 1rem;
+    }
+
+    .estado-sf-grid .dx-button {
+        min-width: 36px;
+    }
+
+    .estado-sf-grid .dx-texteditor {
+        width: 100%;
+    }
+</style>
+
 
 @code {
     private ConfiguracionSistemaDto modelo = new();
@@ -666,34 +506,22 @@
     private bool configuracionExiste = false;
     private string? alerta;
     private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
-
-    // Descripciones editables para Activos
-    private string descActivoCortoPlazo1 = string.Empty;
-    private string descActivoCortoPlazo2 = string.Empty;
-    private string descActivoLargoPlazo1 = string.Empty;
-    private string descActivoLargoPlazo2 = string.Empty;
-
-    // Descripciones editables para Pasivos
-    private string descPasivoCortoPlazo1 = string.Empty;
-    private string descPasivoCortoPlazo2 = string.Empty;
-    private string descPasivoLargoPlazo1 = string.Empty;
-    private string descPasivoLargoPlazo2 = string.Empty;
-
-    // Descripciones editables para Capital
-    private string descCapitalAportado = string.Empty;
-    private string descResultadosAcumulados = string.Empty;
-    private string descUtilidadPerdida = string.Empty;
-    private string descSobrevaluaciones = string.Empty;
-
-    // Descripción editable para Pasivo y Capital
-    private string descPasivoyCapital = string.Empty;
+    private string simboloUi = "()";
+    private bool popupGuardadoVisible;
+    private List<BalancePreviewRow> balancePreviewData = CrearBalancePreview();
+    private static readonly IReadOnlyList<string> categoriasBalance = new[]
+    {
+        "Activos",
+        "Pasivos",
+        "Capital",
+        "Pasivo y Capital",
+        "Orden"
+    };
 
     private readonly IReadOnlyList<string> separadores = new[] { ".", "-", ";" };
     private readonly IReadOnlyList<string> frecuencias = new[] { "Anual", "Mensual", "Diario" };
     private readonly IReadOnlyList<string> simbolosUi = new[] { "()", "-" };
     private readonly IReadOnlyList<string> tiposResultado = new[] { "Ingreso", "Costo", "Gasto" };
-    private string simboloUi = "()";
-    private bool popupGuardadoVisible;
 
     protected override async Task OnInitializedAsync()
     {
@@ -706,6 +534,7 @@
         cargando = true;
         alerta = null;
         configuracionExiste = false;
+        ResetBalancePreview();
         try
         {
             empresas = (await TenantCompaniesClient.ObtenerAsync())?.ToList() ?? new List<TenantCompanyDto>();
@@ -741,7 +570,7 @@
         var dto = await ConfiguracionClient.ObtenerAsync(companyId);
         modelo = dto ?? CrearModeloPorDefecto();
         
-        // Determinar si la configuración existe verificando si hay valores en ESF o CuentasUtilidad
+        // Determinar si la configuracion existe verificando si hay valores en ESF o CuentasUtilidad
         configuracionExiste = (modelo.EstadoSituacionFinanciera?.Seleccionadas ?? 0) > 0 || 
                               (modelo.CuentasUtilidad?.Seleccionadas ?? 0) > 0;
 
@@ -752,35 +581,14 @@
         };
 
         modelo.EstadoSituacionFinanciera ??= new EstadoSituacionFinancieraDto();
-        modelo.EstadoResultados ??= new List<EstadoResultadoLineaDto>();
-        foreach (var linea in modelo.EstadoResultados)
+        modelo.LineasResultado ??= new List<LineaResultadoDto>();
+        foreach (var linea in modelo.LineasResultado)
         {
             if (linea.RowId == Guid.Empty)
             {
                 linea.RowId = Guid.NewGuid();
             }
         }
-
-        // Cargar descripciones de Activos
-        descActivoCortoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoCortoPlazo1);
-        descActivoCortoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoCortoPlazo2);
-        descActivoLargoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoLargoPlazo1);
-        descActivoLargoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoLargoPlazo2);
-
-        // Cargar descripciones de Pasivos
-        descPasivoCortoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoCortoPlazo1);
-        descPasivoCortoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoCortoPlazo2);
-        descPasivoLargoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoLargoPlazo1);
-        descPasivoLargoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoLargoPlazo2);
-
-        // Cargar descripciones de Capital
-        descCapitalAportado = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.CapitalAportado);
-        descResultadosAcumulados = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ResultadosAcumulados);
-        descUtilidadPerdida = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.UtilidadPerdidaEjercicio);
-        descSobrevaluaciones = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.Sobrevaluaciones);
-
-        // Cargar descripción de Pasivo y Capital
-        descPasivoyCapital = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoyCapital);
 
         CalcularMeses();
         await CargarCuentasAsync(companyId);
@@ -799,40 +607,6 @@
             {
                 CalcularMeses();
             }
-
-            // Activos
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.ActivoCortoPlazo1))
-                descActivoCortoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoCortoPlazo1);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.ActivoCortoPlazo2))
-                descActivoCortoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoCortoPlazo2);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.ActivoLargoPlazo1))
-                descActivoLargoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoLargoPlazo1);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.ActivoLargoPlazo2))
-                descActivoLargoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ActivoLargoPlazo2);
-
-            // Pasivos
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.PasivoCortoPlazo1))
-                descPasivoCortoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoCortoPlazo1);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.PasivoCortoPlazo2))
-                descPasivoCortoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoCortoPlazo2);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.PasivoLargoPlazo1))
-                descPasivoLargoPlazo1 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoLargoPlazo1);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.PasivoLargoPlazo2))
-                descPasivoLargoPlazo2 = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoLargoPlazo2);
-
-            // Capital
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.CapitalAportado))
-                descCapitalAportado = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.CapitalAportado);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.ResultadosAcumulados))
-                descResultadosAcumulados = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.ResultadosAcumulados);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.UtilidadPerdidaEjercicio))
-                descUtilidadPerdida = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.UtilidadPerdidaEjercicio);
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.Sobrevaluaciones))
-                descSobrevaluaciones = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.Sobrevaluaciones);
-
-            // Pasivo y Capital
-            if (fieldName == nameof(EstadoSituacionFinancieraDto.PasivoyCapital))
-                descPasivoyCapital = ObtenerDescripcionCuenta(modelo.EstadoSituacionFinanciera.PasivoyCapital);
 
             alerta = null;
             InvokeAsync(StateHasChanged);
@@ -886,8 +660,24 @@
 
     private async Task OnEmpresaChangedAsync(long nuevaEmpresaId)
     {
-        empresaSeleccionadaId = nuevaEmpresaId;
-        await CargarConfiguracionAsync(nuevaEmpresaId);
+        cargando = true;
+        alerta = null;
+        ResetBalancePreview();
+        try
+        {
+            empresaSeleccionadaId = nuevaEmpresaId;
+            await CargarConfiguracionAsync(nuevaEmpresaId);
+        }
+        catch (Exception ex)
+        {
+            alerta = $"No fue posible cambiar de empresa: {ex.Message}";
+            alertaEstilo = MessageBoxRenderStyle.Danger;
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
     }
 
     private void CalcularMeses()
@@ -928,34 +718,23 @@
         cuentasDisponibles = await ConfiguracionClient.ListarCuentasAsync(companyId);
     }
 
-    private string ObtenerDescripcionCuenta(long? accountId)
-    {
-        if (!accountId.HasValue)
-        {
-            return string.Empty;
-        }
-
-        var cuenta = cuentasDisponibles.FirstOrDefault(c => c.AccountId == accountId.Value);
-        return cuenta?.Description ?? string.Empty;
-    }
-
     private void AgregarLineaResultado()
     {
-        modelo.EstadoResultados.Add(new EstadoResultadoLineaDto
+        modelo.LineasResultado.Add(new LineaResultadoDto
         {
             RowId = Guid.NewGuid(),
             Tipo = "Ingreso",
-            Codigo = string.Empty,
+            CodigoCuenta = string.Empty,
             Descripcion = string.Empty
         });
     }
 
     private void EliminarLineaResultado(Guid rowId)
     {
-        var existente = modelo.EstadoResultados.FirstOrDefault(e => e.RowId == rowId);
+        var existente = modelo.LineasResultado.FirstOrDefault(e => e.RowId == rowId);
         if (existente is not null)
         {
-            modelo.EstadoResultados.Remove(existente);
+            modelo.LineasResultado.Remove(existente);
         }
     }
 
@@ -979,8 +758,119 @@
             },
             CuentasUtilidad = new CuentasUtilidadDto(),
             EstadoSituacionFinanciera = new EstadoSituacionFinancieraDto(),
-            EstadoResultados = new List<EstadoResultadoLineaDto>(),
+            LineasResultado = new List<LineaResultadoDto>(),
             Correlativos = new List<CorrelativoDto>()
         };
     }
+
+    private static List<BalancePreviewRow> CrearBalancePreview()
+    {
+        var lista = new List<BalancePreviewRow>();
+
+        void AgregarSeccion(string categoria, int filasDetalle)
+        {
+            lista.Add(new BalancePreviewRow
+            {
+                Categoria = categoria,
+                Cuenta = categoria.ToUpperInvariant(),
+                Codigo = string.Empty,
+                Descripcion = string.Empty,
+                EsTitulo = true
+            });
+
+            for (var i = 0; i < filasDetalle; i++)
+            {
+                lista.Add(new BalancePreviewRow
+                {
+                    Categoria = categoria,
+                    Cuenta = string.Empty,
+                    Codigo = string.Empty,
+                    Descripcion = string.Empty,
+                    EsTitulo = false
+                });
+            }
+        }
+
+        // Activos, Pasivos, Capital: 1 fila tÃ­tulo + 3 filas detalle
+        AgregarSeccion("Activos", 3);
+        AgregarSeccion("Pasivos", 3);
+        AgregarSeccion("Capital", 3);
+
+        // Pasivo y Capital: solo fila tÃ­tulo (manual)
+        lista.Add(new BalancePreviewRow
+        {
+            Categoria = "Pasivo y Capital",
+            Cuenta = "PASIVO Y CAPITAL",
+            Codigo = string.Empty,
+            Descripcion = string.Empty,
+            EsTitulo = true
+        });
+
+        // Orden: fila tÃ­tulo + dos filas (Orden, Percontra) con cÃ³digo y descripciÃ³n de la cuenta
+        lista.Add(new BalancePreviewRow
+        {
+            Categoria = "Orden",
+            Cuenta = "ORDEN",
+            Codigo = string.Empty,
+            Descripcion = string.Empty,
+            EsTitulo = true
+        });
+
+        lista.Add(new BalancePreviewRow
+        {
+            Categoria = "Orden",
+            Cuenta = "ORDEN",
+            Codigo = string.Empty,
+            Descripcion = string.Empty,
+            EsTitulo = false
+        });
+
+        lista.Add(new BalancePreviewRow
+        {
+            Categoria = "Orden",
+            Cuenta = "PERCONTRA",
+            Codigo = string.Empty,
+            Descripcion = string.Empty,
+            EsTitulo = false
+        });
+
+        return lista;
+    }
+
+    private void ResetBalancePreview()
+    {
+        balancePreviewData = CrearBalancePreview();
+    }
+
+    private void OnCuentaSeleccionada(BalancePreviewRow? row, string? codigo)
+    {
+        if (row is null || row.EsTitulo)
+        {
+            return;
+        }
+
+        row.Codigo = codigo ?? string.Empty;
+        if (row.Categoria.Equals("Orden", StringComparison.OrdinalIgnoreCase))
+        {
+            var cuenta = cuentasDisponibles?.FirstOrDefault(c => c.Code == codigo);
+            row.Descripcion = cuenta?.Description ?? string.Empty;
+        }
+        InvokeAsync(StateHasChanged);
+    }
+
+    private sealed class BalancePreviewRow
+    {
+        public string Categoria { get; set; } = string.Empty;
+        public string Cuenta { get; set; } = string.Empty;
+        public string Codigo { get; set; } = string.Empty;
+        public string Descripcion { get; set; } = string.Empty;
+        public bool EsTitulo { get; set; }
+    }
 }
+
+
+
+
+
+
+

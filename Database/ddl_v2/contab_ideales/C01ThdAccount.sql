@@ -1,0 +1,47 @@
+USE [MD_CONTAB]
+GO
+
+/****** Object:  Table [dbo].[C01ThdAccount]    Script Date: 10/12/2025 13:45:31 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[C01ThdAccount](
+	[ID_TypeThird] [smallint] NOT NULL,
+	[ID_Third] [varchar](30) NOT NULL,
+	[ID_Account] [varchar](24) NOT NULL,
+	[IDAlte] [varchar](10) NOT NULL,
+ CONSTRAINT [C01ThdAccount0] PRIMARY KEY CLUSTERED 
+(
+	[ID_TypeThird] ASC,
+	[ID_Third] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[C01ThdAccount] ADD  DEFAULT ((0)) FOR [ID_TypeThird]
+GO
+
+ALTER TABLE [dbo].[C01ThdAccount]  WITH CHECK ADD  CONSTRAINT [C01ThdAccountFK01] FOREIGN KEY([ID_Third])
+REFERENCES [dbo].[C01Thirds] ([ID_Third])
+GO
+
+ALTER TABLE [dbo].[C01ThdAccount] CHECK CONSTRAINT [C01ThdAccountFK01]
+GO
+
+ALTER TABLE [dbo].[C01ThdAccount]  WITH CHECK ADD  CONSTRAINT [C01ThdAccountFK02] FOREIGN KEY([ID_Account])
+REFERENCES [dbo].[C01Account] ([ID_Account])
+GO
+
+ALTER TABLE [dbo].[C01ThdAccount] CHECK CONSTRAINT [C01ThdAccountFK02]
+GO
+
+ALTER TABLE [dbo].[C01ThdAccount]  WITH CHECK ADD CHECK  ((len([ID_Account])<>(0)))
+GO
+
+ALTER TABLE [dbo].[C01ThdAccount]  WITH CHECK ADD CHECK  ((len([ID_Third])<>(0)))
+GO
+
+

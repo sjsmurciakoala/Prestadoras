@@ -1,4 +1,5 @@
 using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Services;
@@ -15,6 +16,7 @@ using SIAD.Services.NotasCreditoDebito;
 using SIAD.Services.Cobranza;
 using SIAD.Services.Contabilidad;
 using SIAD.Services.Tenancy;
+using SIAD.Services.Files;
 
 namespace SIAD.Services;
 
@@ -57,6 +59,17 @@ public static class ServiceRegistration
          // contabilidad
          services.AddScoped<IContabilidadCatalogosService, ContabilidadCatalogosService>();
          services.AddScoped<ICompanyManagementService, CompanyManagementService>();
+         services.AddScoped<IPeriodoContableService, PeriodoContableService>();
+         services.AddScoped<IConfiguracionSistemaService, ConfiguracionSistemaService>();
+         
+         // Archivos y almacenamiento
+         services.AddSingleton<IFileStorageService>(sp =>
+         {
+             var logger = sp.GetRequiredService<ILogger<FileStorageService>>();
+             var uploadsBasePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
+             return new FileStorageService(logger, uploadsBasePath);
+         });
+         
         return services;
     }
 }

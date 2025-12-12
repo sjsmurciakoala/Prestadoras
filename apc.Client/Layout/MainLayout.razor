@@ -1,9 +1,13 @@
 ﻿@implements IDisposable
 @inherits LayoutComponentBase
 @using apc.Services;
+@using apc.Client.Services;
+@using apc.Client.Services.Contabilidad;
 @using DevExpress.Blazor;
 @inject NavigationManager NavigationManager
 @inject DxThemesService ThemesService
+@inject TenantState TenantState
+@inject EmpresasContabilidadClient EmpresaClient
 
 <DxToastProvider Name="GlobalToast"
                  MaxToastCount="4" />
@@ -87,7 +91,14 @@
     private bool IsAccountRoute =>
     NavigationManager.Uri.Contains("/Account/", StringComparison.OrdinalIgnoreCase);
     private RenderFragment drawerHeader => @<div class="navigation-drawer-header">
-        <img class="logo" src="images/logo.svg" alt="DevExpress logo" />
+        @if (!string.IsNullOrWhiteSpace(companyLogoUrl))
+        {
+    <img class="company-logo-navbar logo" src="@companyLogoUrl" alt="Logo empresa" />
+        }
+        else
+        {
+            <img class="logo" src="images/logo.svg" alt="Portal" />
+        }
         <NavLink href="@UrlGenerator.GetUrl(new Uri(NavigationManager.Uri).LocalPath, !ToggledSidebar)">
             <DxButton
                 RenderStyle="@(ThemesService.IsBootstrapDarkActive ? ButtonRenderStyle.Dark : ButtonRenderStyle.Light)"
@@ -97,22 +108,32 @@
     </div>;
 
     private RenderFragment drawerFooter => @<div>
-        <NavLink href="https://docs.devexpress.com/Blazor/400725/blazor-components" class="button-link">
-            <DxButton Text="Docs" RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="footer-button"
-                RenderStyle="ButtonRenderStyle.Light" IconCssClass="bi bi-book"></DxButton>
-        </NavLink>
-        <NavLink href="https://demos.devexpress.com/blazor/" class="button-link">
-            <DxButton Text="Demos" RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="footer-button"
-                RenderStyle="ButtonRenderStyle.Light" IconCssClass="bi bi-play-circle"></DxButton>
-        </NavLink>
     </div>;
 
+    private string? companyLogoUrl;
     private string currentUrl = string.Empty;
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
+        
+        try
+        {
+            var companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId > 0)
+            {
+                var empresa = await EmpresaClient.ObtenerAsync(companyId);
+                if (empresa is not null)
+                {
+                    companyLogoUrl = empresa.LogoUrl;
+                }
+            }
+        }
+        catch
+        {
+            companyLogoUrl = null;
+        }
     }
 
     private void OnLocationChanged(object? sender, LocationChangedEventArgs e)

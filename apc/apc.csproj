@@ -4,6 +4,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>aspnet-apc-30987f5c-af7c-444f-b186-dc47e7101675</UserSecretsId>
+    <DefaultItemExcludes>$(DefaultItemExcludes);Data\genhash\**</DefaultItemExcludes>
   </PropertyGroup>
 
   <ItemGroup>

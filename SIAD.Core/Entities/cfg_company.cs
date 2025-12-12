@@ -28,6 +28,8 @@ public partial class cfg_company
 
     public string status { get; set; } = null!;
 
+    public string? logo_url { get; set; }
+
     public DateTime created_at { get; set; }
 
     public string created_by { get; set; } = null!;

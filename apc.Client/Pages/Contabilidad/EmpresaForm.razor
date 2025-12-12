@@ -1,0 +1,176 @@
+@page "/contabilidad/empresas/nueva"
+@page "/contabilidad/empresas/editar/{EmpresaId:long}"
+
+@using Microsoft.AspNetCore.Components.Forms
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Contabilidad
+@using apc.Client.Services.Contabilidad
+@using System.Collections.Generic
+@inject EmpresasContabilidadClient EmpresaClient
+@inject NavigationManager NavigationManager
+
+<h3>Formulario de Empresa</h3>
+
+<EditForm Model="@empresa" OnValidSubmit="HandleValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Código:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.Codigo" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Descripción:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.Descripcion" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Tipo de Empresa:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.TipoEmpresa" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="País:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.Pais" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Siglas ID Fiscal:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.IdFiscalSiglas" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Valor ID Fiscal:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.IdFiscalValor" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Tamaño:" ColSpanMd="6">
+            <DxComboBox Data="@(Enum.GetValues(typeof(CompanySizeType)).Cast<CompanySizeType>())"
+                        TData="CompanySizeType"
+                        TValue="CompanySizeType?"
+                        @bind-Value="empresa.Tamano" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Capital:" ColSpanMd="6">
+            <DxComboBox Data="@(Enum.GetValues(typeof(CompanyCapitalType)).Cast<CompanyCapitalType>())"
+                        TData="CompanyCapitalType"
+                        TValue="CompanyCapitalType?"
+                        @bind-Value="empresa.Capital" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Fecha de Constitución:" ColSpanMd="6">
+            <DxDateEdit T="DateTime?" @bind-Date="empresa.FechaConstitucion" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Activa:" ColSpanMd="6">
+            <DxCheckBox T="bool" @bind-Checked="empresa.Activa" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Contacto:" ColSpanMd="12">
+            <DxTextBox @bind-Text="empresa.Contacto" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Dirección:" ColSpanMd="12">
+            <DxMemo @bind-Text="empresa.Direccion" Rows="3" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Teléfonos:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.Telefonos" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Email:" ColSpanMd="6">
+            <DxTextBox @bind-Text="empresa.Email" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Página Web:" ColSpanMd="12">
+            <DxTextBox @bind-Text="empresa.PaginaWeb" />
+        </DxFormLayoutItem>
+
+        @if (empresa.CompanyId > 0)
+        {
+            <DxFormLayoutItem Caption="Logo actual:" ColSpanMd="12">
+                @if (!string.IsNullOrWhiteSpace(empresa.LogoUrl))
+                {
+                    <img src="@empresa.LogoUrl" alt="Logo de la empresa" style="max-height:120px;max-width:260px;" />
+                }
+                else
+                {
+                    <span class="text-muted">Sin logo</span>
+                }
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Actualizar logo:" ColSpanMd="12">
+                <DxUpload Name="file"
+                          UploadUrl="@GetLogoUploadUrl()"
+                          UploadMode="UploadMode.Instant"
+                          ShowFileList="true"
+                          AllowMultiFileUpload="false"
+                          MaxFileSize="5242880"
+                          AllowedFileExtensions="@(new List<string> { ".png", ".jpg", ".jpeg", ".gif", ".svg" })"
+                          Enabled="@(empresa.CompanyId > 0)" />
+                <div class="text-muted small mt-1">Formatos permitidos: PNG, JPG, GIF o SVG. Tamano maximo 5 MB.</div>
+            </DxFormLayoutItem>
+        }
+
+        <DxFormLayoutItem ColSpanMd="12">
+            <div class="d-flex justify-content-end">
+                <DxButton SubmitFormOnClick="true" Text="Guardar" CssClass="mr-2" />
+                <DxButton RenderStyle="ButtonRenderStyle.Link" Text="Cancelar" @onclick="() => NavigationManager.NavigateTo(cancelNavigationUrl)" />
+            </div>
+        </DxFormLayoutItem>
+    </DxFormLayout>
+    @if (!string.IsNullOrWhiteSpace(loadError))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@loadError</DxAlert>
+    }
+    <ValidationSummary />
+</EditForm>
+
+@code {
+    [Parameter]
+    public long? EmpresaId { get; set; }
+
+    private CompanyCreationDto empresa = new();
+    private string cancelNavigationUrl = "/contabilidad/empresas"; // Asumimos que esta será la página del listado
+    private string? loadError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (EmpresaId.HasValue)
+        {
+            try
+            {
+                var loadedEmpresa = await EmpresaClient.ObtenerAsync(EmpresaId.Value);
+                if (loadedEmpresa != null)
+                {
+                    empresa = loadedEmpresa;
+                }
+                else
+                {
+                    loadError = "La empresa no existe o fue eliminada.";
+                    NavigationManager.NavigateTo(cancelNavigationUrl);
+                }
+            }
+            catch (HttpRequestException ex)
+            {
+                loadError = ex.Message;
+                NavigationManager.NavigateTo(cancelNavigationUrl);
+            }
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        try
+        {
+            if (EmpresaId.HasValue)
+            {
+                await EmpresaClient.ActualizarAsync(EmpresaId.Value, empresa);
+            }
+            else
+            {
+                await EmpresaClient.CrearAsync(empresa);
+            }
+            NavigationManager.NavigateTo(cancelNavigationUrl);
+        }
+        catch (HttpRequestException ex)
+        {
+            loadError = ex.Message;
+        }
+    }
+
+    private string GetLogoUploadUrl()
+    {
+        return empresa.CompanyId > 0
+            ? $"api/contabilidad/empresas/{empresa.CompanyId}/logo"
+            : string.Empty;
+    }
+}

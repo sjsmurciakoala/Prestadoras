@@ -120,7 +120,18 @@
 .tenant-company-option {
     display: flex;
     flex-direction: column;
-    line-height: 1.2;
+    line-height
+    : 1.2;
+}
+.company-logo-navbar {
+    max-height: 200px;
+    max-width: 100px;
+    object-fit: contain;
+}
+.empresa-logo-preview {
+    max-height: 80px;
+    max-width: 200px;
+    object-fit: contain;
 }
 
 .tenant-company-code {

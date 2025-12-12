@@ -30,6 +30,7 @@ namespace apc.Client
             services.AddScoped<CobranzaClient>();
             services.AddScoped<EmpresasContabilidadClient>();
             services.AddScoped<ConfiguracionSistemaClient>();
+            services.AddScoped<EmpresaClient>();
             services.AddScoped<ITenantProvider, TenantProvider>();
             services.AddScoped<TenantState>();
             services.AddScoped<TenantCompaniesClient>();

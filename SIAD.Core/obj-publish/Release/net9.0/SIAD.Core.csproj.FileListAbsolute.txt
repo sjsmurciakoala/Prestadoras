@@ -1,0 +1,4 @@
+D:\jesse\Documents\proyectos\HODSOFT_DEVEXPRESS\Prestadoras\SIAD.Core\obj-publish\Release\net9.0\SIAD.Core.GeneratedMSBuildEditorConfig.editorconfig
+D:\jesse\Documents\proyectos\HODSOFT_DEVEXPRESS\Prestadoras\SIAD.Core\obj-publish\Release\net9.0\SIAD.Core.AssemblyInfoInputs.cache
+D:\jesse\Documents\proyectos\HODSOFT_DEVEXPRESS\Prestadoras\SIAD.Core\obj-publish\Release\net9.0\SIAD.Core.AssemblyInfo.cs
+D:\jesse\Documents\proyectos\HODSOFT_DEVEXPRESS\Prestadoras\SIAD.Core\obj-publish\Release\net9.0\SIAD.Core.csproj.CoreCompileInputs.cache

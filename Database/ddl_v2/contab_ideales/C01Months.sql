@@ -1,0 +1,41 @@
+USE [MD_CONTAB]
+GO
+
+/****** Object:  Table [dbo].[C01Months]    Script Date: 10/12/2025 13:41:19 ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE TABLE [dbo].[C01Months](
+	[siPeriod] [smallint] NOT NULL,
+	[siMonth] [tinyint] NOT NULL,
+	[boStatus] [bit] NOT NULL,
+ CONSTRAINT [C01Months0] PRIMARY KEY CLUSTERED 
+(
+	[siPeriod] ASC
+)WITH (PAD_INDEX = OFF, STATISTICS_NORECOMPUTE = OFF, IGNORE_DUP_KEY = OFF, ALLOW_ROW_LOCKS = ON, ALLOW_PAGE_LOCKS = ON, OPTIMIZE_FOR_SEQUENTIAL_KEY = OFF) ON [PRIMARY]
+) ON [PRIMARY]
+GO
+
+ALTER TABLE [dbo].[C01Months] ADD  DEFAULT ((0)) FOR [siPeriod]
+GO
+
+ALTER TABLE [dbo].[C01Months] ADD  DEFAULT ((0)) FOR [siMonth]
+GO
+
+ALTER TABLE [dbo].[C01Months] ADD  DEFAULT ((1)) FOR [boStatus]
+GO
+
+ALTER TABLE [dbo].[C01Months]  WITH CHECK ADD  CONSTRAINT [C01MonthsFK01] FOREIGN KEY([siPeriod])
+REFERENCES [dbo].[C01Periods] ([siPeriod])
+GO
+
+ALTER TABLE [dbo].[C01Months] CHECK CONSTRAINT [C01MonthsFK01]
+GO
+
+ALTER TABLE [dbo].[C01Months]  WITH CHECK ADD CHECK  (([siMonth]>=(1) AND [siMonth]<=(13)))
+GO
+
+

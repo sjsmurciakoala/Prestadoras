@@ -1,36 +1,131 @@
 ﻿@page "/"
 @attribute [Authorize]
-<PageTitle>Welcome</PageTitle>
+@using System.Drawing
+<PageTitle>Dashboard</PageTitle>
 
 <div class="main-content">
-    <DxGridLayout CssClass="welcome-gridlayout" RowSpacing="3rem">
+    <DxGridLayout CssClass="dashboard-gridlayout" RowSpacing="2rem" ColumnSpacing="2rem">
+        <Columns>
+            <DxGridLayoutColumn Width="1fr"></DxGridLayoutColumn>
+            <DxGridLayoutColumn Width="1fr"></DxGridLayoutColumn>
+        </Columns>
         <Rows>
-            <DxGridLayoutRow Height="auto" Areas="header"></DxGridLayoutRow>
-            <DxGridLayoutRow Height="auto" Areas="cards"></DxGridLayoutRow>
+            <DxGridLayoutRow Height="auto" Areas="header header"></DxGridLayoutRow>
+            <DxGridLayoutRow Height="400px" Areas="chart1 chart2"></DxGridLayoutRow>
+            <DxGridLayoutRow Height="400px" Areas="chart3 chart4"></DxGridLayoutRow>
         </Rows>
         <Items>
-            <DxGridLayoutItem Area="header" CssClass="title">
+            <DxGridLayoutItem Area="header" CssClass="dashboard-title">
                 <Template>
-                    <div class="title-header-text">Hello World!</div>
-                    <div class="title-content-text">Welcome to your new DevExpress Blazor Application</div>
+                    <div class="title-header-text">Panel de Control</div>
+                    <div class="title-content-text">Bienvenido al sistema de gestión - Visualización de métricas clave</div>
+                    <div class="development-notice">
+                        <svg class="notice-icon" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <circle cx="12" cy="12" r="10"></circle>
+                            <line x1="12" y1="8" x2="12" y2="12"></line>
+                            <line x1="12" y1="16" x2="12.01" y2="16"></line>
+                        </svg>
+                        <span>Datos de demostración. Las gráficas y funcionalidades interactivas están en desarrollo.</span>
+                    </div>
                 </Template>
             </DxGridLayoutItem>
-            <DxGridLayoutItem Area="cards" CssClass="welcome-cards">
+
+            <!-- Chart 1: Consumo de Agua por Región -->
+            <DxGridLayoutItem Area="chart1">
                 <Template>
-                    <NavLink class="welcome-card" href="@UrlGenerator.GetUrl("/counter", ToggledSidebar)">
-                        <svg class="welcome-card-img" alt="counter card">
-                            <use href="images/cards.svg#counter"></use>
-                        </svg>
-                        <div class="welcome-card-text">Counter</div>
-                        <div class="welcome-card-back"></div>
-                    </NavLink>
-                    <NavLink class="welcome-card" href="@UrlGenerator.GetUrl("/weather", ToggledSidebar)">
-                        <svg class="welcome-card-img" alt="weather card">
-                            <use href="images/cards.svg#weather"></use>
-                        </svg>
-                        <div class="welcome-card-text">Weather</div>
-                        <div class="welcome-card-back"></div>
-                    </NavLink>
+                    <div class="chart-container">
+                        <DxChart Data="@ConsumoAguaRegionData" Height="100%">
+                            <DxChartTitle Text="Consumo de Agua por Región" />
+                            <DxChartLegend Position="RelativePosition.Outside" HorizontalAlignment="HorizontalAlignment.Center" />
+                            <DxChartBarSeries Name="Consumo (m³)"
+                                            ArgumentField="@((ChartDataPoint p) => p.Region)"
+                                            ValueField="@((ChartDataPoint p) => p.Value)"
+                                            Color="@Color.FromArgb(66, 165, 245)" />
+                            <DxChartArgumentAxis>
+                                <DxChartAxisLabel Overlap="ChartAxisLabelOverlap.Rotate"
+                                                RotationAngle="45" />
+                            </DxChartArgumentAxis>
+                            <DxChartValueAxis>
+                                <DxChartAxisTitle Text="Consumo (m³)" />
+                            </DxChartValueAxis>
+                            <DxChartTooltip Enabled="false"></DxChartTooltip>
+                        </DxChart>
+                    </div>
+                </Template>
+            </DxGridLayoutItem>
+
+            <!-- Chart 2: Consumo por Mes -->
+            <DxGridLayoutItem Area="chart2">
+                <Template>
+                    <div class="chart-container">
+                        <DxChart Data="@ConsumoMesData" Height="100%">
+                            <DxChartTitle Text="Consumo Mensual" />
+                            <DxChartLegend Position="RelativePosition.Outside" HorizontalAlignment="HorizontalAlignment.Center" />
+                            <DxChartLineSeries Name="Consumo (m³)"
+                                             ArgumentField="@((ChartDataPoint p) => p.Month)"
+                                             ValueField="@((ChartDataPoint p) => p.Value)"
+                                             Color="@Color.FromArgb(76, 175, 80)" />
+                            <DxChartArgumentAxis>
+                                <DxChartAxisTitle Text="Mes" />
+                            </DxChartArgumentAxis>
+                            <DxChartValueAxis>
+                                <DxChartAxisTitle Text="Consumo (m³)" />
+                            </DxChartValueAxis>
+                            <DxChartTooltip Enabled="false"></DxChartTooltip>
+                        </DxChart>
+                    </div>
+                </Template>
+            </DxGridLayoutItem>
+
+            <!-- Chart 3: Ventas Mensuales -->
+            <DxGridLayoutItem Area="chart3">
+                <Template>
+                    <div class="chart-container">
+                        <DxChart Data="@VentasMesData" Height="100%">
+                            <DxChartTitle Text="Ventas Mensuales" />
+                            <DxChartLegend Position="RelativePosition.Outside" HorizontalAlignment="HorizontalAlignment.Center" />
+                            <DxChartBarSeries Name="Ventas ($)"
+                                            ArgumentField="@((SalesDataPoint p) => p.Month)"
+                                            ValueField="@((SalesDataPoint p) => p.Amount)"
+                                            Color="@Color.FromArgb(255, 152, 0)" />
+                            <DxChartArgumentAxis>
+                                <DxChartAxisLabel Overlap="ChartAxisLabelOverlap.Rotate"
+                                                RotationAngle="45" />
+                            </DxChartArgumentAxis>
+                            <DxChartValueAxis>
+                                <DxChartAxisTitle Text="Ventas ($)" />
+                            </DxChartValueAxis>
+                            <DxChartTooltip Enabled="false"></DxChartTooltip>
+                        </DxChart>
+                    </div>
+                </Template>
+            </DxGridLayoutItem>
+
+            <!-- Chart 4: Comparativa por Región (Área) -->
+            <DxGridLayoutItem Area="chart4">
+                <Template>
+                    <div class="chart-container">
+                        <DxChart Data="@ComparativaRegionData" Height="100%">
+                            <DxChartTitle Text="Comparativa: Consumo vs Ventas por Región" />
+                            <DxChartLegend Position="RelativePosition.Outside" HorizontalAlignment="HorizontalAlignment.Center" />
+                            <DxChartLineSeries Name="Consumo (m³)"
+                                             ArgumentField="@((ComparativaDataPoint p) => p.Region)"
+                                             ValueField="@((ComparativaDataPoint p) => p.Consumption)"
+                                             Color="@Color.FromArgb(66, 165, 245)" />
+                            <DxChartLineSeries Name="Ventas ($)"
+                                             ArgumentField="@((ComparativaDataPoint p) => p.Region)"
+                                             ValueField="@((ComparativaDataPoint p) => p.Sales)"
+                                             Color="@Color.FromArgb(255, 152, 0)" />
+                            <DxChartArgumentAxis>
+                                <DxChartAxisLabel Overlap="ChartAxisLabelOverlap.Rotate"
+                                                RotationAngle="45" />
+                            </DxChartArgumentAxis>
+                            <DxChartValueAxis>
+                                <DxChartAxisTitle Text="Valores" />
+                            </DxChartValueAxis>
+                            <DxChartTooltip Enabled="false"></DxChartTooltip>
+                        </DxChart>
+                    </div>
                 </Template>
             </DxGridLayoutItem>
         </Items>
@@ -40,4 +135,78 @@
 @code {
     [SupplyParameterFromQuery(Name = UrlGenerator.ToggleSidebarName)]
     public bool ToggledSidebar { get; set; }
+
+    public class ChartDataPoint
+    {
+        public string? Region { get; set; }
+        public string? Month { get; set; }
+        public int Value { get; set; }
+    }
+
+    public class SalesDataPoint
+    {
+        public string? Month { get; set; }
+        public decimal Amount { get; set; }
+    }
+
+    public class ComparativaDataPoint
+    {
+        public string? Region { get; set; }
+        public int Consumption { get; set; }
+        public decimal Sales { get; set; }
+    }
+
+    // Datos dummy - Consumo de agua por región
+    private List<ChartDataPoint> ConsumoAguaRegionData = new()
+    {
+        new ChartDataPoint { Region = "Norte", Value = 4500 },
+        new ChartDataPoint { Region = "Sur", Value = 3800 },
+        new ChartDataPoint { Region = "Este", Value = 5200 },
+        new ChartDataPoint { Region = "Oeste", Value = 4100 },
+        new ChartDataPoint { Region = "Centro", Value = 3900 }
+    };
+
+    // Datos dummy - Consumo mensual
+    private List<ChartDataPoint> ConsumoMesData = new()
+    {
+        new ChartDataPoint { Month = "Enero", Value = 4200 },
+        new ChartDataPoint { Month = "Febrero", Value = 4100 },
+        new ChartDataPoint { Month = "Marzo", Value = 4500 },
+        new ChartDataPoint { Month = "Abril", Value = 4800 },
+        new ChartDataPoint { Month = "Mayo", Value = 5100 },
+        new ChartDataPoint { Month = "Junio", Value = 4900 },
+        new ChartDataPoint { Month = "Julio", Value = 5300 },
+        new ChartDataPoint { Month = "Agosto", Value = 5200 },
+        new ChartDataPoint { Month = "Septiembre", Value = 4600 },
+        new ChartDataPoint { Month = "Octubre", Value = 4400 },
+        new ChartDataPoint { Month = "Noviembre", Value = 4700 },
+        new ChartDataPoint { Month = "Diciembre", Value = 5000 }
+    };
+
+    // Datos dummy - Ventas mensuales
+    private List<SalesDataPoint> VentasMesData = new()
+    {
+        new SalesDataPoint { Month = "Enero", Amount = 25000 },
+        new SalesDataPoint { Month = "Febrero", Amount = 22500 },
+        new SalesDataPoint { Month = "Marzo", Amount = 28000 },
+        new SalesDataPoint { Month = "Abril", Amount = 31000 },
+        new SalesDataPoint { Month = "Mayo", Amount = 35500 },
+        new SalesDataPoint { Month = "Junio", Amount = 33000 },
+        new SalesDataPoint { Month = "Julio", Amount = 37000 },
+        new SalesDataPoint { Month = "Agosto", Amount = 36500 },
+        new SalesDataPoint { Month = "Septiembre", Amount = 29000 },
+        new SalesDataPoint { Month = "Octubre", Amount = 27000 },
+        new SalesDataPoint { Month = "Noviembre", Amount = 32000 },
+        new SalesDataPoint { Month = "Diciembre", Amount = 40000 }
+    };
+
+    // Datos dummy - Comparativa por región
+    private List<ComparativaDataPoint> ComparativaRegionData = new()
+    {
+        new ComparativaDataPoint { Region = "Norte", Consumption = 4500, Sales = 28000 },
+        new ComparativaDataPoint { Region = "Sur", Consumption = 3800, Sales = 24000 },
+        new ComparativaDataPoint { Region = "Este", Consumption = 5200, Sales = 35000 },
+        new ComparativaDataPoint { Region = "Oeste", Consumption = 4100, Sales = 26000 },
+        new ComparativaDataPoint { Region = "Centro", Consumption = 3900, Sales = 22000 }
+    };
 }

@@ -1,0 +1,41 @@
+﻿<?xml version="1.0" encoding="utf-8" standalone="no"?>
+<Project ToolsVersion="14.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <RestoreSuccess Condition=" '$(RestoreSuccess)' == '' ">True</RestoreSuccess>
+    <RestoreTool Condition=" '$(RestoreTool)' == '' ">NuGet</RestoreTool>
+    <ProjectAssetsFile Condition=" '$(ProjectAssetsFile)' == '' ">$(MSBuildThisFileDirectory)project.assets.json</ProjectAssetsFile>
+    <NuGetPackageRoot Condition=" '$(NuGetPackageRoot)' == '' ">$(UserProfile)\.nuget\packages\</NuGetPackageRoot>
+    <NuGetPackageFolders Condition=" '$(NuGetPackageFolders)' == '' ">C:\Users\jesse\.nuget\packages\;C:\Program Files\DevExpress 25.1\Components\Offline Packages;C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages</NuGetPackageFolders>
+    <NuGetProjectStyle Condition=" '$(NuGetProjectStyle)' == '' ">PackageReference</NuGetProjectStyle>
+    <NuGetToolVersion Condition=" '$(NuGetToolVersion)' == '' ">7.0.0</NuGetToolVersion>
+  </PropertyGroup>
+  <ItemGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <SourceRoot Include="C:\Users\jesse\.nuget\packages\" />
+    <SourceRoot Include="C:\Program Files\DevExpress 25.1\Components\Offline Packages\" />
+    <SourceRoot Include="C:\Program Files (x86)\Microsoft Visual Studio\Shared\NuGetPackages\" />
+  </ItemGroup>
+  <ImportGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <Import Project="$(NuGetPackageRoot)skiasharp.nativeassets.webassembly\3.119.0\buildTransitive\netstandard1.0\SkiaSharp.NativeAssets.WebAssembly.props" Condition="Exists('$(NuGetPackageRoot)skiasharp.nativeassets.webassembly\3.119.0\buildTransitive\netstandard1.0\SkiaSharp.NativeAssets.WebAssembly.props')" />
+    <Import Project="$(NuGetPackageRoot)skiasharp.views.blazor\3.119.0\buildTransitive\SkiaSharp.Views.Blazor.props" Condition="Exists('$(NuGetPackageRoot)skiasharp.views.blazor\3.119.0\buildTransitive\SkiaSharp.Views.Blazor.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.entityframeworkcore\9.0.1\buildTransitive\net8.0\Microsoft.EntityFrameworkCore.props" Condition="Exists('$(NuGetPackageRoot)microsoft.entityframeworkcore\9.0.1\buildTransitive\net8.0\Microsoft.EntityFrameworkCore.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.codeanalysis.analyzers\3.3.4\buildTransitive\Microsoft.CodeAnalysis.Analyzers.props" Condition="Exists('$(NuGetPackageRoot)microsoft.codeanalysis.analyzers\3.3.4\buildTransitive\Microsoft.CodeAnalysis.Analyzers.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.entityframeworkcore.design\9.0.0\build\net8.0\Microsoft.EntityFrameworkCore.Design.props" Condition="Exists('$(NuGetPackageRoot)microsoft.entityframeworkcore.design\9.0.0\build\net8.0\Microsoft.EntityFrameworkCore.Design.props')" />
+    <Import Project="$(NuGetPackageRoot)microsoft.aspnetcore.components.webassembly.authentication\9.0.0\buildTransitive\Microsoft.AspNetCore.Components.WebAssembly.Authentication.props" Condition="Exists('$(NuGetPackageRoot)microsoft.aspnetcore.components.webassembly.authentication\9.0.0\buildTransitive\Microsoft.AspNetCore.Components.WebAssembly.Authentication.props')" />
+    <Import Project="$(NuGetPackageRoot)harfbuzzsharp.nativeassets.webassembly\8.3.1.1\buildTransitive\netstandard1.0\HarfBuzzSharp.NativeAssets.WebAssembly.props" Condition="Exists('$(NuGetPackageRoot)harfbuzzsharp.nativeassets.webassembly\8.3.1.1\buildTransitive\netstandard1.0\HarfBuzzSharp.NativeAssets.WebAssembly.props')" />
+    <Import Project="$(NuGetPackageRoot)devexpress.blazor.themes.fluent\25.1.6\buildTransitive\DevExpress.Blazor.Themes.Fluent.props" Condition="Exists('$(NuGetPackageRoot)devexpress.blazor.themes.fluent\25.1.6\buildTransitive\DevExpress.Blazor.Themes.Fluent.props')" />
+    <Import Project="$(NuGetPackageRoot)devexpress.blazor.themes\25.1.6\buildTransitive\DevExpress.Blazor.Themes.props" Condition="Exists('$(NuGetPackageRoot)devexpress.blazor.themes\25.1.6\buildTransitive\DevExpress.Blazor.Themes.props')" />
+    <Import Project="$(NuGetPackageRoot)devexpress.blazor.resources\25.1.6\buildTransitive\DevExpress.Blazor.Resources.props" Condition="Exists('$(NuGetPackageRoot)devexpress.blazor.resources\25.1.6\buildTransitive\DevExpress.Blazor.Resources.props')" />
+    <Import Project="$(NuGetPackageRoot)devexpress.blazor\25.1.6\buildTransitive\net5.0\DevExpress.Blazor.props" Condition="Exists('$(NuGetPackageRoot)devexpress.blazor\25.1.6\buildTransitive\net5.0\DevExpress.Blazor.props')" />
+    <Import Project="$(NuGetPackageRoot)devexpress.blazor.viewer\25.1.6\buildTransitive\DevExpress.Blazor.Viewer.props" Condition="Exists('$(NuGetPackageRoot)devexpress.blazor.viewer\25.1.6\buildTransitive\DevExpress.Blazor.Viewer.props')" />
+    <Import Project="$(NuGetPackageRoot)devexpress.blazor.reporting.viewer\25.1.6\buildTransitive\DevExpress.Blazor.Reporting.Viewer.props" Condition="Exists('$(NuGetPackageRoot)devexpress.blazor.reporting.viewer\25.1.6\buildTransitive\DevExpress.Blazor.Reporting.Viewer.props')" />
+    <Import Project="$(NuGetPackageRoot)devexpress.blazor.pdfviewer\25.1.6\buildTransitive\DevExpress.Blazor.PdfViewer.props" Condition="Exists('$(NuGetPackageRoot)devexpress.blazor.pdfviewer\25.1.6\buildTransitive\DevExpress.Blazor.PdfViewer.props')" />
+  </ImportGroup>
+  <PropertyGroup Condition=" '$(ExcludeRestorePackageImports)' != 'true' ">
+    <PkgMicrosoft_CodeAnalysis_Analyzers Condition=" '$(PkgMicrosoft_CodeAnalysis_Analyzers)' == '' ">C:\Users\jesse\.nuget\packages\microsoft.codeanalysis.analyzers\3.3.4</PkgMicrosoft_CodeAnalysis_Analyzers>
+    <PkgMicrosoft_EntityFrameworkCore_Tools Condition=" '$(PkgMicrosoft_EntityFrameworkCore_Tools)' == '' ">C:\Users\jesse\.nuget\packages\microsoft.entityframeworkcore.tools\9.0.0</PkgMicrosoft_EntityFrameworkCore_Tools>
+    <PkgMicrosoft_AspNetCore_Components_WebAssembly_Server Condition=" '$(PkgMicrosoft_AspNetCore_Components_WebAssembly_Server)' == '' ">C:\Users\jesse\.nuget\packages\microsoft.aspnetcore.components.webassembly.server\9.0.0</PkgMicrosoft_AspNetCore_Components_WebAssembly_Server>
+    <PkgDevExpress_Data Condition=" '$(PkgDevExpress_Data)' == '' ">C:\Users\jesse\.nuget\packages\devexpress.data\25.1.6</PkgDevExpress_Data>
+    <PkgDevExpress_Xpo Condition=" '$(PkgDevExpress_Xpo)' == '' ">C:\Users\jesse\.nuget\packages\devexpress.xpo\25.1.6</PkgDevExpress_Xpo>
+    <PkgDevExpress_DataAccess Condition=" '$(PkgDevExpress_DataAccess)' == '' ">C:\Users\jesse\.nuget\packages\devexpress.dataaccess\25.1.6</PkgDevExpress_DataAccess>
+  </PropertyGroup>
+</Project>

@@ -19,6 +19,8 @@ public partial class con_plan_cuenta : ICompanyScopedEntity
 
     public string? description { get; set; }
 
+    public string? short_description { get; set; }
+
     public string account_type { get; set; } = null!;
 
     public string? category { get; set; }
@@ -30,6 +32,25 @@ public partial class con_plan_cuenta : ICompanyScopedEntity
     public string? currency_code { get; set; }
 
     public string status { get; set; } = null!;
+
+    // ===== REFERENCIAS Y FUNCIONALIDADES =====
+    public string? external_reference { get; set; }
+
+    public bool allows_budget { get; set; } = false;
+
+    public bool allows_cost_center { get; set; } = false;
+
+    public bool allows_third { get; set; } = false;
+
+    public bool allows_bank { get; set; } = false;
+
+    public bool is_tax_base { get; set; } = false;
+
+    public bool allows_amount { get; set; } = true;
+
+    public bool allows_multi_currency { get; set; } = false;
+
+    public decimal? budget_amount { get; set; }
 
     public DateTime created_at { get; set; }
 

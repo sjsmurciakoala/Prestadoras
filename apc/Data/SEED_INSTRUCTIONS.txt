@@ -1,0 +1,35 @@
+// Este archivo contiene instrucciones para ejecutar el seed manualmente
+
+/*
+ * CÓMO EJECUTAR EL SEED MANUAL
+ * ============================
+ * 
+ * Si necesitas crear datos iniciales (admin user + empresa demo), ejecuta:
+ * 
+ * OPCIÓN 1: Usando PowerShell en la raíz del proyecto
+ * =====================================================
+ * 
+ * dotnet user-secrets init (solo si no lo has hecho)
+ * 
+ * Luego crea un script temporal en C:\temp\seed.cs y ejecuta:
+ * dotnet run --project apc -- seed
+ * 
+ * 
+ * OPCIÓN 2: Crear una API endpoint para el seed (RECOMENDADO)
+ * ===========================================================
+ * 
+ * Mira el archivo DatabaseInitializer.cs en apc/Data/
+ * 
+ * Puedes llamar a DatabaseInitializer.SeedAsync() desde:
+ * - Un endpoint de API (POST /api/admin/seed)
+ * - Una página admin en Blazor
+ * - Una herramienta CLI
+ * 
+ * 
+ * OPCIÓN 3: Usar Entity Framework's Seed method
+ * ==============================================
+ * 
+ * Si lo prefieres, modifica OnModelCreating en SiadDbContext
+ * para usar modelBuilder.Entity<cfg_company>().HasData(...)
+ * 
+ */

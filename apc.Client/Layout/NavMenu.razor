@@ -28,18 +28,14 @@
                         Text="Home"
                         CssClass="menu-item"
                         IconCssClass="bi bi-house" />
-            <DxMenuItem NavigateUrl="/counter"
-                        Text="Counter"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-plus-circle" />
-            <DxMenuItem NavigateUrl="/weather"
-                        Text="Weather"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-cloud-sun" />
             <DxMenuItem NavigateUrl="Account/Manage"
                         Text="Settings"
                         CssClass="menu-item"
                         IconCssClass="bi bi-gear" />
+            <DxMenuItem NavigateUrl="/admin/branding"
+                        Text="Branding portal"
+                        CssClass="menu-item"
+                        IconCssClass="bi bi-brush" />
             <DxMenuItem NavigateUrl="/clientes"
                         Text="Clientes"
                         CssClass="menu-item"
@@ -76,6 +72,9 @@
                         CssClass="menu-item"
                         IconCssClass="bi bi-journal">
                 <Items>
+                    <DxMenuItem NavigateUrl="/contabilidad/empresas"
+                                Text="Empresas"
+                                CssClass="menu-item" />
                     <DxMenuItem NavigateUrl="/contabilidad/empresas/configuracion"
                                 Text="Configuración Sistema"
                                 CssClass="menu-item" />
