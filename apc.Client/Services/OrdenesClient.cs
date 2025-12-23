@@ -171,23 +171,9 @@ public class OrdenesClient
 
     private async Task<TResponse?> GetJsonAsync<TResponse>(string url, CancellationToken cancellationToken)
     {
-        Console.WriteLine($"[OrdenesClient] GET {url}");
-        HttpResponseMessage? response = null;
-        try
-        {
-            response = await _httpClient.GetAsync(url, cancellationToken);
-            Console.WriteLine($"[OrdenesClient] Status: {(int)response.StatusCode} {response.ReasonPhrase}");
-            Console.WriteLine($"[OrdenesClient] Content-Type: {response.Content.Headers.ContentType?.MediaType}");
-            await EnsureSuccessJsonResponseAsync(response, cancellationToken);
-            var result = await response.Content.ReadFromJsonAsync<TResponse>(cancellationToken: cancellationToken);
-            return result;
-        }
-        catch (Exception ex)
-        {
-            var ct = response?.Content.Headers.ContentType?.ToString() ?? "<none>";
-            Console.WriteLine($"[OrdenesClient] ERROR GET {url} Content-Type={ct}: {ex.Message}");
-            throw;
-        }
+        var response = await _httpClient.GetAsync(url, cancellationToken);
+        await EnsureSuccessJsonResponseAsync(response, cancellationToken);
+        return await response.Content.ReadFromJsonAsync<TResponse>(cancellationToken: cancellationToken);
     }
 
     private static async Task EnsureSuccessJsonResponseAsync(HttpResponseMessage response, CancellationToken cancellationToken)

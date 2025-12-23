@@ -28,8 +28,6 @@ public partial class cfg_company
 
     public string status { get; set; } = null!;
 
-    public string? logo_url { get; set; }
-
     public DateTime created_at { get; set; }
 
     public string created_by { get; set; } = null!;
@@ -37,4 +35,8 @@ public partial class cfg_company
     public DateTime? updated_at { get; set; }
 
     public string? updated_by { get; set; }
+
+    public byte[]? logo { get; set; }
+
+    public string? logo_mime { get; set; }
 }

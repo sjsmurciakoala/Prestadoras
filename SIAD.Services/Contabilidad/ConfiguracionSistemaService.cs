@@ -107,26 +107,26 @@ public sealed class ConfiguracionSistemaService : IConfiguracionSistemaService
             }
 
             // Mapear configuración principal
-            config.fecha_ini_ejer = dto.Principal.FechaInicioEjercicio;
-            config.fecha_fin_ejer = dto.Principal.FechaFinEjercicio;
-            config.meses_calc = dto.Principal.MesesCalculados;
-            config.sep_codigo = dto.Principal.SeparadorCodigo;
-            config.fmt_ctas = dto.Principal.FormatoCuentas;
-            config.fmt_centros = dto.Principal.FormatoCentros;
-            config.sym_acreedor = dto.Principal.SymbolSaldoAcreedor;
-            config.mto_maximo = dto.Principal.MontoMaximo;
-            config.frec_deprec = dto.Principal.FrecuenciaDepreciacion;
-            config.fec_ult_deprec = dto.Principal.UltimaDepreciacion;
+            config.fecha_inicio_ejercicio = dto.Principal.FechaInicioEjercicio;
+            config.fecha_fin_ejercicio = dto.Principal.FechaFinEjercicio;
+            config.meses_calculados = dto.Principal.MesesCalculados;
+            config.separador_codigo = dto.Principal.SeparadorCodigo;
+            config.formato_cuentas = dto.Principal.FormatoCuentas;
+            config.formato_centros = dto.Principal.FormatoCentros;
+            config.symbol_saldo_acreedor = dto.Principal.SymbolSaldoAcreedor;
+            config.monto_maximo = dto.Principal.MontoMaximo;
+            config.frecuencia_depreciacion = dto.Principal.FrecuenciaDepreciacion;
+            config.ultima_depreciacion = dto.Principal.UltimaDepreciacion;
 
             // Mapear cuentas de utilidad
-            config.cod_util_acum_hist = dto.CuentasUtilidad.CodigoCuentaUtilAcumuladaHistorica;
-            config.cod_util_acum_inf = dto.CuentasUtilidad.CodigoCuentaUtilAcumuladaInflacion;
-            config.cod_util_ejer_hist = dto.CuentasUtilidad.CodigoCuentaUtilEjercicioHistorica;
-            config.cod_util_ejer_inf = dto.CuentasUtilidad.CodigoCuentaUtilEjercicioInflacion;
-            config.cod_perd_acum_hist = dto.CuentasUtilidad.CodigoCuentaPerdidaAcumuladaHistorica;
-            config.cod_perd_acum_inf = dto.CuentasUtilidad.CodigoCuentaPerdidaAcumuladaInflacion;
-            config.cod_perd_ejer_hist = dto.CuentasUtilidad.CodigoCuentaPerdidaEjercicioHistorica;
-            config.cod_perd_ejer_inf = dto.CuentasUtilidad.CodigoCuentaPerdidaEjercicioInflacion;
+            config.codigo_cuenta_util_acumulada_historica = dto.CuentasUtilidad.CodigoCuentaUtilAcumuladaHistorica;
+            config.codigo_cuenta_util_acumulada_inflacion = dto.CuentasUtilidad.CodigoCuentaUtilAcumuladaInflacion;
+            config.codigo_cuenta_util_ejercicio_historica = dto.CuentasUtilidad.CodigoCuentaUtilEjercicioHistorica;
+            config.codigo_cuenta_util_ejercicio_inflacion = dto.CuentasUtilidad.CodigoCuentaUtilEjercicioInflacion;
+            config.codigo_cuenta_perdida_acumulada_historica = dto.CuentasUtilidad.CodigoCuentaPerdidaAcumuladaHistorica;
+            config.codigo_cuenta_perdida_acumulada_inflacion = dto.CuentasUtilidad.CodigoCuentaPerdidaAcumuladaInflacion;
+            config.codigo_cuenta_perdida_ejercicio_historica = dto.CuentasUtilidad.CodigoCuentaPerdidaEjercicioHistorica;
+            config.codigo_cuenta_perdida_ejercicio_inflacion = dto.CuentasUtilidad.CodigoCuentaPerdidaEjercicioInflacion;
 
             // Mapear opciones de presentación
             config.mostrar_orden = dto.EstadoSituacionFinanciera.MostrarOrden;
@@ -298,27 +298,27 @@ public sealed class ConfiguracionSistemaService : IConfiguracionSistemaService
         {
             Principal = new ConfiguracionPrincipalDto
             {
-                FechaInicioEjercicio = config.fecha_ini_ejer,
-                FechaFinEjercicio = config.fecha_fin_ejer,
-                MesesCalculados = config.meses_calc,
-                SeparadorCodigo = config.sep_codigo,
-                FormatoCuentas = config.fmt_ctas,
-                FormatoCentros = config.fmt_centros,
-                SymbolSaldoAcreedor = config.sym_acreedor,
-                MontoMaximo = config.mto_maximo,
-                FrecuenciaDepreciacion = config.frec_deprec,
-                UltimaDepreciacion = config.fec_ult_deprec
+                FechaInicioEjercicio = config.fecha_inicio_ejercicio,
+                FechaFinEjercicio = config.fecha_fin_ejercicio,
+                MesesCalculados = config.meses_calculados,
+                SeparadorCodigo = config.separador_codigo,
+                FormatoCuentas = config.formato_cuentas,
+                FormatoCentros = config.formato_centros,
+                SymbolSaldoAcreedor = config.symbol_saldo_acreedor,
+                MontoMaximo = config.monto_maximo,
+                FrecuenciaDepreciacion = config.frecuencia_depreciacion,
+                UltimaDepreciacion = config.ultima_depreciacion
             },
             CuentasUtilidad = new CuentasUtilidadDto
             {
-                CodigoCuentaUtilAcumuladaHistorica = config.cod_util_acum_hist,
-                CodigoCuentaUtilAcumuladaInflacion = config.cod_util_acum_inf,
-                CodigoCuentaUtilEjercicioHistorica = config.cod_util_ejer_hist,
-                CodigoCuentaUtilEjercicioInflacion = config.cod_util_ejer_inf,
-                CodigoCuentaPerdidaAcumuladaHistorica = config.cod_perd_acum_hist,
-                CodigoCuentaPerdidaAcumuladaInflacion = config.cod_perd_acum_inf,
-                CodigoCuentaPerdidaEjercicioHistorica = config.cod_perd_ejer_hist,
-                CodigoCuentaPerdidaEjercicioInflacion = config.cod_perd_ejer_inf
+                CodigoCuentaUtilAcumuladaHistorica = config.codigo_cuenta_util_acumulada_historica,
+                CodigoCuentaUtilAcumuladaInflacion = config.codigo_cuenta_util_acumulada_inflacion,
+                CodigoCuentaUtilEjercicioHistorica = config.codigo_cuenta_util_ejercicio_historica,
+                CodigoCuentaUtilEjercicioInflacion = config.codigo_cuenta_util_ejercicio_inflacion,
+                CodigoCuentaPerdidaAcumuladaHistorica = config.codigo_cuenta_perdida_acumulada_historica,
+                CodigoCuentaPerdidaAcumuladaInflacion = config.codigo_cuenta_perdida_acumulada_inflacion,
+                CodigoCuentaPerdidaEjercicioHistorica = config.codigo_cuenta_perdida_ejercicio_historica,
+                CodigoCuentaPerdidaEjercicioInflacion = config.codigo_cuenta_perdida_ejercicio_inflacion
             },
             EstadoSituacionFinanciera = new EstadoSituacionFinancieraDto
             {

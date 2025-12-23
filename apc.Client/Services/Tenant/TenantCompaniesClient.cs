@@ -14,8 +14,19 @@ public sealed class TenantCompaniesClient
 
     public async Task<IReadOnlyList<TenantCompanyDto>> ObtenerAsync(CancellationToken ct = default)
     {
-        var result = await httpClient.GetFromJsonAsync<IReadOnlyList<TenantCompanyDto>>("api/tenant/companies",
-            cancellationToken: ct);
-        return result ?? Array.Empty<TenantCompanyDto>();
+        try
+        {
+            var result = await httpClient.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<TenantCompanyDto>>(
+                "api/tenant/companies", ct);
+            return result ?? Array.Empty<TenantCompanyDto>();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException("No fue posible obtener la lista de empresas.", ex);
+        }
     }
 }

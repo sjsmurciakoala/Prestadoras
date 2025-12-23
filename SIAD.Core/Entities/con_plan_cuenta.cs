@@ -19,8 +19,6 @@ public partial class con_plan_cuenta : ICompanyScopedEntity
 
     public string? description { get; set; }
 
-    public string? short_description { get; set; }
-
     public string account_type { get; set; } = null!;
 
     public string? category { get; set; }
@@ -29,28 +27,23 @@ public partial class con_plan_cuenta : ICompanyScopedEntity
 
     public bool allows_posting { get; set; }
 
+    public bool allows_budget { get; set; }
+
+    public bool allows_third { get; set; }
+
+    public bool is_tax_base { get; set; }
+
+    public bool allows_cost_center { get; set; }
+
+    public bool allows_multi_currency { get; set; }
+
     public string? currency_code { get; set; }
 
+    public long? adjustment_account_id { get; set; }
+
+    public long? correction_account_id { get; set; }
+
     public string status { get; set; } = null!;
-
-    // ===== REFERENCIAS Y FUNCIONALIDADES =====
-    public string? external_reference { get; set; }
-
-    public bool allows_budget { get; set; } = false;
-
-    public bool allows_cost_center { get; set; } = false;
-
-    public bool allows_third { get; set; } = false;
-
-    public bool allows_bank { get; set; } = false;
-
-    public bool is_tax_base { get; set; } = false;
-
-    public bool allows_amount { get; set; } = true;
-
-    public bool allows_multi_currency { get; set; } = false;
-
-    public decimal? budget_amount { get; set; }
 
     public DateTime created_at { get; set; }
 
@@ -61,6 +54,10 @@ public partial class con_plan_cuenta : ICompanyScopedEntity
     public string? updated_by { get; set; }
 
     public virtual con_plan_cuenta? parent_account { get; set; }
+
+    public virtual con_plan_cuenta? adjustment_account { get; set; }
+
+    public virtual con_plan_cuenta? correction_account { get; set; }
 
     public virtual ICollection<con_plan_cuenta> child_accounts { get; set; } = new List<con_plan_cuenta>();
 

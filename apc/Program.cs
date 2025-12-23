@@ -17,24 +17,28 @@ using SIAD.Data;
 using SIAD.Services;
 using System.Net.Http.Headers;
 using System.Text.Json;
-using System.Threading.Tasks;
-using apc.Diagnostics;
-using Microsoft.AspNetCore.DataProtection;
-using System.IO;
-using System;
 
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
 
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddTransient<HttpTraceHandler>();
 builder.Services.AddHttpClient("ServerAPI")
-    .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler
+    .ConfigurePrimaryHttpMessageHandler(() => 
     {
-        UseCookies = false
-    })
-    .AddHttpMessageHandler<HttpTraceHandler>();
+        var handler = new HttpClientHandler
+        {
+            UseCookies = false
+        };
+        
+        // Allow self-signed certificates in development
+        if (builder.Environment.IsDevelopment())
+        {
+            handler.ServerCertificateCustomValidationCallback = (message, cert, chain, errors) => true;
+        }
+        
+        return handler;
+    });
 builder.Services.AddScoped(sp =>
 {
     var httpContextAccessor = sp.GetRequiredService<IHttpContextAccessor>();
@@ -53,22 +57,15 @@ builder.Services.AddScoped(sp =>
     }
     else if (client.BaseAddress is null)
     {
-        // En producción, usar la misma URL del servidor actual
-        var baseUrl = builder.Configuration["BaseUrl"] ?? "https://localhost:5001/";
-        client.BaseAddress = new Uri(baseUrl);
+        // Fallback para cuando no hay HttpContext (WASM prerendering o background tasks)
+        // Usar configuración explícita o valor por defecto
+        var baseUrl = builder.Configuration["BaseUrl"] ?? "http://localhost:5000/";
+        client.BaseAddress = new Uri(baseUrl, UriKind.Absolute);
         client.DefaultRequestHeaders.Remove("Cookie");
     }
 
     return client;
 });
-
-// Persistir claves de protección de datos para estabilidad de cookies entre reinicios
-// En producción, escribir fuera de inetpub para evitar permisos restringidos
-var keysDir = Environment.GetEnvironmentVariable("SIAD_KEYS_DIR")
-    ?? Path.Combine("C:\\SIADLogs", "keys");
-builder.Services.AddDataProtection()
-    .PersistKeysToFileSystem(new DirectoryInfo(keysDir))
-    .SetApplicationName("SIAD");
 
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents(options =>
@@ -80,6 +77,13 @@ CommonServices.Configure(builder.Services, builder.Configuration);
 builder.Services.AddMvc();
 
 builder.Services.AddDevExpressServerSideBlazorPdfViewer();
+builder.Services.AddAntiforgery(options => 
+{
+    options.SuppressXFrameOptionsHeader = false;
+    options.Cookie.SecurePolicy = CookieSecurePolicy.SameAsRequest;
+    options.Cookie.SameSite = SameSiteMode.Lax;
+});
+
 builder.Services.AddControllers()
     .AddJsonOptions(options =>
     {
@@ -126,24 +130,6 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.ConfigureApplicationCookie(options =>
-{
-    options.Cookie.SameSite = SameSiteMode.Lax;
-    options.Cookie.SecurePolicy = CookieSecurePolicy.None; // HTTP en producción interna
-    options.ExpireTimeSpan = TimeSpan.FromHours(8);
-    options.SlidingExpiration = true;
-    options.Events.OnRedirectToLogin = ctx =>
-    {
-        ctx.Response.StatusCode = StatusCodes.Status401Unauthorized;
-        return Task.CompletedTask;
-    };
-    options.Events.OnRedirectToAccessDenied = ctx =>
-    {
-        ctx.Response.StatusCode = StatusCodes.Status403Forbidden;
-        return Task.CompletedTask;
-    };
-});
-
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
 
 // Wire SIAD layered services
@@ -162,6 +148,9 @@ else
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
+// Habilitar WebSockets para Blazor Server (crítico para IIS)
+app.UseWebSockets();
 
 app.UseHttpsRedirection();
 

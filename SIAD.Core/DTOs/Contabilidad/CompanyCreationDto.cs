@@ -59,12 +59,6 @@ public sealed class CompanyCreationDto
     [Url(ErrorMessage = "La página web no tiene un formato válido.")]
     [StringLength(200, ErrorMessage = "La página web no puede superar los 200 caracteres.")]
     public string? PaginaWeb { get; set; }
-
-    /// <summary>
-    /// URL relativa del logo de la empresa (ej: /uploads/company-logos/1/logo.png)
-    /// </summary>
-    [StringLength(500, ErrorMessage = "La URL del logo no puede superar los 500 caracteres.")]
-    public string? LogoUrl { get; set; }
 }
 
 public enum CompanySizeType

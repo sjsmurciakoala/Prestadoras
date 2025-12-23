@@ -5,17 +5,10 @@ namespace apc.Services
     public static class DxThemes
     {
         public static readonly ITheme FluentLight = Themes.Fluent.Clone(AddFluentTheme);
-        public static readonly ITheme FluentDark = Themes.Fluent.Clone(properties =>
-        {
-            properties.Mode = ThemeMode.Dark;
-            AddFluentTheme(properties);
-        });
         public static readonly ITheme BlazingBerry = Themes.BlazingBerry.Clone(AddBootstrapTheme);
-        public static readonly ITheme BlazingDark = Themes.BlazingDark.Clone(AddBootstrapTheme);
         public static readonly ITheme Purple = Themes.Purple.Clone(AddBootstrapTheme);
         public static readonly ITheme OfficeWhite = Themes.OfficeWhite.Clone(AddBootstrapTheme);
         public static readonly ITheme Bootstrap = Themes.BootstrapExternal.Clone(properties => AddBootstrapExternalTheme("bootstrap", properties));
-        public static readonly ITheme BootstrapDark = Themes.BootstrapExternal.Clone(properties => AddBootstrapExternalTheme("bootstrap-dark", properties));
 
         public static void AddBootstrapTheme(ThemeProperties properties)
         {
@@ -39,18 +32,19 @@ namespace apc.Services
     {
         public DxThemesService()
         {
+            // Tema global por defecto: Bootstrap (claro)
             ActiveTheme = DxThemes.Bootstrap;
         }
 
         public ITheme ActiveTheme { get; private set; }
 
-        public bool IsFluentActive => ActiveTheme == DxThemes.FluentLight || ActiveTheme == DxThemes.FluentDark;
+        public bool IsFluentActive => ActiveTheme == DxThemes.FluentLight;
 
-        public bool IsBootstrapDarkActive => ActiveTheme == DxThemes.BootstrapDark;
-
-        public bool IsFluentDarkModeActive => ActiveTheme == DxThemes.FluentDark;
-
-        public bool IsActiveThemeDark => IsBootstrapDarkActive || IsFluentDarkModeActive;
+        // Permite cambiar el tema en tiempo de ejecución (para futuros toggles)
+        public void SetTheme(ITheme theme)
+        {
+            ActiveTheme = theme ?? ActiveTheme;
+        }
     }
 
 }

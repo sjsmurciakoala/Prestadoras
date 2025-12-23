@@ -3,8 +3,8 @@ using SIAD.Core.Tenancy;
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Configuraciï¿½n unificada del sistema contable por empresa
-/// Consolidaciï¿½n de configuraciï¿½n principal y cuentas de utilidad
+/// Configuración unificada del sistema contable por empresa
+/// Consolidación de configuración principal y cuentas de utilidad
 /// </summary>
 public class con_configuracion_sistema : ICompanyScopedEntity
 {
@@ -12,54 +12,54 @@ public class con_configuracion_sistema : ICompanyScopedEntity
 
     public long company_id { get; set; }
 
-    // ===== CONFIGURACIï¿½N PRINCIPAL =====
-    public DateTime? fecha_ini_ejer { get; set; }
+    // ===== CONFIGURACIÓN PRINCIPAL =====
+    public DateTime? fecha_inicio_ejercicio { get; set; }
 
-    public DateTime? fecha_fin_ejer { get; set; }
+    public DateTime? fecha_fin_ejercicio { get; set; }
 
-    public int meses_calc { get; set; }
+    public int meses_calculados { get; set; }
 
-    public string sep_codigo { get; set; } = "-";
+    public string separador_codigo { get; set; } = "-";
 
-    public string fmt_ctas { get; set; } = "###-###-##";
+    public string formato_cuentas { get; set; } = "###-###-##";
 
-    public string fmt_centros { get; set; } = "###-##";
+    public string formato_centros { get; set; } = "###-##";
 
-    public string sym_acreedor { get; set; } = "CR";
+    public string symbol_saldo_acreedor { get; set; } = "CR";
 
-    public decimal? mto_maximo { get; set; }
+    public decimal? monto_maximo { get; set; }
 
-    public string frec_deprec { get; set; } = "Mensual";
+    public string frecuencia_depreciacion { get; set; } = "Mensual";
 
-    public DateTime? fec_ult_deprec { get; set; }
+    public DateTime? ultima_depreciacion { get; set; }
 
-    // ===== CUENTAS DE UTILIDAD - HISTï¿½RICAS (como cï¿½digos, no IDs) =====
-    public string? cod_util_acum_hist { get; set; }
+    // ===== CUENTAS DE UTILIDAD - HISTÓRICAS (como códigos, no IDs) =====
+    public string? codigo_cuenta_util_acumulada_historica { get; set; }
 
-    public string? cod_util_ejer_hist { get; set; }
+    public string? codigo_cuenta_util_ejercicio_historica { get; set; }
 
-    public string? cod_perd_acum_hist { get; set; }
+    public string? codigo_cuenta_perdida_acumulada_historica { get; set; }
 
-    public string? cod_perd_ejer_hist { get; set; }
+    public string? codigo_cuenta_perdida_ejercicio_historica { get; set; }
 
-    // ===== CUENTAS DE UTILIDAD - INFLACIï¿½N (como cï¿½digos, no IDs) =====
-    public string? cod_util_acum_inf { get; set; }
+    // ===== CUENTAS DE UTILIDAD - INFLACIÓN (como códigos, no IDs) =====
+    public string? codigo_cuenta_util_acumulada_inflacion { get; set; }
 
-    public string? cod_util_ejer_inf { get; set; }
+    public string? codigo_cuenta_util_ejercicio_inflacion { get; set; }
 
-    public string? cod_perd_acum_inf { get; set; }
+    public string? codigo_cuenta_perdida_acumulada_inflacion { get; set; }
 
-    public string? cod_perd_ejer_inf { get; set; }
+    public string? codigo_cuenta_perdida_ejercicio_inflacion { get; set; }
 
-    // ===== OPCIONES DE PRESENTACIï¿½N =====
+    // ===== OPCIONES DE PRESENTACIÓN =====
     public bool mostrar_orden { get; set; }
 
     public bool mostrar_percontra { get; set; }
 
-    // ===== Tï¿½TULOS Y DESCRIPCIONES =====
-    public string tit_est_result { get; set; } = "Estado de Resultados";
+    // ===== TÍTULOS Y DESCRIPCIONES =====
+    public string titulo_estado_resultados { get; set; } = "Estado de Resultados";
 
-    public string tit_balance_gral { get; set; } = "Balance General";
+    public string titulo_balance_general { get; set; } = "Balance General";
 
     public string descripcion_activo { get; set; } = "ACTIVO";
 
@@ -67,11 +67,11 @@ public class con_configuracion_sistema : ICompanyScopedEntity
 
     public string descripcion_capital { get; set; } = "CAPITAL";
 
-    public string desc_pasiv_cap { get; set; } = "PASIVO y CAPITAL";
+    public string descripcion_pasivo_capital { get; set; } = "PASIVO y CAPITAL";
 
-    public string desc_orden { get; set; } = "CUENTAS ORDEN";
+    public string descripcion_orden { get; set; } = "CUENTAS ORDEN";
 
-    // ===== AUDITORï¿½A =====
+    // ===== AUDITORÍA =====
     public DateTime created_at { get; set; } = DateTime.UtcNow;
 
     public string created_by { get; set; } = null!;

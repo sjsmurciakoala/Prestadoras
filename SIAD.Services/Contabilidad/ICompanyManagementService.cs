@@ -12,8 +12,6 @@ public interface ICompanyManagementService
     Task<CompanyCreationDto> ActualizarAsync(long companyId, CompanyCreationDto dto, string usuario,
         CancellationToken ct = default);
 
-    /// <summary>
-    /// Actualiza la URL del logo para una empresa.
-    /// </summary>
-    Task<string> ActualizarLogoAsync(long companyId, string logoUrl, string usuario, CancellationToken ct = default);
+    Task<bool> GuardarLogoAsync(long companyId, byte[] logoBytes, string usuario, CancellationToken ct = default);
+    Task<(byte[] logoBytes, string? contentType)?> ObtenerLogoAsync(long companyId, CancellationToken ct = default);
 }

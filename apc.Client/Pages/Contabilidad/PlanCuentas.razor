@@ -1,74 +1,439 @@
-@page "/contabilidad/plan-cuentas"
+﻿@page "/contabilidad/plan-cuentas"
 @attribute [Authorize]
 @inject HttpClient Http
+@using apc.Client.Pages.Contabilidad.Components
+@using DevExpress.Blazor
+@using System.Collections.Generic
+@using System.Linq
 
-<div class="contabilidad-page contabilidad-content">
+<div class="contabilidad-page contabilidad-content plan-cuentas-page">
     @if (!string.IsNullOrEmpty(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger">@errorMessage</DxAlert>
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
     }
 
-    <DxStackLayout Orientation="Orientation.Vertical" Spacing="15px">
-        <DxStackLayoutItem>
-            <DxButton Text="Actualizar"
-                      RenderStyle="ButtonRenderStyle.Primary"
-                      Click="LoadPlanCuentasAsync"
-                      Enabled="@( !isLoading )" />
-        </DxStackLayoutItem>
-        <DxStackLayoutItem>
-            <div class="text-muted small">Total cuentas: @planCuentas.Length</div>
-        </DxStackLayoutItem>
-        <DxStackLayoutItem>
-            <DxTreeList Data="@planCuentas"
-                        KeyFieldName="@nameof(PlanCuentaDto.AccountId)"
-                        ParentKeyFieldName="@nameof(PlanCuentaDto.ParentAccountId)"
-                        ShowFilterRow="true"
-                        ShowColumnLines="true"
-                        ShowBorders="true"
-                        AllowColumnResize="true"
-                        KeyboardNavigationEnabled="true">
-                <Columns>
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Code)" Caption="Codigo" />
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Name)" Caption="Nombre" />
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.AccountType)" Caption="Tipo" />
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Category)" Caption="Categoria" />
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Level)" Caption="Nivel" />
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.AllowsPosting)" Caption="Permite movimientos" />
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.Status)" Caption="Estado" />
-                    <DxTreeListDataColumn FieldName="@nameof(PlanCuentaDto.CurrencyCode)" Caption="Moneda" />
-                </Columns>
-            </DxTreeList>
-        </DxStackLayoutItem>
-    </DxStackLayout>
+    <div class="card shadow-sm border-0 rounded">
+        <div class="card-header bg-light">
+            <h5 class="mb-3">Plan de Cuentas</h5>
+            
+            <!-- Barra de Herramientas -->
+            <div class="d-flex flex-wrap gap-2 mb-3">
+                <DxButton Text="Nuevo" 
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary" 
+                          Click="@(() => OpenForm(null))" />
+                <DxButton Text="Editar" 
+                          IconCssClass="bi bi-pencil"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(cuentaSeleccionada != null && !isFormVisible)"
+                          Click="@(() => OpenForm(cuentaSeleccionada))" />
+                <DxButton Text="Eliminar" 
+                          IconCssClass="bi bi-trash"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          Enabled="@(cuentaSeleccionada != null && !isFormVisible)"
+                          Click="@DeleteCuentaAsync" />
+                <DxButton Text="Actualizar" 
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Info"
+                          Click="@(() => LoadPlanCuentasAsync())" />
+            </div>
+
+            <!-- Filtros por columna -->
+            <div class="row g-3 mb-3">
+                <div class="col-md-2">
+                    <label class="form-label small d-block mb-1">Cuenta</label>
+                    <DxTextBox Placeholder="Codigo..."
+                               Text="@filtroCuenta"
+                               TextChanged="@OnCuentaFilterChanged" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small d-block mb-1">Descripcion</label>
+                    <DxTextBox Placeholder="Descripcion..."
+                               Text="@filtroDescripcion"
+                               TextChanged="@OnDescripcionFilterChanged" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small d-block mb-1">Mov</label>
+                    <DxComboBox Data="@boolFilterOptions"
+                                TData="BoolFilterOption"
+                                TValue="bool?"
+                                Value="@filtroMov"
+                                ValueChanged="@OnMovFilterChanged"
+                                TextFieldName="@nameof(BoolFilterOption.Text)"
+                                ValueFieldName="@nameof(BoolFilterOption.Value)"
+                                NullText="Todos"
+                                AllowUserInput="false" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small d-block mb-1">Tercero</label>
+                    <DxComboBox Data="@boolFilterOptions"
+                                TData="BoolFilterOption"
+                                TValue="bool?"
+                                Value="@filtroTercero"
+                                ValueChanged="@OnTerceroFilterChanged"
+                                TextFieldName="@nameof(BoolFilterOption.Text)"
+                                ValueFieldName="@nameof(BoolFilterOption.Value)"
+                                NullText="Todos"
+                                AllowUserInput="false" />
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small d-block mb-1">Centro</label>
+                    <DxComboBox Data="@boolFilterOptions"
+                                TData="BoolFilterOption"
+                                TValue="bool?"
+                                Value="@filtroCentro"
+                                ValueChanged="@OnCentroFilterChanged"
+                                TextFieldName="@nameof(BoolFilterOption.Text)"
+                                ValueFieldName="@nameof(BoolFilterOption.Value)"
+                                NullText="Todos"
+                                AllowUserInput="false" />
+                </div>
+            </div>
+        </div>
+
+        <div class="card-body p-0">
+            @if (cargando)
+            {
+                <div class="text-center py-5">
+                    <DxWaitIndicator Visible="true" />
+                    <p class="mt-2">Cargando cuentas...</p>
+                </div>
+            }
+            else if (cuentasFiltradas.Count == 0)
+            {
+                <div class="alert alert-info m-4">
+                    No hay cuentas que coincidan con los filtros
+                </div>
+            }
+            else
+            {
+                <div class="row" style="height: 600px;">
+                    <!-- Panel Izquierdo: Tabla de Cuentas -->
+                    <div class="col-md-7" style="border-right: 1px solid #dee2e6; overflow: auto;">
+                        <DxGrid Data="@cuentasFiltradas"
+                                KeyFieldName="@nameof(PlanCuentaDto.AccountId)"
+                                SelectionMode="GridSelectionMode.Single"
+                                AllowSelectRowByClick="true"
+                                @bind-SelectedDataItem="SelectedRow"
+                                PageSize="15"
+                                CssClass="w-100">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Code)" Caption="Cuenta" Width="120px" />
+                                <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Name)" Caption="Descripcion" />
+                                <DxGridDataColumn Caption="Mov" Width="70px">
+                                    <CellDisplayTemplate Context="cell">
+                                        @if (cell.DataItem is PlanCuentaDto item)
+                                        {
+                                            <DxCheckBox Checked="@item.AllowsPosting" Enabled="false" />
+                                        }
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn Caption="Tercero" Width="80px">
+                                    <CellDisplayTemplate Context="cell">
+                                        @if (cell.DataItem is PlanCuentaDto item)
+                                        {
+                                            <DxCheckBox Checked="@GetTerceroFlag(item)" Enabled="false" />
+                                        }
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn Caption="Centro" Width="80px">
+                                    <CellDisplayTemplate Context="cell">
+                                        @if (cell.DataItem is PlanCuentaDto item)
+                                        {
+                                            <DxCheckBox Checked="@GetCentroFlag(item)" Enabled="false" />
+                                        }
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                            </Columns>
+                        </DxGrid>
+                    </div>
+
+                    <!-- Panel Derecho: Detalles -->
+                    <div class="col-md-5" style="overflow-y: auto; padding: 20px;">
+                        @if (isFormVisible)
+                        {
+                            <PlanCuentaForm Cuenta="cuentaSeleccionada"
+                                            Accounts="planCuentas"
+                                            AccountTypes="accountTypes"
+                                            CategoryOptions="categoryOptions"
+                                            OnSaved="HandleFormSavedAsync"
+                                            OnCanceled="HandleFormCanceled" />
+                        }
+                        else if (cuentaSeleccionada != null)
+                        {
+                            <h6 class="border-bottom pb-2 mb-3">
+                                Detalles: <strong>@cuentaSeleccionada.Code - @cuentaSeleccionada.Name</strong>
+                            </h6>
+                            <div class="row">
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label small fw-bold">Codigo</label>
+                                    <p>@cuentaSeleccionada.Code</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label small fw-bold">Tipo</label>
+                                    <p>@cuentaSeleccionada.AccountType</p>
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <label class="form-label small fw-bold">Nombre</label>
+                                    <p>@cuentaSeleccionada.Name</p>
+                                </div>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label small fw-bold">Moneda</label>
+                                    <p>@(cuentaSeleccionada.CurrencyCode ?? "-")</p>
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <label class="form-label small fw-bold">Descripcion corta</label>
+                                    <p>@(cuentaSeleccionada.Description ?? "-")</p>
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <h6 class="border-top pt-3 mt-3">Funcionalidades</h6>
+                                    <div class="row">
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input" disabled checked="@cuentaSeleccionada.AllowsPosting" />
+                                                <label class="form-check-label small">Cuenta de detalle</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input" disabled checked="@cuentaSeleccionada.AllowsBudget" />
+                                                <label class="form-check-label small">Presupuesto</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input" disabled checked="@cuentaSeleccionada.AllowsThird" />
+                                                <label class="form-check-label small">Uso de terceros</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input" disabled checked="@cuentaSeleccionada.IsTaxBase" />
+                                                <label class="form-check-label small">Usa bases</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input" disabled checked="@cuentaSeleccionada.AllowsCostCenter" />
+                                                <label class="form-check-label small">Centro de costos</label>
+                                            </div>
+                                        </div>
+                                        <div class="col-md-6">
+                                            <div class="form-check">
+                                                <input type="checkbox" class="form-check-input" disabled checked="@cuentaSeleccionada.AllowsMultiCurrency" />
+                                                <label class="form-check-label small">Moneda referencial</label>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="col-md-12 mb-3">
+                                    <h6 class="border-top pt-3 mt-3">Informacion adicional</h6>
+                                    <div class="row">
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small fw-bold">Nivel</label>
+                                            <p>@cuentaSeleccionada.Level</p>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small fw-bold">Estado</label>
+                                            <p>@cuentaSeleccionada.Status</p>
+                                        </div>
+                                        <div class="col-md-6 mb-2">
+                                            <label class="form-label small fw-bold">Clasificacion</label>
+                                            <p>@(cuentaSeleccionada.Category ?? "-")</p>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="alert alert-info">
+                                Selecciona una cuenta del arbol para ver sus detalles
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+    </div>
 </div>
 
 @code {
+    private static readonly BoolFilterOption[] boolFilterOptions = new[]
+    {
+        new BoolFilterOption("Todos", null),
+        new BoolFilterOption("Si", true),
+        new BoolFilterOption("No", false)
+    };
+
+    private readonly string[] accountTypes = new[] { "ACTIVO", "PASIVO", "CAPITAL", "INGRESO", "GASTO" };
+
     private PlanCuentaDto[] planCuentas = Array.Empty<PlanCuentaDto>();
+    private List<PlanCuentaDto> cuentasFiltradas = new();
+    private IReadOnlyList<string> categoryOptions = Array.Empty<string>();
+    private PlanCuentaDto? cuentaSeleccionada;
+    private bool isFormVisible;
+    private bool cargando;
     private string? errorMessage;
-    private bool isLoading;
+    private object? selectedRow;
+
+    // Filtros por columna
+    private string filtroCuenta = string.Empty;
+    private string filtroDescripcion = string.Empty;
+    private bool? filtroMov;
+    private bool? filtroTercero;
+    private bool? filtroCentro;
+
+    private object? SelectedRow
+    {
+        get => selectedRow;
+        set
+        {
+            if (!ReferenceEquals(selectedRow, value))
+            {
+                selectedRow = value;
+                cuentaSeleccionada = value as PlanCuentaDto;
+                isFormVisible = false;
+            }
+        }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadPlanCuentasAsync();
     }
 
-    private async Task LoadPlanCuentasAsync()
+    private async Task LoadPlanCuentasAsync(long? selectAccountId = null)
     {
         try
         {
-            isLoading = true;
+            cargando = true;
             errorMessage = null;
             planCuentas = await Http.GetFromJsonAsync<PlanCuentaDto[]>("api/contabilidad/catalogos/plan-cuentas")
                 ?? Array.Empty<PlanCuentaDto>();
+
+            categoryOptions = planCuentas
+                .Select(c => c.Category)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(c => c)
+                .ToList()!;
+
+            ApplyFilters();
+            SelectedRow = selectAccountId.HasValue
+                ? planCuentas.FirstOrDefault(c => c.AccountId == selectAccountId.Value)
+                : null;
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
-            planCuentas = Array.Empty<PlanCuentaDto>();
+            errorMessage = $"Error al cargar las cuentas: {ex.Message}";
         }
         finally
         {
-            isLoading = false;
+            cargando = false;
         }
     }
+
+    private void OnCuentaFilterChanged(string? value)
+    {
+        filtroCuenta = value ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private void OnDescripcionFilterChanged(string? value)
+    {
+        filtroDescripcion = value ?? string.Empty;
+        ApplyFilters();
+    }
+
+    private void OnMovFilterChanged(bool? value)
+    {
+        filtroMov = value;
+        ApplyFilters();
+    }
+
+    private void OnTerceroFilterChanged(bool? value)
+    {
+        filtroTercero = value;
+        ApplyFilters();
+    }
+
+    private void OnCentroFilterChanged(bool? value)
+    {
+        filtroCentro = value;
+        ApplyFilters();
+    }
+
+    private void ApplyFilters()
+    {
+        var query = planCuentas.AsEnumerable();
+
+        if (!string.IsNullOrWhiteSpace(filtroCuenta))
+        {
+            query = query.Where(c => c.Code.Contains(filtroCuenta, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtroDescripcion))
+        {
+            query = query.Where(c =>
+                c.Name.Contains(filtroDescripcion, StringComparison.OrdinalIgnoreCase) ||
+                (!string.IsNullOrWhiteSpace(c.Description) &&
+                 c.Description.Contains(filtroDescripcion, StringComparison.OrdinalIgnoreCase)));
+        }
+
+        if (filtroMov.HasValue)
+        {
+            query = query.Where(c => c.AllowsPosting == filtroMov.Value);
+        }
+
+        if (filtroTercero.HasValue)
+        {
+            query = query.Where(c => GetTerceroFlag(c) == filtroTercero.Value);
+        }
+
+        if (filtroCentro.HasValue)
+        {
+            query = query.Where(c => GetCentroFlag(c) == filtroCentro.Value);
+        }
+
+        cuentasFiltradas = query
+            .OrderBy(c => c.Code)
+            .ToList();
+    }
+
+    private static bool GetTerceroFlag(PlanCuentaDto cuenta) => cuenta.AllowsThird;
+
+    private static bool GetCentroFlag(PlanCuentaDto cuenta) => cuenta.AllowsCostCenter;
+
+    private void OpenForm(PlanCuentaDto? cuenta)
+    {
+        cuentaSeleccionada = cuenta;
+        isFormVisible = true;
+    }
+
+    private async Task HandleFormSavedAsync(long savedId)
+    {
+        await LoadPlanCuentasAsync(savedId == 0 ? null : savedId);
+        isFormVisible = false;
+    }
+
+    private Task HandleFormCanceled()
+    {
+        isFormVisible = false;
+        return Task.CompletedTask;
+    }
+
+    private async Task DeleteCuentaAsync()
+    {
+        if (cuentaSeleccionada == null)
+        {
+            errorMessage = "Debes seleccionar una cuenta para eliminar";
+            return;
+        }
+
+        errorMessage = "FunciÐ˜n de eliminar en desarrollo...";
+    }
+
+    private sealed record BoolFilterOption(string Text, bool? Value);
 }
+

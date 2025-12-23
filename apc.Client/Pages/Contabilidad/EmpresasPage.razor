@@ -57,6 +57,11 @@ else
 			var resultado = await TenantCompaniesClient.ObtenerAsync();
 			companies = resultado.ToList();
 		}
+		catch (UnauthorizedAccessException)
+		{
+			// Sesión expirada - redirigir a login
+			NavigationManager.NavigateTo("/Account/Login");
+		}
 		catch (Exception ex)
 		{
 			error = ex.Message;

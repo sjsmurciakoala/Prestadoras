@@ -6,7 +6,6 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Tenancy;
 using SIAD.Services.Contabilidad;
-using SIAD.Services.Files;
 
 namespace apc.Controllers.Contabilidad;
 
@@ -17,15 +16,12 @@ public sealed class ContabilidadEmpresaController : ControllerBase
 {
     private readonly ICompanyManagementService companyManagementService;
     private readonly ICurrentCompanyService currentCompanyService;
-    private readonly IFileStorageService fileStorageService;
 
     public ContabilidadEmpresaController(ICompanyManagementService companyManagementService,
-        ICurrentCompanyService currentCompanyService,
-        IFileStorageService fileStorageService)
+        ICurrentCompanyService currentCompanyService)
     {
         this.companyManagementService = companyManagementService;
         this.currentCompanyService = currentCompanyService;
-        this.fileStorageService = fileStorageService;
     }
 
     [HttpPost]
@@ -58,45 +54,6 @@ public sealed class ContabilidadEmpresaController : ControllerBase
         {
             var raiz = ex.GetBaseException()?.Message ?? ex.Message;
             return BadRequest(CrearProblemDetalle("Error al guardar", raiz));
-        }
-    }
-
-    [HttpPost("{companyId}/logo")]
-    [RequestSizeLimit(5 * 1024 * 1024)] // 5 MB
-    public async Task<IActionResult> CargarLogo(long companyId, IFormFile? file, CancellationToken ct)
-    {
-        if (file is null || file.Length == 0)
-        {
-            return BadRequest(CrearProblemDetalle("Archivo inválido", "Debes adjuntar un archivo de imagen."));
-        }
-
-        if (!fileStorageService.IsValidImageFile(file.FileName, file.ContentType))
-        {
-            return BadRequest(CrearProblemDetalle("Formato inválido", "Solo se permiten imágenes PNG, JPG, GIF o SVG."));
-        }
-
-        var usuario = User?.Identity?.Name ?? "system";
-
-        try
-        {
-            await using var stream = file.OpenReadStream();
-            var relativePath = await fileStorageService.SaveCompanyLogoAsync(companyId, stream, file.FileName, file.ContentType, ct);
-            await companyManagementService.ActualizarLogoAsync(companyId, relativePath, usuario, ct);
-
-            return Ok(new { logoUrl = relativePath });
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(CrearProblemDetalle("No fue posible cargar el logo", ex.Message));
-        }
-        catch (ArgumentException ex)
-        {
-            return BadRequest(CrearProblemDetalle("Datos invalidos", ex.Message));
-        }
-        catch (Exception ex)
-        {
-            return StatusCode(StatusCodes.Status500InternalServerError,
-                CrearProblemDetalle("Error al cargar el logo", ex.Message));
         }
     }
 
@@ -159,6 +116,92 @@ public sealed class ContabilidadEmpresaController : ControllerBase
             Detail = detalle,
             Status = StatusCodes.Status400BadRequest
         };
+    }
+
+    [HttpPost("{companyId}/logo")]
+    [Consumes("multipart/form-data")]
+    public async Task<IActionResult> SubirLogo(long companyId, [FromForm(Name = "logoUpload")] IFormFile? archivo, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+        {
+            var errores = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
+            var detalle = errores.Count == 0 ? "Carga de logo inválida." : string.Join("; ", errores);
+            return BadRequest(CrearProblemDetalle("Solicitud inválida", detalle));
+        }
+
+        // Aceptar tanto "logoUpload" como el primer archivo disponible por si el cliente usa otro nombre
+        var archivoCargado = archivo ?? Request.Form.Files.FirstOrDefault();
+
+        if (archivoCargado is null || archivoCargado.Length == 0)
+        {
+            return BadRequest(CrearProblemDetalle("Archivo requerido", "Debe proporcionar un archivo de imagen."));
+        }
+
+        // Validaciones básicas
+        const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
+        if (archivoCargado.Length > MaxFileSize)
+        {
+            return BadRequest(CrearProblemDetalle("Archivo demasiado grande", "El logo no puede superar los 5MB."));
+        }
+
+        // Validar extensión del archivo
+        var extension = Path.GetExtension(archivoCargado.FileName)?.ToLowerInvariant();
+        var extensionesPermitidas = new[] { ".png", ".jpg", ".jpeg", ".webp", ".svg" };
+        if (string.IsNullOrEmpty(extension) || !extensionesPermitidas.Contains(extension))
+        {
+            return BadRequest(CrearProblemDetalle("Tipo de archivo no válido", 
+                "Solo se permiten imágenes: PNG, JPG, JPEG, WEBP, SVG."));
+        }
+
+        var usuario = User?.Identity?.Name ?? "system";
+
+        try
+        {
+            using var memoryStream = new MemoryStream();
+            await archivoCargado.CopyToAsync(memoryStream, ct);
+            var logoBytes = memoryStream.ToArray();
+
+            await companyManagementService.GuardarLogoAsync(companyId, logoBytes, usuario, ct);
+            return Ok(new { mensaje = "Logo guardado correctamente" });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(CrearProblemDetalle("Validación fallida", ex.Message));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(CrearProblemDetalle("Empresa no encontrada", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                CrearProblemDetalle("Error al guardar el logo", ex.Message));
+        }
+    }
+
+    [HttpGet("{companyId}/logo")]
+    public async Task<IActionResult> ObtenerLogo(long companyId, CancellationToken ct)
+    {
+        try
+        {
+            var resultado = await companyManagementService.ObtenerLogoAsync(companyId, ct);
+            if (resultado is null)
+            {
+                return NotFound();
+            }
+
+            var (logoBytes, contentType) = resultado.Value;
+            return File(logoBytes, contentType ?? "image/png");
+        }
+        catch (ArgumentOutOfRangeException ex)
+        {
+            return BadRequest(CrearProblemDetalle("ID inválido", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                CrearProblemDetalle("Error al obtener el logo", ex.Message));
+        }
     }
 }
 

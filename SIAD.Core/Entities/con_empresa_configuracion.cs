@@ -41,4 +41,8 @@ public partial class con_empresa_configuracion : ICompanyScopedEntity
     public DateTime? updated_at { get; set; }
 
     public string? updated_by { get; set; }
+
+    public byte[]? logo { get; set; }
+
+    public string? logo_mime { get; set; }
 }

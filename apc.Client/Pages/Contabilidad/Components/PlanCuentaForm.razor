@@ -1,0 +1,359 @@
+﻿@using SIAD.Core.DTOs.Contabilidad
+@inject HttpClient Http
+
+@if (!string.IsNullOrEmpty(ErrorMessage))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@ErrorMessage</DxAlert>
+}
+else if (!string.IsNullOrEmpty(SuccessMessage))
+{
+    <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@SuccessMessage</DxAlert>
+}
+
+<DxFormLayout>
+    <DxFormLayoutItem Caption="Codigo *">
+        <DxTextBox Text="@formModel.Code" TextChanged="OnCodeChanged" />
+        @if (codigoInvalido)
+        {
+            <div class="text-danger small">Codigo es obligatorio.</div>
+        }
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Descripcion *">
+        <DxTextBox Text="@formModel.Description" TextChanged="OnDescriptionChanged" />
+        @if (descripcionInvalida)
+        {
+            <div class="text-danger small">Descripcion es obligatoria.</div>
+        }
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Descripcion corta">
+        <DxTextBox @bind-Text="formModel.ShortDescription" />
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Actividad">
+        <DxComboBox Data="@AccountTypes"
+                    TData="string"
+                    TValue="string"
+                    @bind-Value="formModel.Activity"
+                    NullText="Selecciona"
+                    AllowUserInput="false" />
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Clasificacion">
+        <DxComboBox Data="@CategoryOptions"
+                    TData="string"
+                    TValue="string"
+                    @bind-Value="formModel.Category"
+                    NullText="Opcional"
+                    AllowUserInput="true"
+                    DropDownStyle="DropDownStyle.DropDown"
+                    FilterCondition="DataEditorFilterCondition.Contains"
+                    FilterMinLength="0"
+                    FilterDelay="250"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Cuenta de ajuste">
+        <DxComboBox Data="@CuentaOpciones"
+                    TData="CuentaLookup"
+                    TValue="long?"
+                    @bind-Value="formModel.AdjustmentAccountId"
+                    TextFieldName="@nameof(CuentaLookup.Display)"
+                    ValueFieldName="@nameof(CuentaLookup.Id)"
+                    NullText="Buscar cuenta"
+                    AllowUserInput="true"
+                    DropDownStyle="DropDownStyle.DropDown"
+                    FilterCondition="DataEditorFilterCondition.Contains"
+                    FilterMinLength="0"
+                    FilterDelay="250"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+            <ItemTemplate Context="cuenta">
+                <div class="combo-item">
+                    <span class="combo-item-text">@cuenta.Code</span>
+                    <small class="combo-item-hint">@cuenta.Name</small>
+                </div>
+            </ItemTemplate>
+        </DxComboBox>
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Cuenta de correccion">
+        <DxComboBox Data="@CuentaOpciones"
+                    TData="CuentaLookup"
+                    TValue="long?"
+                    @bind-Value="formModel.CorrectionAccountId"
+                    TextFieldName="@nameof(CuentaLookup.Display)"
+                    ValueFieldName="@nameof(CuentaLookup.Id)"
+                    NullText="Buscar cuenta"
+                    AllowUserInput="true"
+                    DropDownStyle="DropDownStyle.DropDown"
+                    FilterCondition="DataEditorFilterCondition.Contains"
+                    FilterMinLength="0"
+                    FilterDelay="250"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+            <ItemTemplate Context="cuenta">
+                <div class="combo-item">
+                    <span class="combo-item-text">@cuenta.Code</span>
+                    <small class="combo-item-hint">@cuenta.Name</small>
+                </div>
+            </ItemTemplate>
+        </DxComboBox>
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Opciones" ColSpanMd="12">
+        <div class="d-flex flex-wrap gap-3">
+            <DxCheckBox @bind-Checked="formModel.IsDetailAccount">Cuenta de detalle</DxCheckBox>
+            <DxCheckBox @bind-Checked="formModel.AllowsBudget">Presupuesto</DxCheckBox>
+            <DxCheckBox @bind-Checked="formModel.AllowsThird">Uso de terceros</DxCheckBox>
+            <DxCheckBox @bind-Checked="formModel.IsTaxBase">Usa bases</DxCheckBox>
+            <DxCheckBox @bind-Checked="formModel.AllowsCostCenter">Centro de costos</DxCheckBox>
+            <DxCheckBox @bind-Checked="formModel.AllowsMultiCurrency">Usa moneda referencial</DxCheckBox>
+            <DxCheckBox @bind-Checked="formModel.IsActive">Activa</DxCheckBox>
+        </div>
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Saldo inicial">
+        <DxSpinEdit @bind-Value="formModel.SaldoInicial" ReadOnly="true" DisplayFormat="n2" />
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Saldo actual">
+        <DxSpinEdit @bind-Value="formModel.SaldoActual" ReadOnly="true" DisplayFormat="n2" />
+    </DxFormLayoutItem>
+
+    <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
+        <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="GuardarAsync" Enabled="@(!isSaving)" />
+        <DxButton Text="Cancelar" CssClass="ms-2" Click="Cancelar" Enabled="@(!isSaving)" />
+    </DxFormLayoutItem>
+</DxFormLayout>
+
+<style>
+    .combo-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        gap: 0.75rem;
+    }
+
+    .combo-item-text {
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+    }
+
+    .combo-item-hint {
+        font-size: 0.75rem;
+        color: #6c757d;
+        white-space: nowrap;
+    }
+</style>
+
+@code {
+    [Parameter]
+    public PlanCuentaDto? Cuenta { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<PlanCuentaDto> Accounts { get; set; } = Array.Empty<PlanCuentaDto>();
+
+    [Parameter]
+    public IReadOnlyList<string> AccountTypes { get; set; } = Array.Empty<string>();
+
+    [Parameter]
+    public IReadOnlyList<string> CategoryOptions { get; set; } = Array.Empty<string>();
+
+    [Parameter]
+    public EventCallback<long> OnSaved { get; set; }
+
+    [Parameter]
+    public EventCallback OnCanceled { get; set; }
+
+    private readonly PlanCuentaFormModel formModel = new();
+    private bool isSaving;
+    private bool codigoInvalido;
+    private bool descripcionInvalida;
+    private string? ErrorMessage;
+    private string? SuccessMessage;
+
+    private IReadOnlyList<CuentaLookup> CuentaOpciones => Accounts
+        .Where(c => formModel.AccountId == null || c.AccountId != formModel.AccountId)
+        .Select(c => new CuentaLookup(c.AccountId, $"{c.Code} - {c.Name}", c.Code, c.Name))
+        .ToList();
+
+    protected override void OnParametersSet()
+    {
+        if (Cuenta == null)
+        {
+            formModel.Reset();
+            if (AccountTypes.Count > 0)
+            {
+                formModel.Activity = AccountTypes[0];
+            }
+        }
+        else
+        {
+            formModel.LoadFrom(Cuenta);
+        }
+
+        ErrorMessage = null;
+        SuccessMessage = null;
+        codigoInvalido = false;
+        descripcionInvalida = false;
+    }
+
+    private void OnCodeChanged(string? value)
+    {
+        formModel.Code = value ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(formModel.Code))
+        {
+            codigoInvalido = false;
+        }
+    }
+
+    private void OnDescriptionChanged(string? value)
+    {
+        formModel.Description = value ?? string.Empty;
+        if (!string.IsNullOrWhiteSpace(formModel.Description))
+        {
+            descripcionInvalida = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (!Validar())
+        {
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+            ErrorMessage = null;
+            SuccessMessage = null;
+
+            var payload = new PlanCuentaUpsertDto(
+                formModel.Code.Trim(),
+                formModel.Description.Trim(),
+                formModel.Activity,
+                formModel.IsDetailAccount,
+                formModel.AllowsBudget,
+                formModel.AllowsThird,
+                formModel.IsTaxBase,
+                formModel.AllowsCostCenter,
+                formModel.AllowsMultiCurrency,
+                formModel.IsActive ? "ACTIVE" : "INACTIVE",
+                string.Empty,
+                formModel.AccountId,
+                formModel.ParentAccountId,
+                string.IsNullOrWhiteSpace(formModel.Category) ? null : formModel.Category.Trim(),
+                string.IsNullOrWhiteSpace(formModel.ShortDescription) ? null : formModel.ShortDescription.Trim(),
+                null,
+                formModel.AdjustmentAccountId,
+                formModel.CorrectionAccountId);
+
+            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/plan-cuentas", payload);
+            response.EnsureSuccessStatusCode();
+
+            var result = await response.Content.ReadFromJsonAsync<SaveResult>();
+            var savedId = result?.Id ?? 0;
+            SuccessMessage = "Cuenta guardada correctamente.";
+            await OnSaved.InvokeAsync(savedId);
+        }
+        catch (Exception ex)
+        {
+            ErrorMessage = $"No se pudo guardar la cuenta: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task Cancelar()
+    {
+        ErrorMessage = null;
+        SuccessMessage = null;
+        await OnCanceled.InvokeAsync();
+    }
+
+    private bool Validar()
+    {
+        codigoInvalido = string.IsNullOrWhiteSpace(formModel.Code);
+        descripcionInvalida = string.IsNullOrWhiteSpace(formModel.Description);
+        return !(codigoInvalido || descripcionInvalida);
+    }
+
+    private sealed record CuentaLookup(long Id, string Display, string Code, string Name);
+
+    private sealed class SaveResult
+    {
+        public long Id { get; set; }
+    }
+
+    private sealed class PlanCuentaFormModel
+    {
+        public long? AccountId { get; set; }
+        public long? ParentAccountId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string? ShortDescription { get; set; }
+        public string Activity { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public bool IsDetailAccount { get; set; } = true;
+        public bool AllowsBudget { get; set; }
+        public bool AllowsThird { get; set; }
+        public bool IsTaxBase { get; set; }
+        public bool AllowsCostCenter { get; set; }
+        public bool AllowsMultiCurrency { get; set; }
+        public bool IsActive { get; set; } = true;
+        public long? AdjustmentAccountId { get; set; }
+        public long? CorrectionAccountId { get; set; }
+        public decimal SaldoInicial { get; set; }
+        public decimal SaldoActual { get; set; }
+
+        public void Reset()
+        {
+            AccountId = null;
+            ParentAccountId = null;
+            Code = string.Empty;
+            Description = string.Empty;
+            ShortDescription = null;
+            Activity = string.Empty;
+            Category = string.Empty;
+            IsDetailAccount = true;
+            AllowsBudget = false;
+            AllowsThird = false;
+            IsTaxBase = false;
+            AllowsCostCenter = false;
+            AllowsMultiCurrency = false;
+            IsActive = true;
+            AdjustmentAccountId = null;
+            CorrectionAccountId = null;
+            SaldoInicial = 0m;
+            SaldoActual = 0m;
+        }
+
+        public void LoadFrom(PlanCuentaDto cuenta)
+        {
+            AccountId = cuenta.AccountId;
+            ParentAccountId = cuenta.ParentAccountId;
+            Code = cuenta.Code;
+            Description = cuenta.Name;
+            ShortDescription = cuenta.Description;
+            Activity = cuenta.AccountType;
+            Category = cuenta.Category ?? string.Empty;
+            IsDetailAccount = cuenta.AllowsPosting;
+            AllowsBudget = cuenta.AllowsBudget;
+            AllowsThird = cuenta.AllowsThird;
+            IsTaxBase = cuenta.IsTaxBase;
+            AllowsCostCenter = cuenta.AllowsCostCenter;
+            AllowsMultiCurrency = cuenta.AllowsMultiCurrency;
+            IsActive = string.Equals(cuenta.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase);
+            AdjustmentAccountId = cuenta.AdjustmentAccountId;
+            CorrectionAccountId = cuenta.CorrectionAccountId;
+            SaldoInicial = 0m;
+            SaldoActual = 0m;
+        }
+    }
+}

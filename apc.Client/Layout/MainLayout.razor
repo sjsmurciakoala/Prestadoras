@@ -1,13 +1,9 @@
 ﻿@implements IDisposable
 @inherits LayoutComponentBase
-@using apc.Services;
-@using apc.Client.Services;
-@using apc.Client.Services.Contabilidad;
+@using apc.Client.Services.Tenant;
 @using DevExpress.Blazor;
 @inject NavigationManager NavigationManager
-@inject DxThemesService ThemesService
 @inject TenantState TenantState
-@inject EmpresasContabilidadClient EmpresaClient
 
 <DxToastProvider Name="GlobalToast"
                  MaxToastCount="4" />
@@ -22,7 +18,7 @@
     }
     else
     {
-        <Drawer DrawerHeader="drawerHeader" DrawerFooter="drawerFooter">
+        <Drawer DrawerHeader="drawerHeader">
             <DrawerBody>
                 <div class="w-100">
                     <NavMenu></NavMenu>
@@ -33,7 +29,7 @@
                     <div class="nav-buttons-container">
                         <NavLink href="@UrlGenerator.GetUrl(new Uri(NavigationManager.Uri).LocalPath, !ToggledSidebar)">
                             <DxButton
-                                RenderStyle="@(ThemesService.IsActiveThemeDark ? ButtonRenderStyle.Light : ButtonRenderStyle.Dark)"
+                                RenderStyle="ButtonRenderStyle.Dark"
                                 RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button"
                                 IconCssClass="bi bi-list"></DxButton>
                         </NavLink>
@@ -41,7 +37,7 @@
                         {
                             <NavLink href="@UrlGenerator.GetUrl("/", ToggledSidebar)" class="button-link hidden">
                                 <DxButton
-                                    RenderStyle="@(ThemesService.IsActiveThemeDark ? ButtonRenderStyle.Light : ButtonRenderStyle.Dark)"
+                                    RenderStyle="ButtonRenderStyle.Dark"
                                     Text="Back to Home" RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button-nav"
                                     IconCssClass="bi bi-arrow-left"></DxButton>
                             </NavLink>
@@ -51,7 +47,7 @@
                                 <NavLink href="@UrlGenerator.GetUrl("Account/Manage", ToggledSidebar)"
                                     class="button-link menubutton-float-end display-desktop">
                                     <DxButton
-                                        RenderStyle="@(ThemesService.IsActiveThemeDark ? ButtonRenderStyle.Light : ButtonRenderStyle.Dark)"
+                                        RenderStyle="ButtonRenderStyle.Dark"
                                         Text="@context.User.Identity?.Name" RenderStyleMode="@ButtonRenderStyleMode.Text"
                                         CssClass="menu-button-nav" IconCssClass="bi bi-person-circle"></DxButton>
                                 </NavLink>
@@ -60,7 +56,7 @@
                                     <AntiforgeryToken />
                                     <input type="hidden" name="ReturnUrl" value="@currentUrl" />
                                     <DxButton
-                                        RenderStyle="@(ThemesService.IsActiveThemeDark ? ButtonRenderStyle.Light : ButtonRenderStyle.Dark)"
+                                        RenderStyle="ButtonRenderStyle.Dark"
                                         SubmitFormOnClick="true" Text="Log out" RenderStyleMode="@ButtonRenderStyleMode.Text"
                                         CssClass="menu-button-nav" IconCssClass="bi bi-box-arrow-right"></DxButton>
                                 </form>
@@ -69,7 +65,7 @@
                                 <NavLink href="@UrlGenerator.GetUrl("Account/Login", ToggledSidebar)"
                                     class="button-link menubutton-float-end display-desktop">
                                     <DxButton
-                                        RenderStyle="@(ThemesService.IsActiveThemeDark ? ButtonRenderStyle.Light : ButtonRenderStyle.Dark)"
+                                        RenderStyle="ButtonRenderStyle.Dark"
                                         Text="Log in" RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button-nav"
                                         IconCssClass="bi bi-box-arrow-in-right"></DxButton>
                                 </NavLink>
@@ -91,48 +87,32 @@
     private bool IsAccountRoute =>
     NavigationManager.Uri.Contains("/Account/", StringComparison.OrdinalIgnoreCase);
     private RenderFragment drawerHeader => @<div class="navigation-drawer-header">
-        @if (!string.IsNullOrWhiteSpace(companyLogoUrl))
-        {
-    <img class="company-logo-navbar logo" src="@companyLogoUrl" alt="Logo empresa" />
-        }
-        else
-        {
-            <img class="logo" src="images/logo.svg" alt="Portal" />
-        }
+        <img class="logo" src="@(currentCompanyId > 0 ? $"/api/contabilidad/empresas/{currentCompanyId}/logo" : "images/logo.svg")" alt="Logo de la Empresa" onerror="this.src='images/logo.svg'" />
         <NavLink href="@UrlGenerator.GetUrl(new Uri(NavigationManager.Uri).LocalPath, !ToggledSidebar)">
             <DxButton
-                RenderStyle="@(ThemesService.IsBootstrapDarkActive ? ButtonRenderStyle.Dark : ButtonRenderStyle.Light)"
+                RenderStyle="ButtonRenderStyle.Light"
                 RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button-nav"
                 IconCssClass="@(ToggledSidebar ? "bi bi-x-lg" : "bi bi-list")"></DxButton>
         </NavLink>
     </div>;
 
-    private RenderFragment drawerFooter => @<div>
-    </div>;
-
-    private string? companyLogoUrl;
     private string currentUrl = string.Empty;
+    private long currentCompanyId;
 
     protected override async Task OnInitializedAsync()
     {
         currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
         NavigationManager.LocationChanged += OnLocationChanged;
         
+        // Inicializar el ID de la empresa, tolerando ausencia de claim
         try
         {
-            var companyId = await TenantState.EnsureCompanyAsync();
-            if (companyId > 0)
-            {
-                var empresa = await EmpresaClient.ObtenerAsync(companyId);
-                if (empresa is not null)
-                {
-                    companyLogoUrl = empresa.LogoUrl;
-                }
-            }
+            currentCompanyId = await TenantState.EnsureCompanyAsync();
         }
-        catch
+        catch (InvalidOperationException)
         {
-            companyLogoUrl = null;
+            // Sin empresa seleccionada: usar logo por defecto y continuar
+            currentCompanyId = 0;
         }
     }
 
@@ -146,4 +126,5 @@
     {
         NavigationManager.LocationChanged -= OnLocationChanged;
     }
+
 }

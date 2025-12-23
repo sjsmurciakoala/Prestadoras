@@ -1,0 +1,131 @@
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@inject ClientesClient ClientesClient
+
+<div class="d-flex flex-column gap-3">
+    @if (isLoadingCuenta)
+    {
+        <DxSkeletonLine />
+        <DxSkeletonLine />
+    }
+    else if (!string.IsNullOrEmpty(errorCuenta))
+    {
+        <DxAlert AlertType="AlertType.Danger">@errorCuenta</DxAlert>
+    }
+    else if (estadoCuenta != null)
+    {
+        <DxCard>
+            <HeaderTemplate>
+                <div class="card-header bg-light">
+                    <strong>Resumen de Cuenta</strong>
+                </div>
+            </HeaderTemplate>
+            <BodyTemplate>
+                                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Saldo Actual">@((estadoCuenta.SaldoActual.HasValue ? estadoCuenta.SaldoActual.Value.ToString("C2") : "-"))</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Ultimo pago">@((estadoCuenta.UltimoPagoMonto.HasValue ? estadoCuenta.UltimoPagoMonto.Value.ToString("C2") : "-"))</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Fecha ultimo pago">@((estadoCuenta.FechaUltimoPago.HasValue ? estadoCuenta.FechaUltimoPago.Value.ToString("d") : "-"))</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Consumo promedio">@((estadoCuenta.ConsumoPromedio.HasValue ? estadoCuenta.ConsumoPromedio.Value.ToString("N2") : "-"))</DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Meses pendientes">@((estadoCuenta.MesesPendientes.HasValue ? estadoCuenta.MesesPendientes.Value.ToString() : "-"))</DxFormLayoutItem>
+                </DxFormLayout>
+            </BodyTemplate>
+        </DxCard>
+    }
+
+    @if (isLoadingMovimientos)
+    {
+        <DxSkeletonLine />
+        <DxSkeletonLine />
+    }
+    else if (!string.IsNullOrEmpty(errorMovimientos))
+    {
+        <DxAlert AlertType="AlertType.Danger">@errorMovimientos</DxAlert>
+    }
+    else if (movimientos.Length == 0)
+    {
+        <DxAlert AlertType="AlertType.Info">No hay movimientos registrados.</DxAlert>
+    }
+    else
+    {
+        <DxCard>
+            <HeaderTemplate>
+                <div class="card-header bg-light">
+                    <strong>Movimientos Recientes</strong>
+                </div>
+            </HeaderTemplate>
+            <BodyTemplate>
+                <DxDataGrid Data="@movimientos" 
+                            ShowSearchBox="false"
+                            ShowFilterRow="false"
+                            ShowPager="false"
+                            AllowSort="false"
+                            CssClass="w-100">
+                    <Columns>
+                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Fecha)" Caption="Fecha" Width="100px" />
+                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Tipo)" Caption="Tipo" Width="100px" />
+                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Descripcion)" Caption="Descripción" />
+                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Monto)" Caption="Monto" Width="100px" />
+                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.SaldoInline)" Caption="Saldo" Width="100px" />
+                    </Columns>
+                </DxDataGrid>
+            </BodyTemplate>
+        </DxCard>
+    }
+</div>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public int ClienteId { get; set; }
+
+    private ClienteEstadoCuentaDto? estadoCuenta;
+    private bool isLoadingCuenta = true;
+    private string? errorCuenta;
+
+    private ClienteMovimientoDto[] movimientos = Array.Empty<ClienteMovimientoDto>();
+    private bool isLoadingMovimientos = true;
+    private string? errorMovimientos;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await Task.WhenAll(LoadEstadoCuentaAsync(), LoadMovimientosAsync());
+    }
+
+    private async Task LoadEstadoCuentaAsync()
+    {
+        isLoadingCuenta = true;
+        errorCuenta = null;
+
+        try
+        {
+            estadoCuenta = await ClientesClient.ObtenerEstadoCuentaAsync(ClienteId);
+        }
+        catch (Exception ex)
+        {
+            errorCuenta = $"Error al cargar el estado de cuenta: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingCuenta = false;
+        }
+    }
+
+    private async Task LoadMovimientosAsync()
+    {
+        isLoadingMovimientos = true;
+        errorMovimientos = null;
+
+        try
+        {
+            movimientos = await ClientesClient.ObtenerMovimientosAsync(ClienteId);
+        }
+        catch (Exception ex)
+        {
+            errorMovimientos = $"Error al cargar los movimientos: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingMovimientos = false;
+        }
+    }
+}

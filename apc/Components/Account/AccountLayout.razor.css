@@ -1,0 +1,109 @@
+/* ==============================================
+   Estilos globales de modo oscuro para Account
+   ============================================== */
+
+/* Fondo principal de páginas de cuenta */
+[data-bs-theme='dark'] .main-content {
+  background: linear-gradient(135deg, #0b1220, #111827);
+}
+
+/* Bloque de contenido (tarjeta central) */
+[data-bs-theme='dark'] .block-content {
+  background: #0f172a; /* slate-900 */
+  padding: 2.5rem;
+  border-radius: 1.5rem;
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.4);
+}
+
+/* Títulos */
+[data-bs-theme='dark'] .title-header-text {
+  color: #f1f5f9; /* slate-100 */
+}
+
+[data-bs-theme='dark'] .title-content-text,
+[data-bs-theme='dark'] .title-content-text-secondary {
+  color: #94a3b8; /* slate-400 */
+}
+
+[data-bs-theme='dark'] .title.title-secondary {
+  color: #cbd5e1; /* slate-300 */
+}
+
+/* Separador "or" */
+[data-bs-theme='dark'] .or .or-line {
+  border-bottom-color: #334155; /* slate-700 */
+}
+
+[data-bs-theme='dark'] .or .or-text {
+  color: #94a3b8; /* slate-400 */
+}
+
+/* Contenedores de links */
+[data-bs-theme='dark'] .links-container {
+  color: #cbd5e1; /* slate-300 */
+}
+
+[data-bs-theme='dark'] .links-container a {
+  color: #93c5fd; /* blue-300 */
+}
+
+[data-bs-theme='dark'] .links-container a:hover {
+  color: #bfdbfe; /* blue-200 */
+}
+
+[data-bs-theme='dark'] .links-container .dot {
+  background-color: #64748b; /* slate-500 */
+}
+
+/* Mensajes de información */
+[data-bs-theme='dark'] .info-message {
+  background: rgba(59, 130, 246, 0.1); /* blue-500 con opacidad */
+  color: #93c5fd; /* blue-300 */
+}
+
+[data-bs-theme='dark'] .info-message::before {
+  background: #1e40af; /* blue-800 */
+  opacity: 0.2;
+}
+
+/* Mensajes de validación */
+[data-bs-theme='dark'] .text-danger,
+[data-bs-theme='dark'] .validation-message {
+  color: #fca5a5; /* red-300 */
+}
+
+[data-bs-theme='dark'] .validation-summary {
+  background: #2f1212;
+  border: 1px solid #7f1d1d;
+  color: #fca5a5;
+}
+
+/* Inputs válidos/inválidos */
+[data-bs-theme='dark'] .valid.modified:not([type=checkbox]) {
+  outline-color: #4ade80; /* green-400 */
+}
+
+[data-bs-theme='dark'] .invalid {
+  outline-color: #f87171; /* red-400 */
+}
+
+/* Layout de manage */
+[data-bs-theme='dark'] .manage-layout,
+[data-bs-theme='dark'] .manage-content {
+  color: #e5e7eb; /* gray-200 */
+}
+
+/* Blazor error UI */
+[data-bs-theme='dark'] #blazor-error-ui {
+  background: #1e1b4b; /* indigo-950 */
+  color: #fbbf24; /* amber-400 */
+  box-shadow: 0 -1px 2px rgba(0, 0, 0, 0.5);
+}
+
+/* Ajustes responsivos */
+@media (max-width: 768px) {
+  [data-bs-theme='dark'] .block-content {
+    padding: 1.75rem;
+    border-radius: 1.25rem;
+  }
+}

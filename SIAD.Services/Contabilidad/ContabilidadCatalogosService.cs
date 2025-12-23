@@ -44,21 +44,16 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
                 c.category,
                 c.level,
                 c.allows_posting,
+                c.allows_budget,
+                c.allows_third,
+                c.is_tax_base,
+                c.allows_cost_center,
+                c.allows_multi_currency,
+                c.adjustment_account_id,
+                c.correction_account_id,
                 c.status,
                 c.description,
-                c.currency_code,
-                c.short_description,
-                c.external_reference,
-                c.allows_budget,
-                c.allows_cost_center,
-                c.allows_third,
-                c.allows_bank,
-                c.is_tax_base,
-                c.allows_amount,
-                c.allows_multi_currency,
-                c.budget_amount,
-                c.created_by,
-                c.updated_by))
+                c.currency_code))
             .ToListAsync(cancellationToken);
     }
 
@@ -118,21 +113,18 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
         entity.code = request.Code.Trim().ToUpperInvariant();
         entity.name = request.Name.Trim();
         entity.description = request.Description?.Trim();
-        entity.short_description = request.ShortDescription?.Trim();
-        entity.external_reference = request.ExternalReference?.Trim();
         entity.account_type = request.AccountType.Trim().ToUpperInvariant();
         entity.category = string.IsNullOrWhiteSpace(request.Category) ? null : request.Category.Trim();
         entity.allows_posting = request.AllowsPosting;
         entity.allows_budget = request.AllowsBudget;
-        entity.allows_cost_center = request.AllowsCostCenter;
         entity.allows_third = request.AllowsThird;
-        entity.allows_bank = request.AllowsBank;
         entity.is_tax_base = request.IsTaxBase;
-        entity.allows_amount = request.AllowsAmount;
+        entity.allows_cost_center = request.AllowsCostCenter;
         entity.allows_multi_currency = request.AllowsMultiCurrency;
-        entity.budget_amount = request.BudgetAmount;
         entity.currency_code = string.IsNullOrWhiteSpace(request.CurrencyCode) ? null : request.CurrencyCode.Trim().ToUpperInvariant();
         entity.status = string.IsNullOrWhiteSpace(request.Status) ? "ACTIVE" : request.Status.Trim().ToUpperInvariant();
+        entity.adjustment_account_id = request.AdjustmentAccountId;
+        entity.correction_account_id = request.CorrectionAccountId;
         entity.updated_at = DateTime.UtcNow;
         entity.updated_by = request.User;
 

@@ -1,5 +1,4 @@
 using System.Net.Http.Json;
-using System.Text.Json;
 using SIAD.Core.DTOs.Contabilidad;
 
 namespace apc.Client.Services.Contabilidad;
@@ -13,26 +12,36 @@ public sealed class EmpresasContabilidadClient
         this.http = http;
     }
 
+    // Exponer HttpClient para operaciones especiales (ej. upload manual)
+    public HttpClient Http => http;
+
     public async Task<CompanyCreationDto> CrearAsync(CompanyCreationDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
 
         var response = await http.PostAsJsonAsync("api/contabilidad/empresas", dto, cancellationToken: ct);
-        if (!response.IsSuccessStatusCode)
+        
+        try
         {
-            var mensaje = await ObtenerMensajeErrorAsync(response, ct);
-            throw new HttpRequestException(string.IsNullOrWhiteSpace(mensaje)
-                ? "No fue posible crear la empresa."
-                : mensaje);
+            var resultado = await response.ReadFromJsonAsyncWithAuthCheck<CompanyCreationDto>(ct);
+            if (resultado is null)
+            {
+                throw new InvalidOperationException("El servicio devolvió una respuesta vacía.");
+            }
+            return resultado;
         }
-
-        var resultado = await response.Content.ReadFromJsonAsync<CompanyCreationDto>(cancellationToken: ct);
-        if (resultado is null)
+        catch (UnauthorizedAccessException)
         {
-            throw new InvalidOperationException("El servicio devolvió una respuesta vacía.");
+            throw;
         }
-
-        return resultado;
+        catch (HttpRequestException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException("No fue posible crear la empresa.", ex);
+        }
     }
 
     public async Task<CompanyCreationDto?> ObtenerAsync(long companyId, CancellationToken ct = default)
@@ -49,16 +58,22 @@ public sealed class EmpresasContabilidadClient
             return null;
         }
 
-        if (!response.IsSuccessStatusCode)
+        try
         {
-            var mensaje = await ObtenerMensajeErrorAsync(response, ct);
-            throw new HttpRequestException(string.IsNullOrWhiteSpace(mensaje)
-                ? "No fue posible obtener la empresa."
-                : mensaje);
+            return await response.ReadFromJsonAsyncWithAuthCheck<CompanyCreationDto>(ct);
         }
-
-        var resultado = await response.Content.ReadFromJsonAsync<CompanyCreationDto>(cancellationToken: ct);
-        return resultado;
+        catch (UnauthorizedAccessException)
+        {
+            throw;
+        }
+        catch (HttpRequestException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException("No fue posible obtener la empresa.", ex);
+        }
     }
 
     public async Task<CompanyCreationDto> ActualizarAsync(long companyId, CompanyCreationDto dto, CancellationToken ct = default)
@@ -71,56 +86,27 @@ public sealed class EmpresasContabilidadClient
         }
 
         var response = await http.PutAsJsonAsync($"api/contabilidad/empresas/{companyId}", dto, cancellationToken: ct);
-        if (!response.IsSuccessStatusCode)
-        {
-            var mensaje = await ObtenerMensajeErrorAsync(response, ct);
-            throw new HttpRequestException(string.IsNullOrWhiteSpace(mensaje)
-                ? "No fue posible actualizar la empresa."
-                : mensaje);
-        }
-
-        var resultado = await response.Content.ReadFromJsonAsync<CompanyCreationDto>(cancellationToken: ct);
-        if (resultado is null)
-        {
-            throw new InvalidOperationException("El servicio devolvió una respuesta vacía.");
-        }
-
-        return resultado;
-    }
-
-    private static async Task<string?> ObtenerMensajeErrorAsync(HttpResponseMessage response, CancellationToken ct)
-    {
-        var contenido = await response.Content.ReadAsStringAsync(ct);
-        if (string.IsNullOrWhiteSpace(contenido))
-        {
-            return null;
-        }
-
+        
         try
         {
-            using var document = JsonDocument.Parse(contenido);
-            var root = document.RootElement;
-
-            if (root.TryGetProperty("detail", out var detail))
+            var resultado = await response.ReadFromJsonAsyncWithAuthCheck<CompanyCreationDto>(ct);
+            if (resultado is null)
             {
-                return detail.GetString();
+                throw new InvalidOperationException("El servicio devolvió una respuesta vacía.");
             }
-
-            if (root.TryGetProperty("title", out var title))
-            {
-                return title.GetString();
-            }
-
-            if (root.ValueKind == JsonValueKind.String)
-            {
-                return root.GetString();
-            }
+            return resultado;
         }
-        catch (JsonException)
+        catch (UnauthorizedAccessException)
         {
-            return contenido;
+            throw;
         }
-
-        return contenido;
+        catch (HttpRequestException)
+        {
+            throw;
+        }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException("No fue posible actualizar la empresa.", ex);
+        }
     }
 }

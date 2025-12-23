@@ -1,4 +1,3 @@
-using System.IO;
 using System.Net;
 using System.Net.Http.Json;
 using System.Threading;
@@ -15,8 +14,6 @@ public class BrandingClient
     public BrandingClient(HttpClient http) => _http = http;
 
     public record BrandingResponse(string CompanyName, string CompanyShortName, string LogoBase64, string LogoMime);
-
-    public record BrandingUpdateRequest(string CompanyName, string CompanyShortName);
 
     public async Task<BrandingResponse?> GetBrandingAsync(CancellationToken ct = default)
     {
@@ -59,31 +56,5 @@ public class BrandingClient
         {
             _brandingLock.Release();
         }
-    }
-
-    public async Task<BrandingResponse> UpsertBrandingAsync(BrandingUpdateRequest request, CancellationToken ct = default)
-    {
-        var response = await _http.PutAsJsonAsync("api/branding", request, cancellationToken: ct);
-        response.EnsureSuccessStatusCode();
-        _cachedBranding = await response.Content.ReadFromJsonAsync<BrandingResponse>(cancellationToken: ct);
-        _brandingLoaded = true;
-        return _cachedBranding!;
-    }
-
-    public async Task<BrandingResponse> UploadLogoAsync(Stream fileStream, string fileName, string companyName, string companyShortName, string contentType, CancellationToken ct = default)
-    {
-        using var content = new MultipartFormDataContent();
-        content.Add(new StringContent(companyName), "CompanyName");
-        content.Add(new StringContent(companyShortName ?? string.Empty), "CompanyShortName");
-        var streamContent = new StreamContent(fileStream);
-        streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
-        content.Add(streamContent, "file", fileName);
-
-        var response = await _http.PostAsync("api/branding/logo", content, ct);
-        response.EnsureSuccessStatusCode();
-
-        _cachedBranding = await response.Content.ReadFromJsonAsync<BrandingResponse>(cancellationToken: ct);
-        _brandingLoaded = true;
-        return _cachedBranding!;
     }
 }

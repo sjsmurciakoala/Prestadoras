@@ -1,21 +1,21 @@
 @page "/contabilidad/empresas/nueva"
 @page "/contabilidad/empresas/editar/{EmpresaId:long}"
 
+@using System.Linq
 @using Microsoft.AspNetCore.Components.Forms
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Contabilidad
 @using apc.Client.Services.Contabilidad
-@using System.Collections.Generic
 @inject EmpresasContabilidadClient EmpresaClient
 @inject NavigationManager NavigationManager
-
+@rendermode InteractiveServer
 <h3>Formulario de Empresa</h3>
 
 <EditForm Model="@empresa" OnValidSubmit="HandleValidSubmit" Context="editContext">
     <DataAnnotationsValidator />
     <DxFormLayout>
         <DxFormLayoutItem Caption="Código:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.Codigo" />
+            <DxTextBox @bind-Text="empresa.Codigo" Enabled="@(!EmpresaId.HasValue)" />
         </DxFormLayoutItem>
         <DxFormLayoutItem Caption="Descripción:" ColSpanMd="6">
             <DxTextBox @bind-Text="empresa.Descripcion" />
@@ -74,38 +74,80 @@
             <DxTextBox @bind-Text="empresa.PaginaWeb" />
         </DxFormLayoutItem>
 
-        @if (empresa.CompanyId > 0)
-        {
-            <DxFormLayoutItem Caption="Logo actual:" ColSpanMd="12">
-                @if (!string.IsNullOrWhiteSpace(empresa.LogoUrl))
-                {
-                    <img src="@empresa.LogoUrl" alt="Logo de la empresa" style="max-height:120px;max-width:260px;" />
-                }
-                else
-                {
-                    <span class="text-muted">Sin logo</span>
-                }
-            </DxFormLayoutItem>
-
-            <DxFormLayoutItem Caption="Actualizar logo:" ColSpanMd="12">
-                <DxUpload Name="file"
-                          UploadUrl="@GetLogoUploadUrl()"
-                          UploadMode="UploadMode.Instant"
-                          ShowFileList="true"
-                          AllowMultiFileUpload="false"
-                          MaxFileSize="5242880"
-                          AllowedFileExtensions="@(new List<string> { ".png", ".jpg", ".jpeg", ".gif", ".svg" })"
-                          Enabled="@(empresa.CompanyId > 0)" />
-                <div class="text-muted small mt-1">Formatos permitidos: PNG, JPG, GIF o SVG. Tamano maximo 5 MB.</div>
-            </DxFormLayoutItem>
-        }
-
         <DxFormLayoutItem ColSpanMd="12">
             <div class="d-flex justify-content-end">
-                <DxButton SubmitFormOnClick="true" Text="Guardar" CssClass="mr-2" />
-                <DxButton RenderStyle="ButtonRenderStyle.Link" Text="Cancelar" @onclick="() => NavigationManager.NavigateTo(cancelNavigationUrl)" />
+                <DxButton SubmitFormOnClick="true" 
+                          Text="@(isSubmitting ? "Guardando..." : "Guardar")" 
+                          Enabled="@(!isSubmitting)"
+                          CssClass="mr-2" />
+                <DxButton RenderStyle="ButtonRenderStyle.Link" 
+                          Text="Cancelar" 
+                          Enabled="@(!isSubmitting)"
+                          @onclick="() => NavigationManager.NavigateTo(cancelNavigationUrl)" />
             </div>
         </DxFormLayoutItem>
+     
+
+        <DxFormLayoutItem Caption="Logo de la Empresa:" ColSpanMd="12">
+    <div class="upload-container">
+        <div class="logo-upload-wrapper">
+            @if (EmpresaId.HasValue)
+            {
+                <div class="logo-current-container">
+                    <div class="position-relative border rounded p-3 bg-white shadow-sm">
+                        <img src="@($"/api/contabilidad/empresas/{EmpresaId}/logo")"
+                             alt="Logo Actual"
+                             class="logo-image"
+                             onerror="this.style.display='none'" />
+                        
+                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info">
+                            Actual
+                        </span>
+                    </div>
+                </div>
+            }
+
+            <div class="logo-upload-form">
+                <div id="dropZone" class="card custom-drop-zone rounded-3 mb-3">
+                    
+                    <i class="bi bi-cloud-arrow-up-fill upload-icon"></i> 
+                    
+                    <span class="drop-file-label">Arrastra y suelta el logo aquí</span>
+                    
+                    @if (EmpresaId.HasValue)
+                    {
+                        <span class="drop-file-sublabel">para reemplazar el anterior</span>
+                    }
+                    else
+                    {
+                        <span class="drop-file-sublabel">o haz clic en el botón inferior</span>
+                    }
+
+                    <DxButton id="selectButton"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              CssClass="mt-3 px-4 rounded-pill" 
+                              Text="Seleccionar Logo" />
+                </div>
+
+                <DxUpload UploadUrl="@uploadUrl"
+                          AllowedFileExtensions="@(new List<string> { ".png", ".jpg", ".jpeg", ".webp", ".svg" })"
+                          MaxFileSize="5242880"
+                          ShowFileList="true"
+                          AllowMultiFileUpload="false"
+                          UploadInputName="logoUpload"
+                          ExternalSelectButtonCssSelector="#selectButton"
+                          ExternalDropZoneCssSelector="#dropZone"
+                          CssClass="mt-2" />
+
+                @if (!string.IsNullOrWhiteSpace(uploadError))
+                {
+                    <DxAlert AlertType="AlertType.Danger" CssClass="mt-3 shadow-sm">@uploadError</DxAlert>
+                }
+            </div>
+        </div>
+    </div>
+</DxFormLayoutItem>
     </DxFormLayout>
     @if (!string.IsNullOrWhiteSpace(loadError))
     {
@@ -119,8 +161,14 @@
     public long? EmpresaId { get; set; }
 
     private CompanyCreationDto empresa = new();
-    private string cancelNavigationUrl = "/contabilidad/empresas"; // Asumimos que esta será la página del listado
+    private string cancelNavigationUrl = "/contabilidad/empresas";
     private string? loadError;
+    private string? uploadError;
+    private const long MaxLogoSize = 5 * 1024 * 1024; // 5MB
+    private bool isSubmitting = false;
+    private string uploadUrl => EmpresaId.HasValue 
+        ? $"api/contabilidad/empresas/{EmpresaId.Value}/logo" 
+        : string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -139,6 +187,10 @@
                     NavigationManager.NavigateTo(cancelNavigationUrl);
                 }
             }
+            catch (UnauthorizedAccessException)
+            {
+                NavigationManager.NavigateTo("/Account/Login");
+            }
             catch (HttpRequestException ex)
             {
                 loadError = ex.Message;
@@ -149,28 +201,36 @@
 
     private async Task HandleValidSubmit()
     {
+        if (isSubmitting) return; // Prevenir doble envío
+        
+        isSubmitting = true;
+        uploadError = null;
+        loadError = null;
+        
         try
         {
+            long savedCompanyId;
+            
             if (EmpresaId.HasValue)
             {
                 await EmpresaClient.ActualizarAsync(EmpresaId.Value, empresa);
+                savedCompanyId = EmpresaId.Value;
             }
             else
             {
-                await EmpresaClient.CrearAsync(empresa);
+                var created = await EmpresaClient.CrearAsync(empresa);
+                savedCompanyId = created.CompanyId;
             }
+
             NavigationManager.NavigateTo(cancelNavigationUrl);
         }
         catch (HttpRequestException ex)
         {
             loadError = ex.Message;
         }
-    }
-
-    private string GetLogoUploadUrl()
-    {
-        return empresa.CompanyId > 0
-            ? $"api/contabilidad/empresas/{empresa.CompanyId}/logo"
-            : string.Empty;
+        finally
+        {
+            isSubmitting = false;
+        }
     }
 }

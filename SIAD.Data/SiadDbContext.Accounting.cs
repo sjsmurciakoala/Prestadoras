@@ -37,6 +37,22 @@ public partial class SiadDbContext
 
     public virtual DbSet<con_poliza_linea> con_poliza_lineas { get; set; } = null!;
 
+    public virtual DbSet<con_tipo_transaccion> con_tipo_transacciones { get; set; } = null!;
+
+    public virtual DbSet<con_apertura_saldo> con_apertura_saldos { get; set; } = null!;
+
+    public virtual DbSet<con_balance_mensual> con_balance_mensuales { get; set; } = null!;
+
+    public virtual DbSet<con_tercero> con_terceros { get; set; } = null!;
+
+    public virtual DbSet<con_libro_iva> con_libro_ivas { get; set; } = null!;
+
+    public virtual DbSet<con_activo_tipo> con_activo_tipos { get; set; } = null!;
+
+    public virtual DbSet<con_activo_fijo> con_activo_fijos { get; set; } = null!;
+
+    public virtual DbSet<con_deprecacion> con_depreciacions { get; set; } = null!;
+
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<cfg_company>(entity =>
@@ -102,23 +118,28 @@ public partial class SiadDbContext
             entity.Property(e => e.name).HasMaxLength(200);
             entity.Property(e => e.status).HasMaxLength(20);
             entity.Property(e => e.description).HasMaxLength(500);
-            entity.Property(e => e.short_description).HasMaxLength(100);
-            entity.Property(e => e.external_reference).HasMaxLength(100);
             entity.Property(e => e.level).HasDefaultValue((short)1);
-            entity.Property(e => e.allows_posting).HasDefaultValue(true);
-            entity.Property(e => e.allows_amount).HasDefaultValue(true);
             entity.Property(e => e.allows_budget).HasDefaultValue(false);
-            entity.Property(e => e.allows_cost_center).HasDefaultValue(false);
             entity.Property(e => e.allows_third).HasDefaultValue(false);
-            entity.Property(e => e.allows_bank).HasDefaultValue(false);
-            entity.Property(e => e.allows_multi_currency).HasDefaultValue(false);
             entity.Property(e => e.is_tax_base).HasDefaultValue(false);
+            entity.Property(e => e.allows_cost_center).HasDefaultValue(false);
+            entity.Property(e => e.allows_multi_currency).HasDefaultValue(false);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
 
             entity.HasOne(d => d.parent_account)
                 .WithMany(p => p.child_accounts)
                 .HasForeignKey(d => d.parent_account_id)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.adjustment_account)
+                .WithMany()
+                .HasForeignKey(d => d.adjustment_account_id)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.correction_account)
+                .WithMany()
+                .HasForeignKey(d => d.correction_account_id)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
@@ -299,27 +320,27 @@ public partial class SiadDbContext
             entity.HasIndex(e => e.company_id).IsUnique();
 
             entity.Property(e => e.config_id).ValueGeneratedOnAdd();
-            entity.Property(e => e.sep_codigo).HasMaxLength(1);
-            entity.Property(e => e.fmt_ctas).HasMaxLength(50);
-            entity.Property(e => e.fmt_centros).HasMaxLength(50);
-            entity.Property(e => e.sym_acreedor).HasMaxLength(5);
-            entity.Property(e => e.mto_maximo).HasColumnType("numeric(18,2)");
-            entity.Property(e => e.frec_deprec).HasMaxLength(20);
-            entity.Property(e => e.cod_util_acum_hist).HasMaxLength(30);
-            entity.Property(e => e.cod_util_ejer_hist).HasMaxLength(30);
-            entity.Property(e => e.cod_perd_acum_hist).HasMaxLength(30);
-            entity.Property(e => e.cod_perd_ejer_hist).HasMaxLength(30);
-            entity.Property(e => e.cod_util_acum_inf).HasMaxLength(30);
-            entity.Property(e => e.cod_util_ejer_inf).HasMaxLength(30);
-            entity.Property(e => e.cod_perd_acum_inf).HasMaxLength(30);
-            entity.Property(e => e.cod_perd_ejer_inf).HasMaxLength(30);
-            entity.Property(e => e.tit_est_result).HasMaxLength(100);
-            entity.Property(e => e.tit_balance_gral).HasMaxLength(100);
+            entity.Property(e => e.separador_codigo).HasMaxLength(1);
+            entity.Property(e => e.formato_cuentas).HasMaxLength(50);
+            entity.Property(e => e.formato_centros).HasMaxLength(50);
+            entity.Property(e => e.symbol_saldo_acreedor).HasMaxLength(5);
+            entity.Property(e => e.monto_maximo).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.frecuencia_depreciacion).HasMaxLength(20);
+            entity.Property(e => e.codigo_cuenta_util_acumulada_historica).HasMaxLength(30);
+            entity.Property(e => e.codigo_cuenta_util_ejercicio_historica).HasMaxLength(30);
+            entity.Property(e => e.codigo_cuenta_perdida_acumulada_historica).HasMaxLength(30);
+            entity.Property(e => e.codigo_cuenta_perdida_ejercicio_historica).HasMaxLength(30);
+            entity.Property(e => e.codigo_cuenta_util_acumulada_inflacion).HasMaxLength(30);
+            entity.Property(e => e.codigo_cuenta_util_ejercicio_inflacion).HasMaxLength(30);
+            entity.Property(e => e.codigo_cuenta_perdida_acumulada_inflacion).HasMaxLength(30);
+            entity.Property(e => e.codigo_cuenta_perdida_ejercicio_inflacion).HasMaxLength(30);
+            entity.Property(e => e.titulo_estado_resultados).HasMaxLength(100);
+            entity.Property(e => e.titulo_balance_general).HasMaxLength(100);
             entity.Property(e => e.descripcion_activo).HasMaxLength(100);
             entity.Property(e => e.descripcion_pasivo).HasMaxLength(100);
             entity.Property(e => e.descripcion_capital).HasMaxLength(100);
-            entity.Property(e => e.desc_pasiv_cap).HasMaxLength(100);
-            entity.Property(e => e.desc_orden).HasMaxLength(100);
+            entity.Property(e => e.descripcion_pasivo_capital).HasMaxLength(100);
+            entity.Property(e => e.descripcion_orden).HasMaxLength(100);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
 
@@ -455,6 +476,250 @@ public partial class SiadDbContext
                 .WithMany()
                 .HasForeignKey(e => e.codigo_cuenta)
                 .HasPrincipalKey(e => e.code)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<con_tipo_transaccion>(entity =>
+        {
+            entity.HasKey(e => e.type_id);
+            entity.ToTable("con_tipo_transaccion", "public");
+            entity.HasIndex(e => new { e.company_id, e.code }).IsUnique();
+
+            entity.Property(e => e.type_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.code).HasMaxLength(20);
+            entity.Property(e => e.name).HasMaxLength(100);
+            entity.Property(e => e.description).HasMaxLength(300);
+            entity.Property(e => e.category).HasMaxLength(30);
+            entity.Property(e => e.status).HasMaxLength(20);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasIndex(e => e.company_id);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<con_apertura_saldo>(entity =>
+        {
+            entity.HasKey(e => e.opening_id);
+            entity.ToTable("con_apertura_saldo", "public");
+            entity.HasIndex(e => new { e.company_id, e.period_id, e.account_id, e.cost_center_id }).IsUnique();
+
+            entity.Property(e => e.opening_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.debit_amount).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(e => e.credit_amount).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(e => e.currency_code).HasMaxLength(3).IsFixedLength();
+            entity.Property(e => e.exchange_rate).HasColumnType("numeric(18,9)").HasDefaultValue(1m);
+            entity.Property(e => e.notes).HasMaxLength(300);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.period)
+                .WithMany()
+                .HasForeignKey(e => e.period_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.account)
+                .WithMany()
+                .HasForeignKey(e => e.account_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.cost_center)
+                .WithMany()
+                .HasForeignKey(e => e.cost_center_id)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<con_balance_mensual>(entity =>
+        {
+            entity.HasKey(e => e.monthly_balance_id);
+            entity.ToTable("con_balance_mensual", "public");
+            entity.HasIndex(e => new { e.company_id, e.period_id, e.account_id, e.cost_center_id, e.month_number }).IsUnique();
+            entity.HasCheckConstraint("ck_con_balance_mensual_month", "month_number >= 1 AND month_number <= 13");
+
+            entity.Property(e => e.monthly_balance_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.month_number).HasColumnType("smallint");
+            entity.Property(e => e.debit_amount).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(e => e.credit_amount).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(e => e.transaction_count).HasDefaultValue(0);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.period)
+                .WithMany()
+                .HasForeignKey(e => e.period_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.account)
+                .WithMany()
+                .HasForeignKey(e => e.account_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.cost_center)
+                .WithMany()
+                .HasForeignKey(e => e.cost_center_id)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<con_tercero>(entity =>
+        {
+            entity.HasKey(e => e.third_party_id);
+            entity.ToTable("con_tercero", "public");
+            entity.HasIndex(e => new { e.company_id, e.code }).IsUnique();
+            entity.HasIndex(e => e.category);
+
+            entity.Property(e => e.code).HasMaxLength(30);
+            entity.Property(e => e.name).HasMaxLength(200);
+            entity.Property(e => e.description).HasMaxLength(300);
+            entity.Property(e => e.tax_id).HasMaxLength(30);
+            entity.Property(e => e.category).HasMaxLength(30);
+            entity.Property(e => e.status).HasMaxLength(20);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<con_libro_iva>(entity =>
+        {
+            entity.HasKey(e => e.iva_register_id);
+            entity.ToTable("con_libro_iva", "public");
+
+            entity.Property(e => e.document_type).HasMaxLength(30);
+            entity.Property(e => e.document_number).HasMaxLength(30);
+            entity.Property(e => e.tax_rate).HasColumnType("numeric(5,2)");
+            entity.Property(e => e.taxable_base).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.exempt_amount).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.tax_amount).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.total_amount).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.iva_type).HasMaxLength(20);
+            entity.Property(e => e.status).HasMaxLength(20);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+
+            entity.HasIndex(e => e.company_id);
+            entity.HasIndex(e => e.period_id);
+            entity.HasIndex(e => e.transaction_date);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.period)
+                .WithMany()
+                .HasForeignKey(e => e.period_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.third_party)
+                .WithMany(p => p.iva_registros)
+                .HasForeignKey(e => e.third_party_id)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<con_activo_tipo>(entity =>
+        {
+            entity.HasKey(e => e.type_id);
+            entity.ToTable("con_activo_tipo", "public");
+            entity.HasIndex(e => new { e.company_id, e.code }).IsUnique();
+
+            entity.Property(e => e.code).HasMaxLength(30);
+            entity.Property(e => e.name).HasMaxLength(200);
+            entity.Property(e => e.description).HasMaxLength(300);
+            entity.Property(e => e.depreciation_method).HasMaxLength(30);
+            entity.Property(e => e.status).HasMaxLength(20);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<con_activo_fijo>(entity =>
+        {
+            entity.HasKey(e => e.asset_id);
+            entity.ToTable("con_activo_fijo", "public");
+            entity.HasIndex(e => new { e.company_id, e.code }).IsUnique();
+
+            entity.Property(e => e.code).HasMaxLength(30);
+            entity.Property(e => e.name).HasMaxLength(200);
+            entity.Property(e => e.description).HasMaxLength(500);
+            entity.Property(e => e.depreciation_method).HasMaxLength(30);
+            entity.Property(e => e.accumulated_depreciation).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.acquisition_cost).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.salvage_value).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.current_value).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.location).HasMaxLength(200);
+            entity.Property(e => e.status).HasMaxLength(20);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.asset_type)
+                .WithMany(e => e.activos)
+                .HasForeignKey(e => e.asset_type_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.asset_account)
+                .WithMany()
+                .HasForeignKey(e => e.asset_account_id)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(e => e.depreciation_account)
+                .WithMany()
+                .HasForeignKey(e => e.depreciation_account_id)
+                .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<con_deprecacion>(entity =>
+        {
+            entity.HasKey(e => e.depreciation_id);
+            entity.ToTable("con_deprecacion", "public");
+            entity.HasIndex(e => new { e.asset_id, e.period_id, e.month_number }).IsUnique();
+
+            entity.Property(e => e.month_number).HasColumnType("smallint");
+            entity.Property(e => e.depreciation_amount).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.accumulated_to_date).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.asset)
+                .WithMany()
+                .HasForeignKey(e => e.asset_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.period)
+                .WithMany()
+                .HasForeignKey(e => e.period_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.poliza)
+                .WithMany()
+                .HasForeignKey(e => e.poliza_id)
                 .OnDelete(DeleteBehavior.SetNull);
         });
     }

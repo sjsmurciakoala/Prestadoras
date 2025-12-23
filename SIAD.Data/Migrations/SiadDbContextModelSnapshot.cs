@@ -739,7 +739,10 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
 
-                    b.Property<string>("logo_url")
+                    b.Property<byte[]>("logo")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("logo_mime")
                         .HasColumnType("text");
 
                     b.Property<string>("phone")
@@ -1822,6 +1825,301 @@ namespace SIAD.Data.Migrations
                     b.ToTable("cnt_tipopartida");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_activo_fijo", b =>
+                {
+                    b.Property<long>("asset_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("asset_id"));
+
+                    b.Property<decimal>("accumulated_depreciation")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("acquisition_cost")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("acquisition_date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("asset_account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("asset_type_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal?>("current_value")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<long?>("depreciation_account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("depreciation_method")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<DateTime>("in_service_date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("location")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<decimal>("salvage_value")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<short>("useful_life_years")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("asset_id");
+
+                    b.HasIndex("asset_account_id");
+
+                    b.HasIndex("asset_type_id");
+
+                    b.HasIndex("depreciation_account_id");
+
+                    b.HasIndex("company_id", "code")
+                        .IsUnique();
+
+                    b.ToTable("con_activo_fijo", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_activo_tipo", b =>
+                {
+                    b.Property<long>("type_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("type_id"));
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("depreciation_method")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<short>("useful_life_years")
+                        .HasColumnType("smallint");
+
+                    b.HasKey("type_id");
+
+                    b.HasIndex("company_id", "code")
+                        .IsUnique();
+
+                    b.ToTable("con_activo_tipo", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_apertura_saldo", b =>
+                {
+                    b.Property<long>("opening_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("opening_id"));
+
+                    b.Property<long>("account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("cost_center_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("credit_amount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("currency_code")
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("debit_amount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal?>("exchange_rate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,9)")
+                        .HasDefaultValue(1m);
+
+                    b.Property<string>("notes")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long>("period_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("opening_id");
+
+                    b.HasIndex("account_id");
+
+                    b.HasIndex("cost_center_id");
+
+                    b.HasIndex("period_id");
+
+                    b.HasIndex("company_id", "period_id", "account_id", "cost_center_id")
+                        .IsUnique();
+
+                    b.ToTable("con_apertura_saldo", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_balance_mensual", b =>
+                {
+                    b.Property<long>("monthly_balance_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("monthly_balance_id"));
+
+                    b.Property<long>("account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("cost_center_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<decimal>("credit_amount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("debit_amount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<short>("month_number")
+                        .HasColumnType("smallint");
+
+                    b.Property<long>("period_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("transaction_count")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("monthly_balance_id");
+
+                    b.HasIndex("account_id");
+
+                    b.HasIndex("cost_center_id");
+
+                    b.HasIndex("period_id");
+
+                    b.HasIndex("company_id", "period_id", "account_id", "cost_center_id", "month_number")
+                        .IsUnique();
+
+                    b.ToTable("con_balance_mensual", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_con_balance_mensual_month", "month_number >= 1 AND month_number <= 13");
+                        });
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_centro_costo", b =>
                 {
                     b.Property<long>("cost_center_id")
@@ -2115,35 +2413,35 @@ namespace SIAD.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("config_id"));
 
-                    b.Property<string>("cod_perd_acum_hist")
+                    b.Property<string>("codigo_cuenta_perdida_acumulada_historica")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("cod_perd_acum_inf")
+                    b.Property<string>("codigo_cuenta_perdida_acumulada_inflacion")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("cod_perd_ejer_hist")
+                    b.Property<string>("codigo_cuenta_perdida_ejercicio_historica")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("cod_perd_ejer_inf")
+                    b.Property<string>("codigo_cuenta_perdida_ejercicio_inflacion")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("cod_util_acum_hist")
+                    b.Property<string>("codigo_cuenta_util_acumulada_historica")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("cod_util_acum_inf")
+                    b.Property<string>("codigo_cuenta_util_acumulada_inflacion")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("cod_util_ejer_hist")
+                    b.Property<string>("codigo_cuenta_util_ejercicio_historica")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<string>("cod_util_ejer_inf")
+                    b.Property<string>("codigo_cuenta_util_ejercicio_inflacion")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
@@ -2158,16 +2456,6 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("desc_orden")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("desc_pasiv_cap")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("descripcion_activo")
                         .IsRequired()
                         .HasMaxLength(100)
@@ -2178,7 +2466,17 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
+                    b.Property<string>("descripcion_orden")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
                     b.Property<string>("descripcion_pasivo")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("descripcion_pasivo_capital")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
@@ -2186,32 +2484,32 @@ namespace SIAD.Data.Migrations
                     b.Property<long?>("empresa_configuracioncompany_id")
                         .HasColumnType("bigint");
 
-                    b.Property<DateTime?>("fec_ult_deprec")
+                    b.Property<DateTime?>("fecha_fin_ejercicio")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("fecha_fin_ejer")
+                    b.Property<DateTime?>("fecha_inicio_ejercicio")
                         .HasColumnType("timestamp with time zone");
 
-                    b.Property<DateTime?>("fecha_ini_ejer")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("fmt_centros")
+                    b.Property<string>("formato_centros")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<string>("fmt_ctas")
+                    b.Property<string>("formato_cuentas")
                         .IsRequired()
                         .HasMaxLength(50)
                         .HasColumnType("character varying(50)");
 
-                    b.Property<string>("frec_deprec")
+                    b.Property<string>("frecuencia_depreciacion")
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
-                    b.Property<int>("meses_calc")
+                    b.Property<int>("meses_calculados")
                         .HasColumnType("integer");
+
+                    b.Property<decimal?>("monto_maximo")
+                        .HasColumnType("numeric(18,2)");
 
                     b.Property<bool>("mostrar_orden")
                         .HasColumnType("boolean");
@@ -2219,28 +2517,28 @@ namespace SIAD.Data.Migrations
                     b.Property<bool>("mostrar_percontra")
                         .HasColumnType("boolean");
 
-                    b.Property<decimal?>("mto_maximo")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("sep_codigo")
+                    b.Property<string>("separador_codigo")
                         .IsRequired()
                         .HasMaxLength(1)
                         .HasColumnType("character varying(1)");
 
-                    b.Property<string>("sym_acreedor")
+                    b.Property<string>("symbol_saldo_acreedor")
                         .IsRequired()
                         .HasMaxLength(5)
                         .HasColumnType("character varying(5)");
 
-                    b.Property<string>("tit_balance_gral")
+                    b.Property<string>("titulo_balance_general")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
 
-                    b.Property<string>("tit_est_result")
+                    b.Property<string>("titulo_estado_resultados")
                         .IsRequired()
                         .HasMaxLength(100)
                         .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("ultima_depreciacion")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<DateTime?>("updated_at")
                         .HasColumnType("timestamp with time zone");
@@ -2257,6 +2555,54 @@ namespace SIAD.Data.Migrations
                     b.HasIndex("empresa_configuracioncompany_id");
 
                     b.ToTable("con_configuracion_sistema", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_deprecacion", b =>
+                {
+                    b.Property<long>("depreciation_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("depreciation_id"));
+
+                    b.Property<decimal>("accumulated_to_date")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<long>("asset_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<decimal>("depreciation_amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<short>("month_number")
+                        .HasColumnType("smallint");
+
+                    b.Property<long>("period_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("poliza_id")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("depreciation_id");
+
+                    b.HasIndex("company_id");
+
+                    b.HasIndex("period_id");
+
+                    b.HasIndex("poliza_id");
+
+                    b.HasIndex("asset_id", "period_id", "month_number")
+                        .IsUnique();
+
+                    b.ToTable("con_deprecacion", "public");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_diario", b =>
@@ -2364,6 +2710,12 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(40)
                         .HasColumnType("character varying(40)");
 
+                    b.Property<byte[]>("logo")
+                        .HasColumnType("bytea");
+
+                    b.Property<string>("logo_mime")
+                        .HasColumnType("text");
+
                     b.Property<string>("pagina_web")
                         .HasMaxLength(200)
                         .HasColumnType("character varying(200)");
@@ -2394,6 +2746,82 @@ namespace SIAD.Data.Migrations
                     b.HasKey("company_id");
 
                     b.ToTable("con_empresa_configuracion", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_libro_iva", b =>
+                {
+                    b.Property<long>("iva_register_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("iva_register_id"));
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("document_number")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("document_type")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<decimal>("exempt_amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("iva_type")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long>("period_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<decimal>("tax_amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("tax_rate")
+                        .HasColumnType("numeric(5,2)");
+
+                    b.Property<decimal>("taxable_base")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<long?>("third_party_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("total_amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<DateTime>("transaction_date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("iva_register_id");
+
+                    b.HasIndex("company_id");
+
+                    b.HasIndex("period_id");
+
+                    b.HasIndex("third_party_id");
+
+                    b.HasIndex("transaction_date");
+
+                    b.ToTable("con_libro_iva", "public");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_periodo_contable", b =>
@@ -2472,15 +2900,8 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
 
-                    b.Property<bool>("allows_amount")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<bool>("allows_bank")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(false);
+                    b.Property<long?>("adjustment_account_id")
+                        .HasColumnType("bigint");
 
                     b.Property<bool>("allows_budget")
                         .ValueGeneratedOnAdd()
@@ -2498,17 +2919,12 @@ namespace SIAD.Data.Migrations
                         .HasDefaultValue(false);
 
                     b.Property<bool>("allows_posting")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
+                        .HasColumnType("boolean");
 
                     b.Property<bool>("allows_third")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
                         .HasDefaultValue(false);
-
-                    b.Property<decimal?>("budget_amount")
-                        .HasColumnType("numeric");
 
                     b.Property<string>("category")
                         .HasMaxLength(30)
@@ -2520,6 +2936,9 @@ namespace SIAD.Data.Migrations
                         .HasColumnType("character varying(30)");
 
                     b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("correction_account_id")
                         .HasColumnType("bigint");
 
                     b.Property<DateTime>("created_at")
@@ -2539,10 +2958,6 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(500)
                         .HasColumnType("character varying(500)");
 
-                    b.Property<string>("external_reference")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<bool>("is_tax_base")
                         .ValueGeneratedOnAdd()
                         .HasColumnType("boolean")
@@ -2561,10 +2976,6 @@ namespace SIAD.Data.Migrations
                     b.Property<long?>("parent_account_id")
                         .HasColumnType("bigint");
 
-                    b.Property<string>("short_description")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
                     b.Property<string>("status")
                         .IsRequired()
                         .HasMaxLength(20)
@@ -2578,6 +2989,10 @@ namespace SIAD.Data.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.HasKey("account_id");
+
+                    b.HasIndex("adjustment_account_id");
+
+                    b.HasIndex("correction_account_id");
 
                     b.HasIndex("parent_account_id");
 
@@ -2972,6 +3387,145 @@ namespace SIAD.Data.Migrations
                         .IsUnique();
 
                     b.ToTable("con_saldo_cuenta", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_tercero", b =>
+                {
+                    b.Property<long>("third_party_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("third_party_id"));
+
+                    b.Property<string>("category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("is_customer")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("is_supplier")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<string>("tax_id")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("third_party_id");
+
+                    b.HasIndex("category");
+
+                    b.HasIndex("company_id", "code")
+                        .IsUnique();
+
+                    b.ToTable("con_tercero", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_tipo_transaccion", b =>
+                {
+                    b.Property<long>("type_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("type_id"));
+
+                    b.Property<bool>("allows_cost_center")
+                        .HasColumnType("boolean");
+
+                    b.Property<bool>("allows_third_party")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("category")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("is_automatic")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("status")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("type_id");
+
+                    b.HasIndex("company_id");
+
+                    b.HasIndex("company_id", "code")
+                        .IsUnique();
+
+                    b.ToTable("con_tipo_transaccion", "public");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.concepto_cobro_adicional", b =>
@@ -6239,6 +6793,110 @@ namespace SIAD.Data.Migrations
                     b.Navigation("cliente");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_activo_fijo", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "asset_account")
+                        .WithMany()
+                        .HasForeignKey("asset_account_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_activo_tipo", "asset_type")
+                        .WithMany("activos")
+                        .HasForeignKey("asset_type_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "depreciation_account")
+                        .WithMany()
+                        .HasForeignKey("depreciation_account_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("asset_account");
+
+                    b.Navigation("asset_type");
+
+                    b.Navigation("depreciation_account");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_activo_tipo", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_apertura_saldo", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "account")
+                        .WithMany()
+                        .HasForeignKey("account_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_centro_costo", "cost_center")
+                        .WithMany()
+                        .HasForeignKey("cost_center_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_periodo_contable", "period")
+                        .WithMany()
+                        .HasForeignKey("period_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("account");
+
+                    b.Navigation("cost_center");
+
+                    b.Navigation("period");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_balance_mensual", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "account")
+                        .WithMany()
+                        .HasForeignKey("account_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_centro_costo", "cost_center")
+                        .WithMany()
+                        .HasForeignKey("cost_center_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_periodo_contable", "period")
+                        .WithMany()
+                        .HasForeignKey("period_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("account");
+
+                    b.Navigation("cost_center");
+
+                    b.Navigation("period");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_configuracion_balance", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "cuenta")
@@ -6322,6 +6980,38 @@ namespace SIAD.Data.Migrations
                     b.Navigation("empresa_configuracion");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_deprecacion", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_activo_fijo", "asset")
+                        .WithMany()
+                        .HasForeignKey("asset_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_periodo_contable", "period")
+                        .WithMany()
+                        .HasForeignKey("period_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_poliza", "poliza")
+                        .WithMany()
+                        .HasForeignKey("poliza_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("asset");
+
+                    b.Navigation("period");
+
+                    b.Navigation("poliza");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_empresa_configuracion", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.cfg_company", null)
@@ -6331,12 +7021,50 @@ namespace SIAD.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_libro_iva", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_periodo_contable", "period")
+                        .WithMany()
+                        .HasForeignKey("period_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_tercero", "third_party")
+                        .WithMany("iva_registros")
+                        .HasForeignKey("third_party_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("period");
+
+                    b.Navigation("third_party");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_plan_cuenta", b =>
                 {
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "adjustment_account")
+                        .WithMany()
+                        .HasForeignKey("adjustment_account_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "correction_account")
+                        .WithMany()
+                        .HasForeignKey("correction_account_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
                     b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "parent_account")
                         .WithMany("child_accounts")
                         .HasForeignKey("parent_account_id")
                         .OnDelete(DeleteBehavior.SetNull);
+
+                    b.Navigation("adjustment_account");
+
+                    b.Navigation("correction_account");
 
                     b.Navigation("parent_account");
                 });
@@ -6467,6 +7195,24 @@ namespace SIAD.Data.Migrations
                     b.Navigation("cuenta");
 
                     b.Navigation("periodo");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_tercero", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_tipo_transaccion", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.configuracion_cobros_adicionales_detalle", b =>
@@ -6666,6 +7412,11 @@ namespace SIAD.Data.Migrations
                     b.Navigation("cln_plan_pago_dtls");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_activo_tipo", b =>
+                {
+                    b.Navigation("activos");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_centro_costo", b =>
                 {
                     b.Navigation("plantilla_lineas");
@@ -6702,6 +7453,11 @@ namespace SIAD.Data.Migrations
             modelBuilder.Entity("SIAD.Core.Entities.con_poliza", b =>
                 {
                     b.Navigation("lineas");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_tercero", b =>
+                {
+                    b.Navigation("iva_registros");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.configuracion_cobros_adicionale", b =>

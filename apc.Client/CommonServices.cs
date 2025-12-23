@@ -2,6 +2,10 @@
 using apc.Client.Services.Ordenes;
 using apc.Client.Services.Rutas;
 using apc.Client.Services.Tenant;
+using apc.Client.Services.Clientes;
+using apc.Client.Services.Solicitudes;
+using apc.Client.Services.Medidores;
+using apc.Client.Services.AuxiliarLectura;
 using apc.Services;
 using apc.Client.Services.CaptacionPagos;
 using apc.Client.Services.Facturacion;
@@ -31,6 +35,13 @@ namespace apc.Client
             services.AddScoped<EmpresasContabilidadClient>();
             services.AddScoped<ConfiguracionSistemaClient>();
             services.AddScoped<EmpresaClient>();
+            
+            // Clientes HTTP para módulo de Clientes
+            services.AddScoped<ClientesClient>();
+            services.AddScoped<SolicitudesClient>();
+            services.AddScoped<MedidoresClient>();
+            services.AddScoped<AuxiliarLecturaClient>();
+            
             services.AddScoped<ITenantProvider, TenantProvider>();
             services.AddScoped<TenantState>();
             services.AddScoped<TenantCompaniesClient>();

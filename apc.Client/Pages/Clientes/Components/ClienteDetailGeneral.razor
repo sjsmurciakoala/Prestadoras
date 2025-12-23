@@ -1,0 +1,21 @@
+@using SIAD.Core.DTOs.Clientes
+
+<DxFormLayout>
+    <DxFormLayoutItem Caption="Código">@Cliente.Codigo</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Nombre">@Cliente.Nombre</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Identidad">@Cliente.Identidad</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="RTN">@Cliente.Rtn</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Dirección">@Cliente.Direccion</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Teléfono">@Cliente.Telefono</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Barrio">@Cliente.Barrio</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Ciclo">@Cliente.Ciclo</DxFormLayoutItem>
+    <DxFormLayoutItem Caption="Activo">
+        <span>@(Cliente.Activo ? "Sí" : "No")</span>
+    </DxFormLayoutItem>
+</DxFormLayout>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public ClienteDetailDto Cliente { get; set; } = default!;
+}

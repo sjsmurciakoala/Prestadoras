@@ -273,10 +273,6 @@ public sealed class CompanyManagementService : ICompanyManagementService
             empresa.phone = Limpiar(dto.Telefonos);
             empresa.address = Limpiar(dto.Direccion);
             empresa.status = dto.Activa ? "ACTIVE" : "INACTIVE";
-            if (!string.IsNullOrWhiteSpace(dto.LogoUrl))
-            {
-                empresa.logo_url = dto.LogoUrl.Trim();
-            }
             empresa.updated_at = now;
             empresa.updated_by = usuario;
 
@@ -312,37 +308,6 @@ public sealed class CompanyManagementService : ICompanyManagementService
         }
     }
 
-    public async Task<string> ActualizarLogoAsync(long companyId, string logoUrl, string usuario,
-        CancellationToken ct = default)
-    {
-        if (companyId <= 0)
-        {
-            throw new ArgumentOutOfRangeException(nameof(companyId), "El ID de la empresa debe ser mayor que cero.");
-        }
-
-        if (string.IsNullOrWhiteSpace(logoUrl))
-        {
-            throw new ArgumentException("La URL del logo es obligatoria.", nameof(logoUrl));
-        }
-
-        var empresa = await _context.cfg_companies
-            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
-
-        if (empresa is null)
-        {
-            throw new InvalidOperationException($"No existe una empresa con el ID {companyId}.");
-        }
-
-        empresa.logo_url = logoUrl.Trim();
-        empresa.updated_at = DateTime.UtcNow;
-        empresa.updated_by = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim();
-
-        _context.cfg_companies.Update(empresa);
-        await _context.SaveChangesAsync(ct);
-
-        return empresa.logo_url!;
-    }
-
     private static CompanyCreationDto MapearDto(cfg_company company, con_empresa_configuracion configuracion,
         CompanySizeType tamano, CompanyCapitalType capital, DateTime fechaConstitucion)
     {
@@ -363,8 +328,7 @@ public sealed class CompanyManagementService : ICompanyManagementService
             Telefonos = configuracion.telefonos,
             Pais = configuracion.pais ?? company.country_code,
             Email = configuracion.email ?? company.email,
-            PaginaWeb = configuracion.pagina_web,
-            LogoUrl = company.logo_url
+            PaginaWeb = configuracion.pagina_web
         };
     }
 
@@ -403,5 +367,107 @@ public sealed class CompanyManagementService : ICompanyManagementService
             "MIXTO" => CompanyCapitalType.Mixto,
             _ => CompanyCapitalType.Privado
         };
+    }
+
+    public async Task<bool> GuardarLogoAsync(long companyId, byte[] logoBytes, string usuario, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(logoBytes);
+
+        if (companyId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(companyId), "El ID de la empresa debe ser mayor que cero.");
+        }
+
+        if (logoBytes.Length == 0)
+        {
+            throw new ArgumentException("El logo no puede estar vacío.", nameof(logoBytes));
+        }
+
+        if (logoBytes.Length > 5 * 1024 * 1024) // 5MB máximo
+        {
+            throw new ArgumentException("El logo no puede superar los 5MB.", nameof(logoBytes));
+        }
+
+        var now = DateTime.UtcNow;
+        var mimeType = DetectarMimeType(logoBytes);
+
+        // 1. Guardar en cfg_company (siempre existe, base del sistema)
+        var empresa = await _context.cfg_companies
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+
+        if (empresa is null)
+        {
+            throw new InvalidOperationException($"No existe una empresa con el ID {companyId}.");
+        }
+
+        empresa.logo = logoBytes;
+        empresa.logo_mime = mimeType;
+        empresa.updated_at = now;
+        empresa.updated_by = usuario;
+
+        // 2. Guardar también en con_empresa_configuracion si existe (módulo contabilidad)
+        var configuracion = await _context.con_empresa_configuracions
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+
+        if (configuracion is not null)
+        {
+            configuracion.logo = logoBytes;
+            configuracion.logo_mime = mimeType;
+            configuracion.updated_at = now;
+            configuracion.updated_by = usuario;
+        }
+
+        await _context.SaveChangesAsync(ct);
+        return true;
+    }
+
+    public async Task<(byte[] logoBytes, string? contentType)?> ObtenerLogoAsync(long companyId, CancellationToken ct = default)
+    {
+        if (companyId <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(companyId), "El ID de la empresa debe ser mayor que cero.");
+        }
+
+        // Leer logo desde cfg_company (fuente principal)
+        var empresa = await _context.cfg_companies
+            .Where(c => c.company_id == companyId)
+            .Select(c => new { c.logo, c.logo_mime })
+            .FirstOrDefaultAsync(ct);
+
+        if (empresa is null || empresa.logo is null || empresa.logo.Length == 0)
+        {
+            return null;
+        }
+
+        var contentType = empresa.logo_mime ?? DetectarMimeType(empresa.logo);
+        return (empresa.logo, contentType);
+    }
+
+    private static string DetectarMimeType(byte[] bytes)
+    {
+        if (bytes.Length < 4)
+        {
+            return "application/octet-stream";
+        }
+
+        // PNG: 89 50 4E 47
+        if (bytes[0] == 0x89 && bytes[1] == 0x50 && bytes[2] == 0x4E && bytes[3] == 0x47)
+        {
+            return "image/png";
+        }
+
+        // JPEG: FF D8 FF
+        if (bytes[0] == 0xFF && bytes[1] == 0xD8 && bytes[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        // SVG: <svg o <?xml
+        if (bytes[0] == 0x3C && (bytes[1] == 0x73 || bytes[1] == 0x3F))
+        {
+            return "image/svg+xml";
+        }
+
+        return "application/octet-stream";
     }
 }

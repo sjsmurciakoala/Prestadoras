@@ -1,0 +1,73 @@
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@inject ClientesClient ClientesClient
+@inject IToastNotificationService ToastService
+
+<div class="d-flex flex-column gap-3">
+    @if (isLoading)
+    {
+        <DxSkeletonLine />
+        <DxSkeletonLine />
+        <DxSkeletonLine />
+    }
+    else if (!string.IsNullOrEmpty(error))
+    {
+        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
+    }
+    else if (tarifas.Length == 0)
+    {
+        <DxAlert AlertType="AlertType.Info">Este cliente no tiene tarifas configuradas.</DxAlert>
+    }
+    else
+    {
+        <DxDataGrid Data="@tarifas" 
+                    ShowSearchBox="false"
+                    ShowFilterRow="false"
+                    ShowPager="false"
+                    AllowSort="false"
+                    CssClass="w-100">
+                        <Columns>
+                <DxDataGridColumn Field="@nameof(ClienteTarifaDto.TarifaNombre)" Caption="Tarifa" Width="180px" />
+                <DxDataGridColumn Field="@nameof(ClienteTarifaDto.PrecioBase)" Caption="Precio base" Width="120px" />
+                <DxDataGridColumn Field="@nameof(ClienteTarifaDto.CargoFijo)" Caption="Cargo fijo" Width="120px" />
+                <DxDataGridColumn Field="@nameof(ClienteTarifaDto.MontoConfigurado)" Caption="Monto" Width="120px" />
+                <DxDataGridColumn Field="@nameof(ClienteTarifaDto.FechaCreacion)" Caption="Creada" Width="120px" />
+                <DxDataGridColumn Field="@nameof(ClienteTarifaDto.Activa)" Caption="Activa" Width="90px" />
+            </Columns>
+        </DxDataGrid>
+    }
+</div>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public int ClienteId { get; set; }
+
+    private ClienteTarifaDto[] tarifas = Array.Empty<ClienteTarifaDto>();
+    private bool isLoading = true;
+    private string? error;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadTarifasAsync();
+    }
+
+    private async Task LoadTarifasAsync()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            tarifas = await ClientesClient.ObtenerTarifasAsync(ClienteId);
+        }
+        catch (Exception ex)
+        {
+            error = $"Error al cargar las tarifas: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

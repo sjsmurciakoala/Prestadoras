@@ -1,5 +1,4 @@
 using Microsoft.Extensions.DependencyInjection;
-using Microsoft.Extensions.Logging;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Services;
@@ -16,7 +15,6 @@ using SIAD.Services.NotasCreditoDebito;
 using SIAD.Services.Cobranza;
 using SIAD.Services.Contabilidad;
 using SIAD.Services.Tenancy;
-using SIAD.Services.Files;
 
 namespace SIAD.Services;
 
@@ -34,42 +32,41 @@ public static class ServiceRegistration
         //solicitudes
         services.AddScoped<ISolicitudesService, SolicitudesService>();
 
-
         //medidores
         services.AddScoped<IMedidoresService, MedidoresService>();
+        
         //auxiliar de lectura
         services.AddScoped<IAuxiliarLecturaService, AuxiliarLecturaService>();
 
-        // agregar más servicios después
-
         // Branding
         services.AddScoped<IBrandingService, BrandingService>();
+        
         //ordenes
-         services.AddScoped<IOrdenesService, OrdenesService>();
-         // rutas
-         services.AddScoped<IRutasService, RutasService>();
-         // captación de pagos
-         services.AddScoped<ICaptacionPagosService, CaptacionPagosService>();
-         // facturación misceláneos
-         services.AddScoped<IFacturacionMiscelaneosService, FacturacionMiscelaneosService>();
-         // notas crédito/débito
-         services.AddScoped<INotasCreditoDebitoService, NotasCreditoDebitoService>();
-         // cobranza
-         services.AddScoped<ICobranzaService, CobranzaService>();
-         // contabilidad
-         services.AddScoped<IContabilidadCatalogosService, ContabilidadCatalogosService>();
-         services.AddScoped<ICompanyManagementService, CompanyManagementService>();
-         services.AddScoped<IPeriodoContableService, PeriodoContableService>();
-         services.AddScoped<IConfiguracionSistemaService, ConfiguracionSistemaService>();
-         
-         // Archivos y almacenamiento
-         services.AddSingleton<IFileStorageService>(sp =>
-         {
-             var logger = sp.GetRequiredService<ILogger<FileStorageService>>();
-             var uploadsBasePath = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot", "uploads");
-             return new FileStorageService(logger, uploadsBasePath);
-         });
-         
+        services.AddScoped<IOrdenesService, OrdenesService>();
+        
+        // rutas
+        services.AddScoped<IRutasService, RutasService>();
+        
+        // captación de pagos
+        services.AddScoped<ICaptacionPagosService, CaptacionPagosService>();
+        
+        // facturación misceláneos
+        services.AddScoped<IFacturacionMiscelaneosService, FacturacionMiscelaneosService>();
+        
+        // notas crédito/débito
+        services.AddScoped<INotasCreditoDebitoService, NotasCreditoDebitoService>();
+        
+        // cobranza
+        services.AddScoped<ICobranzaService, CobranzaService>();
+        
+        // contabilidad - registrar servicios de saldos PRIMERO (dependencia de pólizas)
+        services.AddScoped<IContabilidadCatalogosService, ContabilidadCatalogosService>();
+        services.AddScoped<ICompanyManagementService, CompanyManagementService>();
+        services.AddScoped<IPeriodoContableService, PeriodoContableService>();
+        services.AddScoped<IConfiguracionSistemaService, ConfiguracionSistemaService>();
+        services.AddScoped<ISaldosService, SaldosService>();
+        services.AddScoped<IPolizaService, PolizaService>();
+
         return services;
     }
 }

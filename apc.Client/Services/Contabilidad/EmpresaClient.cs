@@ -14,19 +14,71 @@ namespace apc.Client.Services.Contabilidad
             _httpClient = httpClient;
         }
 
-        public Task<CompanyCreationDto> GetEmpresa(long id)
+        public async Task<CompanyCreationDto> GetEmpresa(long id)
         {
-            return _httpClient.GetFromJsonAsync<CompanyCreationDto>($"api/contabilidad/empresas/{id}");
+            try
+            {
+                return await _httpClient.GetFromJsonAsyncWithAuthCheck<CompanyCreationDto>(
+                    $"api/contabilidad/empresas/{id}");
+            }
+            catch (UnauthorizedAccessException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new HttpRequestException("No fue posible obtener la empresa.", ex);
+            }
         }
 
-        public Task CreateEmpresa(CompanyCreationDto empresa)
+        public async Task CreateEmpresa(CompanyCreationDto empresa)
         {
-            return _httpClient.PostAsJsonAsync("api/contabilidad/empresas", empresa);
+            try
+            {
+                var response = await _httpClient.PostAsJsonAsyncWithAuthCheck("api/contabilidad/empresas", empresa);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var mensaje = await HttpClientExtensions.ObtenerMensajeErrorAsync(response);
+                    throw new HttpRequestException(mensaje ?? "No fue posible crear la empresa.");
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                throw;
+            }
+            catch (HttpRequestException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new HttpRequestException("No fue posible crear la empresa.", ex);
+            }
         }
 
-        public Task UpdateEmpresa(long id, CompanyCreationDto empresa)
+        public async Task UpdateEmpresa(long id, CompanyCreationDto empresa)
         {
-            return _httpClient.PutAsJsonAsync($"api/contabilidad/empresas/{id}", empresa);
+            try
+            {
+                var response = await _httpClient.PutAsJsonAsyncWithAuthCheck($"api/contabilidad/empresas/{id}", empresa);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var mensaje = await HttpClientExtensions.ObtenerMensajeErrorAsync(response);
+                    throw new HttpRequestException(mensaje ?? "No fue posible actualizar la empresa.");
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+                throw;
+            }
+            catch (HttpRequestException)
+            {
+                throw;
+            }
+            catch (Exception ex)
+            {
+                throw new HttpRequestException("No fue posible actualizar la empresa.", ex);
+            }
         }
     }
 }

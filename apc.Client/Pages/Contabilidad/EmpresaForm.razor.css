@@ -1,0 +1,139 @@
+/* Contenedor principal */
+.upload-container {
+    width: 100%;
+    position: relative;
+}
+
+/* Wrapper que crea la estructura de L */
+.logo-upload-wrapper {
+    display: grid;
+    grid-template-columns: 1fr auto;
+    grid-template-rows: auto 1fr;
+    gap: 2rem;
+    align-items: start;
+}
+
+/* Contenedor del logo actual (esquina superior derecha) */
+.logo-current-container {
+    grid-column: 2;
+    grid-row: 1;
+}
+
+/* Imagen del logo */
+.logo-image {
+    max-height: 150px;
+    max-width: 150px;
+    object-fit: contain;
+}
+
+/* Formulario de upload (debajo y a la izquierda) */
+.logo-upload-form {
+    grid-column: 1 / 2;
+    grid-row: 1 / 3;
+}
+
+/* Zona de carga base */
+.custom-drop-zone {
+    padding: 2rem !important; /* Más espacio interno */
+    border: 2px dashed #ced4da !important; /* Color gris suave estándar */
+    min-height: 200px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    background-color: #f8f9fa; /* Gris muy claro */
+    transition: all 0.3s ease-in-out; /* Transición suave para hover */
+    cursor: default;
+    box-shadow: none;
+}
+
+/* Estado Hover (cuando arrastras el archivo encima) */
+.custom-drop-zone.custom-drop-zone-hover,
+.custom-drop-zone:hover { /* Efecto también al pasar el mouse */
+    border-color: #0d6efd !important; /* Color primario (Azul Bootstrap) */
+    background-color: rgba(13, 110, 253, 0.05); /* Azul muy tenue */
+    transform: translateY(-2px); /* Efecto sutil de elevación */
+}
+
+/* Icono (La nube) */
+.upload-icon {
+    font-size: 3rem;
+    color: #6c757d;
+    margin-bottom: 1rem;
+    transition: color 0.3s ease;
+}
+
+/* Cambio de color del icono al hacer hover en la zona */
+.custom-drop-zone:hover .upload-icon,
+.custom-drop-zone.custom-drop-zone-hover .upload-icon {
+    color: #0d6efd;
+    animation: bounce 1s infinite; /* Opcional: Pequeña animación */
+}
+
+/* Texto principal */
+.drop-file-label {
+    font-weight: 600;
+    font-size: 1.1rem;
+    color: #343a40;
+    text-align: center;
+}
+
+/* Texto secundario (instrucción extra) */
+.drop-file-sublabel {
+    font-size: 0.85rem;
+    color: #6c757d;
+    margin-bottom: 0.5rem;
+    text-align: center;
+}
+
+/* --- OPTIMIZACIÓN RESPONSIVE (Móvil) --- */
+@media (max-width: 768px) {
+    /* En móviles, apila el logo arriba y el upload debajo */
+    .logo-upload-wrapper {
+        grid-template-columns: 1fr;
+        grid-template-rows: auto auto auto;
+        gap: 1.5rem;
+    }
+
+    .logo-current-container {
+        grid-column: 1;
+        grid-row: 1;
+        justify-self: center;
+    }
+
+    .logo-upload-form {
+        grid-column: 1;
+        grid-row: 2 / 4;
+    }
+
+    .custom-drop-zone {
+        min-height: 150px; /* Reducir altura en móviles */
+        padding: 1.5rem !important;
+        border-width: 2px !important;
+    }
+
+    .upload-icon {
+        font-size: 2rem; /* Icono más pequeño */
+        margin-bottom: 0.5rem;
+    }
+
+    .drop-file-label {
+        font-size: 1rem; /* Texto ajustado */
+    }
+    
+    /* En móviles es difícil "arrastrar", así que enfatizamos el botón */
+    .drop-file-sublabel {
+        display: none; /* Ocultamos texto extra para limpiar la interfaz */
+    }
+
+    .logo-image {
+        max-height: 120px;
+        max-width: 120px;
+    }
+}
+
+/* Animación opcional para el icono */
+@keyframes bounce {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-5px); }
+}
