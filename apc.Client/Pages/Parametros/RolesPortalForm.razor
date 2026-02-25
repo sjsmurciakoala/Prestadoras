@@ -1,0 +1,544 @@
+﻿@page "/parametros/roles/nuevo"
+@page "/parametros/roles/editar/{RoleId}"
+@attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
+
+@using System.Globalization
+@using System.Collections.Generic
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Roles
+@using apc.Client.Services.Parametros
+@inject RolesPortalClient RolesClient
+@inject NavigationManager NavigationManager
+
+<h3>@(EsNuevo ? "Nuevo Rol" : "Editar Rol")</h3>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
+}
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
+}
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <DxWaitIndicator Visible="true" />
+    </div>
+}
+else
+{
+    <EditForm Model="@formModel" OnValidSubmit="GuardarAsync" Context="editContext">
+        <DataAnnotationsValidator />
+        <DxFormLayout CssClass="mt-3">
+            <DxFormLayoutItem Caption="Nombre del rol:" ColSpanMd="6">
+                @if (EsNuevo)
+                {
+                    <DxTextBox @bind-Text="crearDto.Name" />
+                }
+                else
+                {
+                    <DxTextBox @bind-Text="editarDto.Name" Enabled="@(!isSuperAdminRole)" />
+                }
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Módulos:" ColSpanMd="6">
+                <DxComboBox Data="@modulosDisponibles"
+                            TData="ModuloItem"
+                            TValue="string"
+                            TextFieldName="Nombre"
+                            ValueFieldName="Key"
+                            @bind-Value="moduloSeleccionado"
+                            NullText="Seleccione un módulo..." />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="12">
+                @if (string.IsNullOrWhiteSpace(moduloSeleccionado))
+                {
+                    <span class="text-muted">Selecciona un módulo para configurar permisos.</span>
+                }
+                else if (endpointsVisibles.Count == 0)
+                {
+                    <span class="text-muted">Este módulo aún no tiene opciones configuradas.</span>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm table-bordered align-middle">
+                            <thead class="table-light">
+                                <tr>
+                                    <th>Opción</th>
+                                    <th>Descripción</th>
+                                    <th class="text-center">Registrar</th>
+                                    <th class="text-center">Editar</th>
+                                    <th class="text-center">Eliminar</th>
+                                    <th class="text-center">Consultar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var endpoint in endpointsVisibles)
+                                {
+                                    <tr>
+                                        <td>@endpoint.OpcionNombre</td>
+                                        <td>
+                                            <div>@FormatearEndpoint(endpoint)</div>
+                                        </td>
+                                        <td class="text-center">
+                                            <DxCheckBox T="bool"
+                                                        @bind-Checked="endpoint.PuedeRegistrar"
+                                                        Enabled="@endpoint.HabilitaRegistrar" />
+                                        </td>
+                                        <td class="text-center">
+                                            <DxCheckBox T="bool"
+                                                        @bind-Checked="endpoint.PuedeEditar"
+                                                        Enabled="@endpoint.HabilitaEditar" />
+                                        </td>
+                                        <td class="text-center">
+                                            <DxCheckBox T="bool"
+                                                        @bind-Checked="endpoint.PuedeEliminar"
+                                                        Enabled="@endpoint.HabilitaEliminar" />
+                                        </td>
+                                        <td class="text-center">
+                                            <DxCheckBox T="bool"
+                                                        @bind-Checked="endpoint.PuedeConsultar"
+                                                        Enabled="@endpoint.HabilitaConsultar" />
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="12">
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton SubmitFormOnClick="true"
+                              Text="@(isSaving ? "Guardando..." : "Guardar")"
+                              Enabled="@(!isSaving)"
+                              RenderStyle="ButtonRenderStyle.Primary" />
+                    <DxButton RenderStyle="ButtonRenderStyle.Link"
+                              Text="Cancelar"
+                              Enabled="@(!isSaving)"
+                              Click="@(() => NavigationManager.NavigateTo("/parametros/roles"))" />
+                </div>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        <ValidationSummary />
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public string? RoleId { get; set; }
+
+    private bool EsNuevo => string.IsNullOrEmpty(RoleId);
+
+    private object formModel = new();
+    private CreateRoleDto crearDto = new();
+    private UpdateRoleDto editarDto = new();
+    private bool isSuperAdminRole;
+
+    private readonly List<ModuloItem> modulosDisponibles = [];
+    private string? moduloSeleccionado;
+    private readonly List<EndpointPermiso> endpoints = [];
+    private HashSet<string> permisosOriginales = new(StringComparer.OrdinalIgnoreCase);
+
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isLoading = true;
+    private bool isSaving;
+
+    private IReadOnlyList<EndpointPermiso> endpointsVisibles =>
+        endpoints
+            .Where(o => string.Equals(o.ModuloKey, moduloSeleccionado, StringComparison.OrdinalIgnoreCase))
+            .OrderBy(o => o.OpcionNombre)
+            .ThenBy(o => o.Route)
+            .ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (!EsNuevo)
+            {
+                var role = await RolesClient.ObtenerAsync(RoleId!);
+                if (role is null)
+                {
+                    errorMessage = "El rol no existe.";
+                }
+                else
+                {
+                    isSuperAdminRole = string.Equals(role.Name, SIAD.Core.Constants.RoleNames.SuperAdministrador, StringComparison.OrdinalIgnoreCase);
+                    editarDto = new UpdateRoleDto
+                    {
+                        Name = role.Name,
+                        Permissions = role.Permissions
+                    };
+                    formModel = editarDto;
+                    permisosOriginales = new HashSet<string>(role.Permissions ?? [], StringComparer.OrdinalIgnoreCase);
+                }
+            }
+            else
+            {
+                formModel = crearDto;
+            }
+
+            ConstruirEndpoints(permisosOriginales);
+            moduloSeleccionado = modulosDisponibles.FirstOrDefault()?.Key;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ConstruirEndpoints(HashSet<string> permisosActuales)
+    {
+        endpoints.Clear();
+
+        foreach (var endpoint in PermissionEndpointCatalog.All)
+        {
+            var item = new EndpointPermiso
+            {
+                ModuloKey = endpoint.Module,
+                OpcionKey = endpoint.Option,
+                OpcionNombre = FormatearNombre(endpoint.Option),
+                Route = endpoint.Route,
+                HttpMethod = endpoint.HttpMethod,
+                Action = endpoint.Action,
+                Permission = endpoint.Permission
+            };
+
+            var tienePermiso = TienePermiso(permisosActuales, item.Permission, item.ModuloKey, item.OpcionKey, item.Action);
+            switch (item.Action)
+            {
+                case PermissionAction.View:
+                    item.PuedeConsultar = tienePermiso;
+                    break;
+                case PermissionAction.Create:
+                    item.PuedeRegistrar = tienePermiso;
+                    break;
+                case PermissionAction.Edit:
+                    item.PuedeEditar = tienePermiso;
+                    break;
+                case PermissionAction.Delete:
+                    item.PuedeEliminar = tienePermiso;
+                    break;
+            }
+
+            endpoints.Add(item);
+        }
+
+        modulosDisponibles.Clear();
+        foreach (var module in endpoints.Select(o => o.ModuloKey).Distinct(StringComparer.OrdinalIgnoreCase))
+        {
+            modulosDisponibles.Add(new ModuloItem
+            {
+                Key = module,
+                Nombre = FormatearNombre(module)
+            });
+        }
+    }
+
+    private static bool TienePermiso(HashSet<string> permisos, string permiso, string module, string option, PermissionAction action)
+    {
+        if (string.IsNullOrWhiteSpace(permiso))
+        {
+            return false;
+        }
+
+        if (permisos.Contains(permiso))
+        {
+            return true;
+        }
+
+        var optionPermission = PermissionKeyBuilder.BuildPermission(module, option, action);
+        if (permisos.Contains(optionPermission))
+        {
+            return true;
+        }
+
+        var modulePermission = PermissionKeyBuilder.BuildModulePermission(module, action);
+        if (permisos.Contains(modulePermission))
+        {
+            return true;
+        }
+
+        if (action == PermissionAction.View)
+        {
+            var legacy = $"module.{module}";
+            return permisos.Contains(legacy);
+        }
+
+        return false;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (isSaving)
+        {
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            var permisos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+            foreach (var endpoint in endpoints)
+            {
+                switch (endpoint.Action)
+                {
+                    case PermissionAction.View:
+                        if (endpoint.PuedeConsultar)
+                        {
+                            permisos.Add(endpoint.Permission);
+                        }
+                        break;
+                    case PermissionAction.Create:
+                        if (endpoint.PuedeRegistrar)
+                        {
+                            permisos.Add(endpoint.Permission);
+                        }
+                        break;
+                    case PermissionAction.Edit:
+                        if (endpoint.PuedeEditar)
+                        {
+                            permisos.Add(endpoint.Permission);
+                        }
+                        break;
+                    case PermissionAction.Delete:
+                        if (endpoint.PuedeEliminar)
+                        {
+                            permisos.Add(endpoint.Permission);
+                        }
+                        break;
+                }
+            }
+
+            var modulosGestionados = new HashSet<string>(endpoints.Select(o => o.ModuloKey), StringComparer.OrdinalIgnoreCase);
+            foreach (var permiso in permisosOriginales)
+            {
+                if (!EsPermisoDeModulo(permiso, modulosGestionados))
+                {
+                    permisos.Add(permiso);
+                }
+            }
+
+            var listaPermisos = permisos.ToList();
+            if (EsNuevo)
+            {
+                crearDto.Permissions = listaPermisos;
+                await RolesClient.CrearAsync(crearDto);
+                successMessage = "Rol creado correctamente.";
+                NavigationManager.NavigateTo("/parametros/roles");
+            }
+            else
+            {
+                editarDto.Permissions = listaPermisos;
+                await RolesClient.ActualizarAsync(RoleId!, editarDto);
+                successMessage = "Rol actualizado correctamente.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private static bool EsPermisoDeModulo(string permiso, HashSet<string> modulos)
+    {
+        if (!permiso.StartsWith("module.", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var parts = permiso.Split('.', StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length < 2)
+        {
+            return false;
+        }
+
+        return modulos.Contains(parts[1]);
+    }
+
+    private static string FormatearNombre(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return value;
+        }
+
+        var texto = value.Replace('_', ' ');
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(texto);
+    }
+
+    private static string FormatearEndpoint(EndpointPermiso endpoint)
+    {
+        var accion = FormatearAccion(endpoint.Action);
+        var detalle = ExtraerDetalleRuta(endpoint.Route, endpoint.OpcionNombre);
+
+        if (string.IsNullOrWhiteSpace(detalle))
+        {
+            return accion;
+        }
+
+        return $"{accion} {detalle}";
+    }
+
+    private static string FormatearAccion(PermissionAction action)
+    {
+        return action switch
+        {
+            PermissionAction.View => "Consultar",
+            PermissionAction.Create => "Registrar",
+            PermissionAction.Edit => "Editar",
+            PermissionAction.Delete => "Eliminar",
+            _ => "Consultar"
+        };
+    }
+
+    private static string ExtraerDetalleRuta(string route, string opcionNombre)
+    {
+        if (string.IsNullOrWhiteSpace(route))
+        {
+            return opcionNombre;
+        }
+
+        var path = route.Trim();
+        if (path.StartsWith("api/", StringComparison.OrdinalIgnoreCase))
+        {
+            path = path[4..];
+        }
+
+        var segments = path.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length <= 1)
+        {
+            return opcionNombre;
+        }
+
+        var parts = new List<string>();
+        foreach (var segment in segments.Skip(1))
+        {
+            if (segment.StartsWith("{", StringComparison.Ordinal) && segment.EndsWith("}", StringComparison.Ordinal))
+            {
+                var param = segment.Trim('{', '}');
+                var colonIndex = param.IndexOf(':');
+                if (colonIndex > 0)
+                {
+                    param = param[..colonIndex];
+                }
+
+                param = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(param.Replace('_', ' '));
+
+                if (parts.Count == 0)
+                {
+                    parts.Add($"Detalle por {param}");
+                }
+                else
+                {
+                    parts[^1] = $"{parts[^1]} por {param}";
+                }
+
+                continue;
+            }
+
+            parts.Add(FormatearSegmento(segment));
+        }
+
+        return string.Join(" - ", parts);
+    }
+
+    private static string FormatearSegmento(string segment)
+    {
+        if (string.IsNullOrWhiteSpace(segment))
+        {
+            return string.Empty;
+        }
+
+        var tokens = segment
+            .Replace('_', '-')
+            .Split('-', StringSplitOptions.RemoveEmptyEntries)
+            .Select(FormatearToken)
+            .Where(t => !string.IsNullOrWhiteSpace(t));
+
+        var texto = string.Join(" ", tokens);
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(texto);
+    }
+
+    private static string FormatearToken(string token)
+    {
+        return token.ToLowerInvariant() switch
+        {
+            "search" => "busqueda",
+            "paged" => "paginado",
+            "header" => "encabezado",
+            "detalle" => "detalle",
+            "estado" => "estado",
+            "cuenta" => "cuenta",
+            "historico" => "historico",
+            "consumo" => "consumo",
+            "foto" => "foto",
+            "medidor" => "medidor",
+            "periodo" => "periodo",
+            "actual" => "actual",
+            "reverso" => "reverso",
+            "miscelaneos" => "miscelaneos",
+            "posteo" => "posteo",
+            "manual" => "manual",
+            "configuracion" => "configuracion",
+            "tarifa" => "tarifa",
+            _ => token.Replace('_', ' ')
+        };
+    }
+
+    private sealed class ModuloItem
+    {
+        public string Key { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+    }
+
+    private sealed class EndpointPermiso
+    {
+        public string ModuloKey { get; set; } = string.Empty;
+        public string OpcionKey { get; set; } = string.Empty;
+        public string OpcionNombre { get; set; } = string.Empty;
+        public string Route { get; set; } = string.Empty;
+        public string HttpMethod { get; set; } = string.Empty;
+        public PermissionAction Action { get; set; }
+        public string Permission { get; set; } = string.Empty;
+        public bool PuedeConsultar { get; set; }
+        public bool PuedeRegistrar { get; set; }
+        public bool PuedeEditar { get; set; }
+        public bool PuedeEliminar { get; set; }
+
+        public bool HabilitaConsultar => Action == PermissionAction.View;
+        public bool HabilitaRegistrar => Action == PermissionAction.Create;
+        public bool HabilitaEditar => Action == PermissionAction.Edit;
+        public bool HabilitaEliminar => Action == PermissionAction.Delete;
+    }
+}

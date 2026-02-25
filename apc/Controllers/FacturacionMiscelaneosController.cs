@@ -3,12 +3,14 @@ using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.FacturacionMiscelaneos;
 using SIAD.Services.FacturacionMiscelaneos;
+using apc.Security;
+using SIAD.Core.Constants;
 
 namespace apc.Controllers;
 
 [ApiController]
 [Route("api/facturacion/miscelaneos")]
-[Authorize]
+[ModuleAuthorize(PermissionModules.Ventas, PermissionResources.Ventas.FacturacionMiscelaneos)]
 public class FacturacionMiscelaneosController : ControllerBase
 {
     private readonly IFacturacionMiscelaneosService _service;
@@ -59,3 +61,4 @@ public class FacturacionMiscelaneosController : ControllerBase
         return recibo is null ? NotFound() : Ok(recibo);
     }
 }
+

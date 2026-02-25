@@ -2,12 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.DTOs.NotasCreditoDebito;
 using SIAD.Services.NotasCreditoDebito;
+using apc.Security;
+using SIAD.Core.Constants;
 
 namespace apc.Controllers;
 
 [ApiController]
 [Route("api/facturacion/notas")]
-[Authorize]
+[ModuleAuthorize(PermissionModules.Ventas, PermissionResources.Ventas.NotasCreditoDebito)]
 public class NotasCreditoDebitoController : ControllerBase
 {
     private readonly INotasCreditoDebitoService _service;
@@ -64,3 +66,4 @@ public class NotasCreditoDebitoController : ControllerBase
         return Ok(respuesta);
     }
 }
+

@@ -1,0 +1,171 @@
+@page "/parametros/roles"
+@attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
+
+@using System.Globalization
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Roles
+@using apc.Client.Services.Parametros
+@inject RolesPortalClient RolesClient
+@inject NavigationManager NavigationManager
+
+<h3>Roles y permisos</h3>
+<p class="text-muted">Configura los roles del sistema y sus permisos por módulo.</p>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
+}
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
+}
+
+<div class="d-flex gap-2 mb-3 mt-3">
+    <DxButton Text="Nuevo Rol"
+              RenderStyle="ButtonRenderStyle.Primary"
+              IconCssClass="bi bi-shield-plus"
+              Click="@(() => NavigationManager.NavigateTo("/parametros/roles/nuevo"))" />
+</div>
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <DxWaitIndicator Visible="true" />
+    </div>
+}
+else
+{
+    <DxGrid Data="@roles"
+            KeyFieldName="Id"
+            ShowFilterRow="true"
+            PageSize="20"
+            CssClass="mt-2">
+        <Columns>
+            <DxGridDataColumn FieldName="Name" Caption="Rol" Width="260px" />
+            <DxGridDataColumn FieldName="PermissionsDisplay" Caption="Permisos" UnboundType="GridUnboundColumnType.String"
+                              AllowSort="false" AllowGroup="false">
+                <CellDisplayTemplate>
+                    @{
+                        var role = (RoleDto)context.DataItem;
+                    }
+                    @if (role.Permissions is { Count: > 0 })
+                    {
+                        @foreach (var permiso in role.Permissions)
+                        {
+                            <span class="badge bg-secondary me-1">@FormatearPermiso(permiso)</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="text-muted fst-italic">Sin permisos</span>
+                    }
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+            <DxGridDataColumn FieldName="Id" Caption="" Width="110px" AllowSort="false" AllowGroup="false">
+                <CellDisplayTemplate>
+                    <DxButton Text="Editar"
+                              RenderStyle="ButtonRenderStyle.Link"
+                              IconCssClass="bi bi-pencil"
+                              Click="@(() => NavigationManager.NavigateTo($"/parametros/roles/editar/{context.Value}"))" />
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+        </Columns>
+    </DxGrid>
+}
+
+@code {
+    private List<RoleDto> roles = [];
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isLoading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarRolesAsync();
+    }
+
+    private async Task CargarRolesAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            roles = await RolesClient.ListarAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string FormatearPermiso(string permiso)
+    {
+        if (string.IsNullOrWhiteSpace(permiso))
+        {
+            return permiso;
+        }
+
+        const string prefix = "module.";
+        if (permiso.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            var raw = permiso.Substring(prefix.Length);
+            var parts = raw.Split('.', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 1)
+            {
+                return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(parts[0].Replace('_', ' '));
+            }
+
+            if (parts.Length == 2)
+            {
+                var moduloTexto = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(parts[0].Replace('_', ' '));
+                var accionTexto = FormatearAccion(parts[1]);
+                return $"{moduloTexto} - {accionTexto}";
+            }
+
+            var recurso = parts[1];
+            var opcionTexto = recurso;
+            var detalle = string.Empty;
+            var recursoPartes = recurso.Split(new[] { "__" }, StringSplitOptions.RemoveEmptyEntries);
+            if (recursoPartes.Length == 2)
+            {
+                opcionTexto = recursoPartes[0];
+                detalle = recursoPartes[1];
+            }
+
+            var opcionFormateada = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(opcionTexto.Replace('_', ' '));
+            if (!string.IsNullOrWhiteSpace(detalle))
+            {
+                var detalleFormateado = CultureInfo.CurrentCulture.TextInfo.ToTitleCase(detalle.Replace('_', ' '));
+                var accionFinalDetallada = FormatearAccion(parts[^1]);
+                return $"{opcionFormateada} - {detalleFormateado} ({accionFinalDetallada})";
+            }
+
+            var accionFinal = FormatearAccion(parts[^1]);
+            return $"{opcionFormateada} - {accionFinal}";
+        }
+
+        return permiso;
+    }
+
+    private static string FormatearAccion(string accion)
+    {
+        return accion.ToLowerInvariant() switch
+        {
+            "view" => "Ver",
+            "create" => "Crear",
+            "edit" => "Editar",
+            "delete" => "Eliminar",
+            _ => CultureInfo.CurrentCulture.TextInfo.ToTitleCase(accion.Replace('_', ' '))
+        };
+    }
+}

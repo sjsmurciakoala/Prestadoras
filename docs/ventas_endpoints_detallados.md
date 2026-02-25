@@ -1,0 +1,62 @@
+# Ventas Endpoints Detallados
+
+Tabla generada desde los controllers de Ventas. Incluye metodo, ruta y nombre de accion.
+
+| Controller | Action | HTTP | Route |
+|---|---|---|---|
+| CaptacionPagosController | RegistrarPago | POST | `api/CaptacionPagos` |
+| CaptacionPagosController | GetArqueos | GET | `api/CaptacionPagos/arqueos` |
+| CaptacionPagosController | GetArqueosPaged | GET | `api/CaptacionPagos/arqueos/paged` |
+| CaptacionPagosController | GetBancos | GET | `api/CaptacionPagos/bancos` |
+| CaptacionPagosController | GetCajas | GET | `api/CaptacionPagos/cajas` |
+| CaptacionPagosController | GetClientes | GET | `api/CaptacionPagos/clientes` |
+| CaptacionPagosController | GetMiscelaneos | GET | `api/CaptacionPagos/miscelaneos` |
+| CaptacionPagosController | GetMiscelaneosPaged | GET | `api/CaptacionPagos/miscelaneos/paged` |
+| CaptacionPagosController | RegistrarPagoMiscelaneo | POST | `api/CaptacionPagos/miscelaneos/registrar` |
+| CaptacionPagosController | ReversarPagoMiscelaneo | POST | `api/CaptacionPagos/miscelaneos/reverso` |
+| CaptacionPagosController | GetDetalleReciboMiscelaneo | GET | `api/CaptacionPagos/miscelaneos/{recibo}/detalle` |
+| CaptacionPagosController | GetPeriodoActual | GET | `api/CaptacionPagos/periodo-actual` |
+| CaptacionPagosController | RegistrarPagoManual | POST | `api/CaptacionPagos/posteo-manual` |
+| CaptacionPagosController | ReversarPagoManual | POST | `api/CaptacionPagos/posteo-manual/reverso` |
+| CaptacionPagosController | ReversarPago | POST | `api/CaptacionPagos/reverso` |
+| CaptacionPagosController | GetSaldosPosteoManual | GET | `api/CaptacionPagos/saldos-manual/{clienteClave}` |
+| CaptacionPagosController | BuscarFacturas | GET | `api/CaptacionPagos/search/{term}` |
+| CaptacionPagosController | GetPago | GET | `api/CaptacionPagos/{numFactura}` |
+| CaptacionPagosController | ExisteRegistroPago | GET | `api/CaptacionPagos/{numFactura}/existe` |
+| ClientesController | Get | GET | `api/Clientes` |
+| ClientesController | Post | POST | `api/Clientes` |
+| ClientesController | GetFotoMedidorImagen | GET | `api/Clientes/foto-medidor/{ide:int}/imagen` |
+| ClientesController | Search | GET | `api/Clientes/search` |
+| ClientesController | SearchPaged | GET | `api/Clientes/search-paged` |
+| ClientesController | GetById | GET | `api/Clientes/{id:int}` |
+| ClientesController | Put | PUT | `api/Clientes/{id:int}` |
+| ClientesController | ActualizarConfiguracionTarifa | POST | `api/Clientes/{id:int}/configuracion-tarifa` |
+| ClientesController | AgregarConfiguracionTarifa | POST | `api/Clientes/{id:int}/configuracion-tarifa/agregar` |
+| ClientesController | GetConfiguracionTarifaDetalle | GET | `api/Clientes/{id:int}/configuracion-tarifa/detalle` |
+| ClientesController | GetConfiguracionTarifaHeader | GET | `api/Clientes/{id:int}/configuracion-tarifa/header` |
+| ClientesController | GetEstadoCuenta | GET | `api/Clientes/{id:int}/estado-cuenta` |
+| ClientesController | GetFotoMedidor | GET | `api/Clientes/{id:int}/foto-medidor` |
+| ClientesController | GetFotoMedidorHeader | GET | `api/Clientes/{id:int}/foto-medidor/header` |
+| ClientesController | GetHistoricoConsumo | GET | `api/Clientes/{id:int}/historico-consumo` |
+| ClientesController | GetHistoricoConsumoPaged | GET | `api/Clientes/{id:int}/historico-consumo/paged` |
+| ClientesController | GetMovimientos | GET | `api/Clientes/{id:int}/movimientos` |
+| ClientesController | GetMovimientosPaged | GET | `api/Clientes/{id:int}/movimientos/paged` |
+| ClientesController | GetTarifas | GET | `api/Clientes/{id:int}/tarifas` |
+| CobranzaController | ObtenerBloqueo | GET | `api/Cobranza/clientes/{clave}/bloqueo` |
+| CobranzaController | ObtenerSaldos | GET | `api/Cobranza/clientes/{clave}/saldos` |
+| CobranzaController | NumeroALetras | GET | `api/Cobranza/numero-letras` |
+| CobranzaController | ListarPlanes | GET | `api/Cobranza/planes` |
+| CobranzaController | GuardarPlan | POST | `api/Cobranza/planes` |
+| CobranzaController | CalcularPlan | POST | `api/Cobranza/planes/calcular` |
+| CobranzaController | ObtenerPlan | GET | `api/Cobranza/planes/{correlativo}` |
+| FacturacionMiscelaneosController | ObtenerCatalogo | GET | `api/facturacion/miscelaneos/categorias` |
+| FacturacionMiscelaneosController | BuscarClientes | GET | `api/facturacion/miscelaneos/clientes` |
+| FacturacionMiscelaneosController | ObtenerCliente | GET | `api/facturacion/miscelaneos/clientes/{clave}` |
+| FacturacionMiscelaneosController | CrearRecibo | POST | `api/facturacion/miscelaneos/recibos` |
+| FacturacionMiscelaneosController | ObtenerRecibo | GET | `api/facturacion/miscelaneos/recibos/{numero:int}` |
+| NotasCreditoDebitoController | RegistrarNota | POST | `api/facturacion/notas` |
+| NotasCreditoDebitoController | BuscarClientes | GET | `api/facturacion/notas/clientes` |
+| NotasCreditoDebitoController | ObtenerCliente | GET | `api/facturacion/notas/clientes/{clave}` |
+| NotasCreditoDebitoController | ObtenerConfiguracion | GET | `api/facturacion/notas/clientes/{clave}/configuracion` |
+| NotasCreditoDebitoController | ListarMotivos | GET | `api/facturacion/notas/motivos` |
+| NotasCreditoDebitoController | ObtenerMotivo | GET | `api/facturacion/notas/motivos/{id:int}` |

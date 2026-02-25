@@ -4,6 +4,7 @@ using apc.Components;
 using apc.Components.Account;
 using apc.Data;
 using apc.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Authentication;
 using Microsoft.AspNetCore.Http;
@@ -98,16 +99,13 @@ builder.Services.AddScoped<IClaimsTransformation, TenantCompanyClaimTransformati
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(AuthorizationPolicies.Contabilidad,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Contabilidad));
-    options.AddPolicy(AuthorizationPolicies.Compras,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Compras));
-    options.AddPolicy(AuthorizationPolicies.Ventas,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Ventas));
-    options.AddPolicy(AuthorizationPolicies.Bancos,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Bancos));
-    options.AddPolicy(AuthorizationPolicies.Configuracion,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Configuracion));
+    foreach (var policyDefinition in PermissionNames.Policies)
+    {
+        options.AddPolicy(policyDefinition.Policy,
+            policy => RequirePermissionOrSuperAdmin(policy, policyDefinition.Permissions));
+    }
+    options.AddPolicy(AuthorizationPolicies.SuperAdmin,
+        policy => policy.RequireRole(RoleNames.SuperAdministrador));
 });
 builder.Services.AddAuthentication(options =>
 {
@@ -182,4 +180,11 @@ static void ForwardHeader(IHeaderDictionary source, HttpRequestHeaders target, s
             target.TryAddWithoutValidation(headerName, value);
         }
     }
+}
+
+static void RequirePermissionOrSuperAdmin(AuthorizationPolicyBuilder policy, params string[] permissions)
+{
+    policy.RequireAssertion(context =>
+        context.User.IsInRole(RoleNames.SuperAdministrador) ||
+        permissions.Any(permission => context.User.HasClaim(PermissionClaimTypes.Permission, permission)));
 }

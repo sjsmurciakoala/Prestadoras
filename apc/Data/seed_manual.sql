@@ -3,11 +3,12 @@
 -- =========================================================================
 -- Este script crea los datos iniciales:
 -- 1. Empresa demo (APC - Aguas de Puerto Cortes)
--- 2. Usuario admin
--- 3. Rol admin
+-- 2. Usuario admin (Super Administrador)
+-- 3. Rol Super Administrador
 -- 4. Asignacion de rol al usuario
 -- 5. Asignacion de empresa al usuario (claim tenant_company)
--- 
+-- 6. Asignacion de permisos (role claims)
+--
 -- Contrasena: Admin123@
 -- Email: admin@siad-demo.com
 -- =========================================================================
@@ -21,36 +22,10 @@ BEGIN;
 -- 1. CREAR ROLES SI NO EXISTEN (USANDO INSERT ... SELECT ... WHERE NOT EXISTS)
 -- =========================================================================
 
--- Rol Admin
+-- Rol Super Administrador
 INSERT INTO identity."AspNetRoles" ("Id", "Name", "NormalizedName", "ConcurrencyStamp")
-SELECT gen_random_uuid()::text, 'Admin', 'ADMIN', gen_random_uuid()::text
-WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'ADMIN');
-
--- Rol User
-INSERT INTO identity."AspNetRoles" ("Id", "Name", "NormalizedName", "ConcurrencyStamp")
-SELECT gen_random_uuid()::text, 'User', 'USER', gen_random_uuid()::text
-WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'USER');
-
--- Roles por dominio
-INSERT INTO identity."AspNetRoles" ("Id", "Name", "NormalizedName", "ConcurrencyStamp")
-SELECT gen_random_uuid()::text, 'Contabilidad', 'CONTABILIDAD', gen_random_uuid()::text
-WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'CONTABILIDAD');
-
-INSERT INTO identity."AspNetRoles" ("Id", "Name", "NormalizedName", "ConcurrencyStamp")
-SELECT gen_random_uuid()::text, 'Compras', 'COMPRAS', gen_random_uuid()::text
-WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'COMPRAS');
-
-INSERT INTO identity."AspNetRoles" ("Id", "Name", "NormalizedName", "ConcurrencyStamp")
-SELECT gen_random_uuid()::text, 'Ventas', 'VENTAS', gen_random_uuid()::text
-WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'VENTAS');
-
-INSERT INTO identity."AspNetRoles" ("Id", "Name", "NormalizedName", "ConcurrencyStamp")
-SELECT gen_random_uuid()::text, 'Bancos', 'BANCOS', gen_random_uuid()::text
-WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'BANCOS');
-
-INSERT INTO identity."AspNetRoles" ("Id", "Name", "NormalizedName", "ConcurrencyStamp")
-SELECT gen_random_uuid()::text, 'Configuracion', 'CONFIGURACION', gen_random_uuid()::text
-WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'CONFIGURACION');
+SELECT gen_random_uuid()::text, 'Super Administrador', 'SUPER ADMINISTRADOR', gen_random_uuid()::text
+WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetRoles" r WHERE r."NormalizedName" = 'SUPER ADMINISTRADOR');
 
 -- =========================================================================
 -- 2. CREAR EMPRESA DEMO
@@ -130,11 +105,11 @@ SELECT
 WHERE NOT EXISTS (SELECT 1 FROM identity."AspNetUsers" u WHERE u."NormalizedUserName" = 'ADMIN@SIAD-DEMO.COM');
 
 -- =========================================================================
--- 4. ASIGNAR ROL ADMIN AL USUARIO
+-- 4. ASIGNAR ROL SUPER ADMINISTRADOR AL USUARIO
 -- =========================================================================
 
 WITH r AS (
-  SELECT "Id" FROM identity."AspNetRoles" WHERE "NormalizedName" = 'ADMIN' LIMIT 1
+  SELECT "Id" FROM identity."AspNetRoles" WHERE "NormalizedName" = 'SUPER ADMINISTRADOR' LIMIT 1
 ), u AS (
   SELECT "Id" FROM identity."AspNetUsers" WHERE "NormalizedUserName" = 'ADMIN@SIAD-DEMO.COM' LIMIT 1
 )
@@ -186,19 +161,124 @@ WHERE NOT EXISTS (
 );
 
 -- =========================================================================
--- 7. ASIGNAR ROLES ADICIONALES AL USUARIO ADMIN
+-- 7. ASIGNAR PERMISOS AL ROL SUPER ADMINISTRADOR (role claims)
 -- =========================================================================
-WITH u AS (
-  SELECT "Id" FROM identity."AspNetUsers" WHERE "NormalizedUserName" = 'ADMIN@SIAD-DEMO.COM' LIMIT 1
-), roles AS (
-  SELECT "Id", "NormalizedName" FROM identity."AspNetRoles"
-  WHERE "NormalizedName" IN ('CONTABILIDAD', 'COMPRAS', 'VENTAS', 'BANCOS', 'CONFIGURACION')
+
+WITH r AS (
+  SELECT "Id" FROM identity."AspNetRoles" WHERE "NormalizedName" = 'SUPER ADMINISTRADOR' LIMIT 1
 )
-INSERT INTO identity."AspNetUserRoles" ("UserId", "RoleId")
-SELECT u."Id", r."Id"
-FROM u, roles r
+INSERT INTO identity."AspNetRoleClaims" ("RoleId", "ClaimType", "ClaimValue")
+SELECT r."Id", 'permission', v.perm
+FROM r
+CROSS JOIN (VALUES
+  ('module.ventas.view'),
+  ('module.ventas.create'),
+  ('module.ventas.edit'),
+  ('module.ventas.delete'),
+  ('module.bancos.view'),
+  ('module.bancos.create'),
+  ('module.bancos.edit'),
+  ('module.bancos.delete'),
+  ('module.compras.view'),
+  ('module.compras.create'),
+  ('module.compras.edit'),
+  ('module.compras.delete'),
+  ('module.inventario.view'),
+  ('module.inventario.create'),
+  ('module.inventario.edit'),
+  ('module.inventario.delete'),
+  ('module.contabilidad.view'),
+  ('module.contabilidad.create'),
+  ('module.contabilidad.edit'),
+  ('module.contabilidad.delete'),
+  ('module.reporteria.view'),
+  ('module.reporteria.create'),
+  ('module.reporteria.edit'),
+  ('module.reporteria.delete'),
+  ('module.configuracion.view'),
+  ('module.configuracion.create'),
+  ('module.configuracion.edit'),
+  ('module.configuracion.delete'),
+  ('module.ventas.clientes.view'),
+  ('module.ventas.clientes.create'),
+  ('module.ventas.clientes.edit'),
+  ('module.ventas.clientes.delete'),
+  ('module.ventas.captacion_pagos.view'),
+  ('module.ventas.captacion_pagos.create'),
+  ('module.ventas.captacion_pagos.edit'),
+  ('module.ventas.captacion_pagos.delete'),
+  ('module.ventas.cobranza.view'),
+  ('module.ventas.cobranza.create'),
+  ('module.ventas.cobranza.edit'),
+  ('module.ventas.cobranza.delete'),
+  ('module.ventas.facturacion_miscelaneos.view'),
+  ('module.ventas.facturacion_miscelaneos.create'),
+  ('module.ventas.facturacion_miscelaneos.edit'),
+  ('module.ventas.facturacion_miscelaneos.delete'),
+  ('module.ventas.notas_credito_debito.view'),
+  ('module.ventas.notas_credito_debito.create'),
+  ('module.ventas.notas_credito_debito.edit'),
+  ('module.ventas.notas_credito_debito.delete'),
+  ('module.ventas.captacion_pagos__captacionpagos.create'),
+  ('module.ventas.captacion_pagos__captacionpagos_arqueos.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_arqueos_paged.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_bancos.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_cajas.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_clientes.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_miscelaneos.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_miscelaneos_paged.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_miscelaneos_registrar.create'),
+  ('module.ventas.captacion_pagos__captacionpagos_miscelaneos_reverso.edit'),
+  ('module.ventas.captacion_pagos__captacionpagos_miscelaneos_recibo_detalle.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_periodo_actual.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_posteo_manual.edit'),
+  ('module.ventas.captacion_pagos__captacionpagos_posteo_manual_reverso.edit'),
+  ('module.ventas.captacion_pagos__captacionpagos_reverso.edit'),
+  ('module.ventas.captacion_pagos__captacionpagos_saldos_manual_clienteclave.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_search_term.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_numfactura.view'),
+  ('module.ventas.captacion_pagos__captacionpagos_numfactura_existe.view'),
+  ('module.ventas.clientes__clientes.view'),
+  ('module.ventas.clientes__clientes.create'),
+  ('module.ventas.clientes__clientes_foto_medidor_ide_imagen.view'),
+  ('module.ventas.clientes__clientes_search.view'),
+  ('module.ventas.clientes__clientes_search_paged.view'),
+  ('module.ventas.clientes__clientes_id.view'),
+  ('module.ventas.clientes__clientes_id.edit'),
+  ('module.ventas.clientes__clientes_id_configuracion_tarifa.edit'),
+  ('module.ventas.clientes__clientes_id_configuracion_tarifa_agregar.create'),
+  ('module.ventas.clientes__clientes_id_configuracion_tarifa_detalle.view'),
+  ('module.ventas.clientes__clientes_id_configuracion_tarifa_header.view'),
+  ('module.ventas.clientes__clientes_id_estado_cuenta.view'),
+  ('module.ventas.clientes__clientes_id_foto_medidor.view'),
+  ('module.ventas.clientes__clientes_id_foto_medidor_header.view'),
+  ('module.ventas.clientes__clientes_id_historico_consumo.view'),
+  ('module.ventas.clientes__clientes_id_historico_consumo_paged.view'),
+  ('module.ventas.clientes__clientes_id_movimientos.view'),
+  ('module.ventas.clientes__clientes_id_movimientos_paged.view'),
+  ('module.ventas.clientes__clientes_id_tarifas.view'),
+  ('module.ventas.cobranza__cobranza_clientes_clave_bloqueo.view'),
+  ('module.ventas.cobranza__cobranza_clientes_clave_saldos.view'),
+  ('module.ventas.cobranza__cobranza_numero_letras.view'),
+  ('module.ventas.cobranza__cobranza_planes.view'),
+  ('module.ventas.cobranza__cobranza_planes.create'),
+  ('module.ventas.cobranza__cobranza_planes_calcular.view'),
+  ('module.ventas.cobranza__cobranza_planes_correlativo.view'),
+  ('module.ventas.facturacion_miscelaneos__facturacion_miscelaneos_categorias.view'),
+  ('module.ventas.facturacion_miscelaneos__facturacion_miscelaneos_clientes.view'),
+  ('module.ventas.facturacion_miscelaneos__facturacion_miscelaneos_clientes_clave.view'),
+  ('module.ventas.facturacion_miscelaneos__facturacion_miscelaneos_recibos.create'),
+  ('module.ventas.facturacion_miscelaneos__facturacion_miscelaneos_recibos_numero.view'),
+  ('module.ventas.notas_credito_debito__facturacion_notas.create'),
+  ('module.ventas.notas_credito_debito__facturacion_notas_clientes.view'),
+  ('module.ventas.notas_credito_debito__facturacion_notas_clientes_clave.view'),
+  ('module.ventas.notas_credito_debito__facturacion_notas_clientes_clave_configuracion.view'),
+  ('module.ventas.notas_credito_debito__facturacion_notas_motivos.view'),
+  ('module.ventas.notas_credito_debito__facturacion_notas_motivos_id.view')
+) AS v(perm)
 WHERE NOT EXISTS (
-  SELECT 1 FROM identity."AspNetUserRoles" ur WHERE ur."UserId" = u."Id" AND ur."RoleId" = r."Id"
+  SELECT 1 FROM identity."AspNetRoleClaims" rc
+  WHERE rc."RoleId" = r."Id" AND rc."ClaimType" = 'permission' AND rc."ClaimValue" = v.perm
 );
 
 COMMIT;
@@ -214,8 +294,9 @@ COMMIT;
 -- 3) Para revertir cambios manualmente:
 --    DELETE FROM identity."AspNetUserRoles" WHERE "UserId" IN (SELECT "Id" FROM identity."AspNetUsers" WHERE "NormalizedUserName" = 'ADMIN@SIAD-DEMO.COM');
 --    DELETE FROM identity."AspNetUserClaims" WHERE "UserId" IN (SELECT "Id" FROM identity."AspNetUsers" WHERE "NormalizedUserName" = 'ADMIN@SIAD-DEMO.COM');
+--    DELETE FROM identity."AspNetRoleClaims" WHERE "RoleId" IN (SELECT "Id" FROM identity."AspNetRoles" WHERE "NormalizedName" = 'SUPER ADMINISTRADOR');
 --    DELETE FROM identity."AspNetUsers" WHERE "NormalizedUserName" = 'ADMIN@SIAD-DEMO.COM';
---    DELETE FROM identity."AspNetRoles" WHERE "NormalizedName" IN ('ADMIN', 'USER');
+--    DELETE FROM identity."AspNetRoles" WHERE "NormalizedName" = 'SUPER ADMINISTRADOR';
 --    DELETE FROM public.con_empresa_configuracion WHERE company_id = (SELECT company_id FROM public.cfg_company WHERE code = 'APC');
 --    DELETE FROM public.cfg_company WHERE code = 'APC';
 -- =========================================================================
