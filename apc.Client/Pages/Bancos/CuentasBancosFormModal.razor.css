@@ -1,0 +1,50 @@
+.tipo-form-shell {
+    background-color: #ffffff;
+    border: 1px solid #dee2e6;
+    border-radius: 0.75rem;
+    overflow: hidden;
+}
+
+.tipo-form-header {
+    padding: 1.25rem 1.5rem;
+    background: linear-gradient(135deg, #f8fafc 0%, #edf2f7 100%);
+    border-bottom: 1px solid #e5e7eb;
+}
+
+.tipo-form-title {
+    margin: 0;
+    font-size: 1.05rem;
+    font-weight: 700;
+    color: #0f172a;
+}
+
+.tipo-form-code {
+    margin-left: 0.5rem;
+    color: #2563eb;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.tipo-form-subtitle {
+    margin-top: 0.4rem;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.tipo-form-body {
+    padding: 1.5rem;
+}
+
+.tipo-form-footer {
+    padding: 1rem 1.5rem;
+    border-top: 1px solid #e5e7eb;
+    background-color: #f8fafc;
+}
+
+@media (max-width: 768px) {
+    .tipo-form-header,
+    .tipo-form-body,
+    .tipo-form-footer {
+        padding: 1rem;
+    }
+}

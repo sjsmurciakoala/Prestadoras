@@ -1,96 +1,392 @@
-<div>
-    <DxMenu Orientation="@Orientation.Vertical" CssClass="menu display-mobile">
-        <Items>
-            <AuthorizeView Context="authContext">
-                <Authorized>
-                    <DxMenuItem NavigateUrl="Account/Manage"
-                                Text="@authContext.User.Identity?.Name"
-                                CssClass="menu-item"
-                                IconCssClass="bi bi-person-circle" />
-                    <DxMenuItem NavigateUrl="Account/Logout"
-                                Text="Log out"
-                                CssClass="menu-item"
-                                IconCssClass="bi bi-box-arrow-right" />
-                </Authorized>
-                <NotAuthorized>
-                    <DxMenuItem NavigateUrl="Account/Login"
-                                Text="Log in"
-                                CssClass="menu-item"
-                                IconCssClass="bi bi-box-arrow-in-right" />
-                </NotAuthorized>
-            </AuthorizeView>
-        </Items>
-    </DxMenu>
+﻿@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Routing
+@inject NavigationManager NavigationManager
+@implements IDisposable
 
-    <DxMenu Orientation="@Orientation.Vertical" CssClass="menu">
+<div class="nav-menu-container @(IsCollapsed ? "collapsed" : "expanded")">
+    <div class="brand-container">
+        <i class="bi bi-bootstrap-fill logo-icon"></i>
+        <span class="brand-text">MI SISTEMA</span>
+    </div>
+
+    <div class="menu-section-label">MAIN</div>
+    <DxMenu Orientation="Orientation.Vertical"
+            DisplayMode="MenuDisplayMode.Desktop"
+            DropDownActionMode="MenuDropDownActionMode.Click"
+            CollapseItemToIconMode="MenuCollapseItemToIconMode.None"
+            CollapseItemsToHamburgerMenu="false"
+            CssClass="custom-dx-menu">
         <Items>
             <DxMenuItem NavigateUrl="/"
                         Text="Home"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-house" />
-            <DxMenuItem NavigateUrl="Account/Manage"
-                        Text="Settings"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-gear" />
+                        IconCssClass="bi bi-house"
+                        CssClass="@ActiveClass("/")"
+                        Attributes="@ItemAttrs("Inicio")" />
+        </Items>
+    </DxMenu>
+
+    <div class="menu-section-label">OPERACIÓN</div>
+    <DxMenu Orientation="Orientation.Vertical"
+            DisplayMode="MenuDisplayMode.Desktop"
+            DropDownActionMode="MenuDropDownActionMode.Click"
+            CollapseItemToIconMode="MenuCollapseItemToIconMode.None"
+            CollapseItemsToHamburgerMenu="false"
+            CssClass="custom-dx-menu">
+        <Items>
             <DxMenuItem NavigateUrl="/clientes"
                         Text="Clientes"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-people" />
+                        IconCssClass="bi bi-people"
+                        CssClass="@ActiveClass("/clientes")"
+                        Attributes="@ItemAttrs("Clientes")" />
+            <DxMenuItem Text="Proveedores"
+                        IconCssClass="bi bi-truck"
+                        CssClass="@GroupClass("/proveedores")"
+                        Attributes="@ItemAttrs("Proveedores")">
+                <Items>
+                    <DxMenuItem NavigateUrl="/proveedores"
+                                Text="Catalogo proveedores"
+                                CssClass="@ActiveClass("/proveedores")"
+                                Attributes="@ItemAttrs("Catalogo proveedores")" />
+                    <DxMenuItem NavigateUrl="/proveedores/tipos"
+                                Text="Tipos de proveedor"
+                                CssClass="@ActiveClass("/proveedores/tipos")"
+                                Attributes="@ItemAttrs("Tipos de proveedor")" />
+                </Items>
+            </DxMenuItem>
+            <DxMenuItem NavigateUrl="/abogados"
+                        Text="Abogados"
+                        IconCssClass="bi bi-briefcase"
+                        CssClass="@ActiveClass("/abogados")"
+                        Attributes="@ItemAttrs("Abogados")" />
             <DxMenuItem NavigateUrl="/ordenes"
                         Text="Órdenes"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-list-check" />
+                        IconCssClass="bi bi-list-check"
+                        CssClass="@ActiveClass("/ordenes")"
+                        Attributes="@ItemAttrs("Órdenes")" />
             <DxMenuItem NavigateUrl="/rutas"
                         Text="Rutas"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-map" />
-            <DxMenuItem NavigateUrl="/facturacion/captacion/caja"
-                        Text="Captación de Pagos"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-cash-stack" />
-            <DxMenuItem NavigateUrl="/facturacion/miscelaneos"
-                        Text="Facturación Misceláneos"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-receipt" />
-            <DxMenuItem NavigateUrl="/facturacion/notas"
-                        Text="Notas Crédito/Débito"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-journal-text" />
-            <DxMenuItem NavigateUrl="/facturacion/cobranza"
-                        Text="Cobranza"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-collection" />
-            <DxMenuItem NavigateUrl="/facturacion/captacion/reverso"
-                        Text="Reversos"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-arrow-counterclockwise" />
-            <DxMenuItem Text="Contabilidad"
-                        CssClass="menu-item"
-                        IconCssClass="bi bi-journal">
+                        IconCssClass="bi bi-map"
+                        CssClass="@ActiveClass("/rutas")"
+                        Attributes="@ItemAttrs("Rutas")" />
+            <DxMenuItem NavigateUrl="/mapa"
+                        Text="Mapa"
+                        IconCssClass="bi bi-geo-alt"
+                        CssClass="@ActiveClass("/mapa")"
+                        Attributes="@ItemAttrs("Mapa")" />
+            <DxMenuItem NavigateUrl="/ciclos"
+                        Text="Ciclos"
+                        IconCssClass="bi bi-arrow-repeat"
+                        CssClass="@ActiveClass("/ciclos")"
+                        Attributes="@ItemAttrs("Ciclos")" />
+            <DxMenuItem NavigateUrl="/letras"
+                        Text="Letras"
+                        IconCssClass="bi bi-type"
+                        CssClass="@ActiveClass("/letras")"
+                        Attributes="@ItemAttrs("Letras")" />
+            <DxMenuItem NavigateUrl="/medidores"
+                        Text="Medidores"
+                        IconCssClass="bi bi-speedometer2"
+                        CssClass="@ActiveClass("/medidores")"
+                        Attributes="@ItemAttrs("Medidores")" />
+            <DxMenuItem Text="Auxiliares"
+                        IconCssClass="bi bi-file-earmark-text"
+                        CssClass="@GroupClass("/auxiliares")"
+                        Attributes="@ItemAttrs("Auxiliares")">
                 <Items>
-                    <DxMenuItem NavigateUrl="/contabilidad/empresas"
-                                Text="Empresas"
-                                CssClass="menu-item" />
-                    <DxMenuItem NavigateUrl="/contabilidad/empresas/configuracion"
-                                Text="Configuración Sistema"
-                                CssClass="menu-item" />
-                    <DxMenuItem NavigateUrl="/contabilidad/empresas/nueva"
-                                Text="Crear empresa"
-                                CssClass="menu-item" />
-                    <DxMenuItem NavigateUrl="/contabilidad/plan-cuentas"
-                                Text="Plan de cuentas"
-                                CssClass="menu-item"/>
-                    <DxMenuItem NavigateUrl="/contabilidad/centros-costo"
-                                Text="Centros de costo"
-                                CssClass="menu-item"/>
-                    <DxMenuItem NavigateUrl="/contabilidad/diarios"
-                                Text="Diarios contables"
-                                CssClass="menu-item"/>
-                    <DxMenuItem NavigateUrl="/contabilidad/periodos"
-                                Text="Períodos contables"
-                                CssClass="menu-item"/>
+                    <DxMenuItem NavigateUrl="/auxiliares/auxiliar-lectura"
+                                Text="Auxiliar de Lectura"
+                                CssClass="@ActiveClass("/auxiliares/auxiliar-lectura")"
+                                Attributes="@ItemAttrs("Auxiliar de Lectura")" />
+                </Items>
+            </DxMenuItem>
+            <DxMenuItem Text="Servicios"
+                        IconCssClass="bi bi-tools"
+                        CssClass="@GroupClass("/servicios", "/conceptos", "/tarifas", "/tarifas-contador", "/solicitudes")"
+                        Attributes="@ItemAttrs("Servicios")">
+                <Items>
+                    <DxMenuItem NavigateUrl="/servicios"
+                                Text="Servicios"
+                                CssClass="@ActiveClass("/servicios")"
+                                Attributes="@ItemAttrs("Servicios")" />
+                    <DxMenuItem NavigateUrl="/conceptos"
+                                Text="Conceptos"
+                                CssClass="@ActiveClass("/conceptos")"
+                                Attributes="@ItemAttrs("Conceptos")" />
+                    <DxMenuItem NavigateUrl="/tarifas"
+                                Text="Tarifas"
+                                CssClass="@ActiveClass("/tarifas")"
+                                Attributes="@ItemAttrs("Tarifas")" />
+                    <DxMenuItem NavigateUrl="/tarifas-contador"
+                                Text="Tarifas Contador"
+                                CssClass="@ActiveClass("/tarifas-contador")"
+                                Attributes="@ItemAttrs("Tarifas Contador")" />
+                    <DxMenuItem NavigateUrl="/solicitudes"
+                                Text="Solicitudes"
+                                CssClass="@ActiveClass("/solicitudes")"
+                                Attributes="@ItemAttrs("Solicitudes")" />
                 </Items>
             </DxMenuItem>
         </Items>
     </DxMenu>
+
+    <div class="menu-section-label">FACTURACIÓN</div>
+    <DxMenu Orientation="Orientation.Vertical"
+            DisplayMode="MenuDisplayMode.Desktop"
+            DropDownActionMode="MenuDropDownActionMode.Click"
+            CollapseItemToIconMode="MenuCollapseItemToIconMode.None"
+            CollapseItemsToHamburgerMenu="false"
+            CssClass="custom-dx-menu">
+        <Items>
+            <DxMenuItem Text="Servicios públicos"
+                        IconCssClass="bi bi-lightning-charge"
+                        CssClass="@GroupClass("/facturacion/captacion/caja", "/facturacion/miscelaneos")"
+                        Attributes="@ItemAttrs("Servicios públicos")">
+                <Items>
+                    <DxMenuItem NavigateUrl="/facturacion/captacion/caja"
+                                Text="Captación de Pagos"
+                                CssClass="@ActiveClass("/facturacion/captacion/caja")"
+                                Attributes="@ItemAttrs("Captación de Pagos")" />
+                    <DxMenuItem NavigateUrl="/facturacion/miscelaneos"
+                                Text="Facturación Misceláneos"
+                                CssClass="@ActiveClass("/facturacion/miscelaneos")"
+                                Attributes="@ItemAttrs("Facturación Misceláneos")" />
+                    <DxMenuItem NavigateUrl="/facturacion/miscelaneos/catalogo"
+                                Text="Catálogo Misceláneos"
+                                CssClass="@ActiveClass("/facturacion/miscelaneos/catalogo")"
+                                Attributes="@ItemAttrs("Catálogo Misceláneos")" />
+                </Items>
+            </DxMenuItem>
+            <DxMenuItem NavigateUrl="/facturacion/notas"
+                        Text="Notas Crédito/Débito"
+                        IconCssClass="bi bi-journal-text"
+                        CssClass="@ActiveClass("/facturacion/notas")"
+                        Attributes="@ItemAttrs("Notas Crédito/Débito")" />
+            <DxMenuItem NavigateUrl="/facturacion/cobranza"
+                        Text="Cobranza"
+                        IconCssClass="bi bi-collection"
+                        CssClass="@ActiveClass("/facturacion/cobranza")"
+                        Attributes="@ItemAttrs("Cobranza")" />
+            <DxMenuItem NavigateUrl="/facturacion/captacion/reverso"
+                        Text="Reversos"
+                        IconCssClass="bi bi-arrow-counterclockwise"
+                        CssClass="@ActiveClass("/facturacion/captacion/reverso")"
+                        Attributes="@ItemAttrs("Reversos")" />
+        </Items>
+    </DxMenu>
+
+    <div class="menu-section-label">CONTABILIDAD</div>
+    <DxMenu Orientation="Orientation.Vertical"
+            DisplayMode="MenuDisplayMode.Desktop"
+            DropDownActionMode="MenuDropDownActionMode.Click"
+            CollapseItemToIconMode="MenuCollapseItemToIconMode.None"
+            CollapseItemsToHamburgerMenu="false"
+            CssClass="custom-dx-menu">
+        <Items>
+            <DxMenuItem Text="Bancos"
+                        IconCssClass="bi bi-bank"
+                        CssClass="@GroupClass("/contabilidad/bancos", "/bancos/configuracion_transacciones", "/bancos/configuracion")"
+                        Attributes="@ItemAttrs("Bancos")">
+                <Items>
+                    <DxMenuItem NavigateUrl="/contabilidad/bancos"
+                                Text="Gestión de bancos"
+                                CssClass="@ActiveClass("/contabilidad/bancos")"
+                                Attributes="@ItemAttrs("Gestión de bancos")" />
+                    <DxMenuItem NavigateUrl="/bancos/configuracion_transacciones"
+                                Text="Configuración de transacciones"
+                                CssClass="@ActiveClass("/bancos/configuracion_transacciones")"
+                                Attributes="@ItemAttrs("Configuración de transacciones")" />
+                    <DxMenuItem NavigateUrl="/bancos/configuracion"
+                                Text="Configuración"
+                                CssClass="@ActiveClass("/bancos/configuracion")"
+                                Attributes="@ItemAttrs("Configuración")" />
+                </Items>
+            </DxMenuItem>
+            <DxMenuItem Text="Contabilidad"
+                        IconCssClass="bi bi-journal"
+                        CssClass="@GroupClass("/contabilidad/empresas", "/contabilidad/plan-cuentas", "/contabilidad/centros-costo", "/contabilidad/terceros", "/contabilidad/diarios", "/contabilidad/periodos", "/contabilidad/tipos-transaccion", "/contabilidad/reglas-integracion", "/contabilidad/polizas", "/contabilidad/partidas")"
+                        Attributes="@ItemAttrs("Contabilidad")">
+                <Items>
+                    <DxMenuItem NavigateUrl="/contabilidad/empresas"
+                                Text="Empresas"
+                                CssClass="@ActiveClass("/contabilidad/empresas")"
+                                Attributes="@ItemAttrs("Empresas")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/empresas/configuracion"
+                                Text="Configuración Sistema"
+                                CssClass="@ActiveClass("/contabilidad/empresas/configuracion")"
+                                Attributes="@ItemAttrs("Configuración Sistema")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/empresas/nueva"
+                                Text="Crear empresa"
+                                CssClass="@ActiveClass("/contabilidad/empresas/nueva")"
+                                Attributes="@ItemAttrs("Crear empresa")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/plan-cuentas"
+                                Text="Plan de cuentas"
+                                CssClass="@ActiveClass("/contabilidad/plan-cuentas")"
+                                Attributes="@ItemAttrs("Plan de cuentas")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/centros-costo"
+                                Text="Centros de costo"
+                                CssClass="@ActiveClass("/contabilidad/centros-costo")"
+                                Attributes="@ItemAttrs("Centros de costo")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/terceros"
+                                Text="Terceros"
+                                CssClass="@ActiveClass("/contabilidad/terceros")"
+                                Attributes="@ItemAttrs("Terceros")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/diarios"
+                                Text="Diarios contables"
+                                CssClass="@ActiveClass("/contabilidad/diarios")"
+                                Attributes="@ItemAttrs("Diarios contables")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/periodos"
+                                Text="Períodos contables"
+                                CssClass="@ActiveClass("/contabilidad/periodos")"
+                                Attributes="@ItemAttrs("Períodos contables")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/tipos-transaccion"
+                                Text="Tipos de comprobantes"
+                                CssClass="@ActiveClass("/contabilidad/tipos-transaccion")"
+                                Attributes="@ItemAttrs("Tipos de comprobantes")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/reglas-integracion"
+                                Text="Reglas legacy (lectura)"
+                                CssClass="@ActiveClass("/contabilidad/reglas-integracion")"
+                                Attributes="@ItemAttrs("Reglas legacy (lectura)")" />
+                    <DxMenuItem NavigateUrl="/contabilidad/partidas"
+                                Text="Partidas"
+                                CssClass="@((!string.IsNullOrEmpty(ActiveClass("/contabilidad/partidas")) || !string.IsNullOrEmpty(ActiveClass("/contabilidad/polizas"))) ? "menu-item-active" : string.Empty)"
+                                Attributes="@ItemAttrs("Partidas")" />
+                </Items>
+            </DxMenuItem>
+        </Items>
+    </DxMenu>
+
+    <div class="menu-section-label">SETTINGS</div>
+    <DxMenu Orientation="Orientation.Vertical"
+            DisplayMode="MenuDisplayMode.Desktop"
+            DropDownActionMode="MenuDropDownActionMode.Click"
+            CollapseItemToIconMode="MenuCollapseItemToIconMode.None"
+            CollapseItemsToHamburgerMenu="false"
+            CssClass="custom-dx-menu">
+        <Items>
+            <DxMenuItem Text="Mi App"
+                        IconCssClass="bi bi-phone"
+                        CssClass="@GroupClass("/mi-app/usuarios", "/mi-app/configuracion")"
+                        Attributes="@ItemAttrs("Mi App")">
+                <Items>
+                    <DxMenuItem NavigateUrl="/mi-app/usuarios"
+                                Text="Usuarios App"
+                                CssClass="@ActiveClass("/mi-app/usuarios")"
+                                Attributes="@ItemAttrs("Usuarios App")" />
+                    <DxMenuItem NavigateUrl="/mi-app/configuracion"
+                                Text="Configuraciones App"
+                                CssClass="@ActiveClass("/mi-app/configuracion")"
+                                Attributes="@ItemAttrs("Configuraciones App")" />
+                </Items>
+            </DxMenuItem>
+            <AuthorizeView Context="authContext">
+                <Authorized>
+                    <DxMenuItem NavigateUrl="Account/Manage"
+                                Text="@authContext.User.Identity?.Name"
+                                IconCssClass="bi bi-person-circle"
+                                CssClass="@ActiveClass("/Account/Manage")"
+                                Attributes="@ItemAttrs("Cuenta")" />
+                    <DxMenuItem NavigateUrl="Account/Logout"
+                                Text="Log out"
+                                IconCssClass="bi bi-box-arrow-right"
+                                CssClass="@ActiveClass("/Account/Logout")"
+                                Attributes="@ItemAttrs("Cerrar sesión")" />
+                </Authorized>
+                <NotAuthorized>
+                    <DxMenuItem NavigateUrl="Account/Login"
+                                Text="Log in"
+                                IconCssClass="bi bi-box-arrow-in-right"
+                                CssClass="@ActiveClass("/Account/Login")"
+                                Attributes="@ItemAttrs("Iniciar sesión")" />
+                </NotAuthorized>
+            </AuthorizeView>
+        </Items>
+    </DxMenu>
 </div>
+
+@code {
+    [Parameter] public bool IsCollapsed { get; set; }
+
+    private string CurrentPath => NormalizePath(NavigationManager.ToBaseRelativePath(NavigationManager.Uri));
+
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += HandleLocationChanged;
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e) => StateHasChanged();
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+    }
+
+    private Dictionary<string, object> ItemAttrs(string text)
+    {
+        if (!IsCollapsed)
+        {
+            return new Dictionary<string, object>();
+        }
+
+        return new Dictionary<string, object>
+        {
+            ["title"] = text,
+            ["aria-label"] = text
+        };
+    }
+
+    private string ActiveClass(string href)
+    {
+        var current = CurrentPath;
+        var target = NormalizePath(href);
+
+        if (target == "/")
+        {
+            return current == "/" ? "menu-item-active" : string.Empty;
+        }
+
+        if (current.Equals(target, StringComparison.OrdinalIgnoreCase) ||
+            current.StartsWith(target + "/", StringComparison.OrdinalIgnoreCase))
+        {
+            return "menu-item-active";
+        }
+
+        return string.Empty;
+    }
+
+    private string GroupClass(params string[] prefixes)
+    {
+        foreach (var prefix in prefixes)
+        {
+            var target = NormalizePath(prefix);
+            if (CurrentPath.Equals(target, StringComparison.OrdinalIgnoreCase) ||
+                CurrentPath.StartsWith(target + "/", StringComparison.OrdinalIgnoreCase))
+            {
+                return "menu-group-active";
+            }
+        }
+
+        return string.Empty;
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        var cleaned = path.Split('?', '#')[0];
+        if (!cleaned.StartsWith("/"))
+        {
+            cleaned = "/" + cleaned;
+        }
+
+        cleaned = cleaned.TrimEnd('/');
+        if (string.IsNullOrEmpty(cleaned))
+        {
+            cleaned = "/";
+        }
+
+        return cleaned.ToLowerInvariant();
+    }
+}

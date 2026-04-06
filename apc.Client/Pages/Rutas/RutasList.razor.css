@@ -1,0 +1,209 @@
+/* RutasList.razor.css */
+
+.page-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+/* HEADER */
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-title {
+    font-weight: 800;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+/* CARDS */
+.modern-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.02);
+    padding: 1.5rem;
+}
+
+/* BOTON */
+.btn-modern {
+    font-weight: 600;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: all 0.15s ease;
+}
+
+/* GRID WRAPPER */
+.grid-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ===== FILTROS (Filtrar + Limpiar como Solicitudes) ===== */
+.filters-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+    width: 100%;
+}
+
+.filters-btn {
+    min-width: 220px;
+    border-radius: 8px;
+    font-weight: 700;
+}
+
+.filters-btn-primary {
+    background: #dee2e6 !important;
+    border-color: #dee2e6 !important;
+    color: #212529 !important;
+}
+
+.filters-link {
+    background: transparent;
+    border: none;
+    color: #212529;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 8px 10px;
+}
+
+/* ===== Chips / Badges ===== */
+.badge-status {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+}
+
+.badge-status.active {
+    background-color: #d1e7dd;
+    color: #0f5132;
+}
+
+.badge-status.inactive {
+    background-color: #e2e3e5;
+    color: #41464b;
+}
+
+/* ===== Botones icono (identicos a Solicitudes) ===== */
+.btn-icon {
+    border: none;
+    background: transparent;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.btn-edit { color: #ffc107; background: rgba(255, 193, 7, 0.1); }
+.btn-edit:hover { background: #ffc107; color: white; transform: scale(1.1); }
+.btn-delete { color: #dc3545; background: rgba(220, 53, 69, 0.1); }
+.btn-delete:hover { background: #dc3545; color: white; transform: scale(1.1); }
+
+/* =========================
+   DxGrid LOOK "Solicitudes"
+   ========================= */
+::deep .grid-solicitudes {
+    border: 1px solid rgba(0,0,0,0.10);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Header gris claro como tabla de Solicitudes */
+::deep .grid-solicitudes .dxg-headerrow,
+::deep .grid-solicitudes .dxbs-grid-header-row {
+    background: #f1f3f5 !important;
+}
+
+::deep .grid-solicitudes th,
+::deep .grid-solicitudes .dxg-headerrow td {
+    font-weight: 700;
+    color: #2c3e50;
+    border-bottom: 1px solid rgba(0,0,0,0.10) !important;
+}
+
+/* Lineas finas */
+::deep .grid-solicitudes td {
+    border-bottom: 1px solid rgba(0,0,0,0.08) !important;
+}
+
+/* Quitar azul de seleccion/focus */
+::deep .grid-solicitudes .dxg-selected-row,
+::deep .grid-solicitudes .dxg-focused-row,
+::deep .grid-solicitudes .dxbs-table-row-selected {
+    background: transparent !important;
+}
+
+/* Hover suave */
+::deep .grid-solicitudes .dxg-data-row:hover,
+::deep .grid-solicitudes .dxbs-table-row:hover {
+    background: rgba(13, 110, 253, 0.04) !important;
+}
+
+/* Pager simple */
+::deep .grid-solicitudes .dxg-pager,
+::deep .grid-solicitudes .dxbs-grid-pager {
+    border-top: 1px solid rgba(0,0,0,0.08);
+    padding: 10px 12px;
+}
+
+/* Popup */
+::deep .custom-popup {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0,0,0,0.2);
+}
+
+::deep .custom-popup .dx-popup-header {
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+    padding: 1.25rem 1.5rem;
+}
+
+::deep .custom-popup .dx-popup-content {
+    padding: 0 !important;
+    background-color: #fff;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    .page-container { padding: 1rem; }
+
+    .header-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .btn-modern { width: 100%; display: block; }
+    .modern-card { padding: 1rem; }
+
+    .filters-actions { gap: 0.75rem; }
+    .filters-btn { width: 100%; min-width: 0; }
+}

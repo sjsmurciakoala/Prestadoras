@@ -1,0 +1,4 @@
+interface:
+  display_name: "HODSOFT DevExpress Docs"
+  short_description: "Consultar DevExpress oficial antes de codificar"
+  default_prompt: "Use $hodsoft-devexpress-docs to resolve a DevExpress Blazor or Reporting question with official docs."

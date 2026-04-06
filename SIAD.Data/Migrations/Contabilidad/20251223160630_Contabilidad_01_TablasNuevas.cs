@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
@@ -570,10 +570,10 @@ namespace SIAD.Data.Migrations.Contabilidad
                         principalColumn: "period_id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_con_deprecacion_con_poliza_poliza_id",
+                        name: "FK_con_deprecacion_con_partida_hdr_poliza_id",
                         column: x => x.poliza_id,
                         principalSchema: "public",
-                        principalTable: "con_poliza",
+                        principalTable: "con_partida_hdr",
                         principalColumn: "poliza_id",
                         onDelete: ReferentialAction.SetNull);
                 });
@@ -976,3 +976,4 @@ namespace SIAD.Data.Migrations.Contabilidad
         }
     }
 }
+

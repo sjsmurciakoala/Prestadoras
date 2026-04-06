@@ -1,7 +1,16 @@
 @using DevExpress.Blazor
 
-<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+@using Microsoft.AspNetCore.Components.Forms
+
+<EditForm EditContext="_editContext" Context="formContext">
     <DataAnnotationsValidator />
+    @if (_editContext?.GetValidationMessages().Any() == true)
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atencion</h6>
+            <DxValidationSummary />
+        </div>
+    }
     <DxFormLayout>
         <DxFormLayoutItem Caption="Ciclo *">
             <DxComboBox TData="CicloLookupDto"
@@ -27,14 +36,23 @@
                        MaxLength="200" />
             <ValidationMessage For="() => Model.Descripcion" />
         </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Estado">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.Activo"
+                                CheckType="CheckType.Switch"
+                                LabelText="Activo" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
     </DxFormLayout>
 
-    <DxValidationSummary CssClass="mb-3" />
-
     <div class="d-flex justify-content-end">
-        <DxButton ButtonType="ButtonType.Submit"
+        <DxButton ButtonType="ButtonType.Normal"
                   RenderStyle="ButtonRenderStyle.Primary"
                   Text="Guardar"
+                  Click="SubmitAsync"
                   Enabled="@(!IsBusy)" />
         <DxButton ButtonType="ButtonType.Normal"
                   CssClass="ms-2"
@@ -60,8 +78,28 @@
     [Parameter]
     public bool IsBusy { get; set; }
 
-    private async Task HandleValidSubmit()
+    private EditContext? _editContext;
+
+    protected override void OnParametersSet()
     {
+        if (_editContext is null || !ReferenceEquals(_editContext.Model, Model))
+        {
+            _editContext = new EditContext(Model);
+        }
+    }
+
+    private async Task SubmitAsync()
+    {
+        if (_editContext is null)
+        {
+            return;
+        }
+
+        if (!_editContext.Validate())
+        {
+            return;
+        }
+
         if (OnValidSubmit.HasDelegate)
         {
             await OnValidSubmit.InvokeAsync();

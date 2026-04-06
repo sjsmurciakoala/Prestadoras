@@ -130,7 +130,7 @@ namespace Microsoft.AspNetCore.Routing
                     }
                 }
 
-                return "~/";
+                return "~/Account/Login";
             }
         }
     }

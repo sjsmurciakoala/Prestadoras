@@ -1,0 +1,93 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.AppLectores
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+
+    @if (editContext.GetValidationMessages().Any())
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atencion</h6>
+            <DxValidationSummary />
+        </div>
+    }
+
+    <DxFormLayout>
+        @if (Model.Id.HasValue)
+        {
+            <DxFormLayoutItem Caption="ID" ColSpanMd="4">
+                <DxTextBox Text="@Model.Id.Value.ToString()" 
+                           TextExpression="@(() => Model.Id.Value.ToString())"
+                           ReadOnly="true" />
+            </DxFormLayoutItem>
+        }
+
+        <DxFormLayoutItem Caption="Descripcion *" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Descripcion"
+                       NullText="Descripcion de la configuracion"
+                       MaxLength="200" />
+            <ValidationMessage For="() => Model.Descripcion" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Valor numerico" ColSpanMd="6">
+            <DxSpinEdit TValue="decimal?"
+                        @bind-Value="Model.ValorNumeros"
+                        DisplayFormat="N2"
+                        Max="99999999"
+                        Min="-99999999"
+                        NullText="Valor numerico" />
+            <ValidationMessage For="() => Model.ValorNumeros" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Valor en letras" ColSpanMd="6">
+            <DxTextBox @bind-Text="Model.ValorLetras"
+                       NullText="Valor en letras"
+                       MaxLength="100" />
+            <ValidationMessage For="() => Model.ValorLetras" />
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <ValidationSummary class="text-danger mb-3" />
+
+    <div class="d-flex justify-content-end gap-2">
+        <DxButton ButtonType="ButtonType.Submit"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar"
+                  SubmitFormOnClick="true"
+                  Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal"
+                  Text="Cancelar"
+                  Enabled="@(!IsBusy)"
+                  Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConfiguracionAppEditDto Model { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}

@@ -41,6 +41,8 @@ public partial class prv_proveedore
 
     public string? rtn { get; set; }
 
+    public string? nombre_contacto { get; set; }
+
     public string? telefono { get; set; }
 
     public string? pagina_web { get; set; }

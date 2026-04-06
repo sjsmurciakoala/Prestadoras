@@ -1,0 +1,155 @@
+@using System.Linq.Expressions
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.CaptacionPagos
+@inject CaptacionPagosClient CaptacionClient
+
+<DxComboBox TData="ClienteComboDto" TValue="string" Data="@items"
+            TextFieldName="@nameof(ClienteComboDto.NombreCompleto)"
+            ValueFieldName="@nameof(ClienteComboDto.Clave)"
+            DropDownStyle="DropDownStyle.DropDown"
+            AllowUserInput="true"
+            Value="@currentValue"
+            ValueChanged="OnValueChanged"
+            ValueExpression="ValueExpression"
+            Text="@currentText"
+            TextChanged="OnTextChanged"
+            NullText="@NullText"
+            FilterCondition="DataEditorFilterCondition.Contains"
+            FilterMinLength="@MinSearchLength"
+            FilterDelay="@SearchDelay"
+            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+            Enabled="@(!Disabled)" />
+
+@code {
+    [Parameter] public IReadOnlyList<ClienteComboDto> Items { get; set; } = Array.Empty<ClienteComboDto>();
+    [Parameter] public string? Value { get; set; }
+    [Parameter] public EventCallback<string?> ValueChanged { get; set; }
+    [Parameter] public Expression<Func<string?>>? ValueExpression { get; set; }
+    [Parameter] public string? NullText { get; set; } = "Seleccione cliente...";
+    [Parameter] public int MinSearchLength { get; set; } = 0;
+    [Parameter] public int SearchDelay { get; set; } = 250;
+    [Parameter] public bool Disabled { get; set; }
+
+    private readonly List<ClienteComboDto> items = new();
+    private string? currentValue;
+    private string? currentText;
+    private bool suppressTextChanged;
+    private CancellationTokenSource? searchCts;
+
+    protected override void OnParametersSet()
+    {
+        if (items.Count == 0 && Items.Count > 0)
+        {
+            items.AddRange(Items);
+        }
+
+        if (!string.Equals(currentValue, Value, StringComparison.Ordinal))
+        {
+            currentValue = Value;
+            SyncTextFromValue();
+        }
+    }
+
+    private async Task OnValueChanged(string? value)
+    {
+        currentValue = value;
+        await ValueChanged.InvokeAsync(value);
+        SyncTextFromValue();
+    }
+
+    private async Task OnTextChanged(string? text)
+    {
+        if (suppressTextChanged)
+        {
+            suppressTextChanged = false;
+            return;
+        }
+
+        if (TrySyncFromText(text))
+        {
+            return;
+        }
+
+        currentText = text;
+        await LoadAsync(text);
+    }
+
+    private void SyncTextFromValue()
+    {
+        if (string.IsNullOrWhiteSpace(currentValue))
+        {
+            suppressTextChanged = true;
+            currentText = null;
+            return;
+        }
+
+        var match = items.FirstOrDefault(c => string.Equals(c.Clave, currentValue, StringComparison.OrdinalIgnoreCase))
+                    ?? Items.FirstOrDefault(c => string.Equals(c.Clave, currentValue, StringComparison.OrdinalIgnoreCase));
+        if (match is not null)
+        {
+            EnsureItem(match);
+            suppressTextChanged = true;
+            currentText = match.NombreCompleto;
+            return;
+        }
+
+        suppressTextChanged = true;
+        currentText = currentValue;
+    }
+
+    private bool TrySyncFromText(string? text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+        {
+            currentValue = null;
+            _ = ValueChanged.InvokeAsync(null);
+            suppressTextChanged = true;
+            currentText = text;
+            return true;
+        }
+
+        var match = items.FirstOrDefault(c => string.Equals(c.NombreCompleto, text, StringComparison.OrdinalIgnoreCase)
+                                              || string.Equals(c.Clave, text, StringComparison.OrdinalIgnoreCase))
+                    ?? Items.FirstOrDefault(c => string.Equals(c.NombreCompleto, text, StringComparison.OrdinalIgnoreCase)
+                                                 || string.Equals(c.Clave, text, StringComparison.OrdinalIgnoreCase));
+        if (match is null)
+        {
+            return false;
+        }
+
+        EnsureItem(match);
+        currentValue = match.Clave;
+        _ = ValueChanged.InvokeAsync(match.Clave);
+        suppressTextChanged = true;
+        currentText = match.NombreCompleto;
+        return true;
+    }
+
+    private async Task LoadAsync(string? text)
+    {
+        searchCts?.Cancel();
+        searchCts?.Dispose();
+        searchCts = new CancellationTokenSource();
+
+        try
+        {
+            var results = await CaptacionClient.GetClientesAsync(text, searchCts.Token);
+            items.Clear();
+            items.AddRange(results);
+            SyncTextFromValue();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private void EnsureItem(ClienteComboDto match)
+    {
+        if (items.Any(c => string.Equals(c.Clave, match.Clave, StringComparison.OrdinalIgnoreCase)))
+        {
+            return;
+        }
+
+        items.Insert(0, match);
+    }
+}

@@ -5,6 +5,8 @@ namespace SIAD.Data;
 
 public partial class SiadDbContext
 {
+    public virtual DbSet<cfg_document_type> cfg_document_types { get; set; } = null!;
+
     public virtual DbSet<con_plan_cuenta> con_plan_cuentas { get; set; } = null!;
 
     public virtual DbSet<con_centro_costo> con_centro_costos { get; set; } = null!;
@@ -12,7 +14,7 @@ public partial class SiadDbContext
     public virtual DbSet<con_periodo_contable> con_periodo_contables { get; set; } = null!;
 
     public virtual DbSet<con_diario> con_diarios { get; set; } = null!;
-    
+
     public virtual DbSet<con_empresa_configuracion> con_empresa_configuracions { get; set; } = null!;
 
     public virtual DbSet<con_configuracion_sistema> con_configuracion_sistemas { get; set; } = null!;
@@ -29,17 +31,19 @@ public partial class SiadDbContext
 
     public virtual DbSet<con_regla_integracion> con_regla_integracions { get; set; } = null!;
 
-    public virtual DbSet<con_plantilla_poliza> con_plantilla_polizas { get; set; } = null!;
+    public virtual DbSet<con_plantilla_partida_hdr> con_plantilla_partida_hdrs { get; set; } = null!;
 
-    public virtual DbSet<con_plantilla_poliza_linea> con_plantilla_poliza_lineas { get; set; } = null!;
+    public virtual DbSet<con_plantilla_partida_dtl> con_plantilla_partida_dtls { get; set; } = null!;
 
-    public virtual DbSet<con_poliza> con_polizas { get; set; } = null!;
+    public virtual DbSet<con_partida_hdr> con_partida_hdrs { get; set; } = null!;
 
-    public virtual DbSet<con_poliza_linea> con_poliza_lineas { get; set; } = null!;
+    public virtual DbSet<con_partida_dtl> con_partida_dtls { get; set; } = null!;
 
     public virtual DbSet<con_tipo_transaccion> con_tipo_transacciones { get; set; } = null!;
 
     public virtual DbSet<con_apertura_saldo> con_apertura_saldos { get; set; } = null!;
+
+    public virtual DbSet<con_apertura_centro_costo> con_apertura_centro_costos { get; set; } = null!;
 
     public virtual DbSet<con_balance_mensual> con_balance_mensuales { get; set; } = null!;
 
@@ -52,9 +56,30 @@ public partial class SiadDbContext
     public virtual DbSet<con_activo_fijo> con_activo_fijos { get; set; } = null!;
 
     public virtual DbSet<con_deprecacion> con_depreciacions { get; set; } = null!;
+    public virtual DbSet<con_tipo_transaccion_rule> con_tipo_transaccion_rules { get; set; } = null!;
+    public virtual DbSet<rep_catalogo_informe> rep_catalogo_informes { get; set; } = null!;
+    public virtual DbSet<rep_catalogo_dataset> rep_catalogo_datasets { get; set; } = null!;
+    public virtual DbSet<rep_dataset_parametro> rep_dataset_parametros { get; set; } = null!;
+    public virtual DbSet<rep_reporte_layout> rep_reporte_layouts { get; set; } = null!;
+
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<cfg_document_type>(entity =>
+        {
+            entity.HasKey(e => e.document_type_id);
+            entity.ToTable("cfg_document_type", "public");
+            entity.HasIndex(e => new { e.company_id, e.module, e.code }).IsUnique();
+
+            entity.Property(e => e.document_type_id).HasColumnName("document_type_id");
+            entity.Property(e => e.module).HasMaxLength(30);
+            entity.Property(e => e.code).HasMaxLength(20);
+            entity.Property(e => e.name).HasMaxLength(120);
+            entity.Property(e => e.description).HasMaxLength(300);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+        });
+
         modelBuilder.Entity<cfg_company>(entity =>
         {
             entity.HasKey(e => e.company_id);
@@ -155,6 +180,18 @@ public partial class SiadDbContext
             entity.Property(e => e.status).HasMaxLength(20);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.legacy_parent_code).HasMaxLength(24);
+            entity.Property(e => e.legacy_type_trans).HasDefaultValue((short)0);
+            entity.Property(e => e.allows_movement).HasDefaultValue(false);
+            entity.Property(e => e.start_date).IsRequired(false);
+            entity.Property(e => e.end_date).IsRequired(false);
+            entity.Property(e => e.legacy_notes).HasColumnType("text");
+            entity.Property(e => e.is_periodic).HasDefaultValue(false);
+            entity.Property(e => e.legacy_status).HasDefaultValue(false);
+
+            entity.HasCheckConstraint(
+                "ck_con_centro_costo_legacy_type_trans",
+                "legacy_type_trans >= 0 AND legacy_type_trans <= 5");
         });
 
         modelBuilder.Entity<con_periodo_contable>(entity =>
@@ -166,6 +203,7 @@ public partial class SiadDbContext
             entity.Property(e => e.code).HasMaxLength(20);
             entity.Property(e => e.name).HasMaxLength(80);
             entity.Property(e => e.status).HasMaxLength(20);
+            entity.Property(e => e.status_id).HasDefaultValue((short)0);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
             entity.Property(e => e.closed_by).HasMaxLength(100);
@@ -176,11 +214,15 @@ public partial class SiadDbContext
             entity.HasKey(e => e.journal_id);
             entity.ToTable("con_diario", "public");
             entity.HasIndex(e => new { e.company_id, e.code }).IsUnique();
+            entity.HasIndex(e => e.company_id)
+                .HasFilter("is_default_manual AND is_active AND allows_manual")
+                .IsUnique();
 
             entity.Property(e => e.code).HasMaxLength(20);
             entity.Property(e => e.name).HasMaxLength(120);
             entity.Property(e => e.description).HasMaxLength(300);
             entity.Property(e => e.sequence_prefix).HasMaxLength(20);
+            entity.Property(e => e.is_default_manual).HasDefaultValue(false);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
         });
@@ -213,10 +255,10 @@ public partial class SiadDbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
-        modelBuilder.Entity<con_plantilla_poliza>(entity =>
+        modelBuilder.Entity<con_plantilla_partida_hdr>(entity =>
         {
             entity.HasKey(e => e.template_id);
-            entity.ToTable("con_plantilla_poliza", "public");
+            entity.ToTable("con_plantilla_partida_hdr", "public");
             entity.HasIndex(e => new { e.company_id, e.name }).IsUnique();
 
             entity.Property(e => e.module).HasMaxLength(30);
@@ -227,15 +269,21 @@ public partial class SiadDbContext
             entity.Property(e => e.updated_by).HasMaxLength(100);
         });
 
-        modelBuilder.Entity<con_plantilla_poliza_linea>(entity =>
+        modelBuilder.Entity<con_plantilla_partida_dtl>(entity =>
         {
             entity.HasKey(e => e.template_line_id);
-            entity.ToTable("con_plantilla_poliza_linea", "public");
+            entity.ToTable("con_plantilla_partida_dtl", "public");
             entity.HasIndex(e => new { e.company_id, e.template_id, e.line_number }).IsUnique();
 
             entity.Property(e => e.description).HasMaxLength(300);
             entity.Property(e => e.debit_formula).HasMaxLength(200);
             entity.Property(e => e.credit_formula).HasMaxLength(200);
+
+            entity.Property(e => e.line_mode).HasMaxLength(20).HasDefaultValue("FIXED");
+            entity.Property(e => e.entry_side).HasMaxLength(1);
+            entity.Property(e => e.detail_account_field).HasMaxLength(50);
+            entity.Property(e => e.detail_amount_field).HasMaxLength(50);
+            entity.Property(e => e.detail_description_field).HasMaxLength(50);
 
             entity.HasOne(d => d.template)
                 .WithMany(p => p.lineas)
@@ -253,21 +301,25 @@ public partial class SiadDbContext
                 .OnDelete(DeleteBehavior.SetNull);
         });
 
-        modelBuilder.Entity<con_poliza>(entity =>
+        modelBuilder.Entity<con_partida_hdr>(entity =>
         {
             entity.HasKey(e => e.poliza_id);
-            entity.ToTable("con_poliza", "public");
+            entity.ToTable("con_partida_hdr", "public");
             entity.HasIndex(e => new { e.company_id, e.poliza_number }).IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.type_id, e.document_number })
+                .HasFilter("document_number IS NOT NULL AND module = 'MANUAL'")
+                .IsUnique();
 
             entity.Property(e => e.module).HasMaxLength(30);
             entity.Property(e => e.document_type).HasMaxLength(50);
             entity.Property(e => e.document_number).HasMaxLength(50);
             entity.Property(e => e.poliza_number).HasMaxLength(50);
             entity.Property(e => e.description).HasMaxLength(500);
-            entity.Property(e => e.status).HasMaxLength(20);
             entity.Property(e => e.source_reference).HasMaxLength(120);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.total_debit).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.total_credit).HasColumnType("numeric(18,2)");
 
             entity.HasOne(d => d.journal)
                 .WithMany(p => p.polizas)
@@ -283,12 +335,17 @@ public partial class SiadDbContext
                 .WithMany(p => p.polizas)
                 .HasForeignKey(d => d.template_id)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.tipo_transaccion)
+                .WithMany()
+                .HasForeignKey(d => new { d.company_id, d.type_id })
+                .HasPrincipalKey(p => new { p.company_id, p.type_id });
         });
 
-        modelBuilder.Entity<con_poliza_linea>(entity =>
+        modelBuilder.Entity<con_partida_dtl>(entity =>
         {
             entity.HasKey(e => e.poliza_line_id);
-            entity.ToTable("con_poliza_linea", "public");
+            entity.ToTable("con_partida_dtl", "public");
             entity.HasIndex(e => new { e.company_id, e.poliza_id, e.line_number }).IsUnique();
 
             entity.Property(e => e.description).HasMaxLength(300);
@@ -311,6 +368,11 @@ public partial class SiadDbContext
                 .WithMany(p => p.poliza_lineas)
                 .HasForeignKey(d => d.cost_center_id)
                 .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasOne(d => d.tercero)
+                .WithMany()
+                .HasForeignKey(d => new { d.company_id, d.third_party_id })
+                .HasPrincipalKey(p => new { p.company_id, p.third_party_id });
         });
 
         modelBuilder.Entity<con_configuracion_sistema>(entity =>
@@ -478,29 +540,210 @@ public partial class SiadDbContext
                 .HasPrincipalKey(e => e.code)
                 .OnDelete(DeleteBehavior.SetNull);
         });
-
         modelBuilder.Entity<con_tipo_transaccion>(entity =>
-        {
-            entity.HasKey(e => e.type_id);
-            entity.ToTable("con_tipo_transaccion", "public");
-            entity.HasIndex(e => new { e.company_id, e.code }).IsUnique();
+{
+    entity.HasKey(e => e.type_id);
+    entity.ToTable("con_tipo_transaccion", "public");
+    entity.HasIndex(e => new { e.company_id, e.code }).IsUnique();
+    entity.HasIndex(e => new { e.company_id, e.is_default })
+          .HasFilter("is_default")
+          .IsUnique();
 
-            entity.Property(e => e.type_id).ValueGeneratedOnAdd();
-            entity.Property(e => e.code).HasMaxLength(20);
-            entity.Property(e => e.name).HasMaxLength(100);
-            entity.Property(e => e.description).HasMaxLength(300);
-            entity.Property(e => e.category).HasMaxLength(30);
-            entity.Property(e => e.status).HasMaxLength(20);
+    entity.Property(e => e.type_id).ValueGeneratedOnAdd();
+    entity.Property(e => e.code).HasMaxLength(20);
+    entity.Property(e => e.name).HasMaxLength(100);
+    entity.Property(e => e.description).HasMaxLength(300);
+    entity.Property(e => e.category).HasMaxLength(30);
+    entity.Property(e => e.status).HasMaxLength(20);
+    entity.Property(e => e.status_id).HasDefaultValue((short)1);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+    entity.Property(e => e.updated_by).HasMaxLength(100);
+
+    entity.Property(e => e.type_trans).HasDefaultValue((short)0);
+    entity.Property(e => e.type_oper).HasDefaultValue((short)0);
+    entity.Property(e => e.frequency).HasDefaultValue((short)0);
+    entity.Property(e => e.max_entries).HasDefaultValue(0);
+    entity.Property(e => e.document_sequence_start).HasDefaultValue(1L);
+    entity.Property(e => e.last_document_number).HasDefaultValue(0L);
+    entity.Property(e => e.allows_cash_flow).HasDefaultValue(false);
+    entity.Property(e => e.allows_account_limit).HasDefaultValue(false);
+    entity.Property(e => e.is_default).HasDefaultValue(false);
+
+    entity.HasCheckConstraint("ck_con_tipo_transaccion_type_trans", "type_trans >= 0 AND type_trans <= 5");
+    entity.HasCheckConstraint("ck_con_tipo_transaccion_type_oper", "type_oper >= 0 AND type_oper <= 10");
+    entity.HasCheckConstraint("ck_con_tipo_transaccion_frequency", "frequency >= 0 AND frequency <= 2");
+    entity.HasCheckConstraint("ck_con_tipo_transaccion_max_entries", "max_entries >= 0");
+
+    entity.HasOne<cfg_company>()
+        .WithMany()
+        .HasForeignKey(e => e.company_id)
+        .OnDelete(DeleteBehavior.Cascade);
+});
+        modelBuilder.Entity<con_tipo_transaccion_rule>(entity =>
+        {
+            entity.HasKey(e => e.rule_id);
+            entity.ToTable("con_tipo_transaccion_rule", "public");
+            entity.HasIndex(e => new { e.company_id, e.type_id, e.line_number }).IsUnique();
+
+            entity.Property(e => e.rule_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.account_code_from).HasMaxLength(30);
+            entity.Property(e => e.account_code_to).HasMaxLength(30);
+            entity.Property(e => e.cost_center_code_from).HasMaxLength(30);
+            entity.Property(e => e.cost_center_code_to).HasMaxLength(30);
+            entity.Property(e => e.third_party_code_from).HasMaxLength(30);
+            entity.Property(e => e.third_party_code_to).HasMaxLength(30);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.is_active).HasDefaultValue(true);
 
-            entity.HasIndex(e => e.company_id);
+            entity.HasCheckConstraint("ck_con_tipo_transaccion_rule_line", "line_number >= 1");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.tipo_transaccion)
+                .WithMany()
+                .HasForeignKey(e => e.type_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<rep_catalogo_informe>(entity =>
+        {
+            entity.HasKey(e => e.informe_id);
+            entity.ToTable("rep_catalogo_informe", "public");
+            entity.HasIndex(e => new { e.company_id, e.codigo }).IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.ruta }).IsUnique();
+
+            entity.Property(e => e.informe_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.codigo).HasMaxLength(80);
+            entity.Property(e => e.nombre).HasMaxLength(150);
+            entity.Property(e => e.descripcion).HasMaxLength(500);
+            entity.Property(e => e.categoria).HasMaxLength(50);
+            entity.Property(e => e.tipo_origen).HasMaxLength(30);
+            entity.Property(e => e.ruta).HasMaxLength(200);
+            entity.Property(e => e.consulta_clave).HasMaxLength(80);
+            entity.Property(e => e.icono_css_class).HasMaxLength(80);
+            entity.Property(e => e.orden).HasDefaultValue(0);
+            entity.Property(e => e.permite_exportar).HasDefaultValue(false);
+            entity.Property(e => e.permite_imprimir).HasDefaultValue(false);
+            entity.Property(e => e.is_active).HasDefaultValue(true);
+            entity.Property(e => e.filtros_schema_json).HasColumnType("text");
+            entity.Property(e => e.metadata_json).HasColumnType("text");
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
 
             entity.HasOne<cfg_company>()
                 .WithMany()
                 .HasForeignKey(e => e.company_id)
                 .OnDelete(DeleteBehavior.Cascade);
         });
+
+        modelBuilder.Entity<rep_catalogo_dataset>(entity =>
+        {
+            entity.HasKey(e => e.dataset_id);
+            entity.ToTable("rep_catalogo_dataset", "public");
+            entity.HasIndex(e => new { e.company_id, e.codigo }).IsUnique();
+
+            entity.Property(e => e.dataset_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.codigo).HasMaxLength(80);
+            entity.Property(e => e.nombre).HasMaxLength(150);
+            entity.Property(e => e.descripcion).HasMaxLength(500);
+            entity.Property(e => e.tipo_origen).HasMaxLength(30);
+            entity.Property(e => e.origen_clave).HasMaxLength(160);
+            entity.Property(e => e.connection_name).HasMaxLength(100);
+            entity.Property(e => e.is_active).HasDefaultValue(true);
+            entity.Property(e => e.sql_text).HasColumnType("text");
+            entity.Property(e => e.metadata_json).HasColumnType("text");
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasCheckConstraint(
+                "ck_rep_catalogo_dataset_tipo_origen",
+                "tipo_origen IN ('STORED_PROCEDURE', 'VIEW', 'SQL')");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<rep_dataset_parametro>(entity =>
+        {
+            entity.HasKey(e => e.dataset_parametro_id);
+            entity.ToTable("rep_dataset_parametro", "public");
+            entity.HasIndex(e => new { e.company_id, e.dataset_id, e.nombre }).IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.dataset_id, e.orden }).IsUnique();
+
+            entity.Property(e => e.dataset_parametro_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.nombre).HasMaxLength(80);
+            entity.Property(e => e.nombre_origen).HasMaxLength(80);
+            entity.Property(e => e.etiqueta).HasMaxLength(150);
+            entity.Property(e => e.tipo_dato).HasMaxLength(30);
+            entity.Property(e => e.fuente_valor).HasMaxLength(30);
+            entity.Property(e => e.valor_default).HasMaxLength(200);
+            entity.Property(e => e.visible).HasDefaultValue(true);
+            entity.Property(e => e.permite_nulo).HasDefaultValue(false);
+            entity.Property(e => e.requerido).HasDefaultValue(false);
+            entity.Property(e => e.orden).HasDefaultValue(0);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasCheckConstraint(
+                "ck_rep_dataset_parametro_tipo_dato",
+                "tipo_dato IN ('TEXT', 'INT64', 'DECIMAL', 'DATE', 'DATETIME', 'BOOLEAN')");
+
+            entity.HasCheckConstraint(
+                "ck_rep_dataset_parametro_fuente_valor",
+                "fuente_valor IN ('REPORT', 'CURRENT_COMPANY', 'FIXED')");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<rep_catalogo_dataset>()
+                .WithMany()
+                .HasForeignKey(e => e.dataset_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<rep_reporte_layout>(entity =>
+        {
+            entity.HasKey(e => e.report_layout_id);
+            entity.ToTable("rep_reporte_layout", "public");
+            entity.HasIndex(e => new { e.company_id, e.informe_id, e.version_num }).IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.informe_id })
+                .HasFilter("estado = 'DRAFT'")
+                .IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.informe_id })
+                .HasFilter("estado = 'PUBLISHED'")
+                .IsUnique();
+
+            entity.Property(e => e.report_layout_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.estado).HasMaxLength(20);
+            entity.Property(e => e.layout_xml).HasColumnType("text");
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.published_by).HasMaxLength(100);
+
+            entity.HasCheckConstraint(
+                "ck_rep_reporte_layout_estado",
+                "estado IN ('DRAFT', 'PUBLISHED', 'ARCHIVED')");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<rep_catalogo_informe>()
+                .WithMany()
+                .HasForeignKey(e => e.informe_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+
 
         modelBuilder.Entity<con_apertura_saldo>(entity =>
         {
@@ -536,6 +779,52 @@ public partial class SiadDbContext
                 .WithMany()
                 .HasForeignKey(e => e.cost_center_id)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<con_apertura_centro_costo>(entity =>
+        {
+            entity.HasKey(e => e.opening_id);
+            entity.ToTable("con_apertura_centro_costo", "public");
+            entity.HasIndex(e => new { e.company_id, e.period_id, e.account_id, e.cost_center_id, e.tipo_transaccion })
+                .IsUnique();
+            entity.HasCheckConstraint(
+                "ck_con_apertura_centro_costo_tipo_transaccion",
+                "tipo_transaccion >= 0 AND tipo_transaccion <= 5");
+
+            entity.Property(e => e.tipo_transaccion)
+                .HasColumnType("smallint")
+                .HasDefaultValue((short)0);
+            entity.Property(e => e.debit_amount).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(e => e.credit_amount).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(e => e.currency_code).HasMaxLength(3).IsFixedLength();
+            entity.Property(e => e.exchange_rate).HasColumnType("numeric(18,9)").HasDefaultValue(1m);
+            entity.Property(e => e.notes).HasMaxLength(300);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasIndex(e => e.account_id);
+            entity.HasIndex(e => e.cost_center_id);
+            entity.HasIndex(e => e.period_id);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.period)
+                .WithMany()
+                .HasForeignKey(e => e.period_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne(e => e.account)
+                .WithMany()
+                .HasForeignKey(e => e.account_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.cost_center)
+                .WithMany(c => c.aperturas_centro_costo)
+                .HasForeignKey(e => e.cost_center_id)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<con_balance_mensual>(entity =>
@@ -724,3 +1013,10 @@ public partial class SiadDbContext
         });
     }
 }
+
+
+
+
+
+
+

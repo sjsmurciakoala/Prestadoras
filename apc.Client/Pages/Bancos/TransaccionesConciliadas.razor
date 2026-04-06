@@ -1,0 +1,356 @@
+@page "/bancos/cuentas/transacciones-conciliadas"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Tenant
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Bancos
+
+@inject CuentasBancosClient CuentasClient
+@inject BancosClient BancosClient
+@inject TenantState TenantState
+@inject NavigationManager NavigationManager
+
+@implements IDisposable
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Transacciones conciliadas</h2>
+            <p class="page-subtitle">Consulta de movimientos conciliados por cuenta bancaria.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Buscar"
+                      IconCssClass="bi bi-search"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading && cuenta is not null)"
+                      Click="BuscarAsync" />
+            <DxButton Text="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern shadow-sm"
+                      Click="Volver" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(alerta))
+    {
+        <DxMessageBox Type="MessageBoxType.Alert"
+                      RenderStyle="@alertaEstilo"
+                      ShowIcon="true"
+                      Text="@alerta"
+                      CssClass="mb-3"
+                      Visible="true" />
+    }
+
+    @if (cuenta is null)
+    {
+        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            Seleccione una cuenta bancaria para consultar transacciones conciliadas.
+        </DxAlert>
+    }
+    else
+    {
+        <div class="modern-card mb-4">
+            <DxFormLayout CssClass="mb-2">
+                <DxFormLayoutItem Caption="Banco" ColSpanLg="4">
+                    <DxTextBox Text="@(bancoNombre ?? cuenta.BancoId.ToString())" ReadOnly="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cuenta" ColSpanLg="4">
+                    <DxTextBox Text="@cuenta.NumeroCuenta" ReadOnly="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Moneda" ColSpanLg="4">
+                    <DxTextBox Text="@(cuenta.Moneda ?? string.Empty)" ReadOnly="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha desde" ColSpanLg="4">
+                    <DxDateEdit @bind-Date="fechaDesde" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha hasta" ColSpanLg="4">
+                    <DxDateEdit @bind-Date="fechaHasta" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cantidad" ColSpanLg="2">
+                    <DxTextBox Text="@transaccionesConciliadas.Count.ToString()" ReadOnly="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Total conciliado" ColSpanLg="2">
+                    <DxTextBox Text="@TotalConciliadoTexto" ReadOnly="true" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </div>
+
+        <div class="modern-card position-relative" style="min-height: 320px;">
+            @if (transaccionesConciliadas.Count == 0)
+            {
+                <DxAlert AlertType="AlertType.Info" CssClass="mt-3">
+                    No hay transacciones conciliadas para el rango seleccionado.
+                </DxAlert>
+            }
+            else
+            {
+                <div class="grid-wrapper">
+                    <DxGrid Data="@transaccionesConciliadas"
+                            PageSize="20"
+                            SizeMode="SizeMode.Large"
+                            CssClass="grid-modern">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(BancoCuentaConciliacionDto.NumeroTransaccion)"
+                                              Caption="Numero transaccion"
+                                              Width="170px" />
+                            <DxGridDataColumn FieldName="@nameof(BancoCuentaConciliacionDto.Fecha)"
+                                              Caption="Fecha"
+                                              Width="120px"
+                                              DisplayFormat="dd/MM/yyyy" />
+                            <DxGridDataColumn FieldName="@nameof(BancoCuentaConciliacionDto.Tipo)"
+                                              Caption="Tipo"
+                                              Width="200px" />
+                            <DxGridDataColumn FieldName="@nameof(BancoCuentaConciliacionDto.Referencia)"
+                                              Caption="Referencia"
+                                              Width="220px">
+                                <CellDisplayTemplate Context="cell">
+                                    @if (cell.DataItem is BancoCuentaConciliacionDto item)
+                                    {
+                                        @(!string.IsNullOrWhiteSpace(item.Referencia) ? item.Referencia : "-")
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(BancoCuentaConciliacionDto.Monto)"
+                                              Caption="Monto"
+                                              Width="140px"
+                                              DisplayFormat="N2"
+                                              TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(BancoCuentaConciliacionDto.EstadoConciliacion)"
+                                              Caption="Estado"
+                                              Width="140px">
+                                <CellDisplayTemplate Context="cell">
+                                    @if (cell.DataItem is BancoCuentaConciliacionDto item)
+                                    {
+                                        var estado = string.Equals(item.EstadoConciliacion, "CON", StringComparison.OrdinalIgnoreCase)
+                                            ? "Conciliada"
+                                            : (string.IsNullOrWhiteSpace(item.EstadoConciliacion) ? "-" : item.EstadoConciliacion);
+                                        <span class="badge-status active">@estado</span>
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@if (isLoading)
+{
+    <div class="splash-overlay">
+        <div class="splash-card">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <div class="splash-text">Cargando transacciones conciliadas...</div>
+        </div>
+    </div>
+}
+
+@code {
+    private BancoCuentaEditDto? cuenta;
+    private string? bancoNombre;
+    private List<BancoCuentaConciliacionDto> transaccionesConciliadas = new();
+    private DateOnly? fechaDesde;
+    private DateOnly? fechaHasta;
+    private bool isLoading;
+    private string? alerta;
+    private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private CancellationTokenSource? loadCts;
+
+    [SupplyParameterFromQuery(Name = "cuentaId")]
+    public long? CuentaId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private decimal TotalConciliado => transaccionesConciliadas.Sum(item => item.Monto);
+    private string TotalConciliadoTexto => TotalConciliado.ToString("N2");
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarCuentaYDatosAsync();
+    }
+
+    private async Task CargarCuentaYDatosAsync()
+    {
+        if (!CuentaId.HasValue || CuentaId.Value <= 0)
+        {
+            cuenta = null;
+            transaccionesConciliadas = new List<BancoCuentaConciliacionDto>();
+            SetAlert("Seleccione una cuenta para consultar transacciones conciliadas.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+
+        isLoading = true;
+        try
+        {
+            alerta = null;
+            var data = await CuentasClient.GetByIdAsync(CuentaId.Value, loadCts.Token);
+            if (data is null)
+            {
+                cuenta = null;
+                transaccionesConciliadas = new List<BancoCuentaConciliacionDto>();
+                SetAlert("No se encontro la cuenta bancaria.", MessageBoxRenderStyle.Warning);
+                return;
+            }
+
+            cuenta = data;
+            await CargarBancoAsync(cuenta.BancoId, loadCts.Token);
+            SetDefaultRangoFechas();
+            await CargarTransaccionesConciliadasAsync(false, loadCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No fue posible cargar la vista: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarBancoAsync(long bancoId, CancellationToken ct)
+    {
+        try
+        {
+            var banco = await BancosClient.GetByIdAsync(bancoId, ct);
+            bancoNombre = banco?.Nombre;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            bancoNombre = null;
+        }
+    }
+
+    private async Task BuscarAsync()
+    {
+        await CargarTransaccionesConciliadasAsync(true, CancellationToken.None);
+    }
+
+    private async Task CargarTransaccionesConciliadasAsync(bool controlLoading, CancellationToken ct)
+    {
+        if (cuenta is null)
+        {
+            SetAlert("Seleccione una cuenta para consultar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        if (!fechaDesde.HasValue || !fechaHasta.HasValue)
+        {
+            SetAlert("Seleccione un rango de fechas valido.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        if (fechaDesde.Value > fechaHasta.Value)
+        {
+            SetAlert("La fecha inicial no puede ser mayor que la final.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        if (controlLoading)
+        {
+            isLoading = true;
+        }
+
+        try
+        {
+            var companyIdActual = await TenantState.EnsureCompanyAsync();
+            if (companyIdActual <= 0)
+            {
+                SetAlert("No hay empresa seleccionada.", MessageBoxRenderStyle.Warning);
+                transaccionesConciliadas = new List<BancoCuentaConciliacionDto>();
+                return;
+            }
+
+            var data = await CuentasClient.GetConciliadasAsync(
+                companyIdActual,
+                cuenta.BancoCuentaId,
+                fechaDesde,
+                fechaHasta,
+                ct);
+
+            transaccionesConciliadas = data
+                .OrderByDescending(item => item.Fecha)
+                .ThenByDescending(item => item.NumeroTransaccion)
+                .ToList();
+
+            if (transaccionesConciliadas.Count == 0)
+            {
+                SetAlert("No hay transacciones conciliadas en el rango indicado.", MessageBoxRenderStyle.Info);
+            }
+            else
+            {
+                alerta = null;
+            }
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No fue posible cargar las transacciones: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            if (controlLoading)
+            {
+                isLoading = false;
+            }
+        }
+    }
+
+    private void SetDefaultRangoFechas()
+    {
+        if (fechaDesde.HasValue && fechaHasta.HasValue)
+        {
+            return;
+        }
+
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        fechaDesde = new DateOnly(today.Year, today.Month, 1);
+        fechaHasta = today;
+    }
+
+    private void SetAlert(string message, MessageBoxRenderStyle style)
+    {
+        alerta = message;
+        alertaEstilo = style;
+    }
+
+    private void Volver()
+    {
+        NavigationManager.NavigateTo(GetReturnUrl());
+    }
+
+    private string GetReturnUrl()
+    {
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            return "/bancos/cuentas";
+        }
+
+        return Uri.UnescapeDataString(ReturnUrl);
+    }
+
+    public void Dispose()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+    }
+}
+

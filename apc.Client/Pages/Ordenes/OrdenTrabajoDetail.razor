@@ -4,87 +4,157 @@
 @inject NavigationManager NavigationManager
 
 <DxScrollView Height="100%">
-    @if (!string.IsNullOrEmpty(error))
-    {
-        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
-    }
-    else if (detalle is null)
-    {
-        <p>Cargando...</p>
-    }
-    else
-    {
-        <DxButton Text="Volver" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => NavigationManager.NavigateTo("/ordenes"))" CssClass="mb-3" />
+    <div class="page-container">
+        <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+            <div>
+                <h2 class="page-title">Órdenes de trabajo</h2>
+                <p class="page-subtitle">Detalle completo de la orden</p>
+            </div>
+            <DxButton Text="Volver"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => NavigationManager.NavigateTo("/ordenes"))"
+                      CssClass="btn-modern shadow-sm" />
+        </div>
 
-        <DxFormLayout>
-            <DxFormLayoutItem Caption="Número">
-                <span>@detalle.Numero</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Cliente">
-                <span>@detalle.ClienteClave</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Propietario">
-                <span>@detalle.Propietario</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Dirección">
-                <span>@detalle.Direccion</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Fecha">
-                <span>@detalle.Fecha.ToString("dd/MM/yyyy")</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Creada">
-                <span>@detalle.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Concepto">
-                <span>@detalle.Concepto</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Estado">
-                <span>@detalle.EstadoDescripcion (@detalle.Estado)</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Tipo">
-                <span>@detalle.TipoDescripcion (@detalle.Tipo)</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Empleado">
-                <span>@detalle.Empleado</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Usuario asignado">
-                <span>@detalle.UsuarioAsignado</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Personas">
-                <span>@detalle.Personas</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Saldo">
-                <span>@detalle.Saldo?.ToString("C2")</span>
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Informe">
-                <DxMemo Text="@detalle.Informe" Rows="4" ReadOnly="true" />
-            </DxFormLayoutItem>
-        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+        }
+        else if (detalle is null)
+        {
+            <div class="modern-card text-center">
+                <p class="mb-0">Cargando...</p>
+            </div>
+        }
+        else
+        {
+            <div class="modern-card mb-4">
+                <div class="detail-hero">
+                    <div class="detail-hero-left">
+                        <div class="detail-avatar" aria-hidden="true"><i class="bi bi-clipboard-check"></i></div>
+                        <div class="detail-hero-text">
+                            <div class="detail-name">Orden #@detalle.Numero</div>
+                            <div class="detail-sub">
+                                <i class="bi bi-person-badge me-1"></i>@detalle.Propietario
+                            </div>
+                        </div>
+                    </div>
+                    <div class="detail-hero-right">
+                        <span class="detail-pill @GetEstadoPillCss(detalle.Estado)">@detalle.EstadoDescripcion</span>
+                        <div class="detail-id">ID: #@detalle.Id</div>
+                    </div>
+                </div>
 
-        <h5 class="mt-4">Materiales</h5>
-        <DxGrid Data="@detalle.Materiales" PageSize="10">
-            <Columns>
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CuentaContable)" Caption="Cuenta" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CodigoProducto)" Caption="Código" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Descripcion)" Caption="Descripción" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Cantidad)" Caption="Cantidad" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Fecha)" Caption="Fecha" DisplayFormat="g" />
-            </Columns>
-        </DxGrid>
+                <div class="detail-grid">
+                    <section class="detail-section">
+                        <div class="detail-section-title"><i class="bi bi-geo-alt-fill me-2"></i>Cliente y ubicación</div>
+                        <div class="detail-kv">
+                            <div class="kv">
+                                <div class="kv-label">Cliente</div>
+                                <div class="kv-value">@detalle.ClienteClave</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Propietario</div>
+                                <div class="kv-value">@detalle.Propietario</div>
+                            </div>
+                            <div class="kv kv--full">
+                                <div class="kv-label">Dirección</div>
+                                <div class="kv-value kv-address">@detalle.Direccion</div>
+                            </div>
+                        </div>
+                    </section>
 
-        <h5 class="mt-4">Adjuntos</h5>
-        <DxGrid Data="@detalle.Adjuntos" PageSize="10">
-            <Columns>
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Nombre)" Caption="Nombre" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Tipo)" Caption="Tipo" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Latitud)" Caption="Latitud" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Longitud)" Caption="Longitud" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaInicio)" Caption="Fecha inicio" DisplayFormat="g" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaFin)" Caption="Fecha fin" DisplayFormat="g" />
-                <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaSincronizacion)" Caption="Fecha sincronización" DisplayFormat="g" />
-            </Columns>
-        </DxGrid>
-    }
+                    <section class="detail-section">
+                        <div class="detail-section-title"><i class="bi bi-clipboard-data me-2"></i>Datos de la orden</div>
+                        <div class="detail-kv">
+                            <div class="kv">
+                                <div class="kv-label">Número</div>
+                                <div class="kv-value">@detalle.Numero</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Fecha</div>
+                                <div class="kv-value">@detalle.Fecha.ToString("dd/MM/yyyy")</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Creación</div>
+                                <div class="kv-value">@detalle.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Tipo</div>
+                                <div class="kv-value">@detalle.TipoDescripcion (@detalle.Tipo)</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Estado</div>
+                                <div class="kv-value">@detalle.EstadoDescripcion (@detalle.Estado)</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Empleado</div>
+                                <div class="kv-value">@detalle.Empleado</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Usuario asignado</div>
+                                <div class="kv-value">@detalle.UsuarioAsignado</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Personas</div>
+                                <div class="kv-value">@detalle.Personas</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Saldo</div>
+                                <div class="kv-value">@detalle.Saldo?.ToString("C2")</div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="detail-section detail-section--full">
+                        <div class="detail-section-title"><i class="bi bi-file-earmark-text-fill me-2"></i>Concepto e informe</div>
+                        <div class="detail-kv">
+                            <div class="kv kv--full">
+                                <div class="kv-label">Concepto</div>
+                                <div class="kv-value detail-note">@detalle.Concepto</div>
+                            </div>
+                            <div class="kv kv--full">
+                                <div class="kv-label">Informe</div>
+                                <DxMemo Text="@detalle.Informe" Rows="4" ReadOnly="true" />
+                            </div>
+                        </div>
+                    </section>
+                </div>
+            </div>
+
+            <div class="modern-card mb-4">
+                <div class="detail-section-title"><i class="bi bi-box-seam me-2"></i>Materiales</div>
+                <div class="grid-wrapper">
+                    <DxGrid Data="@detalle.Materiales" PageSize="10" CssClass="grid-modern">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CuentaContable)" Caption="Cuenta" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CodigoProducto)" Caption="Código" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Descripcion)" Caption="Descripción" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Cantidad)" Caption="Cantidad" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Fecha)" Caption="Fecha" DisplayFormat="g" />
+                        </Columns>
+                    </DxGrid>
+                </div>
+            </div>
+
+            <div class="modern-card">
+                <div class="detail-section-title"><i class="bi bi-paperclip me-2"></i>Adjuntos</div>
+                <div class="grid-wrapper">
+                    <DxGrid Data="@detalle.Adjuntos" PageSize="10" CssClass="grid-modern">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Nombre)" Caption="Nombre" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Tipo)" Caption="Tipo" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Latitud)" Caption="Latitud" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Longitud)" Caption="Longitud" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaInicio)" Caption="Fecha inicio" DisplayFormat="g" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaFin)" Caption="Fecha fin" DisplayFormat="g" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaSincronizacion)" Caption="Fecha sincronización" DisplayFormat="g" />
+                        </Columns>
+                    </DxGrid>
+                </div>
+            </div>
+        }
+    </div>
 </DxScrollView>
 
 @code {
@@ -114,5 +184,17 @@
             error = ex.Message;
             detalle = null;
         }
+    }
+
+    private static string GetEstadoPillCss(string? estado)
+    {
+        return estado switch
+        {
+            "P" => "detail-pill--warning",
+            "A" => "detail-pill--info",
+            "E" => "detail-pill--success",
+            "C" => "detail-pill--dark",
+            _ => "detail-pill--muted"
+        };
     }
 }

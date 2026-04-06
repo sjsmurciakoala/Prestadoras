@@ -1,0 +1,4 @@
+interface:
+  display_name: "HODSOFT Blazor UI"
+  short_description: "Construir UI Blazor/DevExpress del proyecto"
+  default_prompt: "Use $hodsoft-blazor-devexpress-ui to add or update a tenant-aware Blazor page in apc.Client."

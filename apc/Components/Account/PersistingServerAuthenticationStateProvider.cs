@@ -51,6 +51,7 @@ namespace apc.Components.Account
 
             if (principal.Identity?.IsAuthenticated == true)
             {
+                var isSuperAdmin = principal.IsInRole(RoleNames.SuperAdministrador);
                 var userId = principal.FindFirst(options.ClaimsIdentity.UserIdClaimType)?.Value;
                 var email = principal.FindFirst(options.ClaimsIdentity.EmailClaimType)?.Value;
 
@@ -59,12 +60,22 @@ namespace apc.Components.Account
                     var companyClaim = principal.FindFirst(TenantClaimTypes.CompanyId)?.Value;
                     if (!long.TryParse(companyClaim, out var companyId) || companyId <= 0)
                     {
-                        throw new InvalidOperationException(
-                            $"El usuario con correo {email} no tiene el claim {TenantClaimTypes.CompanyId} requerido.");
+                        if (!isSuperAdmin)
+                        {
+                            throw new InvalidOperationException(
+                                $"El usuario con correo {email} no tiene el claim {TenantClaimTypes.CompanyId} requerido.");
+                        }
+
+                        companyId = 0;
                     }
 
                     var roles = principal.FindAll(options.ClaimsIdentity.RoleClaimType)
                         .Select(c => c.Value)
+                        .ToArray();
+
+                    var permissions = principal.FindAll(PermissionClaimTypes.Permission)
+                        .Select(c => c.Value)
+                        .Distinct(StringComparer.OrdinalIgnoreCase)
                         .ToArray();
 
                     state.PersistAsJson(nameof(UserInfo), new UserInfo
@@ -72,7 +83,8 @@ namespace apc.Components.Account
                         UserId = userId,
                         Email = email,
                         CompanyId = companyId,
-                        Roles = roles
+                        Roles = roles,
+                        Permissions = permissions
                     });
                 }
             }

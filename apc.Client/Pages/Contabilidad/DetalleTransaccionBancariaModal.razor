@@ -1,0 +1,125 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Bancos
+
+@if (Transaccion != null)
+{
+    <div class="p-4">
+        <DxFormLayout>
+            <DxFormLayoutItem Caption="ID Transacción:" ColSpanLg="6">
+                <div class="form-control-plaintext">@Transaccion.BanKardexId</div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Estado:" ColSpanLg="6">
+                <DxBadge BadgeType="BadgeType.Pill" BackgroundColor="#28a745">
+                    <span style="color: white; padding: 4px 8px;">Registrada</span>
+                </DxBadge>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Moneda:" ColSpanLg="6">
+                <div class="form-control-plaintext">
+                    @if (string.IsNullOrWhiteSpace(Transaccion.MonedaCodigo))
+                    {
+                        <span class="text-muted">--</span>
+                    }
+                    else
+                    {
+                        @Transaccion.MonedaCodigo
+                    }
+                </div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Fecha Movimiento:" ColSpanLg="6">
+                <div class="form-control-plaintext">@Transaccion.FechaMovimiento.ToString("dd/MM/yyyy")</div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Tipo de Transacción:" ColSpanLg="6">
+                <DxBadge BadgeType="BadgeType.Pill" BackgroundColor="#007bff">
+                    <span style="color: white; padding: 4px 8px;">@Transaccion.IdTipoTransaccion</span>
+                </DxBadge>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Descripción:" ColSpanLg="12">
+                <div class="form-control-plaintext">@Transaccion.Descripcion</div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Referencia:" ColSpanLg="12">
+                <div class="form-control-plaintext">
+                    @if (string.IsNullOrEmpty(Transaccion.Referencia))
+                    {
+                        <span class="text-muted">--</span>
+                    }
+                    else
+                    {
+                        @Transaccion.Referencia
+                    }
+                </div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Monto:" ColSpanLg="6">
+                <div class="form-control-plaintext">
+                    <strong style="@(Transaccion.Monto >= 0 ? "color: green;" : "color: red;")">
+                        @Transaccion.Monto.ToString(Transaccion.Monto >= 0 ? "+N2" : "N2")
+                    </strong>
+                </div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Saldo Resultante:" ColSpanLg="6">
+                <div class="form-control-plaintext">
+                    <strong>@Transaccion.SaldoResultante.ToString("N2")</strong>
+                </div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Creado Por:" ColSpanLg="6">
+                <div class="form-control-plaintext">
+                    @if (string.IsNullOrWhiteSpace(Transaccion.CreadoPor))
+                    {
+                        <span class="text-muted">--</span>
+                    }
+                    else
+                    {
+                        @Transaccion.CreadoPor
+                    }
+                </div>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Fecha de Registro:" ColSpanLg="6">
+                <div class="form-control-plaintext">
+                    @(Transaccion.CreadoEn == DateTime.MinValue
+                        ? "--"
+                        : Transaccion.CreadoEn.ToString("dd/MM/yyyy HH:mm:ss"))
+                </div>
+            </DxFormLayoutItem>
+
+            @if (!string.IsNullOrEmpty(Transaccion.ActualizadoPor))
+            {
+                <DxFormLayoutItem Caption="Actualizado Por:" ColSpanLg="6">
+                    <div class="form-control-plaintext">@Transaccion.ActualizadoPor</div>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Fecha de Actualización:" ColSpanLg="6">
+                    <div class="form-control-plaintext">
+                        @Transaccion.ActualizadoEn?.ToString("dd/MM/yyyy HH:mm:ss")
+                    </div>
+                </DxFormLayoutItem>
+            }
+
+            <DxFormLayoutItem ColSpanLg="12">
+                <div class="d-flex gap-2 justify-content-end mt-4">
+                    <DxButton Text="Cerrar"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="CerrarAsync" />
+                </div>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+}
+
+@code {
+    [Parameter]
+    public BanTransaccionListDto? Transaccion { get; set; }
+
+    private async Task CerrarAsync()
+    {
+        await Task.CompletedTask;
+    }
+}

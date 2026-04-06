@@ -1,0 +1,249 @@
+@attribute [Authorize]
+
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@using DevExpress.Blazor
+
+@inject ClientesClient ClientesClient
+@inject NavigationManager Navigation
+@inject ILogger<ClienteDetail> Logger
+
+<div class="page-container cliente-detail-page">
+    <DxToastProvider Name="MainToast" MaxToastCount="4" />
+
+    <div class="cliente-detail-scroll">
+
+
+    @if (MostrarEncabezado)
+    {
+        <!-- HEADER -->
+        <div class="header-section">
+            <div>
+                <h2 class="page-title">Detalle de Cliente</h2>
+                <p class="page-subtitle">
+                    Información general, dirección, contacto y opciones del cliente
+                </p>
+            </div>
+
+            <div class="header-actions">
+                <DxButton Text="Volver"
+                          Click="BackToList"
+                          IconCssClass="bi bi-arrow-left"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+            </div>
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="modern-card text-center p-5">
+            <DxLoadingPanel Visible="true" Text="Cargando cliente..." />
+            <div style="height:80px"></div>
+        </div>
+    }
+    else if (cliente is not null)
+    {
+        <!-- HERO -->
+        <div class="modern-card mb-3 hero-card">
+            <div class="detail-hero ">
+                <div class="detail-hero-left">
+                    <div class="detail-avatar">@GetInitials(cliente.Nombre)</div>
+
+                    <div>
+                        <div class="detail-name">
+                            @($"{cliente.Nombre} {cliente.Apellidos}".Trim())
+                        </div>
+
+                        <div class="detail-sub">
+                            <span class="text-code">@cliente.Codigo</span>
+                            <span class="mx-2">•</span>
+                            <i class="bi bi-geo-alt"></i>
+                            @(cliente.BarrioNombre ?? cliente.BarrioCodigo ?? "Sin barrio")
+                        </div>
+                    </div>
+                </div>
+
+                <div class="detail-hero-right">
+                    @if (cliente.Activo)
+                    {
+                        <span class="detail-pill detail-pill--ok">
+                            <i class="bi bi-check-circle-fill me-1"></i> ACTIVO
+                        </span>
+                    }
+                    else
+                    {
+                        <span class="detail-pill detail-pill--muted">INACTIVO</span>
+                    }
+
+                    <div class="detail-id">ID: @cliente.Id</div>
+                </div>
+            </div>
+
+            <!-- BOTONES (ANTES NO SE VEÍAN) -->
+            <div class="detail-actions">
+                <DxButton Text="Tarifas"
+                          IconCssClass="bi bi-tags"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="() => modalTarifas = true" />
+
+                <DxButton Text="Estado de Cuenta"
+                          IconCssClass="bi bi-receipt"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="() => modalEstadoCuenta = true" />
+
+                <DxButton Text="Medidores"
+                          IconCssClass="bi bi-speedometer2"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="() => modalMedidores = true" />
+            </div>
+        </div>
+
+        <!-- INFORMACIÓN -->
+        <div class="modern-card">
+            <div class="detail-section-title">
+                <i class="bi bi-info-circle me-2"></i> Información General
+            </div>
+
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Datos personales" HeaderIconCssClass="bi bi-person-lines-fill" ColSpanXs="12">
+                    <DxFormLayoutItem Caption="Clave" ColSpanXs="12" ColSpanMd="3"><span class="@BadgeClassForObj(cliente.Codigo)">@MostrarObj(cliente.Codigo)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Nombre" ColSpanXs="12" ColSpanMd="5"><span class="@BadgeClassForText(cliente.Nombre)">@MostrarTexto(cliente.Nombre)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Apellidos" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.Apellidos)">@MostrarTexto(cliente.Apellidos)</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="DNI" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.Dni)">@MostrarTexto(cliente.Dni)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.Rtn)">@MostrarTexto(cliente.Rtn)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Fecha nacimiento" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForDate(cliente.FechaNacimiento)">@MostrarFecha(cliente.FechaNacimiento)</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Tercera edad" ColSpanXs="12" ColSpanMd="3"><span class="@BadgeClassForBool(cliente.TerceraEdad)"><i class="@BoolIcon(cliente.TerceraEdad)"></i>@MostrarBooleano(cliente.TerceraEdad)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Bloqueado cobranza" ColSpanXs="12" ColSpanMd="3"><span class="@BadgeClassForBool(cliente.BloqueadoCobranza)"><i class="@BoolIcon(cliente.BloqueadoCobranza)"></i>@MostrarBooleano(cliente.BloqueadoCobranza)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" ColSpanMd="6"><span class="@BadgeClassForText(MostrarAbogado(cliente))">@MostrarAbogado(cliente)</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.Telefono)">@MostrarTexto(cliente.Telefono)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Teléfono móvil" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.TelefonoMovil)">@MostrarTexto(cliente.TelefonoMovil)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.Email)">@MostrarTexto(cliente.Email)</span></DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Dirección" HeaderIconCssClass="bi bi-geo-alt-fill" ColSpanXs="12" CssClass="mt-2">
+                    <DxFormLayoutItem Caption="Barrio" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.BarrioNombre ?? cliente.BarrioCodigo)">@MostrarTexto(cliente.BarrioNombre ?? cliente.BarrioCodigo)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Color casa" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.ColorCasa)">@MostrarTexto(cliente.ColorCasa)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Dirección" ColSpanXs="12"><span class="@BadgeClassForText(cliente.Direccion)">@MostrarTexto(cliente.Direccion)</span></DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Datos empresa" HeaderIconCssClass="bi bi-building" ColSpanXs="12" CssClass="mt-2">
+                    <DxFormLayoutItem Caption="Empresa" ColSpanXs="12" ColSpanMd="6"><span class="@BadgeClassForText(cliente.EmpresaNombre)">@MostrarTexto(cliente.EmpresaNombre)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="RTN / RIF" ColSpanXs="12" ColSpanMd="6"><span class="@BadgeClassForText(cliente.EmpresaRtn)">@MostrarTexto(cliente.EmpresaRtn)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.EmpresaTelefono)">@MostrarTexto(cliente.EmpresaTelefono)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Dirección" ColSpanXs="12" ColSpanMd="8"><span class="@BadgeClassForText(cliente.EmpresaDireccion)">@MostrarTexto(cliente.EmpresaDireccion)</span></DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Datos servicios" HeaderIconCssClass="bi bi-gear" ColSpanXs="12" CssClass="mt-2">
+                    <DxFormLayoutItem Caption="Servicio" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.ServicioNombre ?? cliente.ServicioId?.ToString())">@MostrarTexto(cliente.ServicioNombre ?? cliente.ServicioId?.ToString())</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Categoría" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.CategoriaServicioNombre ?? cliente.CategoriaServicioId?.ToString())">@MostrarTexto(cliente.CategoriaServicioNombre ?? cliente.CategoriaServicioId?.ToString())</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Tipo uso" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.TipoUsoCodigo)">@MostrarTexto(cliente.TipoUsoCodigo)</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="3"><span class="@BadgeClassForText(cliente.LetraCodigo)">@MostrarTexto(cliente.LetraCodigo)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="3"><span class="@BadgeClassForText(cliente.CicloDescripcion ?? cliente.CicloId?.ToString())">@MostrarTexto(cliente.CicloDescripcion ?? cliente.CicloId?.ToString())</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Libreta" ColSpanXs="12" ColSpanMd="3"><span class="@BadgeClassForText(cliente.Libreta)">@MostrarTexto(cliente.Libreta)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Secuencia" ColSpanXs="12" ColSpanMd="3"><span class="@BadgeClassForText(cliente.Secuencia)">@MostrarTexto(cliente.Secuencia)</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Indicativo ruta" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.IndicativoRuta)">@MostrarTexto(cliente.IndicativoRuta)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.ClaveCatastral)">@MostrarTexto(cliente.ClaveCatastral)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Clave SURE" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.ClaveSure)">@MostrarTexto(cliente.ClaveSure)</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Contador" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.Contador)">@MostrarTexto(cliente.Contador)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Tiene medidor" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForBool(cliente.TieneMedidor)"><i class="@BoolIcon(cliente.TieneMedidor)"></i>@MostrarBooleano(cliente.TieneMedidor)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Medidor" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.MedidorNumero ?? cliente.MedidorId?.ToString())">@MostrarTexto(cliente.MedidorNumero ?? cliente.MedidorId?.ToString())</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Tiene convenio" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForBool(cliente.TieneConvenio)"><i class="@BoolIcon(cliente.TieneConvenio)"></i>@MostrarBooleano(cliente.TieneConvenio)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Número convenio" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.NumeroConvenio)">@MostrarTexto(cliente.NumeroConvenio)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Tiene contrato" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForBool(cliente.TieneContrato)"><i class="@BoolIcon(cliente.TieneContrato)"></i>@MostrarBooleano(cliente.TieneContrato)</span></DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Número contrato" ColSpanXs="12" ColSpanMd="4"><span class="@BadgeClassForText(cliente.NumeroContrato)">@MostrarTexto(cliente.NumeroContrato)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Observaciones" ColSpanXs="12" ColSpanMd="8"><span class="@BadgeClassForText(cliente.Observaciones)">@MostrarTexto(cliente.Observaciones)</span></DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Auditoría" HeaderIconCssClass="bi bi-person-check" ColSpanXs="12" CssClass="mt-2">
+                    <DxFormLayoutItem Caption="Usuario creación" ColSpanXs="12" ColSpanMd="6"><span class="@BadgeClassForText(cliente.UsuarioCreacion)">@MostrarTexto(cliente.UsuarioCreacion)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Fecha creación" ColSpanXs="12" ColSpanMd="6"><span class="@BadgeClassForDate(cliente.FechaCreacion)">@MostrarFecha(cliente.FechaCreacion)</span></DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Descuento tercera edad" ColSpanXs="12" ColSpanMd="6"><span class="@BadgeClassForDecimal(cliente.DescuentoTerceraEdad)">@MostrarDecimal(cliente.DescuentoTerceraEdad)</span></DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
+    }
+    </div>
+
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+    [Parameter] public bool MostrarEncabezado { get; set; } = true;
+
+    ClienteDetailDto? cliente;
+    bool isLoading = true;
+
+    bool modalTarifas;
+    bool modalEstadoCuenta;
+    bool modalMedidores;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        cliente = await ClientesClient.ObtenerPorIdAsync(Id);
+        isLoading = false;
+    }
+
+    void BackToList() => Navigation.NavigateTo("/clientes");
+
+    string GetInitials(string? name)
+        => string.IsNullOrWhiteSpace(name) ? "C" : name.Substring(0, 1).ToUpper();
+
+    private static string MostrarTexto(string? valor)
+        => string.IsNullOrWhiteSpace(valor) ? "—" : valor;
+
+    private static string MostrarFecha(DateTime? fecha)
+        => fecha.HasValue ? fecha.Value.ToString("d") : "—";
+
+    private static string MostrarBooleano(bool? valor)
+        => valor.HasValue ? (valor.Value ? "Sí" : "No") : "—";
+
+    private static string MostrarDecimal(double? valor)
+        => valor.HasValue ? valor.Value.ToString("N2") : "—";
+
+    private static string MostrarAbogado(ClienteDetailDto cliente)
+        => !string.IsNullOrWhiteSpace(cliente.AbogadoNombre)
+            ? cliente.AbogadoNombre!
+            : (cliente.AbogadoId?.ToString() ?? "—");
+
+    // ---------- Visual helpers (badges / chips) ----------
+    private static string MostrarObj(object? valor)
+        => valor is null ? "—" : (valor.ToString() ?? "—");
+
+    private static string BadgeClassForText(string? valor)
+        => string.IsNullOrWhiteSpace(valor) || valor.Trim() == "—"
+            ? "kv-badge kv-badge--muted"
+            : "kv-badge kv-badge--info";
+
+    private static string BadgeClassForObj(object? valor)
+        => BadgeClassForText(MostrarObj(valor));
+
+    private static string BadgeClassForDate(DateTime? valor)
+        => valor.HasValue ? "kv-badge kv-badge--info" : "kv-badge kv-badge--muted";
+
+    private static string BadgeClassForDecimal(double? valor)
+        => valor.HasValue ? "kv-badge kv-badge--info" : "kv-badge kv-badge--muted";
+
+    private static string BadgeClassForBool(bool? valor)
+        => valor == true ? "kv-badge kv-badge--ok"
+         : valor == false ? "kv-badge kv-badge--no"
+         : "kv-badge kv-badge--muted";
+
+    private static string BoolIcon(bool? valor)
+        => valor == true ? "bi bi-check-circle-fill"
+         : valor == false ? "bi bi-x-circle-fill"
+         : "bi bi-dash-circle";
+
+}

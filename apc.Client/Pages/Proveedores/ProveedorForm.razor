@@ -1,0 +1,152 @@
+@using SIAD.Core.DTOs.Proveedores
+@using SIAD.Core.DTOs.Contabilidad
+@using DevExpress.Blazor
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+
+    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+        <DxFormLayoutGroup Caption="Identificacion" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Codigo" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.Codigo"
+                           ReadOnly="true"
+                           NullText="Autogenerado"
+                           MaxLength="20" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tipo proveedor *" ColSpanXs="12" ColSpanMd="8">
+                <DxComboBox TData="ProveedorTipoLookupDto"
+                            TValue="int"
+                            Data="@TiposConPlaceholder"
+                            ValueFieldName="@nameof(ProveedorTipoLookupDto.Id)"
+                            TextFieldName="@nameof(ProveedorTipoLookupDto.Nombre)"
+                            @bind-Value="Model.CodTipoProveedor"
+                            NullText="Seleccionar tipo"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                            DropDownStyle="DropDownStyle.DropDownList" />
+                <ValidationMessage For="() => Model.CodTipoProveedor" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+
+        <DxFormLayoutGroup Caption="Datos generales" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Nombre *" ColSpanXs="12" ColSpanMd="6">
+                <DxTextBox @bind-Text="Model.Nombre" MaxLength="150" />
+                <ValidationMessage For="() => Model.Nombre" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Razon social" ColSpanXs="12" ColSpanMd="6">
+                <DxTextBox @bind-Text="Model.RazonSocial" MaxLength="150" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.Rtn" MaxLength="20" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Direccion *" ColSpanXs="12">
+                <DxMemo @bind-Text="Model.Direccion" Rows="2" ResizeMode="MemoResizeMode.Vertical" />
+                <ValidationMessage For="() => Model.Direccion" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+
+        <DxFormLayoutGroup Caption="Contacto" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Nombre contacto" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.NombreContacto" MaxLength="150" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Telefono" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.Telefono" MaxLength="20" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.Email" MaxLength="150" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+
+        <DxFormLayoutGroup Caption="Finanzas" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Cuenta contable *" ColSpanXs="12" ColSpanMd="4">
+                <DxComboBox Data="@CuentasContables"
+                            TData="CuentaContableLookupDto"
+                            TValue="string"
+                            @bind-Value="Model.CuentaContable"
+                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                            NullText="Seleccione cuenta contable"
+                            AllowUserInput="true"
+                            DropDownStyle="DropDownStyle.DropDown"
+                            DropDownTriggerMode="DropDownTriggerMode.Input"
+                            SearchMode="ListSearchMode.AutoSearch"
+                            SearchFilterCondition="ListSearchFilterCondition.Contains"
+                            SearchDelay="200"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(CuentasContables.Count > 0)" />
+                <ValidationMessage For="() => Model.CuentaContable" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Cuenta bancaria *" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.CuentaBancaria" MaxLength="50" />
+                <ValidationMessage For="() => Model.CuentaBancaria" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Banco 1" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.Banco1" MaxLength="80" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Banco 2" ColSpanXs="12" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.Banco2" MaxLength="80" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Activo" ColSpanXs="12" ColSpanMd="4">
+                <DxCheckBox @bind-Checked="Model.Activo" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+    </DxFormLayout>
+
+    <DxValidationSummary CssClass="mb-3" />
+
+    <div class="d-flex justify-content-end">
+        <DxButton SubmitFormOnClick="true"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar"
+                  Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal"
+                  CssClass="ms-2"
+                  Text="Cancelar"
+                  Enabled="@(!IsBusy)"
+                  Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public ProveedorUpsertDto Model { get; set; } = default!;
+
+    [Parameter]
+    public IEnumerable<ProveedorTipoLookupDto> Tipos { get; set; } = Array.Empty<ProveedorTipoLookupDto>();
+
+    [Parameter]
+    public IReadOnlyList<CuentaContableLookupDto> CuentasContables { get; set; } = Array.Empty<CuentaContableLookupDto>();
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    [Parameter]
+    public bool IsEdit { get; set; }
+
+    private IReadOnlyList<ProveedorTipoLookupDto> TiposConPlaceholder =>
+        new[] { new ProveedorTipoLookupDto(0, "Seleccionar tipo") }
+            .Concat(Tipos.Where(t => t.Id > 0))
+            .ToList();
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}
+

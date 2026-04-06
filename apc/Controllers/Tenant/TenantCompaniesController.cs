@@ -1,5 +1,6 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Tenant;
 using SIAD.Services.Tenancy;
 
@@ -7,7 +8,7 @@ namespace apc.Controllers;
 
 [ApiController]
 [Route("api/tenant/companies")]
-[Authorize]
+[Authorize(Policy = AuthorizationPolicies.SuperAdmin)]
 public sealed class TenantCompaniesController : ControllerBase
 {
     private readonly ITenantCompanyService _tenantCompanyService;

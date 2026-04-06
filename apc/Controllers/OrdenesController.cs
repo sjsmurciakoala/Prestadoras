@@ -2,12 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.DTOs.Ordenes;
 using SIAD.Services.Ordenes;
+using apc.Security;
+using SIAD.Core.Constants;
 
 namespace apc.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize]
+[ModuleAuthorize(PermissionModules.Inventario)]
 public class OrdenesController : ControllerBase
 {
     private readonly IOrdenesService _ordenesService;
@@ -85,3 +87,4 @@ public class OrdenesController : ControllerBase
         return Ok(coordenadas);
     }
 }
+

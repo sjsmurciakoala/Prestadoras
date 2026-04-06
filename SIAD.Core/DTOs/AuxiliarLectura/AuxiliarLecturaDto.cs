@@ -10,4 +10,5 @@ public record AuxiliarLecturaDto(
     decimal? Consumo,
     string? Condicion,
     DateTime? FechaLectura,
-    string? Usuario);
+    string? Usuario,
+    string? Secuencia);

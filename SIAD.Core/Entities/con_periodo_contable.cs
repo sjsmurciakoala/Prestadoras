@@ -21,6 +21,8 @@ public partial class con_periodo_contable : ICompanyScopedEntity
 
     public string status { get; set; } = null!;
 
+    public short? status_id { get; set; }
+
     public DateTime? closed_at { get; set; }
 
     public string? closed_by { get; set; }
@@ -33,5 +35,7 @@ public partial class con_periodo_contable : ICompanyScopedEntity
 
     public string? updated_by { get; set; }
 
-    public virtual ICollection<con_poliza> polizas { get; set; } = new List<con_poliza>();
+    public virtual ICollection<con_partida_hdr> polizas { get; set; } = new List<con_partida_hdr>();
 }
+
+

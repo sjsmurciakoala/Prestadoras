@@ -1,0 +1,454 @@
+@page "/solicitudes"
+@using SIAD.Core.DTOs.Solicitudes
+@using apc.Client.Services.Solicitudes
+@inject SolicitudesClient SolicitudesClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager NavigationManager
+
+<div class="page-container">
+    
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Solicitudes</h2>
+            <p class="page-subtitle">Gestión centralizada de servicios</p>
+        </div>
+        
+        <DxButton Text="Nueva Solicitud" 
+                  Click="@AbrirNuevaSolicitudAsync" 
+                  IconCssClass="bi bi-plus-lg" 
+                  RenderStyle="ButtonRenderStyle.Primary" 
+                  CssClass="btn-modern shadow-sm" />
+    </div>
+
+    <div class="modern-card mb-4">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+                <DxFormLayoutItem Caption="Búsqueda Rápida" ColSpanXs="12" ColSpanMd="5">
+                    <Template>
+                        <DxTextBox @bind-Text="@filtroIdentificacion" 
+                                   Placeholder="Nombre, Identidad o Teléfono..." 
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   NullText="Escribe para buscar..." />
+                    </Template>
+                </DxFormLayoutItem>
+                
+                <DxFormLayoutItem Caption="Estado" ColSpanXs="12" ColSpanMd="3">
+                    <Template>
+                        <div class="pt-2">
+                             <DxCheckBox @bind-Checked="@filtroActivos" LabelText="Ocultar inactivos" CheckType="CheckType.Switch" />
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+                
+                <DxFormLayoutItem ColSpanXs="12" ColSpanMd="4">
+                    <Template>
+                        <div class="d-flex gap-2 align-items-end h-100 mt-2 mt-md-0">
+                            <DxButton Text="Filtrar" Click="@CargarSolicitudesAsync" IconCssClass="bi bi-search" RenderStyle="ButtonRenderStyle.Secondary" CssClass="w-100 w-md-auto" />
+                            <DxButton Text="Limpiar" Click="@LimpiarFiltrosAsync" RenderStyle="ButtonRenderStyle.None" RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="w-100 w-md-auto" />
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card position-relative" style="min-height: 300px;">
+        <DxLoadingPanel Visible="cargando" IsContentBlocked="true" Text="Procesando..." />
+        
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <div class="p-4 text-center">
+                <div class="text-danger mb-2"><i class="bi bi-exclamation-circle fs-1"></i></div>
+                <h5 class="text-danger">Ocurrió un error</h5>
+                <p class="text-muted">@error</p>
+                <DxButton Text="Reintentar" Click="@CargarSolicitudesAsync" RenderStyle="ButtonRenderStyle.Secondary" />
+            </div>
+        }
+        else
+        {
+            <div class="grid-wrapper">
+                <DxGrid Data="@solicitudes"
+                        PageSize="15"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="@(new int[] { 10, 15, 20, 50 })"
+                        ShowFilterRow="true"
+                        ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.Id)" Caption="ID" Width="80px" TextAlignment="GridTextAlignment.Center" />
+
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.NombreCliente)" Caption="Cliente" MinWidth="220">
+                            <CellDisplayTemplate>
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bold text-dark">@context.Value</span>
+                                    @{ var item = (SolicitudListDto)context.DataItem; }
+                                    <span class="small text-muted"><i class="bi bi-card-heading me-1"></i>@item.IdentificacionCliente</span>
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.CategoriaServicioNombre)" Caption="Categoría" Width="170px">
+                            <CellDisplayTemplate>
+                                <span class="badge-category"><i class="bi bi-tag-fill me-1"></i>@context.Value</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.Fecha)" Caption="Fecha" Width="130px" DisplayFormat="d" />
+
+                        <DxGridDataColumn Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate>
+                                @{ var item = (SolicitudListDto)context.DataItem; }
+                                @if (item.Estado)
+                                {
+                                    <span class="badge-status active">Activa</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">Inactiva</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn Caption="Acciones" Width="160px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate>
+                                @{ var item = (SolicitudListDto)context.DataItem; }
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button class="btn-icon btn-view" title="Ver" @onclick="() => AbrirDetalleAsync(item.Id)"><i class="bi bi-eye"></i></button>
+                                    <button class="btn-icon btn-edit" title="Editar" @onclick="() => AbrirEdicionAsync(item.Id)"><i class="bi bi-pencil-square"></i></button>
+                                    <button class="btn-icon btn-delete" title="Eliminar" @onclick="() => ConfirmarEliminacion(item.Id)"><i class="bi bi-trash"></i></button>
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<DxPopup Visible="@vistaDetalle" 
+         Width="min(850px, 95vw)" 
+         HeaderText="Ficha de Solicitud" 
+         VisibleChanged="@(v => { vistaDetalle = v; if(!v) solicitudActual = null; })" 
+         CloseOnOutsideClick="true" 
+         ShowFooter="true">
+    <BodyTemplate Context="ctxDetalle">
+        <div class="detail-popup-body">
+            <DxLoadingPanel Visible="detalleLoading" IsContentBlocked="true" />
+
+            @if (solicitudActual != null)
+            {
+                <div class="detail-hero">
+                    <div class="detail-hero-left">
+                        <div class="detail-avatar" aria-hidden="true"><i class="bi bi-person-fill"></i></div>
+                        <div class="detail-hero-text">
+                            <div class="detail-name">@solicitudActual.NombreCliente</div>
+                            <div class="detail-sub">
+                                <i class="bi bi-card-heading me-1"></i>@solicitudActual.IdentificacionCliente
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="detail-hero-right">
+                        @if (solicitudActual.Estado)
+                        {
+                            <span class="detail-pill detail-pill--ok">Activa</span>
+                        }
+                        else
+                        {
+                            <span class="detail-pill detail-pill--muted">Inactiva</span>
+                        }
+                        <div class="detail-id">ID: #@solicitudActual.Id</div>
+                    </div>
+                </div>
+
+                <div class="detail-grid">
+                    <section class="detail-section">
+                        <div class="detail-section-title"><i class="bi bi-geo-alt-fill me-2"></i>Contacto y Ubicación</div>
+
+                        <div class="detail-kv">
+                            <div class="kv">
+                                <div class="kv-label">Teléfono</div>
+                                <div class="kv-value">@solicitudActual.Telefono</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Celular</div>
+                                <div class="kv-value">@solicitudActual.Movil</div>
+                            </div>
+                            <div class="kv kv--full">
+                                <div class="kv-label">Correo</div>
+                                <div class="kv-value">
+                                    @if (!string.IsNullOrEmpty(solicitudActual.Correo))
+                                    {
+                                        <a href="mailto:@solicitudActual.Correo" class="text-decoration-none">@solicitudActual.Correo</a>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted fst-italic">No registrado</span>
+                                    }
+                                </div>
+                            </div>
+                            <div class="kv kv--full">
+                                <div class="kv-label">Dirección</div>
+                                <div class="kv-value kv-address">@solicitudActual.Direccion</div>
+                            </div>
+                        </div>
+                    </section>
+
+                    <section class="detail-section">
+                        <div class="detail-section-title"><i class="bi bi-file-earmark-text-fill me-2"></i>Datos del Servicio</div>
+
+                        <div class="detail-kv">
+                            <div class="kv">
+                                <div class="kv-label">Categoría</div>
+                                <div class="kv-value fw-bold text-primary">@solicitudActual.CategoriaServicioNombre</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Fecha</div>
+                                <div class="kv-value">@solicitudActual.Fecha?.ToString("d 'de' MMMM, yyyy")</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">Clave SURE</div>
+                                <div class="kv-value">@(solicitudActual.ClaveSure ?? "-")</div>
+                            </div>
+                            <div class="kv">
+                                <div class="kv-label">RTN</div>
+                                <div class="kv-value">@(solicitudActual.Rtn ?? "-")</div>
+                            </div>
+                            <div class="kv kv--full">
+                                <div class="kv-label">Color de Casa</div>
+                                <div class="kv-value">@(solicitudActual.ColorCasa ?? "No especificado")</div>
+                            </div>
+                        </div>
+                    </section>
+
+                    @if (!string.IsNullOrEmpty(solicitudActual.EmpresaNombre) || !string.IsNullOrEmpty(solicitudActual.NegocioNombre))
+                    {
+                        <section class="detail-section detail-section--full">
+                            <div class="detail-section-title"><i class="bi bi-building-fill me-2"></i>Información Comercial</div>
+
+                            <div class="detail-kv">
+                                @if (!string.IsNullOrEmpty(solicitudActual.EmpresaNombre))
+                                {
+                                    <div class="kv kv--full">
+                                        <div class="kv-label">Empresa</div>
+                                        <div class="kv-value">
+                                            <span class="fw-bold">@solicitudActual.EmpresaNombre</span>
+                                            <span class="text-muted ms-2 small">(@(solicitudActual.EmpresaTelefono ?? "Sin tel"))</span>
+                                        </div>
+                                    </div>
+                                }
+                                @if (!string.IsNullOrEmpty(solicitudActual.NegocioNombre))
+                                {
+                                    <div class="kv kv--full">
+                                        <div class="kv-label">Negocio</div>
+                                        <div class="kv-value">
+                                            <span class="fw-bold">@solicitudActual.NegocioNombre</span>
+                                            <div class="text-muted small mt-1">Clave Catastral: @(solicitudActual.NegocioClaveCatastral ?? "-")</div>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+                        </section>
+                    }
+
+                    <section class="detail-section detail-section--full">
+                        <div class="detail-section-title"><i class="bi bi-chat-square-quote-fill me-2"></i>Observaciones</div>
+                        <div class="detail-note">
+                            @(string.IsNullOrEmpty(solicitudActual.Observacion) ? "Sin observaciones registradas." : solicitudActual.Observacion)
+                        </div>
+                    </section>
+                </div>
+            }
+        </div>
+    </BodyTemplate>
+   <FooterTemplate Context="ft">
+    <div class="popup-footer-actions popup-footer-actions--sticky">
+        <DxButton Text="Cerrar Ficha"
+                  Click="@(() => vistaDetalle = false)"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  CssClass="popup-footer-btn popup-footer-btn--primary" />
+    </div>
+</FooterTemplate>
+
+</DxPopup>
+
+<DxPopup Visible="@vistaFormulario" Width="min(1000px, 95vw)" HeaderText="@(formularioEdicion != null ? "Editar Solicitud" : "Nueva Solicitud")" VisibleChanged="@(v => { vistaFormulario = v; if(!v) { formularioNuevo = null; formularioEdicion = null; } })">
+    <BodyTemplate Context="ctxForm">
+        <div style="max-height: 80vh; overflow-y: auto; padding: 10px;">
+            @if(formularioNuevo != null) {
+                <SolicitudForm Solicitud="@formularioNuevo" Categorias="@categorias" OnGuardar="@GuardarSolicitudNuevaAsync" />
+            }
+            else if(formularioEdicion != null) {
+                 <SolicitudFormEdicion Solicitud="@formularioEdicion" Categorias="@categorias" OnGuardar="@GuardarSolicitudEdicionAsync" />
+            }
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup Visible="@deleteConfirmVisible" Width="min(400px, 90vw)" HeaderText="Confirmar Acción" ShowFooter="false">
+    <BodyTemplate Context="ctxDel">
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Inactivar Solicitud?</h5>
+            <p class="text-muted">La solicitud pasará a estado inactivo pero no se borrará del historial.</p>
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="@(() => deleteConfirmVisible = false)" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, Inactivar" Click="@ProcederEliminarAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-trash" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private List<SolicitudListDto> solicitudes = new();
+    private List<SolicitudCategoriaDto> categorias = new();
+    private SolicitudDetailDto? solicitudActual;
+    private SolicitudCreateDto? formularioNuevo;
+    private SolicitudUpdateDto? formularioEdicion;
+
+    private bool cargando;
+    private bool detalleLoading;
+    private bool vistaDetalle;
+    private bool vistaFormulario;
+    private bool deleteConfirmVisible;
+    private int idParaEliminar;
+    private string? error;
+    private string filtroIdentificacion = "";
+    private bool filtroActivos = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCategoriasAsync();
+        await CargarSolicitudesAsync();
+    }
+
+    private async Task CargarSolicitudesAsync()
+    {
+        try
+        {
+            cargando = true;
+            await InvokeAsync(StateHasChanged);
+            var clienteIdentidad = string.IsNullOrWhiteSpace(filtroIdentificacion) ? null : filtroIdentificacion;
+            solicitudes = await SolicitudesClient.ObtenerAsync(clienteIdentidad);
+            if (!filtroActivos) solicitudes = solicitudes.Where(s => !s.Estado).ToList();
+            else solicitudes = solicitudes.Where(s => s.Estado).ToList();
+        }
+        catch (Exception ex) { error = $"Error: {ex.Message}"; }
+        finally { cargando = false; }
+    }
+
+    private async Task CargarCategoriasAsync()
+    {
+        try { categorias = await SolicitudesClient.ObtenerCategoriasAsync(); } catch { }
+    }
+
+    private async Task LimpiarFiltrosAsync()
+    {
+        filtroIdentificacion = "";
+        filtroActivos = true;
+        await CargarSolicitudesAsync();
+    }
+
+    private void AbrirNuevaSolicitudAsync()
+    {
+        formularioNuevo = new SolicitudCreateDto { IdentificacionCliente = "", NombreCliente = "", Telefono = "", Movil = "", Direccion = "" };
+        formularioEdicion = null;
+        vistaFormulario = true;
+    }
+
+    private async Task AbrirEdicionAsync(int id)
+    {
+        try
+        {
+            cargando = true;
+            var detalle = await SolicitudesClient.ObtenerPorIdAsync(id);
+            if (detalle != null)
+            {
+                formularioEdicion = new SolicitudUpdateDto
+                {
+                    Id = detalle.Id,
+                    IdentificacionCliente = detalle.IdentificacionCliente,
+                    NombreCliente = detalle.NombreCliente,
+                    CategoriaServicioId = detalle.CategoriaServicioId,
+                    Telefono = detalle.Telefono,
+                    Movil = detalle.Movil,
+                    Direccion = detalle.Direccion,
+                    Rtn = detalle.Rtn,
+                    Correo = detalle.Correo,
+                    Observacion = detalle.Observacion,
+                    ColorCasa = detalle.ColorCasa,
+                    FechaNacimiento = detalle.FechaNacimiento,
+                    ClaveSure = detalle.ClaveSure,
+                    EmpresaNombre = detalle.EmpresaNombre,
+                    EmpresaTelefono = detalle.EmpresaTelefono,
+                    EmpresaDireccion = detalle.EmpresaDireccion,
+                    NegocioNombre = detalle.NegocioNombre,
+                    NegocioTelefono = detalle.NegocioTelefono,
+                    NegocioClaveCatastral = detalle.NegocioClaveCatastral
+                };
+                formularioNuevo = null;
+                vistaFormulario = true;
+            }
+        }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Error", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger }); }
+        finally { cargando = false; }
+    }
+
+    private async Task AbrirDetalleAsync(int id)
+    {
+        try
+        {
+            detalleLoading = true;
+            vistaDetalle = true;
+            solicitudActual = await SolicitudesClient.ObtenerPorIdAsync(id);
+        }
+        catch (Exception ex) { error = ex.Message; }
+        finally { detalleLoading = false; }
+    }
+
+    private void ConfirmarEliminacion(int id)
+    {
+        idParaEliminar = id;
+        deleteConfirmVisible = true;
+    }
+
+    private async Task ProcederEliminarAsync()
+    {
+        deleteConfirmVisible = false;
+        try
+        {
+            await SolicitudesClient.InactivarAsync(idParaEliminar);
+            ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = "Solicitud inactivada", RenderStyle = ToastRenderStyle.Success });
+            await CargarSolicitudesAsync();
+        }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Error", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger }); }
+    }
+
+    private async Task GuardarSolicitudNuevaAsync()
+    {
+        if (formularioNuevo == null) return;
+        try
+        {
+            var id = await SolicitudesClient.CrearAsync(formularioNuevo);
+            vistaFormulario = false;
+            ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = $"Solicitud #{id} creada", RenderStyle = ToastRenderStyle.Success });
+            await CargarSolicitudesAsync();
+        }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Error", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger }); }
+    }
+
+    private async Task GuardarSolicitudEdicionAsync()
+    {
+        if (formularioEdicion == null) return;
+        try
+        {
+            await SolicitudesClient.UpdateAsync(formularioEdicion.Id, formularioEdicion);
+            vistaFormulario = false;
+            ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = "Actualizada correctamente", RenderStyle = ToastRenderStyle.Success });
+            await CargarSolicitudesAsync();
+        }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Error", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger }); }
+    }
+}

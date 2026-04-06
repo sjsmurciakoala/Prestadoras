@@ -165,10 +165,11 @@ public class CobranzaService : ICobranzaService
 
         var correlativo = await GenerarCorrelativoAsync(ct);
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
-        var fechaPlan = dto.Fecha == DateTime.MinValue ? DateTime.UtcNow : dto.Fecha;
+        var ahora = NormalizeTimestamp(DateTime.Now);
+        var fechaPlan = dto.Fecha == DateTime.MinValue ? ahora.Date : NormalizeTimestamp(dto.Fecha).Date;
         var fechaPrimerPago = dto.FechaPrimerPago == DateTime.MinValue
             ? new DateTime(fechaPlan.Year, fechaPlan.Month, 1).AddMonths(1)
-            : dto.FechaPrimerPago;
+            : NormalizeTimestamp(dto.FechaPrimerPago).Date;
 
         var montoPrima = dto.ValorPrima > 0
             ? dto.ValorPrima
@@ -177,7 +178,7 @@ public class CobranzaService : ICobranzaService
         var recibo = dto.Recibo ?? await ObtenerReciboAplicableAsync(cliente.Clave, ct);
         if (recibo is null)
         {
-            return ResponseModelDto.Fail("No existe un recibo (transacción 101) asociado al cliente.");
+            return ResponseModelDto.Fail("No existe un recibo facturado asociado al cliente.");
         }
 
         var cuotaBase = Math.Round(dto.MontoFinanciar / dto.Meses, 2, MidpointRounding.AwayFromZero);
@@ -186,6 +187,7 @@ public class CobranzaService : ICobranzaService
         var tieneMedidor = cliente.TieneMedidor ? "S" : "N";
         var ciclo = dto.CicloId?.ToString() ?? cliente.CicloId?.ToString();
         var periodoActual = fechaPlan.ToString("yyyy/MM");
+        var fechaRegistro = DateOnly.FromDateTime(ahora);
 
         await using var transaction = await _context.Database.BeginTransactionAsync(ct);
         try
@@ -209,8 +211,8 @@ public class CobranzaService : ICobranzaService
                 estadopago = "Pendiente",
                 usuariocreacion = usuario,
                 usuariomodificacion = usuario,
-                fechacreacion = DateTime.UtcNow,
-                fechamodificacion = DateTime.UtcNow
+                fechacreacion = ahora,
+                fechamodificacion = ahora
             };
 
             _context.cln_plan_pago_hdrs.Add(header);
@@ -235,8 +237,8 @@ public class CobranzaService : ICobranzaService
                     estadopago = "Pendiente",
                     usuariocreacion = usuario,
                     usuariomodificacion = usuario,
-                    fechacreacion = DateTime.UtcNow,
-                    fechamodificacion = DateTime.UtcNow
+                    fechacreacion = ahora,
+                    fechamodificacion = ahora
                 });
             }
 
@@ -259,7 +261,7 @@ public class CobranzaService : ICobranzaService
                 saldo = saldoCliente - (dto.MontoFinanciar + montoPrima),
                 periodo = periodoActual,
                 estado = "C",
-                fecha_registro = DateOnly.FromDateTime(DateTime.UtcNow),
+                fecha_registro = fechaRegistro,
                 ciclo = ciclo,
                 tiene_med = tieneMedidor,
                 usuario = usuario,
@@ -280,7 +282,7 @@ public class CobranzaService : ICobranzaService
                 saldo = saldoCliente + montoPrima,
                 periodo = periodoActual,
                 estado = "A",
-                fecha_registro = DateOnly.FromDateTime(DateTime.UtcNow),
+                fecha_registro = fechaRegistro,
                 ciclo = ciclo,
                 tiene_med = tieneMedidor,
                 usuario = usuario,
@@ -314,7 +316,7 @@ public class CobranzaService : ICobranzaService
                     saldo = saldoCuotas,
                     periodo = fechaCuota.ToString("yyyy/MM"),
                     estado = "A",
-                    fecha_registro = DateOnly.FromDateTime(DateTime.UtcNow),
+                    fecha_registro = fechaRegistro,
                     ciclo = ciclo,
                     tiene_med = tieneMedidor,
                     usuario = usuario,
@@ -336,7 +338,7 @@ public class CobranzaService : ICobranzaService
         catch (Exception ex)
         {
             await transaction.RollbackAsync(ct);
-            return ResponseModelDto.Fail($"No se pudo guardar el plan: {ex.Message}");
+            return ResponseModelDto.Fail($"No se pudo guardar el plan: {GetInnermostMessage(ex)}");
         }
     }
 
@@ -473,12 +475,66 @@ public class CobranzaService : ICobranzaService
 
     private async Task<decimal?> ObtenerReciboAplicableAsync(string clienteClave, CancellationToken ct)
     {
+        var reciboFacturaActiva = await _context.facturas
+            .AsNoTracking()
+            .Where(f =>
+                f.clientecodigo == clienteClave &&
+                f.numrecibo > 0 &&
+                f.estado == "A" &&
+                (f.saldototal ?? 0) > 0)
+            .OrderByDescending(f => f.fechaemision)
+            .ThenByDescending(f => f.numrecibo)
+            .Select(f => (decimal?)f.numrecibo)
+            .FirstOrDefaultAsync(ct);
+
+        if (reciboFacturaActiva.HasValue)
+        {
+            return reciboFacturaActiva;
+        }
+
+        var ultimoReciboFactura = await _context.facturas
+            .AsNoTracking()
+            .Where(f => f.clientecodigo == clienteClave && f.numrecibo > 0)
+            .OrderByDescending(f => f.fechaemision)
+            .ThenByDescending(f => f.numrecibo)
+            .Select(f => (decimal?)f.numrecibo)
+            .FirstOrDefaultAsync(ct);
+
+        if (ultimoReciboFactura.HasValue)
+        {
+            return ultimoReciboFactura;
+        }
+
         return await _context.transaccion_abonados
             .AsNoTracking()
-            .Where(t => t.cliente_clave == clienteClave && t.tipotransaccion == "101")
-            .OrderByDescending(t => t.ide)
+            .Where(t => t.cliente_clave == clienteClave && t.recibo != null && t.recibo > 0)
+            .OrderByDescending(t => t.fecha_docu)
+            .ThenByDescending(t => t.ide)
             .Select(t => t.recibo)
             .FirstOrDefaultAsync(ct);
+    }
+
+    private static DateTime NormalizeTimestamp(DateTime value)
+    {
+        if (value == DateTime.MinValue)
+        {
+            return value;
+        }
+
+        return value.Kind == DateTimeKind.Unspecified
+            ? value
+            : DateTime.SpecifyKind(value, DateTimeKind.Unspecified);
+    }
+
+    private static string GetInnermostMessage(Exception ex)
+    {
+        var current = ex;
+        while (current.InnerException is not null)
+        {
+            current = current.InnerException;
+        }
+
+        return current.Message;
     }
 
     private sealed record ClienteBase(

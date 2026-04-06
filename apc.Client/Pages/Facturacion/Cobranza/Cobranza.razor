@@ -1,207 +1,319 @@
 @page "/facturacion/cobranza"
 @attribute [Authorize]
+@using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza
 @inject CobranzaClient CobranzaClient
 @inject NotasCreditoDebitoClient NotasClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 
-<DxScrollView Height="100%">
-    <DxToastProvider Name="@ToastName" MaxToastCount="3" />
+<div class="page-container">
+    <DxToastProvider Name="@ToastName" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Cobranza</h2>
+            <p class="page-subtitle">Planes de pago, cálculo de cuotas y seguimiento</p>
+        </div>
+    </div>
 
     @if (!string.IsNullOrWhiteSpace(errorCobranza))
     {
         <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorCobranza</DxAlert>
     }
 
-    <DxTabs @bind-ActiveTabIndex="tabActivo" CssClass="mb-3">
+    <DxTabs @bind-ActiveTabIndex="tabActivo" CssClass="tabs-modern">
         <DxTabPage Text="Crear plan de pago">
             <ContentTemplate>
-                <DxCard CssClass="mb-3">
-                    <HeaderTemplate>
-                        <h5 class="mb-0">Cliente</h5>
-                    </HeaderTemplate>
-                    <BodyTemplate>
-                        <DxFormLayout>
-                            <DxFormLayoutItem Caption="Buscar">
-                                <div class="d-flex gap-2 flex-wrap align-items-end">
-                                    <DxTextBox @bind-Text="criterioBusqueda"
-                                               Width="280px"
-                                               NullText="Clave, nombre o RTN"
+                <div class="modern-card mb-4">
+                    <div class="section-header">
+                        <div>
+                            <h6 class="section-title">Búsqueda de cliente</h6>
+                            <p class="section-subtitle">Clave, nombre o RTN del cliente</p>
+                        </div>
+                        @if (clienteSeleccionado is not null)
+                        {
+                            <span class="status-pill @(bloqueado ? "blocked" : "ok")">
+                                @(bloqueado ? "Bloqueado" : "Habilitado")
+                            </span>
+                        }
+                    </div>
+
+                    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                        <DxFormLayoutItem Caption="Buscar cliente" ColSpanXs="12" ColSpanMd="6">
+                            <Template>
+                                <div class="d-flex flex-wrap gap-2 align-items-end">
+                                    <DxTextBox Text="@criterioBusqueda"
+                                               TextChanged="OnCriterioChanged"
+                                               TextExpression="@(() => criterioBusqueda)"
+                                               InputDelay="450"
+                                               Placeholder="Clave, nombre o RTN"
+                                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
                                                ReadOnly="@buscandoClientes" />
                                     <DxButton Text="Buscar"
-                                              ButtonType="ButtonType.Normal"
-                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              IconCssClass="bi bi-search"
+                                              RenderStyle="ButtonRenderStyle.Primary"
                                               Enabled="@(!buscandoClientes && !string.IsNullOrWhiteSpace(criterioBusqueda))"
-                                              Click="@BuscarClientesAsync" />
+                                              Click="BuscarClientesAsync" />
                                     <DxButton Text="Limpiar"
-                                              ButtonType="ButtonType.Normal"
-                                              RenderStyle="ButtonRenderStyle.Link"
-                                              Enabled="@(!buscandoClientes && clienteSeleccionado is not null)"
-                                              Click="@(_ => LimpiarPlan())" />
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              Click="_ => LimpiarPlan()" />
                                 </div>
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Cliente seleccionado">
-                                <DxTextBox Text="@clienteSeleccionado?.Nombre"
-                                           ReadOnly="true"
-                                           NullText="Sin seleccionar" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Clave / RTN">
-                                <DxTextBox Text="@clienteSeleccionado?.Clave"
-                                           ReadOnly="true"
-                                           NullText="N/A" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Total deuda">
-                                <DxTextBox Text="@($"L. {totalSaldo:n2}")"
-                                           ReadOnly="true" />
-                            </DxFormLayoutItem>
-                        </DxFormLayout>
-                    </BodyTemplate>
-                </DxCard>
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Cliente seleccionado" ColSpanXs="12" ColSpanMd="6">
+                            <Template>
+                                <DxTextBox Text="@clienteSeleccionado?.Nombre" ReadOnly="true" NullText="Sin seleccionar" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Clave" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxTextBox Text="@clienteSeleccionado?.Clave" ReadOnly="true" NullText="N/A" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxTextBox Text="@clienteSeleccionado?.Rtn" ReadOnly="true" NullText="N/A" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Dirección" ColSpanXs="12" ColSpanMd="6">
+                            <Template>
+                                <DxTextBox Text="@direccionActual" ReadOnly="true" NullText="N/A" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="4">
+                            <Template>
+                                <DxTextBox Text="@cicloDescripcion" ReadOnly="true" NullText="N/A" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Total deuda" ColSpanXs="12" ColSpanMd="4">
+                            <Template>
+                                <DxTextBox Text="@($"L. {totalSaldo:n2}")" ReadOnly="true" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Referencia recibo" ColSpanXs="12" ColSpanMd="4">
+                            <Template>
+                                <DxTextBox Text="@(reciboReferencia?.ToString("N0"))" ReadOnly="true" NullText="N/A" />
+                            </Template>
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+                </div>
 
                 @if (bloqueado)
                 {
                     <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
-                        El cliente está bloqueado por cobranza. Revisa la situación antes de registrar un plan.
+                        El cliente está bloqueado por cobranza. Revise la situación antes de registrar un plan.
                     </DxAlert>
                 }
 
-                <DxGrid Data="@saldos"
-                        PageSize="10"
-                        ShowFilterRow="false"
-                        ShowGroupPanel="false"
-                        CssClass="mb-3">
-                    <Columns>
-                        <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.Descripcion)" Caption="Descripción" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.SaldoDetalle)" Caption="Saldo" DisplayFormat="n2" Width="140px" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.Periodo)" Caption="Periodo" Width="120px" />
-                    </Columns>
-                </DxGrid>
+                <div class="modern-card mb-4">
+                    <div class="section-header">
+                        <div>
+                            <h6 class="section-title">Estado de cuenta</h6>
+                            <p class="section-subtitle">Detalle de saldos pendientes</p>
+                        </div>
+                    </div>
 
-                <DxCard CssClass="mb-3">
-                    <HeaderTemplate>
-                        <h5 class="mb-0">Parámetros del plan</h5>
-                    </HeaderTemplate>
-                    <BodyTemplate>
-                        <DxFormLayout>
-                            <DxFormLayoutItem Caption="Meses">
-                                <DxSpinEdit @bind-Value="MesesBindable"
-                                            Min="1"
-                                            Max="60"
-                                            Increment="1" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="% Prima">
-                                <DxSpinEdit @bind-Value="PorcentajePrimaBindable"
-                                            Min="0"
-                                            Max="100"
-                                            Decimals="2" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Prima">
-                                <DxTextBox Text="@($"L. {montoPrima:n2}")"
-                                           ReadOnly="true" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Monto a financiar">
-                                <DxTextBox Text="@($"L. {montoFinanciar:n2}")"
-                                           ReadOnly="true" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Fecha plan">
+                    <div class="grid-wrapper">
+                        <DxGrid Data="@saldos"
+                                PageSize="20"
+                                ShowFilterRow="false"
+                                ShowGroupPanel="false"
+                                PagerVisible="false"
+                                CssClass="grid-solicitudes">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.Descripcion)" Caption="Descripción" />
+                                <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.SaldoDetalle)" Caption="Saldo" DisplayFormat="n2" Width="140px" />
+                                <DxGridDataColumn FieldName="@nameof(CobranzaSaldoDetalleDto.Periodo)" Caption="Periodo" Width="120px" />
+                            </Columns>
+                            <TotalSummary>
+                                <DxGridSummaryItem FieldName="@nameof(CobranzaSaldoDetalleDto.SaldoDetalle)"
+                                                   SummaryType="GridSummaryItemType.Sum" />
+                            </TotalSummary>
+                            <EmptyDataAreaTemplate>
+                                <div class="p-3 text-center text-muted">No hay saldos pendientes.</div>
+                            </EmptyDataAreaTemplate>
+                        </DxGrid>
+                    </div>
+                </div>
+
+                <div class="modern-card">
+                    <div class="section-header">
+                        <div>
+                            <h6 class="section-title">Parámetros del plan</h6>
+                            <p class="section-subtitle">Configure prima, cuotas y fechas</p>
+                        </div>
+                    </div>
+
+                    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                        <DxFormLayoutItem Caption="Meses" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxSpinEdit @bind-Value="MesesBindable" Min="1" Max="60" Increment="1" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="% Prima" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxSpinEdit @bind-Value="PorcentajePrimaBindable" Min="0" Max="100" Decimals="2" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Prima" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxTextBox Text="@($"L. {montoPrima:n2}")" ReadOnly="true" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Monto a financiar" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxTextBox Text="@($"L. {montoFinanciar:n2}")" ReadOnly="true" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Fecha plan" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
                                 <DxDateEdit @bind-Date="fechaPlan" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Primer pago">
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Primer pago" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
                                 <DxDateEdit @bind-Date="fechaPrimerPago" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Representante">
-                                <DxTextBox @bind-Text="representante" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Identidad representante">
-                                <DxTextBox @bind-Text="docRepresentante" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Contacto representante">
-                                <DxTextBox @bind-Text="numRepresentante" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption="Comentario" ColSpanMd="6">
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Representante" ColSpanXs="12" ColSpanMd="6">
+                            <Template>
+                                <DxTextBox @bind-Text="representante" Placeholder="Nombre completo" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Identidad representante" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxMaskedInput @bind-Value="docRepresentante" Mask="0000-0000-00000" NullText="0000-0000-00000" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Contacto" ColSpanXs="12" ColSpanMd="3">
+                            <Template>
+                                <DxMaskedInput @bind-Value="numRepresentante" Mask="0000-0000" NullText="0000-0000" />
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Comentario" ColSpanXs="12">
+                            <Template>
                                 <DxMemo @bind-Text="comentario" Rows="3" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption=" ">
-                                <DxButton Text="Calcular plan"
-                                          ButtonType="ButtonType.Normal"
+                            </Template>
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem ColSpanXs="12" CssClass="plan-actions">
+                            <Template>
+                                <DxButton Text="Desglose de cuotas"
+                                          IconCssClass="bi bi-list-check"
                                           RenderStyle="ButtonRenderStyle.Primary"
                                           Enabled="@PuedeCalcular"
-                                          Click="@GenerarPreviewAsync" />
-                            </DxFormLayoutItem>
-                            <DxFormLayoutItem Caption=" ">
-                                <DxButton Text="Guardar plan"
-                                          ButtonType="ButtonType.Normal"
-                                          RenderStyle="ButtonRenderStyle.Success"
-                                          Enabled="@PuedeGuardar"
-                                          Click="@GuardarPlanAsync" />
-                            </DxFormLayoutItem>
-                        </DxFormLayout>
-                    </BodyTemplate>
-                </DxCard>
-
-                @if (preview.Cuotas?.Count > 0)
-                {
-                    <DxCard>
-                        <HeaderTemplate>
-                            <h6 class="mb-0">Previsualización de cuotas</h6>
-                        </HeaderTemplate>
-                        <BodyTemplate>
-                            <DxGrid Data="@preview.Cuotas"
-                                    PageSize="10"
-                                    ShowGroupPanel="false"
-                                    ShowFilterRow="false">
-                                <Columns>
-                                    <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Numero)" Caption="Cuota" Width="90px" />
-                                    <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
-                                    <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Valor)" Caption="Valor" DisplayFormat="n2" />
-                                </Columns>
-                            </DxGrid>
-                        </BodyTemplate>
-                    </DxCard>
-                }
+                                          Click="MostrarPreviewAsync" />
+                            </Template>
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+                </div>
             </ContentTemplate>
         </DxTabPage>
+
         <DxTabPage Text="Consulta de planes">
             <ContentTemplate>
-                <DxGrid Data="@planes"
-                        PageSize="10"
-                        ShowGroupPanel="false"
-                        ShowFilterRow="false">
-                    <Columns>
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Correlativo)" Caption="Correlativo" Width="130px" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Cliente)" Caption="Cliente" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Estado)" Caption="Estado" Width="120px" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Total)" Caption="Total" DisplayFormat="n2" Width="120px" />
-                        <DxGridDataColumn Caption="Acciones" Width="150px">
-                            <CellDisplayTemplate Context="ctx">
-                                <DxButton Text="Detalle"
-                                          ButtonType="ButtonType.Normal"
-                                          SizeMode="SizeMode.Small"
-                                          Click="@(
-                                              async () => await MostrarDetallePlan(
-                                                  (CobranzaPlanResumenDto)ctx.DataItem))" />
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
-                    </Columns>
-                </DxGrid>
+                <div class="modern-card">
+                    @if (cargandoPlanes)
+                    {
+                        <div class="text-center p-4">
+                            <DxLoadingPanel Visible="true" Text="Cargando planes..." />
+                            <div style="height:70px"></div>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="grid-wrapper">
+                            <DxGrid Data="@PlanesFiltrados"
+                                    PageSize="15"
+                                    ShowGroupPanel="false"
+                                    ShowFilterRow="false"
+                                    CssClass="grid-solicitudes">
+                                <ToolbarTemplate>
+                                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                                        <DxTextBox Text="@planesBusqueda"
+                                                   TextChanged="OnPlanesBusquedaChanged"
+                                                   TextExpression="@(() => planesBusqueda)"
+                                                   Placeholder="Buscar por correlativo o cliente"
+                                                   InputDelay="500"
+                                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                   CssClass="me-1"
+                                                   Style="min-width: 260px;" />
+
+                                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarPlanesAsync" CssClass="me-1" />
+
+                                        <div class="ms-auto text-muted small">
+                                            Total: <span class="fw-bold">@totalPlanes.ToString("N0")</span>
+                                        </div>
+                                    </div>
+                                </ToolbarTemplate>
+
+                                <Columns>
+                                    <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Correlativo)" Caption="Correlativo" Width="140px" />
+                                    <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Cliente)" Caption="Cliente" />
+                                    <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Fecha)" Caption="Fecha" DisplayFormat="d" Width="140px" />
+                                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                                        <CellDisplayTemplate Context="cell">
+                                            @if (cell.DataItem is CobranzaPlanResumenDto item)
+                                            {
+                                                <span class="badge-status @EstadoBadge(item.Estado)">@item.Estado</span>
+                                            }
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                    <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Total)" Caption="Total" DisplayFormat="n2" Width="120px" />
+                                    <DxGridDataColumn Caption="Acciones" Width="140px" TextAlignment="GridTextAlignment.Center">
+                                        <CellDisplayTemplate Context="ctx">
+                                            <DxButton Text="Detalle"
+                                                      ButtonType="ButtonType.Normal"
+                                                      SizeMode="SizeMode.Small"
+                                                      Click="@(
+                                                          async () => await MostrarDetallePlan(
+                                                              (CobranzaPlanResumenDto)ctx.DataItem))" />
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                </Columns>
+
+                                <EmptyDataAreaTemplate>
+                                    <div class="p-4 text-center text-muted">No hay planes para mostrar.</div>
+                                </EmptyDataAreaTemplate>
+                            </DxGrid>
+                        </div>
+                    }
+                </div>
             </ContentTemplate>
         </DxTabPage>
     </DxTabs>
+</div>
 
-    <DxPopup @bind-Visible="mostrandoPopupClientes"
-             Width="700px"
-             HeaderText="Resultados de búsqueda">
-        <ChildContent>
+<DxPopup @bind-Visible="mostrandoPopupClientes"
+         Width="min(900px, 95vw)"
+         Height="auto"
+         MaxHeight="85vh"
+         Scrollable="true"
+         CssClass="custom-popup">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center" style="width: 38px; height: 38px;">
+                <i class="bi bi-search"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Resultados de búsqueda</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Seleccione un cliente para continuar</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        <div class="p-3">
             <DxGrid Data="@clientes"
                     PageSize="10"
                     ShowFilterRow="false"
-                    ShowGroupPanel="false">
+                    ShowGroupPanel="false"
+                    CssClass="grid-solicitudes">
                 <Columns>
                     <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Clave)" Caption="Clave" Width="120px" />
                     <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Nombre)" Caption="Nombre" />
                     <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Rtn)" Caption="RTN" Width="150px" />
-                    <DxGridDataColumn Caption="Acciones" Width="120px">
+                    <DxGridDataColumn Caption="Acciones" Width="140px">
                         <CellDisplayTemplate Context="ctx">
                             <DxButton Text="Seleccionar"
                                       ButtonType="ButtonType.Normal"
@@ -212,36 +324,140 @@
                     </DxGridDataColumn>
                 </Columns>
             </DxGrid>
-        </ChildContent>
-    </DxPopup>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
 
-    <DxPopup @bind-Visible="mostrandoDetalle"
-             Width="700px"
-             HeaderText="@($"Plan {detalle?.Correlativo ?? string.Empty}")">
-        <ChildContent>
-            @if (detalle is not null)
-            {
-                <div class="mb-3">
-                    <p class="mb-1"><strong>Cliente:</strong> @detalle.ClienteClave - @detalle.ClienteNombre</p>
-                    <p class="mb-1"><strong>Monto:</strong> L. @detalle.Monto:n2</p>
-                    <p class="mb-1"><strong>Meses:</strong> @detalle.Meses</p>
-                    <p class="mb-1"><strong>Estado:</strong> @detalle.Estado</p>
+<DxPopup @bind-Visible="mostrandoPreview"
+         Width="min(860px, 95vw)"
+         Height="auto"
+         MaxHeight="85vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-success bg-opacity-10 text-success p-2 rounded-circle d-flex justify-content-center align-items-center" style="width: 38px; height: 38px;">
+                <i class="bi bi-receipt"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Detalle de cuotas</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Revise el plan antes de guardar</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        <div class="p-4">
+            <div class="preview-summary">
+                <div>
+                    <div class="summary-label">Cliente</div>
+                    <div class="summary-value">@clienteSeleccionado?.Nombre</div>
                 </div>
-                <DxGrid Data="@detalle.Cuotas"
+                <div>
+                    <div class="summary-label">Meses</div>
+                    <div class="summary-value">@meses</div>
+                </div>
+                <div>
+                    <div class="summary-label">Prima</div>
+                    <div class="summary-value">@($"{porcentajePrima:n2} %")</div>
+                </div>
+                <div>
+                    <div class="summary-label">Monto financiar</div>
+                    <div class="summary-value">@($"L. {montoFinanciar:n2}")</div>
+                </div>
+                <div>
+                    <div class="summary-label">Valor cuota</div>
+                    <div class="summary-value">@($"L. {preview.ValorCuota:n2}")</div>
+                </div>
+            </div>
+
+            <div class="grid-wrapper mb-3">
+                <DxGrid Data="@preview.Cuotas"
                         PageSize="10"
+                        ShowGroupPanel="false"
                         ShowFilterRow="false"
-                        ShowGroupPanel="false">
+                        CssClass="grid-solicitudes">
                     <Columns>
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Numero)" Caption="Cuota" Width="80px" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Valor)" Caption="Valor" DisplayFormat="n2" />
-                        <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Estado)" Caption="Estado" Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Numero)" Caption="Cuota" Width="90px" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
+                        <DxGridDataColumn FieldName="@nameof(CobranzaCuotaDto.Valor)" Caption="Valor" DisplayFormat="n2" />
                     </Columns>
                 </DxGrid>
-            }
-        </ChildContent>
-    </DxPopup>
-</DxScrollView>
+            </div>
+
+            <div class="preview-actions">
+                <DxButton Text="Cancelar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="CerrarPreview" />
+                <DxButton Text="Guardar plan"
+                          RenderStyle="ButtonRenderStyle.Success"
+                          Enabled="@PuedeGuardar"
+                          Click="GuardarPlanAsync" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="mostrandoDetalle"
+         Width="min(860px, 95vw)"
+         Height="auto"
+         MaxHeight="85vh"
+         Scrollable="true"
+         CssClass="custom-popup">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center" style="width: 38px; height: 38px;">
+                <i class="bi bi-journal-text"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Plan @detalle?.Correlativo</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Detalle del plan de pago</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (detalle is not null)
+        {
+            <div class="p-4">
+                <div class="detail-header">
+                    <div>
+                        <div class="summary-label">Cliente</div>
+                        <div class="summary-value">@detalle.ClienteClave - @detalle.ClienteNombre</div>
+                    </div>
+                    <div>
+                        <div class="summary-label">Monto</div>
+                        <div class="summary-value">@($"L. {detalle.Monto:n2}")</div>
+                    </div>
+                    <div>
+                        <div class="summary-label">Meses</div>
+                        <div class="summary-value">@detalle.Meses</div>
+                    </div>
+                    <div>
+                        <div class="summary-label">Estado</div>
+                        <div class="summary-value">
+                            <span class="badge-status @EstadoBadge(detalle.Estado)">@detalle.Estado</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="grid-wrapper">
+                    <DxGrid Data="@detalle.Cuotas"
+                            PageSize="10"
+                            ShowFilterRow="false"
+                            ShowGroupPanel="false"
+                            CssClass="grid-solicitudes">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Numero)" Caption="Cuota" Width="80px" />
+                            <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
+                            <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Valor)" Caption="Valor" DisplayFormat="n2" />
+                            <DxGridDataColumn FieldName="@nameof(CobranzaPlanDetalleCuotaDto.Estado)" Caption="Estado" Width="140px" />
+                        </Columns>
+                    </DxGrid>
+                </div>
+            </div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
 
 @code {
     private const string ToastName = "cobranza-plan";
@@ -259,6 +475,8 @@
     private bool bloqueado;
     private decimal? reciboReferencia;
     private int? cicloIdReferencia;
+    private string? direccionActual;
+    private string? cicloDescripcion;
 
     private int meses = 6;
     private int MesesBindable
@@ -291,6 +509,7 @@
             RecalcularMontos();
         }
     }
+
     private decimal montoPrima;
     private decimal montoFinanciar;
     private DateTime fechaPlan = DateTime.Today;
@@ -303,9 +522,13 @@
     private CobranzaPlanPreviewDto preview = new();
     private bool generandoPreview;
     private bool guardandoPlan;
+    private bool mostrandoPreview;
     private string? errorCobranza;
 
     private List<CobranzaPlanResumenDto> planes = new();
+    private string planesBusqueda = string.Empty;
+    private int totalPlanes;
+    private bool cargandoPlanes;
     private CobranzaPlanDetalleDto? detalle;
     private bool mostrandoDetalle;
 
@@ -318,14 +541,48 @@
 
     private bool PuedeCalcular =>
         clienteSeleccionado is not null &&
+        !bloqueado &&
         meses > 0 &&
         montoFinanciar > 0 &&
         !generandoPreview;
 
     private bool PuedeGuardar =>
-        PuedeCalcular &&
+        clienteSeleccionado is not null &&
         preview.Cuotas?.Count > 0 &&
         !guardandoPlan;
+
+    private IEnumerable<CobranzaPlanResumenDto> PlanesFiltrados
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(planesBusqueda))
+            {
+                return planes;
+            }
+
+            return planes.Where(p =>
+                (!string.IsNullOrWhiteSpace(p.Correlativo) && p.Correlativo.Contains(planesBusqueda, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(p.Cliente) && p.Cliente.Contains(planesBusqueda, StringComparison.OrdinalIgnoreCase)) ||
+                (!string.IsNullOrWhiteSpace(p.ClienteClave) && p.ClienteClave.Contains(planesBusqueda, StringComparison.OrdinalIgnoreCase)));
+        }
+    }
+
+    private async Task OnCriterioChanged(string value)
+    {
+        criterioBusqueda = value;
+        if (string.IsNullOrWhiteSpace(value) || value.Length < 3)
+        {
+            return;
+        }
+
+        await BuscarClientesAsync();
+    }
+
+    private Task OnPlanesBusquedaChanged(string value)
+    {
+        planesBusqueda = value;
+        return Task.CompletedTask;
+    }
 
     private async Task BuscarClientesAsync()
     {
@@ -376,6 +633,8 @@
             bloqueado = saldos.FirstOrDefault()?.Bloqueado ?? false;
             reciboReferencia = saldos.FirstOrDefault()?.Recibo;
             cicloIdReferencia = saldos.FirstOrDefault()?.CicloId;
+            direccionActual = saldos.FirstOrDefault()?.Direccion ?? clienteSeleccionado.Direccion;
+            cicloDescripcion = saldos.FirstOrDefault()?.CicloDescripcion;
             RecalcularMontos();
         }
         catch (Exception ex)
@@ -389,12 +648,28 @@
     {
         montoPrima = Math.Round(totalSaldo * (porcentajePrima / 100m), 2, MidpointRounding.AwayFromZero);
         montoFinanciar = Math.Max(0, totalSaldo - montoPrima);
-        preview = new CobranzaPlanPreviewDto();
+        ReiniciarPreview();
     }
 
     private void ReiniciarPreview()
     {
         preview = new CobranzaPlanPreviewDto();
+        mostrandoPreview = false;
+    }
+
+    private async Task MostrarPreviewAsync()
+    {
+        if (bloqueado)
+        {
+            MostrarToast("Cobranza", "El cliente está bloqueado por cobranza.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        await GenerarPreviewAsync();
+        if (preview.Cuotas?.Count > 0)
+        {
+            mostrandoPreview = true;
+        }
     }
 
     private async Task GenerarPreviewAsync()
@@ -475,6 +750,7 @@
             }
 
             MostrarToast("Cobranza", respuesta.Message ?? "Plan guardado correctamente.", ToastRenderStyle.Success);
+            mostrandoPreview = false;
             await CargarPlanesAsync();
             LimpiarPlan();
         }
@@ -491,14 +767,20 @@
 
     private async Task CargarPlanesAsync()
     {
+        cargandoPlanes = true;
         try
         {
             planes = (await CobranzaClient.ListarPlanesAsync()).ToList();
+            totalPlanes = planes.Count;
         }
         catch (Exception ex)
         {
             errorCobranza = $"No se pudo cargar el listado de planes: {ex.Message}";
             MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargandoPlanes = false;
         }
     }
 
@@ -516,11 +798,23 @@
         }
     }
 
+    private void CerrarPreview()
+    {
+        if (guardandoPlan)
+        {
+            return;
+        }
+
+        mostrandoPreview = false;
+    }
+
     private void LimpiarPlan()
     {
+        criterioBusqueda = string.Empty;
         clienteSeleccionado = null;
         saldos = Array.Empty<CobranzaSaldoDetalleDto>();
         totalSaldo = 0;
+        bloqueado = false;
         porcentajePrima = 0;
         montoPrima = 0;
         montoFinanciar = 0;
@@ -532,6 +826,30 @@
         preview = new CobranzaPlanPreviewDto();
         reciboReferencia = null;
         cicloIdReferencia = null;
+        direccionActual = null;
+        cicloDescripcion = null;
+        mostrandoPreview = false;
+        fechaPlan = DateTime.Today;
+        fechaPrimerPago = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
+        clientes.Clear();
+        mostrandoPopupClientes = false;
+    }
+
+    private string EstadoBadge(string? estado)
+    {
+        if (string.IsNullOrWhiteSpace(estado))
+        {
+            return "inactive";
+        }
+
+        return estado.Trim().ToLowerInvariant() switch
+        {
+            "pagado" => "paid",
+            "cancelado" => "cancelled",
+            "pendiente" => "pending",
+            "activo" => "active",
+            _ => "inactive"
+        };
     }
 
     private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>

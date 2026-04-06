@@ -1,0 +1,142 @@
+@page "/informes"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using apc.Client.Services.Informes
+@using SIAD.Core.DTOs.Informes
+@using SIAD.Core.Constants
+@inject InformesClient InformesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Informes</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Informes</h2>
+            <p class="page-subtitle">Catálogo dinámico de consultas e informes disponibles para la empresa actual.</p>
+        </div>
+
+        <div class="d-flex gap-2">
+            <DxButton Text="Actualizar"
+                      Click="LoadCatalogoAsync"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        @if (isLoading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else if (items.Count == 0)
+        {
+            <div class="text-center text-muted py-5">
+                No hay informes configurados todavía para esta empresa.
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var item in items)
+                {
+                    <div class="col-12 col-lg-6">
+                        <div class="border rounded-3 p-4 h-100 bg-white shadow-sm">
+                            <div class="d-flex align-items-start justify-content-between gap-3">
+                                <div class="d-flex gap-3">
+                                    <div class="fs-3 text-primary">
+                                        <i class="@GetIcon(item)"></i>
+                                    </div>
+                                    <div>
+                                        <div class="fw-semibold fs-5">@item.Nombre</div>
+                                        <div class="text-muted small">@item.Categoria · @item.TipoOrigen</div>
+                                    </div>
+                                </div>
+                                <span class="badge bg-light text-dark border">@item.Codigo</span>
+                            </div>
+
+                            <p class="text-muted mt-3 mb-4">
+                                @(string.IsNullOrWhiteSpace(item.Descripcion) ? "Sin descripción configurada." : item.Descripcion)
+                            </p>
+
+                            <div class="d-flex flex-wrap gap-2">
+                                <DxButton Text="Abrir"
+                                          Click="@(() => OpenInforme(item.Ruta))"
+                                          IconCssClass="bi bi-box-arrow-up-right"
+                                          RenderStyle="ButtonRenderStyle.Primary" />
+                                @if (string.Equals(item.TipoOrigen, ReportesWebConstants.TipoOrigenReporte, StringComparison.OrdinalIgnoreCase))
+                                {
+                                    <AuthorizeView Policy="@PermissionNames.Reporteria.Edit">
+                                        <Authorized>
+                                            <DxButton Text="Diseñar"
+                                                      Click="@(() => OpenInforme(ReportesWebConstants.BuildDesignerRoute(item.Codigo)))"
+                                                      IconCssClass="bi bi-pencil-square"
+                                                      RenderStyle="ButtonRenderStyle.Secondary" />
+                                        </Authorized>
+                                    </AuthorizeView>
+                                }
+                                <DxButton Text="Exportar"
+                                          Enabled="false"
+                                          IconCssClass="bi bi-download"
+                                          RenderStyle="ButtonRenderStyle.Secondary" />
+                                <DxButton Text="Imprimir"
+                                          Enabled="false"
+                                          IconCssClass="bi bi-printer"
+                                          RenderStyle="ButtonRenderStyle.Secondary" />
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<InformeCatalogoItemDto> items = [];
+    private bool isLoading;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCatalogoAsync();
+    }
+
+    private async Task LoadCatalogoAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            items = (await InformesClient.GetCatalogoAsync()).OrderBy(x => x.Orden).ThenBy(x => x.Nombre).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            items = [];
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OpenInforme(string ruta)
+    {
+        if (string.IsNullOrWhiteSpace(ruta))
+        {
+            return;
+        }
+
+        NavigationManager.NavigateTo(ruta);
+    }
+
+    private static string GetIcon(InformeCatalogoItemDto item)
+        => string.IsNullOrWhiteSpace(item.IconoCssClass) ? "bi bi-file-earmark-bar-graph" : item.IconoCssClass;
+}

@@ -4,7 +4,7 @@ namespace SIAD.Services.Contabilidad;
 
 /// <summary>
 /// Servicio para gestión de pólizas contables (encabezado + líneas)
-/// Alineado con estructura DB: con_poliza (header) + con_poliza_linea (detail)
+/// Alineado con estructura DB: con_partida_hdr (header) + con_partida_dtl (detail)
 /// Multiempresa: todas las operaciones scoped por company_id
 /// </summary>
 public interface IPolizaService
@@ -12,11 +12,14 @@ public interface IPolizaService
     /// <summary>Crear nueva póliza en estado DRAFT</summary>
     Task<long> CrearAsync(
         long companyId,
+        long typeId,
         long? periodId,
         long? journalId,
         DateTime polizaDate,
         string module,
         string documentType,
+        long? documentId,
+        string? documentNumber,
         string description,
         List<PolizaLineaCrearDto> lineas,
         string userId,
@@ -54,84 +57,4 @@ public interface IPolizaService
     Task RevertirAsync(long companyId, long polizaId, string userId, CancellationToken ct = default);
 }
 
-/// <summary>Datos para crear póliza</summary>
-public sealed record PolizaCrearDto(
-    long? PeriodId,
-    long? JournalId,
-    DateTime PolizaDate,
-    string Module,
-    string DocumentType,
-    string? Description,
-    List<PolizaLineaCrearDto> Lineas
-);
 
-/// <summary>Datos para crear línea de póliza</summary>
-public sealed record PolizaLineaCrearDto(
-    long AccountId,
-    long? CostCenterId,
-    decimal DebitAmount,
-    decimal CreditAmount,
-    string? Description,
-    string? CurrencyCode = "HNL",
-    decimal? ExchangeRate = null,
-    string? SourceDocument = null
-);
-
-/// <summary>Datos para actualizar póliza</summary>
-public sealed record PolizaActualizarDto(
-    DateTime PolizaDate,
-    string? Description
-);
-
-/// <summary>DTO para consultar póliza con todas sus líneas</summary>
-public sealed record PolizaConLineasDto(
-    long PolizaId,
-    long CompanyId,
-    long? PeriodId,
-    long? JournalId,
-    string PolizaNumber,
-    DateTime PolizaDate,
-    string Module,
-    string DocumentType,
-    string? Description,
-    string Status,
-    decimal TotalDebit,
-    decimal TotalCredit,
-    bool IsBalanced,
-    DateTime CreatedAt,
-    string CreatedBy,
-    DateTime? UpdatedAt,
-    string? UpdatedBy,
-    List<PolizaLineaConDetallesDto> Lineas
-);
-
-/// <summary>DTO para línea de póliza con detalles de cuenta</summary>
-public sealed record PolizaLineaConDetallesDto(
-    long LineaId,
-    long PolizaId,
-    long AccountId,
-    string AccountCode,
-    string AccountName,
-    long? CostCenterId,
-    string? CostCenterCode,
-    decimal DebitAmount,
-    decimal CreditAmount,
-    string? Description,
-    string? CurrencyCode
-);
-
-/// <summary>DTO para listar pólizas (vista simple)</summary>
-public sealed record PolizaListaDto(
-    long PolizaId,
-    string PolizaNumber,
-    DateTime PolizaDate,
-    string Module,
-    string DocumentType,
-    string? Description,
-    string Status,
-    decimal TotalDebit,
-    decimal TotalCredit,
-    bool IsBalanced,
-    DateTime CreatedAt,
-    string CreatedBy
-);

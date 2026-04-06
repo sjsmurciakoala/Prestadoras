@@ -1,0 +1,389 @@
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json
+@using SIAD.Core.DTOs.CaptacionPagos
+@inject apc.Client.Services.CaptacionPagos.CaptacionPagosClient CaptacionClient
+@inject IToastNotificationService ToastService
+
+<div class="tab-content-section">
+    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+        <DxFormLayoutGroup ColSpanXs="12" ColSpanMd="12">
+            <DxFormLayoutItem Caption="Cliente" ColSpanXs="12" ColSpanMd="6">
+                <ClienteLookup Items="@Clientes"
+                               @bind-Value="form.ClienteClave" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Banco" ColSpanXs="12" ColSpanMd="3">
+                @if (UsaCatalogoBancoCuenta)
+                {
+                    <DxComboBox TData="BancoDto" TValue="long?" Data="@BancosConCuenta"
+                                TextFieldName="Nombre" ValueFieldName="BancoCuentaId"
+                                @bind-Value="form.BancoCuentaId"
+                                NullText="Seleccione banco"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                }
+                else
+                {
+                    <DxComboBox TData="BancoDto" TValue="string" Data="@Bancos"
+                                TextFieldName="Nombre" ValueFieldName="Codigo"
+                                @bind-Value="form.BancoCodigo"
+                                NullText="Seleccione banco"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                }
+            </DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanXs="12" ColSpanMd="3">
+                <DxButton Text="Buscar Recibos" 
+                          RenderStyle="ButtonRenderStyle.Primary" 
+                          IconCssClass="bi bi-search"
+                          Enabled="@(!string.IsNullOrEmpty(form.ClienteClave) && !buscando)"
+                          Click="BuscarRecibosAsync" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+    </DxFormLayout>
+
+    @if (busquedaRealizada)
+    {
+        <div class="mt-3">
+            <h6 class="text-muted mb-2">Recibos Misceláneos del Cliente</h6>
+            <div class="text-muted small mb-2">@($"Recibos encontrados: {totalRecibos}")</div>
+            <DxGrid @ref="recibosGrid"
+                    Data="@recibosDataSource"
+                    KeyFieldName="@nameof(ReciboMiscelaneoDto.Recibo)"
+                    ShowFilterRow="false"
+                    ShowGroupPanel="false"
+                    ShowPager="false"
+                    PageSize="50"
+                    VirtualScrollingEnabled="true"
+                    VirtualScrollingMode="GridVirtualScrollingMode.Rows"
+                    SelectionMode="GridSelectionMode.Single"
+                    AllowSelectRowByClick="true"
+                    SelectedDataItem="@reciboSeleccionado"
+                    SelectedDataItemChanged="OnReciboSeleccionadoChanged"
+                    CssClass="table-hover">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ReciboMiscelaneoDto.Recibo)" Caption="Recibo" Width="100px" />
+                    <DxGridDataColumn FieldName="@nameof(ReciboMiscelaneoDto.Fecha)" Caption="Fecha" DisplayFormat="{0:dd/MM/yyyy}" Width="120px" />
+                    <DxGridDataColumn FieldName="@nameof(ReciboMiscelaneoDto.Cliente)" Caption="Cliente" />
+                    <DxGridDataColumn FieldName="@nameof(ReciboMiscelaneoDto.Total)" Caption="Total" DisplayFormat="c2" Width="120px" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(ReciboMiscelaneoDto.Estado)" Caption="Estado" Width="100px" />
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="text-center text-muted py-3">
+                        <i class="bi bi-inbox fs-5 d-block mb-2"></i>
+                        <span>No hay recibos para mostrar.</span>
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    }
+
+    @if (reciboSeleccionado is not null && detallesRecibo.Count > 0)
+    {
+        <div class="mt-3">
+            <div class="row g-3 mb-3">
+                <div class="col-md-3">
+                    <div class="info-pill">
+                        <span class="label">Recibo</span>
+                        <span class="value">@reciboSeleccionado.Recibo</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-pill">
+                        <span class="label">Cliente</span>
+                        <span class="value">@reciboSeleccionado.Cliente</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-pill">
+                        <span class="label">Fecha</span>
+                        <span class="value">@reciboSeleccionado.Fecha.ToShortDateString()</span>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="info-pill">
+                        <span class="label">Total</span>
+                        <span class="value text-primary">@reciboSeleccionado.Total.ToString("C2")</span>
+                    </div>
+                </div>
+            </div>
+
+            <h6 class="text-muted mb-2">Detalle del Recibo</h6>
+            <DxDataGrid Data="@detallesRecibo"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false"
+                        CssClass="mb-3">
+                <Columns>
+                    <DxDataGridColumn FieldName="@nameof(ReciboMiscelaneoDetalleDto.Linea)" Caption="#" Width="80px" />
+                    <DxDataGridColumn FieldName="@nameof(ReciboMiscelaneoDetalleDto.Concepto)" Caption="Concepto" />
+                    <DxDataGridSpinEditColumn FieldName="@nameof(ReciboMiscelaneoDetalleDto.Monto)" Caption="Monto" DisplayFormat="c2" Width="140px" TextAlignment="DataGridTextAlignment.Right" />
+                </Columns>
+                <TotalSummary>
+                    <DxDataGridSummaryItem SummaryType="DataGridSummaryItemType.Sum" FieldName="@nameof(ReciboMiscelaneoDetalleDto.Monto)" DisplayFormat="Total: {0:C2}" />
+                </TotalSummary>
+            </DxDataGrid>
+
+            <div class="d-flex flex-wrap gap-2 justify-content-end">
+                <DxButton Text="Limpiar" 
+                          RenderStyle="ButtonRenderStyle.Secondary" 
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          IconCssClass="bi bi-eraser" 
+                          Click="Limpiar" />
+                <DxButton Text="Reversar Pago" 
+                          RenderStyle="ButtonRenderStyle.Danger" 
+                          IconCssClass="bi bi-arrow-counterclockwise"
+                          Enabled="@((reciboSeleccionado?.Estado == "C" || reciboSeleccionado?.Estado == "P") && !reversando)"
+                          Click="ReversarAsync" />
+                <DxButton Text="Registrar Pago" 
+                          RenderStyle="ButtonRenderStyle.Success" 
+                          IconCssClass="bi bi-check-lg"
+                          Enabled="@(reciboSeleccionado?.Estado == "A" && TieneBancoSeleccionado() && !registrando)"
+                          Click="RegistrarAsync" />
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrEmpty(error))
+    {
+        <div class="alert alert-danger mt-3">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>@error
+        </div>
+    }
+    @if (!string.IsNullOrEmpty(info))
+    {
+        <div class="alert alert-info mt-3">
+            <i class="bi bi-info-circle-fill me-2"></i>@info
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<BancoDto> Bancos { get; set; } = new();
+    [Parameter] public List<ClienteComboDto> Clientes { get; set; } = new();
+    [Parameter] public string? UsuarioActual { get; set; }
+
+    private sealed class FormModel
+    {
+        public string? ClienteClave { get; set; }
+        public string? BancoCodigo { get; set; }
+        public long? BancoCuentaId { get; set; }
+    }
+
+    private readonly FormModel form = new();
+    private readonly List<ReciboMiscelaneoDetalleDto> detallesRecibo = new();
+    private ReciboMiscelaneoDto? reciboSeleccionado;
+    private DxGrid? recibosGrid;
+    private MiscelaneosGridDataSource recibosDataSource = default!;
+    private int totalRecibos;
+    private bool busquedaRealizada;
+    
+    private bool buscando;
+    private bool registrando;
+    private bool reversando;
+    private string? error;
+    private string? info;
+    private bool UsaCatalogoBancoCuenta => Bancos.Any(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
+    private IEnumerable<BancoDto> BancosConCuenta => Bancos.Where(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
+
+    protected override void OnInitialized()
+    {
+        recibosDataSource = new MiscelaneosGridDataSource(CaptacionClient, total =>
+        {
+            totalRecibos = total;
+            if (busquedaRealizada)
+            {
+                info = totalRecibos == 0
+                    ? "No se encontraron recibos misceláneos pendientes para este cliente."
+                    : null;
+            }
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async Task BuscarRecibosAsync()
+    {
+        error = null;
+        info = null;
+        buscando = true;
+
+        try
+        {
+            busquedaRealizada = true;
+            reciboSeleccionado = null;
+            detallesRecibo.Clear();
+            recibosDataSource.ClienteClave = form.ClienteClave;
+            recibosDataSource.PrepareForRefresh();
+            recibosGrid?.Reload();
+        }
+        catch (Exception ex)
+        {
+            error = $"Error al buscar recibos: {ex.Message}";
+        }
+        finally
+        {
+            buscando = false;
+        }
+    }
+
+    private async Task OnReciboSeleccionadoChanged(object item)
+    {
+        reciboSeleccionado = item as ReciboMiscelaneoDto;
+        detallesRecibo.Clear();
+
+        if (reciboSeleccionado is not null)
+        {
+            try
+            {
+                var detalles = await CaptacionClient.GetDetalleReciboMiscelaneoAsync(reciboSeleccionado.Recibo);
+                detallesRecibo.AddRange(detalles);
+            }
+            catch (Exception ex)
+            {
+                error = $"Error al cargar detalle: {ex.Message}";
+            }
+        }
+    }
+
+    private async Task RegistrarAsync()
+    {
+        if (reciboSeleccionado is null || !TieneBancoSeleccionado())
+        {
+            error = "Debe seleccionar un recibo y un banco.";
+            return;
+        }
+
+        error = null;
+        registrando = true;
+
+        try
+        {
+            var bancoSeleccionado = GetBancoSeleccionado();
+            if (bancoSeleccionado is null || string.IsNullOrWhiteSpace(bancoSeleccionado.Codigo))
+            {
+                error = "No se pudo resolver el banco seleccionado.";
+                return;
+            }
+
+            var dto = new PagoMiscelaneoCrearDto
+            {
+                ClienteClave = form.ClienteClave ?? string.Empty,
+                Recibo = reciboSeleccionado.Recibo,
+                Banco = bancoSeleccionado.Codigo.Trim(),
+                BancoCuentaId = bancoSeleccionado.BancoCuentaId,
+                Usuario = UsuarioActual ?? "SYSTEM"
+            };
+
+            var respuesta = await CaptacionClient.RegistrarPagoMiscelaneoAsync(dto);
+
+            if (respuesta.Success)
+            {
+                var mensaje = BuildSuccessMessage("Pago registrado exitosamente.", TryGetPolizaId(respuesta.Data));
+                ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = mensaje, RenderStyle = ToastRenderStyle.Success, ProviderName = "GlobalToast" });
+                await BuscarRecibosAsync();
+                Limpiar();
+            }
+            else
+            {
+                error = respuesta.Message ?? "Error al registrar el pago.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            registrando = false;
+        }
+    }
+
+    private async Task ReversarAsync()
+    {
+        if (reciboSeleccionado is null)
+        {
+            error = "Debe seleccionar un recibo pagado.";
+            return;
+        }
+
+        error = null;
+        reversando = true;
+
+        try
+        {
+            var dto = new ReversoMiscelaneoRequestDto
+            {
+                Recibo = reciboSeleccionado.Recibo,
+                Usuario = UsuarioActual ?? "SYSTEM"
+            };
+
+            var respuesta = await CaptacionClient.ReversarPagoMiscelaneoAsync(dto);
+
+            if (respuesta.Success)
+            {
+                var mensaje = BuildSuccessMessage("Pago reversado exitosamente.", TryGetPolizaId(respuesta.Data));
+                ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = mensaje, RenderStyle = ToastRenderStyle.Success, ProviderName = "GlobalToast" });
+                await BuscarRecibosAsync();
+                Limpiar();
+            }
+            else
+            {
+                error = respuesta.Message ?? "Error al reversar el pago.";
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            reversando = false;
+        }
+    }
+
+    private void Limpiar()
+    {
+        reciboSeleccionado = null;
+        detallesRecibo.Clear();
+        error = null;
+        info = null;
+    }
+
+    private static string BuildSuccessMessage(string baseText, long? polizaId) =>
+        polizaId.HasValue ? $"{baseText} Póliza #{polizaId.Value}." : baseText;
+
+    private static long? TryGetPolizaId(object? data)
+    {
+        if (data is not JsonElement json || json.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return json.TryGetProperty("polizaId", out var polizaElement)
+               && polizaElement.ValueKind == JsonValueKind.Number
+               && polizaElement.TryGetInt64(out var polizaId)
+            ? polizaId
+            : null;
+    }
+
+    private bool TieneBancoSeleccionado() =>
+        UsaCatalogoBancoCuenta
+            ? form.BancoCuentaId.HasValue && form.BancoCuentaId.Value > 0
+            : !string.IsNullOrWhiteSpace(form.BancoCodigo);
+
+    private BancoDto? GetBancoSeleccionado()
+    {
+        if (UsaCatalogoBancoCuenta)
+        {
+            if (!form.BancoCuentaId.HasValue || form.BancoCuentaId.Value <= 0)
+            {
+                return null;
+            }
+
+            return Bancos.FirstOrDefault(b => b.BancoCuentaId == form.BancoCuentaId);
+        }
+
+        return Bancos
+            .FirstOrDefault(b => string.Equals(b.Codigo, form.BancoCodigo, StringComparison.OrdinalIgnoreCase))
+            ?? (string.IsNullOrWhiteSpace(form.BancoCodigo)
+                ? null
+                : new BancoDto { Codigo = form.BancoCodigo.Trim() });
+    }
+}
+

@@ -1,195 +1,171 @@
-@page "/ordenes"
+﻿@page "/ordenes"
 @attribute [Authorize]
 @inject apc.Client.Services.Ordenes.OrdenesClient OrdenesClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
-
-<style>
-    .combo-item {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 0.75rem;
-    }
-
-    .combo-item-text {
-        flex: 1;
-        min-width: 0;
-        white-space: nowrap;
-        overflow: hidden;
-        text-overflow: ellipsis;
-    }
-
-    .combo-item-hint {
-        font-size: 0.75rem;
-        color: #6c757d;
-        white-space: nowrap;
-    }
-
-    .estado-badge-warning {
-        background-color: #fff3cd;
-        color: #5c3c00;
-    }
-
-    .estado-badge-info {
-        background-color: #cfe2ff;
-        color: #04307c;
-    }
-
-    .estado-badge-success {
-        background-color: #d1e7dd;
-        color: #0f5132;
-    }
-
-    .estado-badge-dark {
-        background-color: #495057;
-        color: #fff;
-    }
-
-    .estado-badge-default {
-        background-color: #e2e3e5;
-        color: #41464b;
-    }
-</style>
+@using DevExpress.Blazor
 
 <DxScrollView Height="100%">
     <DxToastProvider Name="OrdenesToast" MaxToastCount="4" />
 
-    @if (!string.IsNullOrEmpty(error))
-    {
-        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
-    }
-    else if (!string.IsNullOrEmpty(mensaje))
-    {
-        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@mensaje</DxAlert>
-    }
+    <div class="page-container">
+        <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+            <div>
+                <h2 class="page-title">Órdenes de trabajo</h2>
+                <p class="page-subtitle">Gestión y asignación de órdenes</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <DxButton Text="Nueva orden"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Click="AbrirCrear"
+                          IconCssClass="bi bi-plus-lg"
+                          CssClass="btn-modern shadow-sm" />
+                <DxButton Text="Asignar órdenes seleccionadas"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="AbrirAsignacion"
+                          CssClass="btn-modern shadow-sm" />
+            </div>
+        </div>
 
-    <DxTabs ActiveTabIndex="@tabIndex" ActiveTabIndexChanged="OnTabChanged" CssClass="mb-3">
-        <Tabs>
-            <DxTab Text="Órdenes de Trabajo Agua" />
-            <DxTab Text="Órdenes de Corte" />
-            <DxTab Text="Órdenes Alcantarillado" />
-        </Tabs>
-    </DxTabs>
+        @if (!string.IsNullOrEmpty(error))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+        }
+        else if (!string.IsNullOrEmpty(mensaje))
+        {
+            <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@mensaje</DxAlert>
+        }
 
-    <DxFormLayout CssClass="mb-3">
-        <DxFormLayoutItem Caption="Búsqueda">
-            <DxTextBox @bind-Text="filtro.Busqueda" NullText="Clave, concepto, usuario o empleado" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Estado">
-            <DxComboBox TData="OrdenTrabajoEstadoDto"
-                        TValue="string"
-                        Data="@estados"
-                        ValueFieldName="@nameof(OrdenTrabajoEstadoDto.Codigo)"
-                        TextFieldName="@nameof(OrdenTrabajoEstadoDto.Nombre)"
-                        DropDownStyle="DropDownStyle.DropDown"
-                        AllowUserInput="true"
-                        @bind-Value="filtro.Estado"
-                        Text="@estadoFiltroTexto"
-                        TextChanged="OnEstadoFiltroTextChanged"
-                        NullText="Todos los estados"
-                        FilterCondition="DataEditorFilterCondition.Contains"
-                        FilterMinLength="0"
-                        FilterDelay="250"
-                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Tipo">
-            <DxComboBox TData="OrdenTrabajoTipoDto"
-                        TValue="string"
-                        Data="@tipos"
-                        ValueFieldName="@nameof(OrdenTrabajoTipoDto.Tipo)"
-                        TextFieldName="@nameof(OrdenTrabajoTipoDto.Descripcion)"
-                        DropDownStyle="DropDownStyle.DropDown"
-                        AllowUserInput="true"
-                        @bind-Value="filtro.Tipo"
-                        Text="@tipoFiltroTexto"
-                        TextChanged="OnTipoFiltroTextChanged"
-                        NullText="Todos los tipos"
-                        FilterCondition="DataEditorFilterCondition.Contains"
-                        FilterMinLength="0"
-                        FilterDelay="250"
-                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
-                <ItemTemplate Context="tipo">
-                    <div class="combo-item">
-                        <span class="combo-item-text">@tipo.Descripcion</span>
-                        <small class="combo-item-hint">@tipo.Tipo</small>
-                    </div>
-                </ItemTemplate>
-            </DxComboBox>
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Fecha desde">
-            <DxDateEdit @bind-Date="filtro.FechaDesde" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Fecha hasta">
-            <DxDateEdit @bind-Date="filtro.FechaHasta" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Cliente (clave)">
-            <DxComboBox TData="OrdenTrabajoPropietarioDto"
-                        TValue="string"
-                        Data="@propietarios"
-                        ValueFieldName="@nameof(OrdenTrabajoPropietarioDto.Clave)"
-                        TextFieldName="@nameof(OrdenTrabajoPropietarioDto.Nombre)"
-                        DropDownStyle="DropDownStyle.DropDown"
-                        AllowUserInput="true"
-                        @bind-Value="filtro.ClienteClave"
-                        Text="@clienteFiltroTexto"
-                        TextChanged="OnClienteFiltroTextChanged"
-                        NullText="Escribe para buscar"
-                        FilterCondition="DataEditorFilterCondition.Contains"
-                        FilterMinLength="0"
-                        FilterDelay="250"
-                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
-                <ItemTemplate Context="propietario">
-                    <div class="combo-item">
-                        <span class="combo-item-text">@propietario.Nombre</span>
-                        <small class="combo-item-hint">@propietario.Clave</small>
-                    </div>
-                </ItemTemplate>
-            </DxComboBox>
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
-            <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
-            <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
-        </DxFormLayoutItem>
-    </DxFormLayout>
+        <div class="modern-card mb-4">
+            <DxTabs ActiveTabIndex="@tabIndex" ActiveTabIndexChanged="OnTabChanged" CssClass="mb-3">
+                <Tabs>
+                    <DxTab Text="Órdenes de Trabajo Agua" />
+                    <DxTab Text="Órdenes de Corte" />
+                    <DxTab Text="Órdenes Alcantarillado" />
+                </Tabs>
+            </DxTabs>
 
-    <DxStack CssClass="mb-3" Orientation="Orientation.Horizontal">
-        <DxButton Text="Nueva orden" RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirCrear" />
-        <DxButton Text="Asignar órdenes seleccionadas" RenderStyle="ButtonRenderStyle.Secondary" CssClass="ms-2"
-            Click="AbrirAsignacion" />
-    </DxStack>
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Búsqueda">
+                    <DxTextBox @bind-Text="filtro.Busqueda" NullText="Clave, concepto, usuario o empleado" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Estado">
+                    <DxComboBox TData="OrdenTrabajoEstadoDto"
+                                TValue="string"
+                                Data="@estados"
+                                ValueFieldName="@nameof(OrdenTrabajoEstadoDto.Codigo)"
+                                TextFieldName="@nameof(OrdenTrabajoEstadoDto.Nombre)"
+                                DropDownStyle="DropDownStyle.DropDown"
+                                AllowUserInput="true"
+                                @bind-Value="filtro.Estado"
+                                Text="@estadoFiltroTexto"
+                                TextChanged="OnEstadoFiltroTextChanged"
+                                NullText="Todos los estados"
+                                FilterCondition="DataEditorFilterCondition.Contains"
+                                FilterMinLength="0"
+                                FilterDelay="250"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Tipo">
+                    <DxComboBox TData="OrdenTrabajoTipoDto"
+                                TValue="string"
+                                Data="@tipos"
+                                ValueFieldName="@nameof(OrdenTrabajoTipoDto.Tipo)"
+                                TextFieldName="@nameof(OrdenTrabajoTipoDto.Descripcion)"
+                                DropDownStyle="DropDownStyle.DropDown"
+                                AllowUserInput="true"
+                                @bind-Value="filtro.Tipo"
+                                Text="@tipoFiltroTexto"
+                                TextChanged="OnTipoFiltroTextChanged"
+                                NullText="Todos los tipos"
+                                FilterCondition="DataEditorFilterCondition.Contains"
+                                FilterMinLength="0"
+                                FilterDelay="250"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                        <ItemTemplate Context="tipo">
+                            <div class="combo-item">
+                                <span class="combo-item-text">@tipo.Descripcion</span>
+                                <small class="combo-item-hint">@tipo.Tipo</small>
+                            </div>
+                        </ItemTemplate>
+                    </DxComboBox>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha desde">
+                    <DxDateEdit @bind-Date="filtro.FechaDesde" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha hasta">
+                    <DxDateEdit @bind-Date="filtro.FechaHasta" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cliente (clave)">
+                    <DxComboBox TData="OrdenTrabajoPropietarioDto"
+                                TValue="string"
+                                Data="@propietarios"
+                                ValueFieldName="@nameof(OrdenTrabajoPropietarioDto.Clave)"
+                                TextFieldName="@nameof(OrdenTrabajoPropietarioDto.Nombre)"
+                                DropDownStyle="DropDownStyle.DropDown"
+                                AllowUserInput="true"
+                                @bind-Value="filtro.ClienteClave"
+                                Text="@clienteFiltroTexto"
+                                TextChanged="OnClienteFiltroTextChanged"
+                                NullText="Escribe para buscar"
+                                FilterCondition="DataEditorFilterCondition.Contains"
+                                FilterMinLength="0"
+                                FilterDelay="250"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                        <ItemTemplate Context="propietario">
+                            <div class="combo-item">
+                                <span class="combo-item-text">@propietario.Nombre</span>
+                                <small class="combo-item-hint">@propietario.Clave</small>
+                            </div>
+                        </ItemTemplate>
+                    </DxComboBox>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
+                    <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
+                    <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        </div>
 
-    <DxGrid Data="@ordenes" @bind-SelectedDataItems="seleccionadasObjetos" SelectionMode="GridSelectionMode.Multiple"
-        KeyboardNavigationEnabled="true" PageSize="15">
-        <Columns>
-            <DxGridSelectionColumn Width="45px" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Numero)" Caption="Orden">
-                <CellDisplayTemplate Context="cell">
-                    @if (cell.DataItem is OrdenTrabajoListItemDto item)
-                    {
-                        <NavLink href="@($"/ordenes/{item.Id}")">@item.Numero</NavLink>
-                    }
-                </CellDisplayTemplate>
-            </DxGridDataColumn>
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.ClienteClave)" Caption="Clave cliente" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Propietario)" Caption="Propietario" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Direccion)" Caption="Dirección" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.FechaCreacion)" Caption="Creación"
-                DisplayFormat="g" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Concepto)" Caption="Concepto" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.TipoDescripcion)" Caption="Tipo" />
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.EstadoDescripcion)" Caption="Estado">
-                <CellDisplayTemplate Context="cell">
-                    @if (cell.DataItem is OrdenTrabajoListItemDto item)
-                    {
-                        <DxBadge Text="@item.EstadoDescripcion" CssClass="@($"px-2 {GetEstadoBadgeCss(item.Estado)}")" />
-                    }
-                </CellDisplayTemplate>
-            </DxGridDataColumn>
-            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.UsuarioAsignado)" Caption="Usuario asignado" />
-        </Columns>
-    </DxGrid>
+        <div class="modern-card position-relative" style="min-height: 300px;">
+            <div class="grid-wrapper">
+                <DxGrid Data="@ordenes" @bind-SelectedDataItems="seleccionadasObjetos"
+                        SelectionMode="GridSelectionMode.Multiple"
+                        KeyboardNavigationEnabled="true"
+                        PageSize="15"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridSelectionColumn Width="45px" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Numero)" Caption="Orden">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is OrdenTrabajoListItemDto item)
+                                {
+                                    <NavLink href="@($"/ordenes/{item.Id}")">@item.Numero</NavLink>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.ClienteClave)" Caption="Clave cliente" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Propietario)" Caption="Propietario" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Direccion)" Caption="Dirección" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Fecha)" Caption="Fecha" DisplayFormat="d" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.FechaCreacion)" Caption="Creación"
+                                          DisplayFormat="g" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Concepto)" Caption="Concepto" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.TipoDescripcion)" Caption="Tipo" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.EstadoDescripcion)" Caption="Estado">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is OrdenTrabajoListItemDto item)
+                                {
+                                    <span class="@($"estado-badge {GetEstadoBadgeCss(item.Estado)}")">@GetEstadoDisplayText(item)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.UsuarioAsignado)" Caption="Usuario asignado" />
+                    </Columns>
+                </DxGrid>
+            </div>
+        </div>
+    </div>
 </DxScrollView>
 
 <DxPopup @bind-Visible="mostrarCrear" Width="640px" ShowCloseButton="true" HeaderText="Nueva orden de trabajo">
@@ -258,18 +234,25 @@
                 <DxComboBox TData="UsuarioMiOrdenDto"
                             TValue="string"
                             Data="usuarios"
-                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Usuario)"
+                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
                             TextFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
                             DropDownStyle="DropDownStyle.DropDown"
                             AllowUserInput="true"
                             @bind-Value="nuevo.Empleado"
                             Text="@empleadoCrearTexto"
                             TextChanged="OnEmpleadoCrearTextChanged"
-                            NullText="Escribe para buscar"
+                            NullText="Seleccione o escriba un empleado"
                             FilterCondition="DataEditorFilterCondition.Contains"
                             FilterMinLength="0"
                             FilterDelay="250"
-                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                    <ItemTemplate Context="usuario">
+                        <div class="combo-item">
+                            <span class="combo-item-text">@usuario.Nombre</span>
+                            <small class="combo-item-hint">@usuario.Usuario</small>
+                        </div>
+                    </ItemTemplate>
+                </DxComboBox>
             </DxFormLayoutItem>
             <DxFormLayoutItem Caption="Usuario">
                 <DxTextBox @bind-Text="nuevo.Usuario" ReadOnly="true" />
@@ -326,18 +309,25 @@
                 <DxComboBox TData="UsuarioMiOrdenDto"
                             TValue="string"
                             Data="usuarios"
-                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Usuario)"
+                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
                             TextFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
                             DropDownStyle="DropDownStyle.DropDown"
                             AllowUserInput="true"
                             @bind-Value="empleadoAsignacion"
                             Text="@empleadoAsignacionTexto"
                             TextChanged="OnEmpleadoAsignacionTextChanged"
-                            NullText="Escribe para buscar"
+                            NullText="Seleccione o escriba un empleado"
                             FilterCondition="DataEditorFilterCondition.Contains"
                             FilterMinLength="0"
                             FilterDelay="250"
-                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                    <ItemTemplate Context="usuario">
+                        <div class="combo-item">
+                            <span class="combo-item-text">@usuario.Nombre</span>
+                            <small class="combo-item-hint">@usuario.Usuario</small>
+                        </div>
+                    </ItemTemplate>
+                </DxComboBox>
             </DxFormLayoutItem>
             <DxFormLayoutItem Caption="Resumen">
                 <p>@($"Se asignarán {SeleccionadasOrdenes.Count()} orden(es).")</p>
@@ -388,8 +378,6 @@
     private bool tipoInvalido;
     private bool fechaInvalida;
     private bool conceptoInvalido;
-    private bool empleadoInvalido;
-
     private DxMemo? conceptoMemo;
 
     private CancellationTokenSource? tiposFiltroCts;
@@ -476,7 +464,6 @@
         tipoInvalido = false;
         fechaInvalida = false;
         conceptoInvalido = false;
-        empleadoInvalido = false;
 
         nuevo = new CrearOrdenTrabajoDto
         {
@@ -531,10 +518,10 @@
         }
 
         usuarioAsignacion = usuarios.FirstOrDefault()?.Usuario ?? usuarioActual;
-        empleadoAsignacion = usuarioAsignacion;
+        empleadoAsignacion = usuarios.FirstOrDefault(u => u.Usuario == usuarioAsignacion)?.Nombre;
         estadoAsignacion ??= estadosAsignacion.FirstOrDefault()?.Codigo;
         usuarioAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == usuarioAsignacion)?.Nombre ?? string.Empty;
-        empleadoAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == empleadoAsignacion)?.Nombre ?? string.Empty;
+        empleadoAsignacionTexto = empleadoAsignacion ?? string.Empty;
         estadoAsignacionTexto = estadosAsignacion.FirstOrDefault(e => e.Codigo == estadoAsignacion)?.Nombre ?? string.Empty;
         mostrarAsignar = true;
         mensaje = null;
@@ -590,16 +577,13 @@
     {
         var clienteExiste = !string.IsNullOrWhiteSpace(nuevo.ClienteClave) && propietarios.Any(p => p.Clave == nuevo.ClienteClave);
         var tipoExiste = !string.IsNullOrWhiteSpace(nuevo.Tipo) && tipos.Any(t => t.Tipo == nuevo.Tipo);
-        var empleadoTieneValor = !string.IsNullOrWhiteSpace(nuevo.Empleado);
-        var empleadoExiste = empleadoTieneValor && usuarios.Any(u => u.Usuario == nuevo.Empleado);
 
         clienteInvalido = !clienteExiste;
         tipoInvalido = !tipoExiste;
         fechaInvalida = nuevo.Fecha == default;
         conceptoInvalido = string.IsNullOrWhiteSpace(nuevo.Concepto);
-        empleadoInvalido = empleadoTieneValor && !empleadoExiste;
 
-        if (!clienteInvalido && !tipoInvalido && !fechaInvalida && !conceptoInvalido && !empleadoInvalido)
+        if (!clienteInvalido && !tipoInvalido && !fechaInvalida && !conceptoInvalido)
         {
             return true;
         }
@@ -623,11 +607,6 @@
         if (conceptoInvalido)
         {
             faltantes.Add("concepto");
-        }
-
-        if (empleadoInvalido)
-        {
-            faltantes.Add("empleado");
         }
 
         ShowToast("Órdenes de trabajo", $"Completa los campos obligatorios: {string.Join(", ", faltantes)}.",
@@ -680,6 +659,7 @@
     private void OnEmpleadoCrearTextChanged(string texto)
     {
         empleadoCrearTexto = texto;
+        nuevo.Empleado = ResolverNombreEmpleado(texto);
         _ = RecargarUsuariosAsync(texto);
     }
 
@@ -692,6 +672,7 @@
     private void OnEmpleadoAsignacionTextChanged(string texto)
     {
         empleadoAsignacionTexto = texto;
+        empleadoAsignacion = ResolverNombreEmpleado(texto);
         _ = RecargarUsuariosAsync(texto);
     }
 
@@ -830,32 +811,24 @@
             }
 
             usuarios = lista;
-            if (!string.IsNullOrWhiteSpace(nuevo.Empleado) && usuarios.All(u => u.Usuario != nuevo.Empleado))
-            {
-                nuevo.Empleado = null;
-                empleadoCrearTexto = string.Empty;
-            }
-            else if (!string.IsNullOrWhiteSpace(nuevo.Empleado))
-            {
-                empleadoCrearTexto = usuarios.FirstOrDefault(u => u.Usuario == nuevo.Empleado)?.Nombre ?? string.Empty;
-            }
-            else
-            {
-                empleadoCrearTexto = string.Empty;
-            }
+            empleadoCrearTexto = string.IsNullOrWhiteSpace(nuevo.Empleado)
+                ? string.Empty
+                : ResolverNombreEmpleado(nuevo.Empleado) ?? nuevo.Empleado;
 
             if (!string.IsNullOrWhiteSpace(usuarioAsignacion) && usuarios.All(u => u.Usuario != usuarioAsignacion))
             {
                 usuarioAsignacion = usuarios.FirstOrDefault()?.Usuario ?? usuarioActual;
             }
 
-            if (!string.IsNullOrWhiteSpace(empleadoAsignacion) && usuarios.All(u => u.Usuario != empleadoAsignacion))
+            if (string.IsNullOrWhiteSpace(empleadoAsignacion) && !string.IsNullOrWhiteSpace(usuarioAsignacion))
             {
-                empleadoAsignacion = usuarioAsignacion;
+                empleadoAsignacion = usuarios.FirstOrDefault(u => u.Usuario == usuarioAsignacion)?.Nombre;
             }
 
             usuarioAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == usuarioAsignacion)?.Nombre ?? string.Empty;
-            empleadoAsignacionTexto = usuarios.FirstOrDefault(u => u.Usuario == empleadoAsignacion)?.Nombre ?? string.Empty;
+            empleadoAsignacionTexto = string.IsNullOrWhiteSpace(empleadoAsignacion)
+                ? string.Empty
+                : ResolverNombreEmpleado(empleadoAsignacion) ?? empleadoAsignacion;
 
             await InvokeAsync(StateHasChanged);
         }
@@ -865,15 +838,35 @@
         }
     }
 
-    private static string GetEstadoBadgeCss(string estado) =>
-    estado switch
+    private static string GetEstadoBadgeCss(string? estado)
     {
-        "P" => "estado-badge-warning",
-        "A" => "estado-badge-info",
-        "E" => "estado-badge-success",
-        "C" => "estado-badge-dark",
-        _ => "estado-badge-default"
-    };
+        var codigo = NormalizarEstadoCodigo(estado);
+        return codigo switch
+        {
+            "P" => "estado-badge-warning",
+            "A" => "estado-badge-info",
+            "E" => "estado-badge-success",
+            "C" => "estado-badge-dark",
+            _ => "estado-badge-default"
+        };
+    }
+
+    private static string GetEstadoDisplayText(OrdenTrabajoListItemDto item)
+    {
+        if (!string.IsNullOrWhiteSpace(item.EstadoDescripcion))
+        {
+            return item.EstadoDescripcion;
+        }
+
+        return NormalizarEstadoCodigo(item.Estado) switch
+        {
+            "P" => "Pendiente",
+            "A" => "Asignada",
+            "E" => "Ejecutada",
+            "C" => "Cancelada",
+            _ => string.IsNullOrWhiteSpace(item.Estado) ? "Sin estado" : item.Estado.Trim()
+        };
+    }
 
     private void ShowToast(string title, string message, ToastRenderStyle style)
     {
@@ -884,6 +877,33 @@
             Text = message,
             RenderStyle = style
         });
+    }
+
+    private string? ResolverNombreEmpleado(string? texto)
+    {
+        var normalizado = NormalizarTextoLibre(texto);
+        if (string.IsNullOrWhiteSpace(normalizado))
+        {
+            return null;
+        }
+
+        var coincidencia = usuarios.FirstOrDefault(u =>
+            (!string.IsNullOrWhiteSpace(u.Nombre) && u.Nombre.Equals(normalizado, StringComparison.OrdinalIgnoreCase))
+            || (!string.IsNullOrWhiteSpace(u.Usuario) && u.Usuario.Equals(normalizado, StringComparison.OrdinalIgnoreCase)));
+
+        return string.IsNullOrWhiteSpace(coincidencia?.Nombre)
+            ? normalizado
+            : coincidencia.Nombre;
+    }
+
+    private static string? NormalizarTextoLibre(string? texto)
+    {
+        return string.IsNullOrWhiteSpace(texto) ? null : texto.Trim();
+    }
+
+    private static string? NormalizarEstadoCodigo(string? estado)
+    {
+        return string.IsNullOrWhiteSpace(estado) ? null : estado.Trim().ToUpperInvariant();
     }
 
     private static int? MapearTipoNumerico(int indice)

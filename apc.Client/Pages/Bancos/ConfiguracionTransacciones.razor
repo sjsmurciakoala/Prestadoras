@@ -1,0 +1,731 @@
+@page "/bancos/configuracion_transacciones"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using DevExpress.Blazor
+@using System.Linq
+@using System.Net.Http.Json
+@using SIAD.Core.DTOs.Bancos
+@using SIAD.Core.DTOs.Contabilidad
+
+@inject ConfiguracionTransaccionesClient ConfigClient
+@inject HttpClient Http
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Configuracion de transacciones</h2>
+            <p class="page-subtitle">Catalogo de transacciones bancarias</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Nueva transaccion"
+                      IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern shadow-sm"
+                      Click="@(() => OpenFormAsync(null))"
+                      Enabled="@(!isLoading)" />
+            <DxButton Text="Refrescar"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="LoadAsync"
+                      Enabled="@(!isLoading)" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(alerta))
+    {
+        <DxMessageBox Type="MessageBoxType.Alert"
+                      RenderStyle="@alertaEstilo"
+                      ShowIcon="true"
+                      Text="@alerta"
+                      CssClass="mb-3"
+                      Visible="true" />
+    }
+
+    <div class="modern-card mb-4">
+        <DxToolbar ItemSpacing="20px">
+            <DxToolbarItem>
+                <Template>
+                    <DxTextBox Text="@searchText"
+                               TextChanged="@OnSearchChanged"
+                               NullText="Buscar por codigo o descripcion"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </Template>
+            </DxToolbarItem>
+            <DxToolbarItem IconCssClass="bi bi-search"
+                           Text="Buscar"
+                           RenderStyle="ButtonRenderStyle.Secondary"
+                           Enabled="@(!isLoading)"
+                           Click="LoadAsync" />
+            <DxToolbarItem IconCssClass="bi bi-pencil-square"
+                           Text="Editar"
+                           RenderStyle="ButtonRenderStyle.Secondary"
+                           Enabled="@(SelectedItem is not null)"
+                           Click="@(() => OpenFormAsync(SelectedItem))" />
+            <DxToolbarItem IconCssClass="bi bi-trash"
+                           Text="Eliminar"
+                           RenderStyle="ButtonRenderStyle.Danger"
+                           Enabled="@(SelectedItem is not null)"
+                           Click="OpenDelete" />
+        </DxToolbar>
+    </div>
+
+    <div class="modern-card position-relative" style="min-height: 300px;">
+        <div class="grid-wrapper">
+            <DxGrid Data="@items"
+                    KeyFieldName="@nameof(BancoConfiguracionTransaccionListDto.TipoTransaccionId)"
+                    PageSize="12"
+                    SizeMode="SizeMode.Large"
+                    SelectionMode="GridSelectionMode.Single"
+                    AllowSelectRowByClick="true"
+                    @bind-SelectedDataItem="SelectedRow"
+                    CssClass="grid-modern">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(BancoConfiguracionTransaccionListDto.TipoTransaccionId)"
+                                      Caption="Codigo" Width="90px" />
+                    <DxGridDataColumn FieldName="@nameof(BancoConfiguracionTransaccionListDto.DescripcionTransaccion)"
+                                      Caption="Descripcion" MinWidth="220" />
+                    <DxGridDataColumn FieldName="@nameof(BancoConfiguracionTransaccionListDto.Correlativo)"
+                                      Caption="Correlativo" Width="120px" />
+                    <DxGridDataColumn Caption="Tipo" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoConfiguracionTransaccionListDto itemTipo)
+                            {
+                                <span class="badge bg-light text-dark border">
+                                    @GetEntraSaleText(itemTipo.EntraSale)
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Centro costo" Width="200px" Visible="false">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoConfiguracionTransaccionListDto itemCentro)
+                            {
+                                <span>@GetCentroCostoDisplay(itemCentro)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(BancoConfiguracionTransaccionListDto.CuentaContable)"
+                                      Caption="Cuenta contable" Width="180px" Visible="false" />
+                    <DxGridDataColumn Caption="Flags" Width="200px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoConfiguracionTransaccionListDto itemFlags)
+                            {
+                                <div class="d-flex gap-1 flex-wrap">
+                                    @* EmiteCheque oculto *@
+                                    @if (itemFlags.Pad) { <span class="badge bg-warning text-dark">PAD</span> }
+                                    @if (itemFlags.Pda) { <span class="badge bg-warning text-dark">PDA</span> }
+                                    @if (itemFlags.DetalleContable) { <span class="badge bg-primary">DC</span> }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridCommandColumn Caption="Acciones"
+                                         Width="220px"
+                                         NewButtonVisible="false">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoConfiguracionTransaccionListDto itemAccion)
+                            {
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button class="btn-icon btn-edit" title="Editar"
+                                            @onclick="async () => { SelectedItem = itemAccion; await OpenFormAsync(itemAccion); }">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="@(() => { SelectedItem = itemAccion; OpenDelete(); })">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxLoadingPanel Visible="isLoading"
+                PositionTarget="body"
+                ApplyBackgroundShading="true"
+                IsContentBlocked="true"
+                Text="Cargando..."
+                ZIndex="2000" />
+
+<DxPopup @bind-Visible="formVisible"
+         Width="1000px"
+         CloseOnOutsideClick="false"
+         ShowCloseButton="true"
+         ShowFooter="false"
+         BodyCssClass="tipo-form-popup-body">
+    <BodyTemplate Context="popupContext">
+        <div class="tipo-form-shell">
+            <div class="tipo-form-header">
+                <h6 class="tipo-form-title">
+                    <i class="@(isEdit ? "bi bi-pencil-square me-2" : "bi bi-plus-lg me-2")"></i>
+                    @(isEdit ? "Editar tipo de transaccion" : "Nuevo tipo de transaccion")
+                </h6>
+                <p class="tipo-form-subtitle mb-0">
+                    @(isEdit ? "Actualice la configuracion del tipo de transaccion." : "Registre un nuevo tipo de transaccion.")
+                </p>
+            </div>
+            <div class="tipo-form-body">
+                @if (editContext is not null)
+                {
+                    <EditForm EditContext="@editContext" Context="editCtx">
+                        <DataAnnotationsValidator />
+
+                        <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@isSaving">
+                            <DxFormLayoutItem Caption="Codigo *" ColSpanMd="3" ColSpanSm="12">
+                                <DxTextBox @bind-Text="editModel.TipoTransaccionId" MaxLength="3" ReadOnly="@isEdit" />
+                                <ValidationMessage For="@(() => editModel.TipoTransaccionId)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Descripcion *" ColSpanMd="9" ColSpanSm="12">
+                                <DxTextBox @bind-Text="editModel.DescripcionTransaccion" MaxLength="40" />
+                                <ValidationMessage For="@(() => editModel.DescripcionTransaccion)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Correlativo *" ColSpanMd="3" ColSpanSm="12">
+                                <DxTextBox @bind-Text="editModel.Correlativo" MaxLength="6" />
+                                <ValidationMessage For="@(() => editModel.Correlativo)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Tipo movimiento *" ColSpanMd="3" ColSpanSm="12">
+                                <DxComboBox Data="@entraSaleOptions"
+                                            TextFieldName="@nameof(LookupOption.Text)"
+                                            ValueFieldName="@nameof(LookupOption.Value)"
+                                            @bind-Value="editModel.EntraSale"
+                                            DropDownStyle="DropDownStyle.DropDownList"
+                                            NullText="Seleccione..."
+                                            Width="100%" />
+                                <ValidationMessage For="@(() => editModel.EntraSale)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Tipo partida *" ColSpanMd="3" ColSpanSm="12">
+                                <DxComboBox Data="@tipoPartidaOptions"
+                                            TData="TipoPartidaDto"
+                                            TValue="int?"
+                                            TextFieldName="@nameof(TipoPartidaDto.nombre)"
+                                            ValueFieldName="@nameof(TipoPartidaDto.cod_tipopartida)"
+                                            @bind-Value="SelectedTipoPartidaId"
+                                            DropDownStyle="DropDownStyle.DropDownList"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                            NullText="Seleccione..."
+                                            Width="100%" />
+                                <ValidationMessage For="@(() => editModel.TipoPartida)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="3" ColSpanSm="12" Visible="false">
+                                <DxTextBox @bind-Text="editModel.CuentaContable" MaxLength="30" />
+                                <ValidationMessage For="@(() => editModel.CuentaContable)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Destino" ColSpanMd="3" ColSpanSm="12" Visible="false">
+                                <DxTextBox @bind-Text="editModel.Destino" MaxLength="9" />
+                                <ValidationMessage For="@(() => editModel.Destino)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Usa centro costo" ColSpanMd="3" ColSpanSm="12" Visible="false">
+                                <DxCheckBox @bind-Checked="UsaCentroCostoProxy"
+                                            CheckType="CheckType.Switch" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Centro costo" ColSpanMd="3" ColSpanSm="12" Visible="false">
+                                <DxComboBox Data="@centroCostoOptions"
+                                            TData="CentroCostoDto"
+                                            TValue="string"
+                                            TextFieldName="@nameof(CentroCostoDto.Code)"
+                                            ValueFieldName="@nameof(CentroCostoDto.Code)"
+                                            @bind-Value="SelectedCentroCostoCode"
+                                            DropDownStyle="DropDownStyle.DropDownList"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                            NullText="Seleccione..."
+                                            Enabled="@editModel.UsaCentroCosto"
+                                            Width="100%" />
+                                <ValidationMessage For="@(() => editModel.CentroCostoId)" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutGroup Caption="Opciones" ColSpanMd="12">
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6" Visible="false">
+                                    <DxCheckBox @bind-Checked="editModel.EmiteCheque" CheckType="CheckType.Switch">Emite cheque</DxCheckBox>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6">
+                                    <DxCheckBox @bind-Checked="editModel.Pad" CheckType="CheckType.Switch">Pago por adelantado</DxCheckBox>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6">
+                                    <DxCheckBox @bind-Checked="editModel.Pda"
+                                                CheckType="CheckType.Switch"
+                                                Enabled="false">Genera partida contable</DxCheckBox>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6" Visible="false">
+                                    <DxCheckBox @bind-Checked="editModel.DetalleContable" CheckType="CheckType.Switch">Detalle contable</DxCheckBox>
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+
+                            <DxFormLayoutItem Caption="Observaciones" ColSpanMd="12">
+                                <DxMemo @bind-Text="editModel.Observaciones" Rows="3" />
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem ColSpanMd="12">
+                                <ValidationSummary />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </EditForm>
+                }
+            </div>
+            <div class="tipo-form-footer text-end">
+                <DxButton Text="Cancelar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="me-2"
+                          Click="CloseForm" />
+                <DxButton Text="Guardar"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!isSaving)"
+                          Click="SaveAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="deleteVisible"
+         Width="420px"
+         CloseOnOutsideClick="true"
+         ShowCloseButton="true"
+         ShowFooter="true"
+         BodyCssClass="p-3"
+         FooterCssClass="p-2 text-end border-top border-light-subtle"
+         HeaderText="Eliminar transaccion">
+    <BodyTemplate>
+        <div class="pb-3 mb-3 border-bottom border-light-subtle">
+            <div class="d-flex align-items-start gap-3">
+                <span class="text-warning display-6">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                </span>
+                <div>
+                    <p class="fw-semibold mb-2">¿Eliminar esta transaccion?</p>
+                    <p class="text-muted mb-0">Confirma la eliminación del registro seleccionado.</p>
+                </div>
+            </div>
+        </div>
+        @if (SelectedItem is null)
+        {
+            <p class="mb-0">Seleccione una transaccion para eliminar.</p>
+        }
+        else
+        {
+            <div class="small mb-2 text-secondary">
+                <div><strong>Codigo:</strong> @SelectedItem.TipoTransaccionId</div>
+                <div><strong>Descripcion:</strong> @SelectedItem.DescripcionTransaccion</div>
+            </div>
+            <p class="text-danger small mb-0">Esta acción no se puede deshacer.</p>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex justify-content-end gap-2 flex-wrap">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      ButtonStyle="ButtonStyle.Outlined"
+                      Click="CloseDelete" />
+            <DxButton Text="Eliminar"
+                      IconCssClass="bi bi-trash"
+                      RenderStyle="ButtonRenderStyle.Danger"
+                      Enabled="@(!isDeleting)"
+                      Click="DeleteAsync" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private readonly List<BancoConfiguracionTransaccionListDto> items = new();
+    private BancoConfiguracionTransaccionListDto? selectedItem;
+    private BancoConfiguracionTransaccionEditDto editModel = new();
+    private EditContext? editContext;
+    private List<CentroCostoDto> centroCostoOptions = new();
+    private List<TipoPartidaDto> tipoPartidaOptions = new();
+
+    private bool isLoading;
+    private bool isSaving;
+    private bool isDeleting;
+    private bool formVisible;
+    private bool deleteVisible;
+    private bool isEdit;
+
+    private string? alerta;
+    private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private string? searchText;
+
+    private readonly List<LookupOption> entraSaleOptions = new()
+    {
+        new() { Text = "Entrada", Value = "E" },
+        new() { Text = "Salida", Value = "S" }
+    };
+
+    private BancoConfiguracionTransaccionListDto? SelectedItem
+    {
+        get => selectedItem;
+        set => selectedItem = value;
+    }
+
+    private object? selectedRow;
+    private object? SelectedRow
+    {
+        get => selectedRow;
+        set
+        {
+            if (!ReferenceEquals(selectedRow, value))
+            {
+                selectedRow = value;
+                selectedItem = value as BancoConfiguracionTransaccionListDto;
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCentroCostosAsync();
+        await LoadTipoPartidasAsync();
+        await LoadAsync();
+    }
+
+    private Task OnSearchChanged(string value)
+    {
+        searchText = value;
+        return Task.CompletedTask;
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            isLoading = true;
+            alerta = null;
+            items.Clear();
+            var data = await ConfigClient.GetAsync(new BancoConfiguracionTransaccionFilterDto
+            {
+                Search = searchText
+            });
+            items.AddRange(data);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo cargar las transacciones: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OpenFormAsync(BancoConfiguracionTransaccionListDto? item)
+    {
+        alerta = null;
+        isEdit = item is not null;
+
+        if (centroCostoOptions.Count == 0)
+        {
+            await LoadCentroCostosAsync();
+        }
+
+        if (tipoPartidaOptions.Count == 0)
+        {
+            await LoadTipoPartidasAsync();
+        }
+
+        if (item is null)
+        {
+            editModel = new BancoConfiguracionTransaccionEditDto
+            {
+                EntraSale = "E",
+                UsaCentroCosto = false,
+                Pda = true
+            };
+            selectedCentroCostoCode = null;
+            selectedTipoPartidaId = null;
+        }
+        else
+        {
+            var detail = await ConfigClient.GetByIdAsync(item.TipoTransaccionId);
+            if (detail is null)
+            {
+                SetAlert("No se encontro la transaccion solicitada.", MessageBoxRenderStyle.Warning);
+                return;
+            }
+
+            editModel = detail;
+            selectedCentroCostoCode = ResolveCentroCostoCode(editModel.CentroCostoId);
+            selectedTipoPartidaId = ResolveTipoPartidaId(editModel.TipoPartida);
+        }
+
+        editContext = new EditContext(editModel);
+        formVisible = true;
+    }
+
+    private void CloseForm()
+    {
+        formVisible = false;
+        editModel = new BancoConfiguracionTransaccionEditDto();
+        editContext = null;
+        selectedCentroCostoCode = null;
+        selectedTipoPartidaId = null;
+    }
+
+    private async Task SaveAsync()
+    {
+        if (editContext is null)
+        {
+            return;
+        }
+
+        // Campos deshabilitados: forzar a null/false antes de validar/guardar
+        editModel.CuentaContable = null;
+        editModel.Destino = null;
+        editModel.EmiteCheque = false;
+        editModel.UsaCentroCosto = false;
+        editModel.CentroCostoId = null;
+        editModel.Pda = true;
+        editModel.CuentaAlterna = false;
+        selectedCentroCostoCode = null;
+
+        if (!editContext.Validate())
+        {
+            SetAlert("Revise los campos requeridos.", MessageBoxRenderStyle.Danger);
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+            if (isEdit)
+            {
+                await ConfigClient.UpdateAsync(editModel.TipoTransaccionId, editModel);
+            }
+            else
+            {
+                await ConfigClient.CreateAsync(editModel);
+            }
+
+            formVisible = false;
+            await LoadAsync();
+            SetAlert("Transaccion guardada correctamente.", MessageBoxRenderStyle.Success);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo guardar la transaccion: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void OpenDelete()
+    {
+        deleteVisible = true;
+    }
+
+    private void CloseDelete()
+    {
+        deleteVisible = false;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (SelectedItem is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isDeleting = true;
+            await ConfigClient.DeleteAsync(SelectedItem.TipoTransaccionId);
+            deleteVisible = false;
+            await LoadAsync();
+            SetAlert("Transaccion eliminada.", MessageBoxRenderStyle.Success);
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo eliminar la transaccion: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private string GetCentroCostoDisplay(BancoConfiguracionTransaccionListDto item)
+    {
+        if (!item.UsaCentroCosto || item.CentroCostoId is null)
+        {
+            return "No aplica";
+        }
+
+        if (!string.IsNullOrWhiteSpace(item.CentroCostoCodigo))
+        {
+            return string.IsNullOrWhiteSpace(item.CentroCostoNombre)
+                ? item.CentroCostoCodigo!
+                : $"{item.CentroCostoCodigo} - {item.CentroCostoNombre}";
+        }
+
+        return item.CentroCostoId.Value.ToString();
+    }
+
+    private string? selectedCentroCostoCode;
+    private string? SelectedCentroCostoCode
+    {
+        get => selectedCentroCostoCode;
+        set
+        {
+            if (string.Equals(selectedCentroCostoCode, value, StringComparison.OrdinalIgnoreCase))
+            {
+                return;
+            }
+
+            selectedCentroCostoCode = value;
+            editModel.CentroCostoId = ResolveCentroCostoId(value);
+        }
+    }
+
+    private long? ResolveCentroCostoId(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        var match = centroCostoOptions.FirstOrDefault(c =>
+            string.Equals(c.Code, code, StringComparison.OrdinalIgnoreCase));
+        return match?.CostCenterId;
+    }
+
+    private string? ResolveCentroCostoCode(long? id)
+    {
+        if (!id.HasValue)
+        {
+            return null;
+        }
+
+        var match = centroCostoOptions.FirstOrDefault(c => c.CostCenterId == id.Value);
+        return match?.Code;
+    }
+
+    private int? selectedTipoPartidaId;
+    private int? SelectedTipoPartidaId
+    {
+        get => selectedTipoPartidaId;
+        set
+        {
+            if (selectedTipoPartidaId == value)
+            {
+                return;
+            }
+
+            selectedTipoPartidaId = value;
+            editModel.TipoPartida = value?.ToString() ?? string.Empty;
+        }
+    }
+
+    private int? ResolveTipoPartidaId(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return null;
+        }
+
+        if (int.TryParse(code.Trim(), out var parsed))
+        {
+            return parsed;
+        }
+
+        var normalized = code.TrimStart('0').Trim();
+        if (int.TryParse(normalized, out var normalizedParsed))
+        {
+            return normalizedParsed;
+        }
+
+        return null;
+    }
+
+    private async Task LoadCentroCostosAsync()
+    {
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<CentroCostoDto>>("api/contabilidad/catalogos/centros-costo");
+            centroCostoOptions = (data ?? new List<CentroCostoDto>())
+                .Where(c => !string.IsNullOrWhiteSpace(c.Code))
+                .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo cargar centros de costo: {ex.Message}", MessageBoxRenderStyle.Warning);
+            centroCostoOptions = new List<CentroCostoDto>();
+        }
+    }
+
+    private async Task LoadTipoPartidasAsync()
+    {
+        try
+        {
+            var data = await Http.GetFromJsonAsync<List<TipoPartidaDto>>("api/contabilidad/catalogos/tipos-partida");
+            tipoPartidaOptions = (data ?? new List<TipoPartidaDto>())
+                .OrderBy(t => t.cod_tipopartida)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo cargar tipos de partida: {ex.Message}", MessageBoxRenderStyle.Warning);
+            tipoPartidaOptions = new List<TipoPartidaDto>();
+        }
+    }
+
+    private string GetEntraSaleText(string value)
+    {
+        if (string.Equals(value, "S", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Salida";
+        }
+
+        return "Entrada";
+    }
+
+    private void SetAlert(string message, MessageBoxRenderStyle style)
+    {
+        alerta = message;
+        alertaEstilo = style;
+    }
+
+    private bool UsaCentroCostoProxy
+    {
+        get => editModel.UsaCentroCosto;
+        set
+        {
+            editModel.UsaCentroCosto = value;
+            if (!value)
+            {
+                editModel.CentroCostoId = null;
+                selectedCentroCostoCode = null;
+            }
+        }
+    }
+
+    private sealed class LookupOption
+    {
+        public string Text { get; set; } = string.Empty;
+        public string Value { get; set; } = string.Empty;
+    }
+}
+

@@ -1,0 +1,259 @@
+@page "/parametros/usuarios/nuevo"
+@page "/parametros/usuarios/editar/{UsuarioId}"
+@attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using SIAD.Core.DTOs.Usuarios
+@using SIAD.Core.DTOs.Tenant
+@using apc.Client.Services.Parametros
+@using apc.Client.Services.Tenant
+@inject UsuariosPortalClient UsuariosClient
+@inject TenantCompaniesClient CompaniesClient
+@inject NavigationManager NavigationManager
+
+<h3>@(EsNuevo ? "Nuevo Usuario" : "Editar Usuario")</h3>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
+}
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
+}
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <DxWaitIndicator Visible="true" />
+    </div>
+}
+else
+{
+    <EditForm Model="@formModel" OnValidSubmit="GuardarAsync" Context="editContext">
+        <DataAnnotationsValidator />
+        <DxFormLayout CssClass="mt-3">
+            @if (EsNuevo)
+            {
+                <DxFormLayoutItem Caption="Correo :" ColSpanMd="6">
+                    <DxTextBox @bind-Text="crearDto.Email" />electronico
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Contraseña:" ColSpanMd="6">
+                    <DxTextBox @bind-Text="crearDto.Password" Password="true" />
+                </DxFormLayoutItem>
+            }
+            else
+            {
+                <DxFormLayoutItem Caption="Correo electronico:" ColSpanMd="6">
+                    <DxTextBox Text="@usuarioCargado?.Email" 
+                               TextExpression="@(() => usuarioCargado == null ? string.Empty : usuarioCargado.Email)"
+                               Enabled="false" />
+                </DxFormLayoutItem>
+            }
+
+            <DxFormLayoutItem Caption="Empresa:" ColSpanMd="6">
+                <DxComboBox Data="@empresas"
+                            TData="TenantCompanyDto"
+                            TValue="long?"
+                            TextFieldName="Name"
+                            ValueFieldName="CompanyId"
+                            Value="companyIdSeleccionado"
+                            ValueChanged="OnCompanyChanged"
+                            ValueExpression="@(() => companyIdSeleccionado)"
+                            NullText="Seleccione una empresa..."
+                            FilteringMode="DataGridFilteringMode.Contains" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Bloqueado:" ColSpanMd="6" Visible="@(!EsNuevo)">
+                <DxCheckBox T="bool" @bind-Checked="bloqueado" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutGroup Caption="Roles" ColSpanMd="12">
+                @if (rolesDisponibles.Count == 0)
+                {
+                    <DxFormLayoutItem ColSpanMd="12">
+                        <span class="text-muted">No hay roles disponibles. Usa "Sincronizar Roles" en la lista de usuarios.</span>
+                    </DxFormLayoutItem>
+                }
+                else
+                {
+                    @foreach (var role in rolesDisponibles)
+                    {
+                        <DxFormLayoutItem Caption="@role.Nombre" ColSpanMd="4">
+                            <DxCheckBox T="bool" @bind-Checked="role.Seleccionado" />
+                        </DxFormLayoutItem>
+                    }
+                }
+            </DxFormLayoutGroup>
+
+            <DxFormLayoutItem ColSpanMd="12">
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton SubmitFormOnClick="true"
+                              Text="@(isSaving ? "Guardando..." : "Guardar")"
+                              Enabled="@(!isSaving)"
+                              RenderStyle="ButtonRenderStyle.Primary" />
+                    <DxButton RenderStyle="ButtonRenderStyle.Link"
+                              Text="Cancelar"
+                              Enabled="@(!isSaving)"
+                              Click="@(() => NavigationManager.NavigateTo("/parametros/usuarios"))" />
+                </div>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        <ValidationSummary />
+    </EditForm>
+}
+
+@code {
+    [Parameter]
+    public string? UsuarioId { get; set; }
+
+    private bool EsNuevo => string.IsNullOrEmpty(UsuarioId);
+
+    private CrearUsuarioPortalDto crearDto = new();
+    private UsuarioPortalDto? usuarioCargado;
+    private object formModel = new();
+
+    private List<TenantCompanyDto> empresas = [];
+    private List<RolSeleccion> rolesDisponibles = [];
+    private long? companyIdSeleccionado;
+    private bool bloqueado;
+
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isLoading = true;
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var rolesTask = UsuariosClient.ListarRolesAsync();
+            var empresasTask = CompaniesClient.ObtenerAsync();
+            await Task.WhenAll(rolesTask, empresasTask);
+
+            var roles = rolesTask.Result;
+            rolesDisponibles = roles.Select(role => new RolSeleccion
+            {
+                Nombre = role,
+                Seleccionado = false
+            }).ToList();
+            empresas = empresasTask.Result.ToList();
+
+            if (!EsNuevo)
+            {
+                usuarioCargado = await UsuariosClient.ObtenerAsync(UsuarioId!);
+                if (usuarioCargado is null)
+                {
+                    errorMessage = "El usuario no existe.";
+                }
+                else
+                {
+                    companyIdSeleccionado = usuarioCargado.CompanyId;
+                    bloqueado = usuarioCargado.Bloqueado;
+
+                    var rolesUsuario = new HashSet<string>(usuarioCargado.Roles ?? []);
+                    foreach (var role in rolesDisponibles)
+                    {
+                        role.Seleccionado = rolesUsuario.Contains(role.Nombre);
+                    }
+
+                    formModel = new EditarUsuarioPortalDto
+                    {
+                        Id = usuarioCargado.Id,
+                        CompanyId = usuarioCargado.CompanyId,
+                        Roles = usuarioCargado.Roles,
+                        Bloqueado = usuarioCargado.Bloqueado
+                    };
+                }
+            }
+            else
+            {
+                formModel = crearDto;
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnCompanyChanged(long? value)
+    {
+        companyIdSeleccionado = value;
+        if (formModel is CrearUsuarioPortalDto crear)
+            crear.CompanyId = value;
+        else if (formModel is EditarUsuarioPortalDto editar)
+            editar.CompanyId = value;
+    }
+
+    private List<string> ObtenerRolesSeleccionados()
+    {
+        return rolesDisponibles
+            .Where(role => role.Seleccionado)
+            .Select(role => role.Nombre)
+            .ToList();
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (isSaving) return;
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            var rolesSeleccionados = ObtenerRolesSeleccionados();
+
+            if (EsNuevo)
+            {
+                crearDto.CompanyId = companyIdSeleccionado;
+                crearDto.Roles = rolesSeleccionados;
+                await UsuariosClient.CrearAsync(crearDto);
+                successMessage = "Usuario creado correctamente.";
+                NavigationManager.NavigateTo("/parametros/usuarios");
+            }
+            else
+            {
+                var dto = new EditarUsuarioPortalDto
+                {
+                    Id = UsuarioId!,
+                    CompanyId = companyIdSeleccionado,
+                    Roles = rolesSeleccionados,
+                    Bloqueado = bloqueado
+                };
+                await UsuariosClient.ActualizarAsync(UsuarioId!, dto);
+                successMessage = "Usuario actualizado correctamente.";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private sealed class RolSeleccion
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public bool Seleccionado { get; set; }
+    }
+}

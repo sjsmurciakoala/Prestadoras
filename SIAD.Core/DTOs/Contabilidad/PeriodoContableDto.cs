@@ -1,4 +1,5 @@
 using System;
+using SIAD.Core.Constants;
 
 namespace SIAD.Core.DTOs.Contabilidad;
 
@@ -10,4 +11,5 @@ public record PeriodoContableDto(
     DateTime EndDate,
     string Status,
     DateTime? ClosedAt,
-    string? ClosedBy);
+    string? ClosedBy,
+    short StatusId = EstadoPeriodoHelper.AbiertoId);

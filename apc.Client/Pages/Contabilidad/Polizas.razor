@@ -1,0 +1,1384 @@
+@page "/contabilidad/partidas"
+@page "/contabilidad/polizas"
+@attribute [Authorize]
+@using DevExpress.Blazor
+@using System.Globalization
+@using System.Net.Http.Json
+@using Microsoft.AspNetCore.Components.Web
+@using apc.Client.Services.Tenant
+@using SIAD.Core.DTOs.Contabilidad
+@inject HttpClient Http
+@inject apc.Client.Services.Contabilidad.PolizasClient PolizasClient
+@inject apc.Client.Services.Contabilidad.PeriodosContablesClient PeriodosClient
+@inject TenantState TenantState
+
+<PageTitle>Partidas manuales</PageTitle>
+
+<div class="contabilidad-page contabilidad-content h-100" id="partidas-view">
+    <DxCard CssClass="shadow-sm border-0 rounded w-100 mb-3">
+        <HeaderContent>
+            <div class="d-flex align-items-center py-2 px-1">
+                <i class="bi bi-journal-plus me-2 fs-4 text-primary"></i>
+                <h5 class="mb-0 fw-bold text-secondary">Partidas manuales</h5>
+            </div>
+        </HeaderContent>
+        <ChildContent>
+            <div class="px-2 pb-2">
+                <DxToolbar CssClass="mb-3" ItemSpacing="10px">
+                    <DxToolbarItem Text="Totalizar" IconCssClass="bi bi-check-lg"
+                                   RenderStyle="ButtonRenderStyle.Primary"
+                                   Click="@(async _ => await GuardarAsync())"
+                                   Disabled="@(IsSaving || !CanGuardarEnContexto)" />
+                    <DxToolbarItem Text="Limpiar" IconCssClass="bi bi-eraser"
+                                   Click="@(async _ => await ResetFormAsync())"
+                                   Disabled="@IsSaving" />
+                    <DxToolbarItem Text="Actualizar catalogos" IconCssClass="bi bi-arrow-clockwise"
+                                   BeginGroup="true"
+                                   Click="@(async _ => await LoadCatalogosAsync())"
+                                   Disabled="@IsSaving" />
+                </DxToolbar>
+
+                @if (HasStatusMessage)
+                {
+                    @if (statusMessageCssClass.Contains("danger"))
+                    {
+                        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-x-circle-fill me-1"></i> <strong>@statusMessageTitle</strong> @statusMessageText</span>
+                                <DxButton RenderStyle="ButtonRenderStyle.None" IconCssClass="bi bi-x-lg"
+                                          Click="@(() => { ClearStatusMessage(); InvokeAsync(StateHasChanged); })"
+                                          title="Cerrar" CssClass="ms-2" />
+                            </div>
+                        </DxAlert>
+                    }
+                    else if (statusMessageCssClass.Contains("success"))
+                    {
+                        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-check-circle-fill me-1"></i> <strong>@statusMessageTitle</strong> @statusMessageText</span>
+                                <DxButton RenderStyle="ButtonRenderStyle.None" IconCssClass="bi bi-x-lg"
+                                          Click="@(() => { ClearStatusMessage(); InvokeAsync(StateHasChanged); })"
+                                          title="Cerrar" CssClass="ms-2" />
+                            </div>
+                        </DxAlert>
+                    }
+                    else
+                    {
+                        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+                            <div class="d-flex justify-content-between align-items-center">
+                                <span><i class="bi bi-info-circle-fill me-1"></i> <strong>@statusMessageTitle</strong> @statusMessageText</span>
+                                <DxButton RenderStyle="ButtonRenderStyle.None" IconCssClass="bi bi-x-lg"
+                                          Click="@(() => { ClearStatusMessage(); InvokeAsync(StateHasChanged); })"
+                                          title="Cerrar" CssClass="ms-2" />
+                            </div>
+                        </DxAlert>
+                    }
+                }
+
+                @if (PeriodoActivo is not null)
+                {
+                    <div class="periodo-contexto">
+                        <div>
+                            <span class="periodo-contexto__eyebrow">Periodo contable activo</span>
+                            <strong>@PeriodoActivo.Code - @PeriodoActivo.Name</strong>
+                            <span>@PeriodoActivo.StartDate.ToString("dd/MM/yyyy") - @PeriodoActivo.EndDate.ToString("dd/MM/yyyy")</span>
+                        </div>
+                        <div class="periodo-contexto__meta">
+                            <span>Diario manual por defecto: @DiarioManualDescripcion</span>
+                        </div>
+                    </div>
+                }
+                else
+                {
+                    <DxAlert AlertType="AlertType.Warning" CssClass="mb-0">
+                        <span><i class="bi bi-exclamation-triangle-fill me-1"></i>No hay un periodo contable abierto. No se podran guardar partidas hasta abrir uno en Contabilidad.</span>
+                    </DxAlert>
+                }
+
+                @if (FechaFueraDePeriodo)
+                {
+                    <small class="text-danger d-block mt-2 px-1">
+                        La fecha debe estar dentro del periodo activo @PeriodoActivoRango.
+                    </small>
+                }
+
+                @if (PeriodoActivo is not null && DiarioManualActivo is null)
+                {
+                    <small class="text-danger d-block mt-2 px-1">
+                        Configure un diario manual por defecto en Catálogos &gt; Diarios para habilitar el registro manual.
+                    </small>
+                }
+            </div>
+        </ChildContent>
+    </DxCard>
+
+    <DxCard CssClass="shadow-sm border-0 rounded w-100 mb-3">
+        <HeaderContent>
+            <div class="d-flex align-items-center py-2 px-1">
+                <i class="bi bi-card-heading me-2 text-primary"></i>
+                <span class="fw-bold">Encabezado</span>
+            </div>
+        </HeaderContent>
+        <ChildContent>
+            <div class="px-2 pb-2">
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem Caption="Tipo de comprobante *" ColSpanLg="4" ColSpanMd="6" ColSpanSm="12">
+                        <DxComboBox Data="@TiposTransaccion"
+                                    TData="TipoTransaccionDto"
+                                    TValue="long?"
+                                    Value="@Form.TypeId"
+                                    ValueChanged="@(async (long? v) => { Form.TypeId = v; await LoadRulesForTypeAsync(v); foreach (var l in Form.Lineas) NormalizarLineaPorConfiguracion(l); })"
+                                    ValueExpression="@(() => Form.TypeId)"
+                                    ValueFieldName="@nameof(TipoTransaccionDto.TypeId)"
+                                    TextFieldName="@nameof(TipoTransaccionDto.Name)"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    NullText="-- Seleccione --">
+                            <Columns>
+                                <DxListEditorColumn FieldName="@nameof(TipoTransaccionDto.Code)" Caption="Codigo" Width="80px" />
+                                <DxListEditorColumn FieldName="@nameof(TipoTransaccionDto.Name)" Caption="Nombre" />
+                            </Columns>
+                        </DxComboBox>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Fecha *" ColSpanLg="3" ColSpanMd="3" ColSpanSm="6">
+                        <DxDateEdit @bind-Date="Form.PolizaDate"
+                                    Format="dd/MM/yyyy"
+                                    MinDate="@PeriodoMinDate"
+                                    MaxDate="@PeriodoMaxDate"
+                                    OutOfRangeNotificationText="La fecha debe estar dentro del periodo contable abierto." />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Correlativo" ColSpanLg="5" ColSpanMd="3" ColSpanSm="6">
+                        <div class="poliza-correlativo-box">
+                            <strong class="poliza-correlativo-box__value">@GetDocumentNumberPreview()</strong>
+                        </div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Descripcion *" ColSpanLg="12" ColSpanMd="12" ColSpanSm="12">
+                        <DxTextBox @bind-Text="Form.Description" NullText="Concepto del comprobante" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </div>
+        </ChildContent>
+    </DxCard>
+
+    <DxCard CssClass="shadow-sm border-0 rounded w-100 mb-3">
+        <HeaderContent>
+            <div class="d-flex justify-content-between align-items-center py-2 px-1">
+                <div>
+                    <i class="bi bi-list-ol me-2 text-primary"></i>
+                    <span class="fw-bold">Detalle de lineas</span>
+                    <small class="text-muted ms-2">@Form.Lineas.Count linea(s)</small>
+                </div>
+                <DxButton Text="Agregar linea"
+                          IconCssClass="bi bi-plus"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          SizeMode="SizeMode.Small"
+                          Click="AddLinea"
+                          Enabled="!IsSaving" />
+            </div>
+        </HeaderContent>
+        <ChildContent>
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead class="table-light">
+                        <tr>
+                            <th style="width:40px">#</th>
+                            <th style="min-width:260px">Codigo *</th>
+                            <th style="min-width:180px">Descripcion</th>
+                            <th style="min-width:120px">Ref. línea</th>
+                            <th style="min-width:120px">Debito</th>
+                            <th style="min-width:120px">Credito</th>
+                            <th style="width:90px" class="text-center">Accion</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (Form.Lineas.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="7" class="text-center text-muted py-4">No hay lineas cargadas. Use Agregar linea para iniciar el detalle.</td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @for (var i = 0; i < Form.Lineas.Count; i++)
+                            {
+                                var linea = Form.Lineas[i];
+                                var rowNum = i + 1;
+                                var needsExtra = NecesitaCamposExtra(linea);
+
+                                <tr @onkeydown="e => OnLineaKeyDown(e, linea)">
+                                    <td class="text-muted small">@rowNum</td>
+                                    <td>
+                                        <div class="d-flex gap-1 align-items-start">
+                                            <div style="flex:1">
+                                                <DxMaskedInput T="string"
+                                                               Value="@linea.AccountCode"
+                                                               ValueChanged="@((string v) => OnAccountCodeChanged(linea, v))"
+                                                               ValueExpression="@(() => linea.AccountCode)"
+                                                               Mask="@AccountMask"
+                                                               SizeMode="SizeMode.Small">
+                                                    <DxTextMaskProperties Placeholder="@('_')" />
+                                                </DxMaskedInput>
+                                            </div>
+                                            <DxButton RenderStyle="ButtonRenderStyle.Secondary"
+                                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                      IconCssClass="bi bi-search"
+                                                      SizeMode="SizeMode.Small"
+                                                      title="Buscar cuenta"
+                                                      Click="@(() => ToggleBuscarCuenta(linea))" />
+                                        </div>
+
+                                        @if (linea.ShowBuscarCuenta)
+                                        {
+                                            <DxComboBox Data="@CuentasLookup"
+                                                        TData="CuentaLookupItem"
+                                                        TValue="long?"
+                                                        Value="linea.AccountId"
+                                                        ValueChanged="@((long? v) => OnCuentaSelectedFromSearch(linea, v))"
+                                                        ValueExpression="@(() => linea.AccountId)"
+                                                        ValueFieldName="@nameof(CuentaLookupItem.AccountId)"
+                                                        TextFieldName="@nameof(CuentaLookupItem.Display)"
+                                                        SearchMode="ListSearchMode.AutoSearch"
+                                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        DropDownWidthMode="DropDownWidthMode.ContentOrEditorWidth"
+                                                        NullText="Buscar por codigo o nombre..."
+                                                        SizeMode="SizeMode.Small"
+                                                        CssClass="mt-1">
+                                                <Columns>
+                                                    <DxListEditorColumn FieldName="@nameof(CuentaLookupItem.Code)" Caption="Codigo" Width="140px" />
+                                                    <DxListEditorColumn FieldName="@nameof(CuentaLookupItem.Name)" Caption="Cuenta" />
+                                                </Columns>
+                                            </DxComboBox>
+                                        }
+
+                                        @if (!linea.AccountId.HasValue && !string.IsNullOrWhiteSpace(linea.AccountName))
+                                        {
+                                            <small class="text-danger d-block mt-1">@linea.AccountName</small>
+                                        }
+                                    </td>
+                                    <td>
+                                        <DxTextBox @bind-Text="linea.Description"
+                                                   NullText="Detalle"
+                                                   SizeMode="SizeMode.Small" />
+                                    </td>
+                                    <td>
+                                        <DxTextBox @bind-Text="linea.SourceDocument"
+                                                   NullText="Factura/Ref"
+                                                   SizeMode="SizeMode.Small" />
+                                    </td>
+                                    <td>
+                                        <DxSpinEdit T="decimal"
+                                                    @bind-Value="linea.DebitAmount"
+                                                    MinValue="0"
+                                                    Increment="0.01m"
+                                                    SizeMode="SizeMode.Small" />
+                                    </td>
+                                    <td>
+                                        <DxSpinEdit T="decimal"
+                                                    @bind-Value="linea.CreditAmount"
+                                                    MinValue="0"
+                                                    Increment="0.01m"
+                                                    SizeMode="SizeMode.Small" />
+                                    </td>
+                                    <td class="text-center">
+                                        <div class="d-flex gap-1 justify-content-center">
+                                            @if (needsExtra)
+                                            {
+                                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                          IconCssClass="@(linea.ShowDetalle ? "bi bi-chevron-up" : "bi bi-chevron-down")"
+                                                          SizeMode="SizeMode.Small"
+                                                          title="@(linea.ShowDetalle ? "Ocultar detalle" : "Mostrar CC/Tercero")"
+                                                          Click="@(() => ToggleDetalle(linea))" />
+                                            }
+                                            <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                                      RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                      IconCssClass="bi bi-trash"
+                                                      SizeMode="SizeMode.Small"
+                                                      title="Quitar linea"
+                                                      Click="@(() => RemoveLinea(linea))" />
+                                        </div>
+                                    </td>
+                                </tr>
+
+                                @if (linea.ShowDetalle && needsExtra)
+                                {
+                                    var cuentaDetalle = GetCuenta(linea.AccountId);
+                                    var mostrarCC = CuentaRequiereCentroCosto(cuentaDetalle, linea);
+                                    var mostrarTercero = CuentaRequiereTercero(cuentaDetalle, linea);
+
+                                    <tr class="detail-row">
+                                        <td></td>
+                                        <td colspan="6">
+                                            <div class="d-flex flex-wrap gap-3 p-2 bg-light rounded-2 align-items-end">
+                                                @if (mostrarCC)
+                                                {
+                                                    <div style="min-width:230px; flex:1;">
+                                                        <label class="form-label small fw-bold mb-1">Centro de Costo</label>
+                                                        <DxComboBox Data="@CentrosCostoLookup"
+                                                                    TData="CentroCostoLookupItem"
+                                                                    TValue="long?"
+                                                                    Value="linea.CostCenterId"
+                                                                    ValueChanged="@(v => OnLineaCostCenterChanged(linea, v))"
+                                                                    ValueExpression="@(() => linea.CostCenterId)"
+                                                                    ValueFieldName="@nameof(CentroCostoLookupItem.CostCenterId)"
+                                                                    TextFieldName="@nameof(CentroCostoLookupItem.Display)"
+                                                                    SearchMode="ListSearchMode.AutoSearch"
+                                                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                                    NullText="Seleccione CC"
+                                                                    SizeMode="SizeMode.Small">
+                                                            <Columns>
+                                                                <DxListEditorColumn FieldName="@nameof(CentroCostoLookupItem.Code)" Caption="Codigo" Width="100px" />
+                                                                <DxListEditorColumn FieldName="@nameof(CentroCostoLookupItem.Name)" Caption="Centro" />
+                                                            </Columns>
+                                                        </DxComboBox>
+                                                    </div>
+                                                }
+
+                                                @if (mostrarTercero)
+                                                {
+                                                    <div style="min-width:320px; flex:2;">
+                                                        <label class="form-label small fw-bold mb-1">Tercero</label>
+                                                        <DxComboBox Data="@TercerosLookup"
+                                                                    TData="TerceroDto"
+                                                                    TValue="long?"
+                                                                    Value="linea.ThirdPartyId"
+                                                                    ValueChanged="@((long? v) => OnTerceroSelected(linea, v))"
+                                                                    ValueExpression="@(() => linea.ThirdPartyId)"
+                                                                    ValueFieldName="@nameof(TerceroDto.ThirdPartyId)"
+                                                                    TextFieldName="@nameof(TerceroDto.Name)"
+                                                                    SearchMode="ListSearchMode.AutoSearch"
+                                                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                                    NullText="Buscar tercero..."
+                                                                    SizeMode="SizeMode.Small">
+                                                            <Columns>
+                                                                <DxListEditorColumn FieldName="@nameof(TerceroDto.Code)" Caption="Código" Width="140px" />
+                                                                <DxListEditorColumn FieldName="@nameof(TerceroDto.Name)" Caption="Nombre" />
+                                                                <DxListEditorColumn FieldName="@nameof(TerceroDto.Category)" Caption="Tipo" Width="100px" />
+                                                            </Columns>
+                                                        </DxComboBox>
+
+                                                        @if (!string.IsNullOrEmpty(linea.TerceroLabel))
+                                                        {
+                                                            <small class="text-muted d-block mt-1">
+                                                                <i class="bi bi-person-check me-1"></i>@linea.TerceroLabel
+                                                            </small>
+                                                        }
+                                                    </div>
+                                                }
+
+                                                <div class="ms-auto align-self-end">
+                                                    <DxButton Text="Listo"
+                                                              IconCssClass="bi bi-check"
+                                                              RenderStyle="ButtonRenderStyle.Success"
+                                                              SizeMode="SizeMode.Small"
+                                                              Click="@(() => ConfirmDetalle(linea))" />
+                                                </div>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            }
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="table-light fw-bold">
+                            <td></td>
+                            <td colspan="2" class="text-end">Totales</td>
+                            <td></td>
+                            <td class="text-end">@TotalDebito.ToString("N2", HnCulture)</td>
+                            <td class="text-end">@TotalCredito.ToString("N2", HnCulture)</td>
+                            <td class="text-end @(BalanceExacto ? "text-success" : "text-warning")">
+                                @FormatHnl(TotalDebito - TotalCredito)
+                            </td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        </ChildContent>
+    </DxCard>
+</div>
+
+<DxPopup @bind-Visible="validationErrorsVisible"
+         Width="min(480px, 90vw)"
+         HeaderText="Errores de validacion"
+         ShowFooter="false"
+         ShowCloseButton="true"
+         CloseOnOutsideClick="true">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning">
+                <i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i>
+            </div>
+            <ul class="text-start mb-0 ps-3">
+                @foreach (var err in validationErrors)
+                {
+                    <li class="mb-1">@err</li>
+                }
+            </ul>
+            <div class="mt-4 text-start">
+                <DxButton Text="Entendido"
+                          RenderStyle="ButtonRenderStyle.Warning"
+                          Click="@(() => validationErrorsVisible = false)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private List<PlanCuentaDto> PlanCuentas = new();
+    private List<CentroCostoDto> CentrosCosto = new();
+    private List<TipoTransaccionDto> TiposTransaccion = new();
+    private List<TipoTransaccionRuleDto> TipoRules = new();
+    private List<DiarioDto> Diarios = new();
+    private List<CuentaLookupItem> CuentasLookup = new();
+    private List<CentroCostoLookupItem> CentrosCostoLookup = new();
+    private List<TerceroDto> TercerosLookup = new();
+    private PeriodoContableDto? PeriodoActivo;
+    private DiarioDto? DiarioManualActivo;
+
+    private string AccountMask => BuildAccountMask();
+
+    private string formatoCuentas = "###-###-##";
+    private string separadorCodigo = "-";
+    private IReadOnlyList<int> nivelesFormatoCuentas = Array.Empty<int>();
+
+    private string statusMessageTitle = string.Empty;
+    private string statusMessageText = string.Empty;
+    private string statusMessageCssClass = "alert-info";
+    private bool IsSaving;
+    private List<string> validationErrors = new();
+    private bool validationErrorsVisible;
+
+    private PolizaForm Form = new();
+    private static readonly CultureInfo HnCulture = new("es-HN");
+
+    private TipoTransaccionDto? SelectedTipo => Form.TypeId is null
+        ? null
+        : TiposTransaccion.FirstOrDefault(t => t.TypeId == Form.TypeId.Value);
+
+    private bool HasStatusMessage => !string.IsNullOrWhiteSpace(statusMessageText);
+    private decimal TotalDebito => Form.Lineas.Sum(l => l.DebitAmount);
+    private decimal TotalCredito => Form.Lineas.Sum(l => l.CreditAmount);
+    private bool BalanceExacto => Math.Abs(TotalDebito - TotalCredito) < 0.01m;
+    private bool CanGuardarEnContexto => PeriodoActivo is not null && DiarioManualActivo is not null;
+    private DateTime PeriodoMinDate => PeriodoActivo?.StartDate.Date ?? DateTime.MinValue;
+    private DateTime PeriodoMaxDate => PeriodoActivo?.EndDate.Date ?? DateTime.MaxValue;
+    private bool FechaFueraDePeriodo => PeriodoActivo is not null &&
+                                        (Form.PolizaDate.Date < PeriodoMinDate || Form.PolizaDate.Date > PeriodoMaxDate);
+    private string PeriodoActivoRango => PeriodoActivo is null
+        ? "sin periodo activo"
+        : $"{PeriodoActivo.StartDate:dd/MM/yyyy} - {PeriodoActivo.EndDate:dd/MM/yyyy}";
+    private string DiarioManualDescripcion => DiarioManualActivo is null
+        ? "Sin diario manual por defecto"
+        : $"{DiarioManualActivo.Code} - {DiarioManualActivo.Name}";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCatalogosAsync();
+    }
+
+    private async Task LoadCatalogosAsync()
+    {
+        try
+        {
+            ClearStatusMessage();
+
+            var companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0)
+            {
+                ShowStatusMessage("Error", "No se pudo determinar la empresa activa.", "alert-danger");
+                return;
+            }
+
+            var tiposTask = Http.GetFromJsonAsync<List<TipoTransaccionDto>>("api/contabilidad/catalogos/tipos-transaccion");
+            var cuentasTask = Http.GetFromJsonAsync<List<PlanCuentaDto>>("api/contabilidad/catalogos/plan-cuentas");
+            var centrosTask = Http.GetFromJsonAsync<List<CentroCostoDto>>("api/contabilidad/catalogos/centros-costo");
+            var tercerosTask = Http.GetFromJsonAsync<List<TerceroDto>>("api/contabilidad/terceros");
+            var diariosTask = Http.GetFromJsonAsync<List<DiarioDto>>("api/contabilidad/catalogos/diarios");
+            var periodoTask = PeriodosClient.ObtenerPeriodoActivoAsync(companyId);
+            await LoadConfiguracionFormatoAsync();
+
+            await Task.WhenAll(tiposTask!, cuentasTask!, centrosTask!, tercerosTask!, diariosTask!, periodoTask);
+
+            TiposTransaccion = (tiposTask?.Result ?? new List<TipoTransaccionDto>())
+                .OrderBy(t => t.Code)
+                .ToList();
+            PlanCuentas = (cuentasTask?.Result ?? new List<PlanCuentaDto>())
+                .Where(c => c.AllowsPosting)
+                .OrderBy(c => c.Code)
+                .ToList();
+            CentrosCosto = (centrosTask?.Result ?? new List<CentroCostoDto>())
+                .OrderBy(c => c.Code)
+                .ToList();
+
+            nivelesFormatoCuentas = ParseFormatoNiveles(formatoCuentas);
+            RefreshCuentasLookup();
+            CentrosCostoLookup = CentrosCosto
+                .Select(c => new CentroCostoLookupItem(
+                    c.CostCenterId,
+                    c.Code,
+                    c.Name,
+                    $"{c.Code} - {c.Name}"))
+                .ToList();
+
+            TercerosLookup = (tercerosTask?.Result ?? new List<TerceroDto>())
+                .Where(t => t.Status == "ACTIVE")
+                .OrderBy(t => t.Code)
+                .ToList();
+            Diarios = (diariosTask?.Result ?? new List<DiarioDto>())
+                .Where(d => d.IsActive)
+                .OrderBy(d => d.Code)
+                .ToList();
+            PeriodoActivo = periodoTask.Result;
+            DiarioManualActivo = ResolveManualJournal(Diarios);
+
+            await LoadRulesForTypeAsync(Form.TypeId);
+
+            if (Form.TypeId is null)
+            {
+                var defaultTipo = TiposTransaccion.FirstOrDefault(t => t.IsDefault);
+                if (defaultTipo is not null)
+                {
+                    Form.TypeId = defaultTipo.TypeId;
+                    await LoadRulesForTypeAsync(Form.TypeId);
+                }
+            }
+
+            AjustarFechaAlPeriodoActivo();
+        }
+        catch (Exception ex)
+        {
+            ShowStatusMessage("Error", $"No se pudieron cargar catalogos: {ex.Message}", "alert-danger");
+        }
+    }
+
+    private void AddLinea()
+    {
+        var linea = new PolizaLineaVm();
+        NormalizarLineaPorConfiguracion(linea);
+        Form.Lineas.Add(linea);
+    }
+
+    private void RemoveLinea(PolizaLineaVm linea)
+    {
+        Form.Lineas.Remove(linea);
+    }
+
+    private void OnAccountCodeChanged(PolizaLineaVm linea, string maskedCode)
+    {
+        linea.AccountCode = maskedCode;
+        var normalized = NormalizeCode(maskedCode);
+
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            linea.AccountId = null;
+            linea.AccountName = null;
+            linea.ShowDetalle = false;
+            return;
+        }
+
+        var match = GetPlanCuentasPermitidas().FirstOrDefault(c => NormalizeCode(c.Code) == normalized);
+        if (match != null)
+        {
+            linea.AccountId = match.AccountId;
+            linea.AccountName = match.Name;
+            NormalizarLineaPorConfiguracion(linea);
+
+            if (NecesitaCamposExtra(linea))
+            {
+                linea.ShowDetalle = true;
+            }
+        }
+        else
+        {
+            var existingAccount = PlanCuentas.FirstOrDefault(c => NormalizeCode(c.Code) == normalized);
+            linea.AccountId = null;
+            linea.AccountName = existingAccount is null
+                ? $"Cuenta '{maskedCode}' no encontrada"
+                : $"Cuenta {FormatCuentaCode(existingAccount.Code)} fuera de las reglas de {SelectedTipo?.Name ?? "este tipo"}";
+            linea.ShowDetalle = false;
+        }
+    }
+
+    private bool NecesitaCamposExtra(PolizaLineaVm linea)
+    {
+        if (linea.AccountId is null) return false;
+        var cuenta = GetCuenta(linea.AccountId);
+        if (cuenta is null) return false;
+        return CuentaRequiereCentroCosto(cuenta, linea) || CuentaRequiereTercero(cuenta, linea);
+    }
+
+    private bool CuentaRequiereCentroCosto(PlanCuentaDto? cuenta, PolizaLineaVm linea)
+    {
+        if (cuenta is null) return false;
+        // 1. La cuenta lo permite en Plan de Cuentas
+        if (cuenta.AllowsCostCenter) return true;
+        // 2. El tipo de comprobante lo habilita
+        if (SelectedTipo?.AllowsCostCenter == true) return true;
+        // 3. Las reglas del tipo lo exigen para esta cuenta
+        return RequiereCentroCostoPorRegla(linea);
+    }
+
+    private bool CuentaRequiereTercero(PlanCuentaDto? cuenta, PolizaLineaVm linea)
+    {
+        if (cuenta is null) return false;
+        // 1. La cuenta lo permite en Plan de Cuentas
+        if (cuenta.AllowsThird) return true;
+        // 2. El tipo de comprobante lo habilita
+        if (SelectedTipo?.AllowsThirdParty == true) return true;
+        // 3. Las reglas del tipo lo exigen para esta cuenta
+        return RequiereTerceroPorRegla(linea);
+    }
+
+    private void ToggleDetalle(PolizaLineaVm linea)
+    {
+        linea.ShowDetalle = !linea.ShowDetalle;
+    }
+
+    private void ToggleBuscarCuenta(PolizaLineaVm linea)
+    {
+        linea.ShowBuscarCuenta = !linea.ShowBuscarCuenta;
+    }
+
+    private void OnCuentaSelectedFromSearch(PolizaLineaVm linea, long? accountId)
+    {
+        linea.ShowBuscarCuenta = false;
+
+        if (accountId is null or <= 0)
+        {
+            linea.AccountId = null;
+            linea.AccountCode = null;
+            linea.AccountName = null;
+            linea.ShowDetalle = false;
+            return;
+        }
+
+        var cuenta = GetPlanCuentasPermitidas().FirstOrDefault(c => c.AccountId == accountId.Value);
+        if (cuenta is not null)
+        {
+            linea.AccountId = cuenta.AccountId;
+            linea.AccountCode = FormatCuentaCode(cuenta.Code);
+            linea.AccountName = cuenta.Name;
+            NormalizarLineaPorConfiguracion(linea);
+
+            if (NecesitaCamposExtra(linea))
+            {
+                linea.ShowDetalle = true;
+            }
+        }
+    }
+
+    private void ConfirmDetalle(PolizaLineaVm linea)
+    {
+        linea.ShowDetalle = false;
+    }
+
+    private void OnTerceroSelected(PolizaLineaVm linea, long? thirdPartyId)
+    {
+        linea.ThirdPartyId = thirdPartyId;
+        if (thirdPartyId.HasValue)
+        {
+            var tercero = TercerosLookup.FirstOrDefault(t => t.ThirdPartyId == thirdPartyId.Value);
+            linea.TerceroLabel = tercero != null ? $"{tercero.Code} - {tercero.Name}" : null;
+        }
+        else
+        {
+            linea.TerceroLabel = null;
+        }
+    }
+
+    private string BuildAccountMask()
+    {
+        if (string.IsNullOrWhiteSpace(formatoCuentas))
+            return string.Empty;
+
+        var sep = string.IsNullOrWhiteSpace(separadorCodigo) ? "-" : separadorCodigo;
+        var niveles = ParseFormatoNiveles(formatoCuentas);
+        if (niveles.Count == 0)
+            return new string('0', formatoCuentas.Count(c => c == '#' || c == 'X' || c == 'x'));
+
+        return string.Join(sep, niveles.Select(n => new string('0', n)));
+    }
+
+    private void OnLineaCostCenterChanged(PolizaLineaVm linea, long? costCenterId)
+    {
+        linea.CostCenterId = costCenterId;
+    }
+
+    private async Task OnLineaKeyDown(KeyboardEventArgs args, PolizaLineaVm linea)
+    {
+        if (args.Key == "F2" || args.Code == "F2")
+        {
+            await CopyLineaFromPreviousAsync(linea);
+        }
+    }
+
+    private async Task CopyLineaFromPreviousAsync(PolizaLineaVm linea)
+    {
+        var indiceActual = Form.Lineas.IndexOf(linea);
+        if (indiceActual <= 0)
+        {
+            ShowStatusMessage("Informacion", "No hay una linea anterior para copiar.", "alert-info");
+            await InvokeAsync(StateHasChanged);
+            return;
+        }
+
+        var anterior = Form.Lineas[indiceActual - 1];
+        linea.Description = anterior.Description;
+        linea.SourceDocument = anterior.SourceDocument;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private async Task GuardarAsync()
+    {
+        ClearStatusMessage();
+        var errors = Validar();
+        if (errors.Count > 0)
+        {
+            validationErrors = errors;
+            validationErrorsVisible = true;
+            return;
+        }
+
+        IsSaving = true;
+        try
+        {
+            var request = new PolizaCrearRequest(
+                TypeId: Form.TypeId!.Value,
+                PeriodId: PeriodoActivo?.PeriodId,
+                JournalId: DiarioManualActivo?.JournalId,
+                PolizaDate: Form.PolizaDate,
+                Module: "MANUAL",
+                DocumentType: "JE",
+                DocumentId: null,
+                DocumentNumber: null,
+                Description: Form.Description?.Trim(),
+                Lineas: Form.Lineas.Select(l => new PolizaLineaRequest(
+                    AccountId: l.AccountId!.Value,
+                    CostCenterId: l.CostCenterId,
+                    ThirdPartyId: l.ThirdPartyId,
+                    DebitAmount: l.DebitAmount,
+                    CreditAmount: l.CreditAmount,
+                    Description: l.Description,
+                    CurrencyCode: null,
+                    ExchangeRate: null,
+                    SourceDocument: l.SourceDocument
+                )).ToList()
+            );
+
+            var newId = await PolizasClient.CrearAsync(request);
+            var polizaCreada = await PolizasClient.ObtenerAsync(newId);
+            var documentNumberAsignado = polizaCreada?.DocumentNumber;
+
+            await LoadCatalogosAsync();
+            await ResetFormAsync(clearStatusMessage: false);
+            ShowStatusMessage(
+                "Proceso completado",
+                string.IsNullOrWhiteSpace(documentNumberAsignado)
+                    ? $"Partida creada con ID {newId}."
+                    : $"Partida creada con ID {newId} y No. documento {documentNumberAsignado}.",
+                "alert-success");
+        }
+        catch (Exception ex)
+        {
+            ShowStatusMessage("Error", $"No se pudo guardar la partida: {ex.Message}", "alert-danger");
+        }
+        finally
+        {
+            IsSaving = false;
+        }
+    }
+
+    private List<string> Validar()
+    {
+        var errors = new List<string>();
+
+        if (PeriodoActivo is null)
+            errors.Add("No hay un periodo contable abierto en Contabilidad.");
+
+        if (DiarioManualActivo is null)
+            errors.Add("No hay un diario manual activo configurado para registrar partidas.");
+
+        if (FechaFueraDePeriodo)
+            errors.Add($"La fecha del comprobante debe estar dentro del periodo activo {PeriodoActivoRango}.");
+
+        if (Form.TypeId is null || Form.TypeId <= 0)
+            errors.Add("Debe seleccionar el tipo de comprobante.");
+
+        if (string.IsNullOrWhiteSpace(Form.Description))
+            errors.Add("Debe ingresar la descripcion del encabezado.");
+
+        if (Form.Lineas.Count == 0)
+        {
+            errors.Add("Debe agregar al menos una linea.");
+            return errors;
+        }
+
+        foreach (var (linea, idx) in Form.Lineas.Select((item, index) => (item, index + 1)))
+        {
+            if (linea.AccountId is null || linea.AccountId <= 0)
+            {
+                errors.Add($"Linea {idx}: {(string.IsNullOrWhiteSpace(linea.AccountName) ? "seleccione una cuenta." : linea.AccountName)}");
+                continue;
+            }
+
+            var cuenta = GetCuenta(linea.AccountId);
+            if (cuenta is null)
+            {
+                errors.Add($"Linea {idx}: la cuenta seleccionada no existe en catalogos.");
+                continue;
+            }
+
+            if (!cuenta.AllowsPosting)
+                errors.Add($"Linea {idx}: la cuenta {FormatCuentaCode(cuenta.Code)} no permite movimiento.");
+
+            if (CuentaRequiereCentroCosto(cuenta, linea) && (linea.CostCenterId is null || linea.CostCenterId <= 0))
+                errors.Add($"Linea {idx}: debe seleccionar centro de costo.");
+
+            if (CuentaRequiereTercero(cuenta, linea) && (linea.ThirdPartyId is null || linea.ThirdPartyId <= 0))
+                errors.Add($"Linea {idx}: debe indicar tercero.");
+
+            if (linea.DebitAmount <= 0 && linea.CreditAmount <= 0)
+                errors.Add($"Linea {idx}: indique debito o credito.");
+
+            if (linea.DebitAmount < 0 || linea.CreditAmount < 0)
+                errors.Add($"Linea {idx}: debito y credito deben ser positivos.");
+
+            if (linea.DebitAmount > 0 && linea.CreditAmount > 0)
+                errors.Add($"Linea {idx}: use solo debito o credito por linea.");
+
+            var reglaError = GetRuleValidationMessage(linea);
+            if (reglaError is not null)
+                errors.Add($"Linea {idx}: {reglaError}");
+        }
+
+        if (!BalanceExacto)
+            errors.Add("Los debitos y creditos deben balancear.");
+
+        return errors;
+    }
+
+    private Task ResetFormAsync()
+    {
+        return ResetFormAsync(clearStatusMessage: true);
+    }
+
+    private async Task ResetFormAsync(bool clearStatusMessage)
+    {
+        var preservedTypeId = Form.TypeId ?? TiposTransaccion.FirstOrDefault(t => t.IsDefault)?.TypeId;
+        Form = new PolizaForm
+        {
+            TypeId = preservedTypeId,
+            PolizaDate = GetDefaultPolizaDate()
+        };
+        TipoRules = new();
+
+        if (preservedTypeId.HasValue)
+        {
+            await LoadRulesForTypeAsync(preservedTypeId);
+        }
+
+        if (clearStatusMessage)
+        {
+            ClearStatusMessage();
+        }
+    }
+
+    private DateTime GetDefaultPolizaDate()
+    {
+        if (PeriodoActivo is null)
+        {
+            return DateTime.Today;
+        }
+
+        var today = DateTime.Today;
+        if (today < PeriodoMinDate)
+        {
+            return PeriodoMinDate;
+        }
+
+        if (today > PeriodoMaxDate)
+        {
+            return PeriodoMaxDate;
+        }
+
+        return today;
+    }
+
+    private void AjustarFechaAlPeriodoActivo()
+    {
+        if (PeriodoActivo is null)
+        {
+            return;
+        }
+
+        if (Form.PolizaDate.Date < PeriodoMinDate)
+        {
+            Form.PolizaDate = PeriodoMinDate;
+            return;
+        }
+
+        if (Form.PolizaDate.Date > PeriodoMaxDate)
+        {
+            Form.PolizaDate = PeriodoMaxDate;
+        }
+    }
+
+    private static DiarioDto? ResolveManualJournal(IEnumerable<DiarioDto> diarios)
+    {
+        var defaults = diarios
+            .Where(d => d.IsActive && d.AllowsManual && d.IsDefaultManual)
+            .ToList();
+
+        return defaults.Count == 1 ? defaults[0] : null;
+    }
+
+    private string GetDocumentNumberPreview()
+    {
+        if (SelectedTipo is null)
+        {
+            return "Seleccione un tipo";
+        }
+
+        return SelectedTipo.NextDocumentNumber.ToString(CultureInfo.InvariantCulture);
+    }
+
+    private void ShowStatusMessage(string title, string text, string cssClass)
+    {
+        statusMessageTitle = title;
+        statusMessageText = text;
+        statusMessageCssClass = cssClass;
+    }
+
+    private void ClearStatusMessage()
+    {
+        statusMessageTitle = string.Empty;
+        statusMessageText = string.Empty;
+        statusMessageCssClass = "alert-info";
+    }
+
+    private string FormatHnl(decimal value) => string.Format(HnCulture, "L {0:N2}", value);
+
+    private PlanCuentaDto? GetCuenta(long? accountId) => accountId is > 0
+        ? PlanCuentas.FirstOrDefault(c => c.AccountId == accountId.Value)
+        : null;
+
+    private async Task LoadConfiguracionFormatoAsync()
+    {
+        try
+        {
+            var companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0)
+            {
+                return;
+            }
+
+            var config = await Http.GetFromJsonAsync<ConfiguracionSistemaDto>($"api/contabilidad/configuracion/{companyId}");
+            if (config?.Principal is null)
+            {
+                return;
+            }
+
+            if (!string.IsNullOrWhiteSpace(config.Principal.FormatoCuentas))
+            {
+                formatoCuentas = config.Principal.FormatoCuentas;
+            }
+
+            if (!string.IsNullOrWhiteSpace(config.Principal.SeparadorCodigo))
+            {
+                separadorCodigo = config.Principal.SeparadorCodigo;
+            }
+        }
+        catch
+        {
+            // Mantiene formato por defecto si la configuracion no esta disponible.
+        }
+    }
+
+    private string FormatCuentaCode(string? raw)
+    {
+        var normalized = NormalizeCode(raw);
+        if (string.IsNullOrWhiteSpace(normalized))
+        {
+            return string.Empty;
+        }
+
+        if (nivelesFormatoCuentas.Count == 0)
+        {
+            return normalized;
+        }
+
+        var separator = string.IsNullOrWhiteSpace(separadorCodigo) ? "-" : separadorCodigo;
+        var parts = new List<string>();
+        var index = 0;
+
+        foreach (var length in nivelesFormatoCuentas)
+        {
+            if (index >= normalized.Length)
+            {
+                break;
+            }
+
+            var take = Math.Min(length, normalized.Length - index);
+            parts.Add(normalized.Substring(index, take));
+            index += take;
+        }
+
+        if (index < normalized.Length)
+        {
+            parts.Add(normalized.Substring(index));
+        }
+
+        return string.Join(separator, parts);
+    }
+
+    private static string NormalizeCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        return new string(value.Where(char.IsLetterOrDigit).ToArray());
+    }
+
+    private static IReadOnlyList<int> ParseFormatoNiveles(string? format)
+    {
+        if (string.IsNullOrWhiteSpace(format))
+        {
+            return Array.Empty<int>();
+        }
+
+        var groups = new List<int>();
+        var current = 0;
+
+        foreach (var ch in format)
+        {
+            if (ch == '#' || ch == 'X' || ch == 'x')
+            {
+                current++;
+            }
+            else if (current > 0)
+            {
+                groups.Add(current);
+                current = 0;
+            }
+        }
+
+        if (current > 0)
+        {
+            groups.Add(current);
+        }
+
+        return groups;
+    }
+
+    private bool PermiteCentroCosto() => SelectedTipo?.AllowsCostCenter ?? true;
+
+    private bool PermiteTercero() => SelectedTipo?.AllowsThirdParty ?? true;
+
+    private bool RequiereCentroCosto(PolizaLineaVm linea)
+    {
+        var cuenta = GetCuenta(linea.AccountId);
+        return (cuenta?.AllowsCostCenter ?? false) || RequiereCentroCostoPorRegla(linea);
+    }
+
+    private bool RequiereTercero(PolizaLineaVm linea)
+    {
+        var cuenta = GetCuenta(linea.AccountId);
+        return (cuenta?.AllowsThird ?? false) || RequiereTerceroPorRegla(linea);
+    }
+
+    private void NormalizarLineaPorConfiguracion(PolizaLineaVm linea)
+    {
+        var cuenta = GetCuenta(linea.AccountId);
+        if (!CuentaRequiereCentroCosto(cuenta, linea))
+        {
+            linea.CostCenterId = null;
+        }
+
+        if (!CuentaRequiereTercero(cuenta, linea))
+        {
+            linea.ThirdPartyId = null;
+            linea.TerceroLabel = null;
+        }
+    }
+
+    private async Task LoadRulesForTypeAsync(long? typeId)
+    {
+        TipoRules = new();
+        if (typeId is null or <= 0)
+        {
+            RefreshCuentasLookup();
+            return;
+        }
+
+        try
+        {
+            TipoRules = await Http.GetFromJsonAsync<List<TipoTransaccionRuleDto>>(
+                    $"api/contabilidad/catalogos/tipos-transaccion/{typeId.Value}/rules")
+                ?? new List<TipoTransaccionRuleDto>();
+        }
+        catch
+        {
+            TipoRules = new();
+        }
+
+        RefreshCuentasLookup();
+    }
+
+    private bool RequiereCentroCostoPorRegla(PolizaLineaVm linea)
+    {
+        var cuenta = GetCuenta(linea.AccountId);
+        if (cuenta is null)
+        {
+            return false;
+        }
+
+        var reglasActivas = TipoRules.Where(r => r.IsActive).ToList();
+        if (reglasActivas.Count == 0)
+        {
+            return false;
+        }
+
+        return reglasActivas.Any(r =>
+            CuentaEnRango(cuenta.Code, r.AccountCodeFrom, r.AccountCodeTo) &&
+            (!string.IsNullOrWhiteSpace(r.CostCenterCodeFrom) || !string.IsNullOrWhiteSpace(r.CostCenterCodeTo)));
+    }
+
+    private bool RequiereTerceroPorRegla(PolizaLineaVm linea)
+    {
+        var cuenta = GetCuenta(linea.AccountId);
+        if (cuenta is null)
+        {
+            return false;
+        }
+
+        var reglasActivas = TipoRules.Where(r => r.IsActive).ToList();
+        if (reglasActivas.Count == 0)
+        {
+            return false;
+        }
+
+        return reglasActivas.Any(r =>
+            CuentaEnRango(cuenta.Code, r.AccountCodeFrom, r.AccountCodeTo) &&
+            (!string.IsNullOrWhiteSpace(r.ThirdPartyCodeFrom) || !string.IsNullOrWhiteSpace(r.ThirdPartyCodeTo)));
+    }
+
+    private bool CumpleReglasTipo(PolizaLineaVm linea)
+        => GetRuleValidationMessage(linea) is null;
+
+    private string? GetRuleValidationMessage(PolizaLineaVm linea)
+    {
+        var reglasActivas = GetActiveRules();
+        if (reglasActivas.Count == 0)
+        {
+            return null;
+        }
+
+        var cuenta = GetCuenta(linea.AccountId);
+        if (cuenta is null)
+        {
+            return "la cuenta seleccionada no es valida.";
+        }
+
+        var nombreTipo = SelectedTipo?.Name ?? "el tipo seleccionado";
+        var reglasCuenta = reglasActivas
+            .Where(r => CuentaEnRango(cuenta.Code, r.AccountCodeFrom, r.AccountCodeTo))
+            .ToList();
+
+        if (reglasCuenta.Count == 0)
+        {
+            return $"la cuenta {FormatCuentaCode(cuenta.Code)} esta fuera de las cuentas permitidas para {nombreTipo}. Rangos validos: {DescribeAccountRanges(reglasActivas)}.";
+        }
+
+        var centro = linea.CostCenterId.HasValue
+            ? CentrosCosto.FirstOrDefault(c => c.CostCenterId == linea.CostCenterId.Value)
+            : null;
+
+        var reglasCentro = reglasCuenta
+            .Where(r => !RuleRequiresCostCenter(r) ||
+                        (centro is not null && CuentaEnRango(centro.Code, r.CostCenterCodeFrom, r.CostCenterCodeTo)))
+            .ToList();
+
+        if (reglasCentro.Count == 0)
+        {
+            if (centro is null && reglasCuenta.Any(RuleRequiresCostCenter))
+            {
+                return $"la cuenta {FormatCuentaCode(cuenta.Code)} requiere un centro de costo dentro de: {DescribeCostCenterRanges(reglasCuenta)}.";
+            }
+
+            return $"el centro de costo seleccionado no esta dentro del rango permitido para la cuenta {FormatCuentaCode(cuenta.Code)}. Rangos validos: {DescribeCostCenterRanges(reglasCuenta)}.";
+        }
+
+        var tercero = linea.ThirdPartyId.HasValue
+            ? TercerosLookup.FirstOrDefault(t => t.ThirdPartyId == linea.ThirdPartyId.Value)
+            : null;
+
+        var reglasTercero = reglasCentro
+            .Where(r => !RuleRequiresThirdParty(r) ||
+                        (tercero is not null && CuentaEnRango(tercero.Code, r.ThirdPartyCodeFrom, r.ThirdPartyCodeTo)))
+            .ToList();
+
+        if (reglasTercero.Count == 0)
+        {
+            if (tercero is null && reglasCentro.Any(RuleRequiresThirdParty))
+            {
+                return $"la cuenta {FormatCuentaCode(cuenta.Code)} requiere un tercero dentro de: {DescribeThirdPartyRanges(reglasCentro)}.";
+            }
+
+            return $"el tercero seleccionado no esta dentro del rango permitido para la cuenta {FormatCuentaCode(cuenta.Code)}. Rangos validos: {DescribeThirdPartyRanges(reglasCentro)}.";
+        }
+
+        return null;
+    }
+
+    private List<TipoTransaccionRuleDto> GetActiveRules()
+        => TipoRules.Where(r => r.IsActive).OrderBy(r => r.LineNumber).ToList();
+
+    private IReadOnlyList<PlanCuentaDto> GetPlanCuentasPermitidas()
+    {
+        var reglasActivas = GetActiveRules();
+        if (reglasActivas.Count == 0)
+        {
+            return PlanCuentas;
+        }
+
+        return PlanCuentas
+            .Where(c => reglasActivas.Any(r => CuentaEnRango(c.Code, r.AccountCodeFrom, r.AccountCodeTo)))
+            .ToList();
+    }
+
+    private void RefreshCuentasLookup()
+    {
+        CuentasLookup = GetPlanCuentasPermitidas()
+            .Select(c => new CuentaLookupItem(
+                c.AccountId,
+                FormatCuentaCode(c.Code),
+                c.Name,
+                $"{FormatCuentaCode(c.Code)} - {c.Name}"))
+            .ToList();
+    }
+
+    private static bool RuleRequiresCostCenter(TipoTransaccionRuleDto regla)
+        => !string.IsNullOrWhiteSpace(regla.CostCenterCodeFrom) || !string.IsNullOrWhiteSpace(regla.CostCenterCodeTo);
+
+    private static bool RuleRequiresThirdParty(TipoTransaccionRuleDto regla)
+        => !string.IsNullOrWhiteSpace(regla.ThirdPartyCodeFrom) || !string.IsNullOrWhiteSpace(regla.ThirdPartyCodeTo);
+
+    private string DescribeAccountRanges(IEnumerable<TipoTransaccionRuleDto> reglas)
+        => DescribeRanges(reglas, r => r.AccountCodeFrom, r => r.AccountCodeTo, FormatCuentaCode);
+
+    private string DescribeCostCenterRanges(IEnumerable<TipoTransaccionRuleDto> reglas)
+        => DescribeRanges(reglas.Where(RuleRequiresCostCenter), r => r.CostCenterCodeFrom, r => r.CostCenterCodeTo, value => value ?? string.Empty);
+
+    private string DescribeThirdPartyRanges(IEnumerable<TipoTransaccionRuleDto> reglas)
+        => DescribeRanges(reglas.Where(RuleRequiresThirdParty), r => r.ThirdPartyCodeFrom, r => r.ThirdPartyCodeTo, value => value ?? string.Empty);
+
+    private static string DescribeRanges(
+        IEnumerable<TipoTransaccionRuleDto> reglas,
+        Func<TipoTransaccionRuleDto, string?> fromSelector,
+        Func<TipoTransaccionRuleDto, string?> toSelector,
+        Func<string?, string> formatter)
+    {
+        var ranges = reglas
+            .Select(r => FormatRange(fromSelector(r), toSelector(r), formatter))
+            .Where(r => !string.IsNullOrWhiteSpace(r))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+        return ranges.Count == 0 ? "cualquier valor" : string.Join(", ", ranges);
+    }
+
+    private static string FormatRange(string? from, string? to, Func<string?, string> formatter)
+    {
+        var hasFrom = !string.IsNullOrWhiteSpace(from);
+        var hasTo = !string.IsNullOrWhiteSpace(to);
+
+        if (!hasFrom && !hasTo)
+        {
+            return "cualquier valor";
+        }
+
+        if (hasFrom && hasTo)
+        {
+            return string.Equals(from, to, StringComparison.OrdinalIgnoreCase)
+                ? formatter(from)
+                : $"{formatter(from)} a {formatter(to)}";
+        }
+
+        if (hasFrom)
+        {
+            return $"desde {formatter(from)}";
+        }
+
+        return $"hasta {formatter(to)}";
+    }
+
+    private static bool CuentaEnRango(string value, string? from, string? to)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        var hasFrom = !string.IsNullOrWhiteSpace(from);
+        var hasTo = !string.IsNullOrWhiteSpace(to);
+        if (!hasFrom && !hasTo)
+        {
+            return true;
+        }
+
+        var compareFrom = hasFrom
+            ? string.Compare(value, from, StringComparison.OrdinalIgnoreCase) >= 0
+            : true;
+        var compareTo = hasTo
+            ? string.Compare(value, to, StringComparison.OrdinalIgnoreCase) <= 0
+            : true;
+
+        return compareFrom && compareTo;
+    }
+
+    private sealed class PolizaForm
+    {
+        public long? TypeId { get; set; }
+        public DateTime PolizaDate { get; set; } = DateTime.Today;
+        public string? Module { get; set; } = "MANUAL";
+        public string? DocumentType { get; set; } = "JE";
+        public string? DocumentNumber { get; set; }
+        public string? Description { get; set; }
+        public List<PolizaLineaVm> Lineas { get; } = new();
+    }
+
+    private sealed class PolizaLineaVm
+    {
+        public long? AccountId { get; set; }
+        public string? AccountCode { get; set; }
+        public string? AccountName { get; set; }
+        public long? CostCenterId { get; set; }
+        public long? ThirdPartyId { get; set; }
+        public string? TerceroLabel { get; set; }
+        public decimal DebitAmount { get; set; }
+        public decimal CreditAmount { get; set; }
+        public string? Description { get; set; }
+        public string? SourceDocument { get; set; }
+        public bool ShowDetalle { get; set; }
+        public bool ShowBuscarCuenta { get; set; }
+    }
+
+    private sealed record CuentaLookupItem(
+        long AccountId,
+        string Code,
+        string Name,
+        string Display);
+
+    private sealed record CentroCostoLookupItem(
+        long CostCenterId,
+        string Code,
+        string Name,
+        string Display);
+}

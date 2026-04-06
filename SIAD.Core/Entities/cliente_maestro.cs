@@ -1,11 +1,14 @@
 ﻿using System;
 using System.Collections.Generic;
+using SIAD.Core.Tenancy;
 
 namespace SIAD.Core.Entities;
 
-public partial class cliente_maestro
+public partial class cliente_maestro : ICompanyScopedEntity
 {
     public int maestro_cliente_id { get; set; }
+
+    public long company_id { get; set; }
 
     public string maestro_cliente_clave { get; set; } = null!;
 

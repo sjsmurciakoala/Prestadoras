@@ -25,6 +25,8 @@ public partial class con_diario : ICompanyScopedEntity
 
     public bool allows_manual { get; set; }
 
+    public bool is_default_manual { get; set; }
+
     public DateTime created_at { get; set; }
 
     public string created_by { get; set; } = null!;
@@ -33,5 +35,6 @@ public partial class con_diario : ICompanyScopedEntity
 
     public string? updated_by { get; set; }
 
-    public virtual ICollection<con_poliza> polizas { get; set; } = new List<con_poliza>();
+    public virtual ICollection<con_partida_hdr> polizas { get; set; } = new List<con_partida_hdr>();
 }
+

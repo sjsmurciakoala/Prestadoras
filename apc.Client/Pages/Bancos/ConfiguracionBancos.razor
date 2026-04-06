@@ -1,0 +1,322 @@
+@page "/bancos/configuracion"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Tenant
+@using SIAD.Core.DTOs.Bancos
+@using SIAD.Core.DTOs.Tenant
+@using DevExpress.Blazor
+
+@inject BancoConfiguracionClient ConfiguracionClient
+@inject TenantCompaniesClient TenantCompaniesClient
+@inject TenantState TenantState
+
+<div class="contabilidad-page contabilidad-content h-100">
+    <DxCard CssClass="shadow-sm border-0 rounded w-100 h-100">
+        <HeaderContent>
+            <div class="d-flex flex-wrap justify-content-between align-items-center p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-circle bg-primary text-white d-flex align-items-center justify-content-center">
+                        <i class="bi bi-bank fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-bold text-secondary">Configuracion de bancos</h5>
+                        <small class="text-muted">Parametros del modulo de bancos por empresa.</small>
+                    </div>
+                </div>
+            </div>
+        </HeaderContent>
+        <ChildContent>
+            <div class="p-4">
+                @if (!string.IsNullOrWhiteSpace(alerta))
+                {
+                    <DxAlert AlertType="@alertaTipo" Visible="true" CssClass="mb-3">
+                        @alerta
+                    </DxAlert>
+                }
+
+                <DxToolbar ItemSpacing="12px" CssClass="mb-3">
+                    <DxToolbarItem>
+                        <Template>
+                            <DxComboBox Data="@empresas"
+                                        TData="TenantCompanyDto"
+                                        TValue="long"
+                                        Value="@empresaSeleccionadaId"
+                                        ValueChanged="@OnEmpresaChangedAsync"
+                                        ValueExpression="@(() => empresaSeleccionadaId)"
+                                        ValueFieldName="@nameof(TenantCompanyDto.CompanyId)"
+                                        TextFieldName="@nameof(TenantCompanyDto.Name)"
+                                        NullText="Seleccione empresa"
+                                        Enabled="@(!cargando && empresas.Count > 0)"
+                                        Width="260px">
+                                <ItemTemplate Context="empresa">
+                                    <div class="d-flex flex-column">
+                                        <span class="fw-semibold">@empresa.Code - @empresa.Name</span>
+                                        <small class="text-muted">ID: @empresa.CompanyId</small>
+                                    </div>
+                                </ItemTemplate>
+                            </DxComboBox>
+                        </Template>
+                    </DxToolbarItem>
+                    <DxToolbarItem IconCssClass="bi bi-arrow-clockwise"
+                                   Text="Recargar"
+                                   RenderStyle="ButtonRenderStyle.Secondary"
+                                   Enabled="@(!cargando)"
+                                   Click="@RecargarAsync" />
+                    <DxToolbarItem IconCssClass="bi bi-save"
+                                   Text="Guardar"
+                                   RenderStyle="ButtonRenderStyle.Primary"
+                                   Enabled="@(!cargando && editContext != null)"
+                                   Click="@GuardarAsync" />
+                </DxToolbar>
+
+                @if (cargando && editContext == null)
+                {
+                    <div class="text-center my-5">
+                        <DxWaitIndicator Visible="true" AnimationType="WaitIndicatorAnimationType.Spin" />
+                    </div>
+                }
+
+                @if (editContext != null)
+                {
+                    <EditForm EditContext="@editContext" Context="editCtx">
+                        <ChildContent>
+                            <DxTabs CssClass="modern-tabs">
+                                <DxTabPage Text="General" CssClass="p-3">
+                                    <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@cargando">
+                                        <DxFormLayoutItem Caption="Máximo cheque" ColSpanMd="4" ColSpanSm="12">
+                                            <ChildContent Context="itemCtx">
+                                                <DxSpinEdit TValue="decimal"
+                                                            @bind-Value="modelo.MaxCheque"
+                                                            Min="0" Max="9999999999m"
+                                                            Increment="1m"
+                                                            DisplayFormatString="N2" />
+                                            </ChildContent>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Débito banco" ColSpanMd="4" ColSpanSm="12">
+                                            <ChildContent Context="itemCtx">
+                                                <DxSpinEdit TValue="decimal"
+                                                            @bind-Value="modelo.PDebBan"
+                                                            Min="0" Max="9999999999m"
+                                                            Increment="0.01m"
+                                                            DisplayFormatString="N2" />
+                                            </ChildContent>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Meses historial" ColSpanMd="4" ColSpanSm="12">
+                                            <ChildContent Context="itemCtx">
+                                                <DxSpinEdit TValue="int" @bind-Value="modelo.MesesH" Min="0" Max="120" />
+                                            </ChildContent>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Alertar ND" ColSpanMd="4" ColSpanSm="12">
+                                            <ChildContent Context="itemCtx">
+                                                <DxCheckBox @bind-Checked="modelo.AlertarNd" CheckType="CheckType.Switch" />
+                                            </ChildContent>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Máx operaciones conc." ColSpanMd="4" ColSpanSm="12">
+                                            <ChildContent Context="itemCtx">
+                                                <DxSpinEdit TValue="int" @bind-Value="modelo.MOpeConc" Min="0" Max="99999" />
+                                            </ChildContent>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Consolidado" ColSpanMd="4" ColSpanSm="12">
+                                            <ChildContent Context="itemCtx">
+                                                <DxCheckBox @bind-Checked="modelo.Consolidado" CheckType="CheckType.Switch" />
+                                            </ChildContent>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutItem Caption="Cuenta mayor" ColSpanMd="4" ColSpanSm="12">
+                                            <ChildContent Context="itemCtx">
+                                                <DxTextBox @bind-Text="modelo.CuentaMayor" MaxLength="30" NullText="Ej: 110102" />
+                                            </ChildContent>
+                                        </DxFormLayoutItem>
+                                        <DxFormLayoutGroup Caption="Dias de deposito" ColSpanMd="12">
+                                            <DxFormLayoutItem Caption="Dias D1" ColSpanMd="4" ColSpanSm="12">
+                                                <ChildContent Context="itemCtx">
+                                                    <DxSpinEdit TValue="int" @bind-Value="modelo.DiasD1" Min="0" Max="365" />
+                                                </ChildContent>
+                                            </DxFormLayoutItem>
+                                            <DxFormLayoutItem Caption="Dias D2" ColSpanMd="4" ColSpanSm="12">
+                                                <ChildContent Context="itemCtx">
+                                                    <DxSpinEdit TValue="int" @bind-Value="modelo.DiasD2" Min="0" Max="365" />
+                                                </ChildContent>
+                                            </DxFormLayoutItem>
+                                            <DxFormLayoutItem Caption="Dias D3" ColSpanMd="4" ColSpanSm="12">
+                                                <ChildContent Context="itemCtx">
+                                                    <DxSpinEdit TValue="int" @bind-Value="modelo.DiasD3" Min="0" Max="365" />
+                                                </ChildContent>
+                                            </DxFormLayoutItem>
+                                        </DxFormLayoutGroup>
+                                    </DxFormLayout>
+                                </DxTabPage>
+                                
+                            </DxTabs>
+                            <ValidationSummary />
+                        </ChildContent>
+                    </EditForm>
+                }
+            </div>
+        </ChildContent>
+    </DxCard>
+</div>
+
+<DxLoadingPanel Visible="@cargando"
+                PositionTarget="body"
+                ApplyBackgroundShading="true"
+                IsContentBlocked="true"
+                Text="Cargando..."
+                ZIndex="2000" />
+
+@code {
+    private IReadOnlyList<TenantCompanyDto> empresas = Array.Empty<TenantCompanyDto>();
+    private long empresaSeleccionadaId;
+    private BancoConfiguracionDto modelo = new();
+    private EditContext? editContext;
+    private string? alerta;
+    private AlertType alertaTipo = AlertType.Info;
+    private bool cargando;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarEmpresasAsync();
+        await CargarConfiguracionAsync();
+    }
+
+    private async Task CargarEmpresasAsync()
+    {
+        try
+        {
+            empresas = await TenantCompaniesClient.ObtenerAsync();
+            var companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId > 0)
+            {
+                empresaSeleccionadaId = companyId;
+                return;
+            }
+
+            var fallbackCompanyId = empresas.FirstOrDefault()?.CompanyId ?? 0;
+            if (fallbackCompanyId > 0)
+            {
+                await TenantState.TrySetCompanyIdAsync(fallbackCompanyId);
+            }
+            empresaSeleccionadaId = fallbackCompanyId;
+        }
+        catch (Exception ex)
+        {
+            alerta = $"Error al cargar empresas: {ex.Message}";
+            alertaTipo = AlertType.Danger;
+        }
+    }
+
+    private async Task CargarConfiguracionAsync()
+    {
+        if (empresaSeleccionadaId <= 0)
+        {
+            modelo = new BancoConfiguracionDto();
+            editContext = new EditContext(modelo);
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            alerta = null;
+            modelo = await ConfiguracionClient.ObtenerAsync(empresaSeleccionadaId);
+            editContext = new EditContext(modelo);
+            if (modelo.ConfigId == 0)
+            {
+                alerta = "Esta empresa no tiene configuracion de bancos. Complete los datos y guarde.";
+                alertaTipo = AlertType.Info;
+            }
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            alerta = ex.Message;
+            alertaTipo = AlertType.Danger;
+        }
+        catch (Exception ex)
+        {
+            alerta = $"Error al cargar configuracion: {ex.Message}";
+            alertaTipo = AlertType.Danger;
+            modelo = new BancoConfiguracionDto();
+            editContext = new EditContext(modelo);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task OnEmpresaChangedAsync(long value)
+    {
+        if (value <= 0 || value == empresaSeleccionadaId)
+        {
+            return;
+        }
+
+        var actualizado = await TenantState.TrySetCompanyIdAsync(value);
+        if (!actualizado)
+        {
+            return;
+        }
+
+        empresaSeleccionadaId = value;
+        await CargarConfiguracionAsync();
+    }
+
+    private async Task RecargarAsync()
+    {
+        await CargarConfiguracionAsync();
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (editContext is null || empresaSeleccionadaId <= 0)
+        {
+            return;
+        }
+
+        alerta = null;
+        if (!editContext.Validate())
+        {
+            alerta = "Revisa los campos del formulario.";
+            alertaTipo = AlertType.Danger;
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            modelo = await ConfiguracionClient.GuardarAsync(empresaSeleccionadaId, modelo);
+            editContext = new EditContext(modelo);
+            alerta = "Configuracion guardada correctamente.";
+            alertaTipo = AlertType.Success;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            alerta = ex.Message;
+            alertaTipo = AlertType.Danger;
+        }
+        catch (HttpRequestException ex)
+        {
+            alerta = ex.Message;
+            alertaTipo = AlertType.Danger;
+        }
+        catch (Exception ex)
+        {
+            alerta = $"Error al guardar: {ex.Message}";
+            alertaTipo = AlertType.Danger;
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    public enum AlertType
+    {
+        Info,
+        Warning,
+        Error,
+        Success,
+        Danger
+    }
+}
+

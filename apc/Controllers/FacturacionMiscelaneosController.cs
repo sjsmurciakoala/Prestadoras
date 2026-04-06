@@ -60,5 +60,69 @@ public class FacturacionMiscelaneosController : ControllerBase
         var recibo = await _service.ObtenerReciboAsync(numero, ct);
         return recibo is null ? NotFound() : Ok(recibo);
     }
+
+    // ── CRUD catálogo misceláneos ──
+
+    [HttpGet("catalogo/{id:int}")]
+    public async Task<IActionResult> ObtenerCatalogoItem(int id, CancellationToken ct)
+    {
+        var item = await _service.ObtenerCatalogoItemAsync(id, ct);
+        return item is null ? NotFound() : Ok(item);
+    }
+
+    [HttpPost("catalogo")]
+    public async Task<IActionResult> CrearCatalogoItem([FromBody] MiscelaneoCatalogoEditDto dto, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        try
+        {
+            var usuario = User?.Identity?.Name ?? "system";
+            var creado = await _service.CrearCatalogoItemAsync(dto, usuario, ct);
+            return CreatedAtAction(nameof(ObtenerCatalogoItem), new { id = creado.Id }, creado);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpPut("catalogo/{id:int}")]
+    public async Task<IActionResult> ActualizarCatalogoItem(int id, [FromBody] MiscelaneoCatalogoEditDto dto, CancellationToken ct)
+    {
+        if (!ModelState.IsValid)
+            return ValidationProblem(ModelState);
+
+        try
+        {
+            var usuario = User?.Identity?.Name ?? "system";
+            var actualizado = await _service.ActualizarCatalogoItemAsync(id, dto, usuario, ct);
+            return Ok(actualizado);
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpDelete("catalogo/{id:int}")]
+    public async Task<IActionResult> EliminarCatalogoItem(int id, CancellationToken ct)
+    {
+        var ok = await _service.EliminarCatalogoItemAsync(id, ct);
+        return ok ? Ok(new { success = true }) : NotFound();
+    }
 }
 

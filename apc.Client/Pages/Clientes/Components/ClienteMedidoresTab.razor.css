@@ -1,0 +1,379 @@
+/* ClienteMedidoresTab.razor.css - Estilos congruentes con ClienteTarifasTab */
+
+.cliente-medidores-container {
+    padding: 0.5rem;
+}
+
+/* --- ENCABEZADOS --- */
+.section-header {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    background: linear-gradient(180deg, rgba(13,110,253,.10), rgba(13,110,253,.04));
+    border: 1px solid rgba(13,110,253,.15);
+    border-radius: 14px;
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+.section-header i {
+    color: #0d6efd;
+    font-size: 1.25rem;
+}
+
+.section-header-inner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 2px solid rgba(13,110,253,.1);
+    margin-bottom: 1rem;
+}
+
+.section-header-inner i {
+    color: #0d6efd;
+}
+
+.section-header-inner h5 {
+    color: #2c3e50;
+    font-weight: 700;
+}
+
+.badge-count {
+    background: rgba(13,110,253,.1);
+    color: #0d6efd;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+/* --- TARJETA MODERNA --- */
+.modern-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.02);
+    padding: 1.5rem;
+}
+
+/* --- ACCIONES --- */
+.medidores-actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.medidores-action-btn {
+    border-radius: 10px;
+    font-weight: 600;
+    padding: 0.45rem 0.9rem;
+    box-shadow: 0 4px 6px rgba(50, 50, 93, 0.08), 0 1px 3px rgba(0, 0, 0, 0.06);
+}
+
+.medidores-action-btn .dxbl-btn-icon {
+    margin-right: 0.4rem;
+}
+
+.medidores-action-btn.action-refresh {
+    background: #f8f9fa;
+    border-color: #e9ecef;
+    color: #495057;
+}
+
+.medidores-action-btn.action-assign {
+    background: #0d6efd;
+    border-color: #0d6efd;
+    color: #fff;
+}
+
+.medidores-action-btn.action-lectura {
+    border-color: #adb5bd;
+    color: #495057;
+}
+
+.medidores-action-btn.action-lectura:hover {
+    background: #f1f3f5;
+}
+
+.medidores-grid-action {
+    border-radius: 8px;
+    font-weight: 600;
+}
+
+/* --- GRID WRAPPER --- */
+.grid-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.medidores-grid {
+    border: 1px solid rgba(0,0,0,0.06);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+:deep(.medidores-grid .dxbl-grid-header) {
+    background: #f8f9fa;
+    border-bottom: 2px solid rgba(13,110,253,.1);
+}
+
+:deep(.medidores-grid .dxbl-grid-cell) {
+    padding: 0.75rem 0.5rem;
+    border-color: rgba(0,0,0,0.05);
+}
+
+:deep(.medidores-grid .dxbl-grid-row:hover) {
+    background-color: rgba(13,110,253,.03);
+}
+
+/* --- ESTILOS PARA DxGrid --- */
+:deep(.medidores-grid .dxbl-grid-pager) {
+    background: #f8f9fa;
+    border-top: 1px solid rgba(0,0,0,0.06);
+    padding: 0.5rem;
+}
+
+:deep(.medidores-grid .dxbl-grid-header-cell) {
+    font-weight: 700;
+    color: #495057;
+    font-size: 0.85rem;
+}
+
+:deep(.medidores-grid .dxbl-grid-filter-row) {
+    background: rgba(248,249,250,0.8);
+}
+
+:deep(.medidores-grid .dxbl-grid-search-box) {
+    margin-bottom: 1rem;
+    border: 1px solid rgba(0,0,0,0.08);
+    border-radius: 8px;
+    padding: 0.5rem;
+    background: white;
+}
+
+/* --- ALERTAS --- */
+:deep(.dxbl-alert-error),
+:deep(.dxbl-alert-danger) {
+    border: 1px solid rgba(220,53,69,0.2);
+    background: rgba(220,53,69,0.05);
+    border-radius: 10px;
+    margin-bottom: 1rem;
+}
+
+/* --- ESTADO DE CARGA --- */
+:deep(.dxbl-loading-panel) {
+    background: rgba(255,255,255,0.8);
+    border-radius: 12px;
+}
+
+/* =============================================================================
+   POPUPS (DEVEXPRESS) - TODO EN GLOBAL PARA VENCER CSS ISOLATION
+   IMPORTANTE: DxPopup se renderiza fuera del scope del componente.
+   ============================================================================= */
+
+/* Contenedor/ventana del popup (para bordes redondeados y sombra) */
+:global(.medidores-popup .dxbl-popup),
+:global(.medidores-popup .dx-popup) {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.18) !important;
+    border: 1px solid rgba(0,0,0,0.08) !important;
+}
+
+/* Header del popup */
+:global(.medidores-popup .dxbl-popup-header),
+:global(.medidores-popup .dx-popup-header) {
+    background: linear-gradient(180deg, rgba(13,110,253,.10), rgba(13,110,253,.04)) !important;
+    border-bottom: 2px solid rgba(13,110,253,.12) !important;
+    padding: 0.9rem 1.1rem !important;
+    font-weight: 800 !important;
+    color: #2c3e50 !important;
+    font-size: 1.05rem !important;
+}
+
+/* Content */
+:global(.medidores-popup .dxbl-popup-content),
+:global(.medidores-popup .dx-popup-content) {
+    padding: 1.1rem !important;
+    background: #f8f9fa !important;
+}
+
+/* Footer */
+:global(.medidores-popup .dxbl-popup-footer),
+:global(.medidores-popup .dx-popup-footer) {
+    background: #f8f9fa !important;
+    border-top: 1px solid rgba(0,0,0,0.08) !important;
+    padding: 0.9rem 1.1rem !important;
+}
+
+/* Form layout dentro del popup */
+:global(.medidores-popup .dxbl-form-layout),
+:global(.medidores-popup .dx-formlayout) {
+    background: #ffffff !important;
+    border-radius: 12px !important;
+    padding: 1.25rem !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
+    border: 1px solid rgba(0,0,0,0.08) !important;
+}
+
+:global(.medidores-popup .dxbl-form-layout-item) {
+    margin-bottom: 1rem !important;
+}
+
+:global(.medidores-popup .dxbl-form-layout-item-caption) {
+    font-weight: 700 !important; /* negrita fuerte pero sutil */
+    color: #2c3e50 !important;
+    margin-bottom: 0.45rem !important;
+    font-size: 0.9rem !important;
+}
+
+/* Inputs (cubre TextBox/DateEdit/SpinEdit/ComboBox) */
+:global(.medidores-popup .dxbl-text-box),
+:global(.medidores-popup .dxbl-date-edit),
+:global(.medidores-popup .dxbl-spin-edit),
+:global(.medidores-popup .dxbl-combo-box),
+:global(.medidores-popup input),
+:global(.medidores-popup select) {
+    border-radius: 10px !important;
+    border: 1px solid rgba(0,0,0,0.14) !important;
+    font-size: 0.95rem !important;
+    width: 100% !important;
+    box-sizing: border-box !important;
+}
+
+:global(.medidores-popup input:focus),
+:global(.medidores-popup select:focus),
+:global(.medidores-popup .dxbl-text-box:focus),
+:global(.medidores-popup .dxbl-date-edit:focus),
+:global(.medidores-popup .dxbl-spin-edit:focus),
+:global(.medidores-popup .dxbl-combo-box:focus) {
+    border-color: #0d6efd !important;
+    box-shadow: 0 0 0 0.2rem rgba(13,110,253,.20) !important;
+    outline: none !important;
+}
+
+:global(.medidores-popup .dxbl-text-box[disabled]),
+:global(.medidores-popup input[disabled]) {
+    background-color: #e9ecef !important;
+    color: #6c757d !important;
+    border-color: #ced4da !important;
+    cursor: not-allowed !important;
+}
+
+/* Acciones del popup */
+:global(.medidores-popup-actions) {
+    display: flex !important;
+    justify-content: flex-end !important;
+    align-items: center !important;
+    gap: 0.6rem !important;
+    width: 100% !important;
+}
+
+/* Botones del footer: base */
+:global(.medidores-popup-actions .dxbl-btn),
+:global(.medidores-popup-actions .dx-btn),
+:global(.medidores-popup-actions button) {
+    min-width: 120px !important;
+    border-radius: 10px !important;
+    font-weight: 700 !important;
+    padding: 0.52rem 1.25rem !important;
+    transition: all 0.2s ease !important;
+}
+
+/* Botón primario (primer botón del footer) */
+:global(.medidores-popup-actions .dxbl-btn:first-child),
+:global(.medidores-popup-actions .dx-btn:first-child),
+:global(.medidores-popup-actions button:first-child) {
+    background: #0d6efd !important;
+    border-color: #0d6efd !important;
+    color: #fff !important;
+}
+
+:global(.medidores-popup-actions .dxbl-btn:first-child:hover),
+:global(.medidores-popup-actions .dx-btn:first-child:hover),
+:global(.medidores-popup-actions button:first-child:hover) {
+    background: #0b5ed7 !important;
+    border-color: #0a58ca !important;
+}
+
+/* Botón secundario (último botón del footer) */
+:global(.medidores-popup-actions .dxbl-btn:last-child),
+:global(.medidores-popup-actions .dx-btn:last-child),
+:global(.medidores-popup-actions button:last-child) {
+    background: transparent !important;
+    border-color: #6c757d !important;
+    color: #6c757d !important;
+}
+
+:global(.medidores-popup-actions .dxbl-btn:last-child:hover),
+:global(.medidores-popup-actions .dx-btn:last-child:hover),
+:global(.medidores-popup-actions button:last-child:hover) {
+    background: #6c757d !important;
+    color: #fff !important;
+}
+
+/* --- RESPONSIVIDAD --- */
+@media (max-width: 768px) {
+    .cliente-medidores-container {
+        padding: 0.25rem;
+    }
+
+    .modern-card {
+        padding: 1rem;
+    }
+
+    .section-header {
+        padding: 0.5rem;
+        font-size: 0.9rem;
+    }
+
+    .section-header i {
+        font-size: 1rem;
+    }
+
+    .grid-wrapper {
+        margin: 0 -1rem;
+        width: calc(100% + 2rem);
+    }
+
+    :deep(.medidores-grid .dxbl-grid-cell) {
+        padding: 0.5rem 0.25rem;
+        font-size: 0.85rem;
+    }
+
+    .medidores-actions {
+        width: 100%;
+    }
+
+    .medidores-action-btn {
+        width: 100%;
+        justify-content: center;
+    }
+
+    :global(.medidores-popup-actions) {
+        flex-direction: column !important;
+        width: 100% !important;
+    }
+
+    :global(.medidores-popup-actions .dxbl-btn),
+    :global(.medidores-popup-actions .dx-btn),
+    :global(.medidores-popup-actions button) {
+        width: 100% !important;
+        margin-bottom: 0.5rem !important;
+    }
+}
+
+@media (max-width: 480px) {
+    .section-header-inner {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.25rem;
+    }
+
+    .badge-count {
+        align-self: flex-start;
+    }
+}

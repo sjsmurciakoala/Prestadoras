@@ -1,0 +1,664 @@
+@page "/servicios"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Servicios
+@using apc.Client.Pages.Servicios
+@using apc.Client.Services.Servicios
+@using apc.Client.Services.Tenant
+@using apc.Client.Services.Contabilidad
+
+@inject ServiciosClient ServiciosClient
+@inject TenantState TenantState
+@inject ConfiguracionSistemaClient ConfiguracionClient
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="ServiciosToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Catalogo de Servicios</h2>
+            <p class="page-subtitle">Mantenimiento de servicios disponibles</p>
+        </div>
+
+        <DxButton Text="Nuevo servicio"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="AbrirNuevo" />
+    </div>
+
+    @if (mostrarFiltros)
+    {
+        <div class="modern-card mb-4">
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+                    <DxFormLayoutItem Caption="Busqueda rapida" ColSpanXs="12" ColSpanMd="6">
+                        <Template>
+                            <DxTextBox Text="@filtroBusqueda"
+                                       TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                       Placeholder="Codigo o descripcion..."
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       InputDelay="600" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Estado" ColSpanXs="12" ColSpanMd="2">
+                        <Template>
+                            <div class="pt-md-4 pt-2">
+                                <DxCheckBox Checked="@filtroSoloActivos"
+                                            CheckedChanged="@((bool v) => OnEstadoChanged(v))"
+                                            LabelText=""
+                                            CheckType="CheckType.Switch" />
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Facturable App" ColSpanXs="12" ColSpanMd="2">
+                        <Template>
+                            <div class="pt-md-4 pt-2">
+                                <DxCheckBox Checked="@filtroFacturableApp"
+                                            CheckedChanged="@((bool v) => OnFacturableAppChanged(v))"
+                                            LabelText=""
+                                            CheckType="CheckType.Switch" />
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanXs="12" ColSpanMd="2" CssClass="align-self-end">
+                        <Template>
+                            <div class="filters-actions">
+                                <DxButton Text="Filtrar"
+                                          IconCssClass="bi bi-search"
+                                          CssClass="filters-btn filters-btn-primary"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="BuscarAsync" />
+
+                                <button type="button" class="filters-link" @onclick="LimpiarFiltrosAsync">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card position-relative">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(ServicioListItemDto.Id)" PageSize="15"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar servicio..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Filtros" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="ToggleFiltros" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalServicios.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ServicioListItemDto.Codigo)" Caption="Codigo" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ServicioListItemDto.DescripcionCorta)" Caption="Descripcion corta" MinWidth="220">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                <div class="text-truncate" title="@item.DescripcionCorta">@item.DescripcionCorta</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ServicioListItemDto.DescripcionLarga)" Caption="Descripcion larga" MinWidth="260">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                <div class="text-truncate" title="@item.DescripcionLarga">
+                                    @(string.IsNullOrWhiteSpace(item.DescripcionLarga) ? "-" : item.DescripcionLarga)
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Cuenta contable" MinWidth="220">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                if (!string.IsNullOrWhiteSpace(item.CuentaContableCodigo))
+                                {
+                                    <span class="font-monospace">@FormatCuentaCode(item.CuentaContableCodigo)</span>
+                                }
+                                else
+                                {
+                                    <span>-</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                if (item.Activo)
+                                {
+                                    <span class="badge-status active">ACTIVO</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">INACTIVO</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Facturable App" Width="160px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                if (item.FacturableApp)
+                                {
+                                    <span class="badge-status active">SI</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">NO</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ServicioListItemDto.AppGrupo)" Caption="Grupo App" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                <span>@(string.IsNullOrWhiteSpace(item.AppGrupo) ? "-" : item.AppGrupo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ServicioListItemDto.AppOrden)" Caption="Orden App" Width="120px" TextAlignment="GridTextAlignment.Center" />
+
+                    <DxGridDataColumn Caption="Acciones" Width="160px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay servicios para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="min(720px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando servicio..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3">
+                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+            </div>
+        }
+        else
+        {
+            <ServicioForm Model="formModel"
+                          CuentasContables="cuentasContables"
+                          OnValidSubmit="GuardarAsync"
+                          OnCancel="CerrarForm"
+                          IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Desactivar servicio?</h5>
+            <p class="text-muted">El servicio pasara a estado inactivo pero no se eliminara del sistema.</p>
+            @if (servicioParaDesactivar is not null)
+            {
+                <div class="fw-semibold">@servicioParaDesactivar.Codigo - @servicioParaDesactivar.DescripcionCorta</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarDesactivar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, desactivar"
+                          Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private ServiciosGridDataSource dataSource = default!;
+
+    private string filtroBusqueda = string.Empty;
+    private bool filtroSoloActivos = true;
+    private bool filtroFacturableApp;
+    private bool mostrarFiltros = true;
+
+    private string? errorMessage;
+    private int totalServicios;
+
+    private bool formVisible;
+    private bool formLoading;
+    private bool isSaving;
+    private string? formError;
+    private ServicioEditDto formModel = new();
+    private List<CuentaContableLookupDto> cuentasContables = new();
+    private string formatoCuentas = "###-###-##";
+    private string separadorCodigo = "-";
+    private IReadOnlyList<int> nivelesCuentas = Array.Empty<int>();
+
+    private bool confirmVisible;
+    private ServicioListItemDto? servicioParaDesactivar;
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar servicio" : "Nuevo servicio";
+    private string PopupSubtitle => formModel.Id.HasValue
+        ? "Actualice la informacion del servicio"
+        : "Complete el formulario de registro";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-gear";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        dataSource = new ServiciosGridDataSource(ServiciosClient, OnGridStateChanged);
+        ApplyFilters();
+        await CargarFormatoCuentasAsync();
+        await CargarCuentasContablesAsync();
+    }
+
+    private void OnGridStateChanged()
+    {
+        errorMessage = dataSource.LastError;
+        totalServicios = dataSource.LastTotalCount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyFilters()
+    {
+        dataSource.SearchText = filtroBusqueda;
+        dataSource.SoloActivos = filtroSoloActivos;
+        dataSource.SoloFacturableApp = filtroFacturableApp ? true : null;
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await BuscarAsync();
+    }
+
+    private async Task OnEstadoChanged(bool valor)
+    {
+        filtroSoloActivos = valor;
+        await BuscarAsync();
+    }
+
+    private async Task OnFacturableAppChanged(bool valor)
+    {
+        filtroFacturableApp = valor;
+        await BuscarAsync();
+    }
+
+    private Task BuscarAsync()
+    {
+        ApplyFilters();
+        dataSource.Invalidate();
+        grid?.Reload();
+        return Task.CompletedTask;
+    }
+
+    private async Task LimpiarFiltrosAsync()
+    {
+        filtroBusqueda = string.Empty;
+        filtroSoloActivos = true;
+        filtroFacturableApp = false;
+        await BuscarAsync();
+    }
+
+    private void RecargarGrid()
+    {
+        dataSource.Invalidate();
+        grid?.Reload();
+    }
+
+    private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void AbrirNuevo()
+    {
+        formError = null;
+        formModel = new ServicioEditDto { Activo = true };
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null;
+        formLoading = true;
+        formVisible = true;
+
+        try
+        {
+            var detalle = await ServiciosClient.GetByIdAsync(id);
+            if (detalle is null)
+            {
+                formError = "No se encontro el servicio.";
+                formModel = new ServicioEditDto { Activo = true };
+                return;
+            }
+
+            formModel = detalle;
+        }
+        catch (Exception ex)
+        {
+            formError = $"Error al cargar el servicio: {ex.Message}";
+        }
+        finally
+        {
+            formLoading = false;
+        }
+    }
+
+    private void CerrarForm()
+    {
+        if (isSaving)
+        {
+            return;
+        }
+
+        formVisible = false;
+        formError = null;
+        formModel = new ServicioEditDto();
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+
+        try
+        {
+            if (formModel.Id.HasValue)
+            {
+                await ServiciosClient.UpdateAsync(formModel.Id.Value, formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Servicio actualizado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "ServiciosToast"
+                });
+            }
+            else
+            {
+                await ServiciosClient.CreateAsync(formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Servicio registrado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "ServiciosToast"
+                });
+            }
+
+            formVisible = false;
+            formModel = new ServicioEditDto();
+            dataSource.Invalidate();
+            grid?.Reload();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "ServiciosToast"
+            });
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(ServicioListItemDto servicio)
+    {
+        servicioParaDesactivar = servicio;
+        confirmVisible = true;
+    }
+
+    private void CancelarDesactivar()
+    {
+        confirmVisible = false;
+        servicioParaDesactivar = null;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (servicioParaDesactivar is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await ServiciosClient.DeactivateAsync(servicioParaDesactivar.Id);
+            if (!ok)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Error",
+                    Text = "No se pudo desactivar el servicio.",
+                    RenderStyle = ToastRenderStyle.Danger,
+                    ProviderName = "ServiciosToast"
+                });
+            }
+            else
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Servicio desactivado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "ServiciosToast"
+                });
+
+                dataSource.Invalidate();
+                grid?.Reload();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "ServiciosToast"
+            });
+        }
+        finally
+        {
+            confirmVisible = false;
+            servicioParaDesactivar = null;
+        }
+    }
+
+    private async Task CargarCuentasContablesAsync()
+    {
+        try
+        {
+            cuentasContables = (await ServiciosClient.GetCuentasContablesAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            cuentasContables = new List<CuentaContableLookupDto>();
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = $"No se pudieron cargar las cuentas contables: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Warning,
+                ProviderName = "ServiciosToast"
+            });
+        }
+    }
+
+    private async Task CargarFormatoCuentasAsync()
+    {
+        try
+        {
+            var companyId = await TenantState.EnsureCompanyAsync();
+            var config = await ConfiguracionClient.ObtenerAsync(companyId);
+
+            if (config?.Principal is not null)
+            {
+                if (!string.IsNullOrWhiteSpace(config.Principal.FormatoCuentas))
+                {
+                    formatoCuentas = config.Principal.FormatoCuentas;
+                }
+
+                if (!string.IsNullOrWhiteSpace(config.Principal.SeparadorCodigo))
+                {
+                    separadorCodigo = config.Principal.SeparadorCodigo;
+                }
+            }
+        }
+        catch
+        {
+            // Mantener formato por defecto
+        }
+        finally
+        {
+            nivelesCuentas = ParseFormatoNiveles(formatoCuentas);
+        }
+    }
+
+    private string FormatCuentaCode(string? raw) => FormatFromMask(NormalizeCode(raw), nivelesCuentas);
+
+    private string FormatFromMask(string normalized, IReadOnlyList<int> niveles)
+    {
+        if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
+        if (niveles.Count == 0) return normalized;
+
+        var sep = string.IsNullOrWhiteSpace(separadorCodigo) ? "-" : separadorCodigo;
+        var parts = new List<string>();
+        var index = 0;
+
+        foreach (var len in niveles)
+        {
+            if (index >= normalized.Length) break;
+            var take = Math.Min(len, normalized.Length - index);
+            parts.Add(normalized.Substring(index, take));
+            index += take;
+        }
+
+        if (index < normalized.Length) parts.Add(normalized.Substring(index));
+        return string.Join(sep, parts);
+    }
+
+    private static string NormalizeCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        return new string(value.Where(char.IsLetterOrDigit).ToArray());
+    }
+
+    private static IReadOnlyList<int> ParseFormatoNiveles(string? formato)
+    {
+        if (string.IsNullOrWhiteSpace(formato)) return Array.Empty<int>();
+        var grupos = new List<int>();
+        var current = 0;
+
+        foreach (var ch in formato)
+        {
+            if (ch == '#' || ch == 'X' || ch == 'x') { current++; continue; }
+            if (current > 0) { grupos.Add(current); current = 0; }
+        }
+
+        if (current > 0) grupos.Add(current);
+        return grupos;
+    }
+}

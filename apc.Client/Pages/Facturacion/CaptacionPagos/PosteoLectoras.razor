@@ -1,0 +1,374 @@
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json
+@using SIAD.Core.DTOs.CaptacionPagos
+@inject apc.Client.Services.CaptacionPagos.CaptacionPagosClient CaptacionClient
+@inject IToastNotificationService ToastService
+
+<div class="tab-content-section">
+    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+        <DxFormLayoutGroup ColSpanXs="12" ColSpanMd="12">
+            <DxFormLayoutItem Caption="Banco" ColSpanXs="12" ColSpanMd="3">
+                @if (UsaCatalogoBancoCuenta)
+                {
+                    <DxComboBox TData="BancoDto" TValue="long?" Data="@BancosConCuenta"
+                                TextFieldName="Nombre" ValueFieldName="BancoCuentaId"
+                                @bind-Value="form.BancoCuentaId"
+                                NullText="Seleccione banco"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                }
+                else
+                {
+                    <DxComboBox TData="BancoDto" TValue="string" Data="@Bancos"
+                                TextFieldName="Nombre" ValueFieldName="Codigo"
+                                @bind-Value="form.BancoCodigo"
+                                NullText="Seleccione banco"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                }
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha de pago" ColSpanXs="12" ColSpanMd="3">
+                <DxDateEdit T="DateTime?"
+                            @bind-Date="form.FechaPago"
+                            DisplayFormat="d"
+                            NullText="Seleccione fecha" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Caja" ColSpanXs="12" ColSpanMd="3">
+                <DxComboBox TData="CajaDto" TValue="int?" Data="@Cajas"
+                            TextFieldName="Nombre" ValueFieldName="Id"
+                            @bind-Value="form.CajaId"
+                            NullText="Seleccione caja"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Factura / Recibo" ColSpanXs="12" ColSpanMd="3">
+                <DxTextBox Text="@form.NumFactura"
+                           TextChanged="OnFacturaTextChanged"
+                           NullText="Buscar factura o recibo..."
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                @if (coincidencias.Count > 0)
+                {
+                    <div class="list-group shadow-sm mt-1">
+                        @foreach (var fac in coincidencias)
+                        {
+                            <button type="button" class="list-group-item list-group-item-action"
+                                    @onclick="() => SeleccionarFacturaAsync(fac)">
+                                <div class="fw-bold">@fac.NumFactura</div>
+                                <small class="text-muted">@fac.ClienteNombre (@fac.ClienteClave) • @fac.Total.ToString("C2")</small>
+                            </button>
+                        }
+                    </div>
+                }
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+    </DxFormLayout>
+
+    @if (facturaSeleccionada is not null)
+    {
+        <div class="row g-3 mt-2">
+            <div class="col-md-3">
+                <div class="info-pill">
+                    <span class="label">Factura</span>
+                    <span class="value">@facturaSeleccionada.NumFactura</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="info-pill">
+                    <span class="label">Cliente</span>
+                    <span class="value">@facturaSeleccionada.ClienteClave</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="info-pill">
+                    <span class="label">Fecha</span>
+                    <span class="value">@facturaSeleccionada.Fecha.ToShortDateString()</span>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="info-pill">
+                    <span class="label">Total</span>
+                    <span class="value text-primary">@facturaSeleccionada.Total.ToString("C2")</span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-pill">
+                    <span class="label">Nombre</span>
+                    <span class="value">@facturaSeleccionada.ClienteNombre</span>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="info-pill">
+                    <span class="label">Dirección</span>
+                    <span class="value">@clienteDetalle?.Direccion</span>
+                </div>
+            </div>
+        </div>
+
+        <DxDataGrid Data="@(pagoLector?.Detalles ?? detallesPreview)"
+                    ShowFilterRow="false"
+                    ShowGroupPanel="false"
+                    CssClass="mt-3">
+            <Columns>
+                <DxDataGridColumn FieldName="@nameof(CaptacionDetailDto.Linea)" Caption="#" Width="80px" />
+                <DxDataGridColumn FieldName="@nameof(CaptacionDetailDto.Servicio)" Caption="Servicio" />
+                <DxDataGridSpinEditColumn FieldName="@nameof(CaptacionDetailDto.MontoValor)" Caption="Monto" DisplayFormat="c2" TextAlignment="DataGridTextAlignment.Right" Width="120px" />
+            </Columns>
+        </DxDataGrid>
+
+        <div class="d-flex flex-wrap gap-2 justify-content-end mt-3">
+            <DxButton Text="Limpiar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" IconCssClass="bi bi-eraser" Click="Limpiar" />
+            <DxButton Text="Reversar Pago" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-arrow-counterclockwise" Enabled="@(pagoLector is not null && !reversando)" Click="ReversarAsync" />
+            <DxButton Text="Registrar Pago" RenderStyle="ButtonRenderStyle.Success" IconCssClass="bi bi-check-lg" Enabled="@(!registrando && facturaSeleccionada is not null)" Click="RegistrarAsync" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<CajaDto> Cajas { get; set; } = new();
+    [Parameter] public List<BancoDto> Bancos { get; set; } = new();
+    [Parameter] public string? UsuarioActual { get; set; }
+
+    private sealed class FormModel
+    {
+        public string NumFactura { get; set; } = string.Empty;
+        public string? ClienteClave { get; set; }
+        public int? CajaId { get; set; }
+        public string? BancoCodigo { get; set; }
+        public long? BancoCuentaId { get; set; }
+        public decimal Monto { get; set; }
+        public string? Usuario { get; set; }
+        public DateTime? FechaPago { get; set; } = DateTime.Today;
+    }
+
+    private readonly FormModel form = new();
+    private List<BusquedaFacturaDto> coincidencias = new();
+    private BusquedaFacturaDto? facturaSeleccionada;
+    private ClienteComboDto? clienteDetalle;
+    private CaptacionPagoResponseDto? pagoLector;
+    private List<CaptacionDetailDto> detallesPreview = new();
+    private bool registrando;
+    private bool reversando;
+    private bool suppressFacturaTextChanged;
+    private bool UsaCatalogoBancoCuenta => Bancos.Any(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
+    private IEnumerable<BancoDto> BancosConCuenta => Bancos.Where(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
+
+    private async Task OnFacturaTextChanged(string value)
+    {
+        form.NumFactura = value?.Trim() ?? string.Empty;
+
+        if (suppressFacturaTextChanged)
+        {
+            suppressFacturaTextChanged = false;
+            return;
+        }
+
+        if (facturaSeleccionada is not null &&
+            string.Equals(facturaSeleccionada.NumFactura, form.NumFactura, StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        await BuscarCoincidenciasAsync(value);
+    }
+
+    private async Task BuscarCoincidenciasAsync(string? term)
+    {
+        coincidencias.Clear();
+        facturaSeleccionada = null;
+        clienteDetalle = null;
+        pagoLector = null;
+        detallesPreview.Clear();
+
+        if (string.IsNullOrWhiteSpace(term) || term.Trim().Length < 3)
+        {
+            return;
+        }
+
+        try
+        {
+            coincidencias = (await CaptacionClient.BuscarFacturasAsync(term.Trim())).Take(10).ToList();
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Búsqueda", $"Error: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task SeleccionarFacturaAsync(BusquedaFacturaDto? item)
+    {
+        if (item is null) return;
+
+        facturaSeleccionada = item;
+        clienteDetalle = null;
+        suppressFacturaTextChanged = true;
+        form.NumFactura = item.NumFactura;
+        form.ClienteClave = item.ClienteClave;
+        form.Monto = item.Total;
+        coincidencias.Clear();
+        detallesPreview = new List<CaptacionDetailDto>
+        {
+            new() { Linea = 1, Servicio = "Pago lectora", MontoValor = item.Total }
+        };
+
+        try
+        {
+            var existe = await CaptacionClient.ExisteRegistroPagoAsync(item.NumFactura);
+            pagoLector = existe ? await CaptacionClient.GetPagoAsync(item.NumFactura) : null;
+        }
+        catch { }
+
+        try
+        {
+            var clientes = await CaptacionClient.GetClientesAsync(item.ClienteClave);
+            clienteDetalle = clientes.FirstOrDefault(c => c.Clave == item.ClienteClave) ?? clientes.FirstOrDefault();
+        }
+        catch
+        {
+            clienteDetalle = null;
+        }
+    }
+
+    private async Task RegistrarAsync()
+    {
+        if (registrando || facturaSeleccionada is null) return;
+        if (string.IsNullOrWhiteSpace(form.NumFactura))
+        {
+            MostrarToast("Validacion", "Seleccione una factura antes de registrar.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (form.CajaId is null)
+        {
+            MostrarToast("Validación", "Seleccione caja", ToastRenderStyle.Warning);
+            return;
+        }
+
+        registrando = true;
+        try
+        {
+            var total = form.Monto > 0 ? form.Monto : facturaSeleccionada.Total;
+            var bancoSeleccionado = GetBancoSeleccionado();
+            var dto = new PagoCrearDto
+            {
+                NumFactura = form.NumFactura,
+                ClienteClave = form.ClienteClave ?? facturaSeleccionada.ClienteClave,
+                CajaId = form.CajaId.Value,
+                Banco = bancoSeleccionado?.Codigo,
+                BancoCuentaId = bancoSeleccionado?.BancoCuentaId,
+                Usuario = form.Usuario ?? UsuarioActual ?? "sistema",
+                FechaPago = form.FechaPago,
+                Detalles = new List<PagoCrearDetalleDto>
+                {
+                    new() { Servicio = "Posteo lectora", MontoValor = total }
+                },
+                Monto = total
+            };
+
+            var resp = await CaptacionClient.RegistrarPagoAsync(dto);
+            if (!resp.Success)
+            {
+                MostrarToast("Error", resp.Message, ToastRenderStyle.Danger);
+                return;
+            }
+
+            var polizaId = TryGetPolizaId(resp.Data);
+            MostrarToast("Éxito", BuildSuccessMessage("Pago registrado", polizaId), ToastRenderStyle.Success);
+            pagoLector = await CaptacionClient.GetPagoAsync(form.NumFactura);
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            registrando = false;
+        }
+    }
+
+    private async Task ReversarAsync()
+    {
+        if (reversando || facturaSeleccionada is null) return;
+
+        reversando = true;
+        try
+        {
+            var request = new ReversoRequestDto
+            {
+                NumFactura = facturaSeleccionada.NumFactura,
+                ClienteClave = facturaSeleccionada.ClienteClave,
+                Usuario = UsuarioActual ?? "sistema"
+            };
+
+            var resp = await CaptacionClient.ReversarPagoAsync(request);
+            if (!resp.Success)
+            {
+                MostrarToast("Error", resp.Message, ToastRenderStyle.Danger);
+                return;
+            }
+
+            var polizaId = TryGetPolizaId(resp.Data);
+            MostrarToast("Éxito", BuildSuccessMessage("Pago reversado", polizaId), ToastRenderStyle.Success);
+            pagoLector = null;
+            Limpiar();
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            reversando = false;
+        }
+    }
+
+    private void Limpiar()
+    {
+        coincidencias.Clear();
+        facturaSeleccionada = null;
+        clienteDetalle = null;
+        pagoLector = null;
+        detallesPreview.Clear();
+        form.NumFactura = string.Empty;
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "CaptacionCajaToast",
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+
+    private static string BuildSuccessMessage(string baseText, long? polizaId) =>
+        polizaId.HasValue ? $"{baseText}. Poliza #{polizaId.Value}." : baseText;
+
+    private static long? TryGetPolizaId(object? data)
+    {
+        if (data is not JsonElement json || json.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return json.TryGetProperty("polizaId", out var polizaElement)
+               && polizaElement.ValueKind == JsonValueKind.Number
+               && polizaElement.TryGetInt64(out var polizaId)
+            ? polizaId
+            : null;
+    }
+
+    private BancoDto? GetBancoSeleccionado()
+    {
+        if (UsaCatalogoBancoCuenta)
+        {
+            if (!form.BancoCuentaId.HasValue || form.BancoCuentaId.Value <= 0)
+            {
+                return null;
+            }
+
+            return Bancos.FirstOrDefault(b => b.BancoCuentaId == form.BancoCuentaId);
+        }
+
+        return Bancos
+            .FirstOrDefault(b => string.Equals(b.Codigo, form.BancoCodigo, StringComparison.OrdinalIgnoreCase))
+            ?? (string.IsNullOrWhiteSpace(form.BancoCodigo)
+                ? null
+                : new BancoDto { Codigo = form.BancoCodigo.Trim() });
+    }
+}

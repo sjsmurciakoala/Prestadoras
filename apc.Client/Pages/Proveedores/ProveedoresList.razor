@@ -1,0 +1,182 @@
+@page "/proveedores"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services.Proveedores
+
+<DxScrollView Height="100%">
+    <div class="page-container">
+        <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+            <div>
+                <h2 class="page-title">Proveedores</h2>
+                <p class="page-subtitle">Gestion de proveedores registrados</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <DxButton Text="Nuevo proveedor"
+                          Click="NuevoProveedor"
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          CssClass="btn-modern shadow-sm" />
+                <DxButton Text="Tipos de proveedor"
+                          Click="AbrirTipos"
+                          IconCssClass="bi bi-tags"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Actualizar"
+                          Click="LoadProveedoresAsync"
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(!isLoading)" />
+            </div>
+        </div>
+
+        @if (!string.IsNullOrEmpty(errorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        }
+
+        <div class="modern-card position-relative" style="min-height: 320px;">
+            <DxFormLayout CssClass="mb-3">
+                <DxFormLayoutItem Caption="Codigo">
+                    <DxTextBox @bind-Text="filtro.Codigo" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Nombre">
+                    <DxTextBox @bind-Text="filtro.Nombre" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="RTN">
+                    <DxTextBox @bind-Text="filtro.Rtn" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Solo activos">
+                    <DxCheckBox @bind-Checked="filtro.SoloActivos" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem ColSpanMd="12">
+                    <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
+                    <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            @if (isLoading)
+            {
+                <p>Cargando proveedores...</p>
+            }
+
+            <div class="grid-wrapper">
+                <DxGrid Data="@proveedores"
+                        KeyFieldName="@nameof(ProveedorListItemDto.Codigo)"
+                        PageSize="12"
+                        SizeMode="SizeMode.Large"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Codigo)" Caption="Codigo" Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Nombre)" Caption="Nombre" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Direccion)" Caption="Direccion" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Rtn)" Caption="RTN" Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Telefono)" Caption="Telefono" Width="140px" />
+                        <DxGridDataColumn Caption="Estado" Width="120px">
+                            <CellDisplayTemplate Context="cellData">
+                                @if (cellData.DataItem is ProveedorListItemDto item)
+                                {
+                                    <span class="badge-status @(item.Activo ? "active" : "inactive")">
+                                        @(item.Activo ? "Activo" : "Inactivo")
+                                    </span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is ProveedorListItemDto item)
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn-icon btn-edit" title="Editar" @onclick="@(() => EditarProveedor(item.Codigo))">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button class="btn-icon btn-delete" title="Eliminar" @onclick="@(() => EliminarAsync(item))">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        </div>
+    </div>
+</DxScrollView>
+
+@code {
+    private readonly List<ProveedorListItemDto> proveedores = new();
+    private ProveedorFilterDto filtro = new();
+    private bool isLoading;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadProveedoresAsync();
+    }
+
+    private async Task LoadProveedoresAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            var data = await ProveedoresClient.BuscarAsync(filtro);
+            proveedores.Clear();
+            proveedores.AddRange(data ?? Array.Empty<ProveedorListItemDto>());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar el catalogo de proveedores: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private Task BuscarAsync() => LoadProveedoresAsync();
+
+    private async Task LimpiarAsync()
+    {
+        filtro = new ProveedorFilterDto();
+        await LoadProveedoresAsync();
+    }
+
+    private void NuevoProveedor() => Navigation.NavigateTo("/proveedores/nuevo");
+
+    private void EditarProveedor(string codigo)
+    {
+        var safeCodigo = Uri.EscapeDataString(codigo);
+        Navigation.NavigateTo($"/proveedores/{safeCodigo}/editar");
+    }
+
+    private void AbrirTipos() => Navigation.NavigateTo("/proveedores/tipos");
+
+    private async Task EliminarAsync(ProveedorListItemDto item)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar al proveedor {item.Codigo} - {item.Nombre}?");
+
+        if (!confirmado)
+        {
+            return;
+        }
+
+        try
+        {
+            await ProveedoresClient.EliminarAsync(item.Codigo);
+            await LoadProveedoresAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo eliminar el proveedor: {ex.Message}";
+        }
+    }
+}

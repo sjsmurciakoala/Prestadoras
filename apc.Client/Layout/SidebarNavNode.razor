@@ -1,0 +1,145 @@
+@using apc.Client.Layout.Navigation
+
+@if (Item.HasChildren)
+{
+    <div class="nav-group @(isExpanded ? "nav-group--expanded" : "")">
+        <button type="button"
+                class="nav-item nav-item--group @(IsGroupActive() ? "nav-item--active" : "")"
+                title="@Item.Text"
+                @onclick="ToggleExpand">
+            <i class="@Item.IconCssClass nav-item__icon"></i>
+            <span class="nav-item__text">@Item.Text</span>
+            <i class="bi bi-chevron-down nav-item__chevron"></i>
+        </button>
+        @if (isExpanded)
+        {
+            <div class="nav-group__children">
+                @foreach (var child in Item.Children)
+                {
+                    <SidebarNavNode Item="@child"
+                                    CurrentPath="@CurrentPath"
+                                    IsCollapsed="@IsCollapsed" />
+                }
+            </div>
+        }
+    </div>
+}
+else
+{
+    <a href="@Item.NavigateUrl"
+       class="nav-item @(IsLeafActive() ? "nav-item--active" : "")"
+       title="@Item.Text">
+        @if (!string.IsNullOrEmpty(Item.IconCssClass))
+        {
+            <i class="@Item.IconCssClass nav-item__icon"></i>
+        }
+        <span class="nav-item__text">@Item.Text</span>
+    </a>
+}
+
+@code {
+    [Parameter, EditorRequired] public SidebarNavItem Item { get; set; } = default!;
+    [Parameter, EditorRequired] public string CurrentPath { get; set; } = "/";
+    [Parameter] public bool IsCollapsed { get; set; }
+
+    private bool isExpanded;
+    private string? lastPath;
+
+    protected override void OnParametersSet()
+    {
+        if (CurrentPath != lastPath)
+        {
+            lastPath = CurrentPath;
+            if (Item.HasChildren && HasActiveDescendant(Item))
+            {
+                isExpanded = true;
+            }
+        }
+    }
+
+    private void ToggleExpand()
+    {
+        if (!IsCollapsed)
+        {
+            isExpanded = !isExpanded;
+        }
+    }
+
+    private bool IsLeafActive() =>
+        IsPathMatch(CurrentPath, Item.NavigateUrl, Item.MatchPrefixes);
+
+    private bool IsGroupActive() =>
+        HasActiveDescendant(Item);
+
+    private bool HasActiveDescendant(SidebarNavItem item)
+    {
+        foreach (var child in item.Children)
+        {
+            if (IsPathMatch(CurrentPath, child.NavigateUrl, child.MatchPrefixes))
+            {
+                return true;
+            }
+
+            if (child.HasChildren && HasActiveDescendant(child))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsPathMatch(string currentPath, string? navigateUrl, IReadOnlyList<string> prefixes)
+    {
+        if (!string.IsNullOrWhiteSpace(navigateUrl) && IsExactOrChild(currentPath, navigateUrl))
+        {
+            return true;
+        }
+
+        foreach (var prefix in prefixes)
+        {
+            if (IsExactOrChild(currentPath, prefix))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsExactOrChild(string currentPath, string target)
+    {
+        var normalizedCurrent = NormalizePath(currentPath);
+        var normalizedTarget = NormalizePath(target);
+
+        if (normalizedTarget == "/")
+        {
+            return normalizedCurrent == "/";
+        }
+
+        return normalizedCurrent.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase) ||
+               normalizedCurrent.StartsWith(normalizedTarget + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        var cleaned = path.Split('?', '#')[0];
+        if (!cleaned.StartsWith("/"))
+        {
+            cleaned = "/" + cleaned;
+        }
+
+        cleaned = cleaned.TrimEnd('/');
+        if (string.IsNullOrEmpty(cleaned))
+        {
+            cleaned = "/";
+        }
+
+        return cleaned.ToLowerInvariant();
+    }
+}

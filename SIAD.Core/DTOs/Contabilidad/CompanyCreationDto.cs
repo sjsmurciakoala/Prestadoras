@@ -7,6 +7,8 @@ public sealed class CompanyCreationDto
 {
     public long CompanyId { get; set; }
 
+    public string? Advertencia { get; set; }
+
     [Required(ErrorMessage = "El código es obligatorio.")]
     [StringLength(20, ErrorMessage = "El código no puede superar los 20 caracteres.")]
     public string Codigo { get; set; } = string.Empty;

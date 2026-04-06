@@ -1,0 +1,137 @@
+@page "/proveedores/tipos"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using apc.Client.Services.Proveedores
+@using SIAD.Core.DTOs.Proveedores
+
+<DxScrollView Height="100%">
+    <div class="page-container">
+        <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+            <div>
+                <h2 class="page-title">Tipos de proveedor</h2>
+                <p class="page-subtitle">Gestion de tipos de proveedor</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <DxButton Text="Nuevo tipo"
+                          Click="NuevoTipo"
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          CssClass="btn-modern shadow-sm" />
+                <DxButton Text="Volver a proveedores"
+                          Click="VolverAProveedores"
+                          IconCssClass="oi oi-arrow-left"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Actualizar"
+                          Click="LoadTiposAsync"
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(!isLoading)" />
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        }
+
+        <div class="modern-card position-relative" style="min-height: 300px;">
+            @if (isLoading)
+            {
+                <p>Cargando tipos de proveedor...</p>
+            }
+
+            <div class="grid-wrapper">
+                <DxGrid Data="@tipos"
+                        KeyFieldName="@nameof(TipoProveedorListItemDto.Id)"
+                        PageSize="12"
+                        SizeMode="SizeMode.Large"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(TipoProveedorListItemDto.Id)" Caption="Codigo" Width="120px" />
+                        <DxGridDataColumn FieldName="@nameof(TipoProveedorListItemDto.Nombre)" Caption="Nombre" />
+                        <DxGridDataColumn FieldName="@nameof(TipoProveedorListItemDto.Observaciones)" Caption="Observaciones" />
+                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is TipoProveedorListItemDto item)
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn-icon btn-edit" title="Editar" @onclick="@(() => EditarTipo(item.Id))">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button class="btn-icon btn-delete" title="Eliminar" @onclick="@(() => EliminarAsync(item))">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        </div>
+    </div>
+</DxScrollView>
+
+@code {
+    private readonly List<TipoProveedorListItemDto> tipos = new();
+    private bool isLoading;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTiposAsync();
+    }
+
+    private async Task LoadTiposAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            var data = await ProveedoresClient.ObtenerTiposCatalogoAsync();
+            tipos.Clear();
+            tipos.AddRange(data ?? Array.Empty<TipoProveedorListItemDto>());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar el catalogo de tipos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NuevoTipo() => Navigation.NavigateTo("/proveedores/tipos/nuevo");
+
+    private void EditarTipo(int id) => Navigation.NavigateTo($"/proveedores/tipos/{id}/editar");
+
+    private void VolverAProveedores() => Navigation.NavigateTo("/proveedores");
+
+    private async Task EliminarAsync(TipoProveedorListItemDto item)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar el tipo {item.Id} - {item.Nombre}?");
+
+        if (!confirmado)
+        {
+            return;
+        }
+
+        try
+        {
+            await ProveedoresClient.EliminarTipoAsync(item.Id);
+            await LoadTiposAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo eliminar el tipo: {ex.Message}";
+        }
+    }
+}

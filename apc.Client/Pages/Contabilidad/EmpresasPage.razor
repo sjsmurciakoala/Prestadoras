@@ -1,8 +1,11 @@
-@page "/contabilidad/empresas"
+﻿@page "/contabilidad/empresas"
+@attribute [Authorize]
 
 @using SIAD.Core.DTOs.Tenant
 @using DevExpress.Blazor
 @inject TenantCompaniesClient TenantCompaniesClient
+@inject TenantCompanyContextClient TenantCompanyContextClient
+@inject TenantState TenantState
 @inject NavigationManager NavigationManager
 
 <PageTitle>Empresas</PageTitle>
@@ -14,6 +17,11 @@
 	</div>
 	<DxButton Text="Crear nueva" CssClass="mb-0" NavigateUrl="/contabilidad/empresas/nueva" />
 </div>
+
+@if (!string.IsNullOrWhiteSpace(statusMessage))
+{
+	<DxAlert AlertType="AlertType.Success" CssClass="mb-3">@statusMessage</DxAlert>
+}
 
 @if (loading)
 {
@@ -34,10 +42,24 @@ else
 				<CellDisplayTemplate Context="cellContext">
 					@if (cellContext.DataItem is TenantCompanyDto company)
 					{
-						<DxButton Text="Editar"
-								  Size="ButtonSize.Small"
-								  RenderStyle="ButtonRenderStyle.Secondary"
-								  Click="@(async () => await NavegarEditarAsync(company.CompanyId))" />
+						<div class="d-flex gap-2 align-items-center">
+							@if (company.CompanyId == activeCompanyId)
+							{
+								<span class="badge text-bg-success">Activa</span>
+							}
+							else
+							{
+								<DxButton Text="Usar"
+										  Size="ButtonSize.Small"
+										  RenderStyle="ButtonRenderStyle.Primary"
+										  Enabled="@(activatingCompanyId == 0)"
+										  Click="@(async () => await ActivarEmpresaAsync(company.CompanyId))" />
+							}
+							<DxButton Text="Editar"
+									  Size="ButtonSize.Small"
+									  RenderStyle="ButtonRenderStyle.Secondary"
+									  Click="@(async () => await NavegarEditarAsync(company.CompanyId))" />
+						</div>
 					}
 				</CellDisplayTemplate>
 			</DxGridDataColumn>
@@ -49,13 +71,20 @@ else
 	private List<TenantCompanyDto> companies = new();
 	private bool loading = true;
 	private string? error;
+	private string? statusMessage;
+	private long activeCompanyId;
+	private long activatingCompanyId;
 
 	protected override async Task OnInitializedAsync()
 	{
 		try
 		{
-			var resultado = await TenantCompaniesClient.ObtenerAsync();
-			companies = resultado.ToList();
+			var companiesTask = TenantCompaniesClient.ObtenerAsync();
+			var contextTask = TenantCompanyContextClient.ObtenerAsync();
+
+			await Task.WhenAll(companiesTask, contextTask);
+			companies = companiesTask.Result.ToList();
+			activeCompanyId = contextTask.Result.CurrentCompanyId;
 		}
 		catch (UnauthorizedAccessException)
 		{
@@ -76,5 +105,39 @@ else
 	{
 		NavigationManager.NavigateTo($"/contabilidad/empresas/editar/{companyId}", forceLoad: true);
 		return Task.CompletedTask;
+	}
+
+	private async Task ActivarEmpresaAsync(long companyId)
+	{
+		if (companyId <= 0 || activatingCompanyId != 0)
+		{
+			return;
+		}
+
+		activatingCompanyId = companyId;
+		error = null;
+		statusMessage = null;
+
+		try
+		{
+			var actualizado = await TenantState.TrySetCompanyIdAsync(companyId);
+			if (!actualizado)
+			{
+				error = "No fue posible activar la empresa seleccionada.";
+				return;
+			}
+
+			activeCompanyId = companyId;
+			statusMessage = "Empresa activada correctamente.";
+			NavigationManager.NavigateTo("/", forceLoad: true);
+		}
+		catch (HttpRequestException ex)
+		{
+			error = ex.Message;
+		}
+		finally
+		{
+			activatingCompanyId = 0;
+		}
 	}
 }

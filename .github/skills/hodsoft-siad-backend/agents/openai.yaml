@@ -1,0 +1,4 @@
+interface:
+  display_name: "HODSOFT SIAD Backend"
+  short_description: "Extender APIs, servicios y tenancy del backend"
+  default_prompt: "Use $hodsoft-siad-backend to implement an end-to-end backend module in apc, SIAD.Services, SIAD.Core, and SIAD.Data."

@@ -4,5 +4,6 @@ public record ClienteListItemDto(
     int Id,
     string Codigo,
     string Nombre,
+    string? Identidad,
     string? Barrio,
     bool Activo);

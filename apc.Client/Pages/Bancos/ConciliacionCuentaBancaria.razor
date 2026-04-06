@@ -1,0 +1,944 @@
+@page "/bancos/cuentas/conciliacion"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Tenant
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using Microsoft.JSInterop
+@using System.Globalization
+@using System.Linq
+@using System.Text.Json
+@using SIAD.Core.DTOs.Bancos
+
+@inject CuentasBancosClient CuentasClient
+@inject BancosClient BancosClient
+@inject TenantState TenantState
+@inject NavigationManager NavigationManager
+@inject IJSRuntime JSRuntime
+
+@implements IDisposable
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Conciliacion cuenta bancaria</h2>
+            <p class="page-subtitle">Compare transacciones del sistema vs banco.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 header-actions">
+            <button type="button"
+                    class="btn btn-outline-secondary"
+                    @onclick="Volver">
+                <i class="bi bi-arrow-left me-1"></i>
+                Volver a cuentas
+            </button>
+            @if (cuenta is not null)
+            {
+                <button type="button"
+                        class="btn btn-outline-primary"
+                        disabled="@consolidando"
+                        @onclick="RecargarConciliacionAsync">
+                    Buscar
+                </button>
+                <a class="btn btn-outline-secondary"
+                   href="@GetConciliacionTemplateUrl()"
+                   target="_blank"
+                   rel="noopener">
+                    Descargar plantilla
+                </a>
+                <button type="button"
+                        class="btn btn-outline-success"
+                        disabled="@(!PuedeConciliar)"
+                        @onclick="ConciliarSeleccionadosAsync">
+                    Conciliar seleccionados
+                </button>
+                <button type="button"
+                        class="btn btn-outline-danger"
+                        disabled="@(!PuedeLimpiarDatosBanco)"
+                        @onclick="LimpiarDatosBancoAsync">
+                    Limpiar datos banco
+                </button>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(alerta))
+    {
+        <div class="toast-container-floating" role="status" aria-live="polite" aria-atomic="true">
+            <div class="toast-notification @GetAlertaToastCssClass()">
+                @alerta
+            </div>
+        </div>
+    }
+
+    @if (cuenta is null)
+    {
+        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <span>No hay cuenta seleccionada para conciliar.</span>
+                <button type="button"
+                        class="btn btn-outline-secondary"
+                        @onclick="Volver">
+                    Volver a cuentas
+                </button>
+            </div>
+        </DxAlert>
+    }
+    else
+    {
+        @if (!bancoActivo)
+        {
+            <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                El banco seleccionado esta inactivo. La conciliacion puede no estar disponible.
+            </DxAlert>
+        }
+
+        <div class="modern-card mb-4">
+            <div class="p-3">
+                <div class="small text-secondary mb-3">
+                    <div><strong>Banco:</strong> @(bancoNombre ?? cuenta.BancoId.ToString())</div>
+                    <div><strong>Cuenta:</strong> @cuenta.NumeroCuenta</div>
+                    <div><strong>Moneda:</strong> @cuenta.Moneda</div>
+                </div>
+
+                <div class="row g-2 align-items-end mb-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Fecha conciliacion</label>
+                        <DxDateEdit @bind-Date="conciliacionFechaHasta"
+                                    @bind-Date:after="OnRangoFechasChangedAsync" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label">Archivo banco (Excel)</label>
+                        <InputFile @key="conciliacionArchivoSelectorKey"
+                                   OnChange="@OnConciliacionFileSelected"
+                                   accept=".xlsx"
+                                   class="form-control form-control-sm" />
+                    </div>
+                </div>
+
+                @if (consolidando)
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span>
+                        <span>Cargando datos...</span>
+                    </div>
+                }
+                else if (!string.IsNullOrWhiteSpace(conciliacionError))
+                {
+                    <div class="alert alert-danger mb-0">@conciliacionError</div>
+                }
+                else if (conciliacionHistorial.Count == 0 && conciliacionBanco.Count == 0)
+                {
+                    <div class="alert alert-warning mb-0">No hay transacciones hasta la fecha seleccionada.</div>
+                }
+                else
+                {
+                    <div class="row g-3">
+                        <div class="col-12 col-lg-6">
+                            <div class="fw-semibold mb-2">Sistema</div>
+                            @if (conciliacionHistorial.Count == 0)
+                            {
+                                <div class="alert alert-warning mb-0">No hay transacciones del sistema.</div>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th class="text-center" style="width: 40px;">
+                                                    <input type="checkbox"
+                                                           class="form-check-input"
+                                                           checked="@SeleccionSistemaCompleta"
+                                                           disabled="@(!PuedeSeleccionarSistema)"
+                                                           @onchange="ToggleSeleccionSistemaTodos" />
+                                                </th>
+                                                <th>ID</th>
+                                                <th>Fecha</th>
+                                                <th>Tipo</th>
+                                                <th>Referencia</th>
+                                                <th class="text-end">Monto</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var item in conciliacionHistorial)
+                                            {
+                                                <tr class="@(EsConciliado(item) ? "text-muted" : null)">
+                                                    <td class="text-center">
+                                                        <input type="checkbox"
+                                                               class="form-check-input"
+                                                               checked="@(EsConciliado(item) || IsSistemaSelected(item))"
+                                                               disabled="@EsConciliado(item)"
+                                                               @onchange="(args) => ToggleSeleccionSistema(item, args)" />
+                                                    </td>
+                                                    <td>@item.NumeroTransaccion</td>
+                                                    <td>@item.Fecha.ToString("dd/MM/yyyy")</td>
+                                                    <td>@item.Tipo</td>
+                                                    <td>@item.Referencia</td>
+                                                    <td class="text-end">@item.Monto.ToString("N2")</td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center border-top pt-2 small text-secondary">
+                                    <span>Balance sistema</span>
+                                    <strong class="text-dark">@TotalSistema.ToString("N2")</strong>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center small text-secondary">
+                                    <span>Balance seleccionado</span>
+                                    <strong class="text-dark">@TotalSistemaSeleccionado.ToString("N2")</strong>
+                                </div>
+                            }
+                        </div>
+                        <div class="col-12 col-lg-6">
+                            <div class="fw-semibold mb-2">Banco</div>
+                            @if (conciliacionBanco.Count == 0)
+                            {
+                                <div class="alert alert-warning mb-0">No hay transacciones del banco cargadas.</div>
+                            }
+                            else
+                            {
+                                <div class="table-responsive">
+                                    <table class="table table-sm table-striped align-middle mb-0">
+                                        <thead>
+                                            <tr>
+                                                <th>ID</th>
+                                                <th>Fecha</th>
+                                                <th>Referencia</th>
+                                                <th class="text-end">Monto</th>
+                                                <th class="text-end">Acciones</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            @foreach (var item in conciliacionBanco)
+                                            {
+                                                <tr>
+                                                    <td>@item.NumeroTransaccion</td>
+                                                    <td>@item.Fecha.ToString("dd/MM/yyyy")</td>
+                                                    <td>@(string.IsNullOrWhiteSpace(item.Referencia) ? item.Tipo : item.Referencia)</td>
+                                                    <td class="text-end">@item.Monto.ToString("N2")</td>
+                                                    <td class="text-end">
+                                                        @if (EsSoloBanco(item))
+                                                        {
+                                                            <button type="button"
+                                                                    class="btn btn-outline-primary btn-sm"
+                                                                    @onclick="() => CrearTransaccionBanco(item)">
+                                                                Crear transaccion
+                                                            </button>
+                                                        }
+                                                        else
+                                                        {
+                                                            <span class="text-muted">-</span>
+                                                        }
+                                                    </td>
+                                                </tr>
+                                            }
+                                        </tbody>
+                                    </table>
+                                </div>
+                                <div class="d-flex justify-content-between align-items-center border-top pt-2 small text-secondary">
+                                    <span>Balance banco</span>
+                                    <strong class="text-dark">@TotalBanco.ToString("N2")</strong>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                    <div class="d-flex flex-wrap gap-3 small text-secondary mt-2">
+                        <span>Sistema: @conciliacionHistorial.Count</span>
+                        <span>Banco: @conciliacionBanco.Count</span>
+                        <span class="text-success">Coinciden: @conciliacionCoinciden</span>
+                        <span class="text-danger">Solo sistema: @conciliacionSoloSistema</span>
+                        <span class="text-danger">Solo banco: @conciliacionSoloBanco</span>
+                    </div>
+                    <div class="mt-2">
+                        <span class="@DiferenciaCss fw-semibold fs-4">Diferencia: @DiferenciaBancoSistema.ToString("N2")</span>
+                    </div>
+
+                }
+
+            </div>
+        </div>
+    }
+</div>
+
+@if (isLoading)
+{
+    <div class="splash-overlay">
+        <div class="splash-card">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <div class="splash-text">Cargando conciliacion...</div>
+        </div>
+    </div>
+}
+
+@code {
+    private BancoCuentaEditDto? cuenta;
+    private string? bancoNombre;
+    private bool bancoActivo = true;
+    private bool isLoading;
+    private bool consolidando;
+    private List<BancoCuentaConciliacionDto> conciliacionHistorial = new();
+    private List<BancoCuentaConciliacionDto> conciliacionBanco = new();
+    private List<BancoCuentaConciliacionDto> conciliacionBancoCompleto = new();
+    private readonly HashSet<string> conciliacionSeleccionSistema = new();
+    private string? conciliacionError;
+    private DateOnly? conciliacionFechaHasta;
+    private IBrowserFile? conciliacionArchivo;
+    private bool conciliando;
+    private int conciliacionCoinciden;
+    private int conciliacionSoloSistema;
+    private int conciliacionSoloBanco;
+    private HashSet<string> conciliacionKeysSistema = new();
+    private string? alerta;
+    private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private CancellationTokenSource? loadCts;
+    private CancellationTokenSource? alertaCts;
+    private int conciliacionArchivoSelectorKey;
+    private const string ConciliacionBancoCachePrefix = "conciliacion:banco:";
+
+    [SupplyParameterFromQuery(Name = "cuentaId")]
+    public long? CuentaId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarCuentaAsync();
+    }
+
+    private async Task CargarCuentaAsync()
+    {
+        if (!CuentaId.HasValue || CuentaId.Value <= 0)
+        {
+            cuenta = null;
+            SetAlert("Seleccione una cuenta para conciliar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+
+        isLoading = true;
+        try
+        {
+            alerta = null;
+            var data = await CuentasClient.GetByIdAsync(CuentaId.Value, loadCts.Token);
+            if (data is null)
+            {
+                cuenta = null;
+                SetAlert("No se encontro la cuenta bancaria.", MessageBoxRenderStyle.Warning);
+                return;
+            }
+
+            cuenta = data;
+            await CargarBancoAsync(cuenta.BancoId, loadCts.Token);
+            ResetConciliacion();
+
+            if (!conciliacionFechaHasta.HasValue)
+            {
+                SetDefaultRangoConciliacion();
+            }
+
+            await CargarConciliacionAsync();
+            await RestaurarConciliacionBancoAsync();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"Error al cargar la cuenta: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarBancoAsync(long bancoId, CancellationToken ct)
+    {
+        try
+        {
+            var banco = await BancosClient.GetByIdAsync(bancoId, ct);
+            bancoNombre = banco?.Nombre;
+            bancoActivo = banco?.Activo ?? true;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch
+        {
+            bancoNombre = null;
+            bancoActivo = true;
+        }
+    }
+
+    private void ResetConciliacion()
+    {
+        conciliacionHistorial = new List<BancoCuentaConciliacionDto>();
+        conciliacionBanco = new List<BancoCuentaConciliacionDto>();
+        conciliacionBancoCompleto = new List<BancoCuentaConciliacionDto>();
+        conciliacionArchivo = null;
+        conciliacionError = null;
+        conciliacionCoinciden = 0;
+        conciliacionSoloSistema = 0;
+        conciliacionSoloBanco = 0;
+        conciliacionKeysSistema = new HashSet<string>();
+        conciliacionSeleccionSistema.Clear();
+    }
+
+    private async Task RecargarConciliacionAsync()
+    {
+        await ActualizarConciliacionPorRangoAsync();
+    }
+
+    private async Task OnRangoFechasChangedAsync()
+    {
+        await ActualizarConciliacionPorRangoAsync();
+    }
+
+    private async Task ActualizarConciliacionPorRangoAsync()
+    {
+        await CargarConciliacionAsync();
+        await RestaurarConciliacionBancoAsync();
+    }
+
+    private async Task CargarConciliacionAsync()
+    {
+        if (cuenta is null)
+        {
+            conciliacionError = "Seleccione una cuenta para conciliar.";
+            return;
+        }
+
+        if (!conciliacionFechaHasta.HasValue)
+        {
+            conciliacionError = "Seleccione una fecha de conciliacion valida.";
+            return;
+        }
+
+        consolidando = true;
+        conciliacionError = null;
+
+        try
+        {
+            var companyIdActual = await TenantState.EnsureCompanyAsync();
+            if (companyIdActual <= 0)
+            {
+                conciliacionError = "No hay empresa seleccionada.";
+                return;
+            }
+
+            var data = await CuentasClient.GetConciliacionAsync(
+                companyIdActual,
+                cuenta.BancoCuentaId,
+                conciliacionFechaHasta);
+
+            conciliacionHistorial = data.ToList();
+            conciliacionSeleccionSistema.Clear();
+            RecalcularResumenConciliacion();
+        }
+        catch (Exception ex)
+        {
+            conciliacionError = $"No fue posible cargar el historial: {ex.Message}";
+        }
+        finally
+        {
+            consolidando = false;
+        }
+    }
+
+    private async Task OnConciliacionFileSelected(InputFileChangeEventArgs args)
+    {
+        conciliacionArchivo = args.GetMultipleFiles(1).FirstOrDefault();
+        conciliacionBanco = new List<BancoCuentaConciliacionDto>();
+        conciliacionBancoCompleto = new List<BancoCuentaConciliacionDto>();
+        RecalcularResumenConciliacion();
+        conciliacionError = null;
+        await GuardarConciliacionBancoAsync();
+
+        if (conciliacionArchivo is null)
+        {
+            return;
+        }
+
+        await CargarConciliacionBancoAsync();
+        conciliacionArchivoSelectorKey++;
+    }
+
+    private async Task CargarConciliacionBancoAsync()
+    {
+        if (conciliacionArchivo is null)
+        {
+            conciliacionError = "Seleccione un archivo Excel primero.";
+            return;
+        }
+
+        consolidando = true;
+        conciliacionError = null;
+
+        try
+        {
+            var data = await CuentasClient.ImportarConciliacionBancoAsync(conciliacionArchivo);
+            conciliacionBancoCompleto = data.ToList();
+            AplicarFiltroBancoPorRango();
+            RecalcularResumenConciliacion();
+            await GuardarConciliacionBancoAsync();
+            SetAlert($"Archivo cargado correctamente. {conciliacionBancoCompleto.Count} registros importados.", MessageBoxRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            conciliacionError = $"No fue posible importar el archivo: {ex.Message}";
+        }
+        finally
+        {
+            consolidando = false;
+        }
+    }
+
+    private async Task LimpiarDatosBancoAsync()
+    {
+        await LimpiarDatosBancoCoreAsync(true);
+    }
+
+    private async Task LimpiarDatosBancoCoreAsync(bool mostrarAlerta)
+    {
+        if (consolidando)
+        {
+            return;
+        }
+
+        conciliacionArchivo = null;
+        conciliacionBanco = new List<BancoCuentaConciliacionDto>();
+        conciliacionBancoCompleto = new List<BancoCuentaConciliacionDto>();
+        conciliacionError = null;
+        conciliacionArchivoSelectorKey++;
+        RecalcularResumenConciliacion();
+        await GuardarConciliacionBancoAsync();
+        if (mostrarAlerta)
+        {
+            SetAlert("Datos del banco limpiados correctamente.", MessageBoxRenderStyle.Info);
+        }
+    }
+
+    private async Task LimpiarEstadoBancoAlSalirAsync()
+    {
+        conciliacionArchivo = null;
+        conciliacionBanco = new List<BancoCuentaConciliacionDto>();
+        conciliacionBancoCompleto = new List<BancoCuentaConciliacionDto>();
+        conciliacionError = null;
+        conciliacionArchivoSelectorKey++;
+        RecalcularResumenConciliacion();
+        await EliminarCacheConciliacionBancoAsync();
+    }
+
+    private void RecalcularResumenConciliacion()
+    {
+        conciliacionKeysSistema = new HashSet<string>(conciliacionHistorial.Select(BuildConciliacionKey));
+        var bancoKeys = new HashSet<string>(conciliacionBanco.Select(BuildConciliacionKey));
+
+        conciliacionCoinciden = conciliacionKeysSistema.Intersect(bancoKeys).Count();
+        conciliacionSoloSistema = conciliacionKeysSistema.Except(bancoKeys).Count();
+        conciliacionSoloBanco = bancoKeys.Except(conciliacionKeysSistema).Count();
+    }
+
+
+    private bool PuedeSeleccionarSistema
+        => conciliacionHistorial.Any(item => !EsConciliado(item));
+
+    private bool SeleccionSistemaCompleta
+        => PuedeSeleccionarSistema
+           && conciliacionHistorial.Where(item => !EsConciliado(item)).All(IsSistemaSelected);
+
+    private decimal TotalSistema => conciliacionHistorial.Sum(item => item.Monto);
+    private decimal TotalBanco => conciliacionBanco.Sum(item => item.Monto);
+    private decimal DiferenciaBancoSistema => TotalSistemaSeleccionado - TotalBanco;
+    private decimal TotalSistemaSeleccionado
+        => conciliacionHistorial.Where(IsSistemaSelected).Sum(item => item.Monto);
+
+    private bool EsConciliado(BancoCuentaConciliacionDto item)
+        => string.Equals(item.EstadoConciliacion, "CON", StringComparison.OrdinalIgnoreCase);
+
+    private bool IsSistemaSelected(BancoCuentaConciliacionDto item)
+    {
+        if (EsConciliado(item))
+        {
+            return false;
+        }
+
+        var key = BuildConciliacionKey(item);
+        return conciliacionSeleccionSistema.Contains(key);
+    }
+
+    private void ToggleSeleccionSistema(BancoCuentaConciliacionDto item, ChangeEventArgs args)
+    {
+        if (EsConciliado(item))
+        {
+            return;
+        }
+
+        var isChecked = args?.Value is bool value && value;
+        var key = BuildConciliacionKey(item);
+        if (isChecked)
+        {
+            conciliacionSeleccionSistema.Add(key);
+        }
+        else
+        {
+            conciliacionSeleccionSistema.Remove(key);
+        }
+        StateHasChanged();
+    }
+
+    private void ToggleSeleccionSistemaTodos(ChangeEventArgs args)
+    {
+        var isChecked = args?.Value is bool value && value;
+        conciliacionSeleccionSistema.Clear();
+        if (isChecked)
+        {
+            foreach (var item in conciliacionHistorial.Where(item => !EsConciliado(item)))
+            {
+                conciliacionSeleccionSistema.Add(BuildConciliacionKey(item));
+            }
+        }
+        StateHasChanged();
+    }
+
+    private bool PuedeConciliar
+        => !consolidando
+           && !conciliando
+           && conciliacionHistorial.Any(IsSistemaSelected)
+           && DiferenciaBancoSistema <= 0m;
+
+    private bool PuedeLimpiarDatosBanco
+        => !consolidando && (conciliacionBancoCompleto.Count > 0 || conciliacionArchivo is not null);
+
+    private async Task ConciliarSeleccionadosAsync()
+    {
+        if (conciliando)
+        {
+            return;
+        }
+
+        if (cuenta is null)
+        {
+            SetAlert("Seleccione una cuenta para conciliar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+        if (!conciliacionFechaHasta.HasValue)
+        {
+            SetAlert("Seleccione la fecha de conciliacion.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        if (DiferenciaBancoSistema > 0m)
+        {
+            SetAlert("La diferencia debe ser 0 para conciliar.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        var seleccionados = conciliacionHistorial.Where(IsSistemaSelected).ToList();
+        if (seleccionados.Count == 0)
+        {
+            SetAlert("Seleccione transacciones del sistema para conciliar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        try
+        {
+            conciliando = true;
+            var companyIdActual = await TenantState.EnsureCompanyAsync();
+            if (companyIdActual <= 0)
+            {
+                SetAlert("No hay empresa seleccionada.", MessageBoxRenderStyle.Warning);
+                return;
+            }
+
+            var payload = new BancoCuentaConciliarDto
+            {
+                BancoCuentaId = cuenta.BancoCuentaId,
+                FechaConciliacion = conciliacionFechaHasta,
+                Movimientos = seleccionados
+            };
+
+            await CuentasClient.ConciliarAsync(payload);
+            await LimpiarDatosBancoCoreAsync(false);
+            SetAlert("Conciliación realizada correctamente.", MessageBoxRenderStyle.Success);
+            await ActualizarConciliacionPorRangoAsync();
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No fue posible conciliar: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            conciliando = false;
+        }
+    }
+
+    private static string BuildConciliacionKey(BancoCuentaConciliacionDto item)
+    {
+        var referencia = (item.Referencia ?? string.Empty).Trim().ToUpperInvariant();
+        var monto = Math.Round(item.Monto, 4).ToString("0.0000", CultureInfo.InvariantCulture);
+        return $"{referencia}|{item.Fecha:yyyy-MM-dd}|{monto}";
+    }
+
+    private bool EsSoloBanco(BancoCuentaConciliacionDto item)
+    {
+        var key = BuildConciliacionKey(item);
+        return !conciliacionKeysSistema.Contains(key);
+    }
+
+    private void AplicarFiltroBancoPorRango()
+    {
+        if (!conciliacionFechaHasta.HasValue)
+        {
+            conciliacionBanco = conciliacionBancoCompleto.ToList();
+            return;
+        }
+
+        var hasta = conciliacionFechaHasta.Value;
+        conciliacionBanco = conciliacionBancoCompleto
+            .Where(item => item.Fecha <= hasta)
+            .ToList();
+    }
+
+    private string? GetConciliacionBancoCacheKey()
+    {
+        if (cuenta is null || !conciliacionFechaHasta.HasValue)
+        {
+            return null;
+        }
+
+        var fechaConciliacion = conciliacionFechaHasta.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        return $"{ConciliacionBancoCachePrefix}{cuenta.BancoCuentaId}:{fechaConciliacion}";
+    }
+
+    private string? GetConciliacionBancoLegacyCacheKey()
+    {
+        if (cuenta is null)
+        {
+            return null;
+        }
+
+        return $"{ConciliacionBancoCachePrefix}{cuenta.BancoCuentaId}";
+    }
+
+    private async Task EliminarCacheConciliacionBancoAsync()
+    {
+        try
+        {
+            var cacheKey = GetConciliacionBancoCacheKey();
+            if (!string.IsNullOrWhiteSpace(cacheKey))
+            {
+                await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", cacheKey);
+            }
+
+            var legacyCacheKey = GetConciliacionBancoLegacyCacheKey();
+            if (!string.IsNullOrWhiteSpace(legacyCacheKey))
+            {
+                await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", legacyCacheKey);
+            }
+        }
+        catch
+        {
+            // Ignore cache cleanup failures when leaving the screen.
+        }
+    }
+
+    private async Task GuardarConciliacionBancoAsync()
+    {
+        var cacheKey = GetConciliacionBancoCacheKey();
+        if (string.IsNullOrWhiteSpace(cacheKey))
+        {
+            return;
+        }
+
+        try
+        {
+            var legacyCacheKey = GetConciliacionBancoLegacyCacheKey();
+            if (conciliacionBancoCompleto.Count == 0)
+            {
+                await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", cacheKey);
+                if (!string.IsNullOrWhiteSpace(legacyCacheKey))
+                {
+                    await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", legacyCacheKey);
+                }
+                return;
+            }
+
+            var payload = JsonSerializer.Serialize(conciliacionBancoCompleto);
+            await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", cacheKey, payload);
+            if (!string.IsNullOrWhiteSpace(legacyCacheKey))
+            {
+                await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", legacyCacheKey);
+            }
+        }
+        catch
+        {
+            // Ignore cache failures, they should not block the screen.
+        }
+    }
+
+    private async Task RestaurarConciliacionBancoAsync()
+    {
+        var cacheKey = GetConciliacionBancoCacheKey();
+        if (string.IsNullOrWhiteSpace(cacheKey))
+        {
+            conciliacionBanco = new List<BancoCuentaConciliacionDto>();
+            conciliacionBancoCompleto = new List<BancoCuentaConciliacionDto>();
+            RecalcularResumenConciliacion();
+            return;
+        }
+
+        try
+        {
+            var payload = await JSRuntime.InvokeAsync<string?>("sessionStorage.getItem", cacheKey);
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                var legacyCacheKey = GetConciliacionBancoLegacyCacheKey();
+                if (!string.IsNullOrWhiteSpace(legacyCacheKey))
+                {
+                    var legacyPayload = await JSRuntime.InvokeAsync<string?>("sessionStorage.getItem", legacyCacheKey);
+                    if (!string.IsNullOrWhiteSpace(legacyPayload))
+                    {
+                        payload = legacyPayload;
+                        await JSRuntime.InvokeVoidAsync("sessionStorage.setItem", cacheKey, legacyPayload);
+                        await JSRuntime.InvokeVoidAsync("sessionStorage.removeItem", legacyCacheKey);
+                    }
+                }
+            }
+
+            if (string.IsNullOrWhiteSpace(payload))
+            {
+                conciliacionBanco = new List<BancoCuentaConciliacionDto>();
+                conciliacionBancoCompleto = new List<BancoCuentaConciliacionDto>();
+                RecalcularResumenConciliacion();
+                return;
+            }
+
+            var data = JsonSerializer.Deserialize<List<BancoCuentaConciliacionDto>>(payload);
+            if (data is null || data.Count == 0)
+            {
+                conciliacionBanco = new List<BancoCuentaConciliacionDto>();
+                conciliacionBancoCompleto = new List<BancoCuentaConciliacionDto>();
+                RecalcularResumenConciliacion();
+                return;
+            }
+
+            conciliacionBancoCompleto = data;
+            AplicarFiltroBancoPorRango();
+            RecalcularResumenConciliacion();
+        }
+        catch
+        {
+            // Ignore cache restore failures, users can always re-upload.
+        }
+    }
+
+    private void CrearTransaccionBanco(BancoCuentaConciliacionDto item)
+    {
+        if (cuenta is null)
+        {
+            return;
+        }
+
+        var returnUrl = Uri.EscapeDataString(NavigationManager.Uri);
+        var referenciaBase = string.IsNullOrWhiteSpace(item.Referencia) ? item.Tipo : item.Referencia;
+        var referencia = Uri.EscapeDataString((referenciaBase ?? string.Empty).Trim());
+        var descripcion = Uri.EscapeDataString($"Conciliacion bancaria {referenciaBase}".Trim());
+        var fecha = item.Fecha.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var monto = Math.Abs(item.Monto).ToString("0.00", CultureInfo.InvariantCulture);
+
+        var url = $"/contabilidad/transacciones-bancarias/nueva?bancoId={cuenta.BancoId}&bancoCuentaId={cuenta.BancoCuentaId}&returnUrl={returnUrl}&referencia={referencia}&monto={monto}&fecha={fecha}&descripcion={descripcion}";
+        NavigationManager.NavigateTo(url);
+    }
+
+    private string DiferenciaCss => DiferenciaBancoSistema != 0m ? "text-warning" : "text-primary";
+
+    private string GetConciliacionTemplateUrl()
+    {
+        var uri = NavigationManager.ToAbsoluteUri("api/bancos/cuentas/conciliacion/plantilla");
+        return uri.ToString();
+    }
+
+    private string GetAlertaToastCssClass()
+        => alertaEstilo switch
+        {
+            MessageBoxRenderStyle.Success => "toast-success",
+            MessageBoxRenderStyle.Warning => "toast-warning",
+            MessageBoxRenderStyle.Danger => "toast-danger",
+            _ => "toast-info"
+        };
+
+    private void SetAlert(string message, MessageBoxRenderStyle style)
+    {
+        _ = MostrarAlertaTemporalAsync(message, style);
+    }
+
+    private async Task MostrarAlertaTemporalAsync(string message, MessageBoxRenderStyle style)
+    {
+        alertaCts?.Cancel();
+        alertaCts?.Dispose();
+        alertaCts = new CancellationTokenSource();
+        var token = alertaCts.Token;
+
+        alerta = message;
+        alertaEstilo = style;
+        await InvokeAsync(StateHasChanged);
+
+        var durationSeconds = Math.Max(1, (int)Math.Ceiling((message?.Length ?? 0) / 2d));
+        try
+        {
+            await Task.Delay(TimeSpan.FromSeconds(durationSeconds), token);
+        }
+        catch (TaskCanceledException)
+        {
+            return;
+        }
+
+        if (token.IsCancellationRequested)
+        {
+            return;
+        }
+
+        alerta = null;
+        await InvokeAsync(StateHasChanged);
+    }
+
+    private void SetDefaultRangoConciliacion()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        conciliacionFechaHasta = today;
+    }
+
+    private string GetReturnUrl()
+    {
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            return "/bancos/cuentas";
+        }
+
+        return Uri.UnescapeDataString(ReturnUrl);
+    }
+
+    private async Task Volver()
+    {
+        await LimpiarEstadoBancoAlSalirAsync();
+        NavigationManager.NavigateTo(GetReturnUrl());
+    }
+
+    public void Dispose()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        alertaCts?.Cancel();
+        alertaCts?.Dispose();
+    }
+}
+

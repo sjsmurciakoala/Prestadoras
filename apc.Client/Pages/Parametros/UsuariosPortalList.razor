@@ -1,0 +1,159 @@
+@page "/parametros/usuarios"
+@attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Usuarios
+@using apc.Client.Services.Parametros
+@inject UsuariosPortalClient UsuariosClient
+@inject NavigationManager NavigationManager
+
+<h3>Usuarios del Portal</h3>
+<p class="text-muted">Administra los usuarios, roles y permisos del sistema.</p>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
+}
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
+}
+
+<div class="d-flex gap-2 mb-3 mt-3">
+    <DxButton Text="Nuevo Usuario"
+              RenderStyle="ButtonRenderStyle.Primary"
+              IconCssClass="bi bi-person-plus"
+              Click="@(() => NavigationManager.NavigateTo("/parametros/usuarios/nuevo"))" />
+
+    <DxButton Text="Sincronizar Roles"
+              RenderStyle="ButtonRenderStyle.Secondary"
+              RenderStyleMode="ButtonRenderStyleMode.Outline"
+              IconCssClass="bi bi-arrow-repeat"
+              Enabled="@(!isSyncing)"
+              Click="SincronizarRolesAsync" />
+</div>
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <DxWaitIndicator Visible="true" />
+    </div>
+}
+else
+{
+    <DxGrid Data="@usuarios"
+            KeyFieldName="Id"
+            ShowFilterRow="true"
+            PageSize="20"
+            CssClass="mt-2">
+        <Columns>
+            <DxGridDataColumn FieldName="Email" Caption="Correo" Width="300px" />
+            <DxGridDataColumn FieldName="EmailConfirmado" Caption="Confirmado" Width="110px">
+                <CellDisplayTemplate>
+                    @{
+                        var confirmado = (bool)context.Value;
+                    }
+                    <span class="badge @(confirmado ? "bg-success" : "bg-warning text-dark")">
+                        @(confirmado ? "Sí" : "No")
+                    </span>
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+            <DxGridDataColumn FieldName="Bloqueado" Caption="Bloqueado" Width="110px">
+                <CellDisplayTemplate>
+                    @{
+                        var bloqueado = (bool)context.Value;
+                    }
+                    <span class="badge @(bloqueado ? "bg-danger" : "bg-success")">
+                        @(bloqueado ? "Sí" : "No")
+                    </span>
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+            <DxGridDataColumn FieldName="CompanyId" Caption="Empresa ID" Width="110px" />
+            <DxGridDataColumn FieldName="RolesDisplay" Caption="Roles" UnboundType="GridUnboundColumnType.String"
+                              AllowSort="false" AllowGroup="false">
+                <CellDisplayTemplate>
+                    @{
+                        var usuario = (UsuarioPortalDto)context.DataItem;
+                    }
+                    @if (usuario.Roles is { Count: > 0 })
+                    {
+                        @foreach (var role in usuario.Roles)
+                        {
+                            <span class="badge bg-primary me-1">@role</span>
+                        }
+                    }
+                    else
+                    {
+                        <span class="text-muted fst-italic">Sin roles</span>
+                    }
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+            <DxGridDataColumn FieldName="Id" Caption="" Width="100px" AllowSort="false" AllowGroup="false">
+                <CellDisplayTemplate>
+                    <DxButton Text="Editar"
+                              RenderStyle="ButtonRenderStyle.Link"
+                              IconCssClass="bi bi-pencil"
+                              Click="@(() => NavigationManager.NavigateTo($"/parametros/usuarios/editar/{context.Value}"))" />
+                </CellDisplayTemplate>
+            </DxGridDataColumn>
+        </Columns>
+    </DxGrid>
+}
+
+@code {
+    private List<UsuarioPortalDto> usuarios = [];
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isLoading = true;
+    private bool isSyncing;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarUsuariosAsync();
+    }
+
+    private async Task CargarUsuariosAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            usuarios = await UsuariosClient.ListarAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SincronizarRolesAsync()
+    {
+        isSyncing = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            await UsuariosClient.SincronizarRolesAsync();
+            successMessage = "Roles sincronizados correctamente.";
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSyncing = false;
+        }
+    }
+}

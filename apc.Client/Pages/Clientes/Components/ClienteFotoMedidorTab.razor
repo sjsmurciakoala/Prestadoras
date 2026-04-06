@@ -1,0 +1,191 @@
+@using SIAD.Core.DTOs.Clientes
+@inject apc.Client.Services.Clientes.ClientesClient ClientesClient
+@inject IToastNotificationService ToastService
+
+<div class="cliente-foto-medidor-container">
+    <DxToastProvider Name="FotoMedidorToast" MaxToastCount="3" />
+
+    @if (isLoading)
+    {
+        <div class="text-center p-4">
+            <DxLoadingPanel Visible="true" Text="Cargando fotos..." />
+            <div style="height:80px"></div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
+    }
+    else if (header is null)
+    {
+        <div class="text-muted text-center p-4">No se encontró información del cliente.</div>
+    }
+    else
+    {
+        <div class="section-header mb-3">
+            <i class="bi bi-camera"></i>
+            <h4 class="m-0">Foto de Medidor</h4>
+        </div>
+
+        <div class="modern-card mb-3">
+            <div class="row g-3">
+                <div class="col-md-3">
+                    <label class="form-label">Cliente</label>
+                    <input class="form-control" value="@header.CodigoCliente" readonly />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label">Nombre</label>
+                    <input class="form-control" value="@header.NombreCliente" readonly />
+                </div>
+                <div class="col-md-3">
+                    <label class="form-label">Medidor</label>
+                    <input class="form-control" value="@header.NumeroMedidor" readonly />
+                </div>
+                <div class="col-md-12">
+                    <label class="form-label">Dirección</label>
+                    <input class="form-control" value="@header.DireccionCliente" readonly />
+                </div>
+            </div>
+        </div>
+
+        <div class="modern-card mb-3">
+            <div class="d-flex flex-wrap gap-3 align-items-end">
+                <div>
+                    <label class="form-label mb-1">Desde</label>
+                    <input type="date" class="form-control"
+                           @bind="desdeInput"
+                           @bind:format="yyyy-MM-dd" />
+                </div>
+                <div>
+                    <label class="form-label mb-1">Hasta</label>
+                    <input type="date" class="form-control"
+                           @bind="hastaInput"
+                           @bind:format="yyyy-MM-dd" />
+                </div>
+                <DxButton Text="Aplicar"
+                          CssClass="btn-icon"
+                          IconCssClass="bi bi-funnel"
+                          Click="LoadFotosAsync" />
+            </div>
+        </div>
+
+        <div class="modern-card">
+            @if (items.Count == 0)
+            {
+                <div class="text-muted text-center p-3">Este cliente no tiene historial de fotos en el rango seleccionado.</div>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm table-bordered table-striped align-middle">
+                        <thead>
+                            <tr>
+                                <th>Periodo</th>
+                                <th>Usuario</th>
+                                <th style="width:120px;">Acciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in items)
+                            {
+                                <tr>
+                                    <td>@($"{item.Ano:D4}/{item.Mes:D2}")</td>
+                                    <td>@(string.IsNullOrWhiteSpace(item.Usuario) ? "-" : item.Usuario)</td>
+                                    <td>
+                                        <button type="button" class="btn btn-sm btn-outline-primary"
+                                                @onclick="() => AbrirFoto(item.Ide)">
+                                            Ver
+                                        </button>
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+
+        <DxPopup Visible="@mostrarFotoModal"
+                 VisibleChanged="@(v => mostrarFotoModal = v)"
+                 Width="min(800px, 95vw)"
+                 MaxHeight="90vh"
+                 Scrollable="true"
+                 HeaderText="Foto del Medidor"
+                 CssClass="historico-consumo-popup">
+            <BodyTemplate>
+                <div class="p-2 historico-consumo-body">
+                    @if (string.IsNullOrWhiteSpace(fotoUrl))
+                    {
+                        <div class="text-muted text-center p-4">Sin imagen para mostrar.</div>
+                    }
+                    else
+                    {
+                        <img src="@fotoUrl" style="max-width:100%; height:auto;" />
+                    }
+                </div>
+            </BodyTemplate>
+        </DxPopup>
+    }
+</div>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public int ClienteId { get; set; }
+
+    private ClienteFotoMedidorHeaderDto? header;
+    private List<ClienteFotoMedidorItemDto> items = new();
+    private DateTime desdeInput = DateTime.Today.AddYears(-1);
+    private DateTime hastaInput = DateTime.Today;
+    private bool isLoading = true;
+    private string? error;
+    private bool mostrarFotoModal;
+    private string? fotoUrl;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        error = null;
+        items.Clear();
+
+        try
+        {
+            header = await ClientesClient.ObtenerFotoMedidorHeaderAsync(ClienteId);
+            await LoadFotosAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"Error al cargar fotos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadFotosAsync()
+    {
+        var desde = desdeInput.Date;
+        var hasta = hastaInput.Date;
+        if (hasta < desde)
+        {
+            (desde, hasta) = (hasta, desde);
+            desdeInput = desde;
+            hastaInput = hasta;
+        }
+
+        items = (await ClientesClient.ObtenerFotoMedidorAsync(ClienteId, desde, hasta)).ToList();
+        StateHasChanged();
+    }
+
+    private void AbrirFoto(int ide)
+    {
+        fotoUrl = $"api/clientes/foto-medidor/{ide}/imagen";
+        mostrarFotoModal = true;
+    }
+}

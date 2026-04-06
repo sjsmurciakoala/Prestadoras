@@ -1,0 +1,85 @@
+.contabilidad-page { padding: 1rem; background-color: #f8f9fa; min-height: 100vh; }
+
+.cc-toolbar { margin-bottom: 12px; align-items: center; }
+:deep(.cc-popup-responsive) { width: 800px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; }
+.cc-form { margin-top: 5px; }
+
+.alert-danger { border: 1px solid #f5c2c7; background-color: #f8d7da; color: #842029; }
+
+:deep(.cc-confirm-popup) {
+    border-radius: 14px;
+    overflow: hidden;
+}
+
+:deep(.cc-confirm-popup .dxbl-popup-header),
+:deep(.cc-confirm-popup .dx-popup-header) {
+    background: transparent;
+    border-bottom: none;
+    padding: 1rem 1rem 0 1rem;
+    z-index: 10;
+}
+
+:deep(.cc-confirm-popup .dxbl-popup-content),
+:deep(.cc-confirm-popup .dx-popup-content) {
+    padding: 0 !important;
+}
+
+.cc-modal-wrapper {
+    padding: 0 1.5rem 1.5rem 1.5rem;
+}
+
+.cc-confirm-body {
+    display: flex;
+    gap: 1.25rem;
+    margin-top: 0.5rem;
+}
+
+.cc-icon-circle {
+    width: 48px;
+    height: 48px;
+    background-color: #fee2e2;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.cc-icon-circle i {
+    color: #dc3545;
+    font-size: 1.4rem;
+}
+
+.cc-confirm-title { font-size: 1.25rem; font-weight: 700; color: #1f2937; margin-bottom: 0.25rem; }
+.cc-confirm-subtitle { font-size: 0.9rem; color: #6b7280; line-height: 1.4; margin-bottom: 1rem; }
+
+.cc-details-card {
+    background-color: #f9fafb;
+    border: 1px solid #e5e7eb;
+    border-radius: 8px;
+    padding: 12px;
+    font-size: 0.9rem;
+}
+
+.cc-detail-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+.cc-label { color: #6b7280; }
+.cc-value { font-weight: 600; color: #111827; }
+
+.cc-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    margin-top: 1.5rem;
+    padding-top: 1rem;
+}
+
+.cc-btn-cancel { min-width: 90px; }
+.cc-btn-delete { min-width: 110px; background-color: #dc3545; border-color: #dc3545; color: white; }
+.cc-btn-delete:hover { background-color: #bb2d3b; }
+
+@media (max-width: 576px) {
+    .cc-confirm-body { flex-direction: column; align-items: center; text-align: center; }
+    .cc-details-card { text-align: left; width: 100%; }
+    .cc-modal-footer { flex-direction: column-reverse; width: 100%; }
+    .cc-modal-footer .dx-btn { width: 100%; }
+}

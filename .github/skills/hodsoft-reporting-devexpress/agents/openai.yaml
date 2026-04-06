@@ -1,0 +1,4 @@
+interface:
+  display_name: "HODSOFT Reporting"
+  short_description: "Trabajar reportes DevExpress y datasets web"
+  default_prompt: "Use $hodsoft-reporting-devexpress to modify report storage, designer/viewer, or report datasets."

@@ -1,4 +1,6 @@
 using System.Net.Http.Json;
+using apc.Client.Services;
+using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.Medidores;
 
 namespace apc.Client.Services.Medidores;
@@ -42,6 +44,125 @@ public sealed class MedidoresClient
     /// </summary>
     public async Task<MedidorDetailDto?> ObtenerPorIdAsync(int id, CancellationToken ct = default)
         => await http.GetFromJsonAsync<MedidorDetailDto?>($"api/medidores/{id}", ct);
+
+    public async Task<PagedResult<MedidorListItemDto>?> GetPagedAsync(
+        MedidorFilterDto? filtro,
+        int skip,
+        int take,
+        string? sortField,
+        bool sortDesc,
+        CancellationToken ct = default)
+    {
+        var filter = filtro ?? new MedidorFilterDto(null, null, null, null, null);
+
+        var parameters = new List<string>
+        {
+            $"skip={Math.Max(0, skip)}",
+            $"take={Math.Max(1, take)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(filter.Numero))
+        {
+            parameters.Add($"numero={Uri.EscapeDataString(filter.Numero)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.Marca))
+        {
+            parameters.Add($"marca={Uri.EscapeDataString(filter.Marca)}");
+        }
+
+        if (filter.Estado.HasValue)
+        {
+            parameters.Add($"estado={(filter.Estado.Value ? "true" : "false")}");
+        }
+
+        if (filter.Asignado.HasValue)
+        {
+            parameters.Add($"asignado={(filter.Asignado.Value ? "true" : "false")}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(filter.ClienteClave))
+        {
+            parameters.Add($"clienteClave={Uri.EscapeDataString(filter.ClienteClave)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(sortField))
+        {
+            parameters.Add($"sortField={Uri.EscapeDataString(sortField)}");
+        }
+
+        parameters.Add($"sortDesc={(sortDesc ? "true" : "false")}");
+
+        var url = $"api/medidores/paged?{string.Join("&", parameters)}";
+        var response = await http.GetAsync(url, ct);
+        return await response.ReadFromJsonAsyncWithAuthCheck<PagedResult<MedidorListItemDto>>(ct);
+    }
+
+    public async Task<MedidorEditDto?> GetEditByIdAsync(int id, CancellationToken ct = default)
+    {
+        if (id <= 0)
+        {
+            return null;
+        }
+
+        var response = await http.GetAsync($"api/medidores/{id}/edit", ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return null;
+        }
+
+        return await response.ReadFromJsonAsyncWithAuthCheck<MedidorEditDto>(ct);
+    }
+
+    public async Task<MedidorEditDto> CreateAsync(MedidorEditDto dto, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        var response = await http.PostAsJsonAsync("api/medidores", dto, ct);
+        var result = await response.ReadFromJsonAsyncWithAuthCheck<MedidorEditDto>(ct);
+        if (result is null)
+        {
+            throw new InvalidOperationException("El medidor devolvio una respuesta vacia.");
+        }
+
+        return result;
+    }
+
+    public async Task<MedidorEditDto> UpdateAsync(int id, MedidorEditDto dto, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        if (id <= 0)
+        {
+            throw new ArgumentException("El ID del medidor debe ser valido.", nameof(id));
+        }
+
+        var response = await http.PutAsJsonAsync($"api/medidores/{id}", dto, ct);
+        var result = await response.ReadFromJsonAsyncWithAuthCheck<MedidorEditDto>(ct);
+        if (result is null)
+        {
+            throw new InvalidOperationException("El medidor devolvio una respuesta vacia.");
+        }
+
+        return result;
+    }
+
+    public async Task<bool> DeactivateAsync(int id, CancellationToken ct = default)
+    {
+        if (id <= 0)
+        {
+            throw new ArgumentException("El ID del medidor debe ser valido.", nameof(id));
+        }
+
+        var response = await http.PostAsync($"api/medidores/{id}/desactivar", null, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        await response.ReadFromJsonAsyncWithAuthCheck<object>(ct);
+        return response.IsSuccessStatusCode;
+    }
 
     /// <summary>
     /// Asigna un medidor a un cliente.

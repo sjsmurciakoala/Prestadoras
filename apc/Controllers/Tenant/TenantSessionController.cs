@@ -16,7 +16,7 @@ namespace apc.Controllers;
 
 [ApiController]
 [Route("api/tenant/switch")]
-[Authorize]
+[Authorize(Policy = AuthorizationPolicies.SuperAdmin)]
 public sealed class TenantSessionController : ControllerBase
 {
     private readonly UserManager<ApplicationUser> _userManager;

@@ -73,15 +73,15 @@ public sealed class ConfiguracionPrincipalDto : IValidatableObject
     public int MesesCalculados { get; set; }
 
     [Required]
-    [RegularExpression(@"^[\.\-;]$", ErrorMessage = "Selecciona un separador valido.")]
+    [RegularExpression(@"^[\./-]$", ErrorMessage = "Selecciona un separador valido.")]
     public string SeparadorCodigo { get; set; } = "-";
 
     [Required]
-    [RegularExpression(@"^[#\.\-;]+$", ErrorMessage = "El formato de cuentas solo permite #, '.', '-' o ';'.")]
+    [RegularExpression(@"^[#\./-]+$", ErrorMessage = "El formato de cuentas solo permite #, '.', '-' o '/'.")]
     public string FormatoCuentas { get; set; } = "###-###-##";
 
     [Required]
-    [RegularExpression(@"^[#\.\-;]+$", ErrorMessage = "El formato de centros solo permite #, '.', '-' o ';'.")]
+    [RegularExpression(@"^[#\./-]+$", ErrorMessage = "El formato de centros solo permite #, '.', '-' o '/'.")]
     public string FormatoCentros { get; set; } = "###-##";
 
     [Required]
@@ -151,13 +151,13 @@ public sealed class CuentasUtilidadDto
 
 public sealed class EstadoSituacionFinancieraDto
 {
-    // Activos - ahora con c�digos
+    // Activos - ahora con códigos
     public string? CodigoActivoCortoPlazo1 { get; set; }
     public string? CodigoActivoCortoPlazo2 { get; set; }
     public string? CodigoActivoLargoPlazo1 { get; set; }
     public string? CodigoActivoLargoPlazo2 { get; set; }
     
-    // Pasivos - ahora con c�digos
+    // Pasivos - ahora con códigos
     public string? CodigoPasivoCortoPlazo1 { get; set; }
     public string? CodigoPasivoCortoPlazo2 { get; set; }
     public string? CodigoPasivoLargoPlazo1 { get; set; }

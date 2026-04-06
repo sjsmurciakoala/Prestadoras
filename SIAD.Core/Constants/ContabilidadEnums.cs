@@ -1,3 +1,5 @@
+using System;
+
 namespace SIAD.Core.Constants;
 
 /// <summary>
@@ -58,12 +60,54 @@ public enum EstadoPeriodoType
 {
     /// <summary>Abierto para movimientos</summary>
     Abierto = 0,
-    
-    /// <summary>Bloqueado para edición, pero permite consultas</summary>
-    Bloqueado = 1,
-    
+
+    /// <summary>En precierre para validaciones y preparacion del siguiente periodo</summary>
+    Precierre = 1,
+
     /// <summary>Cerrado fiscalmente</summary>
     Cerrado = 2
+}
+
+/// <summary>
+/// Utilidades canonicas para estados de periodos contables.
+/// </summary>
+public static class EstadoPeriodoHelper
+{
+    public const short AbiertoId = (short)EstadoPeriodoType.Abierto;
+    public const short PrecierreId = (short)EstadoPeriodoType.Precierre;
+    public const short CerradoId = (short)EstadoPeriodoType.Cerrado;
+
+    public static bool IsValid(short? statusId)
+    {
+        return statusId is AbiertoId or PrecierreId or CerradoId;
+    }
+
+    public static short Require(short? statusId, string context)
+    {
+        if (statusId is AbiertoId or PrecierreId or CerradoId)
+        {
+            return statusId.Value;
+        }
+
+        throw new InvalidOperationException(
+            $"Estado de periodo invalido en {context}. Valores permitidos: 0=Abierto, 1=Precierre, 2=Cerrado.");
+    }
+
+    public static bool IsOpen(short? statusId)
+    {
+        return statusId == AbiertoId;
+    }
+
+    public static string ToText(short? statusId)
+    {
+        return statusId switch
+        {
+            AbiertoId => "ABIERTO",
+            PrecierreId => "PRECIERRE",
+            CerradoId => "CERRADO",
+            _ => "SIN ESTADO"
+        };
+    }
 }
 
 /// <summary>

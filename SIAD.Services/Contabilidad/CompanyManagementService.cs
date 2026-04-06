@@ -11,31 +11,32 @@ namespace SIAD.Services.Contabilidad;
 public sealed class CompanyManagementService : ICompanyManagementService
 {
     private readonly SiadDbContext _context;
-    private readonly IConfiguracionSistemaService _configuracionService;
-
-    public CompanyManagementService(SiadDbContext context, IConfiguracionSistemaService configuracionService)
+    public CompanyManagementService(SiadDbContext context)
     {
         _context = context;
-        _configuracionService = configuracionService;
     }
 
     public async Task<CompanyCreationDto> CrearAsync(long tenantCompanyId, CompanyCreationDto dto, string usuario,
         CancellationToken ct = default)
     {
-        if (tenantCompanyId <= 0)
+        ArgumentNullException.ThrowIfNull(dto);
+
+        usuario = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim();
+        var companiesExist = await _context.cfg_companies
+            .AsNoTracking()
+            .AnyAsync(ct);
+
+        if (companiesExist && tenantCompanyId <= 0)
         {
             throw new ArgumentOutOfRangeException(nameof(tenantCompanyId),
                 "El identificador de la empresa activa debe ser mayor que cero.");
         }
 
-        ArgumentNullException.ThrowIfNull(dto);
-
-        usuario = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim();
         var tenantCompany = await _context.cfg_companies
             .AsNoTracking()
             .SingleOrDefaultAsync(c => c.company_id == tenantCompanyId, ct);
 
-        if (tenantCompany is null)
+        if (companiesExist && tenantCompany is null)
         {
             throw new InvalidOperationException("La empresa activa seleccionada no es válida.");
         }
@@ -71,9 +72,9 @@ public sealed class CompanyManagementService : ICompanyManagementService
                 email = Limpiar(dto.Email),
                 phone = Limpiar(dto.Telefonos),
                 address = Limpiar(dto.Direccion),
-                country_code = NormalizarCountryCode(dto.Pais) ?? tenantCompany.country_code,
-                currency_code = tenantCompany.currency_code,
-                timezone = tenantCompany.timezone,
+                country_code = NormalizarCountryCode(dto.Pais) ?? tenantCompany?.country_code ?? "HN",
+                currency_code = tenantCompany?.currency_code ?? "HNL",
+                timezone = tenantCompany?.timezone ?? "America/Tegucigalpa",
                 status = dto.Activa ? "ACTIVE" : "INACTIVE",
                 created_at = now,
                 created_by = usuario
@@ -105,12 +106,6 @@ public sealed class CompanyManagementService : ICompanyManagementService
             await _context.SaveChangesAsync(ct);
 
             // Inicializar configuración del sistema contable con periodo inicial
-            await _configuracionService.InicializarConfiguracionPorDefectoAsync(
-                nuevaEmpresa.company_id,
-                tenantCompanyId,
-                fechaConstitucion,
-                ct);
-
             await transaction.CommitAsync(ct);
 
             return MapearDto(nuevaEmpresa, configuracion, tamano, capital, fechaConstitucion);
@@ -213,16 +208,45 @@ public sealed class CompanyManagementService : ICompanyManagementService
             .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
 
+        var configuracionCreada = false;
         if (configuracion is null)
         {
-            return null;
+            configuracionCreada = true;
+            var nuevaConfiguracion = CrearConfiguracionPorDefecto(empresa, "system");
+            _context.con_empresa_configuracions.Add(nuevaConfiguracion);
+
+            try
+            {
+                await _context.SaveChangesAsync(ct);
+                configuracion = nuevaConfiguracion;
+            }
+            catch (DbUpdateException)
+            {
+                _context.Entry(nuevaConfiguracion).State = EntityState.Detached;
+                configuracion = await _context.con_empresa_configuracions
+                    .AsNoTracking()
+                    .IgnoreQueryFilters()
+                    .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+                configuracionCreada = false;
+            }
+
+            if (configuracion is null)
+            {
+                return null;
+            }
         }
 
         var tamano = ParseCompanySize(configuracion.tamano);
         var capital = ParseCompanyCapital(configuracion.capital);
         var fechaConstitucion = configuracion.fecha_constitucion?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today;
 
-        return MapearDto(empresa, configuracion, tamano, capital, fechaConstitucion);
+        var dto = MapearDto(empresa, configuracion, tamano, capital, fechaConstitucion);
+        if (configuracionCreada)
+        {
+            dto.Advertencia = "La configuracion contable no existia. Se creo con valores por defecto; revisa y completa los campos obligatorios antes de guardar.";
+        }
+
+        return dto;
     }
 
     public async Task<CompanyCreationDto> ActualizarAsync(long companyId, CompanyCreationDto dto, string usuario,
@@ -246,11 +270,15 @@ public sealed class CompanyManagementService : ICompanyManagementService
         }
 
         var configuracion = await _context.con_empresa_configuracions
+            .IgnoreQueryFilters()
             .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
 
+        var configuracionNueva = false;
         if (configuracion is null)
         {
-            throw new InvalidOperationException("La configuración de la empresa no existe.");
+            configuracionNueva = true;
+            configuracion = CrearConfiguracionPorDefecto(empresa, usuario);
+            _context.con_empresa_configuracions.Add(configuracion);
         }
 
         var normalizedName = NormalizarNombre(dto.Descripcion);
@@ -294,7 +322,10 @@ public sealed class CompanyManagementService : ICompanyManagementService
             configuracion.updated_at = now;
             configuracion.updated_by = usuario;
 
-            _context.con_empresa_configuracions.Update(configuracion);
+            if (!configuracionNueva)
+            {
+                _context.con_empresa_configuracions.Update(configuracion);
+            }
 
             await _context.SaveChangesAsync(ct);
             await transaction.CommitAsync(ct);
@@ -335,6 +366,40 @@ public sealed class CompanyManagementService : ICompanyManagementService
     private static string? Limpiar(string? valor)
     {
         return string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
+    }
+
+    private static con_empresa_configuracion CrearConfiguracionPorDefecto(cfg_company empresa, string usuario)
+    {
+        var (siglas, valor) = DescomponerTaxId(empresa.tax_id);
+
+        return new con_empresa_configuracion
+        {
+            company_id = empresa.company_id,
+            id_fiscal_siglas = siglas,
+            id_fiscal_valor = valor,
+            direccion = Limpiar(empresa.address),
+            telefonos = Limpiar(empresa.phone),
+            pais = empresa.country_code,
+            email = Limpiar(empresa.email),
+            created_at = DateTime.UtcNow,
+            created_by = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim()
+        };
+    }
+
+    private static (string? siglas, string? valor) DescomponerTaxId(string? taxId)
+    {
+        if (string.IsNullOrWhiteSpace(taxId))
+        {
+            return (null, null);
+        }
+
+        var parts = taxId.Split('-', 2, StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length == 2)
+        {
+            return (parts[0].Trim(), parts[1].Trim());
+        }
+
+        return (null, taxId.Trim());
     }
 
     private static CompanySizeType ParseCompanySize(string? value)

@@ -5,4 +5,5 @@ public record RutaDetailDto(
     int CodCiclo,
     string CodRuta,
     string? Descripcion,
-    string? CicloDescripcion);
+    string? CicloDescripcion,
+    bool Activo);

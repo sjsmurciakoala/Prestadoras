@@ -61,7 +61,9 @@ public partial class con_plan_cuenta : ICompanyScopedEntity
 
     public virtual ICollection<con_plan_cuenta> child_accounts { get; set; } = new List<con_plan_cuenta>();
 
-    public virtual ICollection<con_plantilla_poliza_linea> plantilla_lineas { get; set; } = new List<con_plantilla_poliza_linea>();
+    public virtual ICollection<con_plantilla_partida_dtl> plantilla_lineas { get; set; } = new List<con_plantilla_partida_dtl>();
 
-    public virtual ICollection<con_poliza_linea> poliza_lineas { get; set; } = new List<con_poliza_linea>();
+    public virtual ICollection<con_partida_dtl> poliza_lineas { get; set; } = new List<con_partida_dtl>();
 }
+
+

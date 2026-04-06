@@ -1,0 +1,426 @@
+@page "/letras"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Letras
+@using apc.Client.Pages.Letras
+@using apc.Client.Services.Letras
+@inject LetrasClient Client
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="LetrasToast" MaxToastCount="4" />
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Letras de categorización</h2>
+            <p class="page-subtitle">Catálogo de letras (A, B, C...) usadas en Tarifas y Tarifas Contador</p>
+        </div>
+
+        <DxButton Text="Nueva letra"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="@(() => OpenFormAsync(null))" />
+    </div>
+
+    <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+        Esta vista solo define las letras disponibles. El significado y los valores se configuran en <strong>Tarifas</strong> y <strong>Tarifas Contador</strong>.
+    </DxAlert>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <!-- Panel de filtros (colapsable) -->
+    @if (mostrarFiltros)
+    {
+        <div class="modern-card mb-4">
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+
+                    <DxFormLayoutItem Caption="Búsqueda Rápida" ColSpanXs="12" ColSpanMd="9">
+                        <Template>
+                            <DxTextBox Text="@filtro.Search" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                TextExpression="@(() => filtro.Search)" Placeholder="Escribe para buscar..."
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" InputDelay="600" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanXs="12" ColSpanMd="3" CssClass="align-self-end">
+                        <Template>
+                            <div class="filters-actions">
+                                <DxButton Text="Filtrar" IconCssClass="bi bi-search"
+                                    CssClass="filters-btn filters-btn-primary" RenderStyle="ButtonRenderStyle.Secondary"
+                                    Click="BuscarAsync" />
+
+                                <button type="button" class="filters-link" @onclick="LimpiarFiltrosAsync">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
+    }
+
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="Letra" PageSize="15"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtro.Search" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtro.Search)"
+                                   Placeholder="Buscar letra..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Filtros" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Secondary"
+                            Click="ToggleFiltros" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalLetras.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(LetraListItemDto.Letra)" Caption="Letra" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LetraListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold fs-5">@item.Letra</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(LetraListItemDto.Numero)" Caption="Orden" Width="100px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LetraListItemDto item)
+                            {
+                                <span>@item.Numero?.ToString("0")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LetraListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => OpenFormAsync(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay letras configuradas.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="min(500px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    @PopupSubtitle
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (letraForm != null)
+        {
+            <LetraForm Model="@letraForm"
+                       IsEditMode="@(letraEditKey != null)"
+                       IsBusy="@isBusy"
+                       OnValidSubmit="GuardarAsync"
+                       OnCancel="CerrarFormAsync" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Eliminar letra?</h5>
+            <p class="text-muted">Esta accion no se puede deshacer.</p>
+            @if (letraAEliminar is not null)
+            {
+                <div class="fw-semibold">@letraAEliminar.Letra</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarEliminar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, eliminar"
+                          Click="EliminarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-trash" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private IGrid? grid;
+    private LetrasGridDataSource dataSource = default!;
+
+    private bool formVisible = false;
+    private bool isBusy = false;
+    private string? errorMessage;
+    private int totalLetras = 0;
+    private LetraListItemDto? letraAEliminar;
+    private LetraEditDto? letraForm;
+    private string? letraEditKey;
+    private LetraFilterDto filtro = new();
+    
+    private bool confirmVisible;
+    private bool mostrarFiltros = true;
+
+    private string PopupTitle => letraEditKey == null ? "Nueva letra" : "Editar letra";
+    private string PopupSubtitle => letraEditKey == null ? "Añada una nueva letra al catálogo" : "Actualice la información de la letra";
+    private string PopupIcon => letraEditKey == null ? "bi bi-plus-circle" : "bi bi-pencil-circle";
+    private string PopupIconWrapperClass => letraEditKey == null ? "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center" : "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override void OnInitialized()
+    {
+        dataSource = new LetrasGridDataSource(Client, total =>
+        {
+            totalLetras = total;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private async Task OnBusquedaChanged(string? value)
+    {
+        filtro.Search = value ?? string.Empty;
+        dataSource.Search = filtro.Search;
+        dataSource.Invalidate();
+        await BuscarAsync();
+    }
+
+    private async Task BuscarAsync()
+    {
+        dataSource.Search = filtro.Search;
+        grid?.Reload();
+        await Task.CompletedTask;
+    }
+
+    private async Task LimpiarFiltrosAsync()
+    {
+        filtro.Search = "";
+        dataSource.Search = "";
+        dataSource.Invalidate();
+        grid?.Reload();
+        await Task.CompletedTask;
+    }
+
+    private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
+
+    private void RecargarGrid()
+    {
+        dataSource.Invalidate();
+        grid?.Reload();
+    }
+
+    private void MostrarColumnChooser()
+    {
+        grid?.ShowColumnChooser();
+    }
+
+    private async Task OpenFormAsync(LetraListItemDto? letra)
+    {
+        errorMessage = null;
+
+        if (letra != null)
+        {
+            letraEditKey = letra.Letra;
+            letraForm = new LetraEditDto
+            {
+                Letra = letra.Letra,
+                Numero = letra.Numero
+            };
+        }
+        else
+        {
+            letraEditKey = null;
+            letraForm = new LetraEditDto();
+        }
+
+        formVisible = true;
+        await Task.Delay(50);
+        StateHasChanged();
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (letraForm == null)
+            return;
+
+        isBusy = true;
+        errorMessage = null;
+
+        try
+        {
+            if (letraEditKey == null)
+            {
+                // Crear nueva
+                await Client.CreateAsync(letraForm);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Éxito",
+                    Text = "Letra creada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "LetrasToast"
+                });
+            }
+            else
+            {
+                // Actualizar
+                await Client.UpdateAsync(letraEditKey, letraForm);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Éxito",
+                    Text = "Letra actualizada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "LetrasToast"
+                });
+            }
+
+            dataSource.Invalidate();
+            formVisible = false;
+            letraForm = null;
+            letraEditKey = null;
+            grid?.Reload();
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.Data.Contains("StatusCode"))
+            {
+                var statusCode = (int)ex.Data["StatusCode"]!;
+                errorMessage = statusCode switch
+                {
+                    409 => "Esta letra ya existe en el sistema.",
+                    400 => "Datos inválidos. Verifique que la letra sea un carácter válido y el número esté entre 0 y 9.",
+                    _ => ex.Message
+                };
+            }
+            else
+            {
+                errorMessage = ex.Message;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+        }
+    }
+
+    private async Task CerrarFormAsync()
+    {
+        formVisible = false;
+        letraForm = null;
+        letraEditKey = null;
+        errorMessage = null;
+        await Task.Delay(100);
+    }
+
+    private void ConfirmarEliminar(LetraListItemDto letra)
+    {
+        letraAEliminar = letra;
+        confirmVisible = true;
+    }
+
+    private void CancelarEliminar()
+    {
+        confirmVisible = false;
+        letraAEliminar = null;
+    }
+
+    private async Task EliminarConfirmadoAsync()
+    {
+        if (letraAEliminar == null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        isBusy = true;
+        errorMessage = null;
+
+        try
+        {
+            await Client.DeleteAsync(letraAEliminar.Letra);
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Éxito",
+                Text = "Letra eliminada correctamente.",
+                RenderStyle = ToastRenderStyle.Success,
+                ProviderName = "LetrasToast"
+            });
+            dataSource.Invalidate();
+            grid?.Reload();
+        }
+        catch (HttpRequestException ex)
+        {
+            if (ex.Data.Contains("StatusCode") && (int)ex.Data["StatusCode"]! == 404)
+            {
+                errorMessage = "La letra no existe o ya fue eliminada.";
+            }
+            else
+            {
+                errorMessage = $"Error al eliminar: {ex.Message}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error inesperado: {ex.Message}";
+        }
+        finally
+        {
+            isBusy = false;
+            confirmVisible = false;
+            letraAEliminar = null;
+        }
+    }
+}

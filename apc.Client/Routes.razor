@@ -1,4 +1,9 @@
-﻿<Router AppAssembly="typeof(Program).Assembly">
+﻿@using apc.Client.Services.Tenant
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject TenantCompanyContextClient TenantCompanyContextClient
+
+<Router AppAssembly="typeof(Program).Assembly" OnNavigateAsync="HandleNavigationAsync">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
             <NotAuthorized>
@@ -12,3 +17,75 @@
         </LayoutView>
     </NotFound>
 </Router>
+
+@code {
+    private async Task HandleNavigationAsync(NavigationContext context)
+    {
+        var path = NormalizePath(context.Path);
+        if (IsAccountPath(path))
+        {
+            return;
+        }
+
+        if (IsCompanyRecoveryPath(path))
+        {
+            return;
+        }
+
+        var authenticationState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        if (authenticationState.User.Identity?.IsAuthenticated != true)
+        {
+            return;
+        }
+
+        try
+        {
+            context.CancellationToken.ThrowIfCancellationRequested();
+            var tenantContext = await TenantCompanyContextClient.ObtenerAsync(context.CancellationToken);
+            context.CancellationToken.ThrowIfCancellationRequested();
+            if (tenantContext.HasValidCompany)
+            {
+                return;
+            }
+
+            if (!tenantContext.CanManageCompanies)
+            {
+                NavigationManager.NavigateTo("/Account/Logout", forceLoad: true);
+                return;
+            }
+
+            var recoveryPath = string.IsNullOrWhiteSpace(tenantContext.RecoveryPath)
+                ? (tenantContext.HasCompanies ? "/contabilidad/empresas" : "/contabilidad/empresas/nueva")
+                : NormalizePath(tenantContext.RecoveryPath);
+
+            NavigationManager.NavigateTo(recoveryPath, forceLoad: true);
+        }
+        catch (OperationCanceledException) when (context.CancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login", forceLoad: true);
+        }
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        var value = (path ?? string.Empty).Split('?', '#')[0].Trim();
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "/";
+        }
+
+        return value.StartsWith('/') ? value : "/" + value;
+    }
+
+    private static bool IsAccountPath(string path)
+        => path.Equals("/Account", StringComparison.OrdinalIgnoreCase) ||
+           path.StartsWith("/Account/", StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsCompanyRecoveryPath(string path)
+        => path.Equals("/contabilidad/empresas", StringComparison.OrdinalIgnoreCase) ||
+           path.Equals("/contabilidad/empresas/nueva", StringComparison.OrdinalIgnoreCase) ||
+           path.StartsWith("/contabilidad/empresas/editar/", StringComparison.OrdinalIgnoreCase);
+}

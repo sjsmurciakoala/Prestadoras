@@ -1,0 +1,594 @@
+@page "/medidores"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Medidores
+@using apc.Client.Pages.Medidores
+@using apc.Client.Services.Medidores
+
+@inject MedidoresClient MedidoresClient
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="MedidoresToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Catalogo de Medidores</h2>
+            <p class="page-subtitle">Mantenimiento de medidores instalados</p>
+        </div>
+
+        <DxButton Text="Nuevo medidor"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="AbrirNuevo" />
+    </div>
+
+    @if (mostrarFiltros)
+    {
+        <div class="modern-card mb-4">
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+                    <DxFormLayoutItem Caption="Numero" ColSpanXs="12" ColSpanMd="4">
+                        <Template>
+                            <DxTextBox Text="@filtroNumero"
+                                       TextChanged="@((string v) => OnNumeroChanged(v))"
+                                       Placeholder="Numero del medidor"
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       InputDelay="600" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Marca" ColSpanXs="12" ColSpanMd="4">
+                        <Template>
+                            <DxTextBox Text="@filtroMarca"
+                                       TextChanged="@((string v) => OnMarcaChanged(v))"
+                                       Placeholder="Marca del medidor"
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       InputDelay="600" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Asignado" ColSpanXs="12" ColSpanMd="2">
+                        <Template>
+                            <DxComboBox Data="@AsignadoOptions" TData="BoolFilterOption" TValue="bool?"
+                                        Value="@filtroAsignado"
+                                        ValueChanged="@((bool? v) => OnAsignadoChanged(v))"
+                                        ValueFieldName="@nameof(BoolFilterOption.Value)"
+                                        TextFieldName="@nameof(BoolFilterOption.Text)"
+                                        NullText="Todos"
+                                        DropDownStyle="DropDownStyle.DropDownList" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Estado" ColSpanXs="12" ColSpanMd="2">
+                        <Template>
+                            <div class="pt-md-4 pt-2">
+                                <DxCheckBox Checked="@filtroSoloActivos"
+                                            CheckedChanged="@((bool v) => OnEstadoChanged(v))"
+                                            LabelText=""
+                                            CheckType="CheckType.Switch" />
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanXs="12" ColSpanMd="12" CssClass="align-self-end">
+                        <Template>
+                            <div class="filters-actions">
+                                <DxButton Text="Filtrar"
+                                          IconCssClass="bi bi-search"
+                                          CssClass="filters-btn filters-btn-primary"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="BuscarAsync" />
+
+                                <button type="button" class="filters-link" @onclick="LimpiarFiltrosAsync">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card position-relative">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(MedidorListItemDto.Id)" PageSize="15"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroNumero" TextChanged="@((string v) => OnNumeroChanged(v))"
+                                   TextExpression="@(() => filtroNumero)"
+                                   Placeholder="Buscar numero..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Filtros" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="ToggleFiltros" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalMedidores.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(MedidorListItemDto.Numero)" Caption="Numero" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Numero</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(MedidorListItemDto.Marca)" Caption="Marca" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                <div class="text-truncate" title="@item.Marca">@(string.IsNullOrWhiteSpace(item.Marca) ? "-" : item.Marca)</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(MedidorListItemDto.FechaInstalacion)" Caption="Fecha instalacion" Width="160px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                <span>@(item.FechaInstalacion.HasValue ? item.FechaInstalacion.Value.ToString("dd/MM/yyyy") : "-")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(MedidorListItemDto.Diametro)" Caption="Diametro" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                <span>@(item.Diametro.HasValue ? item.Diametro.Value.ToString("n2") : "-")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(MedidorListItemDto.Acueducto)" Caption="Acueducto" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                <div class="text-truncate" title="@item.Acueducto">@(string.IsNullOrWhiteSpace(item.Acueducto) ? "-" : item.Acueducto)</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(MedidorListItemDto.Empleado)" Caption="Empleado" MinWidth="200">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                <div class="text-truncate" title="@item.Empleado">@(string.IsNullOrWhiteSpace(item.Empleado) ? "-" : item.Empleado)</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Cliente" MinWidth="220" AllowSort="false">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                var clienteTexto = string.Empty;
+                                if (!string.IsNullOrWhiteSpace(item.ClienteNombre))
+                                {
+                                    clienteTexto = string.IsNullOrWhiteSpace(item.ClienteClave)
+                                        ? item.ClienteNombre
+                                        : $"{item.ClienteClave} - {item.ClienteNombre}";
+                                }
+                                else if (!string.IsNullOrWhiteSpace(item.ClienteClave))
+                                {
+                                    clienteTexto = item.ClienteClave;
+                                }
+                                else
+                                {
+                                    clienteTexto = "Sin asignar";
+                                }
+
+                                <div class="text-truncate" title="@clienteTexto">@clienteTexto</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                if (item.Activo)
+                                {
+                                    <span class="badge-status active">ACTIVO</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">INACTIVO</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="160px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is MedidorListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay medidores para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="min(780px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando medidor..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3">
+                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+            </div>
+        }
+        else
+        {
+            <MedidorForm Model="formModel"
+                         OnValidSubmit="GuardarAsync"
+                         OnCancel="CerrarForm"
+                         IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Desactivar medidor?</h5>
+            <p class="text-muted">El medidor pasara a estado inactivo pero no se eliminara del sistema.</p>
+            @if (medidorParaDesactivar is not null)
+            {
+                <div class="fw-semibold">@medidorParaDesactivar.Numero - @(medidorParaDesactivar.Marca ?? "-")</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarDesactivar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, desactivar"
+                          Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private MedidoresGridDataSource dataSource = default!;
+
+    private string filtroNumero = string.Empty;
+    private string filtroMarca = string.Empty;
+    private bool? filtroAsignado;
+    private bool filtroSoloActivos = true;
+    private bool mostrarFiltros = true;
+
+    private string? errorMessage;
+    private int totalMedidores;
+
+    private bool formVisible;
+    private bool formLoading;
+    private bool isSaving;
+    private string? formError;
+    private MedidorEditDto formModel = new();
+
+    private bool confirmVisible;
+    private MedidorListItemDto? medidorParaDesactivar;
+
+    private static readonly BoolFilterOption[] AsignadoOptions = new[]
+    {
+        new BoolFilterOption("Todos", null),
+        new BoolFilterOption("Asignados", true),
+        new BoolFilterOption("Sin asignar", false)
+    };
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar medidor" : "Nuevo medidor";
+    private string PopupSubtitle => formModel.Id.HasValue
+        ? "Actualice la informacion del medidor"
+        : "Complete el formulario de registro";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-speedometer2";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override void OnInitialized()
+    {
+        dataSource = new MedidoresGridDataSource(MedidoresClient, OnGridStateChanged);
+        ApplyFilters();
+    }
+
+    private void OnGridStateChanged()
+    {
+        errorMessage = dataSource.LastError;
+        totalMedidores = dataSource.LastTotalCount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyFilters()
+    {
+        dataSource.Numero = filtroNumero;
+        dataSource.Marca = filtroMarca;
+        dataSource.Asignado = filtroAsignado;
+        dataSource.SoloActivos = filtroSoloActivos;
+    }
+
+    private async Task OnNumeroChanged(string valor)
+    {
+        filtroNumero = valor;
+        await BuscarAsync();
+    }
+
+    private async Task OnMarcaChanged(string valor)
+    {
+        filtroMarca = valor;
+        await BuscarAsync();
+    }
+
+    private async Task OnAsignadoChanged(bool? valor)
+    {
+        filtroAsignado = valor;
+        await BuscarAsync();
+    }
+
+    private async Task OnEstadoChanged(bool valor)
+    {
+        filtroSoloActivos = valor;
+        await BuscarAsync();
+    }
+
+    private Task BuscarAsync()
+    {
+        ApplyFilters();
+        dataSource.Invalidate();
+        grid?.Reload();
+        return Task.CompletedTask;
+    }
+
+    private async Task LimpiarFiltrosAsync()
+    {
+        filtroNumero = string.Empty;
+        filtroMarca = string.Empty;
+        filtroAsignado = null;
+        filtroSoloActivos = true;
+        await BuscarAsync();
+    }
+
+    private void RecargarGrid()
+    {
+        dataSource.Invalidate();
+        grid?.Reload();
+    }
+
+    private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void AbrirNuevo()
+    {
+        formError = null;
+        formModel = new MedidorEditDto { Activo = true };
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null;
+        formLoading = true;
+        formVisible = true;
+
+        try
+        {
+            var detalle = await MedidoresClient.GetEditByIdAsync(id);
+            if (detalle is null)
+            {
+                formError = "No se encontro el medidor.";
+                formModel = new MedidorEditDto { Activo = true };
+                return;
+            }
+
+            formModel = detalle;
+        }
+        catch (Exception ex)
+        {
+            formError = $"Error al cargar el medidor: {ex.Message}";
+        }
+        finally
+        {
+            formLoading = false;
+        }
+    }
+
+    private void CerrarForm()
+    {
+        if (isSaving)
+        {
+            return;
+        }
+
+        formVisible = false;
+        formError = null;
+        formModel = new MedidorEditDto();
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+
+        try
+        {
+            if (formModel.Id.HasValue)
+            {
+                await MedidoresClient.UpdateAsync(formModel.Id.Value, formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Medidor actualizado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "MedidoresToast"
+                });
+            }
+            else
+            {
+                await MedidoresClient.CreateAsync(formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Medidor registrado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "MedidoresToast"
+                });
+            }
+
+            formVisible = false;
+            formModel = new MedidorEditDto();
+            dataSource.Invalidate();
+            grid?.Reload();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "MedidoresToast"
+            });
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(MedidorListItemDto medidor)
+    {
+        medidorParaDesactivar = medidor;
+        confirmVisible = true;
+    }
+
+    private void CancelarDesactivar()
+    {
+        confirmVisible = false;
+        medidorParaDesactivar = null;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (medidorParaDesactivar is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await MedidoresClient.DeactivateAsync(medidorParaDesactivar.Id);
+            if (!ok)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Error",
+                    Text = "No se pudo desactivar el medidor.",
+                    RenderStyle = ToastRenderStyle.Danger,
+                    ProviderName = "MedidoresToast"
+                });
+            }
+            else
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Medidor desactivado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "MedidoresToast"
+                });
+
+                dataSource.Invalidate();
+                grid?.Reload();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "MedidoresToast"
+            });
+        }
+        finally
+        {
+            confirmVisible = false;
+            medidorParaDesactivar = null;
+        }
+    }
+
+    private sealed record BoolFilterOption(string Text, bool? Value);
+}

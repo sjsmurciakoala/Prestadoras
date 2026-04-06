@@ -1,0 +1,208 @@
+@page "/proveedores/nuevo"
+@page "/proveedores/{codigo}/editar"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject ILogger<ProveedorEdit> Logger
+@using apc.Client.Services.Proveedores
+@using Microsoft.AspNetCore.Authorization
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Proveedores
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">@TituloPagina</h2>
+            <p class="page-subtitle">@SubtituloPagina</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card">
+        @if (isLoading)
+        {
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+        }
+        else
+        {
+            <ProveedorForm Model="model"
+                           Tipos="tipos"
+                           CuentasContables="cuentasContables"
+                           IsEdit="IsEdit"
+                           OnValidSubmit="GuardarAsync"
+                           OnCancel="Volver"
+                           IsBusy="isSaving" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string? Codigo { get; set; }
+
+    private readonly List<ProveedorTipoLookupDto> tipos = new();
+    private readonly List<CuentaContableLookupDto> cuentasContables = new();
+    private ProveedorUpsertDto model = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private string? errorMessage;
+
+    private bool IsEdit => !string.IsNullOrWhiteSpace(Codigo);
+    private string SubtituloPagina => IsEdit
+        ? "Actualice la informacion del proveedor."
+        : "Registre un nuevo proveedor.";
+    private string TituloPagina
+    {
+        get
+        {
+            if (!IsEdit)
+            {
+                return "Nuevo proveedor";
+            }
+
+            var codigoMostrar = string.IsNullOrWhiteSpace(model.Codigo)
+                ? Codigo?.Trim()
+                : model.Codigo.Trim();
+
+            var nombreMostrar = model.Nombre?.Trim();
+            if (string.IsNullOrWhiteSpace(nombreMostrar))
+            {
+                return $"Editar proveedor {codigoMostrar}";
+            }
+
+            return $"Editar proveedor {codigoMostrar} - {nombreMostrar}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            await Task.WhenAll(
+                CargarTiposAsync(),
+                CargarCuentasContablesAsync());
+            if (IsEdit)
+            {
+                await CargarProveedorAsync();
+            }
+            else
+            {
+                model = new ProveedorUpsertDto
+                {
+                    Activo = true,
+                    CodTipoProveedor = 0
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar la pantalla: {ex.Message}";
+            Logger.LogError(ex, "Error al cargar pantalla de proveedor.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarTiposAsync()
+    {
+        var data = await ProveedoresClient.ObtenerTiposAsync();
+        tipos.Clear();
+        tipos.AddRange(data ?? Array.Empty<ProveedorTipoLookupDto>());
+    }
+
+    private async Task CargarCuentasContablesAsync()
+    {
+        var data = await ProveedoresClient.ObtenerCuentasContablesAsync();
+        cuentasContables.Clear();
+        cuentasContables.AddRange(data ?? Array.Empty<CuentaContableLookupDto>());
+    }
+
+    private async Task CargarProveedorAsync()
+    {
+        var codigo = Codigo?.Trim();
+        if (string.IsNullOrWhiteSpace(codigo))
+        {
+            errorMessage = "Codigo invalido.";
+            return;
+        }
+
+        var detail = await ProveedoresClient.ObtenerPorCodigoAsync(codigo);
+        if (detail is null)
+        {
+            errorMessage = $"No se encontro el proveedor {codigo}.";
+            return;
+        }
+
+        model = new ProveedorUpsertDto
+        {
+            Codigo = detail.Codigo,
+            CodTipoProveedor = detail.CodTipoProveedor > 0 ? detail.CodTipoProveedor : 0,
+            Nombre = detail.Nombre,
+            RazonSocial = detail.RazonSocial,
+            Rtn = detail.Rtn,
+            Direccion = detail.Direccion ?? string.Empty,
+            NombreContacto = detail.NombreContacto,
+            Telefono = detail.Telefono,
+            Email = detail.Email,
+            CuentaContable = detail.CuentaContable ?? string.Empty,
+            CuentaBancaria = detail.CuentaBancaria ?? string.Empty,
+            Banco1 = detail.Banco1,
+            Banco2 = detail.Banco2,
+            Activo = detail.Activo
+        };
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+
+            if (IsEdit)
+            {
+                await ProveedoresClient.ActualizarAsync(model.Codigo, model);
+            }
+            else
+            {
+                await ProveedoresClient.CrearAsync(model);
+            }
+
+            Navigation.NavigateTo("/proveedores");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo guardar el proveedor: {ex.Message}";
+            Logger.LogError(ex, "Error al guardar proveedor {ProveedorCodigo}", model.Codigo);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/proveedores");
+}

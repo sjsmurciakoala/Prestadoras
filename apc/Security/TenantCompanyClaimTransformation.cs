@@ -16,6 +16,11 @@ public sealed class TenantCompanyClaimTransformation : IClaimsTransformation
             return Task.FromResult(principal);
         }
 
+        if (principal.IsInRole(RoleNames.SuperAdministrador))
+        {
+            return Task.FromResult(principal);
+        }
+
         var companyClaim = principal.FindFirst(TenantClaimTypes.CompanyId)?.Value;
         if (long.TryParse(companyClaim, NumberStyles.Integer, CultureInfo.InvariantCulture, out var companyId) && companyId > 0)
         {

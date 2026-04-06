@@ -1,10 +1,10 @@
-using System.Net.Http.Json;
+﻿using System.Net.Http.Json;
 using SIAD.Core.DTOs.Contabilidad;
 
 namespace apc.Client.Services.Contabilidad;
 
 /// <summary>
-/// Cliente para interactuar con el API de períodos contables.
+/// Cliente para interactuar con el API de periodos contables.
 /// </summary>
 public sealed class PeriodosContablesClient
 {
@@ -16,7 +16,7 @@ public sealed class PeriodosContablesClient
     }
 
     /// <summary>
-    /// Obtiene el período activo de una empresa.
+    /// Obtiene el periodo activo de una empresa.
     /// </summary>
     public async Task<PeriodoContableDto?> ObtenerPeriodoActivoAsync(long companyId, CancellationToken ct = default)
     {
@@ -38,18 +38,29 @@ public sealed class PeriodosContablesClient
     }
 
     /// <summary>
-    /// Valida que exista un período abierto.
+    /// Valida que exista un periodo abierto.
     /// </summary>
     public async Task<bool> ExistePeriodoAbiertoAsync(long companyId, CancellationToken ct = default)
     {
         try
         {
             var response = await _httpClient.GetAsync($"api/contabilidad/periodos/{companyId}/existe-abierto", ct);
-            return response.IsSuccessStatusCode;
+            if (!response.IsSuccessStatusCode)
+            {
+                return false;
+            }
+
+            var resultado = await response.Content.ReadFromJsonAsync<ExistePeriodoAbiertoResponse>(cancellationToken: ct);
+            return resultado?.Existe ?? false;
         }
         catch
         {
             return false;
         }
+    }
+
+    private sealed class ExistePeriodoAbiertoResponse
+    {
+        public bool Existe { get; set; }
     }
 }

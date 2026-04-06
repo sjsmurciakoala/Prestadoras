@@ -24,6 +24,26 @@ public class MiscelaneoCatalogoDto
     public string Codigo { get; set; } = string.Empty;
     public string Nombre { get; set; } = string.Empty;
     public decimal ValorUnitario { get; set; }
+    public long? ContAccountId { get; set; }
+    public string? CuentaContableDisplay { get; set; }
+}
+
+public class MiscelaneoCatalogoEditDto
+{
+    public int? Id { get; set; }
+
+    [Required(ErrorMessage = "El codigo es obligatorio.")]
+    [StringLength(20, ErrorMessage = "El codigo no puede superar 20 caracteres.")]
+    public string Codigo { get; set; } = string.Empty;
+
+    [Required(ErrorMessage = "El nombre es obligatorio.")]
+    [StringLength(100, ErrorMessage = "El nombre no puede superar 100 caracteres.")]
+    public string Nombre { get; set; } = string.Empty;
+
+    [Range(0, 9999999, ErrorMessage = "El valor debe ser mayor o igual a cero.")]
+    public decimal ValorUnitario { get; set; }
+
+    public long? ContAccountId { get; set; }
 }
 
 public class MiscelaneoDetalleDto

@@ -27,6 +27,13 @@ public sealed class TenantCompanyService : ITenantCompanyService
             .ToListAsync(ct);
     }
 
+    public Task<bool> HayEmpresasAsync(CancellationToken ct = default)
+    {
+        return _context.cfg_companies
+            .AsNoTracking()
+            .AnyAsync(ct);
+    }
+
     public Task<bool> ExisteEmpresaAsync(long companyId, CancellationToken ct = default)
     {
         return _context.cfg_companies

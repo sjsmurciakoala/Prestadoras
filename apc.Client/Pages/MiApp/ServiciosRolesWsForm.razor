@@ -1,0 +1,71 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.AppLectores
+@using apc.Client.Pages.MiApp
+
+<EditForm Model="@Model" OnValidSubmit="@OnValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+
+    <div class="form-scrollable-content">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutGroup Caption="Asignación de roles" ColSpanXs="12">
+                <DxFormLayoutItem Caption="Rol *" ColSpanXs="12" ColSpanMd="4">
+                    <DxComboBox Data="@Roles"
+                                @bind-Value="@Model.Rol"
+                                DropDownStyle="DropDownStyle.DropDown"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                NullText="Ej: agua, alcantarillado..." />
+                    <ValidationMessage For="() => Model.Rol" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Servicio *" ColSpanXs="12" ColSpanMd="8">
+                    <DxComboBox Data="@Servicios"
+                                @bind-Value="@Model.Codigo"
+                                ValueFieldName="@nameof(ServicioLookupItem.Codigo)"
+                                TextFieldName="@nameof(ServicioLookupItem.Label)"
+                                DropDownStyle="DropDownStyle.DropDownList"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                NullText="Seleccione servicio" />
+                    <ValidationMessage For="() => Model.Codigo" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Descripción" ColSpanXs="12">
+                    <DxTextBox @bind-Text="@Model.Descripcion"
+                               NullText="Opcional"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    <ValidationMessage For="() => Model.Descripcion" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem ColSpanXs="12">
+                    <Template>
+                        <div class="d-flex gap-4 p-3 status-checkbox-container">
+                            <DxCheckBox @bind-Checked="@Model.Activo">
+                                <span class="fw-bold text-success"><i class="bi bi-check-circle-fill me-1"></i>Activo</span>
+                            </DxCheckBox>
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+        </DxFormLayout>
+    </div>
+
+    <div class="form-actions">
+        <DxButton Text="@(IsBusy ? "Guardando..." : "Guardar")"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Enabled="@(!IsBusy)"
+                  SubmitOnClick="true"
+                  IconCssClass="bi bi-save" />
+        <DxButton Text="Cancelar"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  Enabled="@(!IsBusy)"
+                  Click="@OnCancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter] public ServicioRolWsEditDto Model { get; set; } = new();
+    [Parameter] public IReadOnlyList<string> Roles { get; set; } = Array.Empty<string>();
+    [Parameter] public IReadOnlyList<ServicioLookupItem> Servicios { get; set; } = Array.Empty<ServicioLookupItem>();
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+}

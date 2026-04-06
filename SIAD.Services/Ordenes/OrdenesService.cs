@@ -17,6 +17,15 @@ public class OrdenesService : IOrdenesService
     private readonly SiadDbContext _context;
 
     private sealed record CatalogoItem(string Codigo, string Descripcion);
+    private sealed record EstadoFallback(string Codigo, string Nombre, bool PermiteAsignacion);
+
+    private static readonly EstadoFallback[] EstadosFallback =
+    {
+        new("P", "Pendiente", false),
+        new("A", "Asignada", true),
+        new("E", "Ejecutada", true),
+        new("C", "Cancelada", true)
+    };
 
     public OrdenesService(SiadDbContext context)
     {
@@ -182,6 +191,7 @@ public class OrdenesService : IOrdenesService
         return ordenes.Select(o =>
         {
             var fecha = o.fecha.ToDateTime(TimeOnly.MinValue);
+            var estadoCodigo = NormalizeEstadoCodigo(o.estado);
             clientePorClave.TryGetValue(o.maestro_cliente_clave, out var cliente);
             string propietario = cliente?.maestro_cliente_nombre ?? o.maestro_cliente_clave;
             string? direccion = null;
@@ -200,13 +210,13 @@ public class OrdenesService : IOrdenesService
 
             string? estadoDescripcion = null;
             orden_trabajo_estado? estadoCatalogo = null;
-            if (!string.IsNullOrWhiteSpace(o.estado) && estadosCatalogo.TryGetValue(o.estado, out var estadoDto))
+            if (!string.IsNullOrWhiteSpace(estadoCodigo) && estadosCatalogo.TryGetValue(estadoCodigo, out var estadoDto))
             {
                 estadoCatalogo = estadoDto;
                 estadoDescripcion = estadoDto.nombre;
             }
 
-            estadoDescripcion ??= MapEstadoDescripcion(o.estado);
+            estadoDescripcion ??= MapEstadoDescripcion(estadoCodigo);
 
             return new OrdenTrabajoListItemDto(
                 o.orden_id,
@@ -220,7 +230,7 @@ public class OrdenesService : IOrdenesService
                 o.empleado,
                 o.tipo,
                 tipoDescripcion,
-                estadoCatalogo?.codigo ?? o.estado,
+                estadoCatalogo?.codigo ?? estadoCodigo ?? string.Empty,
                 estadoDescripcion,
                 o.usuario);
         }).ToList();
@@ -296,16 +306,17 @@ public class OrdenesService : IOrdenesService
 
         tipoDescripcion ??= MapTipoDescripcion(orden.tipo);
 
+        var estadoCodigo = NormalizeEstadoCodigo(orden.estado);
         string? estadoDescripcion = null;
         orden_trabajo_estado? estadoCatalogo = null;
-        if (!string.IsNullOrWhiteSpace(orden.estado))
+        if (!string.IsNullOrWhiteSpace(estadoCodigo))
         {
             estadoCatalogo = await _context.orden_trabajo_estados.AsNoTracking()
-                .FirstOrDefaultAsync(e => e.codigo == orden.estado, cancellationToken);
+                .FirstOrDefaultAsync(e => e.codigo == estadoCodigo, cancellationToken);
             estadoDescripcion = estadoCatalogo?.nombre;
         }
 
-        estadoDescripcion ??= MapEstadoDescripcion(orden.estado);
+        estadoDescripcion ??= MapEstadoDescripcion(estadoCodigo);
 
         return new OrdenTrabajoDetailDto(
             orden.orden_id,
@@ -316,7 +327,7 @@ public class OrdenesService : IOrdenesService
             fecha,
             orden.fecha_creacion,
             orden.concepto,
-            estadoCatalogo?.codigo ?? orden.estado,
+            estadoCatalogo?.codigo ?? estadoCodigo ?? string.Empty,
             estadoDescripcion,
             orden.empleado,
             orden.usuario,
@@ -565,6 +576,22 @@ public class OrdenesService : IOrdenesService
             .Take(limite)
             .ToListAsync(cancellationToken);
 
+        if (estados.Count == 0)
+        {
+            IEnumerable<EstadoFallback> fallback = EstadosFallback;
+            if (!string.IsNullOrWhiteSpace(texto))
+            {
+                fallback = fallback.Where(e =>
+                    e.Nombre.Contains(texto.Trim(), StringComparison.OrdinalIgnoreCase) ||
+                    e.Codigo.Contains(texto.Trim(), StringComparison.OrdinalIgnoreCase));
+            }
+
+            return fallback
+                .Take(limite)
+                .Select(e => new OrdenTrabajoEstadoDto(e.Codigo, e.Nombre, e.PermiteAsignacion))
+                .ToList();
+        }
+
         return estados
             .Select(e => new OrdenTrabajoEstadoDto(
                 e.codigo,
@@ -643,14 +670,20 @@ public class OrdenesService : IOrdenesService
 
     private static string MapEstadoDescripcion(string? estado)
     {
-        return estado switch
+        var codigo = NormalizeEstadoCodigo(estado);
+        return codigo switch
         {
             "P" => "Pendiente",
             "A" => "Asignada",
             "E" => "Ejecutada",
             "C" => "Cancelada",
-            _ => string.IsNullOrWhiteSpace(estado) ? "Sin estado" : estado
+            _ => string.IsNullOrWhiteSpace(codigo) ? "Sin estado" : codigo
         };
+    }
+
+    private static string? NormalizeEstadoCodigo(string? estado)
+    {
+        return string.IsNullOrWhiteSpace(estado) ? null : estado.Trim().ToUpperInvariant();
     }
 
     private static bool ToBoolean(BitArray? bitArray)

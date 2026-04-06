@@ -1,0 +1,398 @@
+@page "/informes/partidas-contabilidad"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Net.Http.Json
+@using apc.Client.Services.Contabilidad
+@using apc.Client.Services.Informes
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Informes
+@inject HttpClient Http
+@inject InformesClient InformesClient
+@inject PolizasClient PolizasClient
+
+<PageTitle>Partidas de Contabilidad</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Partidas de Contabilidad</h2>
+            <p class="page-subtitle">Consulta web para filtrar pólizas, revisar montos y abrir su detalle sin pasar por preimpresión.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Consultar"
+                      Click="ConsultarAsync"
+                      IconCssClass="bi bi-search"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(!isLoading)" />
+            <DxButton Text="Limpiar"
+                      Click="LimpiarFiltros"
+                      IconCssClass="bi bi-eraser"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Enabled="@(!isLoading)" />
+            <DxButton Text="Exportar"
+                      Enabled="false"
+                      IconCssClass="bi bi-download"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Imprimir"
+                      Enabled="false"
+                      IconCssClass="bi bi-printer"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card mb-3 p-4">
+        <DxFormLayout ColCountMd="12">
+            <DxFormLayoutItem Caption="Período" ColSpanMd="3">
+                <DxComboBox Data="@periodos"
+                            TData="PeriodoContableDto"
+                            TValue="long?"
+                            @bind-Value="filtro.PeriodId"
+                            TextFieldName="@nameof(PeriodoContableDto.Name)"
+                            ValueFieldName="@nameof(PeriodoContableDto.PeriodId)"
+                            NullText="Todos"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Diario" ColSpanMd="3">
+                <DxComboBox Data="@diarios"
+                            TData="DiarioDto"
+                            TValue="long?"
+                            @bind-Value="filtro.JournalId"
+                            TextFieldName="@nameof(DiarioDto.Name)"
+                            ValueFieldName="@nameof(DiarioDto.JournalId)"
+                            NullText="Todos"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tipo" ColSpanMd="3">
+                <DxComboBox Data="@tiposTransaccion"
+                            TData="TipoTransaccionDto"
+                            TValue="long?"
+                            @bind-Value="filtro.TypeId"
+                            TextFieldName="@nameof(TipoTransaccionDto.Name)"
+                            ValueFieldName="@nameof(TipoTransaccionDto.TypeId)"
+                            NullText="Todos"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado" ColSpanMd="3">
+                <DxComboBox Data="@statusOptions"
+                            TData="StatusOption"
+                            TValue="short?"
+                            @bind-Value="filtro.Status"
+                            TextFieldName="@nameof(StatusOption.Text)"
+                            ValueFieldName="@nameof(StatusOption.Value)"
+                            NullText="Todos" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Desde" ColSpanMd="2">
+                <DxDateEdit @bind-Date="filtro.FechaDesde" NullText="Inicio" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Hasta" ColSpanMd="2">
+                <DxDateEdit @bind-Date="filtro.FechaHasta" NullText="Fin" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Buscar" ColSpanMd="8">
+                <DxTextBox @bind-Text="filtro.Search"
+                           Placeholder="Número de póliza, documento, referencia o descripción"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="row g-3 mb-3">
+        <div class="col-12 col-md-4">
+            <div class="modern-card p-3 h-100">
+                <div class="text-muted small">Resultados</div>
+                <div class="fs-3 fw-semibold">@resultado.TotalCount.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="modern-card p-3 h-100">
+                <div class="text-muted small">Débito acumulado</div>
+                <div class="fs-3 fw-semibold">@resultado.TotalDebit.ToString("N2")</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-4">
+            <div class="modern-card p-3 h-100">
+                <div class="text-muted small">Crédito acumulado</div>
+                <div class="fs-3 fw-semibold">@resultado.TotalCredit.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative" style="min-height: 360px;">
+        @if (isLoading)
+        {
+            <div class="d-flex justify-content-center align-items-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else
+        {
+            <div class="grid-wrapper">
+                <DxGrid Data="@resultado.Items"
+                        KeyFieldName="@nameof(PartidasInformeItemDto.PolizaId)"
+                        PageSize="15"
+                        SizeMode="SizeMode.Medium"
+                        CssClass="grid-modern">
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <span class="text-muted small">La consulta muestra datos web; exportar e imprimir se conectarán en la siguiente fase.</span>
+                            <div class="ms-auto text-muted small">
+                                Mostrando: <span class="fw-semibold">@resultado.Items.Count</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.PolizaNumber)" Caption="Póliza" Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.PolizaDate)" Caption="Fecha" Width="120px" DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.PeriodoCode)" Caption="Período" Width="120px" />
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.DiarioCode)" Caption="Diario" Width="110px" />
+                        <DxGridDataColumn Caption="Tipo" MinWidth="220">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is PartidasInformeItemDto item)
+                                {
+                                    <span>@GetTipoLabel(item)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.DocumentType)" Caption="Documento" Width="130px" />
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.Description)" Caption="Descripción" MinWidth="260" />
+                        <DxGridDataColumn Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is PartidasInformeItemDto item)
+                                {
+                                    <span class="badge-status @GetStatusCss(item.Status)">
+                                        @GetStatusText(item.Status)
+                                    </span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.TotalDebit)" Caption="Débito" Width="120px" DisplayFormat="N2" />
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.TotalCredit)" Caption="Crédito" Width="120px" DisplayFormat="N2" />
+                        <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is PartidasInformeItemDto item)
+                                {
+                                    <button type="button"
+                                            class="btn-icon btn-edit"
+                                            title="Ver detalle"
+                                            @onclick="() => AbrirDetalleAsync(item.PolizaId)"
+                                            @onclick:stopPropagation="true">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">No hay partidas que coincidan con los filtros actuales.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<DxPopup @bind-Visible="isDetalleVisible"
+         Width="960px"
+         ShowCloseButton="true"
+         HeaderText="@detalleTitulo">
+    <BodyTemplate Context="popupContext">
+        @if (isDetalleLoading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else if (detalleActual is null)
+        {
+            <div class="text-muted">No se pudo cargar el detalle de la póliza.</div>
+        }
+        else
+        {
+            <div class="mb-3">
+                <div class="fw-semibold">@detalleActual.PolizaNumber</div>
+                <div class="text-muted small">@GetDetalleResumen(detalleActual)</div>
+                <div class="text-muted small">@GetDetalleTotales(detalleActual)</div>
+            </div>
+
+            <DxGrid Data="@detalleActual.Lineas"
+                    KeyFieldName="@nameof(PolizaLineaConDetallesDto.LineaId)"
+                    PageSize="10"
+                    SizeMode="SizeMode.Small">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.AccountCode)" Caption="Cuenta" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.AccountName)" Caption="Descripción" MinWidth="240" />
+                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.CostCenterCode)" Caption="Centro costo" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.Description)" Caption="Detalle" MinWidth="220" />
+                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.DebitAmount)" Caption="Débito" Width="120px" DisplayFormat="N2" />
+                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.CreditAmount)" Caption="Crédito" Width="120px" DisplayFormat="N2" />
+                </Columns>
+            </DxGrid>
+        }
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private readonly StatusOption[] statusOptions =
+    [
+        new(null, "Todos"),
+        new(0, "Draft"),
+        new(1, "Posted"),
+        new(2, "Void")
+    ];
+
+    private readonly PartidasInformeResultadoDto emptyResult = new([], 0, 0m, 0m);
+
+    private PartidasInformeFiltroDto filtro = new()
+    {
+        Take = 250,
+        FechaDesde = DateTime.Today.AddMonths(-1),
+        FechaHasta = DateTime.Today
+    };
+
+    private PartidasInformeResultadoDto resultado = new([], 0, 0m, 0m);
+    private PeriodoContableDto[] periodos = [];
+    private DiarioDto[] diarios = [];
+    private TipoTransaccionDto[] tiposTransaccion = [];
+    private bool isLoading;
+    private bool isDetalleVisible;
+    private bool isDetalleLoading;
+    private string? errorMessage;
+    private string detalleTitulo = "Detalle de póliza";
+    private PolizaConLineasDto? detalleActual;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadLookupsAsync();
+        await ConsultarAsync();
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            var periodosTask = Http.GetFromJsonAsync<PeriodoContableDto[]>("api/contabilidad/catalogos/periodos");
+            var diariosTask = Http.GetFromJsonAsync<DiarioDto[]>("api/contabilidad/catalogos/diarios");
+            var tiposTask = Http.GetFromJsonAsync<TipoTransaccionDto[]>("api/contabilidad/catalogos/tipos-transaccion");
+
+            await Task.WhenAll(periodosTask!, diariosTask!, tiposTask!);
+
+            periodos = periodosTask?.Result ?? [];
+            diarios = diariosTask?.Result ?? [];
+            tiposTransaccion = tiposTask?.Result ?? [];
+            var periodoVigente = GetPeriodoOperativoAbierto();
+
+            if (periodoVigente is not null)
+            {
+                filtro.PeriodId = periodoVigente.PeriodId;
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task ConsultarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            resultado = await InformesClient.ConsultarPartidasAsync(filtro);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            resultado = emptyResult;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void LimpiarFiltros()
+    {
+        var periodoVigente = GetPeriodoOperativoAbierto();
+
+        filtro = new PartidasInformeFiltroDto
+        {
+            PeriodId = periodoVigente?.PeriodId,
+            Take = 250,
+            FechaDesde = DateTime.Today.AddMonths(-1),
+            FechaHasta = DateTime.Today
+        };
+
+        _ = ConsultarAsync();
+    }
+
+    private PeriodoContableDto? GetPeriodoOperativoAbierto()
+    {
+        var abiertos = periodos
+            .Where(x => EstadoPeriodoHelper.IsOpen(x.StatusId))
+            .ToList();
+
+        return abiertos.Count == 1 ? abiertos[0] : null;
+    }
+
+    private async Task AbrirDetalleAsync(long polizaId)
+    {
+        try
+        {
+            isDetalleVisible = true;
+            isDetalleLoading = true;
+            detalleActual = null;
+            detalleTitulo = $"Detalle de póliza #{polizaId}";
+            detalleActual = await PolizasClient.ObtenerAsync(polizaId);
+            if (detalleActual is not null)
+            {
+                detalleTitulo = $"Detalle de {detalleActual.PolizaNumber}";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isDetalleLoading = false;
+        }
+    }
+
+    private static string GetStatusText(short status) => status switch
+    {
+        1 => "Posted",
+        2 => "Void",
+        _ => "Draft"
+    };
+
+    private static string GetStatusCss(short status) => status switch
+    {
+        1 => "badge-status--success",
+        2 => "badge-status--danger",
+        _ => "badge-status--warning"
+    };
+
+    private static string GetTipoLabel(PartidasInformeItemDto item)
+    {
+        if (string.IsNullOrWhiteSpace(item.TipoCode))
+        {
+            return item.TipoNombre;
+        }
+
+        return $"{item.TipoCode} - {item.TipoNombre}";
+    }
+
+    private static string GetDetalleResumen(PolizaConLineasDto detalle) =>
+        $"Fecha: {detalle.PolizaDate:dd/MM/yyyy} | Módulo: {detalle.Module} | Documento: {detalle.DocumentType}";
+
+    private static string GetDetalleTotales(PolizaConLineasDto detalle) =>
+        $"Débito: {detalle.TotalDebit:N2} | Crédito: {detalle.TotalCredit:N2}";
+
+    private sealed record StatusOption(short? Value, string Text);
+}

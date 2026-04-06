@@ -19,11 +19,7 @@ public partial class configuracion_tasa
 
     public DateTime? fechamodificacion { get; set; }
 
-    public int? tarifa_catalogo_id { get; set; }
-
     public virtual ICollection<configuracion_tasas_detalle> configuracion_tasas_detalles { get; set; } = new List<configuracion_tasas_detalle>();
 
     public virtual cliente_maestro maestro_cliente { get; set; } = null!;
-
-    public virtual tarifas_catalogo? tarifa_catalogo { get; set; }
 }

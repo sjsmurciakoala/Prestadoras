@@ -1,130 +1,121 @@
-﻿@implements IDisposable
 @inherits LayoutComponentBase
-@using apc.Client.Services.Tenant;
-@using DevExpress.Blazor;
-@inject NavigationManager NavigationManager
-@inject TenantState TenantState
+@using DevExpress.Blazor
+@using apc.Client.Services.Layout
+@inject SidebarStateService SidebarState
+@implements IDisposable
+<DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall"
+                    IsActive="@isXSmall"
+                    IsActiveChanged="@OnXSmallChanged" />
 
-<DxToastProvider Name="GlobalToast"
-                 MaxToastCount="4" />
-<DxDialogProvider />
+<AuthorizeView>
+    <Authorized>
+        <div class="page">
+            @if (isXSmall)
+            {
+                <div class="mobile-topbar">
+                    <button type="button" class="mobile-toggle" @onclick="ToggleDrawer" aria-label="Abrir navegación">
+                        <i class="bi bi-list"></i>
+                    </button>
+                    <span class="mobile-topbar__title">HODSOFT</span>
+                </div>
+            }
 
-<div class="page">
-    @if (IsAccountRoute)
-    {
-        <div class="account-host">
-            @Body
+            <DxDrawer IsOpen="@IsOpen"
+                      IsOpenChanged="@OnIsOpenChanged"
+                      Mode="@DrawerMode"
+                      Position="DrawerPosition.Left"
+                      PanelWidth="@PanelWidth"
+                      MiniModeEnabled="@EnableMiniMode"
+                      MiniPanelWidth="@MiniPanelWidth"
+                      CssClass="app-drawer"
+                      OpenCssClass="app-drawer--open"
+                      MiniCssClass="app-drawer--mini"
+                      ClosedCssClass="app-drawer--closed"
+                      CloseOnEscape="true"
+                      CloseOnTargetContentClick="@isXSmall"
+                      CloseOnOutsideClick="@isXSmall"
+                      ApplyBackgroundShading="@isXSmall">
+
+                <HeaderTemplate>
+                    @if (isXSmall)
+                    {
+                        <div class="drawer-header drawer-header--mobile">
+                            <span class="drawer-header__title">Menú</span>
+                            <button type="button" class="drawer-close" @onclick="ToggleDrawer" aria-label="Cerrar navegación">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="drawer-header">
+                            <DxButton RenderStyle="ButtonRenderStyle.Light"
+                                      RenderStyleMode="ButtonRenderStyleMode.Text"
+                                      CssClass="menu-toggle"
+                                      IconCssClass="@(IsOpen ? "bi bi-chevron-left" : "bi bi-list")"
+                                      Click="ToggleDrawer"
+                                      aria-label="@(IsOpen ? "Colapsar navegación" : "Expandir navegación")"
+                                      aria-expanded="@IsOpen" />
+                        </div>
+                    }
+                </HeaderTemplate>
+
+                <BodyTemplate>
+                    <SidebarNavigation IsCollapsed="@IsMini" IsMobile="@isXSmall" />
+                </BodyTemplate>
+
+                <TargetContent>
+                    <div class="main-content">
+                        <div class="content">
+                            @Body
+                        </div>
+                    </div>
+                </TargetContent>
+            </DxDrawer>
         </div>
-    }
-    else
-    {
-        <Drawer DrawerHeader="drawerHeader">
-            <DrawerBody>
-                <div class="w-100">
-                    <NavMenu></NavMenu>
+    </Authorized>
+    <NotAuthorized>
+        <div class="page">
+            <div class="main-content">
+                <div class="content">
+                    @Body
                 </div>
-            </DrawerBody>
-            <DrawerTarget>
-                <div class="drawer-content">
-                    <div class="nav-buttons-container">
-                        <NavLink href="@UrlGenerator.GetUrl(new Uri(NavigationManager.Uri).LocalPath, !ToggledSidebar)">
-                            <DxButton
-                                RenderStyle="ButtonRenderStyle.Dark"
-                                RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button"
-                                IconCssClass="bi bi-list"></DxButton>
-                        </NavLink>
-                        @if (new Uri(NavigationManager.Uri).LocalPath != "/")
-                        {
-                            <NavLink href="@UrlGenerator.GetUrl("/", ToggledSidebar)" class="button-link hidden">
-                                <DxButton
-                                    RenderStyle="ButtonRenderStyle.Dark"
-                                    Text="Back to Home" RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button-nav"
-                                    IconCssClass="bi bi-arrow-left"></DxButton>
-                            </NavLink>
-                        }
-                        <AuthorizeView>
-                            <Authorized>
-                                <NavLink href="@UrlGenerator.GetUrl("Account/Manage", ToggledSidebar)"
-                                    class="button-link menubutton-float-end display-desktop">
-                                    <DxButton
-                                        RenderStyle="ButtonRenderStyle.Dark"
-                                        Text="@context.User.Identity?.Name" RenderStyleMode="@ButtonRenderStyleMode.Text"
-                                        CssClass="menu-button-nav" IconCssClass="bi bi-person-circle"></DxButton>
-                                </NavLink>
-                                <form action="@UrlGenerator.GetUrl("Account/Logout", ToggledSidebar)" method="post"
-                                    class="display-desktop">
-                                    <AntiforgeryToken />
-                                    <input type="hidden" name="ReturnUrl" value="@currentUrl" />
-                                    <DxButton
-                                        RenderStyle="ButtonRenderStyle.Dark"
-                                        SubmitFormOnClick="true" Text="Log out" RenderStyleMode="@ButtonRenderStyleMode.Text"
-                                        CssClass="menu-button-nav" IconCssClass="bi bi-box-arrow-right"></DxButton>
-                                </form>
-                            </Authorized>
-                            <NotAuthorized>
-                                <NavLink href="@UrlGenerator.GetUrl("Account/Login", ToggledSidebar)"
-                                    class="button-link menubutton-float-end display-desktop">
-                                    <DxButton
-                                        RenderStyle="ButtonRenderStyle.Dark"
-                                        Text="Log in" RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button-nav"
-                                        IconCssClass="bi bi-box-arrow-in-right"></DxButton>
-                                </NavLink>
-                            </NotAuthorized>
-                        </AuthorizeView>
-                    </div>
-                    <div class="p-4 layout-body">
-                        @Body
-                    </div>
-                </div>
-            </DrawerTarget>
-        </Drawer>
-    }
-</div>
+            </div>
+        </div>
+    </NotAuthorized>
+</AuthorizeView>
 
 @code {
-    [SupplyParameterFromQuery(Name = UrlGenerator.ToggleSidebarName)]
-    public bool ToggledSidebar { get; set; }
-    private bool IsAccountRoute =>
-    NavigationManager.Uri.Contains("/Account/", StringComparison.OrdinalIgnoreCase);
-    private RenderFragment drawerHeader => @<div class="navigation-drawer-header">
-        <img class="logo" src="@(currentCompanyId > 0 ? $"/api/contabilidad/empresas/{currentCompanyId}/logo" : "images/logo.svg")" alt="Logo de la Empresa" onerror="this.src='images/logo.svg'" />
-        <NavLink href="@UrlGenerator.GetUrl(new Uri(NavigationManager.Uri).LocalPath, !ToggledSidebar)">
-            <DxButton
-                RenderStyle="ButtonRenderStyle.Light"
-                RenderStyleMode="@ButtonRenderStyleMode.Text" CssClass="menu-button-nav"
-                IconCssClass="@(ToggledSidebar ? "bi bi-x-lg" : "bi bi-list")"></DxButton>
-        </NavLink>
-    </div>;
+    private bool isXSmall;
 
-    private string currentUrl = string.Empty;
-    private long currentCompanyId;
-
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        currentUrl = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
-        NavigationManager.LocationChanged += OnLocationChanged;
-        
-        // Inicializar el ID de la empresa, tolerando ausencia de claim
-        try
-        {
-            currentCompanyId = await TenantState.EnsureCompanyAsync();
-        }
-        catch (InvalidOperationException)
-        {
-            // Sin empresa seleccionada: usar logo por defecto y continuar
-            currentCompanyId = 0;
-        }
+        SidebarState.Changed += HandleSidebarStateChanged;
     }
 
-    private void OnLocationChanged(object? sender, LocationChangedEventArgs e)
+    private bool IsOpen => SidebarState.IsOpen;
+
+    private DrawerMode DrawerMode => isXSmall ? DrawerMode.Overlap : DrawerMode.Shrink;
+    private bool EnableMiniMode => !isXSmall;
+    private bool IsMini => EnableMiniMode && !IsOpen;
+
+    private string PanelWidth => isXSmall ? "80%" : "280px";
+    private string MiniPanelWidth => "64px";
+
+    private void ToggleDrawer() => SidebarState.Toggle();
+
+    private void OnXSmallChanged(bool isActive)
     {
-        currentUrl = NavigationManager.ToBaseRelativePath(e.Location);
-        StateHasChanged();
+        isXSmall = isActive;
+        SidebarState.SetBreakpoint(isActive);
     }
+
+    private void OnIsOpenChanged(bool value) => SidebarState.SetOpen(value);
+
+    private void HandleSidebarStateChanged() => InvokeAsync(StateHasChanged);
 
     public void Dispose()
     {
-        NavigationManager.LocationChanged -= OnLocationChanged;
+        SidebarState.Changed -= HandleSidebarStateChanged;
     }
-
 }

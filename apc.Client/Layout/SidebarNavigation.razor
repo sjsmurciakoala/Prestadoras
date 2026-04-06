@@ -1,0 +1,187 @@
+@using Microsoft.AspNetCore.Components.Routing
+@using Microsoft.AspNetCore.Components.Authorization
+@using apc.Client.Layout.Navigation
+@using apc.Client.Services.Tenant
+@inject NavigationManager NavigationManager
+@inject AuthenticationStateProvider AuthStateProvider
+@inject TenantCompanyContextClient TenantCompanyContextClient
+@implements IDisposable
+
+<nav class="sidebar-nav @(IsCollapsed ? "sidebar-nav--collapsed" : "") @(IsMobile ? "sidebar-nav--mobile" : "")">
+@if (!IsMobile)
+{
+    <div class="sidebar-brand">
+        <i class="bi bi-h-square-fill sidebar-brand__logo"></i>
+        <span class="sidebar-brand__text">HODSOFT</span>
+    </div>
+}
+
+    @foreach (var navSection in visibleSections)
+    {
+        <div class="nav-section">
+            @if (!string.IsNullOrEmpty(navSection.Label))
+            {
+                <div class="nav-section__label">@navSection.Label</div>
+            }
+            @foreach (var item in navSection.Items)
+            {
+                <SidebarNavNode Item="@item"
+                                CurrentPath="@currentPath"
+                                IsCollapsed="@IsCollapsed" />
+            }
+        </div>
+    }
+</nav>
+
+@code {
+    [Parameter] public bool IsCollapsed { get; set; }
+    [Parameter] public bool IsMobile { get; set; }
+
+    private string currentPath = "/";
+    private IReadOnlyList<SidebarNavSection> visibleSections = Array.Empty<SidebarNavSection>();
+
+    protected override void OnInitialized()
+    {
+        NavigationManager.LocationChanged += HandleLocationChanged;
+        currentPath = GetCurrentPath();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        var user = authState.User;
+
+        var sections = new List<SidebarNavSection>();
+        foreach (var section in SidebarNavigationDefinition.Sections)
+        {
+            if (string.IsNullOrEmpty(section.RequiredPolicy))
+            {
+                sections.Add(section);
+            }
+            else if (user.IsInRole(SIAD.Core.Constants.RoleNames.SuperAdministrador))
+            {
+                sections.Add(section);
+            }
+        }
+
+        if (user.Identity?.IsAuthenticated == true)
+        {
+            try
+            {
+                var tenantContext = await TenantCompanyContextClient.ObtenerAsync();
+                if (!tenantContext.HasValidCompany)
+                {
+                    sections = FilterSectionsForRecovery(sections).ToList();
+                }
+            }
+            catch (UnauthorizedAccessException)
+            {
+            }
+            catch (HttpRequestException)
+            {
+            }
+        }
+
+        visibleSections = sections;
+    }
+
+    private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
+    {
+        currentPath = GetCurrentPath();
+        InvokeAsync(StateHasChanged);
+    }
+
+    private string GetCurrentPath()
+    {
+        var relative = NavigationManager.ToBaseRelativePath(NavigationManager.Uri);
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            return "/";
+        }
+
+        var cleaned = relative.Split('?', '#')[0];
+        if (!cleaned.StartsWith("/"))
+        {
+            cleaned = "/" + cleaned;
+        }
+
+        cleaned = cleaned.TrimEnd('/');
+        return string.IsNullOrEmpty(cleaned) ? "/" : cleaned.ToLowerInvariant();
+    }
+
+    public void Dispose()
+    {
+        NavigationManager.LocationChanged -= HandleLocationChanged;
+    }
+
+    private static IReadOnlyList<SidebarNavSection> FilterSectionsForRecovery(IEnumerable<SidebarNavSection> sections)
+    {
+        var filteredSections = new List<SidebarNavSection>();
+
+        foreach (var section in sections)
+        {
+            var filteredItems = section.Items
+                .Select(FilterItemForRecovery)
+                .Where(item => item is not null)
+                .Cast<SidebarNavItem>()
+                .ToArray();
+
+            if (filteredItems.Length == 0)
+            {
+                continue;
+            }
+
+            filteredSections.Add(new SidebarNavSection
+            {
+                Label = section.Label,
+                Items = filteredItems,
+                RequiredPolicy = section.RequiredPolicy
+            });
+        }
+
+        return filteredSections;
+    }
+
+    private static SidebarNavItem? FilterItemForRecovery(SidebarNavItem item)
+    {
+        var filteredChildren = item.Children
+            .Select(FilterItemForRecovery)
+            .Where(child => child is not null)
+            .Cast<SidebarNavItem>()
+            .ToArray();
+
+        var filteredPrefixes = item.MatchPrefixes
+            .Where(IsRecoveryAllowedPath)
+            .ToArray();
+
+        var allowSelf = IsRecoveryAllowedPath(item.NavigateUrl) || filteredPrefixes.Length > 0;
+        if (!allowSelf && filteredChildren.Length == 0)
+        {
+            return null;
+        }
+
+        return new SidebarNavItem
+        {
+            Id = item.Id,
+            Text = item.Text,
+            IconCssClass = item.IconCssClass,
+            NavigateUrl = allowSelf ? item.NavigateUrl : null,
+            MatchPrefixes = filteredPrefixes,
+            Children = filteredChildren
+        };
+    }
+
+    private static bool IsRecoveryAllowedPath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return false;
+        }
+
+        return path.Equals("/contabilidad/empresas", StringComparison.OrdinalIgnoreCase) ||
+               path.Equals("/contabilidad/empresas/nueva", StringComparison.OrdinalIgnoreCase) ||
+               path.StartsWith("/contabilidad/empresas/editar/", StringComparison.OrdinalIgnoreCase) ||
+               path.Equals("/Account/Manage", StringComparison.OrdinalIgnoreCase) ||
+               path.Equals("/Account/Logout", StringComparison.OrdinalIgnoreCase);
+    }
+}

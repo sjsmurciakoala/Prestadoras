@@ -1,96 +1,693 @@
 @page "/clientes"
 @attribute [Authorize]
-@inject HttpClient Http
-@using DevExpress.Blazor;
 
-@using Microsoft.AspNetCore.Authorization
-@using SIAD.Core.DTOs.Clientes;
-<DxScrollView Height="100%">
-    @if (!string.IsNullOrEmpty(error))
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@using apc.Client.Pages.Clientes.Components
+@using apc.Client.Pages.Clientes
+
+@inject ClientesClient ClientesClient
+@inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="ListToast" MaxToastCount="5" />
+    <DxToastProvider Name="MainToast" MaxToastCount="4" />
+
+    <!-- Header igual a Solicitudes -->
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Directorio de Clientes</h2>
+            <p class="page-subtitle">Gestión centralizada de cartera y expedientes</p>
+        </div>
+
+        <DxButton Text="Nuevo Cliente" Click="@AbrirModalCreacionAsync" IconCssClass="bi bi-plus-lg"
+            RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" />
+    </div>
+
+    <!-- Panel de filtros (colapsable) -->
+    @if (mostrarFiltros)
     {
-        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
+        <div class="modern-card mb-4">
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+
+                    <DxFormLayoutItem Caption="Búsqueda Rápida" ColSpanXs="12" ColSpanMd="5">
+                        <Template>
+                            <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                TextExpression="@(() => filtroBusqueda)" Placeholder="Escribe para buscar..."
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" InputDelay="600" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Estado" ColSpanXs="12" ColSpanMd="3">
+                        <Template>
+                            <div class="pt-md-4 pt-2">
+                                <DxCheckBox Checked="@filtroSoloActivos" CheckedChanged="@((bool v) => OnEstadoChanged(v))"
+                                    LabelText="" CheckType="CheckType.Switch" />
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanXs="12" ColSpanMd="4" CssClass="align-self-end">
+                        <Template>
+                            <div class="filters-actions">
+                                <DxButton Text="Filtrar" IconCssClass="bi bi-search"
+                                    CssClass="filters-btn filters-btn-primary" RenderStyle="ButtonRenderStyle.Secondary"
+                                    Click="BuscarAsync" />
+
+                                <button type="button" class="filters-link" @onclick="LimpiarFiltrosAsync">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
     }
-    else
-    {
-        <DxFormLayout CssClass="mb-3">
-            <DxFormLayoutItem Caption="Código">
-                <DxTextBox @bind-Text="filtroCodigo" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Nombre">
-                <DxTextBox @bind-Text="filtroNombre" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Barrio">
-                <DxTextBox @bind-Text="filtroBarrio" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Solo activos">
-                <DxCheckBox @bind-Checked="filtroSoloActivos" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem ColSpanMd="12">
-                <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
-                <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
-            </DxFormLayoutItem>
 
-        </DxFormLayout>
+    <!-- Grid -->
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="Id" PageSize="50"
+                PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                ShowGroupPanel="false" CssClass="grid-solicitudes">
 
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
 
-        <DxGrid Data="@clientes">
-            <Columns>
-                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Codigo)" Caption="Código">
-                    <CellDisplayTemplate Context="cellData">
-                        @if (cellData.DataItem is ClienteListItemDto item)
-                        {
-                            <NavLink href="@($"/clientes/{item.Id}")">@item.Codigo</NavLink>
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Nombre)" Caption="Nombre" />
-                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Barrio)" Caption="Barrio" />
-                <DxGridDataColumn FieldName="@nameof(ClienteListItemDto.Activo)" Caption="Activo" />
-            </Columns>
-        </DxGrid>
-    }
-</DxScrollView>
+                        <!-- Buscador DevExpress (remoto) -->
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                            TextExpression="@(() => filtroBusqueda)"
+                            Placeholder="Buscar cliente..." InputDelay="600"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                            Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                            RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Filtros" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Secondary"
+                            Click="ToggleFiltros" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                            RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalClientes.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="Codigo" Caption="Código" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var c = (ClienteListItemDto)cell.DataItem;
+                            }
+                            <span class="text-dark fw-semibold">@c.Codigo</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Nombre" Caption="Cliente" MinWidth="360">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var c = (ClienteListItemDto)cell.DataItem;
+                                var identidad = FormatearIdentidad(c.Identidad);
+                                var sub = string.IsNullOrWhiteSpace(identidad) ? c.Codigo : $"DNI: {identidad}";
+                            }
+                            <div class="client-cell">
+                                <div class="client-title" title="@c.Nombre">@c.Nombre</div>
+                                <div class="client-sub">
+                                    <i class="bi bi-card-text"></i>
+                                    <span class="text-truncate" title="@sub">@sub</span>
+                                </div>
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Barrio" Caption="Barrio / Zona" Width="220px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var c = (ClienteListItemDto)cell.DataItem;
+                            }
+                            <div class="text-truncate text-muted" title="@c.Barrio">@c.Barrio</div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var c = (ClienteListItemDto)cell.DataItem;
+                            }
+                            @if (c.Activo)
+                            {
+                                <span class="badge-status active">ACTIVO</span>
+                            }
+                            else
+                            {
+                                <span class="badge-status inactive">INACTIVO</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="240px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var c = (ClienteListItemDto)cell.DataItem;
+                            }
+                            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                <button type="button" class="btn-icon btn-view" title="Ver"
+                                    @onclick="() => AbrirDetalleModal(c.Id)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-eye"></i>
+                                </button>
+
+                                <button type="button" class="btn-icon btn-edit" title="Editar"
+                                    @onclick="() => AbrirEditarModalAsync(c.Id)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-pencil-square"></i>
+                                </button>
+
+                                <button type="button" class="btn-icon btn-estado" title="Estado de cuenta"
+                                    @onclick="() => AbrirEstadoCuentaModal(c.Id)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-receipt"></i>
+                                </button>
+
+                                <button type="button" class="btn-icon btn-medidores" title="Medidores"
+                                    @onclick="() => AbrirMedidoresModalAsync(c.Id)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-speedometer2"></i>
+                                </button>
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay clientes para mostrar.</div>
+                </EmptyDataAreaTemplate>
+
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<!-- Popup creación -->
+<DxPopup @bind-Visible="mostrarModal" ShowFooter="false" Width="min(950px, 95vw)" Height="auto" MaxHeight="90vh"
+    Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                style="width: 38px; height: 38px;">
+                <i class="bi bi-person-plus-fill fs-6"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Nuevo Cliente</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    Complete el formulario de registro
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        <ClienteForm Modelo="nuevoCliente" OnGuardar="GuardarClienteAsync" OnCancelar="CerrarModal"
+            IsSaving="isSaving" IsEditMode="false" />
+    </BodyContentTemplate>
+</DxPopup>
+
+<!-- Popup detalle cliente -->
+<DxPopup Visible="@mostrarDetalleModal"
+         VisibleChanged="@(v => { mostrarDetalleModal = v; if (!v) clienteDetalleId = null; })"
+         Width="min(1100px, 95vw)"
+         MaxHeight="90vh"
+         HeaderText="Detalle de Cliente"
+         Scrollable="true"
+         ShowFooter="true">
+    <BodyTemplate>
+        @if (clienteDetalleId.HasValue)
+        {
+            <ClienteDetail Id="@clienteDetalleId.Value" MostrarEncabezado="false" />
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <DxButton Text="Cerrar"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                  Click="(() => mostrarDetalleModal = false)" />
+    </FooterTemplate>
+</DxPopup>
+
+<!-- Popup edición cliente -->
+<DxPopup @bind-Visible="mostrarEditarModal" ShowFooter="false" Width="min(950px, 95vw)" Height="auto" MaxHeight="90vh"
+    Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+                style="width: 38px; height: 38px;">
+                <i class="bi bi-pencil-square fs-6"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Editar Cliente</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    Actualice la información del cliente
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        @if (editarLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando cliente..." />
+                <div style="height:100px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(editarError))
+        {
+            <div class="p-3">
+                <DxAlert AlertType="AlertType.Danger">@editarError</DxAlert>
+            </div>
+        }
+        else
+        {
+            <ClienteForm Modelo="clienteEdicion" OnGuardar="GuardarEdicionAsync" OnCancelar="CerrarEditarModal"
+                IsSaving="isSavingEdit" IsEditMode="true" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<!-- Popup estado de cuenta -->
+<DxPopup Visible="@mostrarEstadoCuentaModal"
+         VisibleChanged="@(v => { mostrarEstadoCuentaModal = v; if (!v) clienteAccionId = null; })"
+         Width="min(900px, 95vw)"
+         MaxHeight="90vh"
+         Scrollable="true"
+         HeaderText="Estado de cuenta">
+    <BodyTemplate>
+        @if (clienteAccionId.HasValue)
+        {
+            <div class="p-2">
+                <ClienteEstadoCuentaTab ClienteId="@clienteAccionId.Value" @key="(mostrarEstadoCuentaModal, clienteAccionId)" />
+            </div>
+        }
+    </BodyTemplate>
+</DxPopup>
+
+<!-- Popup medidores -->
+<DxPopup Visible="@mostrarMedidoresModal"
+         VisibleChanged="@(v => { mostrarMedidoresModal = v; if (!v) { clienteAccionId = null; clienteAccionDetalle = null; clienteAccionError = null; clienteAccionLoading = false; } })"
+         Width="min(1000px, 95vw)"
+         MaxHeight="90vh"
+         Scrollable="true"
+         HeaderText="Medidores del cliente">
+    <BodyTemplate>
+        @if (clienteAccionLoading)
+        {
+            <div class="p-4 text-center">
+                <DxLoadingPanel Visible="true" Text="Cargando cliente..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(clienteAccionError))
+        {
+            <div class="p-2">
+                <DxAlert AlertType="AlertType.Danger">@clienteAccionError</DxAlert>
+            </div>
+        }
+        else if (clienteAccionDetalle is not null)
+        {
+            <div class="p-2">
+                <ClienteMedidoresTab Cliente="@clienteAccionDetalle" @key="(mostrarMedidoresModal, clienteAccionDetalle.Id)" />
+            </div>
+        }
+    </BodyTemplate>
+</DxPopup>
+
 @code {
-    private ClienteListItemDto[] clientes = Array.Empty<ClienteListItemDto>();
-    private string? error;
-    private string filtroCodigo = string.Empty;
-    private string filtroNombre = string.Empty;
-    private string filtroBarrio = string.Empty;
-    private bool filtroSoloActivos;
+    private DxGrid? grid;
+    private ClientesGridDataSource dataSource = default!;
+    private ClienteCreateDto nuevoCliente = new();
 
-    protected override async Task OnInitializedAsync()
+    private bool mostrarModal = false;
+    private bool isSaving = false;
+    private bool mostrarDetalleModal = false;
+    private int? clienteDetalleId;
+
+    private bool mostrarEditarModal = false;
+    private bool isSavingEdit = false;
+    private bool editarLoading = false;
+    private string? editarError;
+    private int? clienteEdicionId;
+    private ClienteCreateDto clienteEdicion = new();
+
+    private bool mostrarEstadoCuentaModal = false;
+    private bool mostrarMedidoresModal = false;
+    private int? clienteAccionId;
+    private ClienteDetailDto? clienteAccionDetalle;
+    private bool clienteAccionLoading = false;
+    private string? clienteAccionError;
+
+    private string filtroBusqueda = "";
+    private bool filtroSoloActivos = true;
+
+    private int totalClientes = 0;
+
+    private bool mostrarFiltros = true;
+    
+
+    protected override void OnInitialized()
     {
+        dataSource = new ClientesGridDataSource(ClientesClient, total =>
+        {
+            totalClientes = total;
+            InvokeAsync(StateHasChanged);
+        })
+        {
+            SearchText = filtroBusqueda,
+            SoloActivos = filtroSoloActivos
+        };
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
         await BuscarAsync();
     }
 
-    private async Task BuscarAsync()
+    private async Task OnEstadoChanged(bool valor)
     {
+        filtroSoloActivos = valor;
+        await BuscarAsync();
+    }
+
+    private async Task LimpiarFiltrosAsync()
+    {
+        filtroBusqueda = "";
+        filtroSoloActivos = true;
+        await BuscarAsync();
+    }
+
+    private Task BuscarAsync()
+    {
+        dataSource.SearchText = filtroBusqueda;
+        dataSource.SoloActivos = filtroSoloActivos;
+        grid?.Reload(); // Reload() es void en tu versión
+        return Task.CompletedTask;
+    }
+
+    private void RecargarGrid() => grid?.Reload();
+    private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
+    
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private async Task AbrirModalCreacionAsync()
+    {
+        nuevoCliente = new ClienteCreateDto
+        {
+            Activo = true,
+            FechaNacimiento = DateTime.Now.AddYears(-18),
+            TieneMedidor = false,
+            TieneContrato = false,
+            TieneConvenio = false,
+            ColorCasa = "Blanco"
+        };
+
         try
         {
-            error = null;
-            var query =
-            $"api/clientes/search?codigo={Uri.EscapeDataString(filtroCodigo ?? string.Empty)}" +
-            $"&nombre={Uri.EscapeDataString(filtroNombre ?? string.Empty)}" +
-            $"&barrio={Uri.EscapeDataString(filtroBarrio ?? string.Empty)}" +
-            $"&soloActivos={filtroSoloActivos}";
-
-            clientes = await Http.GetFromJsonAsync<ClienteListItemDto[]>(query)
-            ?? Array.Empty<ClienteListItemDto>();
+            // Generar código automáticamente cuando se abre el modal
+            var codigo = await ClientesClient.GenerarCodigoAsync();
+            nuevoCliente.Clave = codigo;
         }
         catch (Exception ex)
         {
-            error = ex.Message;
-            clientes = Array.Empty<ClienteListItemDto>();
+            System.Diagnostics.Debug.WriteLine($"Error generando código: {ex.Message}");
+        }
+
+        mostrarModal = true;
+    }
+
+    private void CerrarModal()
+    {
+        if (isSaving) return;
+        mostrarModal = false;
+    }
+
+    private async Task GuardarClienteAsync()
+    {
+        isSaving = true;
+        try
+        {
+            var response = await ClientesClient.CrearAsync(nuevoCliente);
+            mostrarModal = false;
+
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Éxito",
+                Text = "Cliente registrado correctamente.",
+                RenderStyle = ToastRenderStyle.Success,
+                ProviderName = "ListToast"
+            });
+
+            filtroBusqueda = "";
+            await BuscarAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "ListToast"
+            });
+        }
+        finally
+        {
+            isSaving = false;
         }
     }
 
-    private async Task LimpiarAsync()
+    private async Task GuardarEdicionAsync()
     {
-        filtroCodigo = string.Empty;
-        filtroNombre = string.Empty;
-        filtroBarrio = string.Empty;
-        filtroSoloActivos = false;
+        if (!clienteEdicionId.HasValue)
+        {
+            editarError = "No se pudo identificar el cliente a editar.";
+            return;
+        }
 
-        await BuscarAsync();
+        isSavingEdit = true;
+        try
+        {
+            var dto = MapearEdicionAUpdate(clienteEdicion);
+            _ = await ClientesClient.ActualizarAsync(clienteEdicionId.Value, dto);
+
+            mostrarEditarModal = false;
+            clienteEdicionId = null;
+
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Éxito",
+                Text = "Cliente actualizado correctamente.",
+                RenderStyle = ToastRenderStyle.Success,
+                ProviderName = "ListToast"
+            });
+
+            grid?.Reload();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "ListToast"
+            });
+        }
+        finally
+        {
+            isSavingEdit = false;
+        }
+    }
+
+    private static string? FormatearIdentidad(string? identidad)
+    {
+        if (string.IsNullOrWhiteSpace(identidad))
+            return null;
+
+        var digits = new string(identidad.Where(char.IsDigit).ToArray());
+        if (digits.Length == 13)
+            return $"{digits.Substring(0, 4)}-{digits.Substring(4, 4)}-{digits.Substring(8, 5)}";
+
+        return identidad;
+    }
+
+    private static ClienteCreateDto MapearDetalleAEdicion(ClienteDetailDto detalle)
+        => new()
+        {
+            Clave = detalle.Codigo,
+            Nombre = detalle.Nombre,
+            Apellidos = detalle.Apellidos,
+            Dni = detalle.Dni ?? string.Empty,
+            Rtn = detalle.Rtn,
+            FechaNacimiento = detalle.FechaNacimiento,
+            BarrioCodigo = detalle.BarrioCodigo,
+            TerceraEdad = detalle.TerceraEdad,
+            BloqueadoCobranza = detalle.BloqueadoCobranza,
+            AbogadoId = detalle.AbogadoId,
+            Telefono = detalle.Telefono,
+            TelefonoMovil = detalle.TelefonoMovil,
+            Email = detalle.Email,
+            Direccion = detalle.Direccion,
+            ColorCasa = detalle.ColorCasa,
+            ClaveCatastral = detalle.ClaveCatastral,
+            TieneMedidor = detalle.TieneMedidor,
+            MedidorId = detalle.MedidorId,
+            EmpresaNombre = detalle.EmpresaNombre,
+            EmpresaRtn = detalle.EmpresaRtn,
+            EmpresaTelefono = detalle.EmpresaTelefono,
+            EmpresaDireccion = detalle.EmpresaDireccion,
+            TipoUsoCodigo = detalle.TipoUsoCodigo,
+            CategoriaServicioId = detalle.CategoriaServicioId,
+            ServicioId = detalle.ServicioId,
+            LetraCodigo = detalle.LetraCodigo,
+            CicloId = detalle.CicloId,
+            Libreta = detalle.Libreta,
+            Secuencia = detalle.Secuencia,
+            Contador = detalle.Contador,
+            ClaveSure = detalle.ClaveSure,
+            TieneConvenio = detalle.TieneConvenio,
+            NumeroConvenio = detalle.NumeroConvenio,
+            TieneContrato = detalle.TieneContrato,
+            NumeroContrato = detalle.NumeroContrato,
+            Observaciones = detalle.Observaciones,
+            Activo = detalle.Activo
+        };
+
+    private static ClienteUpdateDto MapearEdicionAUpdate(ClienteCreateDto modelo)
+        => new()
+        {
+            Clave = modelo.Clave,
+            Nombre = modelo.Nombre,
+            Apellidos = modelo.Apellidos,
+            Dni = modelo.Dni,
+            Rtn = modelo.Rtn,
+            FechaNacimiento = modelo.FechaNacimiento,
+            BarrioCodigo = modelo.BarrioCodigo,
+            TerceraEdad = modelo.TerceraEdad,
+            BloqueadoCobranza = modelo.BloqueadoCobranza,
+            AbogadoId = modelo.AbogadoId,
+            Telefono = modelo.Telefono,
+            TelefonoMovil = modelo.TelefonoMovil,
+            Email = modelo.Email,
+            Direccion = modelo.Direccion,
+            ColorCasa = modelo.ColorCasa,
+            ClaveCatastral = modelo.ClaveCatastral,
+            TieneMedidor = modelo.TieneMedidor,
+            MedidorId = modelo.MedidorId,
+            EmpresaNombre = modelo.EmpresaNombre,
+            EmpresaRtn = modelo.EmpresaRtn,
+            EmpresaTelefono = modelo.EmpresaTelefono,
+            EmpresaDireccion = modelo.EmpresaDireccion,
+            TipoUsoCodigo = modelo.TipoUsoCodigo,
+            CategoriaServicioId = modelo.CategoriaServicioId,
+            ServicioId = modelo.ServicioId,
+            LetraCodigo = modelo.LetraCodigo,
+            CicloId = modelo.CicloId,
+            Libreta = modelo.Libreta,
+            Secuencia = modelo.Secuencia,
+            Contador = modelo.Contador,
+            ClaveSure = modelo.ClaveSure,
+            TieneConvenio = modelo.TieneConvenio,
+            NumeroConvenio = modelo.NumeroConvenio,
+            TieneContrato = modelo.TieneContrato,
+            NumeroContrato = modelo.NumeroContrato,
+            Observaciones = modelo.Observaciones,
+            Activo = modelo.Activo
+        };
+
+    private void AbrirDetalleModal(int id)
+    {
+        clienteDetalleId = id;
+        mostrarDetalleModal = true;
+    }
+
+    private async Task AbrirEditarModalAsync(int id)
+    {
+        clienteEdicionId = id;
+        editarError = null;
+        editarLoading = true;
+        mostrarEditarModal = true;
+
+        try
+        {
+            var detalle = await ClientesClient.ObtenerPorIdAsync(id);
+            if (detalle is null)
+            {
+                editarError = "No se encontró el cliente.";
+                clienteEdicion = new ClienteCreateDto();
+                return;
+            }
+
+            clienteEdicion = MapearDetalleAEdicion(detalle);
+        }
+        catch (Exception ex)
+        {
+            editarError = $"Error al cargar el cliente: {ex.Message}";
+        }
+        finally
+        {
+            editarLoading = false;
+        }
+    }
+
+    private void CerrarEditarModal()
+    {
+        if (isSavingEdit)
+            return;
+
+        mostrarEditarModal = false;
+        editarError = null;
+        clienteEdicionId = null;
+        clienteEdicion = new ClienteCreateDto();
+    }
+
+    private void AbrirEstadoCuentaModal(int id)
+    {
+        clienteAccionId = id;
+        mostrarEstadoCuentaModal = true;
+    }
+
+    private async Task AbrirMedidoresModalAsync(int id)
+    {
+        clienteAccionId = id;
+        clienteAccionDetalle = null;
+        clienteAccionError = null;
+        clienteAccionLoading = true;
+        mostrarMedidoresModal = true;
+
+        try
+        {
+            clienteAccionDetalle = await ClientesClient.ObtenerPorIdAsync(id);
+            if (clienteAccionDetalle is null)
+            {
+                clienteAccionError = "No se encontró el cliente.";
+            }
+        }
+        catch (Exception ex)
+        {
+            clienteAccionError = $"Error al cargar el cliente: {ex.Message}";
+        }
+        finally
+        {
+            clienteAccionLoading = false;
+        }
     }
 }

@@ -181,7 +181,7 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
         var reciboReferencia = await ObtenerReciboAplicableAsync(cliente.maestro_cliente_clave, ct);
         if (reciboReferencia is null)
         {
-            return ResponseModelDto.Fail("No existe un recibo base (transacción 101) para asociar la nota.");
+            return ResponseModelDto.Fail("No existe un recibo facturado para asociar la nota.");
         }
 
         var saldoCuenta = await ObtenerSaldoClienteAsync(cliente.maestro_cliente_clave, ct);
@@ -312,10 +312,41 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
 
     private async Task<decimal?> ObtenerReciboAplicableAsync(string clienteClave, CancellationToken ct)
     {
+        var reciboFacturaActiva = await _context.facturas
+            .AsNoTracking()
+            .Where(f =>
+                f.clientecodigo == clienteClave &&
+                f.numrecibo > 0 &&
+                f.estado == "A" &&
+                (f.saldototal ?? 0) > 0)
+            .OrderByDescending(f => f.fechaemision)
+            .ThenByDescending(f => f.numrecibo)
+            .Select(f => (decimal?)f.numrecibo)
+            .FirstOrDefaultAsync(ct);
+
+        if (reciboFacturaActiva.HasValue)
+        {
+            return reciboFacturaActiva;
+        }
+
+        var ultimoReciboFactura = await _context.facturas
+            .AsNoTracking()
+            .Where(f => f.clientecodigo == clienteClave && f.numrecibo > 0)
+            .OrderByDescending(f => f.fechaemision)
+            .ThenByDescending(f => f.numrecibo)
+            .Select(f => (decimal?)f.numrecibo)
+            .FirstOrDefaultAsync(ct);
+
+        if (ultimoReciboFactura.HasValue)
+        {
+            return ultimoReciboFactura;
+        }
+
         return await _context.transaccion_abonados
             .AsNoTracking()
-            .Where(t => t.cliente_clave == clienteClave && t.tipotransaccion == "101")
-            .OrderByDescending(t => t.ide)
+            .Where(t => t.cliente_clave == clienteClave && t.recibo != null && t.recibo > 0)
+            .OrderByDescending(t => t.fecha_docu)
+            .ThenByDescending(t => t.ide)
             .Select(t => t.recibo)
             .FirstOrDefaultAsync(ct);
     }

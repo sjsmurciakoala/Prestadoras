@@ -1,0 +1,1005 @@
+@page "/contabilidad/tipos-transaccion"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using System.Net.Http.Json
+@using System.Linq
+@using Microsoft.AspNetCore.Components.Web
+@using apc.Client.Services.Tenant
+@using SIAD.Core.DTOs.Contabilidad
+
+@inject HttpClient Http
+@inject TenantState TenantState
+
+<PageTitle>Tipos de transaccion</PageTitle>
+
+<div class="contabilidad-page contabilidad-content h-100" id="tipos-transaccion-view">
+    <DxCard CssClass="shadow-sm border-0 rounded w-100">
+        <HeaderContent>
+            <div class="d-flex align-items-center py-2 px-1">
+                <i class="bi bi-tags me-2 fs-4 text-primary"></i>
+                <h5 class="mb-0 fw-bold text-secondary">Tipos de transaccion</h5>
+            </div>
+        </HeaderContent>
+        <ChildContent>
+            <div class="px-2 pb-2">
+                <DxToolbar CssClass="mb-3" ItemSpacing="10px">
+                    <DxToolbarItem Text="Nuevo tipo" IconCssClass="bi bi-plus-lg"
+                                   RenderStyle="ButtonRenderStyle.Primary"
+                                   Click="@(() => OpenTipoForm(null))" />
+                    <DxToolbarItem Text="Editar" IconCssClass="bi bi-pencil-square"
+                                   RenderStyle="ButtonRenderStyle.Info"
+                                   Disabled="@(SelectedTipo is null || tipoFormVisible)"
+                                   Click="@(() => OpenTipoForm(SelectedTipo))" />
+                    <DxToolbarItem Text="Eliminar" IconCssClass="bi bi-trash"
+                                   RenderStyle="ButtonRenderStyle.Danger"
+                                   Disabled="@(SelectedTipo is null)"
+                                   Click="@(() => OpenDeleteTipoConfirm(SelectedTipo))" />
+                    <DxToolbarItem Text="Actualizar" IconCssClass="bi bi-arrow-clockwise"
+                                   BeginGroup="true"
+                                   Click="@(async _ => await LoadTiposAsync())" />
+                </DxToolbar>
+
+                @if (!string.IsNullOrWhiteSpace(pageError))
+                {
+                    <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@pageError</DxAlert>
+                }
+            </div>
+
+            <div class="row g-3 px-2 pb-2">
+        
+        <div class="col-12 col-xl-7">
+            <DxCard CssClass="shadow-sm border-0 rounded h-100 position-relative" id="catalog-panel">
+                <HeaderContent>
+                    <div class="d-flex justify-content-between align-items-center py-1">
+                        <div>
+                            <i class="bi bi-list-check me-2 text-primary"></i>
+                            <span class="fw-bold">Catalogo</span>
+                            <small class="text-muted ms-2">Tipos disponibles</small>
+                        </div>
+                        <span class="tipos-pill">
+                            <i class="bi bi-list-check me-1"></i> @(tipos?.Count ?? 0)
+                        </span>
+                    </div>
+                </HeaderContent>
+                <ChildContent>
+                    <DxGrid Data="@tipos"
+                            TData="TipoTransaccionDto"
+                            KeyFieldName="@nameof(TipoTransaccionDto.TypeId)"
+                            SelectionMode="GridSelectionMode.Single"
+                            AllowSelectRowByClick="true"
+                            SelectedDataItem="@SelectedTipo"
+                            SelectedDataItemChanged="@(item => OnSelectedTipoChanged((TipoTransaccionDto)item))"
+                            ShowFilterRow="true"
+                            ShowSearchBox="true"
+                            ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                            PageSize="10"
+                            SizeMode="SizeMode.Medium"
+                            PagerPosition="GridPagerPosition.Bottom">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(TipoTransaccionDto.Code)" Caption="Código" Width="90px" />
+                            <DxGridDataColumn FieldName="@nameof(TipoTransaccionDto.Name)" Caption="Nombre" MinWidth="200" />
+                            <DxGridDataColumn Caption="Correlativo" MinWidth="210">
+                                <CellDisplayTemplate Context="cell">
+                                    @if (cell.DataItem is TipoTransaccionDto item)
+                                    {
+                                        <div class="tipo-sequence-cell">
+                                            <div class="tipo-sequence-cell__top">
+                                                <strong class="tipo-sequence-cell__value">@FormatSequence(item.NextDocumentNumber)</strong>
+                                                <span class="@GetSequenceStatusCss(item.HasPolizas)">@GetSequenceStatusText(item.HasPolizas)</span>
+                                            </div>
+                                            <span class="tipo-sequence-cell__meta">Inicio @FormatSequence(item.DocumentSequenceStart) · Último @GetLastDocumentLabel(item.LastDocumentNumber)</span>
+                                        </div>
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            
+                            <DxGridDataColumn Caption="Configuración" MinWidth="140" TextAlignment="GridTextAlignment.Center">
+                                <CellDisplayTemplate Context="cell">
+                                    @if (cell.DataItem is TipoTransaccionDto item)
+                                    {
+                                        <div class="d-flex gap-1 justify-content-center flex-wrap">
+                                            @if (item.AllowsCostCenter) { <span class="badge bg-warning text-dark" title="Centros Costo">CC</span> }
+                                            @if (item.AllowsThirdParty) { <span class="badge bg-info text-dark" title="Terceros">TE</span> }
+                                            @if (item.AllowsCashFlow) { <span class="badge bg-secondary" title="Flujo Efectivo">FE</span> }
+                                            @if (item.IsDefault) { <span class="badge bg-success" title="Por defecto">DF</span> }
+                                            @if (item.IsAutomatic) { <span class="badge bg-primary" title="Automático">AU</span> }
+                                        </div>
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                    <DxLoadingPanel Visible="@isLoading"
+                                    PositionTarget="#catalog-panel"
+                                    ApplyBackgroundShading="true"
+                                    IsContentBlocked="true"
+                                    Text="Cargando tipos..." />
+                </ChildContent>
+            </DxCard>
+        </div>
+
+        <div class="col-12 col-xl-5">
+            <DxCard CssClass="shadow-sm border-0 rounded h-100" id="rules-panel">
+                <HeaderContent>
+                    <div class="d-flex justify-content-between align-items-center py-1">
+                        <div>
+                            <i class="bi bi-diagram-3 me-2 text-primary"></i>
+                            <span class="fw-bold">Reglas</span>
+                            <small class="text-muted ms-2">
+                                @if (SelectedTipo is null)
+                                {
+                                    <span>Seleccione un tipo para gestionar reglas</span>
+                                }
+                                else
+                                {
+                                    <span>Aplican a: <strong>@SelectedTipo.Code</strong> - @SelectedTipo.Name</span>
+                                }
+                            </small>
+                        </div>
+                        <DxButton Text="Nueva Regla"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                  IconCssClass="bi bi-plus-lg"
+                                  Enabled="@(SelectedTipo is not null)"
+                                  Click="@(() => OpenRuleForm(null))" 
+                                  SizeMode="SizeMode.Small"/>
+                    </div>
+                </HeaderContent>
+                <ChildContent>
+                    <div class="position-relative" id="rules-panel-body" style="min-height:200px;">
+                        @if (SelectedTipo is null)
+                        {
+                            <div class="d-flex flex-column align-items-center justify-content-center flex-grow-1 p-5 text-muted opacity-50">
+                                <i class="bi bi-arrow-left-square fs-1 mb-2 d-none d-xl-block"></i> 
+                                <i class="bi bi-arrow-up-square fs-1 mb-2 d-xl-none"></i>
+                                <div class="text-center">Seleccione un tipo para ver sus reglas</div>
+                            </div>
+                        }
+                        else
+                        {
+                            <DxGrid Data="@rules"
+                                    TData="TipoTransaccionRuleDto"
+                                    KeyFieldName="@nameof(TipoTransaccionRuleDto.RuleId)"
+                                    PageSize="10"
+                                    ShowSearchBox="true"
+                                    SizeMode="SizeMode.Small"
+                                    PagerPosition="GridPagerPosition.Bottom">
+                                <Columns>
+                                    <DxGridDataColumn Caption=" " Width="90px" ShowInColumnChooser="false" TextAlignment="GridTextAlignment.Center">
+                                        <CellDisplayTemplate Context="cell">
+                                            <div class="d-flex gap-1 justify-content-center">
+                                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                          IconCssClass="bi bi-pencil-square"
+                                                          SizeMode="SizeMode.Small"
+                                                          title="Editar regla"
+                                                          Click="@(() => OpenRuleForm((TipoTransaccionRuleDto)cell.DataItem))" />
+                                                <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                                          IconCssClass="bi bi-trash"
+                                                          SizeMode="SizeMode.Small"
+                                                          title="Eliminar regla"
+                                                          Click="@(() => OpenDeleteRuleConfirm((TipoTransaccionRuleDto)cell.DataItem))" />
+                                            </div>
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+
+                                    <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.LineNumber)" Caption="#" Width="50px" TextAlignment="GridTextAlignment.Center" />
+                                    <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.AccountCodeFrom)" Caption="Cta. Desde" />
+                                    <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.AccountCodeTo)" Caption="Cta. Hasta" />
+                                    
+                                    <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.IsActive)" Caption="Act" Width="50px" TextAlignment="GridTextAlignment.Center">
+                                         <CellDisplayTemplate Context="cell">
+                                            @if(((TipoTransaccionRuleDto)cell.DataItem).IsActive) {
+                                                <i class="bi bi-check-circle-fill text-success" title="Activa"></i>
+                                            } else {
+                                                <i class="bi bi-circle text-muted" title="Inactiva"></i>
+                                            }
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                </Columns>
+                            </DxGrid>
+                        }
+                        <DxLoadingPanel Visible="@rulesLoading"
+                                        PositionTarget="#rules-panel-body"
+                                        ApplyBackgroundShading="true"
+                                        IsContentBlocked="true"
+                                        Text="Cargando reglas..." />
+                    </div>
+                </ChildContent>
+            </DxCard>
+        </div>
+            </div>
+        </ChildContent>
+    </DxCard>
+
+    <DxPopup @bind-Visible="tipoFormVisible"
+             ShowFooter="false"
+             Width="min(920px, 96vw)"
+             ShowCloseButton="true"
+             CloseOnOutsideClick="false"
+             BodyCssClass="tipo-form-popup-body">
+        <BodyContentTemplate Context="popupCtx">
+            <div class="tipo-form-shell">
+                <div class="tipo-form-header">
+                    <h6 class="tipo-form-title">
+                        <i class="@(tipoEdit.IsNew ? "bi bi-plus-lg me-2" : "bi bi-pencil-square me-2")"></i>
+                        @(tipoEdit.IsNew ? "Nuevo tipo de transaccion" : "Editar tipo de transaccion")
+                    </h6>
+                    <p class="tipo-form-subtitle mb-0">
+                        @(tipoEdit.IsNew ? "Complete los datos para registrar el tipo de transaccion." : "Actualice la informacion del tipo de transaccion.")
+                    </p>
+                </div>
+
+                <div class="tipo-form-body">
+            @if (!string.IsNullOrWhiteSpace(tipoFormError))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@tipoFormError</DxAlert>
+            }
+
+            <DxFormLayout CssClass="w-100" CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Información General" ColSpanMd="12">
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="12" Caption="Código">
+                         <DxTextBox @bind-Text="tipoEdit.Code" ReadOnly="@(!tipoEdit.IsNew)" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanMd="8" ColSpanXs="12" Caption="Nombre">
+                         <DxTextBox @bind-Text="tipoEdit.Name" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanMd="12" Caption="Descripción">
+                         <DxMemo @bind-Text="tipoEdit.Description" Rows="2" />
+                    </DxFormLayoutItem>
+                    
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Categoría">
+                         <DxTextBox @bind-Text="tipoEdit.Category" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Límite docs">
+                         <DxSpinEdit T="int" @bind-Value="tipoEdit.MaxEntries" Min="0" />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Correlativo visible" ColSpanMd="12" CssClass="mt-3">
+                    <DxFormLayoutItem ColSpanMd="5" ColSpanXs="12" Caption="Número inicial">
+                        <DxSpinEdit T="long"
+                                    @bind-Value="tipoEdit.DocumentSequenceStart"
+                                    Min="1"
+                                    ReadOnly="@tipoEdit.HasPolizas" />
+                        @if (tipoEdit.HasPolizas)
+                        {
+                            <small class="tipo-form-note d-block mt-2">El número inicial queda bloqueado porque este tipo ya tiene pólizas registradas.</small>
+                        }
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanMd="7" ColSpanXs="12" Caption="Vista previa">
+                        <div class="tipo-sequence-card">
+                            <div class="tipo-sequence-card__row">
+                                <span class="tipo-sequence-card__label">Siguiente No. documento</span>
+                                <strong class="tipo-sequence-card__value">@FormatSequence(GetNextDocumentPreview(tipoEdit))</strong>
+                            </div>
+                            <div class="tipo-sequence-card__row">
+                                <span class="tipo-sequence-card__label">Último usado</span>
+                                <strong class="tipo-sequence-card__value">@GetLastDocumentLabel(tipoEdit.LastDocumentNumber)</strong>
+                            </div>
+                            <div class="tipo-sequence-card__row">
+                                <span class="tipo-sequence-card__label">Estado</span>
+                                <strong class="tipo-sequence-card__value">@(tipoEdit.HasPolizas ? "En uso" : "Editable")</strong>
+                            </div>
+                        </div>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Configuracion Tecnica" ColSpanMd="12" CssClass="mt-3">
+                     <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6" Caption="Contabilizacion">
+                         <DxComboBox Data="@typeTransOptions" TextFieldName="Text" ValueFieldName="Value"
+                                     @bind-Value="tipoEdit.TypeTrans" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6" Caption="Aplicable a">
+                         <DxComboBox Data="@typeOperOptions" TextFieldName="Text" ValueFieldName="Value"
+                                     @bind-Value="tipoEdit.TypeOper" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6" Caption="Frecuencia">
+                         <DxComboBox Data="@frequencyOptions" TextFieldName="Text" ValueFieldName="Value"
+                                     @bind-Value="tipoEdit.Frequency" />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Opciones" ColSpanMd="12" CssClass="mt-3">
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6">
+                        <DxCheckBox @bind-Checked="tipoEdit.AllowsCostCenter" CheckType="CheckType.Switch">Centros Costo</DxCheckBox>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6">
+                        <DxCheckBox @bind-Checked="tipoEdit.AllowsThirdParty" CheckType="CheckType.Switch">Terceros</DxCheckBox>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6">
+                        <DxCheckBox @bind-Checked="tipoEdit.AllowsCashFlow" CheckType="CheckType.Switch">Flujo Efec.</DxCheckBox>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6">
+                        <DxCheckBox @bind-Checked="tipoEdit.IsDefault" CheckType="CheckType.Switch">Por defecto</DxCheckBox>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="4" ColSpanXs="6">
+                        <DxCheckBox @bind-Checked="tipoEdit.IsAutomatic" CheckType="CheckType.Switch">Automático</DxCheckBox>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+                </div>
+                <div class="tipo-form-footer text-end">
+                    <DxButton Text="Cancelar"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              CssClass="me-2"
+                              Click="@CloseTipoForm" />
+                    <DxButton Text="Guardar"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              Click="@SaveTipoAsync"
+                              IconCssClass="bi bi-check-lg" />
+                </div>
+            </div>
+        </BodyContentTemplate>
+    </DxPopup>
+
+    <DxPopup @bind-Visible="ruleFormVisible"
+             HeaderText="@ruleFormHeader"
+             ShowFooter="true"
+             Width="min(700px, 95vw)"
+             ShowCloseButton="true"
+             CloseOnOutsideClick="false">
+        <BodyContentTemplate Context="popupCtx">
+            @if (!string.IsNullOrWhiteSpace(ruleFormError))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@ruleFormError</DxAlert>
+            }
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem ColSpanMd="6" ColSpanXs="6" Caption="Línea">
+                    <DxSpinEdit T="int" @bind-Value="ruleEdit.LineNumber" Min="1" ReadOnly="true" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem ColSpanMd="6" ColSpanXs="6">
+                     <DxCheckBox @bind-Checked="ruleEdit.IsActive" CheckType="CheckType.Switch">Regla Activa</DxCheckBox>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutGroup Caption="Rangos de Cuentas" ColSpanMd="12" CssClass="mt-2">
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Desde">
+                        <DxComboBox Data="@accountOptions"
+                                    TextFieldName="Display"
+                                    ValueFieldName="Code"
+                                    @bind-Value="ruleEdit.AccountCodeFrom"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    NullText="Buscar cuenta..." />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Hasta">
+                        <DxComboBox Data="@accountOptions"
+                                    TextFieldName="Display"
+                                    ValueFieldName="Code"
+                                    @bind-Value="ruleEdit.AccountCodeTo"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    NullText="Buscar cuenta..." />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Rangos de Centros" ColSpanMd="12" CssClass="mt-2">
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Desde">
+                        <DxComboBox Data="@costCenterOptions"
+                                    TextFieldName="Display"
+                                    ValueFieldName="Code"
+                                    @bind-Value="ruleEdit.CostCenterCodeFrom"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    NullText="Buscar centro..." />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Hasta">
+                        <DxComboBox Data="@costCenterOptions"
+                                    TextFieldName="Display"
+                                    ValueFieldName="Code"
+                                    @bind-Value="ruleEdit.CostCenterCodeTo"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    NullText="Buscar centro..." />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+                
+                 <DxFormLayoutGroup Caption="Rangos de Terceros" ColSpanMd="12" CssClass="mt-2">
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Desde">
+                        <DxTextBox @bind-Text="ruleEdit.ThirdPartyCodeFrom" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12" Caption="Hasta">
+                        <DxTextBox @bind-Text="ruleEdit.ThirdPartyCodeTo" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </BodyContentTemplate>
+         <FooterContentTemplate>
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@CloseRuleForm" />
+            <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="@SaveRuleAsync" IconCssClass="bi bi-check-lg" />
+        </FooterContentTemplate>
+    </DxPopup>
+
+    <DxPopup @bind-Visible="deleteTipoVisible" HeaderText="Confirmar eliminación" Width="400px" ShowFooter="true" CloseOnOutsideClick="true">
+        <BodyContentTemplate>
+            <div class="d-flex align-items-center gap-3">
+                <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
+                <div>
+                    <p class="mb-1 fw-bold">¿Eliminar este tipo?</p>
+                    <small class="text-muted d-block">Código: <strong>@deleteTipo?.Code</strong></small>
+                    <small class="text-muted">Nombre: @deleteTipo?.Name</small>
+                    <div class="mt-2 text-danger small">Esta acción no se puede deshacer.</div>
+                </div>
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate>
+             <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@CloseDeleteTipoConfirm" />
+             <DxButton Text="Eliminar" RenderStyle="ButtonRenderStyle.Danger" Click="@ConfirmDeleteTipoAsync" IconCssClass="bi bi-trash" />
+        </FooterContentTemplate>
+    </DxPopup>
+
+    <DxPopup @bind-Visible="deleteRuleVisible" HeaderText="Confirmar eliminación" Width="400px" ShowFooter="true" CloseOnOutsideClick="true">
+        <BodyContentTemplate>
+             <div class="d-flex align-items-center gap-3">
+                <i class="bi bi-exclamation-triangle-fill text-warning fs-1"></i>
+                <div>
+                    <p class="mb-1 fw-bold">¿Eliminar Regla?</p>
+                    <small class="text-muted">Línea @deleteRule?.LineNumber</small>
+                    <div class="mt-2 text-danger small">Esta acción no se puede deshacer.</div>
+                </div>
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate>
+             <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@CloseDeleteRuleConfirm" />
+             <DxButton Text="Eliminar" RenderStyle="ButtonRenderStyle.Danger" Click="@ConfirmDeleteRuleAsync" IconCssClass="bi bi-trash" />
+        </FooterContentTemplate>
+    </DxPopup>
+
+</div>
+
+@code {
+    private List<TipoTransaccionDto> tipos = new();
+    private List<TipoTransaccionRuleDto> rules = new();
+    private List<SimpleLookup> accountOptions = new();
+    private List<SimpleLookup> costCenterOptions = new();
+
+    private TipoTransaccionDto? selectedTipo;
+    private TipoTransaccionDto? deleteTipo;
+    private TipoTransaccionRuleDto? deleteRule;
+
+    private bool isLoading;
+    private bool rulesLoading;
+    private bool tipoFormVisible;
+    private bool ruleFormVisible;
+    private bool deleteTipoVisible;
+    private bool deleteRuleVisible;
+
+    private string? pageError;
+    private string? tipoFormError;
+    private string? ruleFormError;
+
+    private TipoTransaccionEditModel tipoEdit = new();
+    private TipoTransaccionRuleEditModel ruleEdit = new();
+
+    private string ruleFormHeader = "Regla";
+    private readonly List<LookupOption> typeTransOptions = new()
+    {
+        new() { Text = "Historica", Value = 0 },
+        new() { Text = "Fiscal", Value = 1 },
+        new() { Text = "PC10 / NIC29", Value = 2 },
+    };
+
+    private readonly List<LookupOption> typeOperOptions = new()
+    {
+        new() { Text = "Todas las transacciones", Value = 0 },
+        new() { Text = "Ingresos", Value = 1 },
+        new() { Text = "Egresos", Value = 2 },
+        new() { Text = "Gastos", Value = 3 },
+        new() { Text = "Costos", Value = 4 },
+    };
+
+    private readonly List<LookupOption> frequencyOptions = new()
+    {
+        new() { Text = "Mensual", Value = 0 },
+        new() { Text = "Anual", Value = 1 },
+        new() { Text = "Diaria", Value = 2 },
+    };
+
+    private int TiposTotal => tipos?.Count ?? 0;
+    private int TiposAutomaticos => tipos?.Count(t => t.IsAutomatic) ?? 0;
+    private int TiposConCentroCosto => tipos?.Count(t => t.AllowsCostCenter) ?? 0;
+
+
+    private TipoTransaccionDto? SelectedTipo
+    {
+        get => selectedTipo;
+        set => selectedTipo = value;
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TenantState.EnsureCompanyAsync();
+        await LoadLookupsAsync();
+        await LoadTiposAsync();
+    }
+
+    private Task OnRefreshClick(MouseEventArgs e) => LoadTiposAsync();
+
+    private async Task OnSelectedTipoChanged(TipoTransaccionDto newValue)
+    {
+        if (ReferenceEquals(selectedTipo, newValue))
+            return;
+
+        selectedTipo = newValue;
+        await OnSelectedTipoChangedAsync();
+    }
+
+    private async Task LoadTiposAsync()
+    {
+        try
+        {
+            isLoading = true;
+            pageError = null;
+            
+            // Simulación de carga, asegura que la URL sea correcta según tu controlador
+            tipos = await Http.GetFromJsonAsync<List<TipoTransaccionDto>>("api/contabilidad/catalogos/tipos-transaccion")
+                    ?? new List<TipoTransaccionDto>();
+
+            var currentId = selectedTipo?.TypeId;
+            selectedTipo = currentId.HasValue
+                ? tipos.FirstOrDefault(t => t.TypeId == currentId.Value)
+                : tipos.FirstOrDefault();
+
+            await OnSelectedTipoChangedAsync();
+        }
+        catch (Exception ex)
+        {
+            pageError = $"Error al cargar tipos: {ex.Message}";
+            tipos = new List<TipoTransaccionDto>();
+            rules = new List<TipoTransaccionRuleDto>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadLookupsAsync()
+    {
+        try
+        {
+            var cuentas = await Http.GetFromJsonAsync<List<PlanCuentaDto>>("api/contabilidad/catalogos/plan-cuentas")
+                          ?? new();
+            accountOptions = cuentas
+                .Where(c => !string.IsNullOrWhiteSpace(c.Code))
+                .Select(c => new SimpleLookup
+                {
+                    Code = c.Code!,
+                    Display = string.IsNullOrWhiteSpace(c.Description)
+                        ? c.Code!
+                        : $"{c.Code} - {c.Description}"
+                })
+                .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+
+            var centros = await Http.GetFromJsonAsync<List<CentroCostoDto>>("api/contabilidad/catalogos/centros-costo")
+                          ?? new();
+            costCenterOptions = centros
+                .Where(c => !string.IsNullOrWhiteSpace(c.Code))
+                .Select(c => new SimpleLookup
+                {
+                    Code = c.Code!,
+                    Display = string.IsNullOrWhiteSpace(c.Name)
+                        ? c.Code!
+                        : $"{c.Code} - {c.Name}"
+                })
+                .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            pageError = $"Error al cargar catálogos: {ex.Message}";
+        }
+    }
+
+    private async Task OnSelectedTipoChangedAsync()
+    {
+        if (selectedTipo is null)
+        {
+            rules = new List<TipoTransaccionRuleDto>();
+            return;
+        }
+
+        await LoadRulesAsync(selectedTipo.TypeId);
+    }
+
+    private async Task LoadRulesAsync(long typeId)
+    {
+        try
+        {
+            rulesLoading = true;
+            // Asegura que la URL sea correcta
+            rules = await Http.GetFromJsonAsync<List<TipoTransaccionRuleDto>>(
+                        $"api/contabilidad/catalogos/tipos-transaccion/{typeId}/rules")
+                    ?? new List<TipoTransaccionRuleDto>();
+        }
+        catch (Exception ex)
+        {
+            pageError = $"Error al cargar reglas: {ex.Message}";
+            rules = new List<TipoTransaccionRuleDto>();
+        }
+        finally
+        {
+            rulesLoading = false;
+        }
+    }
+
+    // --- LÓGICA TIPO TRANSACCIÓN ---
+
+    private void OpenTipoForm(TipoTransaccionDto? item)
+    {
+        tipoFormError = null;
+
+        if (item is null)
+        {
+            tipoEdit = new TipoTransaccionEditModel
+            {
+                IsNew = true,
+                Category = "GENERAL",
+                MaxEntries = 0,
+                TypeTrans = 0,
+                TypeOper = 0,
+                Frequency = 0,
+                DocumentSequenceStart = 1,
+                LastDocumentNumber = 0,
+                NextDocumentNumber = 1,
+                HasPolizas = false
+            };
+        }
+        else
+        {
+            tipoEdit = new TipoTransaccionEditModel
+            {
+                IsNew = false,
+                TypeId = item.TypeId,
+                Code = item.Code ?? string.Empty,
+                Name = item.Name ?? string.Empty,
+                Description = item.Desciption ?? string.Empty,
+                Category = item.Category ?? string.Empty,
+                TypeTrans = item.TypeTrans,
+                TypeOper = item.TypeOper,
+                Frequency = item.Frequency,
+                MaxEntries = item.MaxEntries,
+                AllowsCostCenter = item.AllowsCostCenter,
+                AllowsThirdParty = item.AllowsThirdParty,
+                AllowsCashFlow = item.AllowsCashFlow,
+                AllowsAccountLimit = item.AllowsAccountLimit,
+                IsDefault = item.IsDefault,
+                IsAutomatic = item.IsAutomatic,
+                DocumentSequenceStart = item.DocumentSequenceStart,
+                LastDocumentNumber = item.LastDocumentNumber,
+                NextDocumentNumber = item.NextDocumentNumber,
+                HasPolizas = item.HasPolizas
+            };
+        }
+
+        tipoFormVisible = true;
+    }
+
+    private void CloseTipoForm()
+    {
+        tipoFormVisible = false;
+        tipoFormError = null;
+    }
+
+    private async Task SaveTipoAsync()
+    {
+        var validation = ValidateTipo(tipoEdit);
+        if (!string.IsNullOrWhiteSpace(validation))
+        {
+            tipoFormError = validation;
+            return;
+        }
+
+        var payload = new TipoTransaccionUpsertDto(
+            Code: tipoEdit.Code.Trim(),
+            Name: tipoEdit.Name.Trim(),
+            Description: string.IsNullOrWhiteSpace(tipoEdit.Description) ? null : tipoEdit.Description.Trim(),
+            Category: tipoEdit.Category.Trim(),
+            TypeTrans: tipoEdit.TypeTrans,
+            TypeOper: tipoEdit.TypeOper,
+            Frequency: tipoEdit.Frequency,
+            MaxEntries: tipoEdit.MaxEntries,
+            AllowsCostCenter: tipoEdit.AllowsCostCenter,
+            AllowsThirdParty: tipoEdit.AllowsThirdParty,
+            AllowsCashFlow: tipoEdit.AllowsCashFlow,
+            AllowsAccountLimit: tipoEdit.AllowsAccountLimit,
+            IsDefault: tipoEdit.IsDefault,
+            IsAutomatic: tipoEdit.IsAutomatic,
+            User: "system",
+            TypeId: tipoEdit.TypeId,
+            DocumentSequenceStart: tipoEdit.DocumentSequenceStart);
+
+        try
+        {
+            tipoFormError = null;
+            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/tipos-transaccion", payload);
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var msg = await response.Content.ReadAsStringAsync();
+                tipoFormError = string.IsNullOrWhiteSpace(msg) ? "Error al guardar (Server)." : msg;
+                return;
+            }
+
+            tipoFormVisible = false;
+            await LoadTiposAsync();
+        }
+        catch (Exception ex)
+        {
+            tipoFormError = ex.Message;
+        }
+    }
+
+    private static string? ValidateTipo(TipoTransaccionEditModel model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Code)) return "El código es obligatorio.";
+        if (string.IsNullOrWhiteSpace(model.Name)) return "El nombre es obligatorio.";
+        if (string.IsNullOrWhiteSpace(model.Category)) return "La categoría es obligatoria.";
+        if (model.TypeTrans < 0 || model.TypeTrans > 5) return "Tipo transacción inválido (0-5).";
+        if (model.TypeOper < 0 || model.TypeOper > 10) return "Tipo operación inválido (0-10).";
+        if (model.Frequency < 0 || model.Frequency > 2) return "Frecuencia inválida (0-2).";
+        if (model.MaxEntries < 0) return "Límite debe ser >= 0.";
+        if (model.DocumentSequenceStart < 1) return "El número inicial debe ser mayor o igual a 1.";
+        return null;
+    }
+
+    private static string FormatSequence(long value) => value.ToString("N0");
+
+    private static long GetNextDocumentPreview(TipoTransaccionEditModel model)
+        => Math.Max(model.DocumentSequenceStart, model.LastDocumentNumber + 1);
+
+    private static string GetLastDocumentLabel(long value) => value > 0 ? FormatSequence(value) : "Sin uso";
+
+    private static string GetSequenceStatusText(bool hasPolizas) => hasPolizas ? "En uso" : "Editable";
+
+    private static string GetSequenceStatusCss(bool hasPolizas)
+        => hasPolizas ? "tipo-sequence-cell__status is-locked" : "tipo-sequence-cell__status is-open";
+
+    private void OpenDeleteTipoConfirm(TipoTransaccionDto? item)
+    {
+        if (item is null) return;
+        deleteTipo = item;
+        deleteTipoVisible = true;
+    }
+
+    private void CloseDeleteTipoConfirm()
+    {
+        deleteTipoVisible = false;
+        deleteTipo = null;
+    }
+
+    private async Task ConfirmDeleteTipoAsync()
+    {
+        if (deleteTipo is null) return;
+
+        try
+        {
+            pageError = null;
+            var response = await Http.DeleteAsync($"api/contabilidad/catalogos/tipos-transaccion/{deleteTipo.TypeId}");
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var msg = await response.Content.ReadAsStringAsync();
+                pageError = string.IsNullOrWhiteSpace(msg) ? "Error al eliminar (Server)." : msg;
+                return;
+            }
+
+            deleteTipoVisible = false;
+            await LoadTiposAsync();
+        }
+        catch (Exception ex)
+        {
+            pageError = ex.Message;
+        }
+        finally
+        {
+            deleteTipo = null;
+        }
+    }
+
+    // --- LÓGICA REGLAS ---
+
+    private void OpenRuleForm(TipoTransaccionRuleDto? item)
+    {
+        if (SelectedTipo is null) return;
+        ruleFormError = null;
+
+        if (item is null)
+        {
+            var nextLine = rules.Count == 0 ? 1 : rules.Max(r => r.LineNumber) + 1;
+            ruleEdit = new TipoTransaccionRuleEditModel
+            {
+                IsNew = true,
+                LineNumber = nextLine,
+                IsActive = true
+            };
+            ruleFormHeader = SelectedTipo is null
+                ? "Nueva regla"
+                : $"Nueva regla - {SelectedTipo.Code}";
+        }
+        else
+        {
+            ruleEdit = new TipoTransaccionRuleEditModel
+            {
+                IsNew = false,
+                RuleId = item.RuleId,
+                LineNumber = item.LineNumber,
+                AccountCodeFrom = item.AccountCodeFrom,
+                AccountCodeTo = item.AccountCodeTo,
+                CostCenterCodeFrom = item.CostCenterCodeFrom,
+                CostCenterCodeTo = item.CostCenterCodeTo,
+                ThirdPartyCodeFrom = item.ThirdPartyCodeFrom,
+                ThirdPartyCodeTo = item.ThirdPartyCodeTo,
+                IsActive = item.IsActive
+            };
+            ruleFormHeader = SelectedTipo is null
+                ? "Editar regla"
+                : $"Editar regla - {SelectedTipo.Code}";
+        }
+
+        ruleFormVisible = true;
+    }
+
+    private void CloseRuleForm()
+    {
+        ruleFormVisible = false;
+        ruleFormError = null;
+    }
+
+    private async Task SaveRuleAsync()
+    {
+        if (SelectedTipo is null) return;
+
+        var validation = ValidateRule(ruleEdit);
+        if (!string.IsNullOrWhiteSpace(validation))
+        {
+            ruleFormError = validation;
+            return;
+        }
+
+        var payload = new TipoTransaccionRuleUpsertDto(
+            SelectedTipo.TypeId,
+            ruleEdit.LineNumber,
+            NullIfWhite(ruleEdit.AccountCodeFrom),
+            NullIfWhite(ruleEdit.AccountCodeTo),
+            NullIfWhite(ruleEdit.CostCenterCodeFrom),
+            NullIfWhite(ruleEdit.CostCenterCodeTo),
+            NullIfWhite(ruleEdit.ThirdPartyCodeFrom),
+            NullIfWhite(ruleEdit.ThirdPartyCodeTo),
+            ruleEdit.IsActive,
+            "system",
+            ruleEdit.RuleId);
+
+        try
+        {
+            ruleFormError = null;
+            var response = await Http.PostAsJsonAsync(
+                $"api/contabilidad/catalogos/tipos-transaccion/{SelectedTipo.TypeId}/rules", payload);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var msg = await response.Content.ReadAsStringAsync();
+                ruleFormError = string.IsNullOrWhiteSpace(msg) ? "Error al guardar regla (Server)." : msg;
+                return;
+            }
+
+            ruleFormVisible = false;
+            await LoadRulesAsync(SelectedTipo.TypeId);
+        }
+        catch (Exception ex)
+        {
+            ruleFormError = ex.Message;
+        }
+    }
+
+    private static string? ValidateRule(TipoTransaccionRuleEditModel model)
+    {
+        return null;
+    }
+
+    private void OpenDeleteRuleConfirm(TipoTransaccionRuleDto? item)
+    {
+        if (item is null) return;
+        deleteRule = item;
+        deleteRuleVisible = true;
+    }
+
+    private void CloseDeleteRuleConfirm()
+    {
+        deleteRuleVisible = false;
+        deleteRule = null;
+    }
+
+    private async Task ConfirmDeleteRuleAsync()
+    {
+        if (deleteRule is null) return;
+
+        try
+        {
+            pageError = null;
+            var response = await Http.DeleteAsync($"api/contabilidad/catalogos/tipos-transaccion/rules/{deleteRule.RuleId}");
+            
+            if (!response.IsSuccessStatusCode)
+            {
+                var msg = await response.Content.ReadAsStringAsync();
+                pageError = string.IsNullOrWhiteSpace(msg) ? "Error al eliminar regla (Server)." : msg;
+                return;
+            }
+
+            deleteRuleVisible = false;
+            if (SelectedTipo is not null)
+                await LoadRulesAsync(SelectedTipo.TypeId);
+        }
+        catch (Exception ex)
+        {
+            pageError = ex.Message;
+        }
+        finally
+        {
+            deleteRule = null;
+        }
+    }
+
+    private static string? NullIfWhite(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    private sealed class LookupOption
+    {
+        public string Text { get; set; } = string.Empty;
+        public short Value { get; set; }
+    }
+
+    private sealed class SimpleLookup
+    {
+        public string Code { get; set; } = string.Empty;
+        public string Display { get; set; } = string.Empty;
+    }
+
+    // Modelos de Edición (POCOs simples para los formularios)
+    private sealed class TipoTransaccionEditModel
+    {
+        public bool IsNew { get; set; }
+        public long? TypeId { get; set; }
+        public string Code { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Description { get; set; } = string.Empty;
+        public string Category { get; set; } = string.Empty;
+        public short TypeTrans { get; set; }
+        public short TypeOper { get; set; }
+        public short Frequency { get; set; }
+        public int MaxEntries { get; set; }
+        public bool AllowsCostCenter { get; set; }
+        public bool AllowsThirdParty { get; set; }
+        public bool AllowsCashFlow { get; set; }
+        public bool AllowsAccountLimit { get; set; }
+        public bool IsDefault { get; set; }
+        public bool IsAutomatic { get; set; }
+        public long DocumentSequenceStart { get; set; } = 1;
+        public long LastDocumentNumber { get; set; }
+        public long NextDocumentNumber { get; set; } = 1;
+        public bool HasPolizas { get; set; }
+    }
+
+    private sealed class TipoTransaccionRuleEditModel
+    {
+        public bool IsNew { get; set; }
+        public long? RuleId { get; set; }
+        public int LineNumber { get; set; }
+        public string? AccountCodeFrom { get; set; }
+        public string? AccountCodeTo { get; set; }
+        public string? CostCenterCodeFrom { get; set; }
+        public string? CostCenterCodeTo { get; set; }
+        public string? ThirdPartyCodeFrom { get; set; }
+        public string? ThirdPartyCodeTo { get; set; }
+        public bool IsActive { get; set; }
+    }
+}

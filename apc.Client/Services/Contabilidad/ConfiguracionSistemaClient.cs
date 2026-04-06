@@ -133,45 +133,83 @@ public sealed class ConfiguracionSistemaClient
     }
 
     private static async Task<string?> ObtenerMensajeErrorAsync(HttpResponseMessage response, CancellationToken ct)
+{
+    try
     {
-        try
-        {
-            var contenido = await response.Content.ReadAsStringAsync(ct);
-            if (string.IsNullOrWhiteSpace(contenido))
-            {
-                return null;
-            }
-
-            using var document = JsonDocument.Parse(contenido);
-            var root = document.RootElement;
-
-            // Intentar obtener el detalle del error
-            if (root.TryGetProperty("detail", out var detail))
-            {
-                return detail.GetString();
-            }
-
-            // Intentar obtener el título del error
-            if (root.TryGetProperty("title", out var title))
-            {
-                return title.GetString();
-            }
-
-            // Si es solo una cadena
-            if (root.ValueKind == JsonValueKind.String)
-            {
-                return root.GetString();
-            }
-
-            return contenido;
-        }
-        catch
+        var contenido = await response.Content.ReadAsStringAsync(ct);
+        if (string.IsNullOrWhiteSpace(contenido))
         {
             return null;
         }
-    }
 
-    /// <summary>
+        using var document = JsonDocument.Parse(contenido);
+        var root = document.RootElement;
+
+        if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+        {
+            var mensajes = new List<string>();
+            foreach (var propiedad in errors.EnumerateObject())
+            {
+                if (propiedad.Value.ValueKind == JsonValueKind.Array)
+                {
+                    foreach (var item in propiedad.Value.EnumerateArray())
+                    {
+                        var mensaje = item.GetString();
+                        if (!string.IsNullOrWhiteSpace(mensaje))
+                        {
+                            if (string.IsNullOrWhiteSpace(propiedad.Name))
+                            {
+                                mensajes.Add(mensaje);
+                            }
+                            else
+                            {
+                                mensajes.Add($"{propiedad.Name}: {mensaje}");
+                            }
+                        }
+                    }
+                }
+                else if (propiedad.Value.ValueKind == JsonValueKind.String)
+                {
+                    var mensaje = propiedad.Value.GetString();
+                    if (!string.IsNullOrWhiteSpace(mensaje))
+                    {
+                        mensajes.Add(string.IsNullOrWhiteSpace(propiedad.Name)
+                            ? mensaje
+                            : $"{propiedad.Name}: {mensaje}");
+                    }
+                }
+            }
+
+            if (mensajes.Count > 0)
+            {
+                return string.Join(" | ", mensajes);
+            }
+        }
+
+        if (root.TryGetProperty("detail", out var detail))
+        {
+            return detail.GetString();
+        }
+
+        if (root.TryGetProperty("title", out var title))
+        {
+            return title.GetString();
+        }
+
+        if (root.ValueKind == JsonValueKind.String)
+        {
+            return root.GetString();
+        }
+
+        return contenido;
+    }
+    catch
+    {
+        return null;
+    }
+}
+
+/// <summary>
     /// Convierte todos los DateTime del DTO a UTC
     /// </summary>
     private static void ConvertirDateTimesAUtc(ConfiguracionSistemaDto dto)

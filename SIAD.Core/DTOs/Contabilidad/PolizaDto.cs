@@ -1,7 +1,7 @@
 namespace SIAD.Core.DTOs.Contabilidad;
 
 /// <summary>
-/// DTO para crear/actualizar pólizas contables
+/// DTO para crear/actualizar polizas contables
 /// </summary>
 public sealed record PolizaCrearDto(
     long JournalId,
@@ -14,7 +14,7 @@ public sealed record PolizaCrearDto(
 );
 
 /// <summary>
-/// DTO para líneas de póliza (débito/crédito)
+/// DTO para lineas de poliza (debito/credito)
 /// </summary>
 public sealed record PolizaLineaCrearDto(
     short LineNumber,
@@ -30,7 +30,7 @@ public sealed record PolizaLineaCrearDto(
 );
 
 /// <summary>
-/// DTO para consultar pólizas (lectura)
+/// DTO para consultar polizas (lectura)
 /// </summary>
 public sealed record PolizaDto(
     long VoucherId,
@@ -45,7 +45,7 @@ public sealed record PolizaDto(
     decimal TotalDebit,
     decimal TotalCredit,
     bool IsBalanced,
-    string Status,
+    short Status,
     DateTime CreatedAt,
     string CreatedBy,
     DateTime? PostedAt,
@@ -53,7 +53,7 @@ public sealed record PolizaDto(
 );
 
 /// <summary>
-/// DTO para línea de póliza (lectura)
+/// DTO para linea de poliza (lectura)
 /// </summary>
 public sealed record PolizaLineaDto(
     long LineId,
@@ -101,21 +101,33 @@ public sealed record AperturaSaldoDto(
 );
 
 /// <summary>
-/// DTO para tipo de transacción (catálogo)
+/// DTO para tipo de transaccion (catalogo)
 /// </summary>
 public sealed record TipoTransaccionDto(
     long TypeId,
-    long CompanyId,
+    long companyId,
     string Code,
     string Name,
-    string? Description,
+    String? Desciption,
     string Category,
-    bool IsAutomatic,
+    short TypeTrans,
+    short TypeOper,
+    short Frequency,
+    int MaxEntries,
     bool AllowsCostCenter,
     bool AllowsThirdParty,
+    bool AllowsCashFlow,
+    bool AllowsAccountLimit,
+    bool IsDefault,
+    bool IsAutomatic,
     string Status,
     DateTime CreatedAt,
-    string CreatedBy
+    string CreatedBy,
+    short? StatusId = null,
+    long DocumentSequenceStart = 1,
+    long LastDocumentNumber = 0,
+    long NextDocumentNumber = 1,
+    bool HasPolizas = false
 );
 
 public sealed record TipoTransaccionUpsertDto(
@@ -123,7 +135,49 @@ public sealed record TipoTransaccionUpsertDto(
     string Name,
     string? Description,
     string Category,
-    bool IsAutomatic = false,
-    bool AllowsCostCenter = false,
-    bool AllowsThirdParty = false
+    short TypeTrans,
+    short TypeOper,
+    short Frequency,
+    int MaxEntries,
+    bool AllowsCostCenter,
+    bool AllowsThirdParty,
+    bool AllowsCashFlow,
+    bool AllowsAccountLimit,
+    bool IsDefault,
+    bool IsAutomatic,
+    string User,
+    long? TypeId = null,
+    short? StatusId = null,
+    string? Status = null,
+    long DocumentSequenceStart = 1
+);
+
+public sealed record TipoTransaccionRuleDto(
+    long RuleId,
+    long CompanyId,
+    long TypeId,
+    int LineNumber,
+    string? AccountCodeFrom,
+    string? AccountCodeTo,
+    string? CostCenterCodeFrom,
+    string? CostCenterCodeTo,
+    string? ThirdPartyCodeFrom,
+    string? ThirdPartyCodeTo,
+    bool IsActive,
+    DateTime CreatedAt,
+    string CreatedBy
+);
+
+public sealed record TipoTransaccionRuleUpsertDto(
+    long TypeId,
+    int LineNumber,
+    string? AccountCodeFrom,
+    string? AccountCodeTo,
+    string? CostCenterCodeFrom,
+    string? CostCenterCodeTo,
+    string? ThirdPartyCodeFrom,
+    string? ThirdPartyCodeTo,
+    bool IsActive,
+    string User,
+    long? RuleId = null
 );

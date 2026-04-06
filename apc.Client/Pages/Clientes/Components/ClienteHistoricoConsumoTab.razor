@@ -1,0 +1,297 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Clientes
+@inject apc.Client.Services.Clientes.ClientesClient ClientesClient
+@inject IToastNotificationService ToastService
+
+<div class="modern-card cliente-historico-consumo-container">
+    <div class="modern-card-header">
+        <div class="d-flex justify-content-between align-items-start flex-wrap gap-2">
+            <div>
+                <div class="section-title">Histórico de Consumo</div>
+                @if (MostrarDatosCliente)
+                {
+                    <div class="text-muted small">
+                        @if (dataSource?.Header is not null)
+                        {
+                            <span class="me-2"><b>@dataSource.Header.CodigoCliente</b></span>
+                            <span>@dataSource.Header.NombreCliente</span>
+                        }
+                    </div>
+                }
+            </div>
+
+            <div class="d-flex gap-2 flex-wrap align-items-center">
+                <span class="badge-count">
+                    @($"{(dataSource?.LastTotalCount ?? 0):N0} registros")
+                </span>
+                <span class="badge-count">
+                    @($"Total consumo: {(dataSource?.TotalConsumo ?? 0m):N2}")
+                </span>
+
+                <DxButton CssClass="btn-icon"
+                          IconCssClass="bi bi-layout-three-columns"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => showColumnsPopup = true)"
+                          Text="Columnas" />
+
+                <DxButton CssClass="btn-icon"
+                          IconCssClass="bi bi-arrow-repeat"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="ReloadAsync"
+                          Text="Recargar" />
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card-body">
+        <div class="d-flex flex-wrap gap-3 align-items-end mb-3">
+            <div>
+                <label class="form-label mb-1">Desde</label>
+                <input type="date" class="form-control"
+                       @bind="desdeInput"
+                       @bind:format="yyyy-MM-dd" />
+            </div>
+
+            <div>
+                <label class="form-label mb-1">Hasta</label>
+                <input type="date" class="form-control"
+                       @bind="hastaInput"
+                       @bind:format="yyyy-MM-dd" />
+            </div>
+
+            <div class="d-flex gap-2">
+                <DxButton Text="Aplicar"
+                          IconCssClass="bi bi-funnel"
+                          CssClass="btn-icon"
+                          Click="ReloadAsync" />
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(dataSource?.LastError))
+            {
+                <div class="alert alert-danger mb-0 ms-auto">
+                    @dataSource!.LastError
+                </div>
+            }
+        </div>
+
+        @if (ClienteId <= 0)
+        {
+            <div class="alert alert-warning mb-0">Seleccione un cliente para ver el histórico.</div>
+        }
+        else
+        {
+            <div class="grid-wrapper">
+                <DxGrid @ref="grid"
+                        Data="@dataSource"
+                        KeyFieldName="@nameof(ClienteHistoricoConsumoItemDto.Periodo)"
+                        CssClass="grid-solicitudes"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false"
+                        FocusedRowEnabled="false"
+                        VirtualScrollingEnabled="true"
+                        VirtualScrollingMode="GridVirtualScrollingMode.Rows"
+                        PageSize="100"
+                        CustomizeElement="OnGridCustomizeElement">
+
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.Periodo)"
+                                          Caption="Periodo"
+                                          Width="110px"
+                                          Visible="@colPeriodo" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.DisplayFechaLectAnterior)"
+                                          Caption="F. Ant."
+                                          Width="120px"
+                                          Visible="@colFechaAnt" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.DisplayFechaLectActual)"
+                                          Caption="F. Act."
+                                          Width="120px"
+                                          Visible="@colFechaAct" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.LecturaAnterior)"
+                                          Caption="Lect. Ant."
+                                          DisplayFormat="n2"
+                                          Width="120px"
+                                          Visible="@colLectAnt" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.LecturaActual)"
+                                          Caption="Lect. Act."
+                                          DisplayFormat="n2"
+                                          Width="120px"
+                                          Visible="@colLectAct" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.Consumo)"
+                                          Caption="Consumo"
+                                          DisplayFormat="n2"
+                                          Width="110px"
+                                          Visible="@colConsumo" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.Total)"
+                                          Caption="Total"
+                                          DisplayFormat="n2"
+                                          Width="110px"
+                                          Visible="@colTotal" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.Condicion)"
+                                          Caption="Condición"
+                                          Width="140px"
+                                          Visible="@colCondicion" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.TipoLectura)"
+                                          Caption="Tipo Lect."
+                                          Width="140px"
+                                          Visible="@colTipoLectura" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.Ajuste)"
+                                          Caption="Ajuste"
+                                          Width="120px"
+                                          Visible="@colAjuste" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteHistoricoConsumoItemDto.Observacion)"
+                                          Caption="Observación"
+                                          MinWidth="220"
+                                          Visible="@colObservacion" />
+                    </Columns>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Modal (DevExpress) para mostrar/ocultar columnas -->
+<DxPopup Visible="@showColumnsPopup"
+         VisibleChanged="@((bool v) => showColumnsPopup = v)"
+         HeaderText="Columnas visibles"
+         ShowCloseButton="true"
+         CloseOnOutsideClick="true"
+         CssClass="consumo-popup"
+         Width="520px">
+
+    <BodyContentTemplate>
+        <div class="modern-popup-body">
+            <div class="text-muted small mb-3">
+                Activa/desactiva columnas (se aplica al instante).
+            </div>
+
+            <div class="row g-2">
+                <div class="col-6"><DxCheckBox @bind-Checked="colPeriodo">Periodo</DxCheckBox></div>
+                <div class="col-6"><DxCheckBox @bind-Checked="colConsumo">Consumo</DxCheckBox></div>
+
+                <div class="col-6"><DxCheckBox @bind-Checked="colFechaAnt">F. Lect. Ant.</DxCheckBox></div>
+                <div class="col-6"><DxCheckBox @bind-Checked="colFechaAct">F. Lect. Act.</DxCheckBox></div>
+
+                <div class="col-6"><DxCheckBox @bind-Checked="colLectAnt">Lectura Ant.</DxCheckBox></div>
+                <div class="col-6"><DxCheckBox @bind-Checked="colLectAct">Lectura Act.</DxCheckBox></div>
+
+                <div class="col-6"><DxCheckBox @bind-Checked="colTotal">Total</DxCheckBox></div>
+                <div class="col-6"><DxCheckBox @bind-Checked="colCondicion">Condición</DxCheckBox></div>
+
+                <div class="col-6"><DxCheckBox @bind-Checked="colTipoLectura">Tipo Lectura</DxCheckBox></div>
+                <div class="col-6"><DxCheckBox @bind-Checked="colAjuste">Ajuste</DxCheckBox></div>
+
+                <div class="col-12"><DxCheckBox @bind-Checked="colObservacion">Observación</DxCheckBox></div>
+            </div>
+        </div>
+    </BodyContentTemplate>
+
+    <FooterContentTemplate>
+        <div class="d-flex justify-content-end gap-2">
+            <DxButton Text="Cerrar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => showColumnsPopup = false)" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public int ClienteId { get; set; }
+    [Parameter] public bool MostrarDatosCliente { get; set; } = true;
+
+    private DxGrid? grid;
+    private ClienteHistoricoConsumoGridDataSource? dataSource;
+
+    private DateTime desdeInput = DateTime.Today.AddYears(-3);
+    private DateTime hastaInput = DateTime.Today;
+
+    private bool pendingReload;
+
+    // Visibilidad de columnas (default: todo visible)
+    private bool colPeriodo = true;
+    private bool colFechaAnt = true;
+    private bool colFechaAct = true;
+    private bool colLectAnt = true;
+    private bool colLectAct = true;
+    private bool colConsumo = true;
+    private bool colTotal = true;
+    private bool colCondicion = true;
+    private bool colTipoLectura = true;
+    private bool colAjuste = true;
+    private bool colObservacion = true;
+
+    private bool showColumnsPopup;
+
+    protected override void OnInitialized()
+    {
+        dataSource = new ClienteHistoricoConsumoGridDataSource(
+            ClientesClient,
+            onDataChanged: () => InvokeAsync(StateHasChanged)
+        );
+    }
+
+    protected override void OnParametersSet()
+    {
+        if (dataSource is null)
+            return;
+
+        dataSource.ClienteId = ClienteId;
+
+        // Normaliza rango
+        var desde = desdeInput.Date;
+        var hasta = hastaInput.Date;
+        if (hasta < desde)
+        {
+            (desde, hasta) = (hasta, desde);
+            desdeInput = desde;
+            hastaInput = hasta;
+        }
+
+        dataSource.Desde = desde;
+        dataSource.Hasta = hasta;
+
+        // Si ya existe grid, recarga; si no, marca pendiente
+        if (grid is not null)
+            _ = ReloadAsync();
+        else
+            pendingReload = true;
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (pendingReload && grid is not null)
+        {
+            pendingReload = false;
+            await ReloadAsync();
+        }
+    }
+
+    private Task ReloadAsync()
+    {
+        if (grid is null || dataSource is null || ClienteId <= 0)
+            return Task.CompletedTask;
+
+        // Virtual scrolling: el grid pedirá solo lo visible (skip/take) al DataSource
+        grid.Reload(); // Reload() es void en esta versión de DevExpress
+        return Task.CompletedTask;
+    }
+
+    private void OnGridCustomizeElement(GridCustomizeElementEventArgs e)
+    {
+        // Mantén “tabla limpia” y permite reforzar estilos por celda si lo necesitas.
+        // Aquí puedes mapear clases por columna sin tocar el look general.
+        // (Ej: e.CssClass = "client-cell";)
+    }
+}

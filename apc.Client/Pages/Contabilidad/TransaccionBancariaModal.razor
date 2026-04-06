@@ -1,0 +1,336 @@
+﻿@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using SIAD.Core.DTOs.Bancos
+@using SIAD.Core.DTOs.Contabilidad
+
+<div class="@ModalBodyClass">
+@if (CuentasFiltradas != null && CuentasFiltradas.Count > 0)
+{
+    <EditForm Model="@NuevaTransaccion" OnValidSubmit="GuardarAsync" class="w-100">
+        <DataAnnotationsValidator />
+        <div class="row g-4">
+            <div class="col-12">
+                <div class="form-group mb-3">
+                        <label class="form-label">Cuenta Bancaria: <span class="text-danger">*</span></label>
+                        <InputSelect @bind-Value="BancoCuentaSeleccionadaId"
+                                     class="form-control"
+                                     disabled="@(ReadOnly || (BancoCuentaId.HasValue && BancoCuentaId.Value > 0))">
+                            <option value="0">-- Seleccione una cuenta --</option>
+                            @foreach (var cuenta in CuentasFiltradas)
+                            {
+                                <option value="@cuenta.BancoCuentaId">
+                                    @(cuenta.BancoNombre ?? "Cuenta") - @cuenta.NumeroCuenta (@(cuenta.Moneda ?? "N/A"))
+                                </option>
+                            }
+                        </InputSelect>
+                        <ValidationMessage For="@(() => NuevaTransaccion.BancoCuentaId)" class="text-danger d-block mt-1" />
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label">Tipo de Transacción: <span class="text-danger">*</span></label>
+                                <InputSelect @bind-Value="NuevaTransaccion.IdTipoTransaccion"
+                                             class="form-control"
+                                             disabled="@(ReadOnly || TiposTransaccion.Count == 0)">
+                                    <option value="">-- Seleccione un tipo --</option>
+                                    @foreach (var tipo in TiposTransaccion)
+                                    {
+                                        <option value="@tipo.TipoTransaccion">@($"{tipo.TipoTransaccion} - {tipo.Nombre}")</option>
+                                    }
+                                </InputSelect>
+                                <ValidationMessage For="@(() => NuevaTransaccion.IdTipoTransaccion)" class="text-danger d-block mt-1" />
+                                @if (!string.IsNullOrWhiteSpace(MensajeTiposError))
+                                {
+                                    <div class="text-danger small mt-1">@MensajeTiposError</div>
+                                }
+                                else if (TiposTransaccion.Count == 0)
+                                {
+                                    <div class="text-muted small mt-1">No hay tipos de transaccion disponibles.</div>
+                                }
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label">Fecha: <span class="text-danger">*</span></label>
+                                <InputDate @bind-Value="fecha"
+                                           class="form-control"
+                                           max="@DateTime.Today.ToString("yyyy-MM-dd")"
+                                           disabled="@ReadOnly" />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <label class="form-label">Descripción: <span class="text-danger">*</span></label>
+                        <InputTextArea @bind-Value="NuevaTransaccion.Descripcion"
+                                       class="form-control"
+                                       rows="3"
+                                       placeholder="Describa el movimiento..."
+                                       maxlength="500"
+                                       disabled="@ReadOnly" />
+                        <ValidationMessage For="@(() => NuevaTransaccion.Descripcion)" class="text-danger d-block mt-1" />
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label">Referencia: <span class="text-danger">*</span></label>
+                                <InputText @bind-Value="NuevaTransaccion.Referencia"
+                                           class="form-control"
+                                           placeholder="Número de referencia"
+                                           maxlength="100"
+                                           disabled="@ReadOnly" />
+                                <ValidationMessage For="@(() => NuevaTransaccion.Referencia)" class="text-danger d-block mt-1" />
+                            </div>
+                        </div>
+
+                        <div class="col-md-6">
+                            <div class="form-group mb-3">
+                                <label class="form-label">Monto total: <span class="text-danger">*</span></label>
+                                <div class="input-group">
+                                    <span class="input-group-text">L.</span>
+                                    <InputNumber @bind-Value="NuevaTransaccion.Monto"
+                                                 class="form-control text-end"
+                                                 step="0.01"
+                                                 min="0.01"
+                                                 disabled="@ReadOnly" />
+                                </div>
+                                <ValidationMessage For="@(() => NuevaTransaccion.Monto)" class="text-danger d-block mt-1" />
+                                @if (!ReadOnly)
+                                {
+                                    <div class="alert @DiferenciaAlertClass py-1 px-2 mt-2 mb-0 small" role="alert">
+                                        Diferencia: @FormatearMonto(DiferenciaMonto)
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (MostrarTasaCambio)
+                    {
+                        <div class="row">
+                            <div class="col-md-6">
+                                <div class="form-group mb-3">
+                                    <label class="form-label">Tasa de cambio: <span class="text-danger">*</span></label>
+                                    <div class="input-group">
+                                    <span class="input-group-text">L.</span>
+                                    <InputNumber @bind-Value="NuevaTransaccion.TasaCambio"
+                                                 class="form-control text-end"
+                                                 step="0.0001"
+                                                 min="0.0001"
+                                                 disabled="@ReadOnly" />
+                                </div>
+                                <ValidationMessage For="@(() => NuevaTransaccion.TasaCambio)" class="text-danger d-block mt-1" />
+                            </div>
+                        </div>
+                        </div>
+                    }
+                </div>
+            <div class="col-12">
+                    <div class="border rounded p-3 bg-light">
+                        <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                            <label class="form-label mb-0">Detalle contable: <span class="text-danger">*</span></label>
+                            @if (!ReadOnly)
+                            {
+                                <button type="button" class="btn btn-outline-primary btn-sm" @onclick="AgregarContraLinea">
+                                    Agregar
+                                </button>
+                            }
+                        </div>
+
+                        @if (!string.IsNullOrWhiteSpace(MensajeCuentasError))
+                        {
+                            <div class="text-danger small mt-1">@MensajeCuentasError</div>
+                        }
+                        else if (CuentasContra.Count == 0)
+                        {
+                            <div class="text-muted small mt-1">No hay cuentas contables disponibles.</div>
+                        }
+                        else
+                        {
+                        <div class="table-responsive">
+                            <table class="table table-sm table-striped align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width: 24%;">Cuenta</th>
+                                        <th>Descripción</th>
+                                        <th style="width: 18%;">Referencia</th>
+                                        <th style="width: 14%;" class="text-end">@DebitoHeader</th>
+                                        <th style="width: 14%;" class="text-end">@CreditoHeader</th>
+                                        <th style="width: 10%;" class="text-end">Acciones</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @{
+                                        var totalContra = TotalContra;
+                                        var monto = NuevaTransaccion.Monto;
+                                        var bancoDebito = EsEntrada ? monto : 0m;
+                                        var bancoCredito = EsEntrada ? 0m : monto;
+                                    }
+                                    <tr class="table-secondary">
+                                        <td>@GetBancoCuentaDisplay()</td>
+                                        <td>@NuevaTransaccion.Descripcion</td>
+                                        <td>@(string.IsNullOrWhiteSpace(NuevaTransaccion.Referencia) ? "-" : NuevaTransaccion.Referencia)</td>
+                                        <td class="text-end">@FormatearMonto(bancoDebito)</td>
+                                        <td class="text-end">@FormatearMonto(bancoCredito)</td>
+                                        <td></td>
+                                    </tr>
+
+                                    @if (ReadOnly)
+                                    {
+                                        if (ContraLineasValidas.Count == 0)
+                                        {
+                                            <tr>
+                                                <td colspan="6" class="text-muted small">
+                                                    Detalle contable no disponible para esta transacción.
+                                                </td>
+                                            </tr>
+                                        }
+                                        else
+                                        {
+                                            @foreach (var linea in ContraLineasValidas)
+                                            {
+                                                <tr>
+                                                    <td>@GetCuentaDisplay(linea.CuentaId)</td>
+                                                    <td>@GetLineaDescripcion(linea)</td>
+                                                    <td>@(string.IsNullOrWhiteSpace(linea.SourceDocument) ? "-" : linea.SourceDocument)</td>
+                                                    <td class="text-end">@(EsEntrada ? FormatearMonto(0m) : FormatearMonto(linea.Monto))</td>
+                                                    <td class="text-end">@(EsEntrada ? FormatearMonto(linea.Monto) : FormatearMonto(0m))</td>
+                                                    <td></td>
+                                                </tr>
+                                            }
+                                        }
+                                    }
+                                    else
+                                    {
+                                        @for (var i = 0; i < NuevaTransaccion.ContraCuentas.Count; i++)
+                                        {
+                                            var linea = NuevaTransaccion.ContraCuentas[i];
+                                            <tr @key="linea">
+                                                <td>
+                                                    <DxComboBox Data="@CuentasContraLookup"
+                                                                TData="CuentaContableLookupDto"
+                                                                TValue="long"
+                                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                                                                TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                                @bind-Value="linea.CuentaId"
+                                                                NullText="-- Seleccione una cuenta --"
+                                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                                DropDownStyle="DropDownStyle.DropDown"
+                                                                DropDownTriggerMode="DropDownTriggerMode.Input"
+                                                                SearchMode="ListSearchMode.AutoSearch"
+                                                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                                SearchDelay="200"
+                                                                AllowUserInput="true"
+                                                                Enabled="@(!ReadOnly)" />
+                                                </td>
+                                                <td>
+                                                    <InputText @bind-Value="linea.Descripcion"
+                                                               class="form-control"
+                                                               placeholder="Descripción"
+                                                               maxlength="500"
+                                                               disabled="@ReadOnly" />
+                                                </td>
+                                                <td>
+                                                    <InputText @bind-Value="linea.SourceDocument"
+                                                               class="form-control"
+                                                               placeholder="Documento fuente"
+                                                               maxlength="120"
+                                                               disabled="@ReadOnly" />
+                                                </td>
+                                                <td>
+                                                    @if (!EsEntrada)
+                                                    {
+                                                        <div class="input-group">
+                                                            <span class="input-group-text">L.</span>
+                                                            <InputNumber @bind-Value="linea.Monto"
+                                                                         class="form-control text-end"
+                                                                         step="0.01"
+                                                                         min="0.01"
+                                                                         disabled="@ReadOnly" />
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="d-block text-end">@FormatearMonto(0m)</span>
+                                                    }
+                                                </td>
+                                                <td>
+                                                    @if (EsEntrada)
+                                                    {
+                                                        <div class="input-group">
+                                                            <span class="input-group-text">L.</span>
+                                                            <InputNumber @bind-Value="linea.Monto"
+                                                                         class="form-control text-end"
+                                                                         step="0.01"
+                                                                         min="0.01"
+                                                                         disabled="@ReadOnly" />
+                                                        </div>
+                                                    }
+                                                    else
+                                                    {
+                                                        <span class="d-block text-end">@FormatearMonto(0m)</span>
+                                                    }
+                                                </td>
+                                                <td class="text-end">
+                                                    <button type="button"
+                                                            class="btn btn-outline-danger btn-sm"
+                                                            @onclick="() => QuitarContraLinea(linea)"
+                                                            disabled="@(NuevaTransaccion.ContraCuentas.Count == 1)">
+                                                        Quitar
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                                <tfoot>
+                                    @{
+                                        var contraDebito = EsEntrada ? 0m : totalContra;
+                                        var contraCredito = EsEntrada ? totalContra : 0m;
+                                        var totalDebito = bancoDebito + contraDebito;
+                                        var totalCredito = bancoCredito + contraCredito;
+                                    }
+                                    <tr class="fw-semibold">
+                                        <td colspan="3" class="text-end">Total</td>
+                                        <td class="text-end">@FormatearMonto(totalDebito)</td>
+                                        <td class="text-end">@FormatearMonto(totalCredito)</td>
+                                        <td></td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                    }
+
+                        <ValidationMessage For="@(() => NuevaTransaccion.ContraCuentas)" class="text-danger d-block mt-1" />
+                    </div>
+                </div>
+
+            <div class="col-12">
+                <div class="d-flex gap-2 justify-content-end mt-2">
+                    <button type="button" class="btn btn-secondary" @onclick="CancelarAsync">@((ReadOnly ? "Cerrar" : "Cancelar"))</button>
+                    @if (!ReadOnly)
+                    {
+                        <button type="submit" class="btn btn-primary" disabled="@Guardando">Guardar</button>
+                    }
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(MensajeError))
+                {
+                    <div class="alert alert-danger mt-3">
+                        @MensajeError
+                    </div>
+                }
+            </div>
+        </div>
+    </EditForm>
+}
+else
+{
+    <div class="alert alert-warning">
+        No hay cuentas disponibles para este banco.
+    </div>
+}
+</div>

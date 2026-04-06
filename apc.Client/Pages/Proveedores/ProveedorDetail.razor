@@ -1,0 +1,107 @@
+﻿@page "/proveedores/{codigo}"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services.Proveedores
+@using apc.Client.Pages.Proveedores.Components
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject ILogger<ProveedorDetail> Logger
+
+<ErrorBoundary>
+    <ErrorContent Context="ex">
+        <div class="alert alert-danger" role="alert">
+            Error en la pantalla de proveedor: @ex.Message
+        </div>
+    </ErrorContent>
+    <ChildContent>
+        <DxScrollView Height="100%">
+            <DxToolbar>
+                <Items>
+                    <DxToolbarItem CssClass="m-2" Text="Regresar a la lista" IconCssClass="oi oi-arrow-left"
+                                   Click="BackToList" />
+                    <DxToolbarItem CssClass="m-2" Text="Editar" IconCssClass="oi oi-pencil"
+                                   Click="EditProveedor" />
+                </Items>
+            </DxToolbar>
+
+            @if (isLoading)
+            {
+                <div class="text-muted mb-2">Cargando proveedor @Codigo...</div>
+                <DxSkeletonLine />
+                <DxSkeletonLine />
+                <DxSkeletonLine />
+            }
+            else if (!string.IsNullOrEmpty(error))
+            {
+                <div class="alert alert-danger" role="alert">@error</div>
+            }
+            else if (proveedor is null)
+            {
+                <div class="alert alert-warning" role="alert">Proveedor no encontrado.</div>
+            }
+            else
+            {
+                <div class="mb-2">
+                    <strong>@proveedor.Codigo</strong>
+                    <span class="ms-2">@proveedor.Nombre</span>
+                </div>
+
+                <DxTabs @bind-ActiveTabIndex="activeTabIndex" CssClass="mb-3">
+                    <DxTabPage Text="Datos generales">
+                        <ContentTemplate>
+                            @if (activeTabIndex == 0)
+                            {
+                                <ProveedorDetailGeneral Proveedor="@proveedor" />
+                            }
+                        </ContentTemplate>
+                    </DxTabPage>
+                </DxTabs>
+            }
+        </DxScrollView>
+    </ChildContent>
+</ErrorBoundary>
+
+@code {
+    [Parameter]
+    public string Codigo { get; set; } = string.Empty;
+
+    private ProveedorDetailDto? proveedor;
+    private bool isLoading = true;
+    private string? error;
+    private int activeTabIndex;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(Codigo))
+            {
+                error = "Codigo invalido.";
+                proveedor = null;
+                return;
+            }
+
+            proveedor = await ProveedoresClient.ObtenerPorCodigoAsync(Codigo);
+        }
+        catch (Exception ex)
+        {
+            error = ex.Message;
+            Logger.LogError(ex, "Error al cargar proveedor {ProveedorCodigo}", Codigo);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void BackToList() => Navigation.NavigateTo("/proveedores");
+
+    private void EditProveedor()
+    {
+        var safeCodigo = Uri.EscapeDataString(Codigo);
+        Navigation.NavigateTo($"/proveedores/{safeCodigo}/editar");
+    }
+}

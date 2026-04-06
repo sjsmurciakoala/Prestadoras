@@ -26,7 +26,7 @@ public sealed class SaldosService : ISaldosService
     )
     {
         // Obtener póliza con todas sus líneas
-        var poliza = await _context.con_polizas
+        var poliza = await _context.con_partida_hdrs
             .Include(p => p.lineas)
             .ThenInclude(l => l.account)
             .Where(x => x.poliza_id == polizaId && x.company_id == companyId)
@@ -164,3 +164,4 @@ public sealed class SaldosService : ISaldosService
         await _context.SaveChangesAsync(ct);
     }
 }
+

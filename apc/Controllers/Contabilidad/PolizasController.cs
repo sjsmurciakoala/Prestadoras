@@ -1,14 +1,16 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
+using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Services.Contabilidad;
 using SIAD.Core.Tenancy;
+using apc.Security;
 
 namespace apc.Controllers.Contabilidad;
 
 [ApiController]
 [Route("api/contabilidad/polizas")]
-[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad)]
 public sealed class PolizasController : ControllerBase
 {
     private readonly IPolizaService _polizas;
@@ -45,29 +47,8 @@ public sealed class PolizasController : ControllerBase
         return BadRequest(new ProblemDetails { Title = "Parámetros insuficientes", Detail = "Debe especificar periodId o journalId" });
     }
 
-    public sealed record CrearPolizaRequest(
-        long? PeriodId,
-        long? JournalId,
-        DateTime PolizaDate,
-        string Module,
-        string DocumentType,
-        string? Description,
-        List<PolizaLineaRequest> Lineas
-    );
-
-    public sealed record PolizaLineaRequest(
-        long AccountId,
-        long? CostCenterId,
-        decimal DebitAmount,
-        decimal CreditAmount,
-        string? Description,
-        string? CurrencyCode,
-        decimal? ExchangeRate,
-        string? SourceDocument
-    );
-
     [HttpPost]
-    public async Task<IActionResult> Crear([FromBody] CrearPolizaRequest req, CancellationToken ct)
+    public async Task<IActionResult> Crear([FromBody] PolizaCrearRequest req, CancellationToken ct)
     {
         if (!ModelState.IsValid)
             return BadRequest(ModelState);
@@ -75,25 +56,43 @@ public sealed class PolizasController : ControllerBase
         var companyId = _currentCompany.GetCompanyId();
         var userId = User?.Identity?.Name ?? "SYSTEM";
 
+        // Convertir fecha a UTC
+        var polizaDate = req.PolizaDate.Kind == DateTimeKind.Unspecified
+            ? DateTime.SpecifyKind(req.PolizaDate, DateTimeKind.Utc)
+            : req.PolizaDate.ToUniversalTime();
+
         var lineas = req.Lineas?.Select(l => new PolizaLineaCrearDto(
+            (short)0,
             l.AccountId,
             l.CostCenterId,
+            l.ThirdPartyId,
             l.DebitAmount,
             l.CreditAmount,
-            l.Description,
             l.CurrencyCode,
             l.ExchangeRate,
+            l.Description,
             l.SourceDocument
         )).ToList() ?? new List<PolizaLineaCrearDto>();
 
-        var id = await _polizas.CrearAsync(companyId, req.PeriodId, req.JournalId, req.PolizaDate, req.Module, req.DocumentType, req.Description ?? string.Empty, lineas, userId, ct);
+        var id = await _polizas.CrearAsync(
+            companyId,
+            req.TypeId,
+            req.PeriodId,
+            req.JournalId,
+            polizaDate,
+            req.Module,
+            req.DocumentType,
+            req.DocumentId,
+            req.DocumentNumber,
+            req.Description ?? string.Empty,
+            lineas,
+            userId,
+            ct);
         return Created($"api/contabilidad/polizas/{id}", new { id });
     }
 
-    public sealed record ActualizarPolizaRequest(DateTime PolizaDate, string? Description);
-
     [HttpPut("{id:long}")]
-    public async Task<IActionResult> Actualizar(long id, [FromBody] ActualizarPolizaRequest req, CancellationToken ct)
+    public async Task<IActionResult> Actualizar(long id, [FromBody] PolizaActualizarRequest req, CancellationToken ct)
     {
         var companyId = _currentCompany.GetCompanyId();
         var userId = User?.Identity?.Name ?? "SYSTEM";
@@ -135,3 +134,4 @@ public sealed class PolizasController : ControllerBase
         return Ok(new { balanceado = ok, totalDebito = debit, totalCredito = credit });
     }
 }
+

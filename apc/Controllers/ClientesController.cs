@@ -48,19 +48,6 @@ public class ClientesController : ControllerBase
 
     }
 
-    [HttpGet("{id:int}/tarifas")]
-
-    public async Task<IActionResult> GetTarifas(int id, CancellationToken cancellationToken)
-
-    {
-
-        var tarifas = await _clientesService.GetTarifasAsync(id, cancellationToken);
-
-        return Ok(tarifas);
-
-    }
-
-
 
     [HttpGet("{id:int}/configuracion-tarifa/header")]
 
@@ -68,9 +55,11 @@ public class ClientesController : ControllerBase
 
     {
 
-        var header = await _clientesService.GetConfiguracionTarifaHeaderAsync(id, cancellationToken);
+        var usuario = User?.Identity?.Name ?? "system";
 
-        return Ok(header);
+        var header = await _clientesService.GetConfiguracionTarifaHeaderAsync(id, usuario, cancellationToken);
+
+        return header is null ? NotFound() : Ok(header);
 
     }
 
@@ -437,6 +426,20 @@ public class ClientesController : ControllerBase
 
 
 
+    [HttpPost("generar-codigo")]
+    public async Task<IActionResult> GenerarCodigo(CancellationToken cancellationToken)
+    {
+        try
+        {
+            var codigo = await _clientesService.GenerarCodigoClienteAsync(cancellationToken);
+            return Ok(new { codigo });
+        }
+        catch (Exception ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
     [HttpPost]
 
     public async Task<IActionResult> Post([FromBody] ClienteCreateDto dto, CancellationToken cancellationToken)
@@ -471,9 +474,9 @@ public class ClientesController : ControllerBase
 
             var usuario = User?.Identity?.Name ?? "system";
 
-            var id = await _clientesService.CrearClienteAsync(dto, usuario, cancellationToken);
+            var response = await _clientesService.CrearClienteAsync(dto, usuario, cancellationToken);
 
-            return CreatedAtAction(nameof(GetById), new { id }, new { id });
+            return CreatedAtAction(nameof(GetById), new { id = response.Id }, response);
 
         }
 
@@ -596,6 +599,5 @@ public class ClientesController : ControllerBase
 
 
 }
-
 
 

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 
 namespace SIAD.Core.Entities;
 
@@ -13,4 +14,10 @@ public partial class pagos_miscelaneo
     public decimal total { get; set; }
 
     public string? estado { get; set; }
+
+    public string? banco { get; set; }
+
+    public string? usuario { get; set; }
+
+    public virtual ICollection<pagos_miscelaneos_dtl> pagos_miscelaneos_dtl { get; set; } = new List<pagos_miscelaneos_dtl>();
 }

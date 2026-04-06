@@ -1,0 +1,700 @@
+@page "/tarifas-contador"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.TarifasContador
+@using SIAD.Core.DTOs.Solicitudes
+@using apc.Client.Pages.TarifasContador
+@using apc.Client.Services.TarifasContador
+@using apc.Client.Services.TarifasBase
+@using apc.Client.Services.Catalogos
+@using apc.Client.Services.Solicitudes
+
+@inject TarifasContadorClient TarifasContadorClient
+@inject TarifasBaseClient TarifasBaseClient
+@inject CatalogosClient CatalogosClient
+@inject SolicitudesClient SolicitudesClient
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="TarifasContadorToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Tarifas Contador</h2>
+            <p class="page-subtitle">Mantenimiento de rangos y cuotas por medidor (tipo, categoría y letra)</p>
+        </div>
+
+        <DxButton Text="Nueva tarifa contador"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="AbrirNuevo" />
+    </div>
+
+    <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+        La <strong>letra</strong> se selecciona del catálogo de letras. La descripción define qué representa.
+    </DxAlert>
+
+    @if (mostrarFiltros)
+    {
+        <div class="modern-card mb-4">
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+                    <DxFormLayoutItem Caption="Busqueda rapida" ColSpanXs="12" ColSpanMd="4">
+                        <Template>
+                            <DxTextBox Text="@filtroBusqueda"
+                                       TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                       Placeholder="Letra o descripcion..."
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       InputDelay="600" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Tipo" ColSpanXs="12" ColSpanMd="4">
+                        <Template>
+                            <DxComboBox Data="@tiposUso"
+                                        @bind-Value="filtroTipo"
+                                        ValueFieldName="Key"
+                                        TextFieldName="Value"
+                                        NullText="Todos"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Categoria" ColSpanXs="12" ColSpanMd="4">
+                        <Template>
+                            <DxComboBox Data="@categoriasFiltro"
+                                        @bind-Value="filtroCategoria"
+                                        ValueFieldName="Id"
+                                        TextFieldName="Nombre"
+                                        NullText="Todas"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanXs="12" ColSpanMd="12" CssClass="align-self-end">
+                        <Template>
+                            <div class="filters-actions">
+                                <DxButton Text="Filtrar"
+                                          IconCssClass="bi bi-search"
+                                          CssClass="filters-btn filters-btn-primary"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="BuscarAsync" />
+
+                                <button type="button" class="filters-link" @onclick="LimpiarFiltrosAsync">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card position-relative">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(TarifaContadorListItemDto.Id)" PageSize="15"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"                                   TextExpression="@(() => filtroBusqueda)"                                   Placeholder="Buscar tarifa contador..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Filtros" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="ToggleFiltros" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalTarifas.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.Tipo)" Caption="Tipo" Width="180px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@ObtenerTipoDescripcion(item.Tipo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.CategoriaId)" Caption="Categoria" Width="220px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@ObtenerCategoriaDescripcion(item.CategoriaId)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.Codigo)" Caption="Letra" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@(string.IsNullOrWhiteSpace(item.Codigo) ? "-" : item.Codigo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.Descripcion)" Caption="Descripcion" MinWidth="220">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <div class="text-truncate" title="@item.Descripcion">
+                                    @(string.IsNullOrWhiteSpace(item.Descripcion) ? "-" : item.Descripcion)
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.Minimo)" Caption="Minimo" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@(item.Minimo?.ToString("N0") ?? "-")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.Maximo)" Caption="Maximo" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@(item.Maximo?.ToString("N0") ?? "-")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.Cuota)" Caption="Cuota" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@(item.Cuota?.ToString("N2") ?? "-")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.ValorBase)" Caption="Valor base" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@(item.ValorBase?.ToString("N2") ?? "-")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(TarifaContadorListItemDto.Alquiler)" Caption="Alquiler" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <span>@(item.Alquiler?.ToString("N2") ?? "-")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TarifaContadorListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay tarifas de contador para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="min(760px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando tarifa..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3">
+                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+            </div>
+        }
+        else
+        {
+            <TarifaContadorForm Model="formModel"
+                                TiposUso="@tiposUso"
+                                Categorias="@categoriasFormulario"
+                                CodigosTarifa="@codigosTarifa"
+                                OnTipoChanged="OnFormTipoChanged"
+                                OnCategoriaChanged="OnFormCategoriaChanged"
+                                OnValidSubmit="GuardarAsync"
+                                OnCancel="CerrarForm"
+                                IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Eliminar tarifa contador?</h5>
+            <p class="text-muted">Esta accion eliminara el registro de forma permanente.</p>
+            @if (tarifaParaEliminar is not null)
+            {
+                var label = string.IsNullOrWhiteSpace(tarifaParaEliminar.Descripcion)
+                    ? (string.IsNullOrWhiteSpace(tarifaParaEliminar.Codigo) ? $"ID {tarifaParaEliminar.Id}" : tarifaParaEliminar.Codigo)
+                    : tarifaParaEliminar.Descripcion;
+                <div class="fw-semibold">@label</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarEliminar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, eliminar"
+                          Click="EliminarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-trash" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private TarifasContadorGridDataSource dataSource = default!;
+
+    private string filtroBusqueda = string.Empty;
+    private int? filtroTipo;
+    private int? filtroCategoria;
+    private bool mostrarFiltros = true;
+
+    private string? errorMessage;
+    private int totalTarifas;
+
+    private bool formVisible;
+    private bool formLoading;
+    private bool isSaving;
+    private string? formError;
+    private TarifaContadorEditDto formModel = new();
+
+    private bool confirmVisible;
+    private TarifaContadorListItemDto? tarifaParaEliminar;
+
+    private List<KeyValuePair<int, string>> tiposUso = new();
+    private List<SolicitudCategoriaDto> categoriasFiltro = new();
+    private List<SolicitudCategoriaDto> categoriasFormulario = new();
+    private Dictionary<int, string> tiposUsoMap = new();
+    private Dictionary<int, string> categoriasMap = new();
+    private List<string> codigosTarifa = new();
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar tarifa contador" : "Nueva tarifa contador";
+    private string PopupSubtitle => formModel.Id.HasValue
+        ? "Actualice la informacion de la tarifa"
+        : "Complete el formulario de registro";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-speedometer2";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarLookupsAsync();
+        dataSource = new TarifasContadorGridDataSource(TarifasContadorClient, OnGridStateChanged);
+        ApplyFilters();
+    }
+
+    private async Task CargarLookupsAsync()
+    {
+        try
+        {
+            var tipos = await CatalogosClient.ObtenerTiposUsoAsync();
+            tiposUso = tipos
+                .Select(t => new { Ok = int.TryParse(t.Codigo, out var code), Code = code, t.Descripcion })
+                .Where(t => t.Ok)
+                .Select(t => new KeyValuePair<int, string>(t.Code, t.Descripcion))
+                .OrderBy(t => t.Value)
+                .ToList();
+            tiposUsoMap = tiposUso.ToDictionary(t => t.Key, t => t.Value);
+        }
+        catch
+        {
+            tiposUso = new();
+            tiposUsoMap = new();
+        }
+
+        try
+        {
+            categoriasFiltro = await SolicitudesClient.ObtenerCategoriasAsync();
+            categoriasFormulario = categoriasFiltro.ToList();
+            categoriasMap = categoriasFiltro.ToDictionary(c => c.Id, c => c.Nombre);
+        }
+        catch
+        {
+            categoriasFiltro = new();
+            categoriasFormulario = new();
+            categoriasMap = new();
+        }
+    }
+
+    private void OnGridStateChanged()
+    {
+        errorMessage = dataSource.LastError;
+        totalTarifas = dataSource.LastTotalCount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyFilters()
+    {
+        dataSource.SearchText = filtroBusqueda;
+        dataSource.Tipo = filtroTipo;
+        dataSource.CategoriaId = filtroCategoria;
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await BuscarAsync();
+    }
+
+    private Task BuscarAsync()
+    {
+        ApplyFilters();
+        dataSource.Invalidate();
+        grid?.Reload();
+        return Task.CompletedTask;
+    }
+
+    private async Task LimpiarFiltrosAsync()
+    {
+        filtroBusqueda = string.Empty;
+        filtroTipo = null;
+        filtroCategoria = null;
+        await BuscarAsync();
+    }
+
+    private void RecargarGrid()
+    {
+        dataSource.Invalidate();
+        grid?.Reload();
+    }
+
+    private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void AbrirNuevo()
+    {
+        formError = null;
+        formModel = new TarifaContadorEditDto();
+        codigosTarifa = new();
+        categoriasFormulario = categoriasFiltro.ToList();
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null;
+        formLoading = true;
+        formVisible = true;
+
+        try
+        {
+            var detalle = await TarifasContadorClient.GetByIdAsync(id);
+            if (detalle is null)
+            {
+                formError = "No se encontro la tarifa.";
+                formModel = new TarifaContadorEditDto();
+                return;
+            }
+
+            formModel = detalle;
+            await CargarCategoriasFormularioAsync();
+            await CargarCodigosTarifaAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = $"Error al cargar la tarifa: {ex.Message}";
+        }
+        finally
+        {
+            formLoading = false;
+        }
+    }
+
+    private void CerrarForm()
+    {
+        if (isSaving)
+        {
+            return;
+        }
+
+        formVisible = false;
+        formError = null;
+        formModel = new TarifaContadorEditDto();
+        codigosTarifa = new();
+        categoriasFormulario = categoriasFiltro.ToList();
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+
+        try
+        {
+            if (formModel.Id.HasValue)
+            {
+                await TarifasContadorClient.UpdateAsync(formModel.Id.Value, formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Tarifa actualizada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "TarifasContadorToast"
+                });
+            }
+            else
+            {
+                await TarifasContadorClient.CreateAsync(formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Tarifa registrada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "TarifasContadorToast"
+                });
+            }
+
+            formVisible = false;
+            formModel = new TarifaContadorEditDto();
+            dataSource.Invalidate();
+            grid?.Reload();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "TarifasContadorToast"
+            });
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarEliminar(TarifaContadorListItemDto tarifa)
+    {
+        tarifaParaEliminar = tarifa;
+        confirmVisible = true;
+    }
+
+    private void CancelarEliminar()
+    {
+        confirmVisible = false;
+        tarifaParaEliminar = null;
+    }
+
+    private async Task EliminarConfirmadoAsync()
+    {
+        if (tarifaParaEliminar is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await TarifasContadorClient.DeleteAsync(tarifaParaEliminar.Id);
+            if (!ok)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Error",
+                    Text = "No se pudo eliminar la tarifa.",
+                    RenderStyle = ToastRenderStyle.Danger,
+                    ProviderName = "TarifasContadorToast"
+                });
+            }
+            else
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Tarifa eliminada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "TarifasContadorToast"
+                });
+
+                dataSource.Invalidate();
+                grid?.Reload();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "TarifasContadorToast"
+            });
+        }
+        finally
+        {
+            confirmVisible = false;
+            tarifaParaEliminar = null;
+        }
+    }
+
+    private async Task OnFormTipoChanged()
+    {
+        await CargarCategoriasFormularioAsync();
+        await CargarCodigosTarifaAsync();
+    }
+
+    private async Task OnFormCategoriaChanged()
+    {
+        await CargarCodigosTarifaAsync();
+    }
+
+    private async Task CargarCodigosTarifaAsync()
+    {
+        codigosTarifa = new();
+        var codigoActual = string.IsNullOrWhiteSpace(formModel.Codigo) ? null : formModel.Codigo.Trim();
+
+        if (formModel.Tipo <= 0 || !formModel.CategoriaId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var tarifas = await TarifasBaseClient.GetAsync(new SIAD.Core.DTOs.TarifasBase.TarifaBaseFilterDto
+            {
+                Tipo = formModel.Tipo,
+                CategoriaId = formModel.CategoriaId
+            });
+
+            codigosTarifa = tarifas
+                .Select(t => t.Codigo)
+                .Where(c => !string.IsNullOrWhiteSpace(c))
+                .Distinct()
+                .OrderBy(c => c)
+                .ToList();
+        }
+        catch
+        {
+            codigosTarifa = new();
+        }
+
+        if (!string.IsNullOrWhiteSpace(codigoActual))
+        {
+            var existeCodigo = codigosTarifa.Any(c => string.Equals(c, codigoActual, StringComparison.OrdinalIgnoreCase));
+
+            if (!existeCodigo && formModel.Id.HasValue)
+            {
+                codigosTarifa.Insert(0, codigoActual);
+            }
+            else if (!existeCodigo)
+            {
+                formModel.Codigo = null;
+            }
+        }
+    }
+
+    private async Task CargarCategoriasFormularioAsync()
+    {
+        categoriasFormulario = categoriasFiltro.ToList();
+
+        if (formModel.Tipo <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var categoriasPermitidas = await CatalogosClient.ObtenerCategoriasPorTipoAsync(formModel.Tipo);
+
+            if (categoriasPermitidas.Count > 0)
+            {
+                categoriasFormulario = categoriasFiltro
+                    .Where(c => categoriasPermitidas.Contains(c.Id))
+                    .ToList();
+            }
+        }
+        catch
+        {
+            categoriasFormulario = categoriasFiltro.ToList();
+        }
+
+        if (formModel.CategoriaId.HasValue && categoriasFormulario.All(c => c.Id != formModel.CategoriaId.Value))
+        {
+            formModel.CategoriaId = null;
+            formModel.Codigo = null;
+        }
+    }
+
+    private string ObtenerTipoDescripcion(int tipo)
+        => tiposUsoMap.TryGetValue(tipo, out var descripcion) ? descripcion : tipo.ToString();
+
+    private string ObtenerCategoriaDescripcion(int? categoriaId)
+        => categoriaId.HasValue && categoriasMap.TryGetValue(categoriaId.Value, out var descripcion)
+            ? descripcion
+            : categoriaId?.ToString() ?? "-";
+}

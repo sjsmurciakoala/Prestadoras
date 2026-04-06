@@ -1,0 +1,509 @@
+@page "/mi-app/servicios-roles"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.AppLectores
+@using SIAD.Core.DTOs.Servicios
+@using apc.Client.Pages.MiApp
+@using apc.Client.Services.AppLectores
+@using apc.Client.Services.Servicios
+
+@inject ServiciosRolesWsClient RolesClient
+@inject ServiciosClient ServiciosClient
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="RolesWsToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Roles de Servicios (App/WS)</h2>
+            <p class="page-subtitle">Mapeo configurable de roles a servicios para la app y el WS</p>
+        </div>
+
+        <DxButton Text="Nuevo rol"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    @if (mostrarFiltros)
+    {
+        <div class="modern-card mb-4">
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+                    <DxFormLayoutItem Caption="Busqueda" ColSpanXs="12" ColSpanMd="6">
+                        <Template>
+                            <DxTextBox Text="@filtroBusqueda"
+                                       TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                       Placeholder="Rol, codigo o descripcion..."
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       InputDelay="600" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Rol" ColSpanXs="12" ColSpanMd="3">
+                        <Template>
+                            <DxComboBox Data="@RolesDisponibles"
+                                        @bind-Value="@filtroRol"
+                                        DropDownStyle="DropDownStyle.DropDown"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        NullText="Todos" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Activo" ColSpanXs="12" ColSpanMd="2">
+                        <Template>
+                            <div class="pt-md-4 pt-2">
+                                <DxCheckBox Checked="@filtroSoloActivos"
+                                            CheckedChanged="@((bool v) => OnEstadoChanged(v))"
+                                            LabelText=""
+                                            CheckType="CheckType.Switch" />
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanXs="12" ColSpanMd="1" CssClass="align-self-end">
+                        <Template>
+                            <div class="filters-actions">
+                                <DxButton Text="Filtrar"
+                                          IconCssClass="bi bi-search"
+                                          CssClass="filters-btn filters-btn-primary"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="BuscarAsync" />
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
+    }
+
+    <div class="modern-card position-relative">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(ServicioRolWsListItemDto.Rol)" PageSize="15"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"                                   TextExpression="@(() => filtroBusqueda)"                                   Placeholder="Buscar rol..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Filtros" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="ToggleFiltros" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalRegistros.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ServicioRolWsListItemDto.Rol)" Caption="Rol" Width="160px" />
+                    <DxGridDataColumn FieldName="@nameof(ServicioRolWsListItemDto.Codigo)" Caption="Codigo" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(ServicioRolWsListItemDto.ServicioDescripcion)" Caption="Servicio" MinWidth="220" />
+                    <DxGridDataColumn FieldName="@nameof(ServicioRolWsListItemDto.Descripcion)" Caption="Descripcion" MinWidth="220" />
+
+                    <DxGridDataColumn Caption="Activo" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioRolWsListItemDto item)
+                            {
+                                if (item.Activo)
+                                {
+                                    <span class="badge-status active">ACTIVO</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">INACTIVO</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="160px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ServicioRolWsListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Rol, item.Codigo)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay roles para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="min(760px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3">
+                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+            </div>
+        }
+        else
+        {
+            <ServiciosRolesWsForm Model="formModel"
+                                  Roles="RolesDisponibles"
+                                  Servicios="servicios"
+                                  OnValidSubmit="GuardarAsync"
+                                  OnCancel="CerrarForm"
+                                  IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Eliminar rol?</h5>
+            <p class="text-muted">Esta accion eliminara el registro de forma permanente.</p>
+            @if (rolParaEliminar is not null)
+            {
+                <div class="fw-semibold">@rolParaEliminar.Rol - @rolParaEliminar.Codigo</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarEliminar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, eliminar"
+                          Click="EliminarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-trash" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private static readonly string[] RolesDisponibles = new[]
+    {
+        "agua",
+        "alcantarillado",
+        "ambiental",
+        "ersaps",
+        "gestion_legal",
+        "convenio",
+        "otros",
+        "ser1",
+        "ser2",
+        "ser3",
+        "ser4",
+        "ser5",
+        "ser6",
+        "ser7",
+        "ser8",
+        "ser9",
+        "ser10",
+        "sdo_ser6",
+        "sdo_ser7",
+        "sdo_ser8",
+        "sdo_ser9",
+        "sdo_ser10"
+    };
+
+    private DxGrid? grid;
+    private ServiciosRolesWsGridDataSource dataSource = default!;
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroRol;
+    private bool filtroSoloActivos = true;
+    private bool mostrarFiltros = true;
+
+    private string? errorMessage;
+    private int totalRegistros;
+
+    private bool formVisible;
+    private bool formLoading;
+    private bool isSaving;
+    private string? formError;
+    private ServicioRolWsEditDto formModel = new();
+
+    private string? formKeyRol;
+    private string? formKeyCodigo;
+
+    private bool confirmVisible;
+    private ServicioRolWsListItemDto? rolParaEliminar;
+
+    private List<ServicioLookupItem> servicios = new();
+
+    private string PopupTitle => string.IsNullOrWhiteSpace(formKeyRol) ? "Nuevo rol" : "Editar rol";
+    private string PopupSubtitle => string.IsNullOrWhiteSpace(formKeyRol)
+        ? "Asigne un rol a un servicio"
+        : "Actualice la asignacion de rol";
+    private string PopupIcon => string.IsNullOrWhiteSpace(formKeyRol) ? "bi bi-plus-lg" : "bi bi-pencil-square";
+    private string PopupIconWrapperClass => string.IsNullOrWhiteSpace(formKeyRol) ? "icon-wrapper success" : "icon-wrapper warning";
+
+    protected override async Task OnInitializedAsync()
+    {
+        dataSource = new ServiciosRolesWsGridDataSource(RolesClient, OnGridStateChanged);
+        dataSource.SoloActivos = filtroSoloActivos;
+        await CargarServiciosAsync();
+    }
+
+    private async Task CargarServiciosAsync()
+    {
+        try
+        {
+            var list = await ServiciosClient.GetAsync(new ServicioFilterDto { Activo = true });
+            servicios = list
+                .OrderBy(s => s.Codigo)
+                .Select(s => new ServicioLookupItem
+                {
+                    Codigo = s.Codigo,
+                    Label = $"{s.Codigo} - {s.DescripcionCorta}"
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los servicios: {ex.Message}";
+        }
+    }
+
+    private void OnGridStateChanged()
+    {
+        totalRegistros = dataSource.LastTotalCount;
+        StateHasChanged();
+    }
+
+    private void OnBusquedaChanged(string value)
+    {
+        filtroBusqueda = value;
+        dataSource.SearchText = value;
+        dataSource.Invalidate();
+    }
+
+    private void OnEstadoChanged(bool value)
+    {
+        filtroSoloActivos = value;
+        dataSource.SoloActivos = value;
+        dataSource.Invalidate();
+    }
+
+    private Task BuscarAsync()
+    {
+        dataSource.SearchText = filtroBusqueda;
+        dataSource.Rol = filtroRol;
+        dataSource.SoloActivos = filtroSoloActivos;
+        dataSource.Invalidate();
+        return ReloadGridAsync();
+    }
+
+    private Task LimpiarFiltrosAsync()
+    {
+        filtroBusqueda = string.Empty;
+        filtroRol = null;
+        filtroSoloActivos = true;
+        dataSource.SearchText = null;
+        dataSource.Rol = null;
+        dataSource.SoloActivos = filtroSoloActivos;
+        dataSource.Invalidate();
+        return ReloadGridAsync();
+    }
+
+    private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
+
+    private void RecargarGrid() => _ = ReloadGridAsync();
+
+    private Task ReloadGridAsync()
+    {
+        if (grid is null)
+        {
+            return Task.CompletedTask;
+        }
+
+        grid.Reload();
+        return Task.CompletedTask;
+    }
+
+    private void AbrirNuevo()
+    {
+        formKeyRol = null;
+        formKeyCodigo = null;
+        formModel = new ServicioRolWsEditDto { Activo = true };
+        formError = null;
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(string rol, string codigo)
+    {
+        formLoading = true;
+        formError = null;
+        formVisible = true;
+        formKeyRol = rol;
+        formKeyCodigo = codigo;
+
+        try
+        {
+            var detalle = await RolesClient.GetByIdAsync(rol, codigo);
+            if (detalle is null)
+            {
+                formError = "No se encontro el rol seleccionado.";
+                return;
+            }
+
+            formModel = detalle;
+        }
+        catch (Exception ex)
+        {
+            formError = $"No se pudo cargar el rol: {ex.Message}";
+        }
+        finally
+        {
+            formLoading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        formError = null;
+        isSaving = true;
+
+        try
+        {
+            if (string.IsNullOrWhiteSpace(formKeyRol))
+            {
+                await RolesClient.CreateAsync(formModel);
+                ShowToast("Exito", "Rol creado correctamente.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await RolesClient.UpdateAsync(formKeyRol!, formKeyCodigo!, formModel);
+                ShowToast("Exito", "Rol actualizado correctamente.", ToastRenderStyle.Success);
+            }
+
+            formVisible = false;
+            dataSource.Invalidate();
+            await ReloadGridAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+            ShowToast("Error", formError, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void CerrarForm()
+    {
+        formVisible = false;
+        formError = null;
+    }
+
+    private void ConfirmarEliminar(ServicioRolWsListItemDto item)
+    {
+        rolParaEliminar = item;
+        confirmVisible = true;
+    }
+
+    private void CancelarEliminar()
+    {
+        confirmVisible = false;
+        rolParaEliminar = null;
+    }
+
+    private async Task EliminarConfirmadoAsync()
+    {
+        if (rolParaEliminar is null)
+        {
+            return;
+        }
+
+        try
+        {
+            var ok = await RolesClient.DeleteAsync(rolParaEliminar.Rol, rolParaEliminar.Codigo);
+            if (ok)
+            {
+                ShowToast("Exito", "Rol eliminado correctamente.", ToastRenderStyle.Success);
+                dataSource.Invalidate();
+                await ReloadGridAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            rolParaEliminar = null;
+        }
+    }
+
+    private void MostrarColumnChooser()
+    {
+        grid?.ShowColumnChooser();
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = message,
+            RenderStyle = style,
+            ProviderName = "RolesWsToast"
+        });
+    }
+}

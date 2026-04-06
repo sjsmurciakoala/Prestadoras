@@ -1,0 +1,681 @@
+.periodos-page {
+    min-height: 100vh;
+    padding: 1.5rem;
+    background:
+        radial-gradient(circle at top left, rgba(15, 118, 110, 0.10), transparent 28%),
+        linear-gradient(180deg, #f8fbff 0%, #f4f6fb 100%);
+}
+
+.periodos-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1.5rem;
+    padding: 1.75rem;
+    margin-bottom: 1.25rem;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 24px;
+    background: linear-gradient(135deg, #ffffff 0%, #f7fafc 100%);
+    box-shadow: 0 18px 48px rgba(15, 23, 42, 0.08);
+}
+
+.periodos-hero__copy {
+    max-width: 760px;
+}
+
+.periodos-hero__eyebrow,
+.periodos-form-intro__eyebrow {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.7rem;
+    border-radius: 999px;
+    background: rgba(15, 118, 110, 0.10);
+    color: #0f766e;
+    font-size: 0.75rem;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+}
+
+.periodos-hero__title {
+    margin: 0.8rem 0 0.45rem;
+    color: #0f172a;
+    font-size: clamp(1.8rem, 3vw, 2.5rem);
+    font-weight: 800;
+    line-height: 1.05;
+}
+
+.periodos-hero__subtitle {
+    margin: 0;
+    color: #475569;
+    font-size: 1rem;
+    line-height: 1.65;
+}
+
+.periodos-hero__meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.periodos-current-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.55rem 0.9rem;
+    border-radius: 999px;
+    background: rgba(22, 163, 74, 0.12);
+    color: #166534;
+    font-size: 0.84rem;
+    font-weight: 800;
+}
+
+.periodos-current-badge--warning {
+    background: rgba(245, 158, 11, 0.16);
+    color: #92400e;
+}
+
+.periodos-current-badge__dot {
+    width: 0.65rem;
+    height: 0.65rem;
+    border-radius: 50%;
+    background: currentColor;
+    opacity: 0.85;
+}
+
+.periodos-current-caption {
+    color: #64748b;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.periodos-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.75rem;
+}
+
+.periodos-action {
+    min-width: 154px;
+    border-radius: 14px;
+    font-weight: 600;
+}
+
+.periodos-action--primary {
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.24);
+}
+
+.periodos-summary {
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 1rem;
+    margin-bottom: 1.25rem;
+}
+
+.periodos-stat {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.25rem 1.15rem;
+    border: 1px solid rgba(148, 163, 184, 0.16);
+    border-radius: 20px;
+    background: rgba(255, 255, 255, 0.92);
+    box-shadow: 0 12px 36px rgba(15, 23, 42, 0.06);
+}
+
+.periodos-stat__icon {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.35rem;
+    flex-shrink: 0;
+}
+
+.periodos-stat__icon--slate {
+    background: rgba(15, 23, 42, 0.08);
+    color: #1e293b;
+}
+
+.periodos-stat__icon--green {
+    background: rgba(22, 163, 74, 0.12);
+    color: #15803d;
+}
+
+.periodos-stat__icon--stone {
+    background: rgba(71, 85, 105, 0.12);
+    color: #334155;
+}
+
+.periodos-stat__body {
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.periodos-stat__label {
+    color: #64748b;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.periodos-stat__value {
+    color: #0f172a;
+    font-size: 1.7rem;
+    font-weight: 800;
+    line-height: 1.1;
+}
+
+.periodos-stat__hint {
+    color: #94a3b8;
+    font-size: 0.85rem;
+}
+
+.periodos-shell {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid rgba(148, 163, 184, 0.18);
+    border-radius: 24px;
+    background: rgba(255, 255, 255, 0.95);
+    box-shadow: 0 18px 54px rgba(15, 23, 42, 0.08);
+}
+
+.periodos-shell__toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    padding: 1.35rem 1.5rem 1rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+}
+
+.periodos-shell__title {
+    margin: 0 0 0.25rem;
+    color: #0f172a;
+    font-size: 1.1rem;
+    font-weight: 800;
+}
+
+.periodos-shell__description {
+    margin: 0;
+    color: #64748b;
+    font-size: 0.94rem;
+}
+
+.periodos-shell__legend {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+    gap: 0.6rem;
+}
+
+.periodos-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    padding: 0.45rem 0.8rem;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 999px;
+    background: #f8fafc;
+    color: #334155;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.periodos-chip__dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+}
+
+.periodos-chip__dot--green {
+    background: #16a34a;
+}
+
+.periodos-chip__dot--amber {
+    background: #d97706;
+}
+
+.periodos-chip__dot--slate {
+    background: #475569;
+}
+
+.periodos-grid-wrap {
+    min-width: 0;
+    overflow-x: auto;
+    padding: 0 0.35rem 0.35rem;
+}
+
+.periodos-grid {
+    width: 100%;
+}
+
+.periodos-grid__toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.1rem 0;
+}
+
+.periodos-grid__toolbar-copy {
+    min-width: 0;
+    color: #64748b;
+    font-size: 0.9rem;
+}
+
+.periodos-grid__toolbar-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    margin-left: auto;
+}
+
+.periodos-grid__toolbar-button {
+    min-width: 118px;
+    border-radius: 12px;
+}
+
+.periodos-grid__toolbar-total {
+    color: #475569;
+    font-size: 0.88rem;
+    font-weight: 600;
+}
+
+.periodos-grid__toolbar-total span {
+    color: #0f172a;
+    font-weight: 800;
+}
+
+.periodos-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 104px;
+    padding: 0.42rem 0.85rem;
+    border-radius: 999px;
+    font-size: 0.77rem;
+    font-weight: 800;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+}
+
+.periodos-badge--open {
+    background: rgba(22, 163, 74, 0.14);
+    color: #166534;
+}
+
+.periodos-badge--preclose {
+    background: rgba(245, 158, 11, 0.18);
+    color: #92400e;
+}
+
+.periodos-badge--closed {
+    background: rgba(71, 85, 105, 0.16);
+    color: #334155;
+}
+
+.periodos-badge--neutral {
+    background: rgba(148, 163, 184, 0.16);
+    color: #475569;
+}
+
+.periodos-grid__actions {
+    display: flex;
+    justify-content: center;
+    gap: 0.45rem;
+}
+
+.periodos-icon-button {
+    width: 36px;
+    height: 36px;
+    border: none;
+    border-radius: 12px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.18s ease, background-color 0.18s ease, color 0.18s ease;
+    cursor: pointer;
+}
+
+.periodos-icon-button--edit {
+    background: rgba(245, 158, 11, 0.14);
+    color: #b45309;
+}
+
+.periodos-icon-button--edit:hover:not(:disabled) {
+    background: #f59e0b;
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.periodos-icon-button--close {
+    background: rgba(71, 85, 105, 0.12);
+    color: #334155;
+}
+
+.periodos-icon-button--close:hover:not(:disabled) {
+    background: #334155;
+    color: #ffffff;
+    transform: translateY(-1px);
+}
+
+.periodos-icon-button:disabled {
+    background: rgba(148, 163, 184, 0.14);
+    color: #94a3b8;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.periodos-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.55rem;
+    padding: 3rem 1rem;
+    color: #64748b;
+    text-align: center;
+}
+
+.periodos-empty h3 {
+    margin: 0;
+    color: #0f172a;
+    font-size: 1.15rem;
+    font-weight: 800;
+}
+
+.periodos-empty p {
+    margin: 0;
+    max-width: 460px;
+}
+
+.periodos-empty__icon {
+    width: 62px;
+    height: 62px;
+    border-radius: 18px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: rgba(148, 163, 184, 0.14);
+    color: #475569;
+    font-size: 1.6rem;
+}
+
+.periodos-detail-card {
+    display: grid;
+    gap: 0.7rem;
+    padding: 0.9rem 1rem 1rem;
+    border-top: 1px dashed rgba(203, 213, 225, 0.9);
+    background: linear-gradient(180deg, rgba(248, 250, 252, 0.92) 0%, rgba(255, 255, 255, 0.98) 100%);
+}
+
+.periodos-detail-card__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.periodos-detail-card__label {
+    color: #64748b;
+    font-size: 0.84rem;
+}
+
+.periodos-detail-card__value {
+    color: #0f172a;
+    font-size: 0.87rem;
+    font-weight: 800;
+    text-align: right;
+}
+
+.periodos-form-shell {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.periodos-form-intro {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 0.25rem 0 0.35rem;
+}
+
+.periodos-form-intro__title {
+    margin: 0.65rem 0 0.3rem;
+    color: #0f172a;
+    font-size: 1.25rem;
+    font-weight: 800;
+}
+
+.periodos-form-intro__subtitle {
+    margin: 0;
+    color: #64748b;
+    line-height: 1.55;
+}
+
+.periodos-form-mode {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.5rem 0.85rem;
+    border-radius: 999px;
+    background: #eff6ff;
+    color: #1d4ed8;
+    font-size: 0.78rem;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    white-space: nowrap;
+}
+
+.periodos-inline-error {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.75rem;
+    padding: 0.9rem 1rem;
+    border: 1px solid #fecaca;
+    border-radius: 16px;
+    background: #fef2f2;
+    color: #991b1b;
+}
+
+.periodos-form-layout {
+    width: 100%;
+}
+
+.periodos-preview-card {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    padding: 0.95rem 1rem;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 16px;
+    background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
+}
+
+.periodos-preview-card__row {
+    display: flex;
+    justify-content: space-between;
+    gap: 1rem;
+}
+
+.periodos-preview-card__label {
+    color: #64748b;
+    font-size: 0.85rem;
+}
+
+.periodos-preview-card__value {
+    color: #0f172a;
+    font-size: 0.9rem;
+    font-weight: 800;
+    text-align: right;
+}
+
+.periodos-status-panel {
+    height: 100%;
+    min-height: 136px;
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 1rem;
+    padding: 1rem 1.05rem;
+    border: 1px solid rgba(203, 213, 225, 0.9);
+    border-radius: 18px;
+    background: #ffffff;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.periodos-status-panel--open {
+    border-color: rgba(22, 163, 74, 0.34);
+    background: rgba(240, 253, 244, 0.94);
+    box-shadow: inset 0 0 0 1px rgba(22, 163, 74, 0.06);
+}
+
+.periodos-status-panel--preclose {
+    border-color: rgba(245, 158, 11, 0.34);
+    background: rgba(255, 251, 235, 0.94);
+    box-shadow: inset 0 0 0 1px rgba(245, 158, 11, 0.06);
+}
+
+.periodos-status-panel--closed {
+    border-color: rgba(71, 85, 105, 0.28);
+    background: rgba(248, 250, 252, 0.96);
+    box-shadow: inset 0 0 0 1px rgba(71, 85, 105, 0.05);
+}
+
+.periodos-status-panel__title {
+    color: #0f172a;
+    font-size: 0.95rem;
+    font-weight: 800;
+}
+
+.periodos-status-panel__description {
+    margin-top: 0.22rem;
+    color: #64748b;
+    font-size: 0.86rem;
+    line-height: 1.45;
+}
+
+.periodos-popup-actions {
+    width: 100%;
+    display: flex;
+    justify-content: flex-end;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+}
+
+.periodos-popup-actions__button {
+    min-width: 154px;
+    border-radius: 14px;
+}
+
+.periodos-popup-actions__button--primary {
+    box-shadow: 0 12px 24px rgba(37, 99, 235, 0.22);
+}
+
+:deep(.periodos-loading .dxbl-loading-panel-content) {
+    min-width: 260px;
+    padding: 1rem 1.2rem;
+    border-radius: 16px;
+    background: #ffffff;
+    box-shadow: 0 14px 36px rgba(15, 23, 42, 0.22);
+}
+
+:deep(.periodos-loading .dxbl-loading-panel-shading) {
+    background: rgba(255, 255, 255, 0.55);
+}
+
+:deep(.periodos-popup) {
+    overflow: hidden;
+    border-radius: 24px;
+}
+
+:deep(.periodos-popup__header) {
+    padding-top: 1.15rem;
+    padding-bottom: 1rem;
+    border-bottom: 1px solid rgba(226, 232, 240, 0.9);
+    background: linear-gradient(180deg, #f8fbff 0%, #ffffff 100%);
+}
+
+:deep(.periodos-popup__body) {
+    padding-top: 1.25rem;
+    padding-bottom: 1.25rem;
+}
+
+:deep(.periodos-popup__footer) {
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+    background: #f8fafc;
+}
+
+::deep .periodos-grid table,
+::deep .periodos-grid table tbody,
+::deep .periodos-grid table tr,
+::deep .periodos-grid table td {
+    overflow: visible;
+}
+
+@media (max-width: 992px) {
+    .periodos-summary {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .periodos-page {
+        padding: 1rem;
+    }
+
+    .periodos-hero,
+    .periodos-shell__toolbar,
+    .periodos-form-intro {
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .periodos-hero__actions,
+    .periodos-shell__legend {
+        justify-content: flex-start;
+    }
+
+    .periodos-hero__meta {
+        align-items: flex-start;
+    }
+
+    .periodos-action,
+    .periodos-popup-actions__button {
+        width: 100%;
+    }
+
+    .periodos-grid__toolbar {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .periodos-grid__toolbar-actions {
+        width: 100%;
+        justify-content: space-between;
+        margin-left: 0;
+    }
+
+    .periodos-preview-card__row,
+    .periodos-status-panel,
+    .periodos-detail-card__row {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .periodos-preview-card__value,
+    .periodos-detail-card__value {
+        text-align: left;
+    }
+
+    .periodos-grid__toolbar-button {
+        min-width: 0;
+    }
+}

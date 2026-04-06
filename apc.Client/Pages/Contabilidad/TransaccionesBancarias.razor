@@ -1,0 +1,987 @@
+﻿@page "/contabilidad/transacciones-bancarias"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Tenant
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using SIAD.Core.DTOs.Bancos
+@using SIAD.Core.Constants
+@using System.ComponentModel.DataAnnotations
+@using System.Threading.Tasks
+
+@inject BanTransaccionesClient TransaccionesClient
+@inject CuentasBancosClient CuentasClient
+@inject TenantState TenantState
+@inject NavigationManager NavigationManager
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">
+                Transacciones Bancarias
+                @if (bancoSeleccionadoId.HasValue && !string.IsNullOrWhiteSpace(bancoNombre))
+                {
+                    <span class="badge bg-primary ms-2">@bancoNombre</span>
+                }
+            </h2>
+            <p class="page-subtitle">Gestion de transacciones bancarias</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Nueva Transacción"
+                      Click="AbrirFormularioAsync"
+                      IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading && cuentasFiltradasPorBanco.Count > 0)" />
+            <DxButton Text="Exportar Excel"
+                      Click="ExportarExcelAsync"
+                      IconCssClass="bi bi-file-earmark-excel"
+                      RenderStyle="ButtonRenderStyle.Success"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading && transaccionesFiltradas.Count > 0)" />
+            <DxButton Text="@VolverTexto"
+                      Click="VolverABancos"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern shadow-sm" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensajeAlerta))
+    {
+        <DxMessageBox Type="MessageBoxType.Alert"
+                      ShowIcon="true"
+                      Text="@mensajeAlerta"
+                      CssClass="mb-3"
+                      Visible="true" />
+    }
+
+    <div class="modern-card mb-4">
+        <DxFormLayout CssClass="mb-3 filters-row">
+            <DxFormLayoutItem Caption="Banco:" ColSpanLg="3" Visible="false">
+                <DxComboBox Data="@bancosDisponibles"
+                            @bind-Value="bancoSeleccionadoId"
+                            TextFieldName="@nameof(BancoFiltroDto.Nombre)"
+                            ValueFieldName="@nameof(BancoFiltroDto.BancoId)"
+                            NullText="Seleccione un banco"
+                            Enabled="@(!isLoading && !BancoId.HasValue)"
+                            CssClass="form-control fixed-line-editor"
+                            InputCssClass="fixed-line-input"
+                            SizeMode="SizeMode.Small" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Cuenta Bancaria:" ColSpanLg="4">
+                <DxComboBox Data="@cuentasFiltradasPorBanco"
+                            @bind-Value="filtroSeleccionadoCuentaId"
+                            TextFieldName="@nameof(BancoCuentaListDto.NumeroCuenta)"
+                            ValueFieldName="@nameof(BancoCuentaListDto.BancoCuentaId)"
+                            NullText="@(bancoSeleccionadoId.HasValue ? "Seleccione una cuenta" : "Seleccione un banco primero")"
+                            Enabled="@(!isLoading && bancoSeleccionadoId.HasValue)" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Fecha Desde:" ColSpanLg="4">
+                <DxDateEdit @bind-Date="filtroFechaDesde" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Fecha Hasta:" ColSpanLg="4">
+                <DxDateEdit @bind-Date="filtroFechaHasta" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Mostrar transacciones anuladas:" ColSpanLg="12">
+                <DxCheckBox @bind-Checked="mostrarAnuladas" CheckType="CheckType.Switch" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card position-relative" style="min-height: 400px;">
+        @if (!bancoSeleccionadoId.HasValue)
+        {
+            <DxAlert AlertType="AlertType.Info" CssClass="mt-3">
+                Seleccione un banco para visualizar las cuentas disponibles.
+            </DxAlert>
+        }
+        else if (!filtroSeleccionadoCuentaId.HasValue)
+        {
+            <DxAlert AlertType="AlertType.Info" CssClass="mt-3">
+                Seleccione una cuenta bancaria para visualizar sus transacciones.
+            </DxAlert>
+        }
+        else if (transaccionesFiltradas.Count == 0)
+        {
+            <DxAlert AlertType="AlertType.Warning" CssClass="mt-3">
+                No hay transacciones bancarias registradas para los filtros seleccionados.
+                <div class="mt-2">
+                    <small>Banco: @bancoNombre | Cuenta: @filtroSeleccionadoCuentaId | Registros cargados: @transacciones.Count</small>
+                </div>
+            </DxAlert>
+        }
+        else
+        {
+            <div class="grid-wrapper">
+                <DxGrid @ref="transaccionesGrid"
+                        Data="@transaccionesFiltradas"
+                        KeyFieldName="@nameof(BanTransaccionListDto.BanKardexId)"
+                        PageSize="15"
+                        SizeMode="SizeMode.Large"
+                        ShowFilterRow="false"
+                        AllowSelectRowByClick="true"
+                        SelectionMode="GridSelectionMode.Single"
+                        @bind-SelectedDataItem="SelectedRow"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.BanKardexId)"
+                                          Caption="Numero transacción"
+                                          Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.FechaMovimiento)"
+                                          Caption="Fecha"
+                                          Width="120px"
+                                          DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.IdTipoTransaccion)"
+                                          Caption="Tipo"
+                                          Width="350px" />
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.Descripcion)"
+                                          Caption="@DescripcionColumnCaption"
+                                          Width="260px"
+                                          Visible="false" />
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.Referencia)"
+                                          Caption="Referencia"
+                                          Width="160px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is BanTransaccionListDto itemReferencia)
+                                {
+                                    if (string.Equals(itemReferencia.Estado, "ANULADA", StringComparison.OrdinalIgnoreCase))
+                                    {
+                                        <span>ANULADA</span>
+                                    }
+                                    else
+                                    {
+                                        var referencia = string.IsNullOrWhiteSpace(itemReferencia.Referencia)
+                                            ? "-"
+                                            : itemReferencia.Referencia;
+                                        <span>@referencia</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.ReferenciaAnulacion)" Caption="Ref. anulación" Width="160px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is BanTransaccionListDto itemReferencia)
+                                {
+                                    var referencia = string.IsNullOrWhiteSpace(itemReferencia.ReferenciaAnulacion)
+                                        ? "-"
+                                        : itemReferencia.ReferenciaAnulacion;
+                                    var esAnulada = string.Equals(itemReferencia.Estado, "ANULADA", StringComparison.OrdinalIgnoreCase);
+                                    <span class="anulacion-ref">
+                                        @if (esAnulada)
+                                        {
+                                            <span class="anulacion-dot" title="Anulada"></span>
+                                        }
+                                        <span>@referencia</span>
+                                    </span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.Monto)"
+                                          Caption="Monto"
+                                          Width="120px"
+                                          DisplayFormat="N2"
+                                          TextAlignment="GridTextAlignment.Right" />
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.SaldoResultante)"
+                                          Caption="Saldo"
+                                          Width="140px"
+                                          DisplayFormat="N2"
+                                          TextAlignment="GridTextAlignment.Right" />
+                        <DxGridDataColumn Caption="Acciones" Width="180px" TextAlignment="GridTextAlignment.Center" ExportEnabled="false">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is BanTransaccionListDto itemAccion)
+                                {
+                                    <div class="d-flex justify-content-center gap-2">
+                                        <button class="btn-icon btn-edit"
+                                                title="Ver detalles"
+                                                disabled="@(isLoading)"
+                                                @onclick="async () => await VerDetalleDesdeFilaAsync(itemAccion)">
+                                            <i class="bi bi-eye"></i>
+                                        </button>
+                                        <a class="btn-icon btn-print"
+                                           title="Imprimir"
+                                           href="@GetReporteUrl(itemAccion)"
+                                           target="_blank"
+                                           rel="noopener">
+                                            <i class="bi bi-printer"></i>
+                                        </a>
+                                        <button class="btn-icon btn-delete"
+                                                title="Anular"
+                                                disabled="@(!EsAnulable(itemAccion) || isLoading)"
+                                                @onclick="async () => await AnularDesdeFilaAsync(itemAccion)">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<DxLoadingPanel Visible="isLoading"
+                PositionTarget="body"
+                ApplyBackgroundShading="false"
+                IsContentBlocked="true"
+                Text="Cargando..."
+                ZIndex="2000" />
+
+<DxPopup @bind-Visible="mostrarDetalles" 
+         Width="1000px" 
+         HeaderText="Detalle de Transacción Bancaria"
+         ShowCloseButton="true">
+    @if (transaccionActual != null)
+    {
+        <TransaccionBancariaModal CuentasBancarias="@cuentasBancarias"
+                                  BancoId="@bancoSeleccionadoId"
+                                  BancoCuentaId="@transaccionActual.BancoCuentaId"
+                                  ReadOnly="true"
+                                  TransaccionDetalle="@transaccionActual"
+                                  OnClose="@(async (_) => { mostrarDetalles = false; await InvokeAsync(StateHasChanged); })"
+                                  OnTransaccionGuardada="@(async () => { mostrarDetalles = false; await InvokeAsync(StateHasChanged); })" />
+    }
+</DxPopup>
+
+<DxPopup @bind-Visible="mostrarAnulacion"
+         Width="650px"
+         HeaderText="Anular Transacción Bancaria"
+         ShowCloseButton="true">
+    <div class="p-4">
+        @if (transaccionSeleccionada is null)
+        {
+            <DxAlert AlertType="AlertType.Warning">
+                Seleccione una transacción para anular.
+            </DxAlert>
+        }
+        else
+        {
+            <EditForm Model="@anulacionForm" OnValidSubmit="ConfirmarAnulacionAsync">
+                <DataAnnotationsValidator />
+
+                <div class="mb-3">
+                    <div class="fw-semibold">Transacción seleccionada</div>
+                    <div class="small text-muted">
+                        Fecha: @transaccionSeleccionada.FechaMovimiento.ToString("dd/MM/yyyy") |
+                        Monto: @transaccionSeleccionada.Monto.ToString("N2")
+                    </div>
+                </div>
+
+                <div class="form-group mb-3">
+                    <label class="form-label">Motivo: <span class="text-danger">*</span></label>
+                    <InputTextArea @bind-Value="anulacionForm.Motivo"
+                                   class="form-control"
+                                   rows="3"
+                                   maxlength="500"
+                                   placeholder="Describa el motivo de la anulación..." />
+                    <ValidationMessage For="@(() => anulacionForm.Motivo)" class="text-danger d-block mt-1" />
+                </div>
+
+                <div class="d-flex gap-2 justify-content-end">
+                    <button type="button" class="btn btn-secondary" @onclick="CerrarAnulacion">Cancelar</button>
+                    <button type="submit" class="btn btn-danger" disabled="@anulando">Anular</button>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(mensajeAnulacionError))
+                {
+                    <div class="alert alert-danger mt-3">
+                        @mensajeAnulacionError
+                    </div>
+                }
+            </EditForm>
+        }
+    </div>
+</DxPopup>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "bancoId")]
+    public long? BancoId { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "bancoCuentaId")]
+    public long? BancoCuentaId { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private bool isLoading = false;
+    private bool suppressReload = false; // ✅ RESTAURAR ESTA VARIABLE
+    private List<BanTransaccionListDto> transacciones = new();
+    private List<BanTransaccionListDto> transaccionesFiltradas = new();
+    private List<BancoCuentaListDto> cuentasBancarias = new();
+    private List<BancoCuentaListDto> cuentasFiltradasPorBanco = new();
+    private List<BancoFiltroDto> bancosDisponibles = new();
+
+    private long? _bancoSeleccionadoId;
+    private long? bancoSeleccionadoId
+    {
+        get => _bancoSeleccionadoId;
+        set
+        {
+            if (_bancoSeleccionadoId != value)
+            {
+                _bancoSeleccionadoId = value;
+                Console.WriteLine($"🏦 bancoSeleccionadoId cambiado: {value}, suppressReload: {suppressReload}");
+                OnBancoSeleccionadoChanged();
+            }
+        }
+    }
+
+    private long? _filtroSeleccionadoCuentaId;
+    private long? filtroSeleccionadoCuentaId
+    {
+        get => _filtroSeleccionadoCuentaId;
+        set
+        {
+            if (_filtroSeleccionadoCuentaId != value)
+            {
+                _filtroSeleccionadoCuentaId = value;
+                Console.WriteLine($"💳 filtroSeleccionadoCuentaId cambiado: {value}, suppressReload: {suppressReload}");
+                
+                if (!suppressReload) // ✅ SOLO RECARGAR SI NO ESTÁ SUPRIMIDO
+                {
+                    _ = RecargarTransaccionesAsync();
+                }
+            }
+        }
+    }
+
+    private DateOnly? _filtroFechaDesde;
+    private DateOnly? filtroFechaDesde
+    {
+        get => _filtroFechaDesde;
+        set
+        {
+            if (_filtroFechaDesde != value)
+            {
+                _filtroFechaDesde = value;
+                Console.WriteLine($"📅 filtroFechaDesde cambiado: {value}, suppressReload: {suppressReload}");
+                
+                if (!suppressReload) // ✅ SOLO FILTRAR SI NO ESTÁ SUPRIMIDO
+                {
+                    OnFiltroChanged();
+                }
+            }
+        }
+    }
+
+    private DateOnly? _filtroFechaHasta;
+    private DateOnly? filtroFechaHasta
+    {
+        get => _filtroFechaHasta;
+        set
+        {
+            if (_filtroFechaHasta != value)
+            {
+                _filtroFechaHasta = value;
+                Console.WriteLine($"📅 filtroFechaHasta cambiado: {value}, suppressReload: {suppressReload}");
+                
+                if (!suppressReload) // ✅ SOLO FILTRAR SI NO ESTÁ SUPRIMIDO
+                {
+                    OnFiltroChanged();
+                }
+            }
+        }
+    }
+
+    private bool _mostrarAnuladas;
+    private bool mostrarAnuladas
+    {
+        get => _mostrarAnuladas;
+        set
+        {
+            if (_mostrarAnuladas != value)
+            {
+                _mostrarAnuladas = value;
+                Console.WriteLine($"🧾 mostrarAnuladas cambiado: {value}, suppressReload: {suppressReload}");
+
+                if (!suppressReload)
+                {
+                    _ = RecargarTransaccionesAsync();
+                }
+            }
+        }
+    }
+
+    private string mensajeAlerta = string.Empty;
+    private string bancoNombre = string.Empty;
+    private const string DescripcionColumnCaption = "Descripci\u00F3n";
+    private string VolverTexto => string.IsNullOrWhiteSpace(ReturnUrl) ? "Volver a bancos" : "Volver";
+
+    private bool mostrarDetalles = false;
+    private BanTransaccionDetalleDto? transaccionActual;
+    private BanTransaccionListDto? transaccionSeleccionada;
+
+    private bool mostrarAnulacion = false;
+    private bool anulando = false;
+    private string? mensajeAnulacionError;
+    private AnulacionFormModel anulacionForm = new();
+
+    private object? selectedRow;
+    private DxGrid? transaccionesGrid;
+    private object? SelectedRow
+    {
+        get => selectedRow;
+        set
+        {
+            if (!ReferenceEquals(selectedRow, value))
+            {
+                selectedRow = value;
+                transaccionSeleccionada = value as BanTransaccionListDto;
+            }
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            Console.WriteLine("🚀 OnInitializedAsync - INICIO");
+            
+            isLoading = true;
+            suppressReload = true; // ✅ ACTIVAR SUPRESIÓN
+            StateHasChanged();
+            
+            SetDefaultRangoFechas();
+            var companyId = await TenantState.EnsureCompanyAsync();
+            
+            Console.WriteLine($"🏢 CompanyId: {companyId}");
+            
+            cuentasBancarias = (await CuentasClient.GetAsync(companyId)).ToList();
+            Console.WriteLine($"💳 Cuentas bancarias cargadas: {cuentasBancarias.Count}");
+
+            ActualizarBancosDisponibles();
+            Console.WriteLine($"🏦 Bancos disponibles: {bancosDisponibles.Count}");
+
+            // ✅ Configurar banco seleccionado
+            if (BancoId.HasValue)
+            {
+                bancoSeleccionadoId = BancoId.Value;
+                Console.WriteLine($"🎯 Banco desde parámetro: {BancoId.Value}");
+
+                if (cuentasFiltradasPorBanco.Count == 0)
+                {
+                    MostrarAlerta("El banco seleccionado no tiene cuentas bancarias. Registre una cuenta para continuar.");
+                    return;
+                }
+            }
+            else if (bancosDisponibles.Count == 1)
+            {
+                bancoSeleccionadoId = bancosDisponibles[0].BancoId;
+                Console.WriteLine($"🎯 Auto-selección único banco: {bancoSeleccionadoId}");
+            }
+
+            // ✅ Priorizar cuenta desde parámetro si aplica
+            if (BancoCuentaId.HasValue
+                && cuentasFiltradasPorBanco.Any(c => c.BancoCuentaId == BancoCuentaId.Value))
+            {
+                filtroSeleccionadoCuentaId = BancoCuentaId.Value;
+                Console.WriteLine($"💳 Cuenta desde parámetro: {BancoCuentaId.Value}");
+            }
+            // ✅ Auto-seleccionar cuenta si solo hay una
+            else if (bancoSeleccionadoId.HasValue && cuentasFiltradasPorBanco.Count == 1)
+            {
+                filtroSeleccionadoCuentaId = cuentasFiltradasPorBanco[0].BancoCuentaId;
+                Console.WriteLine($"💳 Auto-selección única cuenta: {filtroSeleccionadoCuentaId}");
+            }
+            else if (bancoSeleccionadoId.HasValue && cuentasFiltradasPorBanco.Count > 0)
+            {
+                filtroSeleccionadoCuentaId = cuentasFiltradasPorBanco.First().BancoCuentaId;
+                Console.WriteLine($"💳 Selección primera cuenta: {filtroSeleccionadoCuentaId}");
+            }
+
+            suppressReload = false; // ✅ DESACTIVAR SUPRESIÓN
+            Console.WriteLine("✅ suppressReload = false");
+
+            // ✅ Cargar transacciones si hay cuenta seleccionada
+            if (filtroSeleccionadoCuentaId.HasValue)
+            {
+                await CargarTransaccionesAsync();
+            }
+            else
+            {
+                Console.WriteLine("⚠️ No se seleccionó ninguna cuenta");
+                AplicarFiltros();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error en OnInitializedAsync: {ex.Message}");
+            Console.WriteLine($"   Stack: {ex.StackTrace}");
+            MostrarAlerta($"Error al cargar los datos: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            suppressReload = false; // ✅ Asegurar que se desactiva
+            StateHasChanged();
+            Console.WriteLine($"🏁 OnInitializedAsync - FIN (Registros: {transaccionesFiltradas.Count})");
+        }
+    }
+
+    private async Task CargarTransaccionesAsync()
+    {
+        try
+        {
+            Console.WriteLine($"📥 CargarTransaccionesAsync - INICIO (suppressReload: {suppressReload})");
+            
+            if (!filtroSeleccionadoCuentaId.HasValue)
+            {
+                Console.WriteLine("⚠️ No hay cuenta seleccionada, limpiando datos");
+                transacciones = new List<BanTransaccionListDto>();
+                AplicarFiltros();
+                StateHasChanged();
+                return;
+            }
+
+            var companyId = await TenantState.EnsureCompanyAsync();
+            
+            Console.WriteLine($"📞 Llamando API con:");
+            Console.WriteLine($"   CompanyId: {companyId}");
+            Console.WriteLine($"   BancoId: {bancoSeleccionadoId}");
+            Console.WriteLine($"   CuentaId: {filtroSeleccionadoCuentaId}");
+            Console.WriteLine($"   Desde: {filtroFechaDesde:yyyy-MM-dd}");
+            Console.WriteLine($"   Hasta: {filtroFechaHasta:yyyy-MM-dd}");
+            
+            var resultado = await TransaccionesClient.GetTransaccionesAsync(
+                companyId,
+                bancoSeleccionadoId,
+                filtroSeleccionadoCuentaId,
+                filtroFechaDesde,
+                filtroFechaHasta,
+                mostrarAnuladas);
+
+            var vistos = new HashSet<long>();
+            transacciones = resultado
+                .Where(t => t.BanKardexId <= 0 || vistos.Add(t.BanKardexId))
+                .ToList();
+            Console.WriteLine($"✅ API retornó: {transacciones.Count} transacciones");
+            
+            if (transacciones.Any())
+            {
+                var primera = transacciones.First();
+                Console.WriteLine($"   📊 Primera: ID={primera.BanKardexId}, Banco={primera.BancoNombre}, Monto={primera.Monto:N2}");
+            }
+
+            AplicarFiltros();
+            Console.WriteLine($"✅ CargarTransaccionesAsync - FIN (Filtrados: {transaccionesFiltradas.Count})");
+            
+            StateHasChanged();
+        }
+        catch (HttpRequestException ex)
+        {
+            Console.WriteLine($"❌ HttpRequestException: {ex.Message}");
+            if (ex.Message.Contains("401") || ex.Message.Contains("Unauthorized"))
+            {
+                MostrarAlerta("Su sesión ha expirado. Por favor, inicie sesión nuevamente.");
+            }
+            else
+            {
+                MostrarAlerta($"Error al obtener transacciones: {ex.Message}");
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Exception en CargarTransaccionesAsync: {ex.Message}");
+            Console.WriteLine($"   Stack: {ex.StackTrace}");
+            MostrarAlerta($"Error al cargar transacciones: {ex.Message}");
+            StateHasChanged();
+        }
+    }
+
+    private void AplicarFiltros()
+    {
+        var antes = transaccionesFiltradas.Count;
+        transaccionesFiltradas = mostrarAnuladas
+            ? transacciones.ToList()
+            : transacciones.Where(t => !EsAnulacion(t) && !EsAnulada(t)).ToList();
+        Console.WriteLine($"🔄 AplicarFiltros: origen={transacciones.Count}, antes={antes}, después={transaccionesFiltradas.Count}");
+    }
+
+    private void OnFiltroChanged()
+    {
+        Console.WriteLine($"🔄 OnFiltroChanged - suppressReload: {suppressReload}");
+        if (!suppressReload)
+        {
+            _ = RecargarTransaccionesAsync();
+        }
+    }
+
+    private async Task RecargarTransaccionesAsync()
+    {
+        try
+        {
+            Console.WriteLine($"🔄 RecargarTransaccionesAsync - INICIO (suppressReload: {suppressReload})");
+            
+            if (suppressReload)
+            {
+                Console.WriteLine("⏸️ Recarga suprimida");
+                return;
+            }
+            
+            isLoading = true;
+            StateHasChanged();
+            
+            await CargarTransaccionesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"❌ Error en RecargarTransaccionesAsync: {ex.Message}");
+            MostrarAlerta($"Error al recargar: {ex.Message}");
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+            Console.WriteLine($"✅ RecargarTransaccionesAsync - FIN (Registros: {transaccionesFiltradas.Count})");
+        }
+    }
+
+    private async Task RefreshAsync()
+    {
+        Console.WriteLine("🔄 RefreshAsync - Manual");
+        await RecargarTransaccionesAsync();
+        MostrarAlerta("Datos actualizados correctamente.");
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        if (transaccionesGrid is null || transaccionesFiltradas.Count == 0)
+        {
+            MostrarAlerta("No hay datos para exportar.");
+            return;
+        }
+
+        try
+        {
+            var fileName = $"transacciones_bancarias_{DateTime.Now:yyyyMMdd_HHmmss}.xlsx";
+            await transaccionesGrid.ExportToXlsxAsync(fileName, new GridXlExportOptions
+            {
+                CustomizeColumn = e =>
+                {
+                    if (string.Equals(e.FieldName, nameof(BanTransaccionListDto.Descripcion), StringComparison.Ordinal))
+                    {
+                        e.Column.IsHidden = false;
+                    }
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            MostrarAlerta($"Error al exportar a Excel: {ex.Message}");
+        }
+    }
+
+    private async Task AbrirFormularioAsync()
+    {
+        if (!bancoSeleccionadoId.HasValue)
+        {
+            MostrarAlerta("Seleccione un banco para registrar la transacción.");
+            return;
+        }
+
+        var query = new List<string>
+        {
+            $"bancoId={bancoSeleccionadoId.Value}",
+            $"returnUrl={Uri.EscapeDataString(BuildTransaccionesListUrl())}"
+        };
+
+        if (filtroSeleccionadoCuentaId.HasValue)
+        {
+            query.Insert(1, $"bancoCuentaId={filtroSeleccionadoCuentaId.Value}");
+        }
+
+        var url = "/contabilidad/transacciones-bancarias/nueva?" + string.Join("&", query);
+        NavigationManager.NavigateTo(url);
+    }private Task AbrirAnulacionAsync()
+    {
+        mensajeAnulacionError = null;
+
+        if (transaccionSeleccionada is null)
+        {
+            MostrarAlerta("Seleccione una transacción para anular.");
+            return Task.CompletedTask;
+        }
+
+        if (!EsAnulable(transaccionSeleccionada))
+        {
+            MostrarAlerta("La transacción seleccionada ya está anulada.");
+            return Task.CompletedTask;
+        }
+
+        anulacionForm = new AnulacionFormModel
+        {
+            Motivo = string.Empty
+        };
+
+        mostrarAnulacion = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    private async Task VerDetalleDesdeFilaAsync(BanTransaccionListDto transaccion)
+    {
+        SelectedRow = transaccion;
+        await VerDetallesAsync(transaccion);
+    }
+
+    private async Task AnularDesdeFilaAsync(BanTransaccionListDto transaccion)
+    {
+        SelectedRow = transaccion;
+        await AbrirAnulacionAsync();
+    }
+
+    private void CerrarAnulacion()
+    {
+        mostrarAnulacion = false;
+        mensajeAnulacionError = null;
+        anulacionForm = new AnulacionFormModel();
+        StateHasChanged();
+    }
+
+    private async Task ConfirmarAnulacionAsync()
+    {
+        if (transaccionSeleccionada is null)
+        {
+            mensajeAnulacionError = "Seleccione una transacción válida.";
+            return;
+        }
+
+        try
+        {
+            anulando = true;
+            mensajeAnulacionError = null;
+
+            var dto = new BanTransaccionAnularDto
+            {
+                BancoCuentaId = transaccionSeleccionada.BancoCuentaId,
+                BanKardexIdOriginal = transaccionSeleccionada.BanKardexId,
+                Motivo = anulacionForm.Motivo.Trim()
+            };
+
+            await TransaccionesClient.AnularMovimientoAsync(dto);
+
+            mostrarAnulacion = false;
+            await CargarTransaccionesAsync();
+            MostrarAlerta("Transacción anulada correctamente.");
+        }
+        catch (Exception ex)
+        {
+            mensajeAnulacionError = $"Error al anular la transacción: {ex.Message}";
+        }
+        finally
+        {
+            anulando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task VerDetallesAsync(BanTransaccionListDto transaccion)
+    {
+        try
+        {
+            var companyId = await TenantState.EnsureCompanyAsync();
+            var detalle = await TransaccionesClient.GetDetalleAsync(transaccion.BanKardexId, companyId);
+            transaccionActual = detalle ?? MapDetalleFallback(transaccion);
+        }
+        catch
+        {
+            transaccionActual = MapDetalleFallback(transaccion);
+        }
+        mostrarDetalles = true;
+        StateHasChanged();
+    }
+
+    private void MostrarAlerta(string mensaje)
+    {
+        mensajeAlerta = mensaje;
+        StateHasChanged();
+    }
+
+    private void VolverABancos()
+    {
+        NavigationManager.NavigateTo(GetReturnUrl());
+    }
+    private string GetReturnUrl()
+    {
+        if (string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            return "/contabilidad/bancos";
+        }
+
+        return Uri.UnescapeDataString(ReturnUrl);
+    }
+
+    private string BuildTransaccionesListUrl()
+    {
+        var query = new List<string>();
+        if (bancoSeleccionadoId.HasValue)
+        {
+            query.Add($"bancoId={bancoSeleccionadoId.Value}");
+        }
+
+        if (filtroSeleccionadoCuentaId.HasValue)
+        {
+            query.Add($"bancoCuentaId={filtroSeleccionadoCuentaId.Value}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            query.Add($"returnUrl={Uri.EscapeDataString(ReturnUrl)}");
+        }
+
+        var url = "/contabilidad/transacciones-bancarias";
+        if (query.Count > 0)
+        {
+            url += "?" + string.Join("&", query);
+        }
+
+        return url;
+    }
+
+    private string GetReporteUrl(BanTransaccionListDto transaccion)
+    {
+        var uri = NavigationManager.ToAbsoluteUri($"api/bancos/transacciones/{transaccion.BanKardexId}/reporte");
+        return uri.ToString();
+    }
+
+    private sealed class AnulacionFormModel
+    {
+        [Required(ErrorMessage = "El motivo es obligatorio.")]
+        [StringLength(500, ErrorMessage = "El motivo no puede superar 500 caracteres.")]
+        public string Motivo { get; set; } = string.Empty;
+    }
+
+    private void ActualizarBancosDisponibles()
+    {
+        bancosDisponibles = cuentasBancarias
+            .Where(c => c.BancoId > 0)
+            .GroupBy(c => new { c.BancoId, Nombre = c.BancoNombre ?? string.Empty })
+            .Select(g => new BancoFiltroDto
+            {
+                BancoId = g.Key.BancoId,
+                Nombre = string.IsNullOrWhiteSpace(g.Key.Nombre)
+                    ? $"Banco {g.Key.BancoId}"
+                    : g.Key.Nombre
+            })
+            .OrderBy(b => b.Nombre, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+        
+        Console.WriteLine($"🏦 ActualizarBancosDisponibles: {bancosDisponibles.Count} bancos");
+    }
+
+    private void SetDefaultRangoFechas()
+    {
+        var today = DateOnly.FromDateTime(DateTime.Today);
+        var firstDay = new DateOnly(today.Year, today.Month, 1);
+        var lastDay = new DateOnly(today.Year, today.Month, DateTime.DaysInMonth(today.Year, today.Month));
+
+        _filtroFechaDesde = firstDay;
+        _filtroFechaHasta = lastDay;
+        
+        Console.WriteLine($"📅 Rango por defecto: {firstDay:yyyy-MM-dd} a {lastDay:yyyy-MM-dd}");
+    }
+
+    private void OnBancoSeleccionadoChanged()
+    {
+        Console.WriteLine($"🏦 OnBancoSeleccionadoChanged - Banco: {_bancoSeleccionadoId}, suppressReload: {suppressReload}");
+        
+        ActualizarCuentasFiltradasPorBanco();
+
+        if (suppressReload)
+        {
+            Console.WriteLine("⏸️ Cambio de banco suprimido");
+            return;
+        }
+
+        var cuentaSeleccionadaValida = _filtroSeleccionadoCuentaId.HasValue
+            && cuentasFiltradasPorBanco.Any(c => c.BancoCuentaId == _filtroSeleccionadoCuentaId.Value);
+
+        if (!cuentaSeleccionadaValida)
+        {
+            suppressReload = true; // ✅ Suprimir durante cambio automático
+            _filtroSeleccionadoCuentaId = cuentasFiltradasPorBanco.Count == 1
+                ? cuentasFiltradasPorBanco[0].BancoCuentaId
+                : (long?)null;
+            suppressReload = false;
+            
+            Console.WriteLine($"💳 Cuenta ajustada a: {_filtroSeleccionadoCuentaId}");
+        }
+
+        _ = RecargarTransaccionesAsync();
+    }
+
+    private void ActualizarCuentasFiltradasPorBanco()
+    {
+        if (_bancoSeleccionadoId.HasValue)
+        {
+            cuentasFiltradasPorBanco = cuentasBancarias
+                .Where(c => c.BancoId == _bancoSeleccionadoId.Value)
+                .ToList();
+
+            bancoNombre = bancosDisponibles
+                .FirstOrDefault(b => b.BancoId == _bancoSeleccionadoId.Value)?.Nombre
+                ?? cuentasFiltradasPorBanco.FirstOrDefault()?.BancoNombre
+                ?? $"Banco {_bancoSeleccionadoId.Value}";
+            
+            Console.WriteLine($"   ✅ {cuentasFiltradasPorBanco.Count} cuentas para banco '{bancoNombre}'");
+        }
+        else
+        {
+            cuentasFiltradasPorBanco = new List<BancoCuentaListDto>();
+            bancoNombre = string.Empty;
+            Console.WriteLine("   ❌ Sin banco seleccionado");
+        }
+    }
+
+    private sealed class BancoFiltroDto
+    {
+        public long BancoId { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+    }
+
+    private static bool EsAnulacion(BanTransaccionListDto transaccion)
+        => string.Equals(transaccion.Estado, "ANULACION", StringComparison.OrdinalIgnoreCase);
+
+    private static bool EsAnulada(BanTransaccionListDto transaccion)
+        => string.Equals(transaccion.Estado, "ANULADA", StringComparison.OrdinalIgnoreCase);
+
+    private static BanTransaccionDetalleDto MapDetalleFallback(BanTransaccionListDto transaccion)
+    {
+        return new BanTransaccionDetalleDto
+        {
+            BanKardexId = transaccion.BanKardexId,
+            BancoCuentaId = transaccion.BancoCuentaId,
+            IdTipoTransaccion = transaccion.IdTipoTransaccion,
+            FechaMovimiento = transaccion.FechaMovimiento,
+            Descripcion = transaccion.Descripcion,
+            Referencia = transaccion.Referencia,
+            Monto = Math.Abs(transaccion.Monto),
+            TasaCambio = 1m,
+            ContraCuentas = new List<BanTransaccionContraLineaDto>()
+        };
+    }
+
+    private static bool EsAnulable(BanTransaccionListDto? transaccion)
+    {
+        if (transaccion is null)
+        {
+            return false;
+        }
+
+        var estado = transaccion.Estado ?? string.Empty;
+        return !string.Equals(estado, "ANULADA", StringComparison.OrdinalIgnoreCase)
+               && !string.Equals(estado, "ANULACION", StringComparison.OrdinalIgnoreCase);
+    }
+}
+

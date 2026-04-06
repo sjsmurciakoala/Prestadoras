@@ -3,58 +3,99 @@
 @using apc.Client.Services.Medidores
 @inject MedidoresClient MedidoresClient
 @inject IToastNotificationService ToastService
+@inject AuthenticationStateProvider AuthenticationStateProvider
 
-<div class="d-flex flex-column gap-3">
-    <!-- Botones de acciones -->
-    <div class="d-flex gap-2 mb-3">
-        <DxButton Text="Cargar Medidores" Click="@LoadMedidoresAsync" IconCssClass="oi oi-reload" />
-        <DxButton Text="Asignar Medidor" Click="@AsignarMedidorPopupAsync" IconCssClass="oi oi-plus" />
-        <DxButton Text="Registrar Lectura sin Medidor" Click="@AbrirLecturaSinMedidorAsync" IconCssClass="oi oi-plus" />
-    </div>
-
-    <!-- Listado de Medidores -->
+<div class="cliente-medidores-container">
     @if (medidoresLoading)
     {
-        <DxSkeletonLine />
-        <DxSkeletonLine />
-    }
-    else if (!string.IsNullOrEmpty(medidoresError))
-    {
-        <DxAlert AlertType="AlertType.Danger">@medidoresError</DxAlert>
-    }
-    else if (medidores.Count == 0)
-    {
-        <DxAlert AlertType="AlertType.Info">Este cliente no tiene medidores asignados.</DxAlert>
+        <div class="text-center p-4">
+            <DxLoadingPanel Visible="true" Text="Cargando medidores..." />
+            <div style="height:100px"></div>
+        </div>
     }
     else
     {
-        <DxGrid Data="@medidores" PageSize="15">
-            <Columns>
-                <DxGridDataColumn FieldName="@nameof(MedidorListDto.Numero)" Caption="Numero" Width="120px" />
-                <DxGridDataColumn FieldName="@nameof(MedidorListDto.Marca)" Caption="Marca" Width="120px" />
-                <DxGridDataColumn FieldName="@nameof(MedidorListDto.Diametro)" Caption="Diametro" Width="100px" />
-                <DxGridDataColumn FieldName="@nameof(MedidorListDto.Acueducto)" Caption="Acueducto" Width="140px" />
-                <DxGridDataColumn FieldName="@nameof(MedidorListDto.Estado)" Caption="Estado" Width="90px" />
-                <DxGridDataColumn Caption="Acciones" Width="90px">
-                    <CellDisplayTemplate Context="cellContext">
-                        @if (cellContext.DataItem is MedidorListDto item)
-                        {
-                            <DxButton Text="Ver"
-                                      Size="ButtonSize.Small"
-                                      RenderStyle="ButtonRenderStyle.Secondary"
-                                      Click="@(() => MostrarDetalleMedidorAsync(item))" />
-                        }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
-            </Columns>
-        </DxGrid>
+        <!-- ENCABEZADO -->
+        <div class="section-header mb-4">
+            <i class="bi bi-speedometer2"></i>
+            <h4 class="m-0">Medidores del Cliente</h4>
+        </div>
+
+        <div class="modern-card">
+            <div class="medidores-actions mb-3">
+                <DxButton Text="Cargar Medidores"
+                          Click="@LoadMedidoresAsync"
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="medidores-action-btn action-refresh" />
+                <DxButton Text="Asignar Medidor"
+                          Click="@AsignarMedidorPopupAsync"
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          CssClass="medidores-action-btn action-assign" />
+                <DxButton Text="Registrar Lectura sin Medidor"
+                          Click="@AbrirLecturaSinMedidorAsync"
+                          IconCssClass="bi bi-pencil-square"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="medidores-action-btn action-lectura" />
+            </div>
+
+            @if (!string.IsNullOrEmpty(medidoresError))
+            {
+                <DxAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle">
+                    @medidoresError
+                </DxAlert>
+            }
+            else if (medidores.Count == 0)
+            {
+                <div class="text-center p-4">
+                    <i class="bi bi-speedometer" style="font-size: 3rem; color: #6c757d; opacity: 0.5;"></i>
+                    <p class="text-muted mt-2">Este cliente no tiene medidores asignados</p>
+                </div>
+            }
+            else
+            {
+                <div class="section-header-inner mb-3">
+                    <i class="bi bi-list-check"></i>
+                    <h5 class="m-0">Listado de Medidores</h5>
+                    <span class="badge-count ms-2">@medidores.Count @(medidores.Count == 1 ? "medidor" : "medidores")</span>
+                </div>
+
+                <div class="grid-wrapper">
+                    <DxGrid Data="@medidores" PageSize="15" CssClass="medidores-grid">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(MedidorListDto.Numero)" Caption="Numero" Width="120px" />
+                            <DxGridDataColumn FieldName="@nameof(MedidorListDto.Marca)" Caption="Marca" Width="120px" />
+                            <DxGridDataColumn FieldName="@nameof(MedidorListDto.Diametro)" Caption="Diametro" Width="100px" />
+                            <DxGridDataColumn FieldName="@nameof(MedidorListDto.Acueducto)" Caption="Acueducto" Width="140px" />
+                            <DxGridDataColumn FieldName="@nameof(MedidorListDto.Estado)" Caption="Estado" Width="90px" />
+                            <DxGridDataColumn Caption="Acciones" Width="90px">
+                                <CellDisplayTemplate Context="cellContext">
+                                    @if (cellContext.DataItem is MedidorListDto item)
+                                    {
+                                        <DxButton Text="Ver"
+                                                  Size="ButtonSize.Small"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  IconCssClass="bi bi-eye"
+                                                  CssClass="medidores-grid-action"
+                                                  Click="@(() => MostrarDetalleMedidorAsync(item))" />
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                </div>
+            }
+        </div>
     }
 
     <!-- Popup: Asignar Medidor -->
-    <DxPopup Visible="@asignacionPopupVisible" 
+    <DxPopup Visible="@asignacionPopupVisible"
              VisibleChanged="@(v => asignacionPopupVisible = v)"
              Width="600px"
-             HeaderText="Asignar Medidor">
+             HeaderText="Asignar Medidor"
+             ShowFooter="true"
+             CssClass="medidores-popup">
         <BodyTemplate Context="popupContext">
             @if (medidoresDisponiblesLoading)
             {
@@ -82,16 +123,25 @@
             }
         </BodyTemplate>
         <FooterTemplate>
-            <DxButton Text="Guardar" Click="@GuardarAsignacionMedidorAsync" Enabled="@(!asignacionGuardando)" />
-            <DxButton Text="Cancelar" Click="@(() => asignacionPopupVisible = false)" />
+            <div class="medidores-popup-actions">
+                <DxButton Text="Guardar"
+                          Click="@GuardarAsignacionMedidorAsync"
+                          Enabled="@(!asignacionGuardando)" />
+                <DxButton Text="Cancelar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => asignacionPopupVisible = false)" />
+            </div>
         </FooterTemplate>
     </DxPopup>
 
     <!-- Popup: Lectura sin Medidor -->
-    <DxPopup Visible="@lecturaPopupVisible" 
+    <DxPopup Visible="@lecturaPopupVisible"
              VisibleChanged="@(v => lecturaPopupVisible = v)"
              Width="600px"
-             HeaderText="Registrar Lectura">
+             HeaderText="Registrar Lectura"
+             ShowFooter="true"
+             CssClass="medidores-popup">
         <BodyTemplate Context="popupContext">
             @if (!string.IsNullOrEmpty(lecturaError))
             {
@@ -108,21 +158,31 @@
                     <DxSpinEdit @bind-Value="@lecturaModel.Lectura" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Usuario">
-                    <DxTextBox @bind-Text="@lecturaModel.Usuario" />
+                    <DxTextBox @bind-Text="@lecturaModel.Usuario"
+                               ReadOnly="true" />
                 </DxFormLayoutItem>
             </DxFormLayout>
         </BodyTemplate>
         <FooterTemplate>
-            <DxButton Text="Registrar" Click="@RegistrarLecturaSinMedidorAsync" Enabled="@(!lecturaGuardando)" />
-            <DxButton Text="Cancelar" Click="@(() => lecturaPopupVisible = false)" />
+            <div class="medidores-popup-actions">
+                <DxButton Text="Registrar"
+                          Click="@RegistrarLecturaSinMedidorAsync"
+                          Enabled="@(!lecturaGuardando)" />
+                <DxButton Text="Cancelar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => lecturaPopupVisible = false)" />
+            </div>
         </FooterTemplate>
     </DxPopup>
 
     <!-- Popup: Detalle Medidor -->
-    <DxPopup Visible="@medidorDetalleVisible" 
+    <DxPopup Visible="@medidorDetalleVisible"
              VisibleChanged="@(v => medidorDetalleVisible = v)"
              Width="800px"
-             HeaderText="Detalle de Medidor">
+             HeaderText="Detalle de Medidor"
+             ShowFooter="true"
+             CssClass="medidores-popup">
         <BodyTemplate Context="popupContext">
             @if (medidorDetalleCargando)
             {
@@ -148,7 +208,12 @@
             }
         </BodyTemplate>
         <FooterTemplate>
-            <DxButton Text="Cerrar" Click="@(() => medidorDetalleVisible = false)" />
+            <div class="medidores-popup-actions">
+                <DxButton Text="Cerrar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => medidorDetalleVisible = false)" />
+            </div>
         </FooterTemplate>
     </DxPopup>
 </div>
@@ -308,19 +373,21 @@
         }
     }
 
-    private Task AbrirLecturaSinMedidorAsync()
+    private async Task AbrirLecturaSinMedidorAsync()
     {
         if (Cliente is null)
-            return Task.CompletedTask;
+            return;
 
         lecturaError = null;
+        var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var usuarioActual = auth.User?.Identity?.Name;
         lecturaModel = new LecturaSinMedidorModel
         {
             Clave = Cliente.Codigo,
-            Fecha = DateTime.Today
+            Fecha = DateTime.Today,
+            Usuario = usuarioActual ?? "sistema"
         };
         lecturaPopupVisible = true;
-        return Task.CompletedTask;
     }
 
     private async Task RegistrarLecturaSinMedidorAsync()
@@ -341,7 +408,7 @@
                 Clave = lecturaModel.Clave.Trim(),
                 Fecha = lecturaModel.Fecha,
                 Lectura = lecturaModel.Lectura,
-                Usuario = string.IsNullOrWhiteSpace(lecturaModel.Usuario) ? "app" : lecturaModel.Usuario.Trim()
+                Usuario = string.IsNullOrWhiteSpace(lecturaModel.Usuario) ? "sistema" : lecturaModel.Usuario.Trim()
             };
 
             var response = await MedidoresClient.RegistrarLecturaSinMedidorAsync(modelo);

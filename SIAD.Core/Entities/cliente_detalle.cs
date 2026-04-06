@@ -1,13 +1,16 @@
 ﻿using System;
 using System.Collections.Generic;
+using SIAD.Core.Tenancy;
 
 namespace SIAD.Core.Entities;
 
-public partial class cliente_detalle
+public partial class cliente_detalle : ICompanyScopedEntity
 {
     public int detalle_cliente_id { get; set; }
 
     public int maestro_cliente_id { get; set; }
+
+    public long company_id { get; set; }
 
     public string? detalle_cliente_telefono { get; set; }
 

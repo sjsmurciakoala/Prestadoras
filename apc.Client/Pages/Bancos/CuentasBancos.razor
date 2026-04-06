@@ -1,0 +1,850 @@
+@page "/bancos/cuentas"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Tenant
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using SIAD.Core.DTOs.Bancos
+@using SIAD.Core.DTOs.Contabilidad
+
+@inject CuentasBancosClient CuentasClient
+@inject BancosClient BancosClient
+@inject BancoConfiguracionClient BancoConfigClient
+@inject BanMonedasClient MonedasClient
+@inject TenantState TenantState
+@inject NavigationManager NavigationManager
+
+@implements IDisposable
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Cuentas bancarias</h2>
+            <p class="page-subtitle">Gestion de cuentas por banco</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Nueva cuenta"
+                      IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading && BancoIdSeleccionado.HasValue)"
+                      Click="AbrirNuevaCuenta" />
+            @if (IsModal)
+            {
+                <DxButton Text="Cerrar"
+                          IconCssClass="bi bi-x-lg"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="btn-modern shadow-sm"
+                          Click="CloseOrGoToBancosAsync" />
+            }
+            else
+            {
+                <DxButton Text="Volver a bancos"
+                          IconCssClass="bi bi-arrow-left"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="btn-modern shadow-sm"
+                          Click="CloseOrGoToBancosAsync" />
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(alerta))
+    {
+        <DxMessageBox Type="MessageBoxType.Alert"
+                      RenderStyle="@alertaEstilo"
+                      ShowIcon="true"
+                      Text="@alerta"
+                      CssClass="mb-3"
+                      Visible="true" />
+    }
+
+    @if (showNoBancosAlert)
+    {
+        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+                <span>No hay bancos registrados. Cree uno antes de gestionar cuentas.</span>
+                <DxButton Text="Ir a bancos"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="CloseOrGoToBancosAsync" />
+            </div>
+        </DxAlert>
+    }
+
+    <div class="modern-card mb-4">
+        <DxToolbar ItemSpacing="20px" CssClass="mb-4">
+            <DxToolbarItem IconCssClass="bi bi-arrow-clockwise"
+                           Text="Refrescar"
+                           RenderStyle="ButtonRenderStyle.Secondary"
+                           Enabled="@(!isLoading)"
+                           Click="RefreshAsync"
+                           BeginGroup="true" />
+            <DxToolbarItem BeginGroup="true">
+                <Template>
+                    <DxTextBox Text="@searchText"
+                               TextChanged="@OnSearchTextChanged"
+                               NullText="Buscar..."
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </Template>
+            </DxToolbarItem>
+            <DxToolbarItem IconCssClass="bi bi-search"
+                           Text="Buscar"
+                           RenderStyle="ButtonRenderStyle.Secondary"
+                           Enabled="@(!isLoading)"
+                           Click="ApplyFilter" />
+        </DxToolbar>
+    </div>
+    <div class="modern-card position-relative" style="min-height: 300px;">
+        <div class="grid-wrapper">
+            <DxGrid Data="@cuentasFiltradas"
+                    KeyFieldName="@nameof(BancoCuentaListDto.BancoCuentaId)"
+                    PageSize="12"
+                    SizeMode="SizeMode.Large"
+                    SelectionMode="GridSelectionMode.Single"
+                    AllowSelectRowByClick="true"
+                    @bind-SelectedDataItem="SelectedRow"
+                    CssClass="grid-modern">
+                <Columns>
+                    <DxGridDataColumn Caption="Banco" Width="240px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoCuentaListDto itemBanco)
+                            {
+                                @GetBancoNombre(itemBanco)
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.NumeroCuenta)" Caption="Numero cuenta" Width="170px" />
+                    <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.TipoCuenta)" Caption="Tipo" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.Moneda)" Caption="Moneda" Width="120px" />
+                    <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.SaldoActual)"
+                                      Caption="Saldo actual"
+                                      DisplayFormat="c2"
+                                      Width="150px" />
+                    <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.Titular)" Caption="Titular" Width="200px" />
+                    <DxGridDataColumn Caption="Cuenta contable" Width="220px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoCuentaListDto itemCuenta)
+                            {
+                                @GetCuentaContableDisplay(itemCuenta)
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoCuentaListDto itemEstado)
+                            {
+                                <span class="badge-status @(itemEstado.Activo ? "active" : "inactive")">
+                                    @(itemEstado.Activo ? "Activo" : "Inactivo")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="260px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoCuentaListDto itemAccion)
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button class="btn-icon btn-edit" title="Editar" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => AbrirGestionCuenta(itemAccion)">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button class="btn-icon btn-transactions" title="Transacciones bancarias" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => AbrirTransacciones(itemAccion)">
+                                        <i class="bi bi-receipt"></i>
+                                    </button>
+                                    <button class="btn-icon btn-consolidate" title="Conciliacion cuenta bancaria" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => AbrirConciliacion(itemAccion)">
+                                        <i class="bi bi-clipboard-data"></i>
+                                    </button>
+                                    <button class="btn-icon btn-reconciled" title="Transacciones conciliadas" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => AbrirTransaccionesConciliadas(itemAccion)">
+                                        <i class="bi bi-list-check"></i>
+                                    </button>
+                                    <button class="btn-icon btn-delete" title="Eliminar" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => { SelectedRow = itemAccion; ConfirmDelete(); }">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@if (isLoading)
+{
+    <div class="splash-overlay">
+        <div class="splash-card">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+            <div class="splash-text">Cargando cuentas bancarias...</div>
+        </div>
+    </div>
+}
+
+<DxPopup @bind-Visible="deleteVisible"
+         Width="420px"
+         CloseOnOutsideClick="true"
+         ShowCloseButton="true"
+         ShowFooter="true"
+         BodyCssClass="p-3"
+         FooterCssClass="p-2 text-end"
+         HeaderText="Eliminar cuenta">
+    <BodyTemplate>
+        <div class="pb-3 mb-3 border-bottom border-light-subtle">
+            <div class="d-flex align-items-start gap-3">
+                <span class="text-warning display-6">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                </span>
+                <div>
+                    <p class="fw-semibold mb-2">¿Eliminar esta cuenta?</p>
+                    <p class="text-muted mb-0">Confirma la eliminación del registro seleccionado.</p>
+                </div>
+            </div>
+        </div>
+        @if (cuentaAEliminar is null)
+        {
+            <p class="mb-0">Seleccione una cuenta para eliminar.</p>
+        }
+        else
+        {
+            <div class="small mb-2 text-secondary">
+                <div><strong>Banco:</strong> @GetBancoNombre(cuentaAEliminar)</div>
+                <div><strong>Número:</strong> @cuentaAEliminar.NumeroCuenta</div>
+                <div><strong>Tipo:</strong> @cuentaAEliminar.TipoCuenta</div>
+            </div>
+            <p class="text-danger small mb-0">Esta acción no se puede deshacer.</p>
+        }
+
+        <div class="mt-3 border-top border-light-subtle"></div>
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex justify-content-end gap-2 flex-wrap">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      ButtonStyle="ButtonStyle.Outlined"
+                      Click="CloseDelete" />
+            <DxButton Text="Eliminar"
+                      IconCssClass="bi bi-trash"
+                      RenderStyle="ButtonRenderStyle.Danger"
+                      Enabled="@(!isDeleting)"
+                      Click="DeleteAsync" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+
+<MyChildComponent SomeEvent="HandleCuentaSelected" />
+
+@code {
+    private readonly List<BancoCuentaListDto> cuentas = new();
+    private List<BancoCuentaListDto> cuentasFiltradas = new();
+    private readonly List<BancoListDto> bancos = new();
+    private List<BanMonedaLookupDto> monedas = new();
+    private List<CuentaContableLookupDto> cuentasContables = new();
+    private BancoCuentaListDto? cuentaSeleccionada;
+    private object? selectedRow;
+    private object? SelectedRow
+    {
+        get => selectedRow;
+        set
+        {
+            if (!ReferenceEquals(selectedRow, value))
+            {
+                selectedRow = value;
+                OnCuentaSeleccionadaChanged(value as BancoCuentaListDto);
+            }
+        }
+    }
+    private BancoCuentaListDto? cuentaAEliminar;
+    private bool isLoading;
+    private bool isDeleting;
+    private bool deleteVisible;
+    private bool hasBancos;
+    private bool showNoBancosAlert;
+    private bool consolidado;
+    private string? alerta;
+    private string searchText = string.Empty;
+    private long companyId;
+    private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private CancellationTokenSource? loadCts;
+
+    [Parameter]
+    public long? BancoId { get; set; }
+
+    [Parameter]
+    public bool? Nuevo { get; set; }
+
+    [Parameter]
+    public bool IsModal { get; set; }
+
+    [Parameter]
+    public EventCallback OnClose { get; set; }
+
+    [SupplyParameterFromQuery(Name = "bancoId")]
+    public long? BancoIdQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "nuevo")]
+    public bool? NuevoQuery { get; set; }
+
+    private long? bancoIdFiltro;
+    private long? handledBancoId;
+    private bool? handledNuevo;
+
+    private long? EffectiveBancoId => BancoId ?? BancoIdQuery;
+    private bool? EffectiveNuevo => Nuevo ?? NuevoQuery;
+
+    private long? BancoIdSeleccionado => bancoIdFiltro ?? cuentaSeleccionada?.BancoId;
+
+    private string DeleteMessage => cuentaAEliminar is null
+        ? "Seleccione una cuenta para eliminar."
+        : $"Confirma eliminar la cuenta {cuentaAEliminar.NumeroCuenta}?";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshAsync();
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await HandleParametersAsync();
+    }
+
+    private async Task RefreshAsync()
+    {
+        var setLoading = !isLoading;
+        if (setLoading)
+        {
+            isLoading = true;
+        }
+
+        try
+        {
+            await LoadBancosAsync();
+            await LoadCuentasAsync();
+        }
+        finally
+        {
+            if (setLoading)
+            {
+                isLoading = false;
+            }
+        }
+    }
+
+    private async Task HandleParametersAsync()
+    {
+        var targetBancoId = EffectiveBancoId;
+        var targetNuevo = EffectiveNuevo;
+
+        if (handledBancoId == targetBancoId && handledNuevo == targetNuevo)
+        {
+            return;
+        }
+
+        handledBancoId = targetBancoId;
+        handledNuevo = targetNuevo;
+
+        if (!targetBancoId.HasValue || targetBancoId.Value <= 0)
+        {
+            bancoIdFiltro = null;
+            ApplyFilter();
+            return;
+        }
+
+        bancoIdFiltro = targetBancoId;
+        ApplyFilter();
+
+        if (targetNuevo == true)
+        {
+            NavigateToGestion(null, targetBancoId);
+            return;
+        }
+    }
+
+    private async Task LoadBancosAsync()
+    {
+        try
+        {
+            var data = await BancosClient.GetAsync();
+            bancos.Clear();
+            bancos.AddRange(data);
+            hasBancos = bancos.Count > 0;
+            showNoBancosAlert = !hasBancos;
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"Error al cargar bancos: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+    }
+
+    private async Task LoadCuentasAsync()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+
+        var setLoading = !isLoading;
+        if (setLoading)
+        {
+            isLoading = true;
+        }
+
+        try
+        {
+            alerta = null;
+            companyId = await TenantState.EnsureCompanyAsync(loadCts.Token);
+            if (companyId <= 0)
+            {
+                cuentas.Clear();
+                cuentasFiltradas = new List<BancoCuentaListDto>();
+                cuentasContables = new List<CuentaContableLookupDto>();
+                consolidado = false;
+                SetAlert("No hay empresa seleccionada.", MessageBoxRenderStyle.Info);
+                return;
+            }
+
+            await LoadBancoConfiguracionAsync(companyId, loadCts.Token);
+            await LoadMonedasAsync(companyId, loadCts.Token);
+
+            var data = await CuentasClient.GetAsync(companyId, loadCts.Token);
+            cuentas.Clear();
+            cuentas.AddRange(data);
+            await LoadCuentasContablesAsync(companyId, loadCts.Token);
+            ApplyFilter();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"Error al cargar cuentas: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            if (setLoading)
+            {
+                isLoading = false;
+            }
+        }
+    }
+
+    private async Task LoadBancoConfiguracionAsync(long targetCompanyId, CancellationToken ct = default)
+    {
+        if (targetCompanyId <= 0)
+        {
+            consolidado = false;
+            return;
+        }
+
+        try
+        {
+            var config = await BancoConfigClient.ObtenerAsync(targetCompanyId, ct);
+            consolidado = config.Consolidado;
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            consolidado = false;
+            SetAlert($"Error al cargar configuracion de bancos: {ex.Message}", MessageBoxRenderStyle.Warning);
+        }
+    }
+
+    private void AbrirNuevaCuenta()
+    {
+        var bancoId = BancoIdSeleccionado;
+        if (!bancoId.HasValue || bancoId.Value <= 0)
+        {
+            SetAlert("Seleccione un banco para crear la cuenta.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        if (!IsBancoActivo(bancoId.Value))
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se pueden crear cuentas.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        NavigateToGestion(null, bancoId);
+    }
+
+    private void AbrirGestionCuenta(BancoCuentaListDto cuenta)
+    {
+        SelectedRow = cuenta;
+        NavigateToGestion(cuenta.BancoCuentaId, cuenta.BancoId);
+    }
+
+    private void NavigateToGestion(long? cuentaId, long? bancoId)
+    {
+        var returnUrl = BuildReturnUrl();
+        var query = new List<string>();
+        if (cuentaId.HasValue && cuentaId.Value > 0)
+        {
+            query.Add($"cuentaId={cuentaId.Value}");
+        }
+        if (bancoId.HasValue && bancoId.Value > 0)
+        {
+            query.Add($"bancoId={bancoId.Value}");
+        }
+        if (!string.IsNullOrWhiteSpace(returnUrl))
+        {
+            query.Add($"returnUrl={Uri.EscapeDataString(returnUrl)}");
+        }
+        var url = "/bancos/cuentas/gestion";
+        if (query.Count > 0)
+        {
+            url += "?" + string.Join("&", query);
+        }
+        NavigationManager.NavigateTo(url);
+    }
+
+    private string BuildReturnUrl()
+    {
+        if (bancoIdFiltro.HasValue && bancoIdFiltro.Value > 0)
+        {
+            return $"/bancos/cuentas?bancoId={bancoIdFiltro.Value}";
+        }
+
+        return "/bancos/cuentas";
+    }
+
+    private void AbrirConciliacion(BancoCuentaListDto cuenta)
+    {
+        if (cuenta is null)
+        {
+            SetAlert("Seleccione una cuenta para conciliar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        if (!IsBancoActivo(cuenta.BancoId))
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se puede conciliar.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        var returnUrl = BuildReturnUrl();
+        var url = $"/bancos/cuentas/conciliacion?cuentaId={cuenta.BancoCuentaId}";
+        if (!string.IsNullOrWhiteSpace(returnUrl))
+        {
+            url += $"&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        }
+
+        NavigationManager.NavigateTo(url);
+    }
+    private void AbrirTransacciones(BancoCuentaListDto cuenta)
+    {
+        if (cuenta is null)
+        {
+            SetAlert("Seleccione una cuenta para transacciones.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        if (!IsBancoActivo(cuenta.BancoId))
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se pueden realizar transacciones.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        var returnUrl = BuildReturnUrl();
+        var url = $"/contabilidad/transacciones-bancarias?bancoId={cuenta.BancoId}&bancoCuentaId={cuenta.BancoCuentaId}";
+        if (!string.IsNullOrWhiteSpace(returnUrl))
+        {
+            url += $"&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        }
+
+        NavigationManager.NavigateTo(url);
+    }
+
+
+
+
+    private void AbrirTransaccionesConciliadas(BancoCuentaListDto cuenta)
+    {
+        if (cuenta is null)
+        {
+            SetAlert("Seleccione una cuenta para consultar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        if (!IsBancoActivo(cuenta.BancoId))
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se puede consultar conciliadas.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        var returnUrl = BuildReturnUrl();
+        var url = $"/bancos/cuentas/transacciones-conciliadas?cuentaId={cuenta.BancoCuentaId}";
+        if (!string.IsNullOrWhiteSpace(returnUrl))
+        {
+            url += $"&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        }
+
+        NavigationManager.NavigateTo(url);
+    }
+    private void ConfirmDelete()
+    {
+        if (cuentaSeleccionada is null)
+        {
+            SetAlert("Seleccione una cuenta para eliminar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        if (!IsBancoActivo(cuentaSeleccionada.BancoId))
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se pueden eliminar cuentas.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        cuentaAEliminar = cuentaSeleccionada;
+        deleteVisible = true;
+    }
+
+    private void CloseDelete()
+    {
+        deleteVisible = false;
+        cuentaAEliminar = null;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (cuentaAEliminar is null)
+        {
+            return;
+        }
+
+        if (!IsBancoActivo(cuentaAEliminar.BancoId))
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se pueden eliminar cuentas.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        try
+        {
+            isDeleting = true;
+            await CuentasClient.DeleteAsync(cuentaAEliminar.BancoCuentaId);
+            deleteVisible = false;
+            cuentaAEliminar = null;
+            await LoadCuentasAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (HttpRequestException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo eliminar la cuenta: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+        private void ApplyFilter()
+    {
+        var filtro = searchText?.Trim();
+        IEnumerable<BancoCuentaListDto> query = cuentas;
+
+        if (bancoIdFiltro.HasValue && bancoIdFiltro.Value > 0)
+        {
+            query = query.Where(c => c.BancoId == bancoIdFiltro.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro))
+        {
+            query = query.Where(c =>
+                ContainsValue(c.BancoNombre, filtro)
+                || ContainsValue(c.NumeroCuenta, filtro)
+                || ContainsValue(c.TipoCuenta, filtro)
+                || ContainsValue(c.Moneda, filtro)
+                || ContainsValue(c.Titular, filtro)
+                || ContainsValue(c.Observaciones, filtro));
+        }
+
+        cuentasFiltradas = query.ToList();
+
+        if (cuentaSeleccionada != null &&
+            cuentasFiltradas.All(c => c.BancoCuentaId != cuentaSeleccionada.BancoCuentaId))
+        {
+            SelectedRow = null;
+        }
+    }
+
+    private void OnSearchTextChanged(string? value)
+    {
+        searchText = value ?? string.Empty;
+        ApplyFilter();
+    }
+
+    private bool IsBancoActivo(long bancoId)
+    {
+        var banco = bancos.FirstOrDefault(b => b.BancoId == bancoId);
+        return banco?.Activo == true;
+    }
+
+    private string GetBancoNombre(BancoCuentaListDto cuenta)
+    {
+        if (!string.IsNullOrWhiteSpace(cuenta.BancoNombre))
+        {
+            return cuenta.BancoNombre;
+        }
+
+        var banco = bancos.FirstOrDefault(b => b.BancoId == cuenta.BancoId);
+        return banco?.Nombre ?? cuenta.BancoId.ToString();
+    }
+
+    private string GetCuentaContableDisplay(BancoCuentaListDto cuenta)
+    {
+        var codigo = cuenta.CuentaContableCodigo?.Trim();
+        var nombre = cuenta.CuentaContableNombre?.Trim();
+        if (!string.IsNullOrWhiteSpace(codigo) && !string.IsNullOrWhiteSpace(nombre))
+        {
+            return $"{codigo} - {nombre}";
+        }
+
+        if (!string.IsNullOrWhiteSpace(codigo))
+        {
+            return codigo;
+        }
+
+        if (!string.IsNullOrWhiteSpace(nombre))
+        {
+            return nombre;
+        }
+
+        if (!string.IsNullOrWhiteSpace(cuenta.CtaConc) && cuenta.CtaConc != "0")
+        {
+            return cuenta.CtaConc;
+        }
+
+        return "--";
+    }
+
+    private async Task CloseOrGoToBancosAsync()
+    {
+        if (IsModal)
+        {
+            if (OnClose.HasDelegate)
+            {
+                await OnClose.InvokeAsync();
+            }
+
+            return;
+        }
+
+        GoToBancos();
+    }
+
+    private void GoToBancos()
+    {
+        NavigationManager.NavigateTo("/contabilidad/bancos");
+    }
+
+    private static bool ContainsValue(string? source, string value)
+        => !string.IsNullOrWhiteSpace(source)
+           && source.Contains(value, StringComparison.OrdinalIgnoreCase);
+
+    private void SetAlert(string message, MessageBoxRenderStyle style)
+    {
+        alerta = message;
+        alertaEstilo = style;
+    }
+
+
+    private void HandleCuentaSelected(BancoCuentaListDto cuenta)
+    {
+        OnCuentaSeleccionadaChanged(cuenta);
+    }
+    private void OnCuentaSeleccionadaChanged(BancoCuentaListDto? cuenta)
+    {
+        cuentaSeleccionada = cuenta;
+        selectedRow = cuentaSeleccionada;
+
+        if (cuenta is null)
+        {
+            cuentaAEliminar = null;
+            return;
+        }
+
+        var cuentaActual = cuentas.FirstOrDefault(c => c.BancoCuentaId == cuenta.BancoCuentaId);
+        if (cuentaActual is not null)
+        {
+            cuentaSeleccionada = cuentaActual;
+            selectedRow = cuentaSeleccionada;
+        }
+
+        if (cuentaAEliminar?.BancoCuentaId == cuentaSeleccionada.BancoCuentaId)
+        {
+            cuentaAEliminar = cuentaSeleccionada;
+        }
+    }
+    public void Dispose()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+    }
+
+    private async Task LoadMonedasAsync(long targetCompanyId, CancellationToken ct = default)
+    {
+        if (targetCompanyId <= 0)
+        {
+            monedas = new List<BanMonedaLookupDto>();
+            return;
+        }
+
+        try
+        {
+            var data = await MonedasClient.GetAsync(targetCompanyId, ct);
+            monedas = data
+                .OrderBy(m => m.Descripcion, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            monedas = new List<BanMonedaLookupDto>();
+            SetAlert($"Error al cargar monedas: {ex.Message}", MessageBoxRenderStyle.Warning);
+        }
+    }
+
+    private async Task LoadCuentasContablesAsync(long targetCompanyId, CancellationToken ct = default)
+    {
+        if (targetCompanyId <= 0 || !consolidado)
+        {
+            cuentasContables = new List<CuentaContableLookupDto>();
+            return;
+        }
+
+        try
+        {
+            var data = await CuentasClient.ListarCuentasContablesAsync(targetCompanyId, ct);
+            cuentasContables = data
+                .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+        }
+        catch (OperationCanceledException)
+        {
+        }
+        catch (Exception ex)
+        {
+            cuentasContables = new List<CuentaContableLookupDto>();
+            SetAlert($"Error al cargar cuentas contables: {ex.Message}", MessageBoxRenderStyle.Warning);
+        }
+    }
+}
+

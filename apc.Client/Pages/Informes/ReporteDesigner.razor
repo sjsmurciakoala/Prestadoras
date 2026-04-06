@@ -1,0 +1,186 @@
+@page "/informes/reportes/{Codigo}/designer"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.Edit)]
+@using apc.Client.Services.Informes
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Informes
+@inject InformesClient InformesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Diseñador de Reporte</PageTitle>
+
+<div class="page-container">
+    @if (!isLoading && detalle is not null)
+    {
+        <div class="header-section">
+            <div>
+                <h2 class="page-title">@detalle.Nombre</h2>
+                <p class="page-subtitle">Diseñador web para el layout borrador. Guarda cambios desde el propio diseñador y publícalos cuando estén validados.</p>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+                <DxButton Text="Catálogo"
+                          Click="@(() => NavigationManager.NavigateTo("/informes/reportes"))"
+                          IconCssClass="bi bi-arrow-left"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Abrir visor"
+                          Click="@(() => NavigationManager.NavigateTo(detalle.ViewerRoute))"
+                          IconCssClass="bi bi-eye"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Regenerar borrador"
+                          Click="RegenerarBorradorAsync"
+                          Enabled="@(!isPublishing && !isRegenerating && detalle.PuedeRegenerarBorrador)"
+                          IconCssClass="bi bi-arrow-repeat"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Publicar borrador"
+                          Click="PublicarAsync"
+                          Enabled="@(!isPublishing && !isRegenerating)"
+                          IconCssClass="bi bi-cloud-arrow-up"
+                          RenderStyle="ButtonRenderStyle.Primary" />
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</DxAlert>
+    }
+
+    @if (!isLoading && detalle is not null && !string.IsNullOrWhiteSpace(detalle.MensajeRegeneracionBorrador))
+    {
+        @if (detalle.TieneDesfaseDatasetLayout)
+        {
+            <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                @detalle.MensajeRegeneracionBorrador
+            </DxAlert>
+        }
+        else
+        {
+            <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+                @detalle.MensajeRegeneracionBorrador
+            </DxAlert>
+        }
+    }
+
+    @if (!isLoading && detalle is not null && !detalle.TieneBorrador)
+    {
+        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            @GetDraftWarningMessage(detalle)
+        </DxAlert>
+    }
+
+    <div class="modern-card p-3">
+        @if (isLoading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else if (detalle is not null && (detalle.TieneBorrador || detalle.TieneLayoutPublicado))
+        {
+            <DxReportDesigner ReportName="@detalle.DesignerReportName"
+                              Height="calc(100vh - 260px)"
+                              Width="100%" />
+        }
+        else if (detalle is not null)
+        {
+            <div class="text-center text-muted py-5">
+                No existe un layout persistido para abrir en el diseñador. Crea o regenera un borrador y vuelve a intentarlo.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Codigo { get; set; } = string.Empty;
+
+    private bool isLoading;
+    private bool isPublishing;
+    private bool isRegenerating;
+    private string? errorMessage;
+    private string? successMessage;
+    private ReporteDisenoDetalleDto? detalle;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            successMessage = null;
+            detalle = await InformesClient.GetReporteDisenoAsync(Codigo);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            detalle = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task RegenerarBorradorAsync()
+    {
+        if (detalle is null || !detalle.PuedeRegenerarBorrador)
+        {
+            return;
+        }
+
+        try
+        {
+            isRegenerating = true;
+            errorMessage = null;
+            detalle = await InformesClient.RegenerateReporteDraftAsync(detalle.Codigo);
+            successMessage = "Se regeneró el borrador desde el dataset actual. Revise el Field List y vuelva a guardar si necesita ajustar el layout.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isRegenerating = false;
+        }
+    }
+
+    private async Task PublicarAsync()
+    {
+        if (detalle is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isPublishing = true;
+            errorMessage = null;
+            detalle = await InformesClient.PublishReporteDisenoAsync(detalle.Codigo);
+            successMessage = $"Se publicó la versión {detalle.PublishedVersion?.ToString() ?? "actual"} del reporte.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isPublishing = false;
+        }
+    }
+
+    private static string GetDraftWarningMessage(ReporteDisenoDetalleDto detalle)
+        => detalle.TieneLayoutPublicado
+            ? "Este reporte aún no tiene borrador persistido. El diseñador abrió la última versión publicada; el primer guardado creará la versión borrador."
+            : "Este reporte aún no tiene un layout borrador persistido en base de datos. Genera o guarda un borrador inicial antes de continuar.";
+}

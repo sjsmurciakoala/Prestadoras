@@ -1,19 +1,22 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.Mvc.ModelBinding;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
 using SIAD.Services.Contabilidad;
+using apc.Security;
 
 namespace apc.Controllers.Contabilidad;
 
 [ApiController]
 [Route("api/contabilidad")]
-[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad)]
 public sealed class ConfiguracionSistemaController : ControllerBase
 {
     private readonly SiadDbContext dbContext;
@@ -81,41 +84,42 @@ public sealed class ConfiguracionSistemaController : ControllerBase
     /// <summary>
     /// Guarda la configuracion del sistema
     /// </summary>
+    [SuppressModelStateInvalidFilter]
     [HttpPost("configuracion/{companyId}")]
     public async Task<IActionResult> GuardarConfiguracion(long companyId, [FromBody] ConfiguracionSistemaDto dto, CancellationToken ct)
     {
-        if (!ModelState.IsValid)
-        {
-            return ValidationProblem(ModelState);
-        }
-
         if (!await ValidarAccesoEmpresaAsync(companyId, ct))
         {
             return Forbid();
+        }
+
+        var existePlanCuentas = await configuracionService.ExistePlanCuentasAsync(companyId, ct);
+        if (!existePlanCuentas)
+        {
+            NormalizarSeccionesDependientesDeCuentas(dto);
+        }
+
+        if (!ModelState.IsValid)
+        {
+            if (!existePlanCuentas)
+            {
+                LimpiarErroresSeccion(ModelState,
+                    nameof(ConfiguracionSistemaDto.CuentasUtilidad),
+                    nameof(ConfiguracionSistemaDto.EstadoSituacionFinanciera),
+                    nameof(ConfiguracionSistemaDto.LineasResultado),
+                    nameof(ConfiguracionSistemaDto.LineasBalance));
+            }
+
+            if (!ModelState.IsValid)
+            {
+                return ValidationProblem(ModelState);
+            }
         }
 
         var usuario = User?.Identity?.Name ?? "system";
 
         try
         {
-            var existePlanCuentas = await configuracionService.ExistePlanCuentasAsync(companyId, ct);
-            if (!existePlanCuentas)
-            {
-                return BadRequest(new
-                {
-                    detail = "No existe un plan de cuentas para esta empresa. Por favor, cree primero el plan de cuentas."
-                });
-            }
-
-            var existePeriodo = await configuracionService.ExistePeriodoAbiertoAsync(companyId, ct);
-            if (!existePeriodo)
-            {
-                return BadRequest(new
-                {
-                    detail = "No existe un período contable abierto. Por favor, cree primero un período."
-                });
-            }
-
             var resultado = await configuracionService.GuardarAsync(companyId, dto, usuario, ct);
             return Ok(resultado);
         }
@@ -125,8 +129,8 @@ public sealed class ConfiguracionSistemaController : ControllerBase
         }
         catch (DbUpdateException ex)
         {
-            var raiz = ex.GetBaseException()?.Message ?? ex.Message;
-            return BadRequest(new { detail = $"Error al guardar la configuracion: {raiz}" });
+            var detalle = BuildDbUpdateMessage(ex);
+            return BadRequest(new { detail = detalle });
         }
         catch (Exception ex)
         {
@@ -181,6 +185,116 @@ public sealed class ConfiguracionSistemaController : ControllerBase
         }
 
         var companyIdActual = currentCompanyService.GetCompanyId();
-        return companyIdActual > 0;
+        return companyIdActual > 0 && companyIdActual == companyId;
+    }
+
+    private static void NormalizarSeccionesDependientesDeCuentas(ConfiguracionSistemaDto dto)
+    {
+        dto.CuentasUtilidad = new CuentasUtilidadDto();
+        dto.EstadoSituacionFinanciera = new EstadoSituacionFinancieraDto();
+        dto.LineasResultado = new List<LineaResultadoDto>();
+        dto.LineasBalance = new List<BalanceSheetLineDto>();
+    }
+
+    private static void LimpiarErroresSeccion(ModelStateDictionary modelState, params string[] secciones)
+    {
+        var keys = modelState.Keys
+            .Where(key => secciones.Any(seccion =>
+                string.Equals(key, seccion, StringComparison.OrdinalIgnoreCase) ||
+                key.StartsWith($"{seccion}.", StringComparison.OrdinalIgnoreCase) ||
+                key.StartsWith($"{seccion}[", StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+
+        foreach (var key in keys)
+        {
+            modelState.Remove(key);
+        }
+    }
+
+    private static string BuildDbUpdateMessage(DbUpdateException ex)
+    {
+        if (ex.GetBaseException() is PostgresException pg)
+        {
+            return BuildPostgresMessage(pg);
+        }
+
+        var raiz = ex.GetBaseException()?.Message ?? ex.Message;
+        return $"Error al guardar la configuracion: {raiz}";
+    }
+
+    private static string BuildPostgresMessage(PostgresException pg)
+    {
+        var column = pg.ColumnName;
+        var table = pg.TableName;
+        var constraint = pg.ConstraintName;
+        var friendly = GetFriendlyColumnName(column) ?? column;
+
+        switch (pg.SqlState)
+        {
+            case PostgresErrorCodes.NotNullViolation:
+                return $"Falta un valor obligatorio{FormatFieldSuffix(friendly)}.";
+            case PostgresErrorCodes.UniqueViolation:
+                return FormatConstraintMessage("Ya existe un registro con el mismo valor", friendly, table, constraint);
+            case PostgresErrorCodes.ForeignKeyViolation:
+                return FormatConstraintMessage("Referencia invalida: el valor no existe en la tabla relacionada", friendly, table, constraint);
+            case PostgresErrorCodes.CheckViolation:
+                return FormatConstraintMessage("El valor no cumple una regla de validacion", friendly, table, constraint);
+            case PostgresErrorCodes.StringDataRightTruncation:
+                return $"El valor es demasiado largo{FormatFieldSuffix(friendly)}.";
+            case PostgresErrorCodes.NumericValueOutOfRange:
+                return $"El valor numerico esta fuera de rango{FormatFieldSuffix(friendly)}.";
+            case PostgresErrorCodes.InvalidTextRepresentation:
+                return $"El formato del valor no es valido{FormatFieldSuffix(friendly)}.";
+            default:
+                return FormatConstraintMessage($"Error de base de datos ({pg.SqlState})", friendly, table, constraint, pg.MessageText);
+        }
+    }
+
+    private static string FormatFieldSuffix(string? fieldName)
+    {
+        return string.IsNullOrWhiteSpace(fieldName) ? string.Empty : $" en '{fieldName}'";
+    }
+
+    private static string FormatConstraintMessage(string prefix, string? fieldName, string? tableName, string? constraintName, string? message = null)
+    {
+        var fieldSuffix = FormatFieldSuffix(fieldName);
+        var parts = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(tableName))
+        {
+            parts.Add($"tabla {tableName}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(constraintName))
+        {
+            parts.Add($"constraint {constraintName}");
+        }
+
+        var context = parts.Count > 0 ? $" ({string.Join(", ", parts)})" : string.Empty;
+        var detail = !string.IsNullOrWhiteSpace(message) ? $": {message}" : string.Empty;
+        return $"{prefix}{fieldSuffix}{context}{detail}";
+    }
+
+    private static string? GetFriendlyColumnName(string? columnName)
+    {
+        if (string.IsNullOrWhiteSpace(columnName))
+        {
+            return null;
+        }
+
+        return columnName.ToLowerInvariant() switch
+        {
+            "fmt_ctas" => "Formato de cuentas",
+            "formato_cuentas" => "Formato de cuentas",
+            "fmt_centros" => "Formato de centros",
+            "fmt_ctos" => "Formato de centros",
+            "formato_centros" => "Formato de centros",
+            "sep_codigo" => "Separador de codigo",
+            "separador_codigo" => "Separador de codigo",
+            "meses_calc" => "Meses calculados",
+            "meses_calculados" => "Meses calculados",
+            _ => null
+        };
     }
 }
+

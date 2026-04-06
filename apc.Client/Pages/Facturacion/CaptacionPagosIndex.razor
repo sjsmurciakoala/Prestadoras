@@ -1,0 +1,74 @@
+@page "/facturacion/captacion"
+@attribute [Authorize]
+@using apc.Client.Services.CaptacionPagos
+@using SIAD.Core.DTOs.CaptacionPagos
+@inject CaptacionPagosClient Client
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
+
+<PageTitle>Captación de Pagos</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-3">
+        <div class="col">
+            <h3>Captación de Pagos</h3>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(periodoInfo))
+    {
+        <div class="alert alert-info mb-3">
+            <strong>Período Actual:</strong> @periodoInfo
+        </div>
+    }
+
+    @if (cargando)
+    {
+        <div class="text-center p-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else
+    {
+        <DxTabs @bind-ActiveTabIndex="@tabActivo" CssClass="captacion-tabs">
+            <DxTabPage Text="Posteo Lectoras">
+                <PosteoLectorasTab />
+            </DxTabPage>
+
+            <DxTabPage Text="Posteo Manual">
+                <PosteoManualTab />
+            </DxTabPage>
+
+            <DxTabPage Text="Posteo Misceláneos">
+                <PosteoMiscelaneosTab />
+            </DxTabPage>
+        </DxTabs>
+    }
+</div>
+
+@code {
+    private int tabActivo = 0;
+    private string periodoInfo = string.Empty;
+    private bool cargando = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var periodo = await Client.GetPeriodoActualAsync();
+            if (periodo is not null && !string.IsNullOrWhiteSpace(periodo.Periodo))
+            {
+                periodoInfo = $"{periodo.Periodo} (Año: {periodo.Anio}, Mes: {periodo.Mes})";
+            }
+        }
+        catch (Exception)
+        {
+            periodoInfo = "No se pudo cargar el período actual.";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+}

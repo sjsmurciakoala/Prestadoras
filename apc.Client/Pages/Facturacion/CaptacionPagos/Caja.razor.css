@@ -1,0 +1,54 @@
+.page-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+}
+
+.page-title {
+    font-weight: 800;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+/* Personalización del componente DxCard para mantener el look moderno */
+.custom-dx-card {
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.02);
+    overflow: hidden; /* Asegura que el contenido respete los bordes redondeados */
+}
+
+/* Forzar estilos dentro del header de DxCard si es necesario */
+::deep .dx-card-header {
+    background-color: #fff;
+    border-bottom: 1px solid #f0f2f5;
+    padding: 1rem 1.5rem;
+    color: #2c3e50;
+}
+
+::deep .dx-card-body {
+    padding: 1.5rem;
+}
+
+/* Estilo opcional para ajustar el grid */
+.grid-modern {
+    width: 100%;
+    border: none;
+}

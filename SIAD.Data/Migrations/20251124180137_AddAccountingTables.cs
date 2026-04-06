@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections;
 using Microsoft.EntityFrameworkCore.Migrations;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
@@ -776,7 +776,7 @@ namespace SIAD.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "con_plantilla_poliza",
+                name: "con_plantilla_partida_hdr",
                 schema: "public",
                 columns: table => new
                 {
@@ -795,7 +795,7 @@ namespace SIAD.Data.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_con_plantilla_poliza", x => x.template_id);
+                    table.PrimaryKey("PK_con_plantilla_partida_hdr", x => x.template_id);
                 });
 
             migrationBuilder.CreateTable(
@@ -2302,7 +2302,7 @@ namespace SIAD.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "con_plantilla_poliza_linea",
+                name: "con_plantilla_partida_dtl",
                 schema: "public",
                 columns: table => new
                 {
@@ -2319,32 +2319,32 @@ namespace SIAD.Data.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_con_plantilla_poliza_linea", x => x.template_line_id);
+                    table.PrimaryKey("PK_con_plantilla_partida_dtl", x => x.template_line_id);
                     table.ForeignKey(
-                        name: "FK_con_plantilla_poliza_linea_con_centro_costo_cost_center_id",
+                        name: "FK_con_plantilla_partida_dtl_con_centro_costo_cost_center_id",
                         column: x => x.cost_center_id,
                         principalSchema: "public",
                         principalTable: "con_centro_costo",
                         principalColumn: "cost_center_id",
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
-                        name: "FK_con_plantilla_poliza_linea_con_plan_cuentas_account_id",
+                        name: "FK_con_plantilla_partida_dtl_con_plan_cuentas_account_id",
                         column: x => x.account_id,
                         principalSchema: "public",
                         principalTable: "con_plan_cuentas",
                         principalColumn: "account_id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_con_plantilla_poliza_linea_con_plantilla_poliza_template_id",
+                        name: "FK_con_plantilla_partida_dtl_con_plantilla_partida_hdr_template_id",
                         column: x => x.template_id,
                         principalSchema: "public",
-                        principalTable: "con_plantilla_poliza",
+                        principalTable: "con_plantilla_partida_hdr",
                         principalColumn: "template_id",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateTable(
-                name: "con_poliza",
+                name: "con_partida_hdr",
                 schema: "public",
                 columns: table => new
                 {
@@ -2371,26 +2371,26 @@ namespace SIAD.Data.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_con_poliza", x => x.poliza_id);
+                    table.PrimaryKey("PK_con_partida_hdr", x => x.poliza_id);
                     table.ForeignKey(
-                        name: "FK_con_poliza_con_diario_journal_id",
+                        name: "FK_con_partida_hdr_con_diario_journal_id",
                         column: x => x.journal_id,
                         principalSchema: "public",
                         principalTable: "con_diario",
                         principalColumn: "journal_id",
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
-                        name: "FK_con_poliza_con_periodo_contable_period_id",
+                        name: "FK_con_partida_hdr_con_periodo_contable_period_id",
                         column: x => x.period_id,
                         principalSchema: "public",
                         principalTable: "con_periodo_contable",
                         principalColumn: "period_id",
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
-                        name: "FK_con_poliza_con_plantilla_poliza_template_id",
+                        name: "FK_con_partida_hdr_con_plantilla_partida_hdr_template_id",
                         column: x => x.template_id,
                         principalSchema: "public",
-                        principalTable: "con_plantilla_poliza",
+                        principalTable: "con_plantilla_partida_hdr",
                         principalColumn: "template_id",
                         onDelete: ReferentialAction.SetNull);
                 });
@@ -2664,7 +2664,7 @@ namespace SIAD.Data.Migrations
                 });
 
             migrationBuilder.CreateTable(
-                name: "con_poliza_linea",
+                name: "con_partida_dtl",
                 schema: "public",
                 columns: table => new
                 {
@@ -2684,26 +2684,26 @@ namespace SIAD.Data.Migrations
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_con_poliza_linea", x => x.poliza_line_id);
+                    table.PrimaryKey("PK_con_partida_dtl", x => x.poliza_line_id);
                     table.ForeignKey(
-                        name: "FK_con_poliza_linea_con_centro_costo_cost_center_id",
+                        name: "FK_con_partida_dtl_con_centro_costo_cost_center_id",
                         column: x => x.cost_center_id,
                         principalSchema: "public",
                         principalTable: "con_centro_costo",
                         principalColumn: "cost_center_id",
                         onDelete: ReferentialAction.SetNull);
                     table.ForeignKey(
-                        name: "FK_con_poliza_linea_con_plan_cuentas_account_id",
+                        name: "FK_con_partida_dtl_con_plan_cuentas_account_id",
                         column: x => x.account_id,
                         principalSchema: "public",
                         principalTable: "con_plan_cuentas",
                         principalColumn: "account_id",
                         onDelete: ReferentialAction.Restrict);
                     table.ForeignKey(
-                        name: "FK_con_poliza_linea_con_poliza_poliza_id",
+                        name: "FK_con_partida_dtl_con_partida_hdr_poliza_id",
                         column: x => x.poliza_id,
                         principalSchema: "public",
-                        principalTable: "con_poliza",
+                        principalTable: "con_partida_hdr",
                         principalColumn: "poliza_id",
                         onDelete: ReferentialAction.Cascade);
                 });
@@ -3105,85 +3105,85 @@ namespace SIAD.Data.Migrations
                 column: "parent_account_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_plantilla_poliza_company_id_name",
+                name: "IX_con_plantilla_partida_hdr_company_id_name",
                 schema: "public",
-                table: "con_plantilla_poliza",
+                table: "con_plantilla_partida_hdr",
                 columns: new[] { "company_id", "name" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_plantilla_poliza_linea_account_id",
+                name: "IX_con_plantilla_partida_dtl_account_id",
                 schema: "public",
-                table: "con_plantilla_poliza_linea",
+                table: "con_plantilla_partida_dtl",
                 column: "account_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_plantilla_poliza_linea_company_id_template_id_line_numb~",
+                name: "IX_con_plantilla_partida_dtl_company_id_template_id_line_numb~",
                 schema: "public",
-                table: "con_plantilla_poliza_linea",
+                table: "con_plantilla_partida_dtl",
                 columns: new[] { "company_id", "template_id", "line_number" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_plantilla_poliza_linea_cost_center_id",
+                name: "IX_con_plantilla_partida_dtl_cost_center_id",
                 schema: "public",
-                table: "con_plantilla_poliza_linea",
+                table: "con_plantilla_partida_dtl",
                 column: "cost_center_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_plantilla_poliza_linea_template_id",
+                name: "IX_con_plantilla_partida_dtl_template_id",
                 schema: "public",
-                table: "con_plantilla_poliza_linea",
+                table: "con_plantilla_partida_dtl",
                 column: "template_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_company_id_poliza_number",
+                name: "IX_con_partida_hdr_company_id_poliza_number",
                 schema: "public",
-                table: "con_poliza",
+                table: "con_partida_hdr",
                 columns: new[] { "company_id", "poliza_number" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_journal_id",
+                name: "IX_con_partida_hdr_journal_id",
                 schema: "public",
-                table: "con_poliza",
+                table: "con_partida_hdr",
                 column: "journal_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_period_id",
+                name: "IX_con_partida_hdr_period_id",
                 schema: "public",
-                table: "con_poliza",
+                table: "con_partida_hdr",
                 column: "period_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_template_id",
+                name: "IX_con_partida_hdr_template_id",
                 schema: "public",
-                table: "con_poliza",
+                table: "con_partida_hdr",
                 column: "template_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_linea_account_id",
+                name: "IX_con_partida_dtl_account_id",
                 schema: "public",
-                table: "con_poliza_linea",
+                table: "con_partida_dtl",
                 column: "account_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_linea_company_id_poliza_id_line_number",
+                name: "IX_con_partida_dtl_company_id_poliza_id_line_number",
                 schema: "public",
-                table: "con_poliza_linea",
+                table: "con_partida_dtl",
                 columns: new[] { "company_id", "poliza_id", "line_number" },
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_linea_cost_center_id",
+                name: "IX_con_partida_dtl_cost_center_id",
                 schema: "public",
-                table: "con_poliza_linea",
+                table: "con_partida_dtl",
                 column: "cost_center_id");
 
             migrationBuilder.CreateIndex(
-                name: "IX_con_poliza_linea_poliza_id",
+                name: "IX_con_partida_dtl_poliza_id",
                 schema: "public",
-                table: "con_poliza_linea",
+                table: "con_partida_dtl",
                 column: "poliza_id");
 
             migrationBuilder.CreateIndex(
@@ -3406,11 +3406,11 @@ namespace SIAD.Data.Migrations
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "con_plantilla_poliza_linea",
+                name: "con_plantilla_partida_dtl",
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "con_poliza_linea",
+                name: "con_partida_dtl",
                 schema: "public");
 
             migrationBuilder.DropTable(
@@ -3596,7 +3596,7 @@ namespace SIAD.Data.Migrations
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "con_poliza",
+                name: "con_partida_hdr",
                 schema: "public");
 
             migrationBuilder.DropTable(
@@ -3638,7 +3638,7 @@ namespace SIAD.Data.Migrations
                 schema: "public");
 
             migrationBuilder.DropTable(
-                name: "con_plantilla_poliza",
+                name: "con_plantilla_partida_hdr",
                 schema: "public");
 
             migrationBuilder.DropTable(
@@ -3664,3 +3664,6 @@ namespace SIAD.Data.Migrations
         }
     }
 }
+
+
+

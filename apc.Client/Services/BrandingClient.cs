@@ -13,6 +13,8 @@ public class BrandingClient
 
     public BrandingClient(HttpClient http) => _http = http;
 
+    public HttpClient Http => _http;
+
     public record BrandingResponse(string CompanyName, string CompanyShortName, string LogoBase64, string LogoMime);
 
     public async Task<BrandingResponse?> GetBrandingAsync(CancellationToken ct = default)
@@ -56,5 +58,29 @@ public class BrandingClient
         {
             _brandingLock.Release();
         }
+    }
+
+    public async Task ActualizarAsync(string companyName, string companyShortName, CancellationToken ct = default)
+    {
+        var payload = new { CompanyName = companyName, CompanyShortName = companyShortName };
+        var response = await _http.PutAsJsonAsync("api/branding", payload, cancellationToken: ct);
+
+        try
+        {
+            await response.ReadFromJsonAsyncWithAuthCheck<object>(ct);
+            InvalidateCache();
+        }
+        catch (UnauthorizedAccessException) { throw; }
+        catch (HttpRequestException) { throw; }
+        catch (Exception ex)
+        {
+            throw new HttpRequestException("No fue posible actualizar el branding.", ex);
+        }
+    }
+
+    public void InvalidateCache()
+    {
+        _brandingLoaded = false;
+        _cachedBranding = null;
     }
 }

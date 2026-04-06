@@ -8,13 +8,15 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DevExpress.Blazor" Version="25.1.*-*" />
-    <PackageReference Include="DevExpress.Blazor.PdfViewer" Version="25.1.*-*" />
+    <PackageReference Include="DevExpress.Blazor" Version="25.1.7" />
+    <PackageReference Include="DevExpress.Blazor.PdfViewer" Version="25.1.7" />
+    <PackageReference Include="DevExpress.AspNetCore.Reporting" Version="25.1.7" />
+    <PackageReference Include="DevExpress.Reporting.Core" Version="25.1.7" />
+    <PackageReference Include="ClosedXML" Version="0.104.1" />
     
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Diagnostics.EntityFrameworkCore" Version="9.0.0" />
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.0" />
-    <PackageReference Include="Microsoft.EntityFrameworkCore.SqlServer" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
   </ItemGroup>
@@ -25,6 +27,10 @@
     <ProjectReference Include="..\SIAD.Data\SIAD.Data.csproj" />
     <ProjectReference Include="..\SIAD.Core\SIAD.Core.csproj" />
     <ProjectReference Include="..\SIAD.Reports\SIAD.Reports.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Folder Include="Reportes\" />
   </ItemGroup>
 
 </Project>

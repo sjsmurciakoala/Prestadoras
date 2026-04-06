@@ -1,160 +1,233 @@
-@page "/contabilidad/empresas/nueva"
+﻿@page "/contabilidad/empresas/nueva"
 @page "/contabilidad/empresas/editar/{EmpresaId:long}"
+@attribute [Authorize]
 
 @using System.Linq
 @using Microsoft.AspNetCore.Components.Forms
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Contabilidad
 @using apc.Client.Services.Contabilidad
+@using apc.Client.Services.Tenant
 @inject EmpresasContabilidadClient EmpresaClient
+@inject TenantState TenantState
 @inject NavigationManager NavigationManager
 @rendermode InteractiveServer
-<h3>Formulario de Empresa</h3>
 
-<EditForm Model="@empresa" OnValidSubmit="HandleValidSubmit" Context="editContext">
-    <DataAnnotationsValidator />
-    <DxFormLayout>
-        <DxFormLayoutItem Caption="Código:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.Codigo" Enabled="@(!EmpresaId.HasValue)" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Descripción:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.Descripcion" />
-        </DxFormLayoutItem>
+<PageTitle>@(EmpresaId.HasValue ? "Editar Empresa" : "Nueva Empresa")</PageTitle>
 
-        <DxFormLayoutItem Caption="Tipo de Empresa:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.TipoEmpresa" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="País:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.Pais" />
-        </DxFormLayoutItem>
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <div>
+        <h3 class="mb-1">@(EmpresaId.HasValue ? "Editar Empresa" : "Nueva Empresa")</h3>
+        <p class="text-muted mb-0">@(EmpresaId.HasValue ? "Modifique los datos de la empresa" : "Complete los datos para registrar una nueva empresa")</p>
+    </div>
+    <DxButton Text="Volver"
+              RenderStyle="ButtonRenderStyle.Secondary"
+              RenderStyleMode="ButtonRenderStyleMode.Outline"
+              IconCssClass="bi bi-arrow-left"
+              NavigateUrl="@cancelNavigationUrl" />
+</div>
 
-        <DxFormLayoutItem Caption="Siglas ID Fiscal:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.IdFiscalSiglas" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Valor ID Fiscal:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.IdFiscalValor" />
-        </DxFormLayoutItem>
+@if (!string.IsNullOrWhiteSpace(loadError))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@loadError</DxAlert>
+}
+else
+{
+    <DxLoadingPanel Visible="@isLoading"
+                    ApplyBackgroundShading="true"
+                    Text="Cargando..."
+                    CssClass="w-100">
+        <EditForm Model="@empresa" OnValidSubmit="HandleValidSubmit" Context="editContext">
+            <DataAnnotationsValidator />
 
-        <DxFormLayoutItem Caption="Tamaño:" ColSpanMd="6">
-            <DxComboBox Data="@(Enum.GetValues(typeof(CompanySizeType)).Cast<CompanySizeType>())"
-                        TData="CompanySizeType"
-                        TValue="CompanySizeType?"
-                        @bind-Value="empresa.Tamano" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Capital:" ColSpanMd="6">
-            <DxComboBox Data="@(Enum.GetValues(typeof(CompanyCapitalType)).Cast<CompanyCapitalType>())"
-                        TData="CompanyCapitalType"
-                        TValue="CompanyCapitalType?"
-                        @bind-Value="empresa.Capital" />
-        </DxFormLayoutItem>
-
-        <DxFormLayoutItem Caption="Fecha de Constitución:" ColSpanMd="6">
-            <DxDateEdit T="DateTime?" @bind-Date="empresa.FechaConstitucion" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Activa:" ColSpanMd="6">
-            <DxCheckBox T="bool" @bind-Checked="empresa.Activa" />
-        </DxFormLayoutItem>
-
-        <DxFormLayoutItem Caption="Contacto:" ColSpanMd="12">
-            <DxTextBox @bind-Text="empresa.Contacto" />
-        </DxFormLayoutItem>
-
-        <DxFormLayoutItem Caption="Dirección:" ColSpanMd="12">
-            <DxMemo @bind-Text="empresa.Direccion" Rows="3" />
-        </DxFormLayoutItem>
-
-        <DxFormLayoutItem Caption="Teléfonos:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.Telefonos" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Email:" ColSpanMd="6">
-            <DxTextBox @bind-Text="empresa.Email" />
-        </DxFormLayoutItem>
-
-        <DxFormLayoutItem Caption="Página Web:" ColSpanMd="12">
-            <DxTextBox @bind-Text="empresa.PaginaWeb" />
-        </DxFormLayoutItem>
-
-        <DxFormLayoutItem ColSpanMd="12">
-            <div class="d-flex justify-content-end">
-                <DxButton SubmitFormOnClick="true" 
-                          Text="@(isSubmitting ? "Guardando..." : "Guardar")" 
-                          Enabled="@(!isSubmitting)"
-                          CssClass="mr-2" />
-                <DxButton RenderStyle="ButtonRenderStyle.Link" 
-                          Text="Cancelar" 
-                          Enabled="@(!isSubmitting)"
-                          @onclick="() => NavigationManager.NavigateTo(cancelNavigationUrl)" />
-            </div>
-        </DxFormLayoutItem>
-     
-
-        <DxFormLayoutItem Caption="Logo de la Empresa:" ColSpanMd="12">
-    <div class="upload-container">
-        <div class="logo-upload-wrapper">
-            @if (EmpresaId.HasValue)
+            @if (!string.IsNullOrWhiteSpace(loadWarning))
             {
-                <div class="logo-current-container">
-                    <div class="position-relative border rounded p-3 bg-white shadow-sm">
-                        <img src="@($"/api/contabilidad/empresas/{EmpresaId}/logo")"
-                             alt="Logo Actual"
-                             class="logo-image"
-                             onerror="this.style.display='none'" />
-                        
-                        <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info">
-                            Actual
-                        </span>
-                    </div>
+                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">@loadWarning</DxAlert>
+            }
+
+            @if (editContext.GetValidationMessages().Any())
+            {
+                <div class="alert alert-danger mb-3 shadow-sm">
+                    <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Corrija los siguientes errores</h6>
+                    <DxValidationSummary />
                 </div>
             }
 
-            <div class="logo-upload-form">
-                <div id="dropZone" class="card custom-drop-zone rounded-3 mb-3">
-                    
-                    <i class="bi bi-cloud-arrow-up-fill upload-icon"></i> 
-                    
-                    <span class="drop-file-label">Arrastra y suelta el logo aquí</span>
-                    
-                    @if (EmpresaId.HasValue)
-                    {
-                        <span class="drop-file-sublabel">para reemplazar el anterior</span>
-                    }
-                    else
-                    {
-                        <span class="drop-file-sublabel">o haz clic en el botón inferior</span>
-                    }
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
 
-                    <DxButton id="selectButton"
-                              RenderStyle="ButtonRenderStyle.Primary"
-                              RenderStyleMode="ButtonRenderStyleMode.Outline"
-                              CssClass="mt-3 px-4 rounded-pill" 
-                              Text="Seleccionar Logo" />
-                </div>
+                <DxFormLayoutGroup Caption="Información General" ColSpanMd="12">
+                    <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
+                        <DxTextBox @bind-Text="empresa.Codigo"
+                                   Enabled="@(!EmpresaId.HasValue)"
+                                   NullText="Máx. 20 caracteres" />
+                        <ValidationMessage For="() => empresa.Codigo" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Descripción *" ColSpanMd="8">
+                        <DxTextBox @bind-Text="empresa.Descripcion"
+                                   NullText="Nombre completo de la empresa" />
+                        <ValidationMessage For="() => empresa.Descripcion" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Tipo de Empresa *" ColSpanMd="6">
+                        <DxTextBox @bind-Text="empresa.TipoEmpresa"
+                                   NullText="Ej. Sociedad Anónima" />
+                        <ValidationMessage For="() => empresa.TipoEmpresa" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="País *" ColSpanMd="6">
+                        <DxTextBox @bind-Text="empresa.Pais"
+                                   NullText="Ej. Honduras" />
+                        <ValidationMessage For="() => empresa.Pais" />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
 
-                <DxUpload UploadUrl="@uploadUrl"
-                          AllowedFileExtensions="@(new List<string> { ".png", ".jpg", ".jpeg", ".webp", ".svg" })"
-                          MaxFileSize="5242880"
-                          ShowFileList="true"
-                          AllowMultiFileUpload="false"
-                          UploadInputName="logoUpload"
-                          ExternalSelectButtonCssSelector="#selectButton"
-                          ExternalDropZoneCssSelector="#dropZone"
-                          CssClass="mt-2" />
+                <DxFormLayoutGroup Caption="Identificación Fiscal" ColSpanMd="12" CssClass="mt-3">
+                    <DxFormLayoutItem Caption="Siglas ID Fiscal *" ColSpanMd="3">
+                        <DxTextBox @bind-Text="empresa.IdFiscalSiglas"
+                                   NullText="Ej. RTN" />
+                        <ValidationMessage For="() => empresa.IdFiscalSiglas" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Valor ID Fiscal *" ColSpanMd="9">
+                        <DxTextBox @bind-Text="empresa.IdFiscalValor"
+                                   NullText="Número o código fiscal" />
+                        <ValidationMessage For="() => empresa.IdFiscalValor" />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
 
-                @if (!string.IsNullOrWhiteSpace(uploadError))
+                <DxFormLayoutGroup Caption="Clasificación y Estado" ColSpanMd="12" CssClass="mt-3">
+                    <DxFormLayoutItem Caption="Tamaño *" ColSpanMd="4">
+                        <DxComboBox Data="@TamanosDisponibles"
+                                    TData="KeyValuePair<CompanySizeType, string>"
+                                    TValue="CompanySizeType?"
+                                    @bind-Value="empresa.Tamano"
+                                    ValueFieldName="Key"
+                                    TextFieldName="Value"
+                                    NullText="Seleccione..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        <ValidationMessage For="() => empresa.Tamano" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Capital *" ColSpanMd="4">
+                        <DxComboBox Data="@CapitalesDisponibles"
+                                    TData="KeyValuePair<CompanyCapitalType, string>"
+                                    TValue="CompanyCapitalType?"
+                                    @bind-Value="empresa.Capital"
+                                    ValueFieldName="Key"
+                                    TextFieldName="Value"
+                                    NullText="Seleccione..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        <ValidationMessage For="() => empresa.Capital" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Fecha de Constitución *" ColSpanMd="4">
+                        <DxDateEdit T="DateTime?" @bind-Date="empresa.FechaConstitucion"
+                                    NullText="dd/MM/yyyy"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        <ValidationMessage For="() => empresa.FechaConstitucion" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="12">
+                        <Template>
+                            <DxCheckBox T="bool" @bind-Checked="empresa.Activa">
+                                <span>Empresa Activa</span>
+                            </DxCheckBox>
+                        </Template>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup Caption="Contacto" ColSpanMd="12" CssClass="mt-3">
+                    <DxFormLayoutItem Caption="Persona de Contacto" ColSpanMd="12">
+                        <DxTextBox @bind-Text="empresa.Contacto"
+                                   NullText="Nombre del contacto principal" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Dirección *" ColSpanMd="12">
+                        <DxMemo @bind-Text="empresa.Direccion"
+                                Rows="3"
+                                ResizeMode="MemoResizeMode.Vertical"
+                                NullText="Dirección completa de la empresa" />
+                        <ValidationMessage For="() => empresa.Direccion" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Teléfonos" ColSpanMd="6">
+                        <DxTextBox @bind-Text="empresa.Telefonos"
+                                   NullText="Ej. (504) 2222-3333" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Correo Electrónico" ColSpanMd="6">
+                        <DxTextBox @bind-Text="empresa.Email"
+                                   NullText="correo@empresa.com" />
+                        <ValidationMessage For="() => empresa.Email" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Página Web" ColSpanMd="12">
+                        <DxTextBox @bind-Text="empresa.PaginaWeb"
+                                   NullText="https://www.empresa.com" />
+                        <ValidationMessage For="() => empresa.PaginaWeb" />
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                @if (EmpresaId.HasValue)
                 {
-                    <DxAlert AlertType="AlertType.Danger" CssClass="mt-3 shadow-sm">@uploadError</DxAlert>
+                    <DxFormLayoutGroup Caption="Logo de la Empresa" ColSpanMd="12" CssClass="mt-3">
+                        <DxFormLayoutItem ColSpanMd="12">
+                            <Template>
+                                <div class="upload-container">
+                                    <div class="logo-upload-wrapper">
+                                        <div class="logo-current-container">
+                                            <div class="position-relative border rounded p-3 bg-white shadow-sm">
+                                                <img src="@($"/api/contabilidad/empresas/{EmpresaId}/logo")"
+                                                     alt="Logo Actual"
+                                                     class="logo-image"
+                                                     onerror="this.style.display='none'" />
+                                                <span class="position-absolute top-0 start-100 translate-middle badge rounded-pill bg-info">
+                                                    Actual
+                                                </span>
+                                            </div>
+                                        </div>
+                                        <div class="logo-upload-form">
+                                            <div id="dropZone" class="card custom-drop-zone rounded-3 mb-3">
+                                                <i class="bi bi-cloud-arrow-up-fill upload-icon"></i>
+                                                <span class="drop-file-label">Arrastra y suelta el logo aquí</span>
+                                                <span class="drop-file-sublabel">para reemplazar el anterior</span>
+                                                <DxButton id="selectButton"
+                                                          RenderStyle="ButtonRenderStyle.Primary"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                          CssClass="mt-3 px-4 rounded-pill"
+                                                          Text="Seleccionar Logo" />
+                                            </div>
+                                            <DxUpload UploadUrl="@uploadUrl"
+                                                      AllowedFileExtensions="@(new List<string> { ".png", ".jpg", ".jpeg", ".webp", ".svg" })"
+                                                      MaxFileSize="5242880"
+                                                      ShowFileList="true"
+                                                      AllowMultiFileUpload="false"
+                                                      UploadInputName="logoUpload"
+                                                      ExternalSelectButtonCssSelector="#selectButton"
+                                                      ExternalDropZoneCssSelector="#dropZone"
+                                                      CssClass="mt-2" />
+                                            @if (!string.IsNullOrWhiteSpace(uploadError))
+                                            {
+                                                <DxAlert AlertType="AlertType.Danger" CssClass="mt-3 shadow-sm">@uploadError</DxAlert>
+                                            }
+                                        </div>
+                                    </div>
+                                </div>
+                            </Template>
+                        </DxFormLayoutItem>
+                    </DxFormLayoutGroup>
                 }
+
+            </DxFormLayout>
+
+            <div class="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
+                <DxButton ButtonType="ButtonType.Submit"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Text="@(isSubmitting ? "Guardando..." : "Guardar")"
+                          SubmitFormOnClick="true"
+                          Enabled="@(!isSubmitting)"
+                          IconCssClass="bi bi-check-lg" />
+                <DxButton ButtonType="ButtonType.Normal"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Text="Cancelar"
+                          Enabled="@(!isSubmitting)"
+                          Click="@(() => NavigationManager.NavigateTo(cancelNavigationUrl))"
+                          IconCssClass="bi bi-x-lg" />
             </div>
-        </div>
-    </div>
-</DxFormLayoutItem>
-    </DxFormLayout>
-    @if (!string.IsNullOrWhiteSpace(loadError))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@loadError</DxAlert>
-    }
-    <ValidationSummary />
-</EditForm>
+        </EditForm>
+    </DxLoadingPanel>
+}
 
 @code {
     [Parameter]
@@ -163,28 +236,45 @@
     private CompanyCreationDto empresa = new();
     private string cancelNavigationUrl = "/contabilidad/empresas";
     private string? loadError;
+    private string? loadWarning;
     private string? uploadError;
-    private const long MaxLogoSize = 5 * 1024 * 1024; // 5MB
+    private const long MaxLogoSize = 5 * 1024 * 1024;
+    private bool isLoading = false;
     private bool isSubmitting = false;
     private string uploadUrl => EmpresaId.HasValue 
         ? $"api/contabilidad/empresas/{EmpresaId.Value}/logo" 
         : string.Empty;
 
+    private static readonly List<KeyValuePair<CompanySizeType, string>> TamanosDisponibles = new()
+    {
+        new(CompanySizeType.Pequena, "Pequeña"),
+        new(CompanySizeType.Mediana, "Mediana"),
+        new(CompanySizeType.GranContribuyente, "Gran Contribuyente")
+    };
+
+    private static readonly List<KeyValuePair<CompanyCapitalType, string>> CapitalesDisponibles = new()
+    {
+        new(CompanyCapitalType.Privado, "Privado"),
+        new(CompanyCapitalType.Oficial, "Oficial"),
+        new(CompanyCapitalType.Mixto, "Mixto")
+    };
+
     protected override async Task OnInitializedAsync()
     {
         if (EmpresaId.HasValue)
         {
+            isLoading = true;
             try
             {
                 var loadedEmpresa = await EmpresaClient.ObtenerAsync(EmpresaId.Value);
                 if (loadedEmpresa != null)
                 {
                     empresa = loadedEmpresa;
+                    loadWarning = loadedEmpresa.Advertencia;
                 }
                 else
                 {
                     loadError = "La empresa no existe o fue eliminada.";
-                    NavigationManager.NavigateTo(cancelNavigationUrl);
                 }
             }
             catch (UnauthorizedAccessException)
@@ -194,7 +284,10 @@
             catch (HttpRequestException ex)
             {
                 loadError = ex.Message;
-                NavigationManager.NavigateTo(cancelNavigationUrl);
+            }
+            finally
+            {
+                isLoading = false;
             }
         }
     }
@@ -220,6 +313,16 @@
             {
                 var created = await EmpresaClient.CrearAsync(empresa);
                 savedCompanyId = created.CompanyId;
+
+                var activated = await TenantState.TrySetCompanyIdAsync(savedCompanyId);
+                if (activated)
+                {
+                    NavigationManager.NavigateTo("/", forceLoad: true);
+                    return;
+                }
+
+                NavigationManager.NavigateTo("/contabilidad/empresas", forceLoad: true);
+                return;
             }
 
             NavigationManager.NavigateTo(cancelNavigationUrl);

@@ -4,12 +4,13 @@ using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
 using SIAD.Core.Tenancy;
 using SIAD.Services.Contabilidad;
+using apc.Security;
 
 namespace apc.Controllers.Contabilidad;
 
 [ApiController]
 [Route("api/contabilidad/periodos")]
-[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad)]
 public sealed class PeriodosContablesController : ControllerBase
 {
     private readonly IPeriodoContableService _periodoService;
@@ -64,3 +65,4 @@ public sealed class PeriodosContablesController : ControllerBase
         }
     }
 }
+

@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Identity;
+using SIAD.Core.Constants;
 using SIAD.Data;
 
 namespace apc.Data
@@ -10,13 +11,29 @@ namespace apc.Data
             RoleManager<IdentityRole> roleManager,
             SiadDbContext siadDbContext)
         {
-            // Ensure roles exist
-            var roles = new[] { "Admin", "User" };
-            foreach (var role in roles)
+            // Ensure Super Admin role exists
+            var superAdminRoleName = RoleNames.SuperAdministrador;
+            if (!await roleManager.RoleExistsAsync(superAdminRoleName))
             {
-                if (!await roleManager.RoleExistsAsync(role))
+                await roleManager.CreateAsync(new IdentityRole(superAdminRoleName));
+            }
+
+            var superAdminRole = await roleManager.FindByNameAsync(superAdminRoleName);
+            if (superAdminRole is not null)
+            {
+                var existingClaims = await roleManager.GetClaimsAsync(superAdminRole);
+                var actuales = existingClaims
+                    .Where(c => c.Type == PermissionClaimTypes.Permission)
+                    .Select(c => c.Value)
+                    .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var permiso in PermissionNames.All)
                 {
-                    await roleManager.CreateAsync(new IdentityRole(role));
+                    if (!actuales.Contains(permiso))
+                    {
+                        await roleManager.AddClaimAsync(superAdminRole,
+                            new System.Security.Claims.Claim(PermissionClaimTypes.Permission, permiso));
+                    }
                 }
             }
 
@@ -31,10 +48,17 @@ namespace apc.Data
                     Email = adminEmail,
                     EmailConfirmed = true
                 };
-                var result = await userManager.CreateAsync(user, "Admin123$");
+                var result = await userManager.CreateAsync(user, "Admin123@");
                 if (result.Succeeded)
                 {
-                    await userManager.AddToRoleAsync(user, "Admin");
+                    await userManager.AddToRoleAsync(user, superAdminRoleName);
+                }
+            }
+            else
+            {
+                if (!await userManager.IsInRoleAsync(adminUser, superAdminRoleName))
+                {
+                    await userManager.AddToRoleAsync(adminUser, superAdminRoleName);
                 }
             }
 
@@ -58,6 +82,19 @@ namespace apc.Data
                 };
                 siadDbContext.cfg_companies.Add(demoCompany);
                 await siadDbContext.SaveChangesAsync();
+            }
+
+            // Asignar claim de empresa al usuario admin (si existe)
+            var admin = adminUser ?? await userManager.FindByEmailAsync(adminEmail);
+            if (admin is not null && demoCompany is not null)
+            {
+                var claims = await userManager.GetClaimsAsync(admin);
+                var companyClaim = claims.FirstOrDefault(c => c.Type == TenantClaimTypes.CompanyId);
+                if (companyClaim is null)
+                {
+                    await userManager.AddClaimAsync(admin,
+                        new System.Security.Claims.Claim(TenantClaimTypes.CompanyId, demoCompany.company_id.ToString()));
+                }
             }
         }
     }

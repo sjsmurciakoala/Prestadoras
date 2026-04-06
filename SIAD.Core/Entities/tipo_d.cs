@@ -16,4 +16,14 @@ public partial class tipo_d
     public string? concepto { get; set; }
 
     public string? depto_appmitrabajo { get; set; }
+
+    public bool estado { get; set; }
+
+    public string? usuariocreacion { get; set; }
+
+    public DateTime? fechacreacion { get; set; }
+
+    public string? usuariomodificacion { get; set; }
+
+    public DateTime? fechamodificacion { get; set; }
 }

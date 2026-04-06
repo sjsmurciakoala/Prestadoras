@@ -1,0 +1,248 @@
+@page "/mapa"
+@attribute [Authorize]
+
+@using System.Globalization
+@using apc.Client.Services.Maps
+@using apc.Services
+@using SIAD.Core.DTOs.Maps
+
+@inject MapClient MapClient
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="@ToastProviderName" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Mapa</h2>
+            <p class="page-subtitle">Visualización inicial del mapa operativo con búsqueda manual</p>
+        </div>
+    </div>
+
+    <div class="modern-card mb-4">
+        <div class="search-toolbar">
+            <DxTextBox Text="@searchText"
+                       TextChanged="@((string value) => searchText = value)"
+                       Placeholder="Buscar dirección o coordenadas"
+                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                       InputDelay="0"
+                       CssClass="map-search-box" />
+
+            <DxButton Text="Buscar"
+                      IconCssClass="bi bi-search"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern"
+                      Click="BuscarAsync"
+                      Enabled="@(!isLoading && !string.IsNullOrWhiteSpace(searchText) && CanRenderMap)" />
+
+            <DxButton Text="Restablecer"
+                      IconCssClass="bi bi-arrow-counterclockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern btn-reset"
+                      Click="RestablecerMapa"
+                      Enabled="@(!isLoading && mapConfiguration is not null)" />
+        </div>
+
+        <div class="search-help">
+            Formatos válidos: <strong>14.0723,-87.1921</strong> o una dirección como
+            <strong>Tegucigalpa, Honduras</strong>.
+        </div>
+    </div>
+
+    <div class="modern-card">
+        @if (isLoading)
+        {
+            <div class="text-center py-5">
+                <DxLoadingPanel Visible="true" Text="Cargando mapa..." />
+                <div style="height: 120px;"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(loadError))
+        {
+            <DxAlert AlertType="AlertType.Danger">@loadError</DxAlert>
+        }
+        else
+        {
+            <div class="map-shell">
+                <DxMap Provider="MapProvider.Azure"
+                       Type="MapType.Roadmap"
+                       Width="100%"
+                       Height="560px"
+                       Zoom="@currentZoom"
+                       ControlsVisible="true"
+                       AutoAdjust="false"
+                       CssClass="map-canvas">
+                    <DxMapApiKeys Azure="@mapConfiguration!.ApiKey" />
+                    <DxMapCenter GeoPosition="@currentCenterGeoPosition" />
+                    <DxMapMarkers>
+                        @if (!string.IsNullOrWhiteSpace(searchMarkerGeoPosition))
+                        {
+                            <DxMapMarker>
+                                <DxMapMarkerLocation GeoPosition="@searchMarkerGeoPosition" />
+                                <DxMapMarkerTooltip Text="@searchMarkerTooltip" />
+                            </DxMapMarker>
+                        }
+                    </DxMapMarkers>
+                </DxMap>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private const string ToastProviderName = "MapaToast";
+    private const decimal FallbackLatitude = 14.0723m;
+    private const decimal FallbackLongitude = -87.1921m;
+    private const int FallbackZoom = 13;
+
+    private MapBootstrapDto? mapConfiguration;
+    private string searchText = string.Empty;
+    private string currentCenterGeoPosition = BuildGeoPosition(FallbackLatitude, FallbackLongitude);
+    private string? searchMarkerGeoPosition;
+    private string searchMarkerTooltip = "Resultado de búsqueda";
+    private string? loadError;
+    private bool isLoading = true;
+    private int currentZoom = FallbackZoom;
+
+    private bool CanRenderMap =>
+        mapConfiguration is not null &&
+        string.Equals(mapConfiguration.Provider, "Azure", StringComparison.OrdinalIgnoreCase) &&
+        !string.IsNullOrWhiteSpace(mapConfiguration.ApiKey);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadMapConfigurationAsync();
+    }
+
+    private async Task LoadMapConfigurationAsync()
+    {
+        isLoading = true;
+        loadError = null;
+
+        try
+        {
+            mapConfiguration = await MapClient.GetConfigurationAsync();
+
+            if (mapConfiguration is null)
+            {
+                loadError = "No se encontró configuración para el mapa.";
+                return;
+            }
+
+            if (!string.Equals(mapConfiguration.Provider, "Azure", StringComparison.OrdinalIgnoreCase))
+            {
+                loadError = $"El proveedor configurado '{mapConfiguration.Provider}' no es compatible con este MVP.";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(mapConfiguration.ApiKey))
+            {
+                loadError = "La clave de Azure Maps no está configurada.";
+                return;
+            }
+
+            currentCenterGeoPosition = BuildGeoPosition(mapConfiguration.DefaultLatitude, mapConfiguration.DefaultLongitude);
+            currentZoom = mapConfiguration.DefaultZoom > 0 ? mapConfiguration.DefaultZoom : FallbackZoom;
+            searchMarkerGeoPosition = null;
+        }
+        catch (Exception ex)
+        {
+            loadError = $"No fue posible cargar la configuración del mapa: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private Task BuscarAsync()
+    {
+        if (!CanRenderMap)
+        {
+            ShowToast("Mapa", "El mapa no está listo para recibir búsquedas.", ToastRenderStyle.Warning);
+            return Task.CompletedTask;
+        }
+
+        var query = searchText?.Trim();
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            ShowToast("Mapa", "Escribe una dirección o coordenadas antes de buscar.", ToastRenderStyle.Warning);
+            return Task.CompletedTask;
+        }
+
+        if (TryParseCoordinates(query, out var latitude, out var longitude))
+        {
+            var geoPosition = BuildGeoPosition(latitude, longitude);
+            ApplySearchResult(geoPosition, $"Resultado de búsqueda: {latitude:F5}, {longitude:F5}");
+            return Task.CompletedTask;
+        }
+
+        if (LooksLikeCoordinateInput(query))
+        {
+            ShowToast("Mapa", "Las coordenadas no tienen un formato válido. Usa el formato latitud,longitud.", ToastRenderStyle.Warning);
+            return Task.CompletedTask;
+        }
+
+        ApplySearchResult(query, $"Resultado de búsqueda: {query}");
+        return Task.CompletedTask;
+    }
+
+    private void RestablecerMapa()
+    {
+        if (mapConfiguration is null)
+        {
+            return;
+        }
+
+        searchText = string.Empty;
+        searchMarkerGeoPosition = null;
+        searchMarkerTooltip = "Resultado de búsqueda";
+        currentCenterGeoPosition = BuildGeoPosition(mapConfiguration.DefaultLatitude, mapConfiguration.DefaultLongitude);
+        currentZoom = mapConfiguration.DefaultZoom > 0 ? mapConfiguration.DefaultZoom : FallbackZoom;
+    }
+
+    private void ApplySearchResult(string geoPosition, string tooltip)
+    {
+        searchMarkerGeoPosition = geoPosition;
+        searchMarkerTooltip = tooltip;
+        currentCenterGeoPosition = geoPosition;
+        currentZoom = Math.Max(mapConfiguration?.DefaultZoom ?? FallbackZoom, 15);
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = message,
+            RenderStyle = style,
+            ProviderName = ToastProviderName
+        });
+    }
+
+    private static bool TryParseCoordinates(string value, out decimal latitude, out decimal longitude)
+    {
+        latitude = 0;
+        longitude = 0;
+
+        var parts = value.Split(',', StringSplitOptions.TrimEntries | StringSplitOptions.RemoveEmptyEntries);
+        if (parts.Length != 2)
+        {
+            return false;
+        }
+
+        if (!decimal.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out latitude) ||
+            !decimal.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out longitude))
+        {
+            return false;
+        }
+
+        return latitude is >= -90 and <= 90 && longitude is >= -180 and <= 180;
+    }
+
+    private static bool LooksLikeCoordinateInput(string value)
+        => value.Contains(',') && value.All(ch => char.IsDigit(ch) || ch is '.' or ',' or '-' or '+' or ' ');
+
+    private static string BuildGeoPosition(decimal latitude, decimal longitude)
+        => string.Format(CultureInfo.InvariantCulture, "{0:0.#####}, {1:0.#####}", latitude, longitude);
+}

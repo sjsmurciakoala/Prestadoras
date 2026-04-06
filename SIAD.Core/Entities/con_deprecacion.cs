@@ -27,5 +27,6 @@ public class con_deprecacion : ICompanyScopedEntity
 
     public virtual con_periodo_contable? period { get; set; }
 
-    public virtual con_poliza? poliza { get; set; }
+    public virtual con_partida_hdr? poliza { get; set; }
 }
+

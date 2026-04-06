@@ -1,14 +1,19 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
+using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 using SIAD.Data;
+
+using SIAD.Core.Constants;
 
 namespace SIAD.Services.Contabilidad;
 
 /// <summary>
-/// Implementación del servicio de períodos contables.
+/// Implementacion del servicio de periodos contables.
 /// </summary>
 public sealed class PeriodoContableService : IPeriodoContableService
 {
+    private static readonly TimeZoneInfo BusinessTimeZone = ResolveBusinessTimeZone();
+
     private readonly SiadDbContext _context;
 
     public PeriodoContableService(SiadDbContext context)
@@ -23,18 +28,27 @@ public sealed class PeriodoContableService : IPeriodoContableService
             throw new ArgumentOutOfRangeException(nameof(companyId), "El ID de empresa debe ser mayor a cero.");
         }
 
-        var periodo = await _context.con_periodo_contables
+        var periodos = await _context.con_periodo_contables
             .AsNoTracking()
-            .Where(p => p.company_id == companyId && p.status == "ABIERTO")
-            .OrderByDescending(p => p.end_date)
-            .FirstOrDefaultAsync(ct);
+            .Where(p => p.company_id == companyId)
+            .ToListAsync(ct);
 
-        if (periodo is null)
+        var periodosAbiertos = periodos
+            .Where(p => EstadoPeriodoHelper.IsOpen(p.status_id))
+            .ToList();
+
+        if (periodosAbiertos.Count == 0)
         {
             return null;
         }
 
-        return MapearDto(periodo);
+        if (periodosAbiertos.Count > 1)
+        {
+            throw new InvalidOperationException(
+                $"La empresa {companyId} tiene multiples periodos en estado 0 (Abierto). Revisa el calendario contable antes de continuar.");
+        }
+
+        return MapearDto(periodosAbiertos[0]);
     }
 
     public async Task<bool> ExistePeriodoAbiertoAsync(long companyId, CancellationToken ct = default)
@@ -44,12 +58,18 @@ public sealed class PeriodoContableService : IPeriodoContableService
             throw new ArgumentOutOfRangeException(nameof(companyId), "El ID de empresa debe ser mayor a cero.");
         }
 
-        return await _context.con_periodo_contables
+        var estados = await _context.con_periodo_contables
             .AsNoTracking()
-            .AnyAsync(p => p.company_id == companyId && p.status == "ABIERTO", ct);
+            .Where(p => p.company_id == companyId)
+            .Select(p => p.status_id)
+            .ToListAsync(ct);
+
+        return estados.Any(EstadoPeriodoHelper.IsOpen);
     }
 
-    public async Task<PeriodoContableDto> ObtenerOCrearPeriodoInicialAsync(long companyId, DateTime? fechaInicio = null,
+    public async Task<PeriodoContableDto> ObtenerOCrearPeriodoInicialAsync(
+        long companyId,
+        DateTime? fechaInicio = null,
         CancellationToken ct = default)
     {
         if (companyId <= 0)
@@ -57,19 +77,18 @@ public sealed class PeriodoContableService : IPeriodoContableService
             throw new ArgumentOutOfRangeException(nameof(companyId), "El ID de empresa debe ser mayor a cero.");
         }
 
-        // Intentar obtener período existente
         var periodoExistente = await ObtenerPeriodoActivoAsync(companyId, ct);
         if (periodoExistente is not null)
         {
             return periodoExistente;
         }
 
-        // Crear período inicial
         var ahora = DateTime.UtcNow;
-        var fecha = (fechaInicio.HasValue ? DateTime.SpecifyKind(fechaInicio.Value, DateTimeKind.Utc) : new DateTime(ahora.Year, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-        var fechaFin = new DateTime(fecha.Year, fecha.Month, DateTime.DaysInMonth(fecha.Year, fecha.Month), 23, 59, 59, DateTimeKind.Utc);
+        var fechaBase = fechaInicio?.Date ?? new DateTime(ahora.Year, 1, 1);
+        var fecha = NormalizeBusinessStartUtc(fechaBase);
+        var fechaFin = NormalizeBusinessEndUtc(new DateTime(fechaBase.Year, fechaBase.Month, DateTime.DaysInMonth(fechaBase.Year, fechaBase.Month)));
 
-        var nombrePeriodo = $"{fecha.Year}-{fecha.Month:D2}";
+        var nombrePeriodo = $"{fechaBase.Year}-{fechaBase.Month:D2}";
         var codigoPeriodo = nombrePeriodo;
 
         var nuevoPeriodo = new con_periodo_contable
@@ -79,7 +98,8 @@ public sealed class PeriodoContableService : IPeriodoContableService
             name = nombrePeriodo,
             start_date = fecha,
             end_date = fechaFin,
-            status = "ABIERTO",
+            status = EstadoPeriodoHelper.ToText(EstadoPeriodoHelper.AbiertoId),
+            status_id = EstadoPeriodoHelper.AbiertoId,
             created_at = ahora,
             created_by = "system",
             updated_at = ahora,
@@ -96,15 +116,61 @@ public sealed class PeriodoContableService : IPeriodoContableService
 
     private static PeriodoContableDto MapearDto(con_periodo_contable periodo)
     {
-        return new PeriodoContableDto
+        var estadoId = EstadoPeriodoHelper.Require(periodo.status_id, $"con_periodo_contable.period_id={periodo.period_id}");
+        return new PeriodoContableDto(
+            periodo.period_id,
+            periodo.code,
+            periodo.name,
+            NormalizeBusinessDate(periodo.start_date),
+            NormalizeBusinessDate(periodo.end_date),
+            EstadoPeriodoHelper.ToText(estadoId),
+            periodo.closed_at,
+            periodo.closed_by,
+            estadoId);
+    }
+
+    private static DateTime NormalizeBusinessDate(DateTime value)
+    {
+        if (value.Kind == DateTimeKind.Unspecified)
         {
-            PeriodoId = periodo.period_id,
-            CompanyId = periodo.company_id,
-            Año = periodo.start_date.Year,
-            Mes = (byte)periodo.start_date.Month,
-            FechaInicio = periodo.start_date,
-            FechaFin = periodo.end_date,
-            Estado = periodo.status ?? "ABIERTO"
-        };
+            return value.Date;
+        }
+
+        return TimeZoneInfo.ConvertTime(value, BusinessTimeZone).Date;
+    }
+
+    private static DateTime NormalizeBusinessStartUtc(DateTime value)
+    {
+        var localDate = DateTime.SpecifyKind(value.Date, DateTimeKind.Unspecified);
+        return TimeZoneInfo.ConvertTimeToUtc(localDate, BusinessTimeZone);
+    }
+
+    private static DateTime NormalizeBusinessEndUtc(DateTime value)
+    {
+        var localDate = DateTime.SpecifyKind(value.Date, DateTimeKind.Unspecified)
+            .AddHours(23)
+            .AddMinutes(59)
+            .AddSeconds(59);
+
+        return TimeZoneInfo.ConvertTimeToUtc(localDate, BusinessTimeZone);
+    }
+
+    private static TimeZoneInfo ResolveBusinessTimeZone()
+    {
+        foreach (var timezoneId in new[] { "Central America Standard Time", "America/Tegucigalpa" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        return TimeZoneInfo.Utc;
     }
 }

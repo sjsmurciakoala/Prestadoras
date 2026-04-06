@@ -1,0 +1,218 @@
+﻿@page "/contabilidad/transacciones-bancarias/nueva"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Tenant
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Bancos
+@using System.Globalization
+@using System.Linq
+
+@inject CuentasBancosClient CuentasClient
+@inject TenantState TenantState
+@inject NavigationManager NavigationManager
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Nueva Transacci�n Bancaria</h2>
+            <p class="page-subtitle">Registre el movimiento bancario.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="VolverAsync"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(mensajeAlerta))
+    {
+        <DxMessageBox Type="MessageBoxType.Alert"
+                      ShowIcon="true"
+                      Text="@mensajeAlerta"
+                      CssClass="mb-3"
+                      Visible="true" />
+    }
+
+    <div class="modern-card">
+        <TransaccionBancariaModal CuentasBancarias="@cuentasBancarias"
+                                  BancoId="@BancoId"
+                                  BancoCuentaId="@BancoCuentaId"
+                                  DefaultFechaMovimiento="@FechaPrefill"
+                                  DefaultReferencia="@ReferenciaPrefill"
+                                  DefaultMonto="@MontoPrefill"
+                                  DefaultDescripcion="@DescripcionPrefill"
+                                  DisableInternalScroll="true"
+                                  OnClose="@(async (bool result) => { await VolverAsync(); })"
+                                  OnTransaccionGuardada="@(async () => { await VolverAsync(); })" />
+    </div>
+</div>
+
+<DxLoadingPanel Visible="isLoading"
+                PositionTarget="body"
+                ApplyBackgroundShading="false"
+                IsContentBlocked="true"
+                Text="Cargando..."
+                ZIndex="2000" />
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "bancoId")]
+    public long? BancoId { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "bancoCuentaId")]
+    public long? BancoCuentaId { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "referencia")]
+    public string? Referencia { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "descripcion")]
+    public string? Descripcion { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "fecha")]
+    public string? Fecha { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "monto")]
+    public string? Monto { get; set; }
+
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private List<BancoCuentaListDto> cuentasBancarias = new();
+    private bool isLoading;
+    private string? mensajeAlerta;
+    private bool navegando;
+    private DateOnly? FechaPrefill;
+    private decimal? MontoPrefill;
+    private string? ReferenciaPrefill;
+    private string? DescripcionPrefill;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            var companyId = await TenantState.EnsureCompanyAsync();
+            cuentasBancarias = (await CuentasClient.GetAsync(companyId)).ToList();
+        }
+        catch (Exception ex)
+        {
+            mensajeAlerta = $"Error al cargar cuentas bancarias: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    protected override void OnParametersSet()
+    {
+        ReferenciaPrefill = NormalizeQueryText(Referencia);
+        DescripcionPrefill = NormalizeQueryText(Descripcion);
+        FechaPrefill = ParseFecha(Fecha);
+        MontoPrefill = ParseMonto(Monto);
+    }
+
+    private Task VolverAsync()
+    {
+        if (navegando)
+        {
+            return Task.CompletedTask;
+        }
+
+        navegando = true;
+        var url = "/contabilidad/transacciones-bancarias";
+        if (!string.IsNullOrWhiteSpace(ReturnUrl))
+        {
+            url = Uri.UnescapeDataString(ReturnUrl);
+            NavigationManager.NavigateTo(url);
+            return Task.CompletedTask;
+        }
+
+        if (BancoId.HasValue)
+        {
+            url += $"?bancoId={BancoId.Value}";
+            if (BancoCuentaId.HasValue)
+            {
+                url += $"&bancoCuentaId={BancoCuentaId.Value}";
+            }
+        }
+        else if (BancoCuentaId.HasValue)
+        {
+            url += $"?bancoCuentaId={BancoCuentaId.Value}";
+        }
+
+        NavigationManager.NavigateTo(url);
+        return Task.CompletedTask;
+    }
+
+    private static DateOnly? ParseFecha(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (DateOnly.TryParseExact(value, "yyyy-MM-dd", CultureInfo.InvariantCulture, DateTimeStyles.None, out var fecha))
+        {
+            return fecha;
+        }
+
+        if (DateOnly.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.None, out fecha))
+        {
+            return fecha;
+        }
+
+        if (DateOnly.TryParse(value, CultureInfo.CurrentCulture, DateTimeStyles.None, out fecha))
+        {
+            return fecha;
+        }
+
+        return null;
+    }
+
+    private static decimal? ParseMonto(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.InvariantCulture, out var monto))
+        {
+            return monto;
+        }
+
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.GetCultureInfo("es-HN"), out monto))
+        {
+            return monto;
+        }
+
+        if (decimal.TryParse(value, NumberStyles.Any, CultureInfo.CurrentCulture, out monto))
+        {
+            return monto;
+        }
+
+        return null;
+    }
+
+    private static string? NormalizeQueryText(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return value.Trim();
+    }
+}
+

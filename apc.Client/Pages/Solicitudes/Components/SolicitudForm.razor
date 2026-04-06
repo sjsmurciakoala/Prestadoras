@@ -1,0 +1,204 @@
+@using SIAD.Core.DTOs.Solicitudes
+@using DevExpress.Blazor
+
+<div class="p-2">
+    <DxTabs>
+        <DxTabPage Text="Datos del Cliente">
+            <div class="p-3">
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutGroup Caption="Datos del Cliente" HeaderIconCssClass="bi bi-person-lines-fill" ColSpanXs="12">
+                        <DxFormLayoutItem Caption="Identificación *" ColSpanXs="12" ColSpanMd="6">
+                            <DxMaskedInput @bind-Value="@Solicitud.IdentificacionCliente"
+                                           Mask="0000-0000-00000"
+                                           NullValue=""
+                                           Placeholder="0000-0000-00000" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="6">
+                            <DxMaskedInput @bind-Value="@Solicitud.Rtn"
+                                           Mask="00000000000000"
+                                           NullValue=""
+                                           Placeholder="14 dígitos (opcional)" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Nombre Completo *" ColSpanXs="12" ColSpanMd="6">
+                            <DxTextBox @bind-Text="@Solicitud.NombreCliente" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Categoría *" ColSpanXs="12" ColSpanMd="6">
+                            <DxComboBox Data="@Categorias"
+                                        @bind-Value="@Solicitud.CategoriaServicioId"
+                                        ValueFieldName="Id"
+                                        TextFieldName="Nombre"
+                                        NullText="Seleccione categoría..."
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        </DxFormLayoutItem>
+                    </DxFormLayoutGroup>
+
+                    <DxFormLayoutGroup Caption="Contacto y Ubicación" HeaderIconCssClass="bi bi-geo-alt-fill" ColSpanXs="12">
+                        <DxFormLayoutItem Caption="Teléfono *" ColSpanXs="12" ColSpanMd="4">
+                            <DxMaskedInput @bind-Value="@Solicitud.Telefono"
+                                           Mask="(000) 0000-0000"
+                                           NullValue=""
+                                           Placeholder="(504) 2222-3333" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Celular *" ColSpanXs="12" ColSpanMd="4">
+                            <DxMaskedInput @bind-Value="@Solicitud.Movil"
+                                           Mask="(000) 0000-0000"
+                                           NullValue=""
+                                           Placeholder="(504) 9888-7777" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Correo" ColSpanXs="12" ColSpanMd="4">
+                            <DxTextBox @bind-Text="@Solicitud.Correo" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Color de Casa" ColSpanXs="12" ColSpanMd="6">
+                            <DxComboBox Data="@ColorOptions"
+                                        @bind-Value="@Solicitud.ColorCasa"
+                                        NullText="Seleccione color..."
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Dirección Exacta *" ColSpanXs="12">
+                            <DxMemo @bind-Text="@Solicitud.Direccion" Rows="2" ResizeMode="MemoResizeMode.Vertical" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Fecha de Nacimiento" ColSpanXs="12" ColSpanMd="6">
+                            <DxDateEdit @bind-Date="@Solicitud.FechaNacimiento" 
+                                        DisplayFormat="yyyy-MM-dd" 
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"/>
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Clave SURE" ColSpanXs="12" ColSpanMd="6">
+                            <DxTextBox @bind-Text="@Solicitud.ClaveSure" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Observaciones" ColSpanXs="12">
+                            <DxMemo @bind-Text="@Solicitud.Observacion" Rows="3" ResizeMode="MemoResizeMode.Vertical" />
+                        </DxFormLayoutItem>
+
+                    </DxFormLayoutGroup>
+                </DxFormLayout>
+            </div>
+        </DxTabPage>
+
+        <DxTabPage Text="Datos de Empresa">
+            <div class="p-3">
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem Caption="Nombre de Empresa" ColSpanXs="12" ColSpanMd="6">
+                        <DxTextBox @bind-Text="@Solicitud.EmpresaNombre" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Teléfono Empresa" ColSpanXs="12" ColSpanMd="6">
+                        <DxTextBox @bind-Text="@Solicitud.EmpresaTelefono" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Dirección Empresa" ColSpanXs="12">
+                        <DxTextBox @bind-Text="@Solicitud.EmpresaDireccion" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </div>
+        </DxTabPage>
+
+        <DxTabPage Text="Datos de Negocio">
+            <div class="p-3">
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem Caption="Nombre del Negocio" ColSpanXs="12" ColSpanMd="6">
+                        <DxTextBox @bind-Text="@Solicitud.NegocioNombre" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Teléfono Negocio" ColSpanXs="12" ColSpanMd="6">
+                        <DxTextBox @bind-Text="@Solicitud.NegocioTelefono" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Clave Catastral" ColSpanXs="12">
+                        <DxTextBox @bind-Text="@Solicitud.NegocioClaveCatastral" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </div>
+        </DxTabPage>
+
+    </DxTabs>
+</div>
+
+<div class="form-actions mt-3 pt-3 border-top">
+    <DxButton Text="Cancelar"
+              Click="@CancelarAsync"
+              RenderStyle="ButtonRenderStyle.Secondary"
+              RenderStyleMode="ButtonRenderStyleMode.Outline"
+              IconCssClass="bi bi-x-lg"
+              CssClass="form-btn" />
+
+    <DxButton Text="Guardar Solicitud"
+              Click="@GuardarAsync"
+              RenderStyle="ButtonRenderStyle.Primary"
+              IconCssClass="bi bi-check-lg"
+              CssClass="form-btn" />
+</div>
+
+@if (!string.IsNullOrEmpty(validationError))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mt-3">@validationError</DxAlert>
+}
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public SolicitudCreateDto Solicitud { get; set; } = default!;
+
+    [Parameter]
+    [EditorRequired]
+    public List<SolicitudCategoriaDto> Categorias { get; set; } = new();
+
+    [Parameter]
+    public EventCallback OnGuardar { get; set; }
+
+    private List<string> ColorOptions = new()
+    {
+        "Blanco", "Negro", "Gris", "Rojo", "Verde", "Azul", "Amarillo", "Naranja", "Rosa", "Marrón"
+    };
+
+    private string? validationError;
+
+    private async Task GuardarAsync()
+    {
+        validationError = null;
+        if (!ValidarFormulario())
+        {
+            validationError = "Completa los campos obligatorios y verifica las máscaras.";
+            return;
+        }
+
+        await OnGuardar.InvokeAsync();
+    }
+
+    private async Task CancelarAsync()
+    {
+        await Task.CompletedTask; 
+    }
+
+    private bool ValidarFormulario()
+    {
+        var identidadOk = CountDigits(Solicitud.IdentificacionCliente) == 13;
+        var telefonoOk = CountDigits(Solicitud.Telefono) >= 11;
+        var movilOk = CountDigits(Solicitud.Movil) >= 11;
+        var rtnOk = string.IsNullOrWhiteSpace(Solicitud.Rtn) || CountDigits(Solicitud.Rtn) == 14;
+
+        if (!identidadOk ||
+            string.IsNullOrWhiteSpace(Solicitud.NombreCliente) ||
+            Solicitud.CategoriaServicioId == 0 ||
+            !telefonoOk ||
+            !movilOk ||
+            string.IsNullOrWhiteSpace(Solicitud.Direccion) ||
+            !rtnOk)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private static int CountDigits(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value)
+            ? 0
+            : value.Count(char.IsDigit);
+    }
+}

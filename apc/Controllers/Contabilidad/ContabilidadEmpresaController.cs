@@ -1,4 +1,4 @@
-﻿using Microsoft.AspNetCore.Authorization;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -6,12 +6,13 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Tenancy;
 using SIAD.Services.Contabilidad;
+using apc.Security;
 
 namespace apc.Controllers.Contabilidad;
 
 [ApiController]
 [Route("api/contabilidad/empresas")]
-[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad)]
 public sealed class ContabilidadEmpresaController : ControllerBase
 {
     private readonly ICompanyManagementService companyManagementService;
@@ -31,7 +32,7 @@ public sealed class ContabilidadEmpresaController : ControllerBase
         {
             var errores = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
             var detalle = string.Join("; ", errores);
-            return BadRequest(CrearProblemDetalle("Validación fallida", detalle));
+            return BadRequest(CrearProblemDetalle("Validaci�n fallida", detalle));
         }
 
         var tenantCompanyId = currentCompanyService.GetCompanyId();
@@ -125,8 +126,8 @@ public sealed class ContabilidadEmpresaController : ControllerBase
         if (!ModelState.IsValid)
         {
             var errores = ModelState.Values.SelectMany(v => v.Errors).Select(e => e.ErrorMessage).ToList();
-            var detalle = errores.Count == 0 ? "Carga de logo inválida." : string.Join("; ", errores);
-            return BadRequest(CrearProblemDetalle("Solicitud inválida", detalle));
+            var detalle = errores.Count == 0 ? "Carga de logo inv�lida." : string.Join("; ", errores);
+            return BadRequest(CrearProblemDetalle("Solicitud inv�lida", detalle));
         }
 
         // Aceptar tanto "logoUpload" como el primer archivo disponible por si el cliente usa otro nombre
@@ -137,20 +138,20 @@ public sealed class ContabilidadEmpresaController : ControllerBase
             return BadRequest(CrearProblemDetalle("Archivo requerido", "Debe proporcionar un archivo de imagen."));
         }
 
-        // Validaciones básicas
+        // Validaciones b�sicas
         const long MaxFileSize = 5 * 1024 * 1024; // 5 MB
         if (archivoCargado.Length > MaxFileSize)
         {
             return BadRequest(CrearProblemDetalle("Archivo demasiado grande", "El logo no puede superar los 5MB."));
         }
 
-        // Validar extensión del archivo
+        // Validar extensi�n del archivo
         var extension = Path.GetExtension(archivoCargado.FileName)?.ToLowerInvariant();
         var extensionesPermitidas = new[] { ".png", ".jpg", ".jpeg", ".webp", ".svg" };
         if (string.IsNullOrEmpty(extension) || !extensionesPermitidas.Contains(extension))
         {
-            return BadRequest(CrearProblemDetalle("Tipo de archivo no válido", 
-                "Solo se permiten imágenes: PNG, JPG, JPEG, WEBP, SVG."));
+            return BadRequest(CrearProblemDetalle("Tipo de archivo no v�lido", 
+                "Solo se permiten im�genes: PNG, JPG, JPEG, WEBP, SVG."));
         }
 
         var usuario = User?.Identity?.Name ?? "system";
@@ -166,7 +167,7 @@ public sealed class ContabilidadEmpresaController : ControllerBase
         }
         catch (ArgumentException ex)
         {
-            return BadRequest(CrearProblemDetalle("Validación fallida", ex.Message));
+            return BadRequest(CrearProblemDetalle("Validaci�n fallida", ex.Message));
         }
         catch (InvalidOperationException ex)
         {
@@ -195,7 +196,7 @@ public sealed class ContabilidadEmpresaController : ControllerBase
         }
         catch (ArgumentOutOfRangeException ex)
         {
-            return BadRequest(CrearProblemDetalle("ID inválido", ex.Message));
+            return BadRequest(CrearProblemDetalle("ID inv�lido", ex.Message));
         }
         catch (Exception ex)
         {
@@ -204,4 +205,6 @@ public sealed class ContabilidadEmpresaController : ControllerBase
         }
     }
 }
+
+
 

@@ -4,4 +4,5 @@ public record RutaListItemDto(
     int Id,
     int CodCiclo,
     string CodRuta,
-    string? Descripcion);
+    string? Descripcion,
+    bool Activo);

@@ -1,0 +1,523 @@
+﻿@page "/contabilidad/bancos"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Tenant
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using SIAD.Core.DTOs.Bancos
+@using System.Net.Http
+
+@inject BancosClient BancosClient
+@inject CuentasBancosClient CuentasClient
+@inject TenantState TenantState
+@inject NavigationManager NavigationManager
+
+@implements IDisposable
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Bancos</h2>
+            <p class="page-subtitle">Gestion de bancos registrados</p>
+        </div>
+                                <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Nuevo Banco"
+                      Click="@(() => OpenFormAsync(null))"
+                      IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading)" />
+            <DxButton Text="Actualizar"
+                      Click="LoadBancosAsync"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Enabled="@(!isLoading)" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(alerta))
+    {
+        <DxMessageBox Type="MessageBoxType.Alert"
+                      RenderStyle="@alertaEstilo"
+                      ShowIcon="true"
+                      Text="@alerta"
+                      CssClass="mb-3"
+                      Visible="true" />
+    }
+
+    <div class="modern-card position-relative" style="min-height: 300px;">
+        <div class="grid-wrapper">
+            <DxGrid Data="@bancos"
+                    KeyFieldName="@nameof(BancoListDto.BancoId)"
+                    PageSize="12"
+                    SizeMode="SizeMode.Large"
+                    CssClass="grid-modern">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(BancoListDto.BancoId)" Caption="ID" Width="90px" />
+                    <DxGridDataColumn FieldName="@nameof(BancoListDto.Nombre)"
+                                      Caption="Nombre"
+                                      Width="260px"/>
+                    <DxGridDataColumn FieldName="@nameof(BancoListDto.Activo)" Caption="Estado" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is BancoListDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">
+                                    @(item.Activo ? "Activo" : "Inactivo")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <!-- Opci�n 1: Aumentar ancho de la columna de acciones -->
+                    <DxGridCommandColumn Caption="Acciones"
+                                         Width="220px"
+                                         NewButtonVisible="false">
+                        <CellDisplayTemplate Context="cellContext">
+                            @if (cellContext.DataItem is BancoListDto item)
+                            {
+                                <div class="d-flex flex-wrap gap-2">
+                                    <button class="btn-icon btn-edit" title="Editar" @onclick="() => OpenFormAsync(item)">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button id="@($"opciones-btn-{item.BancoId}")"
+                                            class="btn-icon btn-options"
+                                            title="Opciones"
+                                            @onclick="(MouseEventArgs args) => ShowOpcionesMenuAsync(item, args)">
+                                        <i class="bi bi-three-dots-vertical"></i>
+                                    </button>
+                                    <button class="btn-icon btn-delete" title="Eliminar" @onclick="() => ConfirmDelete(item)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxLoadingPanel Visible="isLoading"
+                PositionTarget="body"
+                ApplyBackgroundShading="false"
+                IsContentBlocked="true"
+                Text="Cargando..."
+                ZIndex="2000" />
+
+<BancosFormModal @bind-Visible="formVisible"
+                 EditContext="editContext"
+                 EditModel="editModel"
+                 IsSaving="isSaving"
+                 PopupTitle="Gestion de banco"
+                 BancoIdDisplay="BancoIdDisplay"
+                 OnCancel="CloseForm"
+                 OnSave="SaveAsync" />
+
+<DxPopup @bind-Visible="deleteVisible"
+         Width="420px"
+         CloseOnOutsideClick="true"
+         ShowCloseButton="true"
+         ShowFooter="true"
+         BodyCssClass="p-3"
+         FooterCssClass="p-2 text-end border-top border-light-subtle"
+         HeaderText="Eliminar banco">
+    <BodyTemplate>
+        <div class="pb-3 mb-3 border-bottom border-light-subtle">
+            <div class="d-flex align-items-start gap-3">
+                <span class="text-warning display-6">
+                    <i class="bi bi-exclamation-triangle-fill"></i>
+                </span>
+                <div>
+                    <p class="fw-semibold mb-2">�Eliminar este banco?</p>
+                    <p class="text-muted mb-0">Confirma la eliminaci�n del registro seleccionado.</p>
+                </div>
+            </div>
+        </div>
+        @if (bancoAEliminar is null)
+        {
+            <p class="mb-0">Seleccione un banco para eliminar.</p>
+        }
+        else
+        {
+            <div class="small mb-2 text-secondary">
+                <div><strong>ID:</strong> @bancoAEliminar.BancoId</div>
+                <div><strong>Nombre:</strong> @bancoAEliminar.Nombre</div>
+            </div>
+            <p class="text-danger small mb-0">Esta acci�n no se puede deshacer.</p>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex justify-content-end gap-2 flex-wrap">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      ButtonStyle="ButtonStyle.Outlined"
+                      Click="CloseDelete" />
+            <DxButton Text="Eliminar"
+                      IconCssClass="bi bi-trash"
+                      RenderStyle="ButtonRenderStyle.Danger"
+                      Enabled="@(!isDeleting)"
+                      Click="DeleteAsync" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+
+
+
+
+<DxContextMenu @ref="opcionesMenu"
+               ItemClick="HandleOpcionesItemClick"
+               Hidden="HandleOpcionesMenuHidden">
+    <Items>
+        <DxContextMenuItem Name="transacciones" Text="Transacciones Bancarias" IconCssClass="bi bi-receipt" />
+        <DxContextMenuItem Name="agregar" Text="Agregar cuenta" IconCssClass="bi bi-plus-lg" />
+        <DxContextMenuItem Name="ver" Text="Ver cuentas" IconCssClass="bi bi-list-ul" />
+    </Items>
+</DxContextMenu>
+
+<DxPopup @bind-Visible="mostrarFormulario" 
+         Width="min(1300px, 98vw)"
+         Height="min(850px, 92vh)"
+         HeaderText="Nueva Transacci�n Bancaria"
+         ShowCloseButton="true">
+    <TransaccionBancariaModal CuentasBancarias="@cuentasBancarias" 
+                              BancoId="@transaccionesBancoId"
+                              OnClose="@(async (bool result) => { mostrarFormulario = false; await Task.CompletedTask; })"
+                              OnTransaccionGuardada="@(async () => { mostrarFormulario = false; await LoadBancosAsync(); })"/>
+</DxPopup>
+
+@code {
+    private readonly List<BancoListDto> bancos = new();
+    private BancoEditDto editModel = new();
+    private EditContext? editContext;
+    private bool isLoading;
+    private bool isSaving;
+    private bool isDeleting;
+    private bool formVisible;
+    private bool deleteVisible;
+    private DxContextMenu? opcionesMenu;
+    private BancoListDto? bancoOpciones;
+    private bool opcionesMenuVisible;
+    private long? transaccionesBancoId;
+    private string? alerta;
+    private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private BancoListDto? bancoAEliminar;
+    private CancellationTokenSource? loadCts;
+
+    // Aseg�rate de declarar e inicializar la variable cuentasBancarias
+    private List<BancoCuentaListDto> cuentasBancarias = new();
+
+    // Declarar la variable mostrarFormulario en el bloque de c�digo del componente
+    private bool mostrarFormulario = false;
+
+    private string Title => editModel.BancoId > 0 ? "Editar banco" : "Nuevo banco";
+    private string BancoIdDisplay => editModel.BancoId > 0 ? editModel.BancoId.ToString() : "Autoincremental";
+    private string DeleteMessage => bancoAEliminar is null
+        ? "Seleccione un banco para eliminar."
+        : $"Confirma eliminar el banco {bancoAEliminar.Nombre}?";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBancosAsync();
+    }
+
+    private async Task LoadBancosAsync()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+        loadCts = new CancellationTokenSource();
+
+        try
+        {
+            isLoading = true;
+            alerta = null;
+            var companyId = await TenantState.EnsureCompanyAsync(loadCts.Token);
+            if (companyId <= 0)
+            {
+                bancos.Clear();
+                SetAlert("No hay empresa seleccionada.", MessageBoxRenderStyle.Info);
+                return;
+            }
+
+            var data = await BancosClient.GetAsync(null, loadCts.Token);
+            bancos.Clear();
+            bancos.AddRange(data);
+        }
+        catch (OperationCanceledException)
+        {
+            
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"Error al cargar bancos: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OpenFormAsync(BancoListDto? banco)
+    {
+        alerta = null;
+        try
+        {
+            if (banco is null)
+            {
+                var companyId = await TenantState.EnsureCompanyAsync();
+                editModel = new BancoEditDto
+                {
+                    Activo = true,
+                    CompanyId = companyId
+                };
+            }
+            else
+            {
+                var detail = await BancosClient.GetByIdAsync(banco.BancoId);
+                editModel = detail ?? new BancoEditDto
+                {
+                    BancoId = banco.BancoId,
+                    Nombre = banco.Nombre,
+                    Activo = banco.Activo,
+                    CompanyId = banco.CompanyId,
+                    CreatedAt = banco.CreatedAt,
+                    CreatedBy = banco.CreatedBy,
+                    UpdatedAt = banco.UpdatedAt,
+                    UpdatedBy = banco.UpdatedBy
+                };
+            }
+
+            editContext = new EditContext(editModel);
+            formVisible = true;
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo cargar el banco: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+    }
+
+    private void CloseForm()
+    {
+        formVisible = false;
+        editContext = null;
+        editModel = new BancoEditDto();
+    }
+
+    private async Task SaveAsync()
+    {
+        if (editContext is null)
+        {
+            return;
+        }
+
+        alerta = null;
+        if (!editContext.Validate())
+        {
+            SetAlert("Revisa los campos del formulario.", MessageBoxRenderStyle.Danger);
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+            if (editModel.BancoId > 0)
+            {
+                await BancosClient.UpdateAsync(editModel.BancoId, editModel);
+            }
+            else
+            {
+                var createDto = BuildCreateDto(editModel);
+                await BancosClient.CreateAsync(createDto);
+            }
+
+            formVisible = false;
+            await LoadBancosAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo guardar el banco: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private bool IsBancoActivo(long bancoId)
+    {
+        var banco = bancos.FirstOrDefault(b => b.BancoId == bancoId);
+        return banco?.Activo == true;
+    }
+
+    private async Task ShowOpcionesMenuAsync(BancoListDto banco, MouseEventArgs args)
+    {
+        if (opcionesMenuVisible && bancoOpciones?.BancoId == banco.BancoId)
+        {
+            await opcionesMenu.HideAsync();
+            return;
+        }
+
+        bancoOpciones = banco;
+        opcionesMenuVisible = true;
+        await opcionesMenu.ShowAsync(args);
+    }
+
+    private void HandleOpcionesMenuHidden()
+    {
+        opcionesMenuVisible = false;
+    }
+
+    private void NavigateToCuentaGestion(long bancoId)
+    {
+        var bancoSeleccionado = bancos.FirstOrDefault(b => b.BancoId == bancoId);
+        if (bancoSeleccionado is not null && !bancoSeleccionado.Activo)
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se pueden agregar cuentas.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        var returnUrl = "/contabilidad/bancos";
+        var url = $"/bancos/cuentas/gestion?bancoId={bancoId}&returnUrl={Uri.EscapeDataString(returnUrl)}";
+        NavigationManager.NavigateTo(url);
+    }
+
+    private async Task HandleOpcionesItemClick(ContextMenuItemClickEventArgs args)
+    {
+        if (bancoOpciones is null)
+        {
+            return;
+        }
+
+        switch (args.ItemInfo?.Name)
+        {
+            case "transacciones":
+                await AbrirTransaccionesAsync(bancoOpciones);
+                break;
+            case "agregar":
+                NavigateToCuentaGestion(bancoOpciones.BancoId);
+                break;
+            case "ver":
+                NavigationManager.NavigateTo($"/bancos/cuentas?bancoId={bancoOpciones.BancoId}");
+                break;
+        }
+
+        if (opcionesMenu is not null)
+        {
+            await opcionesMenu.HideAsync();
+        }
+
+        opcionesMenuVisible = false;
+        bancoOpciones = null;
+    }
+
+    private async Task AbrirTransaccionesAsync(BancoListDto banco)
+    {
+        if (!banco.Activo)
+        {
+            SetAlert("El banco seleccionado esta inactivo. No se pueden realizar transacciones bancarias.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        try
+        {
+            if (!await BancoTieneCuentasAsync(banco.BancoId))
+            {
+                SetAlert("El banco seleccionado no tiene cuentas bancarias. Registre una cuenta para continuar.", MessageBoxRenderStyle.Info);
+                return;
+            }
+
+            transaccionesBancoId = banco.BancoId;
+            NavigationManager.NavigateTo($"/contabilidad/transacciones-bancarias?bancoId={banco.BancoId}");
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo validar las cuentas bancarias: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+    }
+
+    private async Task<bool> BancoTieneCuentasAsync(long bancoId)
+    {
+        var companyId = await TenantState.EnsureCompanyAsync();
+        cuentasBancarias = (await CuentasClient.GetAsync(companyId)).ToList();
+        return cuentasBancarias.Any(c => c.BancoId == bancoId);
+    }
+
+    private void ConfirmDelete(BancoListDto banco)
+    {
+        bancoAEliminar = banco;
+        deleteVisible = true;
+    }
+
+    private void CloseDelete()
+    {
+        deleteVisible = false;
+        bancoAEliminar = null;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (bancoAEliminar is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isDeleting = true;
+            await BancosClient.DeleteAsync(bancoAEliminar.BancoId);
+            deleteVisible = false;
+            bancoAEliminar = null;
+            await LoadBancosAsync();
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (HttpRequestException ex)
+        {
+            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            SetAlert($"No se pudo eliminar el banco: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private static BancoCreateDto BuildCreateDto(BancoEditDto model)
+    {
+        return new BancoCreateDto
+        {
+            Nombre = model.Nombre,
+            Activo = model.Activo
+        };
+    }
+
+    private void SetAlert(string message, MessageBoxRenderStyle style)
+    {
+        alerta = message;
+        alertaEstilo = style;
+    }
+
+    public void Dispose()
+    {
+        loadCts?.Cancel();
+        loadCts?.Dispose();
+    }
+}

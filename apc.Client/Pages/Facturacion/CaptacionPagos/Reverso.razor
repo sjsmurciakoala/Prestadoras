@@ -1,4 +1,4 @@
-@page "/facturacion/captacion/reverso"
+﻿@page "/facturacion/captacion/reverso"
 @attribute [Authorize]
 @using System.ComponentModel.DataAnnotations
 @inject apc.Client.Services.CaptacionPagos.CaptacionPagosClient CaptacionClient
@@ -26,7 +26,8 @@
                         <DxTextBox @bind-Text="reverso.NumFactura" />
                     </DxFormLayoutItem>
                     <DxFormLayoutItem Caption="Cliente">
-                        <DxTextBox @bind-Text="reverso.ClienteClave" />
+                        <ClienteLookup Items="@clientes"
+                                       @bind-Value="reverso.ClienteClave" />
                     </DxFormLayoutItem>
                     <DxFormLayoutItem>
                         <DxButton Text="Consultar" ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Secondary" />
@@ -100,6 +101,7 @@
     private readonly ReversoFormModel reverso = new();
     private CaptacionPagoResponseDto? pagoActual;
     private List<ReciboMiscelaneoDto> miscelaneos = new();
+    private List<ClienteComboDto> clientes = new();
     private string? clienteMiscelaneo;
     private string? error;
     private bool procesando;
@@ -107,6 +109,7 @@
     protected override async Task OnInitializedAsync()
     {
         await EstablecerUsuarioAsync();
+        clientes = (await CaptacionClient.GetClientesAsync()).ToList();
         await CargarMiscelaneosAsync();
     }
 

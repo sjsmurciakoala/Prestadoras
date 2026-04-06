@@ -8,4 +8,5 @@ public record DiarioDto(
     string? SequencePrefix,
     long LastSequence,
     bool IsActive,
-    bool AllowsManual);
+    bool AllowsManual,
+    bool IsDefaultManual);

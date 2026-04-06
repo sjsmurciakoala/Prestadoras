@@ -52,6 +52,17 @@ namespace apc.Client
                 }
             }
 
+            if (userInfo.Permissions is { Length: > 0 })
+            {
+                foreach (var permission in userInfo.Permissions)
+                {
+                    if (!string.IsNullOrWhiteSpace(permission))
+                    {
+                        claims.Add(new Claim(PermissionClaimTypes.Permission, permission));
+                    }
+                }
+            }
+
             authenticationStateTask = Task.FromResult(
                 new AuthenticationState(new ClaimsPrincipal(new ClaimsIdentity(claims,
                     authenticationType: nameof(PersistentAuthenticationStateProvider)))));

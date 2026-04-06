@@ -1,0 +1,154 @@
+@page "/proveedores/tipos/nuevo"
+@page "/proveedores/tipos/{id:int}/editar"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject ILogger<TipoProveedorEdit> Logger
+@using apc.Client.Services.Proveedores
+@using Microsoft.AspNetCore.Authorization
+@using SIAD.Core.DTOs.Proveedores
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">@TituloPagina</h2>
+            <p class="page-subtitle">@SubtituloPagina</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card">
+        @if (isLoading)
+        {
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+        }
+        else
+        {
+            <TipoProveedorForm Model="model"
+                               OnValidSubmit="GuardarAsync"
+                               OnCancel="Volver"
+                               IsBusy="isSaving" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public int? Id { get; set; }
+
+    private TipoProveedorUpsertDto model = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private string? errorMessage;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+    private string SubtituloPagina => IsEdit
+        ? "Actualice la informacion del tipo de proveedor."
+        : "Registre un nuevo tipo de proveedor.";
+    private string TituloPagina
+    {
+        get
+        {
+            if (!IsEdit)
+            {
+                return "Nuevo tipo de proveedor";
+            }
+
+            var nombreMostrar = model.Nombre?.Trim();
+            if (string.IsNullOrWhiteSpace(nombreMostrar))
+            {
+                return $"Editar tipo de proveedor {Id}";
+            }
+
+            return $"Editar tipo de proveedor {Id} - {nombreMostrar}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            if (IsEdit)
+            {
+                var detail = await ProveedoresClient.ObtenerTipoAsync(Id!.Value);
+                if (detail is null)
+                {
+                    errorMessage = $"No se encontro el tipo de proveedor {Id}.";
+                    model = new TipoProveedorUpsertDto();
+                }
+                else
+                {
+                    model = new TipoProveedorUpsertDto
+                    {
+                        Nombre = detail.Nombre,
+                        Observaciones = detail.Observaciones
+                    };
+                }
+            }
+            else
+            {
+                model = new TipoProveedorUpsertDto();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar la pantalla: {ex.Message}";
+            Logger.LogError(ex, "Error al cargar pantalla de tipo de proveedor.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+
+            if (IsEdit)
+            {
+                await ProveedoresClient.ActualizarTipoAsync(Id!.Value, model);
+            }
+            else
+            {
+                await ProveedoresClient.CrearTipoAsync(model);
+            }
+
+            Navigation.NavigateTo("/proveedores/tipos");
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo guardar el tipo: {ex.Message}";
+            Logger.LogError(ex, "Error al guardar tipo de proveedor {TipoId}", Id);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/proveedores/tipos");
+}

@@ -1,0 +1,1092 @@
+@page "/informes/reportes/datasets"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Security.Claims
+@using System.Text.RegularExpressions
+@using apc.Client.Services.Informes
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Informes
+@inject InformesClient InformesClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+
+<PageTitle>Datasets de Reportes</PageTitle>
+
+<div class="page-container reportes-datasets-page">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Datasets de Reportes</h2>
+            <p class="page-subtitle">Fuentes de datos reutilizables para reportería.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Actualizar"
+                      Click="LoadAsync"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <AuthorizeView Policy="@PermissionNames.Reporteria.Create">
+                <Authorized>
+                    <DxButton Text="Nuevo dataset"
+                              Click="OpenCreatePopup"
+                              IconCssClass="bi bi-database-add"
+                              RenderStyle="ButtonRenderStyle.Primary" />
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@errorMessage</DxAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <DxMessageBox @bind-Visible="isSuccessMessageVisible"
+                      Type="MessageBoxType.Alert"
+                      Title="Operación completada"
+                      Text="@successMessage"
+                      OkButtonText="Aceptar"
+                      CssClass="reportes-feedback-messagebox reportes-feedback-messagebox--success"
+                      RenderStyle="MessageBoxRenderStyle.Success"
+                      ShowIcon="true"
+                      CloseOnOutsideClick="true"
+                      Closed="OnSuccessMessageClosed" />
+    }
+
+    <div class="modern-card p-4">
+        <div class="d-flex flex-wrap gap-3 small text-muted mb-3">
+            <span>Tipos habilitados: <strong>@string.Join(", ", sourceTypeOptions.Select(x => x.Text))</strong></span>
+            <span>Recomendado: <strong>Stored Procedure</strong> para reportes especiales multiempresa.</span>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else if (items.Count == 0)
+        {
+            <div class="text-center text-muted py-5">
+                No hay datasets configurados todavía para esta empresa.
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var item in items)
+                {
+                    <div class="col-12 col-xl-6">
+                        <div class="border rounded-3 p-4 h-100 bg-white shadow-sm">
+                            <div class="d-flex align-items-start justify-content-between gap-3">
+                                <div>
+                                    <div class="fw-semibold fs-5">@item.Nombre</div>
+                                    <div class="text-muted small">@item.Codigo</div>
+                                </div>
+                                <span class="badge bg-light text-dark border">@GetSourceTypeLabel(item.TipoOrigen)</span>
+                            </div>
+
+                            <p class="text-muted mt-3 mb-3">
+                                @(string.IsNullOrWhiteSpace(item.Descripcion) ? "Sin descripción configurada." : item.Descripcion)
+                            </p>
+
+                            <div class="d-flex flex-wrap gap-3 small text-muted">
+                                <span>Origen: <strong>@(string.IsNullOrWhiteSpace(item.OrigenClave) ? "N/A" : item.OrigenClave)</strong></span>
+                                <span>Parámetros: <strong>@item.ParametrosCount</strong></span>
+                                <span>Estado: <strong>@(item.IsActive ? "Activo" : "Inactivo")</strong></span>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2 mt-3">
+                                <DxButton Text="Probar"
+                                          Click="@(() => OpenPreviewPopupAsync(item))"
+                                          Enabled="@CanPreviewDataset(item)"
+                                          IconCssClass="bi bi-play-circle"
+                                          RenderStyle="ButtonRenderStyle.Secondary" />
+
+                                <AuthorizeView Policy="@PermissionNames.Reporteria.Edit">
+                                    <Authorized>
+                                        <DxButton Text="Editar"
+                                                  Click="@(() => OpenEditPopupAsync(item))"
+                                                  Enabled="@CanEditDataset(item)"
+                                                  IconCssClass="bi bi-pencil-square"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" />
+                                    </Authorized>
+                                </AuthorizeView>
+
+                                <AuthorizeView Policy="@PermissionNames.Reporteria.Delete">
+                                    <Authorized>
+                                        <DxButton Text="Eliminar"
+                                                  Click="@(() => OpenDeletePopup(item))"
+                                                  Enabled="@CanDeleteDataset(item)"
+                                                  IconCssClass="bi bi-trash"
+                                                  RenderStyle="ButtonRenderStyle.Danger" />
+                                    </Authorized>
+                                </AuthorizeView>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<DxPopup @bind-Visible="isCreatePopupVisible"
+         Width="920px"
+         ShowCloseButton="true"
+         CssClass="reportes-feedback-popup"
+         HeaderCssClass="reportes-feedback-popup__header"
+         BodyCssClass="reportes-feedback-popup__body"
+         HeaderText="@(isEditMode ? "Editar dataset de reportería" : "Nuevo dataset de reportería")">
+    <BodyTemplate Context="popupContext">
+        <div class="p-2 reportes-feedback-panel">
+            @if (!string.IsNullOrWhiteSpace(createErrorMessage))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@createErrorMessage</DxAlert>
+            }
+
+            @if (isEditMode)
+            {
+                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
+                    Editar un dataset no reescribe layouts ya persistidos. Si un reporte ya tiene layout guardado, el cambio de dataset puede requerir regenerar o volver a guardar el layout.
+                </DxAlert>
+            }
+
+            @if (createValidationMessages.Count > 0)
+            {
+                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
+                    <ul class="mb-0 ps-3">
+                        @foreach (var message in createValidationMessages)
+                        {
+                            <li>@message</li>
+                        }
+                    </ul>
+                </DxAlert>
+            }
+
+            <DxFormLayout ColCountMd="12">
+                <DxFormLayoutItem Caption="Código" ColSpanMd="4">
+                    <DxTextBox @bind-Text="createModel.Codigo"
+                               Enabled="@(!isEditMode)"
+                               NullText="ej. sp-cuentas-cobrar"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Nombre" ColSpanMd="5">
+                    <DxTextBox @bind-Text="createModel.Nombre"
+                               NullText="Nombre visible del dataset"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Tipo" ColSpanMd="3">
+                    <DxComboBox Data="@sourceTypeOptions"
+                                TData="OptionItem"
+                                TValue="string"
+                                ValueFieldName="@nameof(OptionItem.Value)"
+                                TextFieldName="@nameof(OptionItem.Text)"
+                                @bind-Value="createModel.TipoOrigen" />
+                </DxFormLayoutItem>
+
+                @if (RequiresOriginKey)
+                {
+                    <DxFormLayoutItem Caption="Origen" ColSpanMd="8">
+                        <DxTextBox @bind-Text="createModel.OrigenClave"
+                                   NullText="@GetOriginPlaceholder()"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+                }
+
+                @if (RequiresConnectionName)
+                {
+                    <DxFormLayoutItem Caption="Connection Name" ColSpanMd="4">
+                        <DxTextBox @bind-Text="createModel.ConnectionName"
+                                   NullText="DefaultConnection"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+                }
+
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <DxMemo @bind-Text="createModel.Descripcion"
+                            Rows="3"
+                            NullText="Qué resuelve el dataset y para qué reportes se usará" />
+                </DxFormLayoutItem>
+
+                @if (IsSqlSource)
+                {
+                    <DxFormLayoutItem Caption="SQL" ColSpanMd="12">
+                        <DxMemo @bind-Text="createModel.SqlText"
+                                Rows="8"
+                                NullText="SELECT ... / WITH ..."
+                                CssClass="font-monospace" />
+                    </DxFormLayoutItem>
+                }
+            </DxFormLayout>
+
+            <div class="border rounded-3 p-3 mt-3">
+                <div class="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-3">
+                    <div>
+                        <div class="fw-semibold">Parámetros</div>
+                        <div class="small text-muted">Use `CURRENT_COMPANY` para aislar por empresa y `REPORT` para parámetros editables desde el visor o diseñador.</div>
+                        <div class="small text-muted">Use <strong>Nombre en origen</strong> cuando el parámetro real del SP o SQL se llame distinto al parámetro lógico del reporte.</div>
+                    </div>
+                    <DxButton Text="Agregar parámetro"
+                              Click="AddParameter"
+                              IconCssClass="bi bi-plus-circle"
+                              RenderStyle="ButtonRenderStyle.Secondary" />
+                </div>
+
+                @if (parameters.Count == 0)
+                {
+                    <div class="text-muted small">Este dataset no tiene parámetros definidos.</div>
+                }
+                else
+                {
+                    @foreach (var parameter in parameters)
+                    {
+                        <div class="border rounded-3 p-3 mb-3 bg-light">
+                            <div class="row g-3 align-items-end">
+                                <div class="col-12 col-md-3">
+                                    <label class="form-label small text-muted">Nombre</label>
+                                    <input class="form-control" @bind="parameter.Nombre" />
+                                </div>
+                                @if (SupportsOriginParameterName)
+                                {
+                                    <div class="col-12 col-md-3">
+                                        <label class="form-label small text-muted">Nombre en origen</label>
+                                        <input class="form-control" @bind="parameter.NombreOrigen" placeholder="Opcional: p_company_id" />
+                                    </div>
+                                }
+                                <div class="col-12 col-md-3">
+                                    <label class="form-label small text-muted">Etiqueta</label>
+                                    <input class="form-control" @bind="parameter.Etiqueta" />
+                                </div>
+                                <div class="col-12 col-md-2">
+                                    <label class="form-label small text-muted">Tipo dato</label>
+                                    <select class="form-select" @bind="parameter.TipoDato">
+                                        @foreach (var option in dataTypeOptions)
+                                        {
+                                            <option value="@option.Value">@option.Text</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-2">
+                                    <label class="form-label small text-muted">Fuente</label>
+                                    <select class="form-select" @bind="parameter.FuenteValor">
+                                        @foreach (var option in valueSourceOptions)
+                                        {
+                                            <option value="@option.Value">@option.Text</option>
+                                        }
+                                    </select>
+                                </div>
+                                <div class="col-12 col-md-1">
+                                    <label class="form-label small text-muted">Orden</label>
+                                    <input class="form-control" type="number" @bind="parameter.Orden" />
+                                </div>
+                                <div class="col-12 col-md-1 d-grid">
+                                    <button type="button" class="btn btn-outline-danger" @onclick="() => RemoveParameter(parameter)">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label small text-muted">Valor default</label>
+                                    <input class="form-control" @bind="parameter.ValorDefault" />
+                                </div>
+                                <div class="col-12 col-md-6">
+                                    <div class="d-flex flex-wrap gap-3 pt-4">
+                                        <label class="form-check-label">
+                                            <input class="form-check-input me-1" type="checkbox" @bind="parameter.Visible" />
+                                            Visible
+                                        </label>
+                                        <label class="form-check-label">
+                                            <input class="form-check-input me-1" type="checkbox" @bind="parameter.PermiteNulo" />
+                                            Permite nulo
+                                        </label>
+                                        <label class="form-check-label">
+                                            <input class="form-check-input me-1" type="checkbox" @bind="parameter.Requerido" />
+                                            Requerido
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar"
+                          Click="CloseCreatePopup"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="@(isEditMode ? "Guardar cambios" : "Crear dataset")"
+                          Click="SaveAsync"
+                          Enabled="@(!isSaving)"
+                          IconCssClass="bi bi-check-circle"
+                          RenderStyle="ButtonRenderStyle.Primary" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="isPreviewPopupVisible"
+         Width="980px"
+         ShowCloseButton="true"
+         CssClass="reportes-feedback-popup"
+         HeaderCssClass="reportes-feedback-popup__header"
+         BodyCssClass="reportes-feedback-popup__body"
+         HeaderText="@(previewDataset?.Nombre is null ? "Probar dataset" : $"Probar dataset: {previewDataset.Nombre}")">
+    <BodyTemplate Context="popupContext">
+        <div class="p-2 reportes-feedback-panel">
+            @if (!string.IsNullOrWhiteSpace(previewErrorMessage))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@previewErrorMessage</DxAlert>
+            }
+
+            @if (isPreviewLoading)
+            {
+                <div class="d-flex justify-content-center py-5">
+                    <DxWaitIndicator Visible="true" />
+                </div>
+            }
+            else if (previewDataset is not null)
+            {
+                <div class="small text-muted mb-3">
+                    Dataset: <strong>@previewDataset.Codigo</strong> |
+                    Tipo: <strong>@GetSourceTypeLabel(previewDataset.TipoOrigen)</strong> |
+                    Origen: <strong>@(string.IsNullOrWhiteSpace(previewDataset.OrigenClave) ? "N/A" : previewDataset.OrigenClave)</strong>
+                </div>
+
+                @if (previewParameters.Count > 0)
+                {
+                    <div class="border rounded-3 p-3 mb-3 bg-light">
+                        <div class="fw-semibold mb-2">Parámetros de prueba</div>
+                        <div class="row g-3">
+                            @foreach (var parameter in previewParameters)
+                            {
+                                <div class="col-12 col-md-6">
+                                    <label class="form-label small text-muted">@parameter.Etiqueta (@parameter.Nombre)</label>
+                                    <input class="form-control" @bind="parameter.Valor" />
+                                    <div class="small text-muted mt-1">@GetPreviewHelpText(parameter)</div>
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+
+                @if (previewAutomaticParameters.Count > 0)
+                {
+                    <div class="border rounded-3 p-3 mb-3">
+                        <div class="fw-semibold mb-2">Parámetros resueltos automáticamente</div>
+                        <div class="d-flex flex-column gap-1 small text-muted">
+                            @foreach (var parameter in previewAutomaticParameters)
+                            {
+                                <span><strong>@parameter.Nombre</strong>: @parameter.Descripcion</span>
+                            }
+                        </div>
+                    </div>
+                }
+
+                <div class="d-flex justify-content-end gap-2 mb-3">
+                    <DxButton Text="Cerrar"
+                              Click="ClosePreviewPopup"
+                              RenderStyle="ButtonRenderStyle.Secondary" />
+                    <DxButton Text="Ejecutar preview"
+                              Click="RunPreviewAsync"
+                              Enabled="@(!isPreviewRunning)"
+                              IconCssClass="bi bi-play-circle"
+                              RenderStyle="ButtonRenderStyle.Primary" />
+                </div>
+
+                @if (previewResult is not null)
+                {
+                    <div class="small text-muted mb-2">
+                        Resultado: <strong>@previewResult.Filas.Count</strong> fila(s), máximo mostrado: <strong>@previewResult.MaxRows</strong>.
+                    </div>
+
+                    @if (previewResult.Columnas.Count == 0)
+                    {
+                        <div class="text-muted">La consulta no devolvió columnas.</div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive border rounded-3">
+                            <table class="table table-sm table-striped mb-0">
+                                <thead>
+                                    <tr>
+                                        @foreach (var column in previewResult.Columnas)
+                                        {
+                                            <th>@column</th>
+                                        }
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @if (previewResult.Filas.Count == 0)
+                                    {
+                                        <tr>
+                                            <td colspan="@previewResult.Columnas.Count" class="text-center text-muted py-3">La consulta no devolvió filas.</td>
+                                        </tr>
+                                    }
+                                    else
+                                    {
+                                        @foreach (var row in previewResult.Filas)
+                                        {
+                                            <tr>
+                                                @foreach (var column in previewResult.Columnas)
+                                                {
+                                                    <td>@(row.TryGetValue(column, out var value) ? value : null)</td>
+                                                }
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    }
+                }
+            }
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="isDeletePopupVisible"
+         Width="460px"
+         ShowCloseButton="true"
+         CssClass="reportes-feedback-popup reportes-feedback-popup--danger"
+         HeaderCssClass="reportes-feedback-popup__header reportes-feedback-popup__header--danger"
+         BodyCssClass="reportes-feedback-popup__body"
+         HeaderText="Eliminar dataset">
+    <BodyTemplate Context="popupContext">
+        <div class="p-3 reportes-feedback-panel">
+            @if (!string.IsNullOrWhiteSpace(deleteErrorMessage))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@deleteErrorMessage</DxAlert>
+            }
+
+            <p class="mb-3">
+                @(deleteCandidate is null
+                    ? "No hay dataset seleccionado."
+                    : $"Se eliminará el dataset '{deleteCandidate.Nombre}' ({deleteCandidate.Codigo}). Esta acción no se puede deshacer.")
+            </p>
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton Text="Cancelar"
+                          Click="CloseDeletePopup"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Eliminar"
+                          Click="DeleteAsync"
+                          Enabled="@(!isDeleting && deleteCandidate is not null)"
+                          IconCssClass="bi bi-trash"
+                          RenderStyle="ButtonRenderStyle.Danger" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private readonly List<OptionItem> dataTypeOptions =
+    [
+        new(ReportesWebConstants.DatasetParameterDataType.Text, "Texto"),
+        new(ReportesWebConstants.DatasetParameterDataType.Int64, "Entero"),
+        new(ReportesWebConstants.DatasetParameterDataType.Decimal, "Decimal"),
+        new(ReportesWebConstants.DatasetParameterDataType.Date, "Fecha"),
+        new(ReportesWebConstants.DatasetParameterDataType.DateTime, "Fecha y hora"),
+        new(ReportesWebConstants.DatasetParameterDataType.Boolean, "Booleano")
+    ];
+
+    private readonly List<OptionItem> valueSourceOptions =
+    [
+        new(ReportesWebConstants.DatasetParameterValueSource.Report, "Report"),
+        new(ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, "Current Company"),
+        new(ReportesWebConstants.DatasetParameterValueSource.Fixed, "Fixed")
+    ];
+    private static readonly Regex ParameterNameRegex = new("^[A-Za-z][A-Za-z0-9_]*$", RegexOptions.Compiled);
+    private static readonly Regex OriginRegex = new(@"^[A-Za-z][A-Za-z0-9_\.]*$", RegexOptions.Compiled);
+
+    private List<OptionItem> sourceTypeOptions = [];
+    private List<ReporteDatasetCatalogoItemDto> items = [];
+    private ReporteDatasetCreateDto createModel = new();
+    private List<EditableDatasetParameter> parameters = [];
+    private List<PreviewParameter> previewParameters = [];
+    private List<PreviewAutomaticParameter> previewAutomaticParameters = [];
+    private ReporteDatasetDetalleDto? previewDataset;
+    private ReporteDatasetPreviewResultDto? previewResult;
+    private ReporteDatasetCatalogoItemDto? deleteCandidate;
+    private bool allowSql;
+    private bool isLoading;
+    private bool isSaving;
+    private bool isEditMode;
+    private bool isCreatePopupVisible;
+    private bool isPreviewPopupVisible;
+    private bool isPreviewLoading;
+    private bool isPreviewRunning;
+    private bool isDeletePopupVisible;
+    private bool isDeleting;
+    private bool isSuccessMessageVisible;
+    private string? editingCode;
+    private string? errorMessage;
+    private string? successMessage;
+    private string? createErrorMessage;
+    private string? previewErrorMessage;
+    private string? deleteErrorMessage;
+    private List<string> createValidationMessages = [];
+
+    private bool IsStoredProcedureSource => string.Equals(createModel.TipoOrigen, ReportesWebConstants.DatasetSourceType.StoredProcedure, StringComparison.OrdinalIgnoreCase);
+    private bool IsSqlSource => string.Equals(createModel.TipoOrigen, ReportesWebConstants.DatasetSourceType.Sql, StringComparison.OrdinalIgnoreCase);
+    private bool SupportsOriginParameterName => IsStoredProcedureSource || IsSqlSource;
+    private bool RequiresOriginKey => !IsSqlSource;
+    private bool RequiresConnectionName => true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await ResolveSecurityAsync();
+        BuildSourceTypeOptions();
+        ResetCreateModel();
+        await LoadAsync();
+    }
+
+    private async Task ResolveSecurityAsync()
+    {
+        var state = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        var user = state.User;
+        allowSql = user.IsInRole(RoleNames.Admin) || user.IsInRole(RoleNames.SuperAdministrador);
+    }
+
+    private void BuildSourceTypeOptions()
+    {
+        sourceTypeOptions =
+        [
+            new(ReportesWebConstants.DatasetSourceType.StoredProcedure, "Stored Procedure"),
+            new(ReportesWebConstants.DatasetSourceType.View, "View")
+        ];
+
+        if (allowSql)
+        {
+            sourceTypeOptions.Add(new OptionItem(ReportesWebConstants.DatasetSourceType.Sql, "SQL libre"));
+        }
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            items = (await InformesClient.GetReportesDatasetsAsync()).OrderBy(x => x.Nombre).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            items = [];
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OpenCreatePopup()
+    {
+        errorMessage = null;
+        successMessage = null;
+        ResetCreateModel();
+        isEditMode = false;
+        editingCode = null;
+        isCreatePopupVisible = true;
+    }
+
+    private async Task OpenEditPopupAsync(ReporteDatasetCatalogoItemDto item)
+    {
+        if (!CanEditDataset(item))
+        {
+            return;
+        }
+
+        try
+        {
+            errorMessage = null;
+            successMessage = null;
+            ResetCreateModel();
+            isEditMode = true;
+            editingCode = item.Codigo;
+            isCreatePopupVisible = true;
+
+            var detail = await InformesClient.GetReporteDatasetAsync(item.Codigo);
+            createModel = new ReporteDatasetCreateDto
+            {
+                Codigo = detail.Codigo,
+                Nombre = detail.Nombre,
+                Descripcion = detail.Descripcion,
+                TipoOrigen = detail.TipoOrigen,
+                OrigenClave = detail.OrigenClave,
+                SqlText = detail.SqlText,
+                ConnectionName = detail.ConnectionName ?? ReportesWebConstants.DefaultReportingConnectionName
+            };
+
+            parameters = detail.Parametros
+                .OrderBy(x => x.Orden)
+                .Select(x => new EditableDatasetParameter
+                {
+                    Nombre = x.Nombre,
+                    NombreOrigen = x.NombreOrigen,
+                    Etiqueta = x.Etiqueta,
+                    TipoDato = x.TipoDato,
+                    FuenteValor = x.FuenteValor,
+                    ValorDefault = x.ValorDefault,
+                    Visible = x.Visible,
+                    PermiteNulo = x.PermiteNulo,
+                    Requerido = x.Requerido,
+                    Orden = x.Orden
+                })
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            isCreatePopupVisible = false;
+            errorMessage = ex.Message;
+        }
+    }
+
+    private void CloseCreatePopup()
+    {
+        isCreatePopupVisible = false;
+    }
+
+    private void ResetCreateModel()
+    {
+        createModel = new ReporteDatasetCreateDto
+        {
+            TipoOrigen = sourceTypeOptions.FirstOrDefault()?.Value ?? ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ConnectionName = ReportesWebConstants.DefaultReportingConnectionName
+        };
+        parameters = [];
+        previewParameters = [];
+        previewAutomaticParameters = [];
+        previewDataset = null;
+        previewResult = null;
+        createErrorMessage = null;
+        previewErrorMessage = null;
+        deleteErrorMessage = null;
+        createValidationMessages = [];
+    }
+
+    private void AddParameter()
+    {
+        parameters.Add(new EditableDatasetParameter
+        {
+            Nombre = $"param_{parameters.Count + 1}",
+            Etiqueta = $"Parámetro {parameters.Count + 1}",
+            TipoDato = ReportesWebConstants.DatasetParameterDataType.Text,
+            FuenteValor = ReportesWebConstants.DatasetParameterValueSource.Report,
+            Visible = true,
+            Orden = parameters.Count == 0 ? 10 : parameters.Max(x => x.Orden) + 10
+        });
+    }
+
+    private void RemoveParameter(EditableDatasetParameter parameter)
+    {
+        parameters.Remove(parameter);
+    }
+
+    private async Task SaveAsync()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            createErrorMessage = null;
+            createValidationMessages = ValidateCreateRequest();
+
+            if (createValidationMessages.Count > 0)
+            {
+                return;
+            }
+
+            createModel.Parametros = parameters
+                .OrderBy(x => x.Orden)
+                .Select(x => new ReporteDatasetParametroCreateDto
+                {
+                    Nombre = x.Nombre.Trim(),
+                    NombreOrigen = string.IsNullOrWhiteSpace(x.NombreOrigen) ? null : x.NombreOrigen.Trim(),
+                    Etiqueta = string.IsNullOrWhiteSpace(x.Etiqueta) ? x.Nombre.Trim() : x.Etiqueta.Trim(),
+                    TipoDato = x.TipoDato,
+                    FuenteValor = x.FuenteValor,
+                    ValorDefault = string.IsNullOrWhiteSpace(x.ValorDefault) ? null : x.ValorDefault.Trim(),
+                    Visible = x.FuenteValor == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible,
+                    PermiteNulo = x.PermiteNulo,
+                    Requerido = x.Requerido,
+                    Orden = x.Orden
+                })
+                .ToList();
+
+            ReporteDatasetDetalleDto result;
+            if (isEditMode && !string.IsNullOrWhiteSpace(editingCode))
+            {
+                result = await InformesClient.UpdateReporteDatasetAsync(editingCode, createModel);
+                successMessage = $"Dataset '{result.Nombre}' actualizado.";
+            }
+            else
+            {
+                result = await InformesClient.CreateReporteDatasetAsync(createModel);
+                successMessage = $"Dataset '{result.Nombre}' creado.";
+            }
+
+            isSuccessMessageVisible = true;
+            isCreatePopupVisible = false;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            createErrorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task OpenPreviewPopupAsync(ReporteDatasetCatalogoItemDto item)
+    {
+        if (!CanPreviewDataset(item))
+        {
+            return;
+        }
+
+        previewDataset = null;
+        previewResult = null;
+        previewParameters = [];
+        previewAutomaticParameters = [];
+        previewErrorMessage = null;
+        isPreviewPopupVisible = true;
+        isPreviewLoading = true;
+
+        try
+        {
+            previewDataset = await InformesClient.GetReporteDatasetAsync(item.Codigo);
+
+            previewParameters = previewDataset.Parametros
+                .Where(x => string.Equals(x.FuenteValor, ReportesWebConstants.DatasetParameterValueSource.Report, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Orden)
+                .Select(x => new PreviewParameter
+                {
+                    Nombre = x.Nombre,
+                    Etiqueta = x.Etiqueta,
+                    TipoDato = x.TipoDato,
+                    PermiteNulo = x.PermiteNulo,
+                    Requerido = x.Requerido,
+                    Valor = x.ValorDefault
+                })
+                .ToList();
+
+            previewAutomaticParameters = previewDataset.Parametros
+                .Where(x => !string.Equals(x.FuenteValor, ReportesWebConstants.DatasetParameterValueSource.Report, StringComparison.OrdinalIgnoreCase))
+                .OrderBy(x => x.Orden)
+                .Select(x => new PreviewAutomaticParameter(
+                    x.Nombre,
+                    string.Equals(x.FuenteValor, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, StringComparison.OrdinalIgnoreCase)
+                        ? "Se resuelve con la empresa actual."
+                        : $"Valor fijo: {(string.IsNullOrWhiteSpace(x.ValorDefault) ? "N/A" : x.ValorDefault)}"))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            previewErrorMessage = ex.Message;
+        }
+        finally
+        {
+            isPreviewLoading = false;
+        }
+    }
+
+    private async Task RunPreviewAsync()
+    {
+        if (previewDataset is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isPreviewRunning = true;
+            previewErrorMessage = null;
+            previewResult = null;
+
+            var request = new ReporteDatasetPreviewRequestDto
+            {
+                Parametros = previewParameters.ToDictionary(
+                    x => x.Nombre,
+                    x => string.IsNullOrWhiteSpace(x.Valor) ? null : x.Valor.Trim(),
+                    StringComparer.OrdinalIgnoreCase)
+            };
+
+            previewResult = await InformesClient.PreviewReporteDatasetAsync(previewDataset.Codigo, request);
+        }
+        catch (Exception ex)
+        {
+            previewErrorMessage = ex.Message;
+        }
+        finally
+        {
+            isPreviewRunning = false;
+        }
+    }
+
+    private void ClosePreviewPopup()
+    {
+        isPreviewPopupVisible = false;
+    }
+
+    private void OpenDeletePopup(ReporteDatasetCatalogoItemDto item)
+    {
+        if (!CanDeleteDataset(item))
+        {
+            return;
+        }
+
+        deleteCandidate = item;
+        deleteErrorMessage = null;
+        isDeletePopupVisible = true;
+    }
+
+    private async Task DeleteAsync()
+    {
+        if (deleteCandidate is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isDeleting = true;
+            deleteErrorMessage = null;
+            await InformesClient.DeleteReporteDatasetAsync(deleteCandidate.Codigo);
+            successMessage = $"Dataset '{deleteCandidate.Nombre}' eliminado.";
+            isSuccessMessageVisible = true;
+            isDeletePopupVisible = false;
+            deleteCandidate = null;
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            deleteErrorMessage = ex.Message;
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private void CloseDeletePopup()
+    {
+        isDeletePopupVisible = false;
+    }
+
+    private void OnSuccessMessageClosed(bool confirmed)
+    {
+        isSuccessMessageVisible = false;
+        successMessage = null;
+    }
+
+    private string GetOriginPlaceholder() => createModel.TipoOrigen switch
+    {
+        var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.StoredProcedure, StringComparison.OrdinalIgnoreCase)
+            => "schema.funcion_que_retorna_filas",
+        var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.View, StringComparison.OrdinalIgnoreCase)
+            => "schema.vista",
+        _ => "schema.objeto"
+    };
+
+    private static string GetSourceTypeLabel(string sourceType) => sourceType switch
+    {
+        var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.StoredProcedure, StringComparison.OrdinalIgnoreCase) => "Stored Procedure",
+        var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.View, StringComparison.OrdinalIgnoreCase) => "View",
+        var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.Sql, StringComparison.OrdinalIgnoreCase) => "SQL libre",
+        _ => sourceType
+    };
+
+    private List<string> ValidateCreateRequest()
+    {
+        var messages = new List<string>();
+        var code = createModel.Codigo?.Trim() ?? string.Empty;
+        var name = createModel.Nombre?.Trim() ?? string.Empty;
+        var originKey = createModel.OrigenClave?.Trim() ?? string.Empty;
+        var sqlText = createModel.SqlText?.Trim() ?? string.Empty;
+
+        if (!ReportesWebConstants.IsValidCode(ReportesWebConstants.NormalizeCode(code)))
+        {
+            messages.Add("El código es obligatorio y solo admite letras, números, guion y guion bajo.");
+        }
+
+        if (string.IsNullOrWhiteSpace(name))
+        {
+            messages.Add("El nombre del dataset es obligatorio.");
+        }
+
+        if (!sourceTypeOptions.Any(x => string.Equals(x.Value, createModel.TipoOrigen, StringComparison.OrdinalIgnoreCase)))
+        {
+            messages.Add("El tipo de dataset seleccionado no es válido para su perfil.");
+        }
+
+        if (!IsSqlSource)
+        {
+            if (string.IsNullOrWhiteSpace(originKey))
+            {
+                messages.Add("El origen es obligatorio para Stored Procedure y View.");
+            }
+            else if (!OriginRegex.IsMatch(originKey))
+            {
+                messages.Add("El origen debe ser un identificador válido, por ejemplo schema.objeto.");
+            }
+        }
+        else
+        {
+            if (string.IsNullOrWhiteSpace(sqlText))
+            {
+                messages.Add("El SQL es obligatorio.");
+            }
+            else
+            {
+                var lowered = sqlText.ToLowerInvariant();
+                if (!(lowered.StartsWith("select ") || lowered.StartsWith("with ")))
+                {
+                    messages.Add("El SQL debe iniciar con SELECT o WITH.");
+                }
+
+                var blockedTokens = new[]
+                {
+                    ";",
+                    " insert ",
+                    " update ",
+                    " delete ",
+                    " drop ",
+                    " alter ",
+                    " truncate ",
+                    " create ",
+                    " grant ",
+                    " revoke ",
+                    " call ",
+                    " do ",
+                    " copy "
+                };
+
+                if (blockedTokens.Any(token => lowered.Contains(token, StringComparison.Ordinal)))
+                {
+                    messages.Add("El SQL libre solo admite consultas de lectura de una sola sentencia.");
+                }
+            }
+        }
+
+        var seenNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var seenOrders = new HashSet<int>();
+
+        foreach (var parameter in parameters)
+        {
+            var parameterName = parameter.Nombre?.Trim() ?? string.Empty;
+            if (!ParameterNameRegex.IsMatch(parameterName))
+            {
+                messages.Add($"El nombre del parámetro '{parameter.Nombre}' no es válido.");
+                continue;
+            }
+
+            if (!seenNames.Add(parameterName))
+            {
+                messages.Add($"El parámetro '{parameterName}' está duplicado.");
+            }
+
+            if (!seenOrders.Add(parameter.Orden))
+            {
+                messages.Add($"El orden '{parameter.Orden}' está duplicado entre parámetros.");
+            }
+
+            if (!dataTypeOptions.Any(x => string.Equals(x.Value, parameter.TipoDato, StringComparison.OrdinalIgnoreCase)))
+            {
+                messages.Add($"El tipo de dato del parámetro '{parameterName}' no es válido.");
+            }
+
+            if (!valueSourceOptions.Any(x => string.Equals(x.Value, parameter.FuenteValor, StringComparison.OrdinalIgnoreCase)))
+            {
+                messages.Add($"La fuente de valor del parámetro '{parameterName}' no es válida.");
+            }
+
+            var originParameterName = NormalizeTechnicalParameterName(parameter.NombreOrigen);
+            if (!string.IsNullOrWhiteSpace(originParameterName) && !ParameterNameRegex.IsMatch(originParameterName))
+            {
+                messages.Add($"El nombre en origen del parámetro '{parameterName}' no es válido.");
+            }
+
+            if (string.Equals(parameter.FuenteValor, ReportesWebConstants.DatasetParameterValueSource.Fixed, StringComparison.OrdinalIgnoreCase)
+                && string.IsNullOrWhiteSpace(parameter.ValorDefault))
+            {
+                messages.Add($"El parámetro '{parameterName}' requiere un valor default porque usa fuente FIXED.");
+            }
+        }
+
+        return messages.Distinct(StringComparer.OrdinalIgnoreCase).ToList();
+    }
+
+    private bool CanEditDataset(ReporteDatasetCatalogoItemDto item)
+        => !string.Equals(item.TipoOrigen, ReportesWebConstants.DatasetSourceType.Sql, StringComparison.OrdinalIgnoreCase) || allowSql;
+
+    private bool CanDeleteDataset(ReporteDatasetCatalogoItemDto item)
+        => CanEditDataset(item);
+
+    private bool CanPreviewDataset(ReporteDatasetCatalogoItemDto item)
+        => item.TipoOrigen switch
+        {
+            var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.StoredProcedure, StringComparison.OrdinalIgnoreCase) => true,
+            var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.View, StringComparison.OrdinalIgnoreCase) => true,
+            var type when string.Equals(type, ReportesWebConstants.DatasetSourceType.Sql, StringComparison.OrdinalIgnoreCase) => allowSql,
+            _ => false
+        };
+
+    private static string GetPreviewHelpText(PreviewParameter parameter) => parameter.TipoDato switch
+    {
+        var type when string.Equals(type, ReportesWebConstants.DatasetParameterDataType.Date, StringComparison.OrdinalIgnoreCase)
+            => "Formato sugerido: yyyy-MM-dd",
+        var type when string.Equals(type, ReportesWebConstants.DatasetParameterDataType.DateTime, StringComparison.OrdinalIgnoreCase)
+            => "Formato sugerido: yyyy-MM-dd HH:mm:ss",
+        var type when string.Equals(type, ReportesWebConstants.DatasetParameterDataType.Boolean, StringComparison.OrdinalIgnoreCase)
+            => "Use true/false o 1/0",
+        _ => parameter.Requerido ? "Parámetro obligatorio." : "Parámetro opcional."
+    };
+
+    private static string? NormalizeTechnicalParameterName(string? rawValue)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        var normalized = rawValue.Trim();
+        while (normalized.StartsWith("@", StringComparison.Ordinal) ||
+               normalized.StartsWith(":", StringComparison.Ordinal) ||
+               normalized.StartsWith("?", StringComparison.Ordinal))
+        {
+            normalized = normalized[1..];
+        }
+
+        return normalized;
+    }
+
+    private sealed class EditableDatasetParameter
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public string? NombreOrigen { get; set; }
+        public string Etiqueta { get; set; } = string.Empty;
+        public string TipoDato { get; set; } = ReportesWebConstants.DatasetParameterDataType.Text;
+        public string FuenteValor { get; set; } = ReportesWebConstants.DatasetParameterValueSource.Report;
+        public string? ValorDefault { get; set; }
+        public bool Visible { get; set; } = true;
+        public bool PermiteNulo { get; set; }
+        public bool Requerido { get; set; }
+        public int Orden { get; set; }
+    }
+
+    private sealed class PreviewParameter
+    {
+        public string Nombre { get; set; } = string.Empty;
+        public string Etiqueta { get; set; } = string.Empty;
+        public string TipoDato { get; set; } = ReportesWebConstants.DatasetParameterDataType.Text;
+        public bool PermiteNulo { get; set; }
+        public bool Requerido { get; set; }
+        public string? Valor { get; set; }
+    }
+
+    private sealed record PreviewAutomaticParameter(string Nombre, string Descripcion);
+    private sealed record OptionItem(string Value, string Text);
+}

@@ -14,6 +14,14 @@ public sealed class AuxiliarLecturaClient
     public AuxiliarLecturaClient(HttpClient http) => this.http = http;
 
     /// <summary>
+    /// Obtiene el período de lectura actualmente abierto.
+    /// </summary>
+    public async Task<AuxiliarLecturaPeriodoDto?> ObtenerPeriodoActualAsync(CancellationToken ct = default)
+    {
+        return await http.GetFromJsonAsync<AuxiliarLecturaPeriodoDto?>("api/auxiliarlectura/periodo-actual", ct);
+    }
+
+    /// <summary>
     /// Obtiene la lista de auxiliares de lectura con filtros opcionales.
     /// </summary>
     public async Task<List<AuxiliarLecturaDto>> ObtenerListaAsync(
@@ -44,15 +52,62 @@ public sealed class AuxiliarLecturaClient
     }
 
     /// <summary>
+    /// Obtiene la lista de auxiliares de lectura con paginación remota.
+    /// </summary>
+    public async Task<AuxiliarLecturaPagedResponseDto?> ObtenerListaPaginadaAsync(
+        int? anio,
+        int? mes,
+        string? ciclo,
+        bool soloPendientes,
+        int skip,
+        int take,
+        string? sortField,
+        bool sortDesc,
+        CancellationToken ct = default)
+    {
+        skip = Math.Max(skip, 0);
+        take = take <= 0 ? 100 : take;
+
+        var queryParts = new List<string>
+        {
+            $"skip={skip}",
+            $"take={take}"
+        };
+
+        if (anio.HasValue)
+            queryParts.Add($"anio={anio.Value}");
+
+        if (mes.HasValue)
+            queryParts.Add($"mes={mes.Value}");
+
+        if (!string.IsNullOrWhiteSpace(ciclo))
+            queryParts.Add($"ciclo={Uri.EscapeDataString(ciclo)}");
+
+        if (soloPendientes)
+            queryParts.Add("soloPendientes=true");
+
+        if (!string.IsNullOrWhiteSpace(sortField))
+        {
+            queryParts.Add($"sortField={Uri.EscapeDataString(sortField)}");
+            if (sortDesc)
+                queryParts.Add("sortDesc=true");
+        }
+
+        var query = $"?{string.Join("&", queryParts)}";
+        return await http.GetFromJsonAsync<AuxiliarLecturaPagedResponseDto?>($"api/auxiliarlectura/paged{query}", ct);
+    }
+
+    /// <summary>
     /// Genera un nuevo período de lectura.
     /// </summary>
     public async Task<HttpResponseMessage> GenerarPeriodoAsync(
         int anio,
         int mes,
+        string ciclo,
         string usuario = "sistema",
         CancellationToken ct = default)
     {
-        var payload = new { Anio = anio, Mes = mes, Usuario = usuario };
+        var payload = new { Anio = anio, Mes = mes, Ciclo = ciclo, Usuario = usuario };
         return await http.PostAsJsonAsync("api/auxiliarlectura", payload, cancellationToken: ct);
     }
 

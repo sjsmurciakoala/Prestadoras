@@ -1,0 +1,119 @@
+@using DevExpress.Blazor
+@using apc.Client.Layout.Navigation
+
+@if (Item.HasChildren)
+{
+    <DxAccordionItem Text="@Item.Text"
+                     IconCssClass="@Item.IconCssClass"
+                     CssClass="@NodeCssClass"
+                     Expanded="@IsExpanded(Item.Id)"
+                     ExpandedChanged="@(expanded => SetExpanded(Item.Id, expanded))">
+        <Items>
+            @foreach (var child in Item.Children)
+            {
+                <SidebarAccordionNode Item="@child"
+                                     CurrentPath="@CurrentPath"
+                                     IsCollapsed="@IsCollapsed"
+                                     IsExpanded="@IsExpanded"
+                                     SetExpanded="@SetExpanded" />
+            }
+        </Items>
+    </DxAccordionItem>
+}
+else
+{
+    <DxAccordionItem Text="@Item.Text"
+                     IconCssClass="@Item.IconCssClass"
+                     NavigateUrl="@Item.NavigateUrl"
+                     CssClass="@NodeCssClass" />
+}
+
+@code {
+    [Parameter, EditorRequired] public SidebarNavItem Item { get; set; } = default!;
+    [Parameter, EditorRequired] public string CurrentPath { get; set; } = "/";
+    [Parameter] public bool IsCollapsed { get; set; }
+    [Parameter, EditorRequired] public Func<string, bool> IsExpanded { get; set; } = _ => false;
+    [Parameter, EditorRequired] public Action<string, bool> SetExpanded { get; set; } = (_, _) => { };
+
+    private string NodeCssClass
+    {
+        get
+        {
+            if (IsActive(Item))
+            {
+                return Item.HasChildren ? "sidebar-node-group-active" : "sidebar-node-active";
+            }
+
+            return string.Empty;
+        }
+    }
+
+    private bool IsActive(SidebarNavItem item)
+    {
+        if (!item.HasChildren)
+        {
+            return IsPathMatch(CurrentPath, item.NavigateUrl, item.MatchPrefixes);
+        }
+
+        if (item.Children.Any(IsActive))
+        {
+            return true;
+        }
+
+        return IsPathMatch(CurrentPath, null, item.MatchPrefixes);
+    }
+
+    private static bool IsPathMatch(string currentPath, string? navigateUrl, IReadOnlyList<string> prefixes)
+    {
+        if (!string.IsNullOrWhiteSpace(navigateUrl) && IsExactOrChild(currentPath, navigateUrl))
+        {
+            return true;
+        }
+
+        foreach (var prefix in prefixes)
+        {
+            if (IsExactOrChild(currentPath, prefix))
+            {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    private static bool IsExactOrChild(string currentPath, string target)
+    {
+        var normalizedCurrent = NormalizePath(currentPath);
+        var normalizedTarget = NormalizePath(target);
+
+        if (normalizedTarget == "/")
+        {
+            return normalizedCurrent == "/";
+        }
+
+        return normalizedCurrent.Equals(normalizedTarget, StringComparison.OrdinalIgnoreCase)
+               || normalizedCurrent.StartsWith(normalizedTarget + "/", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static string NormalizePath(string? path)
+    {
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            return "/";
+        }
+
+        var cleaned = path.Split('?', '#')[0];
+        if (!cleaned.StartsWith("/"))
+        {
+            cleaned = "/" + cleaned;
+        }
+
+        cleaned = cleaned.TrimEnd('/');
+        if (string.IsNullOrEmpty(cleaned))
+        {
+            cleaned = "/";
+        }
+
+        return cleaned.ToLowerInvariant();
+    }
+}

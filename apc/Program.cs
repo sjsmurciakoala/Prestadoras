@@ -3,7 +3,15 @@ using apc.Client.Pages;
 using apc.Components;
 using apc.Components.Account;
 using apc.Data;
+using apc.Options;
 using apc.Security;
+using DevExpress.AspNetCore.Reporting;
+using DevExpress.Blazor.Reporting;
+using DevExpress.DataAccess.Sql;
+using DevExpress.DataAccess.Web;
+using DevExpress.DataAccess.Wizard.Services;
+using DevExpress.Utils;
+using DevExpress.XtraReports.Web.Extensions;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Components.Authorization;
 using Microsoft.AspNetCore.Authentication;
@@ -15,6 +23,7 @@ using System.Linq;
 using System.Net.Http;
 using SIAD.Core.Constants;
 using SIAD.Data;
+using SIAD.Reports;
 using SIAD.Services;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -75,9 +84,34 @@ builder.Services.AddRazorComponents()
     });
 
 CommonServices.Configure(builder.Services, builder.Configuration);
+builder.Services.Configure<MapsOptions>(builder.Configuration.GetSection(MapsOptions.SectionName));
 builder.Services.AddMvc();
 
+builder.Services.AddDevExpressBlazorReporting();
 builder.Services.AddDevExpressServerSideBlazorPdfViewer();
+builder.Services.AddTransient<ICustomQueryValidator, ReportingCustomQueryValidator>();
+builder.Services.ConfigureReportingServices(configurator =>
+{
+    if (builder.Environment.IsDevelopment())
+    {
+        configurator.UseDevelopmentMode();
+    }
+
+    configurator.ConfigureReportDesigner(designerConfigurator =>
+    {
+        designerConfigurator.EnableCustomSql();
+        designerConfigurator.RegisterDataSourceWizardConnectionStringsProvider<ReportingDataSourceWizardConnectionStringsProvider>();
+        designerConfigurator.RegisterSqlDataSourceWizardCustomizationService<ReportingSqlDataSourceWizardCustomizationService>();
+    });
+    configurator.ConfigureWebDocumentViewer(viewerConfigurator =>
+    {
+        viewerConfigurator.RegisterConnectionProviderFactory<ReportingConnectionProviderFactory>();
+    });
+});
+builder.Services.AddSiadReports();
+builder.Services.AddScoped<IConnectionProviderService, ReportingConnectionProviderService>();
+builder.Services.AddScoped<IConnectionProviderFactory, ReportingConnectionProviderFactory>();
+builder.Services.AddScoped<ReportStorageWebExtension, CompanyReportStorageWebExtension>();
 builder.Services.AddAntiforgery(options => 
 {
     options.SuppressXFrameOptionsHeader = false;
@@ -134,6 +168,7 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 builder.Services.AddSiadServices();
 
 var app = builder.Build();
+ReportingRuntimeBootstrap.Initialize(app.Services);
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
@@ -153,6 +188,7 @@ app.UseWebSockets();
 app.UseHttpsRedirection();
 
 app.UseAntiforgery();
+app.UseDevExpressBlazorReporting();
 
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
@@ -164,23 +200,6 @@ app.MapAdditionalIdentityEndpoints();
 app.MapControllers();
 
 app.Run();
-
-static void ForwardHeader(IHeaderDictionary source, HttpRequestHeaders target, string headerName)
-{
-    if (!source.TryGetValue(headerName, out var values))
-    {
-        return;
-    }
-
-    target.Remove(headerName);
-    foreach (var value in values)
-    {
-        if (!string.IsNullOrWhiteSpace(value))
-        {
-            target.TryAddWithoutValidation(headerName, value);
-        }
-    }
-}
 
 static void RequirePermissionOrSuperAdmin(AuthorizationPolicyBuilder policy, params string[] permissions)
 {

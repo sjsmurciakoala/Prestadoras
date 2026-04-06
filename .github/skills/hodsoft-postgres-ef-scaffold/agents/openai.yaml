@@ -1,0 +1,4 @@
+interface:
+  display_name: "HODSOFT Postgres y EF"
+  short_description: "Cambiar SQL, EF Core y scaffold PostgreSQL"
+  default_prompt: "Use $hodsoft-postgres-ef-scaffold to update PostgreSQL scripts, tenancy rules, or scaffold-sensitive data access."

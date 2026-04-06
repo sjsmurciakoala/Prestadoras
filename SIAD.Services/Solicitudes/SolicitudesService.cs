@@ -1,4 +1,5 @@
 using System.Linq;
+using AutoMapper;
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Solicitudes;
 using SIAD.Core.Entities;
@@ -6,15 +7,27 @@ using SIAD.Data;
 
 namespace SIAD.Services.Solicitudes;
 
+/// <summary>
+/// Servicio para gestión completa de solicitudes de servicio.
+/// </summary>
 public class SolicitudesService : ISolicitudesService
 {
     private readonly SiadDbContext _context;
+    private readonly IMapper _mapper;
 
-    public SolicitudesService(SiadDbContext context) => _context = context;
+    public SolicitudesService(SiadDbContext context, IMapper mapper)
+    {
+        _context = context;
+        _mapper = mapper;
+    }
 
-    public async Task<IReadOnlyList<SolicitudListDto>> GetSolicitudesAsync(string? clienteIdentidad, CancellationToken ct = default)
+    /// <summary>
+    /// Obtiene listado de solicitudes, opcionalmente filtradas por identidad del cliente.
+    /// </summary>
+    public async Task<IReadOnlyList<SolicitudListDto>> GetSolicitudesAsync(string? clienteIdentidad = null, CancellationToken ct = default)
     {
         var query = _context.solicitud_servicios
+            .Include(s => s.categoria_servicio)
             .AsNoTracking();
 
         if (!string.IsNullOrWhiteSpace(clienteIdentidad))
@@ -24,81 +37,133 @@ public class SolicitudesService : ISolicitudesService
 
         return await query
             .OrderByDescending(s => s.fechacreacion)
-            .Select(s => new SolicitudListDto(
-                s.solicitud_servicio_id,
-                s.cliente_identidad,
-                s.cliente_nombre,
-                s.categoria_servicio_id,
-                s.categoria_servicio.descripcion,
-                s.fechacreacion ?? DateTime.MinValue,
-                s.estado))
+            .Select(s => _mapper.Map<SolicitudListDto>(s))
             .ToListAsync(ct);
     }
 
+    /// <summary>
+    /// Obtiene el detalle completo de una solicitud por ID.
+    /// </summary>
     public async Task<SolicitudDetailDto?> GetSolicitudAsync(int id, CancellationToken ct = default)
     {
-        return await _context.solicitud_servicios
+        var entity = await _context.solicitud_servicios
+            .Include(s => s.categoria_servicio)
             .AsNoTracking()
-            .Where(s => s.solicitud_servicio_id == id)
-            .Select(s => new SolicitudDetailDto(
-                s.solicitud_servicio_id,
-                s.cliente_identidad,
-                s.cliente_nombre,
-                s.categoria_servicio_id,
-                s.cliente_telefono ?? s.cliente_movil,
-                s.cliente_direccion,
-                s.cliente_email,
-                s.observacion,
-                s.fechacreacion ?? DateTime.MinValue,
-                s.estado,
-                s.categoria_servicio.descripcion,
-                s.empresa_nombre,
-                s.empresa_telefono,
-                s.empresa_direccion,
-                s.negocio_nombre,
-                s.negocio_telefono,
-                s.negocio_clave_catastral))
-            .FirstOrDefaultAsync(ct);
+            .FirstOrDefaultAsync(s => s.solicitud_servicio_id == id, ct);
+
+        return entity != null ? _mapper.Map<SolicitudDetailDto>(entity) : null;
     }
 
+    /// <summary>
+    /// Obtiene listado de categorías de servicio activas.
+    /// </summary>
     public async Task<IReadOnlyList<SolicitudCategoriaDto>> GetCategoriasAsync(CancellationToken ct = default)
     {
         return await _context.categoria_servicios
             .AsNoTracking()
             .Where(c => c.estado)
             .OrderBy(c => c.descripcion)
-            .Select(c => new SolicitudCategoriaDto(
-                c.categoria_servicio_id,
-                c.descripcion,
-                c.estado))
+            .Select(c => new SolicitudCategoriaDto
+            {
+                Id = c.categoria_servicio_id,
+                Nombre = c.descripcion,
+                Activa = c.estado
+            })
             .ToListAsync(ct);
     }
 
-    public async Task<int> CreateSolicitudAsync(SolicitudDetailDto dto, CancellationToken ct = default)
+    /// <summary>
+    /// Crea una nueva solicitud de servicio.
+    /// </summary>
+    public async Task<int> CreateSolicitudAsync(SolicitudCreateDto dto, string usuarioCreacion, CancellationToken ct = default)
     {
-        var entity = new solicitud_servicio
-        {
-            cliente_identidad = dto.IdentificacionCliente,
-            cliente_nombre = dto.NombreCliente,
-            categoria_servicio_id = dto.CategoriaServicioId,
-            cliente_telefono = dto.Telefono,
-            cliente_movil = dto.Telefono,
-            cliente_email = dto.Correo,
-            cliente_direccion = dto.Direccion,
-            observacion = dto.Observacion,
-            empresa_nombre = dto.EmpresaNombre,
-            empresa_telefono = dto.EmpresaTelefono,
-            empresa_direccion = dto.EmpresaDireccion,
-            negocio_nombre = dto.NegocioNombre,
-            negocio_telefono = dto.NegocioTelefono,
-            negocio_clave_catastral = dto.NegocioClaveCatastral,
-            estado = dto.Estado,
-            fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
-            usuariocreacion = "api"
-        };
+        ArgumentNullException.ThrowIfNull(dto);
+        ArgumentNullException.ThrowIfNull(usuarioCreacion);
+
+        var entity = _mapper.Map<solicitud_servicio>(dto);
+        entity.usuariocreacion = usuarioCreacion;
+        entity.fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
         _context.solicitud_servicios.Add(entity);
         await _context.SaveChangesAsync(ct);
+        
         return entity.solicitud_servicio_id;
+    }
+
+    /// <summary>
+    /// Actualiza una solicitud de servicio existente.
+    /// </summary>
+    public async Task UpdateSolicitudAsync(SolicitudUpdateDto dto, string usuarioModificacion, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        ArgumentNullException.ThrowIfNull(usuarioModificacion);
+
+        var entity = await _context.solicitud_servicios
+            .FirstOrDefaultAsync(s => s.solicitud_servicio_id == dto.Id, ct)
+            ?? throw new InvalidOperationException($"Solicitud con ID {dto.Id} no encontrada.");
+
+        _mapper.Map(dto, entity);
+        entity.usuariomodificacion = usuarioModificacion;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        _context.solicitud_servicios.Update(entity);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Inactiva una solicitud (cambia estado a false).
+    /// </summary>
+    public async Task InactivateSolicitudAsync(int id, string usuarioModificacion, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(usuarioModificacion);
+
+        var entity = await _context.solicitud_servicios
+            .FirstOrDefaultAsync(s => s.solicitud_servicio_id == id, ct)
+            ?? throw new InvalidOperationException($"Solicitud con ID {id} no encontrada.");
+
+        entity.estado = false;
+        entity.usuariomodificacion = usuarioModificacion;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        _context.solicitud_servicios.Update(entity);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Marca una solicitud como asignada.
+    /// </summary>
+    public async Task AsignarSolicitudAsync(int id, string usuarioModificacion, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(usuarioModificacion);
+
+        var entity = await _context.solicitud_servicios
+            .FirstOrDefaultAsync(s => s.solicitud_servicio_id == id, ct)
+            ?? throw new InvalidOperationException($"Solicitud con ID {id} no encontrada.");
+
+        entity.asiginada = true;
+        entity.usuariomodificacion = usuarioModificacion;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        _context.solicitud_servicios.Update(entity);
+        await _context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Desasigna una solicitud (marca como no asignada).
+    /// </summary>
+    public async Task DesasignarSolicitudAsync(int id, string usuarioModificacion, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(usuarioModificacion);
+
+        var entity = await _context.solicitud_servicios
+            .FirstOrDefaultAsync(s => s.solicitud_servicio_id == id, ct)
+            ?? throw new InvalidOperationException($"Solicitud con ID {id} no encontrada.");
+
+        entity.asiginada = false;
+        entity.usuariomodificacion = usuarioModificacion;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        _context.solicitud_servicios.Update(entity);
+        await _context.SaveChangesAsync(ct);
     }
 }

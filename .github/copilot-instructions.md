@@ -1,167 +1,65 @@
-# AI Coding Agent Instructions for HODSOFT SIAD Blazor Migration
+# Instrucciones de IA para HODSOFT SIAD
 
-## Project Overview
-**SIAD (Sistema Integral de Administración Domiciliaria)** is a .NET 9 + Blazor WebAssembly + DevExpress migration from ASP.NET Core 3. The architecture follows a layered approach with clear separation between frontend (apc.Client), backend (apc), core business logic (SIAD.Services), and data access (SIAD.Data).
+## Fuente de verdad
+- Toma como fuente principal el codigo actual y la solucion `HODSOFT_DEVEXPRESS.sln`.
+- Si `readme.md` o documentos antiguos contradicen la solucion real, sigue el codigo vigente.
+- Para DevExpress, consulta primero la documentacion oficial mediante el MCP `dxdocs` configurado en `.vscode/mcp.json`.
+- Usa la documentacion local del repo como contexto secundario, no como sustituto de la fuente oficial para APIs DevExpress.
 
-### Core Architecture Pattern
-- **apc.Client**: Blazor WebAssembly (WASM) UI layer with DevExpress components
-- **apc** (Server): ASP.NET Core host serving WASM app, exposing REST API, hosting DevExpress Reporting
-- **SIAD.Services**: Domain services organized by business module (Contabilidad, Clientes, Medidores, etc.)
-- **SIAD.Core**: Entities, DTOs, Constants, and domain interfaces
-- **SIAD.Data**: EF Core DbContext (Postgres/SQL Server), migrations, and seeds
-- **SIAD.Reports**: DevExpress .repx reports and reporting infrastructure
+## Stack real del proyecto
+- `apc`: host ASP.NET Core .NET 9, Identity, controllers, DevExpress Reporting y PDF Viewer.
+- `apc.Client`: Blazor WebAssembly .NET 9 con `DevExpress.Blazor`.
+- `SIAD.Core`: entidades, DTOs, constantes, permisos, tenancy.
+- `SIAD.Data`: `SiadDbContext`, extensiones parciales, Npgsql y reglas multiempresa.
+- `SIAD.Services`: servicios por modulo, AutoMapper y algunos flujos con Dapper.
+- `SIAD.Reports`: storage, bootstrap, validacion SQL, templates y soporte de reporteria web.
+- `Database`: scripts SQL, DDL, seeds y cambios incrementales de la base de datos.
 
-## Data Flow & Communication Pattern
+## Reglas no negociables
+- Respeta la arquitectura por capas y por modulo.
+- Respeta siempre la multiempresa: `company_id`, `ICurrentCompanyService`, `TenantState` e `ICompanyScopedEntity`.
+- No inventes APIs de DevExpress ni asumas propiedades/eventos sin revisar la fuente oficial.
+- No metas logica de negocio pesada dentro de paginas Razor si puede vivir en servicios o API.
+- No hagas ediciones masivas en `SIAD.Data/SiadDbContext.cs` ni en entidades scaffolded salvo necesidad clara.
+- Si agregas un servicio HTTP cliente, registralo en `apc.Client/CommonServices.cs`.
+- Si agregas un servicio de dominio, registralo en `SIAD.Services/ServiceRegistration.cs`.
+- Protege endpoints con `ModuleAuthorize` o politicas construidas desde `PermissionNames`.
+- Manten patrones async con `CancellationToken` cuando el modulo ya los usa.
 
-### API Client Pattern
-All Client→Server communication follows this sealed class pattern in `apc.Client/Services/<Module>/<EntityName>Client.cs`:
+## Convenciones por capa
 
-```csharp
-public sealed class EmpresasContabilidadClient
-{
-    private readonly HttpClient http;
-    
-    public async Task<DTO> CrearAsync(DTO dto, CancellationToken ct = default) 
-        => await http.PostAsJsonAsync("api/<module>/<endpoint>", dto, cancellationToken: ct);
-    
-    // CRUD methods with explicit error handling via ReadFromJsonAsyncWithAuthCheck
-}
-```
+### UI Blazor y DevExpress
+- Coloca pantallas en `apc.Client/Pages/<Modulo>/`.
+- Si la pantalla ya usa `.razor.cs` o clases auxiliares `*GridDataSource.cs`, conserva esa separacion.
+- Para llamadas HTTP, prefiere `ReadFromJsonAsyncWithAuthCheck`, `PostAsJsonAsyncWithAuthCheck`, `PutAsJsonAsyncWithAuthCheck` y `ObtenerMensajeErrorAsync`.
+- Para datos tenant-aware, resuelve la empresa con `TenantState.EnsureCompanyAsync()` antes de cargar informacion.
+- Reutiliza los patrones ya presentes con `DxGrid`, `DxFormLayout`, `DxPopup`, `DxLoadingPanel`, `DxButton`, `DxComboBox` y componentes similares.
 
-**Key conventions:**
-- All HTTP methods are async with optional `CancellationToken`
-- DTOs passed in method parameters; deserialization uses `ReadFromJsonAsyncWithAuthCheck<T>` (custom extension for auth handling)
-- Null validation with `ArgumentNullException.ThrowIfNull()`
-- Exceptions: throw `HttpRequestException` with descriptive message, re-throw `UnauthorizedAccessException`
+### API y servicios
+- Sigue el flujo normal: DTO en `SIAD.Core` -> interfaz e implementacion en `SIAD.Services` -> controller en `apc/Controllers` -> cliente HTTP en `apc.Client/Services` si aplica.
+- Los controllers no deben concentrar reglas de negocio; solo validan, resuelven contexto y delegan al servicio.
+- Cuando el modulo es tenant-aware, no confies en un `companyId` arbitrario enviado por el cliente si ya puedes resolverlo desde claims/sesion.
 
-### Backend Service Orchestration
-Controllers in `apc/Controllers/<Module>/` inject service interfaces from `SIAD.Services` and:
-- **Validate ModelState** and return `BadRequest(CrearProblemDetalle(...))`
-- **Get current user/tenant** via `ICurrentCompanyService.GetCompanyId()` or `User.Identity.Name`
-- **Call domain service methods** (async, with CancellationToken)
-- **Return appropriately**: `Created()`, `Ok()`, `BadRequest()` with problem detail responses
+### Tenancy y seguridad
+- `SiadDbContext.Tenancy.cs` aplica filtros por `company_id` y rellena ese campo al guardar entidades con `ICompanyScopedEntity`.
+- No rompas esos filtros salvo que el cambio lo requiera de forma explicita y este muy justificado.
+- Usa `PermissionModules`, `PermissionNames`, `PermissionEndpointCatalog` y `ModuleAuthorizeAttribute` como base de permisos.
 
-### Service Registration
-Services are registered in `SIAD.Services/ServiceRegistration.cs` via extension method:
-```csharp
-public static IServiceCollection AddSiadServices(this IServiceCollection services)
-{
-    services.AddAutoMapper(typeof(ServiceRegistration).Assembly);
-    services.AddScoped<IClientesService, ClientesService>();
-    // ... all domain services and tenancy services
-}
-```
+### Reporteria DevExpress
+- Revisa `apc/Program.cs` y `SIAD.Reports/Reporting/*` antes de tocar designer/viewer/storage.
+- Los datasets y layouts son por empresa; cualquier cambio debe mantener `company_id`.
+- La SQL custom de reporteria debe seguir siendo solo lectura.
 
-## Code Organization by Module
+### Base de datos y scaffold
+- Para cambios de esquema del negocio, prefiere scripts SQL incrementales en `Database/`.
+- Manten separadas las migraciones de Identity (`apc/Migrations`) de los cambios de la BD funcional.
+- Si necesitas refrescar scaffold, parte del comando documentado en `readme.md` y evita perder tablas ya incluidas en el contexto.
 
-### Module Structure (Example: Contabilidad/Accounting)
-1. **SIAD.Core/DTOs/Contabilidad/**: `CompanyCreationDto`, `PeriodoContableDto`
-2. **SIAD.Services/Contabilidad/**: 
-   - `ICompanyManagementService` (interface)
-   - `CompanyManagementService` (implementation with AutoMapper profile)
-   - `IConfiguracionSistemaService` for system settings
-3. **apc/Controllers/Contabilidad/**: `ContabilidadEmpresaController`, `PeriodosContablesController`
-4. **apc.Client/Services/Contabilidad/**: `EmpresasContabilidadClient` (HTTP client)
-5. **apc.Client/Pages/**: Razor components for UI (organized by feature)
-
-## Critical Conventions & Patterns
-
-### Naming & Style
-- **PascalCase** for classes, interfaces, properties; **camelCase** for local variables
-- No abbreviations (e.g., `companyadministrationservice` → `CompanyAdministrationService`)
-- Sealed classes for non-inherited types (`public sealed class ...`)
-- Async methods suffix `Async`; use `CancellationToken ct = default` in signatures
-
-### Entity Modeling
-- Entities in `SIAD.Core/Entities/` are scaffold-generated from database (EF Core reverse-engineer)
-- DTOs in `SIAD.Core/DTOs/<Module>/` for API contracts
-- AutoMapper profiles (`SIAD.Services/<Module>/*Mappings.cs`) define Entity ↔ DTO transformations
-- Use Fluent API in `SIAD.Data/Configurations/` for EF Core model configuration
-
-### Security & Tenancy
-- **Multi-tenant**: `ICurrentCompanyService` provides tenant context (injected)
-- **Authorization policies** in `SIAD.Core/Constants/AuthorizationPolicies.cs` (e.g., `Contabilidad`, `Administrador`)
-- Controllers decorated with `[Authorize(Policy = "...")]`
-- `TenantCompanyClaimTransformation` adds claims from tenant user context
-
-### Error Handling
-- Domain exceptions: `InvalidOperationException`, `ArgumentException` (with descriptive messages)
-- HTTP responses: use `CrearProblemDetalle(titulo, detalle)` helper for RFC 7807 Problem Details
-- Client-side: catch `UnauthorizedAccessException` separately; re-throw HTTP errors with context
-
-### DevExpress Integration
-- **Server-side PDF Viewer**: `AddDevExpressServerSideBlazorPdfViewer()` in `Program.cs`
-- **WASM PDF Viewer**: `AddDevExpressWebAssemblyBlazorPdfViewer()` in Client `Program.cs`
-- **Reporting**: `.repx` files in `SIAD.Reports/Layouts/`; render via Reporting API
-
-## Database & Migrations
-
-### Connection String Management
-- **Local**: Postgres/SQL Server via containers (config in `appsettings.Development.json`)
-- **QA/Production**: External config (secrets via Options pattern)
-- **Scaffold (EF Core)**:
-```powershell
-dotnet ef dbcontext scaffold "connection-string" Npgsql.EntityFrameworkCore.PostgreSQL `
-  -p SIAD.Data/SIAD.Data.csproj -s apc/apc.csproj -c SiadDbContext `
-  --namespace SIAD.Core.Entities --output-dir SIAD.Core/Entities --force
-```
-
-### Seeds & Testing
-- SQL scripts in `Database/Seeds/` or `Database/Seeds_v2/` executed during schema initialization
-- Demo data: `seed_cliente_demo.sql` provides test tenant + clients for UI validation
-- Migration policies: use Migrations API, avoid raw SQL for structural changes
-
-## Build, Test & Development Workflow
-
-### Commands
-- **Build**: `dotnet build` (solution-level)
-- **Run Development**: `dotnet run --project apc` (serves WASM + API on https://localhost:5001)
-- **Database Init**: Apply migrations via `dotnet ef database update` or via container startup scripts
-- **Trust Dev Certificate**: `dotnet dev-certs https --trust`
-- **Unit Tests**: `dotnet test` (in apc.Client.Tests/ for client logic; expand as needed)
-
-### Branching & Versioning
-- **main**: production-ready code (monthly semantic version: YYYY.MM)
-- **dev**: integration branch for feature merges
-- **Feature branches**: `Feature/<module>` (e.g., `Feature/Ordenes`)
-- Pull requests require cross-review + automated validation (build + unit tests)
-
-### Local Development Setup
-1. Install .NET 9 SDK, Visual Studio 2022, and workloads:
-   ```powershell
-   dotnet workload install wasm-tools
-   dotnet dev-certs https --trust
-   dotnet nuget add source https://nuget.devexpress.com/api/v3/index.json -n DXFeed -u DevExpress -p <key>
-   ```
-2. Create Postgres container or connect to QA instance
-3. Update `appsettings.Development.json` with connection strings
-4. Run migrations: `dotnet ef database update --project SIAD.Data`
-5. Execute seed scripts: `psql -h localhost -U postgres -d bdnes -f Database/Seeds_v2/seed_*.sql`
-6. `dotnet run --project apc`
-
-## Key Files & Documentation
-- [readme.md](readme.md): Project vision, solution structure, prerequisites
-- [docs/modulo_clientes.md](docs/modulo_clientes.md): Clients module inventory & UI flow
-- [docs/modulo_solicitudes.md](docs/modulo_solicitudes.md): Service requests (CRUD + catalog)
-- [docs/modulo_medidores.md](docs/modulo_medidores.md): Meters & readings
-- [docs/modulo_auxiliar_lectura.md](docs/modulo_auxiliar_lectura.md): Reading cycles & bulk import
-- [docs/modulo_ordenes.md](docs/modulo_ordenes.md): Work orders (pending full implementation)
-- [docs/modulo_rutas.md](docs/modulo_rutas.md): Routes & crews
-- [apc.Client/CommonServices.cs](apc.Client/CommonServices.cs): Service registration for DI
-- [SIAD.Services/ServiceRegistration.cs](SIAD.Services/ServiceRegistration.cs): Backend service registration
-
-## When Adding a New Feature/Module
-1. **Define DTOs** in `SIAD.Core/DTOs/<ModuleName>/`
-2. **Create Service Interface** in `SIAD.Services/<ModuleName>/I<Feature>Service.cs`
-3. **Implement Service** with AutoMapper profile; register in `ServiceRegistration.cs`
-4. **Add Controller** in `apc/Controllers/<ModuleName>/` with authorization policy
-5. **Create Client Class** in `apc.Client/Services/<ModuleName>/<Entity>Client.cs`
-6. **Register Client** in `apc.Client/CommonServices.cs`
-7. **Build Razor Pages/Components** in `apc.Client/Pages/<ModuleName>/` using DevExpress grid/form components
-8. **Document** in `docs/modulo_<modulename>.md`
-9. **Add Unit Tests** covering service logic and client HTTP interactions
-10. **Test locally** before merging to `dev`
-
----
-
-**Last Updated**: December 2025 | **Framework**: .NET 9, Blazor WebAssembly, DevExpress v25.1
+## Skills del repo
+- Usa las skills de `.github/skills/` cuando el trabajo encaje con ellas.
+- Skills disponibles en este repo:
+  - `hodsoft-devexpress-docs`
+  - `hodsoft-blazor-devexpress-ui`
+  - `hodsoft-siad-backend`
+  - `hodsoft-reporting-devexpress`
+  - `hodsoft-postgres-ef-scaffold`

@@ -13,5 +13,15 @@ public partial class ruta
 
     public string? descripcion { get; set; }
 
+    public bool estado { get; set; }
+
+    public string? usuariocreacion { get; set; }
+
+    public DateTime? fechacreacion { get; set; }
+
+    public string? usuariomodificacion { get; set; }
+
+    public DateTime? fechamodificacion { get; set; }
+
     public virtual ciclo? codcicloNavigation { get; set; }
 }

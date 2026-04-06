@@ -1,0 +1,173 @@
+@page "/parametros/branding"
+@attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
+
+@using Microsoft.AspNetCore.Components.Forms
+@using apc.Client.Services
+@inject BrandingClient BrandingClient
+@inject NavigationManager NavigationManager
+
+<h3>Branding del Portal</h3>
+<p class="text-muted">Configura el nombre, el nombre corto y el logo del portal.</p>
+
+@if (!string.IsNullOrWhiteSpace(errorMessage))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
+}
+
+@if (!string.IsNullOrWhiteSpace(successMessage))
+{
+    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
+}
+
+@if (isLoading)
+{
+    <div class="d-flex justify-content-center my-4">
+        <DxWaitIndicator Visible="true" />
+    </div>
+}
+else
+{
+    <EditForm Model="@formModel" OnValidSubmit="GuardarAsync" Context="formContext">
+        <DataAnnotationsValidator />
+        <DxFormLayout CssClass="mt-3">
+            <DxFormLayoutItem Caption="Nombre comercial:" ColSpanMd="6">
+                <DxTextBox @bind-Text="formModel.CompanyName" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Nombre corto:" ColSpanMd="6">
+                <DxTextBox @bind-Text="formModel.CompanyShortName" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutGroup Caption="Logo" ColSpanMd="12">
+                <DxFormLayoutItem ColSpanMd="12">
+                    @if (!string.IsNullOrWhiteSpace(logoPreview))
+                    {
+                        <img src="@logoPreview" alt="Logo actual" style="max-height: 120px;" />
+                    }
+                    else
+                    {
+                        <span class="text-muted">Sin logo cargado.</span>
+                    }
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Subir nuevo logo:" ColSpanMd="12">
+                    <InputFile OnChange="OnLogoSelected" />
+                    @if (!string.IsNullOrWhiteSpace(logoFileName))
+                    {
+                        <div class="text-muted mt-1">@logoFileName</div>
+                    }
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+
+            <DxFormLayoutItem ColSpanMd="12">
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton SubmitFormOnClick="true"
+                              Text="@(isSaving ? "Guardando..." : "Guardar")"
+                              Enabled="@(!isSaving)"
+                              RenderStyle="ButtonRenderStyle.Primary" />
+                </div>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        <ValidationSummary />
+    </EditForm>
+}
+
+@code {
+    private string? errorMessage;
+    private string? successMessage;
+    private bool isLoading = true;
+    private bool isSaving;
+
+    private readonly BrandingPortalFormModel formModel = new();
+    private string? logoPreview;
+    private IBrowserFile? logoFile;
+    private string? logoFileName;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarBrandingAsync();
+    }
+
+    private async Task CargarBrandingAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var branding = await BrandingClient.GetBrandingAsync();
+            formModel.CompanyName = branding?.CompanyName ?? string.Empty;
+            formModel.CompanyShortName = branding?.CompanyShortName ?? string.Empty;
+            logoPreview = string.IsNullOrWhiteSpace(branding?.LogoBase64)
+                ? null
+                : $"data:{branding!.LogoMime};base64,{branding.LogoBase64}";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnLogoSelected(InputFileChangeEventArgs e)
+    {
+        logoFile = e.File;
+        logoFileName = logoFile?.Name;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (isSaving)
+        {
+            return;
+        }
+
+        isSaving = true;
+        errorMessage = null;
+        successMessage = null;
+
+        try
+        {
+            await BrandingClient.ActualizarAsync(formModel.CompanyName, formModel.CompanyShortName);
+
+            if (logoFile is not null)
+            {
+                var content = new MultipartFormDataContent();
+                var streamContent = new StreamContent(logoFile.OpenReadStream(5 * 1024 * 1024));
+                content.Add(streamContent, "logoFile", logoFile.Name);
+
+                var response = await BrandingClient.Http.PostAsync("api/branding/logo", content);
+                await response.ReadFromJsonAsyncWithAuthCheck<object>();
+            }
+
+            BrandingClient.InvalidateCache();
+            await CargarBrandingAsync();
+            successMessage = "Branding actualizado correctamente.";
+        }
+        catch (UnauthorizedAccessException)
+        {
+            NavigationManager.NavigateTo("/Account/Login");
+        }
+        catch (HttpRequestException ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private sealed class BrandingPortalFormModel
+    {
+        public string CompanyName { get; set; } = string.Empty;
+
+        public string CompanyShortName { get; set; } = string.Empty;
+    }
+}
+

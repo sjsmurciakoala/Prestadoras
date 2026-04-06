@@ -201,11 +201,1692 @@ namespace SIAD.Data.Migrations
                     b.ToTable("axl_observacion_cobranza", (string)null);
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.ban_banco", b =>
+                {
+                    b.Property<long>("ban_banco_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("ban_banco_id"));
+
+                    b.Property<bool>("activo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("ciudad_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<string>("direccion1")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("direccion2")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("email")
+                        .HasMaxLength(25)
+                        .HasColumnType("character varying(25)");
+
+                    b.Property<int>("estado_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("fax")
+                        .HasMaxLength(25)
+                        .HasColumnType("character varying(25)");
+
+                    b.Property<string>("gerente")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("memo")
+                        .HasColumnType("text");
+
+                    b.Property<int>("municipio_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("nombre")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("nombre_sucursal")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("pais_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("sucursal")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("telefonos")
+                        .HasMaxLength(25)
+                        .HasColumnType("character varying(25)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("zipcode")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.HasKey("ban_banco_id")
+                        .HasName("ban_banco_pkey");
+
+                    b.HasIndex(new[] { "company_id", "code" }, "ban_banco_company_id_code_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_banco_company");
+
+                    b.ToTable("ban_banco");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_config", b =>
+                {
+                    b.Property<long>("ban_config_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("ban_config_id"));
+
+                    b.Property<int>("a_ctas0")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("a_ctas1")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("a_ctas2")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("a_ctas3")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("a_ctas4")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("a_ctas5")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("alertar_nd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("cc_db")
+                        .HasMaxLength(70)
+                        .HasColumnType("character varying(70)");
+
+                    b.Property<string>("cc_descrip")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<int>("cc_prefix")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("cc_pwd")
+                        .HasMaxLength(70)
+                        .HasColumnType("character varying(70)");
+
+                    b.Property<string>("cc_server")
+                        .HasMaxLength(70)
+                        .HasColumnType("character varying(70)");
+
+                    b.Property<int>("cc_ssw")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("cc_tipo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("cc_user")
+                        .HasMaxLength(70)
+                        .HasColumnType("character varying(70)");
+
+                    b.Property<string>("cod_sucu")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("consolidado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<string>("cta_aux1")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cta_aux2")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cta_aux3")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cuenta_mayor")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("dias_d1")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("dias_d2")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("dias_d3")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("dir_contab")
+                        .HasMaxLength(70)
+                        .HasColumnType("character varying(70)");
+
+                    b.Property<string>("dir_dta_cont")
+                        .HasMaxLength(70)
+                        .HasColumnType("character varying(70)");
+
+                    b.Property<int>("i_c_egreso")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("i_cheque_ne")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("m_ope_conc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("max_cheque")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("meses_h")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope1")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope10")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope2")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope3")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope4")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope5")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope6")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope7")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope8")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_ope9")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("nro_cxb")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("p_deb_ban")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("prx_c_egreso")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("prx_deposito")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("prx_n_credito")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("prx_n_debito")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("st_dta")
+                        .HasMaxLength(90)
+                        .HasColumnType("character varying(90)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("ban_config_id")
+                        .HasName("ban_config_pkey");
+
+                    b.HasIndex(new[] { "company_id" }, "ban_config_company_id_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_config_company");
+
+                    b.ToTable("ban_config");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_cta", b =>
+                {
+                    b.Property<long>("ban_cta_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("ban_cta_id"));
+
+                    b.Property<string>("cod_centro")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("codigo")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<int>("cta_base")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("cta_cc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("cta_cf")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("cta_mov")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("cta_ter")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("descripcion")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("ecg")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("es_banco")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("grupo")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<int>("iea")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("saldo_actual")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("tdc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("tercero")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("u_banco")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("u_benef")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("u_coment1")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("u_coment2")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("u_dcto")
+                        .HasMaxLength(25)
+                        .HasColumnType("character varying(25)");
+
+                    b.Property<DateTime?>("u_fecha")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("u_monto")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("ban_cta_id")
+                        .HasName("ban_cta_pkey");
+
+                    b.HasIndex(new[] { "company_id", "codigo" }, "ban_cta_company_id_codigo_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_cta_company");
+
+                    b.ToTable("ban_cta");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_cuenta", b =>
+                {
+                    b.Property<long>("banco_cuenta_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("banco_cuenta_id"));
+
+                    b.Property<bool>("activo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<bool>("allow_reconciliation")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<long?>("ban_banco_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ban_cta_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("banco_nombre")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<long?>("branch_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("cont_account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<int?>("cta_conc")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("cta_debito")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("currency_code")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<string>("estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValueSql("'ACTIVE'::character varying");
+
+                    b.Property<DateTime?>("fecha_c1")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("fecha_c2")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("fecha_saldo")
+                        .HasColumnType("date");
+
+                    b.Property<int>("idb")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("inversion_cheque")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("meses_h")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_comp0")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_comp1")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_comp2")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_comp3")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_comp4")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("n_comp5")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("numero_cuenta")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<decimal>("pdb")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("proxima_conciliacion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("proximo_cheque")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("proximo_nddb")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("r_transf")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("saldo_actual")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("saldo_c1")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("saldo_c2")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("saldo_inicial")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<int>("tdc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("tipo")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValueSql("'CHEQUES'::character varying");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("v_no_ch")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("v_no_dp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("v_no_nc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("v_no_nd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.HasKey("banco_cuenta_id")
+                        .HasName("ban_cuenta_pkey");
+
+                    b.HasIndex(new[] { "company_id", "code" }, "ban_cuenta_company_id_code_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "company_id", "numero_cuenta" }, "ban_cuenta_company_id_numero_cuenta_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "ban_banco_id" }, "ix_ban_cuenta_banco");
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_cuenta_company");
+
+                    b.HasIndex(new[] { "ban_cta_id" }, "ix_ban_cuenta_cta");
+
+                    b.ToTable("ban_cuenta");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_kardex", b =>
+                {
+                    b.Property<long>("ban_kardex_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("ban_kardex_id"));
+
+                    b.Property<long?>("ban_banco_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("ban_moneda_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("banco_cuenta_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("correlativo_t_transacc")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<string>("descripcion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<int>("estado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(1);
+
+                    b.Property<string>("estado_conciliacion")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<DateOnly?>("fecha_conciliacion")
+                        .HasColumnType("date");
+
+                    b.Property<DateOnly>("fecha_movimiento")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime>("fecha_registro")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<long>("id_tipo_transaccion")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("monto")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<long?>("partida_cuenta_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("referencia")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("saldo")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal>("tasa_cambio")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)")
+                        .HasDefaultValue(1m);
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("usuario_conciliacion")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("ban_kardex_id")
+                        .HasName("ban_kardex_pkey");
+
+                    b.HasIndex("ban_banco_id");
+
+                    b.HasIndex("ban_moneda_id");
+
+                    b.HasIndex("banco_cuenta_id");
+
+                    b.HasIndex(new[] { "company_id", "banco_cuenta_id", "fecha_movimiento" }, "ix_ban_kardex_cuenta_fecha");
+
+                    b.HasIndex(new[] { "company_id", "banco_cuenta_id", "fecha_movimiento", "estado" }, "ix_ban_kardex_cuenta_fecha_estado");
+
+                    b.HasIndex(new[] { "partida_cuenta_id" }, "ix_ban_kardex_poliza");
+
+                    b.HasIndex(new[] { "id_tipo_transaccion" }, "ix_ban_kardex_tipo_transaccion");
+
+                    b.ToTable("ban_kardex");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_moneda", b =>
+                {
+                    b.Property<long>("ban_moneda_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("ban_moneda_id"));
+
+                    b.Property<string>("codigo")
+                        .IsRequired()
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<string>("descripcion")
+                        .IsRequired()
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<bool>("es_base")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<decimal>("factor")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<string>("pais")
+                        .HasMaxLength(25)
+                        .HasColumnType("character varying(25)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("ban_moneda_id")
+                        .HasName("ban_moneda_pkey");
+
+                    b.HasIndex(new[] { "company_id", "codigo" }, "ban_moneda_company_id_codigo_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_moneda_company");
+
+                    b.ToTable("ban_moneda");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_movimiento", b =>
+                {
+                    b.Property<long>("movimiento_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("movimiento_id"));
+
+                    b.Property<char>("aod")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .HasDefaultValueSql("'N'::bpchar");
+
+                    b.Property<long>("banco_cuenta_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("bene_ori")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("bene_origen")
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("c_refer")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<int>("cdcd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("cod_bene")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cod_esta")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cod_oper")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("cod_sucu")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<string>("cod_usua")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("comentario1")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("comentario2")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("comentario3")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("con_partida_hdr_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<bool>("conciliado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int>("consolidado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<string>("cta_idb")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("currency_code")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<string>("d_cta_idb")
+                        .HasColumnType("text");
+
+                    b.Property<string>("dcto_ori")
+                        .HasColumnType("text");
+
+                    b.Property<string>("dcto_origen")
+                        .HasColumnType("text");
+
+                    b.Property<string>("descripcion")
+                        .HasColumnType("text");
+
+                    b.Property<string>("documento")
+                        .HasColumnType("text");
+
+                    b.Property<int>("endosable")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValueSql("'POSTED'::character varying");
+
+                    b.Property<int>("estado_legacy")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("exchange_rate")
+                        .ValueGeneratedOnAdd()
+                        .HasPrecision(18, 6)
+                        .HasColumnType("numeric(18,6)")
+                        .HasDefaultValueSql("1");
+
+                    b.Property<DateTime?>("f_consolidado")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime?>("fec_conc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly?>("fecha_conciliacion")
+                        .HasColumnType("date");
+
+                    b.Property<DateTime?>("fecha_lib")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateOnly>("fecha_movimiento")
+                        .HasColumnType("date");
+
+                    b.Property<string>("memo")
+                        .HasColumnType("text");
+
+                    b.Property<decimal>("monto")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("monto1")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("monto2")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("monto_local")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("mto_cr")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_db")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_deb")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_debito")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_idb")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_ori")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_origen")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("no_conc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("no_ope")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("nro_comp")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("nro_egreso")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("nro_ppal")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("obcp")
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<int>("ope_rel")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<long?>("origen_documento_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("origen_legacy")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<string>("origen_modulo")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("referencia")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("saldo")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("tdc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("tip_ben")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("tipo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("tipo_ope")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("movimiento_id")
+                        .HasName("ban_movimiento_pkey");
+
+                    b.HasIndex("company_id");
+
+                    b.HasIndex(new[] { "banco_cuenta_id" }, "ix_ban_movimiento_cuenta");
+
+                    b.HasIndex(new[] { "origen_modulo", "origen_documento_id" }, "ix_ban_movimiento_origen");
+
+                    b.ToTable("ban_movimiento");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_movimiento_detalle", b =>
+                {
+                    b.Property<long>("movimiento_detalle_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("movimiento_detalle_id"));
+
+                    b.Property<decimal>("base_tr")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("cdcd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("cod_cen_cto")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cod_cta")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cod_esta")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cod_oper")
+                        .HasMaxLength(10)
+                        .HasColumnType("character varying(10)");
+
+                    b.Property<string>("cod_sucu")
+                        .HasMaxLength(5)
+                        .HasColumnType("character varying(5)");
+
+                    b.Property<string>("cod_tercero")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cod_usua")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("consolidado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<string>("descripcion")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<int>("dh")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("enc_ope")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("es_cuenta")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("es_transf")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("estado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("f_consolidado")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("fecha")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal?>("flujo_e")
+                        .HasPrecision(28, 3)
+                        .HasColumnType("numeric(28,3)");
+
+                    b.Property<int>("linea_num")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<decimal>("monto")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<long>("movimiento_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("mto_cr")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_db")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("n_mo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("origen")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<int>("si_centro")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("si_tercero")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("tercero")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("movimiento_detalle_id")
+                        .HasName("ban_movimiento_detalle_pkey");
+
+                    b.HasIndex(new[] { "movimiento_id", "linea_num" }, "ban_movimiento_detalle_movimiento_id_linea_num_key")
+                        .IsUnique();
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_mov_detalle_company");
+
+                    b.HasIndex(new[] { "movimiento_id" }, "ix_ban_mov_detalle_movimiento");
+
+                    b.ToTable("ban_movimiento_detalle");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_movimiento_transito", b =>
+                {
+                    b.Property<long>("movimiento_transito_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("movimiento_transito_id"));
+
+                    b.Property<char>("aod")
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .HasDefaultValueSql("'N'::bpchar");
+
+                    b.Property<long>("banco_cuenta_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("c_refer")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<int>("cdcd")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("cod_bene")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cod_usua")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("comentario1")
+                        .HasMaxLength(60)
+                        .HasColumnType("character varying(60)");
+
+                    b.Property<string>("comentario2")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("comentario3")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<string>("descripcion")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("documento")
+                        .HasMaxLength(25)
+                        .HasColumnType("character varying(25)");
+
+                    b.Property<int>("estado")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime>("fecha")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTime>("fecha_lib")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<decimal>("monto")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("monto1")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("monto2")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<long?>("movimiento_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("mto_cr")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<decimal>("mto_db")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("no_conc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<int>("no_ope")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<string>("obcp")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)")
+                        .HasDefaultValueSql("'N'::character varying");
+
+                    b.Property<string>("origen")
+                        .HasMaxLength(35)
+                        .HasColumnType("character varying(35)");
+
+                    b.Property<decimal>("saldo")
+                        .HasPrecision(28, 4)
+                        .HasColumnType("numeric(28,4)");
+
+                    b.Property<int>("tdc")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("movimiento_transito_id")
+                        .HasName("ban_movimiento_transito_pkey");
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_mov_transito_company");
+
+                    b.HasIndex(new[] { "banco_cuenta_id" }, "ix_ban_mov_transito_cuenta");
+
+                    b.HasIndex(new[] { "movimiento_id" }, "ix_ban_mov_transito_movimiento");
+
+                    b.ToTable("ban_movimiento_transito");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_tipos_transacciones", b =>
+                {
+                    b.Property<long>("ban_tipo_transaccion_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<long>("ban_tipo_transaccion_id"));
+
+                    b.Property<long?>("cod_centrocosto")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("cod_tipopartida")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("correlativo")
+                        .IsRequired()
+                        .HasMaxLength(6)
+                        .HasColumnType("character varying(6)");
+
+                    b.Property<DateTime>("created_at")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("timestamp with time zone")
+                        .HasDefaultValueSql("now()");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)")
+                        .HasDefaultValueSql("CURRENT_USER");
+
+                    b.Property<bool>("cuenta_alterna")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("cuenta_contable")
+                        .HasMaxLength(13)
+                        .HasColumnType("character varying(13)");
+
+                    b.Property<string>("del_sistema")
+                        .IsRequired()
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .IsFixedLength();
+
+                    b.Property<string>("destino")
+                        .HasMaxLength(9)
+                        .HasColumnType("character varying(9)");
+
+                    b.Property<string>("emite_cheque")
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .IsFixedLength();
+
+                    b.Property<string>("entra_sale")
+                        .IsRequired()
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .IsFixedLength();
+
+                    b.Property<string>("estado")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("ACTIVE");
+
+                    b.Property<short?>("filtro")
+                        .HasColumnType("smallint");
+
+                    b.Property<string>("nombre")
+                        .IsRequired()
+                        .HasMaxLength(40)
+                        .HasColumnType("character varying(40)");
+
+                    b.Property<string>("observaciones")
+                        .HasColumnType("text");
+
+                    b.Property<string>("pad")
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .IsFixedLength();
+
+                    b.Property<string>("pda")
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .IsFixedLength();
+
+                    b.Property<string>("rel_empleados")
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .IsFixedLength();
+
+                    b.Property<string>("tipo_transaccion")
+                        .IsRequired()
+                        .HasMaxLength(3)
+                        .HasColumnType("character varying(3)");
+
+                    b.Property<string>("trn_prestamo")
+                        .HasMaxLength(1)
+                        .HasColumnType("character(1)")
+                        .IsFixedLength();
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("ban_tipo_transaccion_id")
+                        .HasName("pk_ban_tipos_transacciones");
+
+                    b.HasIndex(new[] { "cod_centrocosto" }, "ix_ban_tipos_transacciones_centrocosto");
+
+                    b.HasIndex(new[] { "company_id" }, "ix_ban_tipos_transacciones_company");
+
+                    b.HasIndex(new[] { "cod_tipopartida" }, "ix_ban_tipos_transacciones_tipopartida");
+
+                    b.HasIndex(new[] { "company_id", "tipo_transaccion", "cod_tipopartida", "correlativo", "entra_sale" }, "ux_ban_tipos_transacciones_company_tipo")
+                        .IsUnique();
+
+                    b.ToTable("ban_tipos_transacciones", (string)null);
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.barrio", b =>
                 {
                     b.Property<string>("barrio_codigo")
-                        .HasMaxLength(3)
-                        .HasColumnType("character varying(3)");
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
 
                     b.Property<string>("descripcion")
                         .IsRequired()
@@ -779,6 +2460,66 @@ namespace SIAD.Data.Migrations
                     b.ToTable("cfg_company", "public");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.cfg_document_type", b =>
+                {
+                    b.Property<long>("document_type_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasColumnName("document_type_id");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("document_type_id"));
+
+                    b.Property<string>("code")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<bool>("is_active")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("module")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("name")
+                        .IsRequired()
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<bool>("requires_cai")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("document_type_id");
+
+                    b.HasIndex("company_id", "module", "code")
+                        .IsUnique();
+
+                    b.ToTable("cfg_document_type", "public");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.ciclo", b =>
                 {
                     b.Property<int>("ciclos_id")
@@ -837,6 +2578,9 @@ namespace SIAD.Data.Migrations
                     b.Property<string>("clave")
                         .HasMaxLength(32767)
                         .HasColumnType("character varying(32767)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
 
                     b.Property<decimal?>("descuento_valor")
                         .HasPrecision(18, 2)
@@ -942,8 +2686,8 @@ namespace SIAD.Data.Migrations
                         .HasColumnType("integer");
 
                     b.Property<string>("barrio_codigo")
-                        .HasMaxLength(5)
-                        .HasColumnType("character varying(5)");
+                        .HasMaxLength(7)
+                        .HasColumnType("character varying(7)");
 
                     b.Property<bool?>("bloqueado_cobranza")
                         .ValueGeneratedOnAdd()
@@ -962,6 +2706,9 @@ namespace SIAD.Data.Migrations
 
                     b.Property<DateTime?>("cliente_fecha_nac")
                         .HasColumnType("timestamp without time zone");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
 
                     b.Property<string>("contador")
                         .HasMaxLength(50)
@@ -1984,6 +3731,87 @@ namespace SIAD.Data.Migrations
                     b.ToTable("con_activo_tipo", "public");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_apertura_centro_costo", b =>
+                {
+                    b.Property<long>("opening_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("opening_id"));
+
+                    b.Property<long>("account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("cost_center_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<decimal>("credit_amount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<string>("currency_code")
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("debit_amount")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,2)")
+                        .HasDefaultValue(0m);
+
+                    b.Property<decimal?>("exchange_rate")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("numeric(18,9)")
+                        .HasDefaultValue(1m);
+
+                    b.Property<string>("notes")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<long>("period_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<short>("tipo_transaccion")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("opening_id");
+
+                    b.HasIndex("account_id");
+
+                    b.HasIndex("cost_center_id");
+
+                    b.HasIndex("period_id");
+
+                    b.HasIndex("company_id", "period_id", "account_id", "cost_center_id", "tipo_transaccion")
+                        .IsUnique();
+
+                    b.ToTable("con_apertura_centro_costo", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_con_apertura_centro_costo_tipo_transaccion", "tipo_transaccion >= 0 AND tipo_transaccion <= 5");
+                        });
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_apertura_saldo", b =>
                 {
                     b.Property<long>("opening_id")
@@ -2128,6 +3956,11 @@ namespace SIAD.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("cost_center_id"));
 
+                    b.Property<bool>("allows_movement")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<string>("code")
                         .IsRequired()
                         .HasMaxLength(30)
@@ -2148,10 +3981,41 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<DateTime?>("end_date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("is_periodic")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<int?>("legacy_key_cost")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("legacy_notes")
+                        .HasColumnType("text");
+
+                    b.Property<string>("legacy_parent_code")
+                        .HasMaxLength(24)
+                        .HasColumnType("character varying(24)");
+
+                    b.Property<bool>("legacy_status")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<short>("legacy_type_trans")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<string>("name")
                         .IsRequired()
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
+
+                    b.Property<DateTime?>("start_date")
+                        .HasColumnType("timestamp with time zone");
 
                     b.Property<string>("status")
                         .IsRequired()
@@ -2170,7 +4034,10 @@ namespace SIAD.Data.Migrations
                     b.HasIndex("company_id", "code")
                         .IsUnique();
 
-                    b.ToTable("con_centro_costo", "public");
+                    b.ToTable("con_centro_costo", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_con_centro_costo_legacy_type_trans", "legacy_type_trans >= 0 AND legacy_type_trans <= 5");
+                        });
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_configuracion_balance", b =>
@@ -2639,6 +4506,11 @@ namespace SIAD.Data.Migrations
                     b.Property<bool>("is_active")
                         .HasColumnType("boolean");
 
+                    b.Property<bool>("is_default_manual")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<long>("last_sequence")
                         .HasColumnType("bigint");
 
@@ -2659,6 +4531,10 @@ namespace SIAD.Data.Migrations
                         .HasColumnType("character varying(100)");
 
                     b.HasKey("journal_id");
+
+                    b.HasIndex("company_id")
+                        .IsUnique()
+                        .HasFilter("is_default_manual AND is_active AND allows_manual");
 
                     b.HasIndex("company_id", "code")
                         .IsUnique();
@@ -2824,6 +4700,177 @@ namespace SIAD.Data.Migrations
                     b.ToTable("con_libro_iva", "public");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_partida_dtl", b =>
+                {
+                    b.Property<long>("poliza_line_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("poliza_line_id"));
+
+                    b.Property<long>("account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("cost_center_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("credit_amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("currency_code")
+                        .HasMaxLength(3)
+                        .HasColumnType("character(3)")
+                        .IsFixedLength();
+
+                    b.Property<decimal>("debit_amount")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<decimal?>("exchange_rate")
+                        .HasColumnType("numeric");
+
+                    b.Property<short>("line_number")
+                        .HasColumnType("smallint");
+
+                    b.Property<long>("poliza_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("source_document")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<long?>("third_party_id")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("poliza_line_id");
+
+                    b.HasIndex("account_id");
+
+                    b.HasIndex("cost_center_id");
+
+                    b.HasIndex("poliza_id");
+
+                    b.HasIndex("company_id", "third_party_id");
+
+                    b.HasIndex("company_id", "poliza_id", "line_number")
+                        .IsUnique();
+
+                    b.ToTable("con_partida_dtl", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_partida_hdr", b =>
+                {
+                    b.Property<long>("poliza_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("poliza_id"));
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<long?>("document_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("document_number")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("document_type")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<long?>("journal_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("module")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long?>("period_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("poliza_date")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("poliza_number")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<DateTime?>("posted_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<long?>("posted_by")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("sequence_number")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("source_reference")
+                        .HasMaxLength(120)
+                        .HasColumnType("character varying(120)");
+
+                    b.Property<short>("status")
+                        .HasColumnType("smallint");
+
+                    b.Property<long?>("template_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<decimal>("total_credit")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<decimal>("total_debit")
+                        .HasColumnType("numeric(18,2)");
+
+                    b.Property<long>("type_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("poliza_id");
+
+                    b.HasIndex("journal_id");
+
+                    b.HasIndex("period_id");
+
+                    b.HasIndex("template_id");
+
+                    b.HasIndex("company_id", "poliza_number")
+                        .IsUnique();
+
+                    b.HasIndex("company_id", "type_id", "document_number")
+                        .IsUnique()
+                        .HasFilter("document_number IS NOT NULL AND module = 'MANUAL'");
+
+                    b.ToTable("con_partida_hdr", "public");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_periodo_contable", b =>
                 {
                     b.Property<long>("period_id")
@@ -2870,6 +4917,11 @@ namespace SIAD.Data.Migrations
                         .IsRequired()
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
+
+                    b.Property<short?>("status_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
 
                     b.Property<DateTime?>("updated_at")
                         .HasColumnType("timestamp with time zone");
@@ -3002,7 +5054,79 @@ namespace SIAD.Data.Migrations
                     b.ToTable("con_plan_cuentas", "public");
                 });
 
-            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_poliza", b =>
+            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_partida_dtl", b =>
+                {
+                    b.Property<long>("template_line_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("template_line_id"));
+
+                    b.Property<long>("account_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<long?>("cost_center_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("credit_formula")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("debit_formula")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("description")
+                        .HasMaxLength(300)
+                        .HasColumnType("character varying(300)");
+
+                    b.Property<string>("detail_account_field")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("detail_amount_field")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("detail_description_field")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("entry_side")
+                        .HasMaxLength(1)
+                        .HasColumnType("character varying(1)");
+
+                    b.Property<string>("line_mode")
+                        .IsRequired()
+                        .ValueGeneratedOnAdd()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)")
+                        .HasDefaultValue("FIXED");
+
+                    b.Property<short>("line_number")
+                        .HasColumnType("smallint");
+
+                    b.Property<long>("template_id")
+                        .HasColumnType("bigint");
+
+                    b.HasKey("template_line_id");
+
+                    b.HasIndex("account_id");
+
+                    b.HasIndex("cost_center_id");
+
+                    b.HasIndex("template_id");
+
+                    b.HasIndex("company_id", "template_id", "line_number")
+                        .IsUnique();
+
+                    b.ToTable("con_plantilla_partida_dtl", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_partida_hdr", b =>
                 {
                     b.Property<long>("template_id")
                         .ValueGeneratedOnAdd()
@@ -3055,205 +5179,7 @@ namespace SIAD.Data.Migrations
                     b.HasIndex("company_id", "name")
                         .IsUnique();
 
-                    b.ToTable("con_plantilla_poliza", "public");
-                });
-
-            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_poliza_linea", b =>
-                {
-                    b.Property<long>("template_line_id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("template_line_id"));
-
-                    b.Property<long>("account_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("company_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("cost_center_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("credit_formula")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("debit_formula")
-                        .HasMaxLength(200)
-                        .HasColumnType("character varying(200)");
-
-                    b.Property<string>("description")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<short>("line_number")
-                        .HasColumnType("smallint");
-
-                    b.Property<long>("template_id")
-                        .HasColumnType("bigint");
-
-                    b.HasKey("template_line_id");
-
-                    b.HasIndex("account_id");
-
-                    b.HasIndex("cost_center_id");
-
-                    b.HasIndex("template_id");
-
-                    b.HasIndex("company_id", "template_id", "line_number")
-                        .IsUnique();
-
-                    b.ToTable("con_plantilla_poliza_linea", "public");
-                });
-
-            modelBuilder.Entity("SIAD.Core.Entities.con_poliza", b =>
-                {
-                    b.Property<long>("poliza_id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("poliza_id"));
-
-                    b.Property<long>("company_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime>("created_at")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("created_by")
-                        .IsRequired()
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.Property<string>("description")
-                        .HasMaxLength(500)
-                        .HasColumnType("character varying(500)");
-
-                    b.Property<long?>("document_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("document_number")
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<string>("document_type")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<long?>("journal_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("module")
-                        .IsRequired()
-                        .HasMaxLength(30)
-                        .HasColumnType("character varying(30)");
-
-                    b.Property<long?>("period_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime>("poliza_date")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("poliza_number")
-                        .IsRequired()
-                        .HasMaxLength(50)
-                        .HasColumnType("character varying(50)");
-
-                    b.Property<long?>("sequence_number")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("source_reference")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<string>("status")
-                        .IsRequired()
-                        .HasMaxLength(20)
-                        .HasColumnType("character varying(20)");
-
-                    b.Property<long?>("template_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<DateTime?>("updated_at")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("updated_by")
-                        .HasMaxLength(100)
-                        .HasColumnType("character varying(100)");
-
-                    b.HasKey("poliza_id");
-
-                    b.HasIndex("journal_id");
-
-                    b.HasIndex("period_id");
-
-                    b.HasIndex("template_id");
-
-                    b.HasIndex("company_id", "poliza_number")
-                        .IsUnique();
-
-                    b.ToTable("con_poliza", "public");
-                });
-
-            modelBuilder.Entity("SIAD.Core.Entities.con_poliza_linea", b =>
-                {
-                    b.Property<long>("poliza_line_id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("bigint");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("poliza_line_id"));
-
-                    b.Property<long>("account_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<long>("company_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<long?>("cost_center_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<decimal>("credit_amount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("currency_code")
-                        .HasMaxLength(3)
-                        .HasColumnType("character(3)")
-                        .IsFixedLength();
-
-                    b.Property<decimal>("debit_amount")
-                        .HasColumnType("numeric(18,2)");
-
-                    b.Property<string>("description")
-                        .HasMaxLength(300)
-                        .HasColumnType("character varying(300)");
-
-                    b.Property<decimal?>("exchange_rate")
-                        .HasColumnType("numeric");
-
-                    b.Property<short>("line_number")
-                        .HasColumnType("smallint");
-
-                    b.Property<long>("poliza_id")
-                        .HasColumnType("bigint");
-
-                    b.Property<string>("source_document")
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.HasKey("poliza_line_id");
-
-                    b.HasIndex("account_id");
-
-                    b.HasIndex("cost_center_id");
-
-                    b.HasIndex("poliza_id");
-
-                    b.HasIndex("company_id", "poliza_id", "line_number")
-                        .IsUnique();
-
-                    b.ToTable("con_poliza_linea", "public");
+                    b.ToTable("con_plantilla_partida_hdr", "public");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_regla_integracion", b =>
@@ -3467,6 +5393,16 @@ namespace SIAD.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("type_id"));
 
+                    b.Property<bool>("allows_account_limit")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("allows_cash_flow")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
                     b.Property<bool>("allows_cost_center")
                         .HasColumnType("boolean");
 
@@ -3498,8 +5434,33 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(300)
                         .HasColumnType("character varying(300)");
 
+                    b.Property<long>("document_sequence_start")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(1L);
+
+                    b.Property<short>("frequency")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<bool>("is_automatic")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("is_default")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<long>("last_document_number")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint")
+                        .HasDefaultValue(0L);
+
+                    b.Property<int>("max_entries")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
 
                     b.Property<string>("name")
                         .IsRequired()
@@ -3511,6 +5472,21 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(20)
                         .HasColumnType("character varying(20)");
 
+                    b.Property<short?>("status_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)1);
+
+                    b.Property<short>("type_oper")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
+                    b.Property<short>("type_trans")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("smallint")
+                        .HasDefaultValue((short)0);
+
                     b.Property<DateTime?>("updated_at")
                         .HasColumnType("timestamp with time zone");
 
@@ -3520,12 +5496,97 @@ namespace SIAD.Data.Migrations
 
                     b.HasKey("type_id");
 
-                    b.HasIndex("company_id");
-
                     b.HasIndex("company_id", "code")
                         .IsUnique();
 
-                    b.ToTable("con_tipo_transaccion", "public");
+                    b.HasIndex("company_id", "is_default")
+                        .IsUnique()
+                        .HasFilter("is_default");
+
+                    b.ToTable("con_tipo_transaccion", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_con_tipo_transaccion_frequency", "frequency >= 0 AND frequency <= 2");
+
+                            t.HasCheckConstraint("ck_con_tipo_transaccion_max_entries", "max_entries >= 0");
+
+                            t.HasCheckConstraint("ck_con_tipo_transaccion_type_oper", "type_oper >= 0 AND type_oper <= 10");
+
+                            t.HasCheckConstraint("ck_con_tipo_transaccion_type_trans", "type_trans >= 0 AND type_trans <= 5");
+                        });
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_tipo_transaccion_rule", b =>
+                {
+                    b.Property<long>("rule_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("rule_id"));
+
+                    b.Property<string>("account_code_from")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("account_code_to")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("cost_center_code_from")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("cost_center_code_to")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<bool>("is_active")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<int>("line_number")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("third_party_code_from")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("third_party_code_to")
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<long>("type_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("rule_id");
+
+                    b.HasIndex("type_id");
+
+                    b.HasIndex("company_id", "type_id", "line_number")
+                        .IsUnique();
+
+                    b.ToTable("con_tipo_transaccion_rule", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_con_tipo_transaccion_rule_line", "line_number >= 1");
+                        });
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.concepto_cobro_adicional", b =>
@@ -3664,9 +5725,6 @@ namespace SIAD.Data.Migrations
                     b.Property<int>("maestro_cliente_id")
                         .HasColumnType("integer");
 
-                    b.Property<int?>("tarifa_catalogo_id")
-                        .HasColumnType("integer");
-
                     b.Property<string>("usuariocreacion")
                         .HasMaxLength(256)
                         .HasColumnType("character varying(256)");
@@ -3678,9 +5736,7 @@ namespace SIAD.Data.Migrations
                     b.HasKey("configuracion_tasas_id")
                         .HasName("configuracion_tasas_id_pkey");
 
-                    b.HasIndex("tarifa_catalogo_id");
-
-                    b.HasIndex(new[] { "maestro_cliente_id", "tarifa_catalogo_id" }, "ix_configuracion_tasas_cliente_tarifa");
+                    b.HasIndex("maestro_cliente_id");
 
                     b.ToTable("configuracion_tasas");
                 });
@@ -4702,6 +6758,36 @@ namespace SIAD.Data.Migrations
                     b.ToTable("informativo", (string)null);
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.letra", b =>
+                {
+                    b.Property<string>("letras")
+                        .HasMaxLength(1)
+                        .HasColumnType("character")
+                        .IsFixedLength();
+
+                    b.Property<DateTime?>("fechacreacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("fechamodificacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<decimal?>("num")
+                        .HasColumnType("numeric(1,0)");
+
+                    b.Property<string>("usuariocreacion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("usuariomodificacion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("letras")
+                        .HasName("letra_pkey");
+
+                    b.ToTable("letras", (string)null);
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.log_cliclo_descarga_app", b =>
                 {
                     b.Property<int?>("anio")
@@ -4807,6 +6893,9 @@ namespace SIAD.Data.Migrations
                     b.Property<string>("codigo")
                         .HasColumnType("character varying");
 
+                    b.Property<long?>("cont_account_id")
+                        .HasColumnType("bigint");
+
                     b.Property<string>("nombre")
                         .HasColumnType("character varying");
 
@@ -4816,6 +6905,9 @@ namespace SIAD.Data.Migrations
 
                     b.HasKey("ide")
                         .HasName("miscelaneos_catalogo_pkey");
+
+                    b.HasIndex("cont_account_id")
+                        .HasDatabaseName("ix_miscelaneos_catalogo_cont_account_id");
 
                     b.ToTable("miscelaneos_catalogo", (string)null);
                 });
@@ -5206,6 +7298,9 @@ namespace SIAD.Data.Migrations
                     b.Property<long>("recibo")
                         .HasColumnType("bigint");
 
+                    b.Property<string>("banco")
+                        .HasColumnType("text");
+
                     b.Property<string>("cliente")
                         .HasMaxLength(30)
                         .HasColumnType("character varying(30)");
@@ -5220,9 +7315,34 @@ namespace SIAD.Data.Migrations
                     b.Property<decimal>("total")
                         .HasColumnType("numeric(18,2)");
 
+                    b.Property<string>("usuario")
+                        .HasColumnType("text");
+
                     b.HasKey("recibo");
 
                     b.ToTable("pagos_miscelaneos", (string)null);
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.pagos_miscelaneos_dtl", b =>
+                {
+                    b.Property<long>("recibo")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("linea")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("concepto")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<decimal?>("monto")
+                        .HasPrecision(18, 2)
+                        .HasColumnType("numeric(18,2)");
+
+                    b.HasKey("recibo", "linea")
+                        .HasName("pagos_miscelaneos_dtl_pkey");
+
+                    b.ToTable("pagos_miscelaneos_dtl", (string)null);
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.pagovariostemp", b =>
@@ -5729,6 +7849,10 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(150)
                         .HasColumnType("character varying(150)");
 
+                    b.Property<string>("nombre_contacto")
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
                     b.Property<string>("nombrebanco1")
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
@@ -5797,6 +7921,8 @@ namespace SIAD.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("uuid")
                         .HasDefaultValueSql("gen_random_uuid()");
+
+                    b.HasKey("cod_tipoproveedor");
 
                     b.ToTable("prv_tipoproveedor", (string)null);
                 });
@@ -5918,8 +8044,349 @@ namespace SIAD.Data.Migrations
                     b.ToTable("recolectora", (string)null);
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.rep_catalogo_dataset", b =>
+                {
+                    b.Property<long>("dataset_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("dataset_id"));
+
+                    b.Property<string>("codigo")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("connection_name")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("descripcion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<bool>("is_active")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("metadata_json")
+                        .HasColumnType("text");
+
+                    b.Property<string>("nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("origen_clave")
+                        .HasMaxLength(160)
+                        .HasColumnType("character varying(160)");
+
+                    b.Property<string>("sql_text")
+                        .HasColumnType("text");
+
+                    b.Property<string>("tipo_origen")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("dataset_id");
+
+                    b.HasIndex("company_id", "codigo")
+                        .IsUnique();
+
+                    b.ToTable("rep_catalogo_dataset", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_rep_catalogo_dataset_tipo_origen", "tipo_origen IN ('STORED_PROCEDURE', 'VIEW', 'SQL')");
+                        });
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.rep_catalogo_informe", b =>
+                {
+                    b.Property<long>("informe_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("informe_id"));
+
+                    b.Property<string>("categoria")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("codigo")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("consulta_clave")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("descripcion")
+                        .HasMaxLength(500)
+                        .HasColumnType("character varying(500)");
+
+                    b.Property<string>("filtros_schema_json")
+                        .HasColumnType("text");
+
+                    b.Property<string>("icono_css_class")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<bool>("is_active")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.Property<string>("metadata_json")
+                        .HasColumnType("text");
+
+                    b.Property<string>("nombre")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<int>("orden")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("permite_exportar")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("permite_imprimir")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("ruta")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<string>("tipo_origen")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.HasKey("informe_id");
+
+                    b.HasIndex("company_id", "codigo")
+                        .IsUnique();
+
+                    b.HasIndex("company_id", "ruta")
+                        .IsUnique();
+
+                    b.ToTable("rep_catalogo_informe", "public");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.rep_dataset_parametro", b =>
+                {
+                    b.Property<long>("dataset_parametro_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("dataset_parametro_id"));
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<long>("dataset_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("etiqueta")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("character varying(150)");
+
+                    b.Property<string>("fuente_valor")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<string>("nombre")
+                        .IsRequired()
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<string>("nombre_origen")
+                        .HasMaxLength(80)
+                        .HasColumnType("character varying(80)");
+
+                    b.Property<int>("orden")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer")
+                        .HasDefaultValue(0);
+
+                    b.Property<bool>("permite_nulo")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<bool>("requerido")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("tipo_dato")
+                        .IsRequired()
+                        .HasMaxLength(30)
+                        .HasColumnType("character varying(30)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("valor_default")
+                        .HasMaxLength(200)
+                        .HasColumnType("character varying(200)");
+
+                    b.Property<bool>("visible")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(true);
+
+                    b.HasKey("dataset_parametro_id");
+
+                    b.HasIndex("dataset_id");
+
+                    b.HasIndex("company_id", "dataset_id", "nombre")
+                        .IsUnique();
+
+                    b.HasIndex("company_id", "dataset_id", "orden")
+                        .IsUnique();
+
+                    b.ToTable("rep_dataset_parametro", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_rep_dataset_parametro_fuente_valor", "fuente_valor IN ('REPORT', 'CURRENT_COMPANY', 'FIXED')");
+
+                            t.HasCheckConstraint("ck_rep_dataset_parametro_tipo_dato", "tipo_dato IN ('TEXT', 'INT64', 'DECIMAL', 'DATE', 'DATETIME', 'BOOLEAN')");
+                        });
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.rep_reporte_layout", b =>
+                {
+                    b.Property<long>("report_layout_id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("bigint");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<long>("report_layout_id"));
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTime>("created_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("created_by")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<string>("estado")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<long>("informe_id")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("layout_xml")
+                        .IsRequired()
+                        .HasColumnType("text");
+
+                    b.Property<DateTime?>("published_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("published_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<DateTime?>("updated_at")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<string>("updated_by")
+                        .HasMaxLength(100)
+                        .HasColumnType("character varying(100)");
+
+                    b.Property<int>("version_num")
+                        .HasColumnType("integer");
+
+                    b.HasKey("report_layout_id");
+
+                    b.HasIndex("informe_id");
+
+                    b.HasIndex("company_id", "informe_id")
+                        .IsUnique()
+                        .HasFilter("estado = 'PUBLISHED'");
+
+                    b.HasIndex("company_id", "informe_id", "version_num")
+                        .IsUnique();
+
+                    b.ToTable("rep_reporte_layout", "public", t =>
+                        {
+                            t.HasCheckConstraint("ck_rep_reporte_layout_estado", "estado IN ('DRAFT', 'PUBLISHED', 'ARCHIVED')");
+                        });
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.ruta", b =>
                 {
+                    b.Property<int>("id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("integer");
+
+                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("id"));
+
                     b.Property<int?>("codciclo")
                         .HasColumnType("integer");
 
@@ -5929,11 +8396,24 @@ namespace SIAD.Data.Migrations
                     b.Property<string>("descripcion")
                         .HasColumnType("character varying");
 
-                    b.Property<int>("id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
+                    b.Property<bool>("estado")
+                        .HasColumnType("boolean");
 
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("id"));
+                    b.Property<DateTime?>("fechacreacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("fechamodificacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<string>("usuariocreacion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("usuariomodificacion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.HasKey("id");
 
                     b.HasIndex("codciclo");
 
@@ -5948,8 +8428,32 @@ namespace SIAD.Data.Migrations
 
                     NpgsqlPropertyBuilderExtensions.UseIdentityAlwaysColumn(b.Property<int>("servicios_id"));
 
+                    b.Property<string>("app_grupo")
+                        .HasMaxLength(20)
+                        .HasColumnType("character varying(20)");
+
+                    b.Property<int>("app_orden")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("company_id")
+                        .HasColumnType("bigint")
+                        .HasColumnName("company_id");
+
+                    b.Property<long?>("cont_account_id")
+                        .HasColumnType("bigint")
+                        .HasColumnName("cont_account_id");
+
+                    b.Property<bool>("es_servicio_base")
+                        .HasColumnType("boolean")
+                        .HasColumnName("es_servicio_base");
+
                     b.Property<bool>("estado")
                         .HasColumnType("boolean");
+
+                    b.Property<bool>("facturable_app")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("boolean")
+                        .HasDefaultValue(false);
 
                     b.Property<DateTime?>("fechacreacion")
                         .HasColumnType("timestamp without time zone");
@@ -5982,7 +8486,39 @@ namespace SIAD.Data.Migrations
                     b.HasKey("servicios_id")
                         .HasName("servicios_id_pkey");
 
+                    b.HasIndex("company_id")
+                        .HasDatabaseName("ix_servicios_company");
+
+                    b.HasIndex("cont_account_id")
+                        .HasDatabaseName("ix_servicios_cont_account");
+
+                    b.HasIndex("company_id", "servicios_codigo")
+                        .IsUnique()
+                        .HasDatabaseName("ix_servicios_company_codigo");
+
                     b.ToTable("servicios");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.servicios_roles_ws", b =>
+                {
+                    b.Property<string>("rol")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<string>("servicios_codigo")
+                        .HasMaxLength(50)
+                        .HasColumnType("character varying(50)");
+
+                    b.Property<bool>("activo")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("descripcion")
+                        .HasColumnType("text");
+
+                    b.HasKey("rol", "servicios_codigo")
+                        .HasName("servicios_roles_ws_pkey");
+
+                    b.ToTable("servicios_roles_ws", (string)null);
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.solicitud_servicio", b =>
@@ -6101,51 +8637,10 @@ namespace SIAD.Data.Migrations
                     b.HasKey("tipo", "categoria_id", "codigo")
                         .HasName("tarifas_pkey");
 
-                    b.ToTable("tarifas");
-                });
+                    b.HasIndex("categoria_id")
+                        .HasDatabaseName("ix_tarifas_categoria_servicio");
 
-            modelBuilder.Entity("SIAD.Core.Entities.tarifas_catalogo", b =>
-                {
-                    b.Property<int>("tarifa_catalogo_id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("tarifa_catalogo_id"));
-
-                    b.Property<bool>("activo")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("boolean")
-                        .HasDefaultValue(true);
-
-                    b.Property<decimal?>("cargo_fijo")
-                        .HasPrecision(11, 4)
-                        .HasColumnType("numeric(11,4)");
-
-                    b.Property<string>("descripcion")
-                        .HasMaxLength(250)
-                        .HasColumnType("character varying(250)");
-
-                    b.Property<DateTime?>("fecha_creacion")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("timestamp without time zone")
-                        .HasDefaultValueSql("now()");
-
-                    b.Property<DateTime?>("fecha_modificacion")
-                        .HasColumnType("timestamp without time zone");
-
-                    b.Property<string>("nombre")
-                        .IsRequired()
-                        .HasMaxLength(120)
-                        .HasColumnType("character varying(120)");
-
-                    b.Property<decimal?>("precio_base")
-                        .HasPrecision(11, 4)
-                        .HasColumnType("numeric(11,4)");
-
-                    b.HasKey("tarifa_catalogo_id")
-                        .HasName("tarifas_catalogo_pkey");
-
-                    b.ToTable("tarifas_catalogo", (string)null);
+                    b.ToTable("tarifas", (string)null);
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.tarifas_contador", b =>
@@ -6192,6 +8687,12 @@ namespace SIAD.Data.Migrations
                     b.HasKey("ide")
                         .HasName("tarifas_contador_pkey");
 
+                    b.HasIndex("categoria_id")
+                        .HasDatabaseName("ix_tarifas_contador_categoria_servicio");
+
+                    b.HasIndex("tipo", "categoria_id", "codigo")
+                        .HasDatabaseName("ix_tarifas_contador_tarifa");
+
                     b.ToTable("tarifas_contador", (string)null);
                 });
 
@@ -6218,9 +8719,26 @@ namespace SIAD.Data.Migrations
                         .HasMaxLength(80)
                         .HasColumnType("character varying(80)");
 
+                    b.Property<bool>("estado")
+                        .HasColumnType("boolean");
+
+                    b.Property<DateTime?>("fechacreacion")
+                        .HasColumnType("timestamp without time zone");
+
+                    b.Property<DateTime?>("fechamodificacion")
+                        .HasColumnType("timestamp without time zone");
+
                     b.Property<string>("tipo")
                         .HasMaxLength(2)
                         .HasColumnType("character varying(2)");
+
+                    b.Property<string>("usuariocreacion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
+
+                    b.Property<string>("usuariomodificacion")
+                        .HasMaxLength(256)
+                        .HasColumnType("character varying(256)");
 
                     b.HasKey("tipo_id")
                         .HasName("tipo_d_pkey");
@@ -6724,6 +9242,200 @@ namespace SIAD.Data.Migrations
                     b.ToTable("identityuserrole<string>", (string)null);
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.ban_banco", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany("ban_banco")
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_banco_company_id_fkey");
+
+                    b.Navigation("company");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_config", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithOne("ban_config")
+                        .HasForeignKey("SIAD.Core.Entities.ban_config", "company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_config_company_id_fkey");
+
+                    b.Navigation("company");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_cta", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany("ban_cta")
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_cta_company_id_fkey");
+
+                    b.Navigation("company");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_cuenta", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.ban_banco", "ban_banco")
+                        .WithMany("ban_cuenta")
+                        .HasForeignKey("ban_banco_id")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_ban_cuenta_banco");
+
+                    b.HasOne("SIAD.Core.Entities.ban_cta", "ban_cta")
+                        .WithMany("ban_cuenta")
+                        .HasForeignKey("ban_cta_id")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_ban_cuenta_cta");
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany("ban_cuenta")
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_cuenta_company_id_fkey");
+
+                    b.Navigation("ban_banco");
+
+                    b.Navigation("ban_cta");
+
+                    b.Navigation("company");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_kardex", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.ban_banco", "ban_banco")
+                        .WithMany()
+                        .HasForeignKey("ban_banco_id")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_ban_kardex_banco");
+
+                    b.HasOne("SIAD.Core.Entities.ban_moneda", "ban_moneda")
+                        .WithMany()
+                        .HasForeignKey("ban_moneda_id")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("fk_ban_kardex_moneda");
+
+                    b.HasOne("SIAD.Core.Entities.ban_cuenta", "banco_cuenta")
+                        .WithMany()
+                        .HasForeignKey("banco_cuenta_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ban_kardex_cuenta");
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_ban_kardex_company");
+
+                    b.Navigation("ban_banco");
+
+                    b.Navigation("ban_moneda");
+
+                    b.Navigation("banco_cuenta");
+
+                    b.Navigation("company");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_moneda", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany("ban_moneda")
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_moneda_company_id_fkey");
+
+                    b.Navigation("company");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_movimiento", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.ban_cuenta", "banco_cuenta")
+                        .WithMany("ban_movimiento")
+                        .HasForeignKey("banco_cuenta_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_movimiento_banco_cuenta_id_fkey");
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany("ban_movimiento")
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_movimiento_company_id_fkey");
+
+                    b.Navigation("banco_cuenta");
+
+                    b.Navigation("company");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_movimiento_detalle", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany("ban_movimiento_detalle")
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_movimiento_detalle_company_id_fkey");
+
+                    b.HasOne("SIAD.Core.Entities.ban_movimiento", "movimiento")
+                        .WithMany("ban_movimiento_detalle")
+                        .HasForeignKey("movimiento_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_movimiento_detalle_movimiento_id_fkey");
+
+                    b.Navigation("company");
+
+                    b.Navigation("movimiento");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_movimiento_transito", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.ban_cuenta", "banco_cuenta")
+                        .WithMany("ban_movimiento_transito")
+                        .HasForeignKey("banco_cuenta_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_movimiento_transito_banco_cuenta_id_fkey");
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", "company")
+                        .WithMany("ban_movimiento_transito")
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("ban_movimiento_transito_company_id_fkey");
+
+                    b.HasOne("SIAD.Core.Entities.ban_movimiento", "movimiento")
+                        .WithMany("ban_movimiento_transito")
+                        .HasForeignKey("movimiento_id")
+                        .OnDelete(DeleteBehavior.SetNull)
+                        .HasConstraintName("ban_movimiento_transito_movimiento_id_fkey");
+
+                    b.Navigation("banco_cuenta");
+
+                    b.Navigation("company");
+
+                    b.Navigation("movimiento");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_tipos_transacciones", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_centro_costo", "cost_center")
+                        .WithMany()
+                        .HasForeignKey("cod_centrocosto")
+                        .HasConstraintName("fk_ban_tipos_transacciones_centrocosto");
+
+                    b.Navigation("cost_center");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.cliente_detalle", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.cliente_maestro", "maestro_cliente")
@@ -6831,6 +9543,39 @@ namespace SIAD.Data.Migrations
                         .HasForeignKey("company_id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_apertura_centro_costo", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "account")
+                        .WithMany()
+                        .HasForeignKey("account_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_centro_costo", "cost_center")
+                        .WithMany("aperturas_centro_costo")
+                        .HasForeignKey("cost_center_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_periodo_contable", "period")
+                        .WithMany()
+                        .HasForeignKey("period_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("account");
+
+                    b.Navigation("cost_center");
+
+                    b.Navigation("period");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_apertura_saldo", b =>
@@ -7000,7 +9745,7 @@ namespace SIAD.Data.Migrations
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
-                    b.HasOne("SIAD.Core.Entities.con_poliza", "poliza")
+                    b.HasOne("SIAD.Core.Entities.con_partida_hdr", "poliza")
                         .WithMany()
                         .HasForeignKey("poliza_id")
                         .OnDelete(DeleteBehavior.SetNull);
@@ -7045,6 +9790,72 @@ namespace SIAD.Data.Migrations
                     b.Navigation("third_party");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_partida_dtl", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "account")
+                        .WithMany("poliza_lineas")
+                        .HasForeignKey("account_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_centro_costo", "cost_center")
+                        .WithMany("poliza_lineas")
+                        .HasForeignKey("cost_center_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_partida_hdr", "poliza")
+                        .WithMany("lineas")
+                        .HasForeignKey("poliza_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_tercero", "tercero")
+                        .WithMany()
+                        .HasForeignKey("company_id", "third_party_id")
+                        .HasPrincipalKey("company_id", "third_party_id");
+
+                    b.Navigation("account");
+
+                    b.Navigation("cost_center");
+
+                    b.Navigation("poliza");
+
+                    b.Navigation("tercero");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_partida_hdr", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_diario", "journal")
+                        .WithMany("polizas")
+                        .HasForeignKey("journal_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_periodo_contable", "period")
+                        .WithMany("polizas")
+                        .HasForeignKey("period_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_plantilla_partida_hdr", "template")
+                        .WithMany("polizas")
+                        .HasForeignKey("template_id")
+                        .OnDelete(DeleteBehavior.SetNull);
+
+                    b.HasOne("SIAD.Core.Entities.con_tipo_transaccion", "tipo_transaccion")
+                        .WithMany()
+                        .HasForeignKey("company_id", "type_id")
+                        .HasPrincipalKey("company_id", "type_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("journal");
+
+                    b.Navigation("period");
+
+                    b.Navigation("template");
+
+                    b.Navigation("tipo_transaccion");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.con_plan_cuenta", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "adjustment_account")
@@ -7069,7 +9880,7 @@ namespace SIAD.Data.Migrations
                     b.Navigation("parent_account");
                 });
 
-            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_poliza_linea", b =>
+            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_partida_dtl", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "account")
                         .WithMany("plantilla_lineas")
@@ -7082,7 +9893,7 @@ namespace SIAD.Data.Migrations
                         .HasForeignKey("cost_center_id")
                         .OnDelete(DeleteBehavior.SetNull);
 
-                    b.HasOne("SIAD.Core.Entities.con_plantilla_poliza", "template")
+                    b.HasOne("SIAD.Core.Entities.con_plantilla_partida_hdr", "template")
                         .WithMany("lineas")
                         .HasForeignKey("template_id")
                         .OnDelete(DeleteBehavior.Cascade)
@@ -7093,56 +9904,6 @@ namespace SIAD.Data.Migrations
                     b.Navigation("cost_center");
 
                     b.Navigation("template");
-                });
-
-            modelBuilder.Entity("SIAD.Core.Entities.con_poliza", b =>
-                {
-                    b.HasOne("SIAD.Core.Entities.con_diario", "journal")
-                        .WithMany("polizas")
-                        .HasForeignKey("journal_id")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SIAD.Core.Entities.con_periodo_contable", "period")
-                        .WithMany("polizas")
-                        .HasForeignKey("period_id")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SIAD.Core.Entities.con_plantilla_poliza", "template")
-                        .WithMany("polizas")
-                        .HasForeignKey("template_id")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.Navigation("journal");
-
-                    b.Navigation("period");
-
-                    b.Navigation("template");
-                });
-
-            modelBuilder.Entity("SIAD.Core.Entities.con_poliza_linea", b =>
-                {
-                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "account")
-                        .WithMany("poliza_lineas")
-                        .HasForeignKey("account_id")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("SIAD.Core.Entities.con_centro_costo", "cost_center")
-                        .WithMany("poliza_lineas")
-                        .HasForeignKey("cost_center_id")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("SIAD.Core.Entities.con_poliza", "poliza")
-                        .WithMany("lineas")
-                        .HasForeignKey("poliza_id")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("account");
-
-                    b.Navigation("cost_center");
-
-                    b.Navigation("poliza");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_regla_integracion", b =>
@@ -7215,6 +9976,23 @@ namespace SIAD.Data.Migrations
                         .IsRequired();
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.con_tipo_transaccion_rule", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.con_tipo_transaccion", "tipo_transaccion")
+                        .WithMany()
+                        .HasForeignKey("type_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("tipo_transaccion");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.configuracion_cobros_adicionales_detalle", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.configuracion_cobros_adicionale", "configuracion_cobro_adicional_ideNavigation")
@@ -7234,15 +10012,7 @@ namespace SIAD.Data.Migrations
                         .IsRequired()
                         .HasConstraintName("maestro_cliente_id_fkey");
 
-                    b.HasOne("SIAD.Core.Entities.tarifas_catalogo", "tarifa_catalogo")
-                        .WithMany("configuracion_tasas")
-                        .HasForeignKey("tarifa_catalogo_id")
-                        .OnDelete(DeleteBehavior.SetNull)
-                        .HasConstraintName("fk_configuracion_tasas_tarifas_catalogo");
-
                     b.Navigation("maestro_cliente");
-
-                    b.Navigation("tarifa_catalogo");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.configuracion_tasas_detalle", b =>
@@ -7315,6 +10085,17 @@ namespace SIAD.Data.Migrations
                     b.Navigation("user");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.miscelaneos_catalogo", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "cont_account")
+                        .WithMany()
+                        .HasForeignKey("cont_account_id")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .HasConstraintName("fk_miscelaneos_catalogo_cont_account");
+
+                    b.Navigation("cont_account");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.pagos_dtl", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.pagos_hdr", "pago")
@@ -7337,6 +10118,66 @@ namespace SIAD.Data.Migrations
                     b.Navigation("caja");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.pagos_miscelaneos_dtl", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.pagos_miscelaneo", "reciboNavigation")
+                        .WithMany("pagos_miscelaneos_dtl")
+                        .HasForeignKey("recibo")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("pagos_miscelaneos_dtl_recibo_fkey");
+
+                    b.Navigation("reciboNavigation");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.rep_catalogo_dataset", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.rep_catalogo_informe", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.rep_dataset_parametro", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.rep_catalogo_dataset", null)
+                        .WithMany()
+                        .HasForeignKey("dataset_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.rep_reporte_layout", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("SIAD.Core.Entities.rep_catalogo_informe", null)
+                        .WithMany()
+                        .HasForeignKey("informe_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.ruta", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.ciclo", "codcicloNavigation")
@@ -7348,6 +10189,23 @@ namespace SIAD.Data.Migrations
                     b.Navigation("codcicloNavigation");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.servicio", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.cfg_company", null)
+                        .WithMany()
+                        .HasForeignKey("company_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("servicios_company_id_fkey");
+
+                    b.HasOne("SIAD.Core.Entities.con_plan_cuenta", "cont_account")
+                        .WithMany()
+                        .HasForeignKey("cont_account_id")
+                        .HasConstraintName("servicios_cont_account_id_fkey");
+
+                    b.Navigation("cont_account");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.solicitud_servicio", b =>
                 {
                     b.HasOne("SIAD.Core.Entities.categoria_servicio", "categoria_servicio")
@@ -7357,6 +10215,29 @@ namespace SIAD.Data.Migrations
                         .HasConstraintName("solicitud_servicio_categoria_servicio_id_fkey");
 
                     b.Navigation("categoria_servicio");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.tarifa", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.categoria_servicio", null)
+                        .WithMany()
+                        .HasForeignKey("categoria_id")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired()
+                        .HasConstraintName("fk_tarifas_categoria_servicio");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.tarifas_contador", b =>
+                {
+                    b.HasOne("SIAD.Core.Entities.categoria_servicio", null)
+                        .WithMany()
+                        .HasForeignKey("categoria_id")
+                        .HasConstraintName("fk_tarifas_contador_categoria_servicio");
+
+                    b.HasOne("SIAD.Core.Entities.tarifa", null)
+                        .WithMany()
+                        .HasForeignKey("tipo", "categoria_id", "codigo")
+                        .HasConstraintName("fk_tarifas_contador_tarifa");
                 });
 
             modelBuilder.Entity("identityuserrole_string_", b =>
@@ -7376,6 +10257,30 @@ namespace SIAD.Data.Migrations
                         .HasConstraintName("fk_user_roles_asp_net_users_identity_user_id");
                 });
 
+            modelBuilder.Entity("SIAD.Core.Entities.ban_banco", b =>
+                {
+                    b.Navigation("ban_cuenta");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_cta", b =>
+                {
+                    b.Navigation("ban_cuenta");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_cuenta", b =>
+                {
+                    b.Navigation("ban_movimiento");
+
+                    b.Navigation("ban_movimiento_transito");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.ban_movimiento", b =>
+                {
+                    b.Navigation("ban_movimiento_detalle");
+
+                    b.Navigation("ban_movimiento_transito");
+                });
+
             modelBuilder.Entity("SIAD.Core.Entities.barrio", b =>
                 {
                     b.Navigation("cliente_maestros");
@@ -7391,6 +10296,25 @@ namespace SIAD.Data.Migrations
                     b.Navigation("cliente_maestros");
 
                     b.Navigation("solicitud_servicios");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.cfg_company", b =>
+                {
+                    b.Navigation("ban_banco");
+
+                    b.Navigation("ban_config");
+
+                    b.Navigation("ban_cta");
+
+                    b.Navigation("ban_cuenta");
+
+                    b.Navigation("ban_moneda");
+
+                    b.Navigation("ban_movimiento");
+
+                    b.Navigation("ban_movimiento_detalle");
+
+                    b.Navigation("ban_movimiento_transito");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.ciclo", b =>
@@ -7419,6 +10343,8 @@ namespace SIAD.Data.Migrations
 
             modelBuilder.Entity("SIAD.Core.Entities.con_centro_costo", b =>
                 {
+                    b.Navigation("aperturas_centro_costo");
+
                     b.Navigation("plantilla_lineas");
 
                     b.Navigation("poliza_lineas");
@@ -7427,6 +10353,11 @@ namespace SIAD.Data.Migrations
             modelBuilder.Entity("SIAD.Core.Entities.con_diario", b =>
                 {
                     b.Navigation("polizas");
+                });
+
+            modelBuilder.Entity("SIAD.Core.Entities.con_partida_hdr", b =>
+                {
+                    b.Navigation("lineas");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_periodo_contable", b =>
@@ -7443,16 +10374,11 @@ namespace SIAD.Data.Migrations
                     b.Navigation("poliza_lineas");
                 });
 
-            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_poliza", b =>
+            modelBuilder.Entity("SIAD.Core.Entities.con_plantilla_partida_hdr", b =>
                 {
                     b.Navigation("lineas");
 
                     b.Navigation("polizas");
-                });
-
-            modelBuilder.Entity("SIAD.Core.Entities.con_poliza", b =>
-                {
-                    b.Navigation("lineas");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.con_tercero", b =>
@@ -7499,9 +10425,9 @@ namespace SIAD.Data.Migrations
                     b.Navigation("detalles");
                 });
 
-            modelBuilder.Entity("SIAD.Core.Entities.tarifas_catalogo", b =>
+            modelBuilder.Entity("SIAD.Core.Entities.pagos_miscelaneo", b =>
                 {
-                    b.Navigation("configuracion_tasas");
+                    b.Navigation("pagos_miscelaneos_dtl");
                 });
 
             modelBuilder.Entity("SIAD.Core.Entities.tipo_uso_servicio", b =>

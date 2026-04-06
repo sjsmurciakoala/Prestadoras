@@ -1,4 +1,4 @@
-@page "/Account/Login"
+﻿@page "/Account/Login"
 @layout AccountLayout
 
 @using System.ComponentModel.DataAnnotations
@@ -9,11 +9,13 @@
 @using apc.Client.Services
 @using apc.Data
 @using SIAD.Core.Constants
+@using SIAD.Services.Tenancy
 
 @inject BrandingClient BrandingClient
 @inject SignInManager<ApplicationUser> SignInManager
 @inject apc.Components.Account.IdentityRedirectManager RedirectManager
 @inject ILogger<Login> Logger
+@inject ITenantCompanyService TenantCompanyService
 
 <PageTitle>Iniciar sesion</PageTitle>
 
@@ -191,16 +193,31 @@
                 errorMessage = "No se pudo completar el inicio de sesion.";
                 return;
             }
-
-            var claims = await SignInManager.UserManager.GetClaimsAsync(user);
-            var hasCompanyClaim = claims.Any(c => c.Type == TenantClaimTypes.CompanyId &&
-                                                  long.TryParse(c.Value, out var companyId) && companyId > 0);
-
-            if (!hasCompanyClaim)
+            var isSuperAdmin = await SignInManager.UserManager.IsInRoleAsync(user, RoleNames.SuperAdministrador);
+            if (!isSuperAdmin)
             {
-                await SignInManager.SignOutAsync();
-                errorMessage = "Tu usuario no tiene una empresa asignada. Contacta al administrador.";
-                return; 
+                var claims = await SignInManager.UserManager.GetClaimsAsync(user);
+                var companyClaim = claims.FirstOrDefault(c => c.Type == TenantClaimTypes.CompanyId);
+                var companyId = companyClaim is not null &&
+                                long.TryParse(companyClaim.Value, out var parsedCompanyId) &&
+                                parsedCompanyId > 0
+                    ? parsedCompanyId
+                    : 0;
+                var hasCompanyClaim = companyId > 0;
+
+                if (!hasCompanyClaim)
+                {
+                    await SignInManager.SignOutAsync();
+                    errorMessage = "Tu usuario no tiene una empresa asignada. Contacta al administrador.";
+                    return;
+                }
+
+                if (!await TenantCompanyService.ExisteEmpresaAsync(companyId))
+                {
+                    await SignInManager.SignOutAsync();
+                    errorMessage = "La empresa asignada a tu usuario ya no existe. Contacta al administrador.";
+                    return;
+                }
             }
             Logger.LogInformation("User logged in.");
             RedirectManager.RedirectTo(ReturnUrl);
@@ -241,6 +258,8 @@
         public bool RememberMe { get; set; }
     }
 }
+
+
 
 
 

@@ -1,0 +1,152 @@
+.page-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.header-actions {
+    justify-content: flex-end;
+}
+
+.page-title {
+    font-weight: 800;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+.modern-card {
+    background: #ffffff;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.02);
+    padding: 1.5rem;
+}
+
+.splash-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(248, 249, 250, 0.95);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 3000;
+}
+
+.splash-card {
+    background: #ffffff;
+    border-radius: 16px;
+    padding: 2rem 2.5rem;
+    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 1rem;
+    text-align: center;
+}
+
+.splash-text {
+    color: #2c3e50;
+    font-weight: 600;
+}
+
+.toast-container-floating {
+    position: fixed;
+    top: 1rem;
+    right: 1rem;
+    z-index: 4000;
+    width: min(420px, calc(100vw - 2rem));
+    pointer-events: none;
+}
+
+.toast-notification {
+    border-radius: 10px;
+    border-left: 4px solid transparent;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.18);
+    background: #ffffff;
+    color: #1f2d3d;
+    padding: 0.85rem 1rem;
+    font-size: 0.92rem;
+    line-height: 1.35;
+    animation: toast-slide-in 180ms ease-out;
+}
+
+.toast-notification.toast-info {
+    border-left-color: #0dcaf0;
+}
+
+.toast-notification.toast-success {
+    border-left-color: #198754;
+}
+
+.toast-notification.toast-warning {
+    border-left-color: #ffc107;
+}
+
+.toast-notification.toast-danger {
+    border-left-color: #dc3545;
+}
+
+@keyframes toast-slide-in {
+    from {
+        transform: translateY(-8px);
+        opacity: 0;
+    }
+
+    to {
+        transform: translateY(0);
+        opacity: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .header-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .header-actions {
+        width: 100%;
+        justify-content: flex-start;
+    }
+
+    .btn-modern {
+        width: 100%;
+        display: block;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+    }
+
+    .modern-card {
+        padding: 1rem;
+    }
+
+    .toast-container-floating {
+        top: 0.75rem;
+        right: 0.75rem;
+        width: calc(100vw - 1.5rem);
+    }
+}

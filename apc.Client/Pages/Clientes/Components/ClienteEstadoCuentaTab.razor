@@ -1,76 +1,158 @@
-@using SIAD.Core.DTOs.Clientes
+﻿@using SIAD.Core.DTOs.Clientes
 @using apc.Client.Services.Clientes
+@using apc.Client.Pages.Clientes
+@using DevExpress.Blazor
 @inject ClientesClient ClientesClient
 
-<div class="d-flex flex-column gap-3">
-    @if (isLoadingCuenta)
-    {
-        <DxSkeletonLine />
-        <DxSkeletonLine />
-    }
-    else if (!string.IsNullOrEmpty(errorCuenta))
-    {
-        <DxAlert AlertType="AlertType.Danger">@errorCuenta</DxAlert>
-    }
-    else if (estadoCuenta != null)
-    {
-        <DxCard>
-            <HeaderTemplate>
-                <div class="card-header bg-light">
-                    <strong>Resumen de Cuenta</strong>
-                </div>
-            </HeaderTemplate>
-            <BodyTemplate>
-                                <DxFormLayout>
-                    <DxFormLayoutItem Caption="Saldo Actual">@((estadoCuenta.SaldoActual.HasValue ? estadoCuenta.SaldoActual.Value.ToString("C2") : "-"))</DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Ultimo pago">@((estadoCuenta.UltimoPagoMonto.HasValue ? estadoCuenta.UltimoPagoMonto.Value.ToString("C2") : "-"))</DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Fecha ultimo pago">@((estadoCuenta.FechaUltimoPago.HasValue ? estadoCuenta.FechaUltimoPago.Value.ToString("d") : "-"))</DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Consumo promedio">@((estadoCuenta.ConsumoPromedio.HasValue ? estadoCuenta.ConsumoPromedio.Value.ToString("N2") : "-"))</DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Meses pendientes">@((estadoCuenta.MesesPendientes.HasValue ? estadoCuenta.MesesPendientes.Value.ToString() : "-"))</DxFormLayoutItem>
-                </DxFormLayout>
-            </BodyTemplate>
-        </DxCard>
-    }
+<div class="cliente-estado-cuenta-container">
+    <!-- ENCABEZADO -->
+    <div class="section-header mb-4">
+        <i class="bi bi-receipt"></i>
+        <h4 class="m-0">Estado de Cuenta</h4>
+    </div>
 
-    @if (isLoadingMovimientos)
-    {
-        <DxSkeletonLine />
-        <DxSkeletonLine />
-    }
-    else if (!string.IsNullOrEmpty(errorMovimientos))
-    {
-        <DxAlert AlertType="AlertType.Danger">@errorMovimientos</DxAlert>
-    }
-    else if (movimientos.Length == 0)
-    {
-        <DxAlert AlertType="AlertType.Info">No hay movimientos registrados.</DxAlert>
-    }
-    else
-    {
-        <DxCard>
-            <HeaderTemplate>
-                <div class="card-header bg-light">
-                    <strong>Movimientos Recientes</strong>
-                </div>
-            </HeaderTemplate>
-            <BodyTemplate>
-                <DxDataGrid Data="@movimientos" 
-                            ShowSearchBox="false"
-                            ShowFilterRow="false"
-                            ShowPager="false"
-                            AllowSort="false"
-                            CssClass="w-100">
+    <!-- RESUMEN DE CUENTA -->
+    <div class="modern-card mb-4">
+        <div class="section-header-inner mb-3">
+            <i class="bi bi-wallet2"></i>
+            <h5 class="m-0">Resumen de Cuenta</h5>
+        </div>
+
+        @if (isLoadingCuenta)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando estado de cuenta..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrEmpty(errorCuenta))
+        {
+            <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
+                @errorCuenta
+            </DxAlert>
+        }
+        else if (estadoCuenta != null)
+        {
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical" CssClass="resumen-cuenta-form">
+                <DxFormLayoutGroup ColSpanXs="12" ColSpanLg="6" CssClass="resumen-group">
+                    <DxFormLayoutItem Caption="Saldo Actual" ColSpanXs="12" ColSpanMd="6">
+                        <div class="valor-destacado @GetSaldoClass(estadoCuenta.SaldoActual)">
+                            @((estadoCuenta.SaldoActual.HasValue ? estadoCuenta.SaldoActual.Value.ToString("C2") : "-"))
+                        </div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Meses pendientes" ColSpanXs="12" ColSpanMd="6">
+                        <div class="valor-destacado @GetMesesPendientesClass(estadoCuenta.MesesPendientes)">
+                            @((estadoCuenta.MesesPendientes.HasValue ? estadoCuenta.MesesPendientes.Value.ToString() : "-"))
+                        </div>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+
+                <DxFormLayoutGroup ColSpanXs="12" ColSpanLg="6" CssClass="resumen-group">
+                    <DxFormLayoutItem Caption="Último pago" ColSpanXs="12" ColSpanMd="6">
+                        <div class="valor-normal">
+                            @((estadoCuenta.UltimoPagoMonto.HasValue ? estadoCuenta.UltimoPagoMonto.Value.ToString("C2") : "-"))
+                        </div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Fecha último pago" ColSpanXs="12" ColSpanMd="6">
+                        <div class="valor-normal">
+                            @((estadoCuenta.FechaUltimoPago.HasValue ? estadoCuenta.FechaUltimoPago.Value.ToString("d") : "-"))
+                        </div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Consumo promedio" ColSpanXs="12" ColSpanMd="12">
+                        <div class="valor-normal">
+                            @((estadoCuenta.ConsumoPromedio.HasValue ? estadoCuenta.ConsumoPromedio.Value.ToString("N2") + " m³" : "-"))
+                        </div>
+                    </DxFormLayoutItem>
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        }
+    </div>
+
+    <!-- MOVIMIENTOS RECIENTES -->
+    <div class="modern-card">
+        <div class="section-header-inner mb-3">
+            <i class="bi bi-clock-history"></i>
+            <h5 class="m-0">Movimientos Recientes</h5>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <DxButton Text="Recargar"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="RecargarMovimientos" />
+            <div class="ms-auto text-muted small">
+                Total: <span class="fw-bold">@((movimientosDataSource is null) ? "0" : movimientosDataSource.LastTotalCount.ToString("N0"))</span>
+            </div>
+        </div>
+
+        @if (ClienteId <= 0)
+        {
+            <div class="alert alert-warning mb-0">Seleccione un cliente para ver los movimientos.</div>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(movimientosDataSource?.LastError))
+            {
+                <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
+                    @movimientosDataSource!.LastError
+                </DxAlert>
+            }
+
+            <div class="grid-wrapper">
+                <DxGrid @ref="movimientosGrid"
+                        Data="@movimientosDataSource"
+                        KeyFieldName="@nameof(ClienteMovimientoDto.MovimientoId)"
+                        CssClass="estado-cuenta-grid grid-solicitudes"
+                        ShowFilterRow="false"
+                        ShowPager="true"
+                        PageSize="20"
+                        FocusedRowEnabled="false">
                     <Columns>
-                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Fecha)" Caption="Fecha" Width="100px" />
-                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Tipo)" Caption="Tipo" Width="100px" />
-                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Descripcion)" Caption="Descripción" />
-                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.Monto)" Caption="Monto" Width="100px" />
-                        <DxDataGridColumn Field="@nameof(ClienteMovimientoDto.SaldoInline)" Caption="Saldo" Width="100px" />
+                        <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Fecha)"
+                                          Caption="Fecha"
+                                          Width="110px"
+                                          DisplayFormat="d" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Tipo)"
+                                          Caption="Tipo"
+                                          Width="100px" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Descripcion)"
+                                          Caption="Descripción"
+                                          Width="220px" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Monto)"
+                                          Caption="Monto"
+                                          Width="120px"
+                                          TextAlignment="GridTextAlignment.Right"
+                                          DisplayFormat="C2" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.SaldoInline)"
+                                          Caption="Saldo"
+                                          Width="120px"
+                                          TextAlignment="GridTextAlignment.Right"
+                                          DisplayFormat="C2" />
                     </Columns>
-                </DxDataGrid>
-            </BodyTemplate>
-        </DxCard>
-    }
+                </DxGrid>
+            </div>
+
+            @if (movimientosDataSource?.HasLoaded == true && movimientosDataSource.LastTotalCount == 0)
+            {
+                <div class="text-center p-4">
+                    <i class="bi bi-inbox" style="font-size: 3rem; color: #6c757d; opacity: 0.5;"></i>
+                    <p class="text-muted mt-2">No hay movimientos registrados</p>
+                </div>
+            }
+
+            @if (movimientosDataSource?.HasLoaded != true)
+            {
+                <div class="text-center p-4">
+                    <DxLoadingPanel Visible="true" Text="Cargando movimientos..." />
+                    <div style="height:80px"></div>
+                </div>
+            }
+        }
+    </div>
 </div>
 
 @code {
@@ -82,13 +164,47 @@
     private bool isLoadingCuenta = true;
     private string? errorCuenta;
 
-    private ClienteMovimientoDto[] movimientos = Array.Empty<ClienteMovimientoDto>();
-    private bool isLoadingMovimientos = true;
-    private string? errorMovimientos;
+    private DxGrid? movimientosGrid;
+    private ClienteMovimientosGridDataSource? movimientosDataSource;
+    private bool pendingMovimientosReload;
+
+    protected override void OnInitialized()
+    {
+        movimientosDataSource = new ClienteMovimientosGridDataSource(
+            ClientesClient,
+            onDataChanged: () => InvokeAsync(StateHasChanged)
+        );
+    }
 
     protected override async Task OnParametersSetAsync()
     {
-        await Task.WhenAll(LoadEstadoCuentaAsync(), LoadMovimientosAsync());
+        if (movimientosDataSource is not null)
+        {
+            movimientosDataSource.ClienteId = ClienteId;
+            movimientosDataSource.Reset();
+
+            if (movimientosGrid is not null)
+            {
+                movimientosGrid.Reload();
+            }
+            else
+            {
+                pendingMovimientosReload = true;
+            }
+        }
+
+        await LoadEstadoCuentaAsync();
+    }
+
+    protected override Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (pendingMovimientosReload && movimientosGrid is not null)
+        {
+            pendingMovimientosReload = false;
+            movimientosGrid.Reload();
+        }
+
+        return Task.CompletedTask;
     }
 
     private async Task LoadEstadoCuentaAsync()
@@ -110,22 +226,39 @@
         }
     }
 
-    private async Task LoadMovimientosAsync()
-    {
-        isLoadingMovimientos = true;
-        errorMovimientos = null;
+    private void RecargarMovimientos() => movimientosGrid?.Reload();
 
-        try
+    private string GetSaldoClass(decimal? saldo)
+    {
+        if (!saldo.HasValue) return "valor-neutral";
+        return saldo.Value >= 0 ? "valor-positivo" : "valor-negativo";
+    }
+
+    private string GetMesesPendientesClass(int? meses)
+    {
+        if (!meses.HasValue) return "valor-neutral";
+        if (meses.Value == 0) return "valor-positivo";
+        if (meses.Value <= 2) return "valor-advertencia";
+        return "valor-negativo";
+    }
+
+    private string GetTipoClass(string? tipo)
+    {
+        if (string.IsNullOrEmpty(tipo)) return "";
+        
+        return tipo.ToUpper() switch
         {
-            movimientos = await ClientesClient.ObtenerMovimientosAsync(ClienteId);
-        }
-        catch (Exception ex)
-        {
-            errorMovimientos = $"Error al cargar los movimientos: {ex.Message}";
-        }
-        finally
-        {
-            isLoadingMovimientos = false;
-        }
+            "PAGO" => "tipo-pago",
+            "FACTURA" => "tipo-factura",
+            "AJUSTE" => "tipo-ajuste",
+            "INTERES" => "tipo-interes",
+            _ => "tipo-otro"
+        };
+    }
+
+    private string GetMontoClass(decimal? monto)
+    {
+        if (!monto.HasValue) return "";
+        return monto.Value >= 0 ? "monto-positivo" : "monto-negativo";
     }
 }

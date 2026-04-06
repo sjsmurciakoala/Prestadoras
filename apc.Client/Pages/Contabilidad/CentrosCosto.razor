@@ -1,162 +1,799 @@
-@page "/contabilidad/centros-costo"
+﻿@page "/contabilidad/centros-costo"
 @attribute [Authorize]
+
+@using apc.Client.Services.Contabilidad
+@using apc.Client.Services.Tenant
+@using System.Linq
+@using System.ComponentModel.DataAnnotations
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Web
+@using System.Net.Http.Json
+
 @inject HttpClient Http
+@inject ConfiguracionSistemaClient ConfiguracionClient
+@inject TenantState TenantState
 
-<div class="contabilidad-page contabilidad-content">
-    @if (!string.IsNullOrEmpty(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger">@errorMessage</DxAlert>
-    }
+<PageTitle>Centros de Costo</PageTitle>
+<div class="contabilidad-page" id="centros-costo-view">
+    <DxMessageBox @bind-Visible="statusMessageVisible"
+                  Type="MessageBoxType.Alert"
+                  Title="@statusMessageTitle"
+                  Text="@statusMessageText"
+                  RenderStyle="@statusMessageRenderStyle"
+                  OkButtonText="Entendido"
+                  ShowCloseButton="false"
+                  CloseOnOutsideClick="false" />
 
-    <DxStackLayout Orientation="Orientation.Vertical" Spacing="15px">
-        <DxStackLayoutItem>
-            <DxButton Text="Nuevo" RenderStyle="ButtonRenderStyle.Primary" Click="@(() => OpenForm(null))" />
-            <DxButton Text="Actualizar" CssClass="ms-2" Click="LoadCentrosAsync" />
-        </DxStackLayoutItem>
-        <DxStackLayoutItem>
-            <DxGrid Data="@centros"
-                    KeyFieldName="@nameof(CentroCostoDto.CostCenterId)"
-                    ShowFilterRow="true">
-                <Columns>
-                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Code)" Caption="Código" />
-                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Name)" Caption="Nombre" />
-                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Description)" Caption="Descripción" />
-                    <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Status)" Caption="Estado" />
-                    <DxGridCommandColumn Width="130px">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is CentroCostoDto item)
+    <DxMessageBox @bind-Visible="discardChangesVisible"
+                  Type="MessageBoxType.Confirmation"
+                  Title="Cambios sin guardar"
+                  Text="Hay cambios sin guardar en el formulario actual. Si continúas, se descartarán. ¿Deseas continuar?"
+                  RenderStyle="MessageBoxRenderStyle.Warning"
+                  OkButtonText="Descartar"
+                  CancelButtonText="Seguir editando"
+                  ShowCloseButton="false"
+                  CloseOnOutsideClick="false"
+                  Closed="OnDiscardChangesMessageClosed" />
+
+    <div class="cc-toolbar-container">
+        <DxStackLayout Orientation="Orientation.Horizontal" Wrap="true" Spacing="10px" Class="w-100 justify-content-between align-items-center">
+            <Items>
+                <DxStackLayoutItem>
+                    <Template>
+                         <h4 class="mb-0 fw-bold text-secondary"><i class="bi bi-diagram-3 me-2 text-primary"></i>Centros de Costo</h4>
+                    </Template>
+                </DxStackLayoutItem>
+                <DxStackLayoutItem>
+                    <Template>
+                        <div class="d-flex gap-2">
+                             <DxButton Text="Actualizar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" IconCssClass="bi bi-arrow-clockwise"
+                                  Click="@OnActualizarClick" />
+                            <DxButton Text="Nuevo" RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-plus-lg"
+                                  Click="@OnNuevoToolbarClick" />
+                        </div>
+                    </Template>
+                </DxStackLayoutItem>
+            </Items>
+        </DxStackLayout>
+    </div>
+
+    <div class="cc-grid-wrapper shadow-sm">
+        <DxGrid @ref="gridCentros" Data="@centros" KeyFieldName="@nameof(CentroCostoDto.CostCenterId)" ShowFilterRow="true"
+                ShowPager="true" PageSize="10" PageSizeSelectorVisible="true" PageSizeSelectorItems="new int[] { 10, 20, 50 }"
+                SizeMode="SizeMode.Medium" EditMode="GridEditMode.PopupEditForm" PopupEditFormHeaderText="@popupHeaderText"
+                PopupEditFormCssClass="cc-popup-responsive" EditFormButtonsVisible="false" CustomizeEditModel="OnCustomizeEditModel"
+                EditModelSaving="OnEditModelSaving">
+
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="140px" VisibleIndex="99">
+                    <CellDisplayTemplate Context="cellContext">
+                        <div class="d-flex gap-1 justify-content-center">
+                             <DxButton RenderStyle="ButtonRenderStyle.Info" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small"
+                                  IconCssClass="bi bi-pencil-square fs-5"
+                                  Click="@((MouseEventArgs e) => OnEditarClick(cellContext.VisibleIndex))" 
+                                  title="Editar"/>
+
+                            <DxButton RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small"
+                                  IconCssClass="bi bi-trash fs-5"
+                                  Click="@((MouseEventArgs e) => OpenDeleteConfirm((CentroCostoDto)cellContext.DataItem))" 
+                                  title="Eliminar"/>
+                        </div>
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Code)" Caption="Código" Width="120px">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@FormatCentroCode((string?)cell.Value)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Name)" Caption="Nombre" MinWidth="200" />
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Description)" Caption="Descripción" Visible="false" />
+
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.AllowsMovement)" Caption="Movimientos" Width="100px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate>
+                         @if((bool)context.Value) { <i class="bi bi-check-circle-fill text-success"></i> } else { <span class="text-muted">-</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.IsPeriodic)" Caption="Periódico" Width="100px" TextAlignment="GridTextAlignment.Center">
+                     <CellDisplayTemplate>
+                          @if((bool)context.Value) { <i class="bi bi-clock-history text-info"></i> } else { <span class="text-muted">-</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.StartDate)" Caption="Inicio" DisplayFormat="{0:d}" Width="100px" />
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.EndDate)" Caption="Fin" DisplayFormat="{0:d}" Width="100px" />
+
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.LegacyStatus)" Caption="Activo" Width="80px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                         @if (cell.DataItem is CentroCostoDto item && IsCentroActivo(item)) { <span class="badge bg-success">Sí</span> } else { <span class="badge bg-secondary">No</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+
+            <EditFormTemplate Context="ctx">
+                @{ var model = (CentroCostoEditModel)ctx.EditModel; }
+                <div class="d-flex flex-column h-100">
+                    
+                    @if (!string.IsNullOrWhiteSpace(formErrorMessage))
+                    {
+                        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 mx-2 mt-2">
+                            <span>@formErrorMessage</span>
+                            <DxButton RenderStyle="ButtonRenderStyle.None" CssClass="btn-close ms-2 float-end" SizeMode="SizeMode.Small"
+                                Click="@(() => formErrorMessage = null)" />
+                        </DxAlert>
+                    }
+
+                    <div class="flex-grow-1 p-3 overflow-auto custom-scrollbar">
+                        <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical">
+                            
+                            <DxFormLayoutGroup Caption="Información General" HeaderIconCssClass="bi bi-card-heading">
+                                <DxFormLayoutItem ColSpanMd="6" ColSpanSm="12">
+                                    <CaptionTemplate><span class="fw-semibold">Código</span></CaptionTemplate>
+                                    <Template>
+                                        <DxMaskedInput @bind-Value="model.CodeDisplay" Mask="@maskedFormatoCentros" MaskChar="_" NullText="@formatoCentros" TextChanged="@(value => OnCentroCodeChanged(model, value))" />
+                                        <ValidationMessage For="@(() => model.Code)" />
+                                    </Template>
+                                </DxFormLayoutItem>
+
+                                <DxFormLayoutItem ColSpanMd="6" ColSpanSm="12">
+                                    <CaptionTemplate><span class="fw-semibold">Nombre</span></CaptionTemplate>
+                                    <Template>
+                                        <DxTextBox @bind-Text="model.Name" NullText="Ej. Administrativo" />
+                                        <ValidationMessage For="@(() => model.Name)" />
+                                    </Template>
+                                </DxFormLayoutItem>
+
+                                <DxFormLayoutItem ColSpanMd="12">
+                                    <CaptionTemplate><span class="fw-semibold">Descripción</span></CaptionTemplate>
+                                    <Template>
+                                        <DxMemo @bind-Text="model.Description" Rows="2" />
+                                        <ValidationMessage For="@(() => model.Description)" />
+                                    </Template>
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+
+                            <DxFormLayoutGroup Caption="Configuración" HeaderIconCssClass="bi bi-gear" CssClass="mt-3">
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6">
+                                    <Template>
+                                        <DxCheckBox @bind-Checked="model.AllowsMovement" CheckType="CheckType.Switch">Permite Movimientos</DxCheckBox>
+                                    </Template>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6">
+                                    <Template>
+                                        <DxCheckBox @bind-Checked="model.IsPeriodic" CheckType="CheckType.Switch">Es Periódico</DxCheckBox>
+                                    </Template>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6">
+                                    <Template>
+                                        <DxCheckBox @bind-Checked="model.IsActive" CheckType="CheckType.Switch">Activo</DxCheckBox>
+                                    </Template>
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+
+                            @if(model.IsPeriodic)
                             {
-                                <DxButton Text="Editar" Click="@(() => OpenForm(item))" />
+                                <DxFormLayoutGroup Caption="Vigencia" HeaderIconCssClass="bi bi-calendar-range" CssClass="mt-3">
+                                    <DxFormLayoutItem ColSpanMd="6" ColSpanSm="12">
+                                        <CaptionTemplate>Desde</CaptionTemplate>
+                                        <Template>
+                                            <DxDateEdit T="DateTime?" @bind-Date="model.StartDate" DisplayFormat="d" />
+                                        </Template>
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem ColSpanMd="6" ColSpanSm="12">
+                                        <CaptionTemplate>Hasta</CaptionTemplate>
+                                        <Template>
+                                            <DxDateEdit T="DateTime?" @bind-Date="model.EndDate" DisplayFormat="d" />
+                                        </Template>
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
                             }
+                        </DxFormLayout>
+                    </div>
+
+                    <div class="modal-footer-custom d-flex justify-content-between align-items-center p-3 border-top bg-light">
+                        <div>
+                            @if (model.CostCenterId.HasValue)
+                            {
+                                <DxButton Text="Eliminar" RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline" IconCssClass="bi bi-trash" Click="@((MouseEventArgs e) => OpenDeleteConfirmFromEdit(model))" />
+                            }
+                        </div>
+                        <div class="d-flex gap-2">
+                            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@OnCancelarClick" />
+                            <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-check-lg" SubmitFormOnClick="true" />
+                        </div>
+                    </div>
+                </div>
+            </EditFormTemplate>
+        </DxGrid>
+    </div>
+
+    <DxCard CssClass="mt-4 shadow-sm border-0">
+        <HeaderContent>
+            <h5 class="mb-0 text-secondary fw-bold"><i class="bi bi-list-nested me-2"></i>Cuentas Relacionadas</h5>
+        </HeaderContent>
+        <ChildContent>
+            <DxGrid Data="@cuentasCentro" ShowFilterRow="true" ShowPager="true" PageSize="5" SizeMode="SizeMode.Medium"
+                    CssClass="border-0">
+                <Columns>
+                    <DxGridDataColumn Caption="Cuenta" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            <span class="font-monospace fw-bold text-primary">@FormatCuentaCode(((PlanCuentaDto)cell.DataItem).Code)</span>
                         </CellDisplayTemplate>
-                    </DxGridCommandColumn>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Name)" Caption="Descripción" />
+                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.AccountType)" Caption="Tipo" Width="120px" />
                 </Columns>
             </DxGrid>
-        </DxStackLayoutItem>
-    </DxStackLayout>
+        </ChildContent>
+    </DxCard>
+
+    <DxPopup @bind-Visible="deleteConfirmVisible"
+             HeaderText=" " 
+             ShowCloseButton="true"
+             CloseOnOutsideClick="true"
+             Width="min(450px, 90vw)"
+             ShowFooter="false"
+             CssClass="cc-confirm-popup"
+             data-qa="delete-confirm-popup"> <BodyTemplate>
+            <div class="cc-modal-wrapper">
+                
+                <div class="cc-confirm-body">
+                    <div class="cc-icon-circle">
+                        <i class="bi bi-exclamation-triangle-fill"></i>
+                    </div>
+
+                    <div class="flex-grow-1">
+                        <div class="cc-confirm-title">¿Eliminar registro?</div>
+                        <div class="cc-confirm-subtitle">
+                            Esta acción eliminará el centro de costo permanentemente. No se puede deshacer.
+                        </div>
+
+                        @if (deleteItem is not null)
+                        {
+                            <div class="cc-details-card">
+                                <div class="cc-detail-row">
+                                    <span class="cc-label">Código:</span>
+                                    <span class="cc-value">@deleteItem.Code</span>
+                                </div>
+                                <div class="cc-detail-row mb-0">
+                                    <span class="cc-label">Nombre:</span>
+                                    <span class="cc-value text-end">@deleteItem.Name</span>
+                                </div>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="cc-modal-footer">
+                    <DxButton Text="Cancelar"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="@OnCancelDeleteClick"
+                              CssClass="cc-btn-cancel" />
+
+                    <DxButton Text="Sí, Eliminar"
+                              RenderStyle="ButtonRenderStyle.None"
+                              CssClass="dx-btn dx-btn-danger cc-btn-delete"
+                              IconCssClass="bi bi-trash3-fill"
+                              Click="@OnConfirmDeleteClick" />
+                </div>
+
+            </div>
+        </BodyTemplate>
+    </DxPopup>
+
+    <DxLoadingPanel Visible="@cargando" PositionTarget="#centros-costo-view"
+        ApplyBackgroundShading="true" IsContentBlocked="true" Text="Cargando centros de costo..." IndicatorVisible="true" />
+
 </div>
 
-<DxPopup @bind-Visible="isFormVisible"
-         Width="500px"
-         ShowCloseButton="true"
-         HeaderText="@popupTitle">
-    <BodyTemplate Context="popupContext">
-        <DxFormLayout>
-            <DxFormLayoutItem Caption="Código">
-                <DxTextBox @bind-Text="formModel.Code" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Nombre">
-                <DxTextBox @bind-Text="formModel.Name" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Descripción">
-                <DxMemo @bind-Text="formModel.Description" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Estado">
-                <DxComboBox Data="@statusOptions"
-                            @bind-Value="formModel.Status"
-                            AllowUserInput="false" />
-            </DxFormLayoutItem>
-        </DxFormLayout>
-    </BodyTemplate>
-    <FooterTemplate>
-        <DxButton Text="Cancelar" CssClass="me-2" Click="@(() => isFormVisible = false)" />
-        <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="SaveCentroAsync" Enabled="@( !isSaving )" />
-    </FooterTemplate>
-</DxPopup>
-
 @code {
-    private readonly string[] statusOptions = new[] { "ACTIVE", "INACTIVE" };
-    private CentroCostoDto[] centros = Array.Empty<CentroCostoDto>();
-    private CentroCostoFormModel formModel = new();
-    private string popupTitle = "Nuevo centro";
-    private bool isFormVisible;
-    private bool isSaving;
-    private string? errorMessage;
+    private IList<CentroCostoDto> centros = new List<CentroCostoDto>();
+    private IList<PlanCuentaDto> cuentasCentro = new List<PlanCuentaDto>();
+    private bool cargando;
+
+    private string formatoCentros = "###-##";
+    private string formatoCuentas = "###-###-##";
+    private string separadorCodigo = "-";
+    private string maskedFormatoCentros = "000-00";
+    private string maskedFormatoCuentas = "000-000-00";
+    private IReadOnlyList<int> nivelesCentros = Array.Empty<int>();
+    private IReadOnlyList<int> nivelesCuentas = Array.Empty<int>();
+
+    private string? formErrorMessage;
+    private DxGrid? gridCentros;
+
+    private bool deleteConfirmVisible;
+    private DeleteCentroCostoInfo? deleteItem;
+
+    private string popupHeaderText = "Centro de costo";
+    private bool statusMessageVisible;
+    private string statusMessageTitle = string.Empty;
+    private string statusMessageText = string.Empty;
+    private MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
+    private bool discardChangesVisible;
+    private PendingGridAction pendingGridAction = PendingGridAction.None;
+    private int pendingVisibleIndex = -1;
 
     protected override async Task OnInitializedAsync()
     {
+        await LoadConfiguracionAsync();
         await LoadCentrosAsync();
+        await LoadCuentasCentroAsync();
+    }
+
+    private Task OnActualizarClick(MouseEventArgs e) => QueueGridActionAsync(PendingGridAction.Refresh);
+
+    private Task OnNuevoToolbarClick(MouseEventArgs e)
+        => QueueGridActionAsync(PendingGridAction.NewRow);
+
+    private Task OnCancelarClick(MouseEventArgs e)
+    => gridCentros is null ? Task.CompletedTask : gridCentros.CancelEditAsync();
+
+    private Task OnEditarClick(int visibleIndex)
+        => QueueGridActionAsync(PendingGridAction.EditRow, visibleIndex);
+
+    private void OpenDeleteConfirm(CentroCostoDto item)
+    {
+        deleteItem = new DeleteCentroCostoInfo
+        {
+            Id = System.Convert.ToInt64(item.CostCenterId),
+            Code = item.Code ?? "",
+            Name = item.Name ?? ""
+        };
+        deleteConfirmVisible = true;
+    }
+
+    private void OpenDeleteConfirmFromEdit(CentroCostoEditModel model)
+    {
+        deleteItem = new DeleteCentroCostoInfo
+        {
+            Id = model.CostCenterId ?? 0,
+            Code = model.Code ?? "",
+            Name = model.Name ?? ""
+        };
+        deleteConfirmVisible = true;
+    }
+
+    private Task OnCancelDeleteClick(MouseEventArgs e)
+    {
+        deleteConfirmVisible = false;
+        deleteItem = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnConfirmDeleteClick(MouseEventArgs e)
+    {
+        try
+        {
+            if (deleteItem is null) { deleteConfirmVisible = false; return; }
+            var id = deleteItem.Id;
+            if (id <= 0) { deleteConfirmVisible = false; deleteItem = null; return; }
+
+            deleteConfirmVisible = false;
+            var deleted = await DeleteCentroCostoAsync(id);
+
+            if (deleted && gridCentros is not null && gridCentros.IsEditing())
+                await gridCentros.CancelEditAsync();
+        }
+        finally
+        {
+            deleteItem = null;
+        }
+    }
+
+    private async Task LoadConfiguracionAsync()
+    {
+        try
+        {
+            var companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0) return;
+
+            var config = await ConfiguracionClient.ObtenerAsync(companyId);
+            if (config?.Principal != null)
+            {
+                if (!string.IsNullOrWhiteSpace(config.Principal.FormatoCentros))
+                    formatoCentros = config.Principal.FormatoCentros;
+
+                if (!string.IsNullOrWhiteSpace(config.Principal.FormatoCuentas))
+                    formatoCuentas = config.Principal.FormatoCuentas;
+
+                if (!string.IsNullOrWhiteSpace(config.Principal.SeparadorCodigo))
+                    separadorCodigo = config.Principal.SeparadorCodigo;
+            }
+
+            RecalcularFormatos();
+        }
+        catch (Exception ex)
+        {
+            ShowStatusMessage("Error", $"Error al cargar configuración: {ex.Message}. Se utilizará la configuración predeterminada.",
+                MessageBoxRenderStyle.Danger);
+        }
     }
 
     private async Task LoadCentrosAsync()
     {
         try
         {
-            errorMessage = null;
-            centros = await Http.GetFromJsonAsync<CentroCostoDto[]>("api/contabilidad/catalogos/centros-costo")
-                ?? Array.Empty<CentroCostoDto>();
+            cargando = true;
+            formErrorMessage = null;
+            var result = await Http.GetFromJsonAsync<List<CentroCostoDto>>("api/contabilidad/catalogos/centros-costo");
+            centros = result ?? new List<CentroCostoDto>();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
-            centros = Array.Empty<CentroCostoDto>();
-        }
-    }
-
-    private void OpenForm(CentroCostoDto? centro)
-    {
-        if (centro is null)
-        {
-            formModel = new CentroCostoFormModel { Status = "ACTIVE" };
-            popupTitle = "Nuevo centro";
-        }
-        else
-        {
-            formModel = new CentroCostoFormModel
-            {
-                CostCenterId = centro.CostCenterId,
-                Code = centro.Code,
-                Name = centro.Name,
-                Description = centro.Description,
-                Status = centro.Status
-            };
-            popupTitle = $"Editar {centro.Code}";
-        }
-
-        isFormVisible = true;
-    }
-
-    private async Task SaveCentroAsync()
-    {
-        if (string.IsNullOrWhiteSpace(formModel.Code) || string.IsNullOrWhiteSpace(formModel.Name))
-        {
-            errorMessage = "Código y nombre son obligatorios.";
-            return;
-        }
-
-        var payload = new CentroCostoUpsertDto(
-            formModel.Code.Trim(),
-            formModel.Name.Trim(),
-            string.IsNullOrWhiteSpace(formModel.Status) ? "ACTIVE" : formModel.Status!,
-            string.Empty,
-            formModel.CostCenterId,
-            string.IsNullOrWhiteSpace(formModel.Description) ? null : formModel.Description.Trim());
-
-        try
-        {
-            isSaving = true;
-            errorMessage = null;
-            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/centros-costo", payload);
-            response.EnsureSuccessStatusCode();
-            isFormVisible = false;
-            await LoadCentrosAsync();
-        }
-        catch (Exception ex)
-        {
-            errorMessage = ex.Message;
+            centros = new List<CentroCostoDto>();
+            ShowStatusMessage("Error", $"No se pudieron cargar los centros de costo: {ex.Message}",
+                MessageBoxRenderStyle.Danger);
         }
         finally
         {
-            isSaving = false;
+            cargando = false;
         }
     }
 
-    class CentroCostoFormModel
+    private async Task LoadCuentasCentroAsync()
+    {
+        try
+        {
+            var result = await Http.GetFromJsonAsync<List<PlanCuentaDto>>("api/contabilidad/catalogos/plan-cuentas");
+            cuentasCentro = result?
+            .Where(c => c.AllowsCostCenter)
+            .OrderBy(c => c.Code)
+            .ToList() ?? new List<PlanCuentaDto>();
+        }
+        catch (Exception ex)
+        {
+            cuentasCentro = new List<PlanCuentaDto>();
+            ShowStatusMessage("Error", $"No se pudieron cargar las cuentas con centro de costo: {ex.Message}",
+                MessageBoxRenderStyle.Danger);
+        }
+    }
+
+    private void OnCustomizeEditModel(GridCustomizeEditModelEventArgs e)
+    {
+        // Limpiar mensaje de error al abrir formulario
+        formErrorMessage = null;
+
+        if (e.IsNew || e.DataItem is not CentroCostoDto item)
+        {
+            popupHeaderText = "Nuevo centro de costo";
+            e.EditModel = new CentroCostoEditModel
+            {
+                IsActive = true,
+                StartDate = DateTime.UtcNow.Date,
+                EndDate = DateTime.UtcNow.Date
+            };
+        }
+        else
+        {
+            popupHeaderText = "Editar centro de costo";
+            var normalizedCode = NormalizeCode(item.Code);
+            e.EditModel = new CentroCostoEditModel
+            {
+                CostCenterId = ToNullableLong(item.CostCenterId),
+                Code = normalizedCode,
+                CodeDisplay = FormatFromMask(normalizedCode, nivelesCentros),
+                Name = item.Name,
+                Description = item.Description ?? string.Empty,
+                AllowsMovement = item.AllowsMovement,
+                IsPeriodic = item.IsPeriodic,
+                StartDate = item.StartDate,
+                EndDate = item.EndDate,
+                IsActive = item.LegacyStatus || string.Equals(item.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase)
+            };
+        }
+    }
+
+    private void OnCentroCodeChanged(CentroCostoEditModel model, string? value)
+    {
+        var normalized = NormalizeCode(value);
+        model.Code = normalized;
+        model.CodeDisplay = FormatFromMask(normalized, nivelesCentros);
+    }
+
+    private async Task OnEditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        if (e.EditModel is CentroCostoEditModel model)
+        {
+            // Limpiar mensaje previo
+            formErrorMessage = null;
+
+            var validationMessage = ValidateCentroCosto(model);
+            if (!string.IsNullOrWhiteSpace(validationMessage))
+            {
+                formErrorMessage = validationMessage;
+                e.Cancel = true;
+                return;
+            }
+
+            var startDate = model.IsPeriodic ? model.StartDate : null;
+            var endDate = model.IsPeriodic ? model.EndDate : null;
+
+            var payload = new CentroCostoUpsertDto(
+            model.Code.Trim(),
+            model.Name.Trim(),
+            model.IsActive ? "ACTIVE" : "INACTIVE",
+            string.Empty,
+            model.CostCenterId, // long?
+            model.Description.Trim(),
+            model.AllowsMovement,
+            model.IsPeriodic,
+            startDate,
+            endDate,
+            model.IsActive
+            );
+
+            try
+            {
+                var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/centros-costo", payload);
+                if (!response.IsSuccessStatusCode)
+                {
+                    var detail = await response.Content.ReadAsStringAsync();
+                    formErrorMessage = string.IsNullOrWhiteSpace(detail)
+                        ? "No se pudo guardar el centro de costo."
+                        : detail;
+                    e.Cancel = true;
+                    return;
+                }
+                await LoadCentrosAsync();
+            }
+            catch (Exception ex)
+            {
+                formErrorMessage = ex.Message;
+                e.Cancel = true;
+            }
+        }
+    }
+
+    private async Task<bool> DeleteCentroCostoAsync(long costCenterId)
+    {
+        try
+        {
+            formErrorMessage = null;
+            var response = await Http.DeleteAsync($"api/contabilidad/catalogos/centros-costo/{costCenterId}");
+            if (!response.IsSuccessStatusCode)
+            {
+                var message = await response.Content.ReadAsStringAsync();
+                ShowStatusMessage("Error",
+                    string.IsNullOrWhiteSpace(message)
+                        ? "No se pudo eliminar el centro de costo."
+                        : message,
+                    MessageBoxRenderStyle.Danger);
+                return false;
+            }
+            await LoadCentrosAsync();
+            return true;
+        }
+        catch (Exception ex)
+        {
+            ShowStatusMessage("Error", ex.Message, MessageBoxRenderStyle.Danger);
+            return false;
+        }
+    }
+
+    private async Task QueueGridActionAsync(PendingGridAction action, int visibleIndex = -1)
+    {
+        if (action == PendingGridAction.EditRow && gridCentros is not null && gridCentros.IsEditingRow(visibleIndex))
+        {
+            return;
+        }
+
+        if (HasUnsavedGridChanges())
+        {
+            pendingGridAction = action;
+            pendingVisibleIndex = visibleIndex;
+            discardChangesVisible = true;
+            return;
+        }
+
+        await ExecuteGridActionAsync(action, visibleIndex);
+    }
+
+    private async Task ExecuteGridActionAsync(PendingGridAction action, int visibleIndex = -1)
+    {
+        switch (action)
+        {
+            case PendingGridAction.Refresh:
+                await LoadCentrosAsync();
+                break;
+            case PendingGridAction.NewRow:
+                if (gridCentros is not null)
+                {
+                    await gridCentros.StartEditNewRowAsync();
+                }
+                break;
+            case PendingGridAction.EditRow:
+                if (gridCentros is not null && visibleIndex >= 0)
+                {
+                    await gridCentros.StartEditRowAsync(visibleIndex);
+                }
+                break;
+        }
+    }
+
+    private bool HasUnsavedGridChanges()
+    {
+        if (gridCentros is null || !gridCentros.IsEditing())
+        {
+            return false;
+        }
+
+        var editContext = gridCentros.GetEditContext();
+        return editContext?.IsModified() == true;
+    }
+
+    private async Task OnDiscardChangesMessageClosed(bool confirmed)
+    {
+        var action = pendingGridAction;
+        var visibleIndex = pendingVisibleIndex;
+        ClearPendingGridAction();
+
+        if (!confirmed)
+        {
+            return;
+        }
+
+        if (gridCentros is not null && gridCentros.IsEditing())
+        {
+            await gridCentros.CancelEditAsync();
+        }
+
+        await ExecuteGridActionAsync(action, visibleIndex);
+    }
+
+    private void ClearPendingGridAction()
+    {
+        pendingGridAction = PendingGridAction.None;
+        pendingVisibleIndex = -1;
+    }
+
+    private void ShowStatusMessage(string title, string message, MessageBoxRenderStyle renderStyle = MessageBoxRenderStyle.Info)
+    {
+        statusMessageTitle = title;
+        statusMessageText = message;
+        statusMessageRenderStyle = renderStyle;
+        statusMessageVisible = true;
+    }
+
+    private string? ValidateCentroCosto(CentroCostoEditModel model)
+    {
+        var normalized = NormalizeCode(model.Code);
+        if (string.IsNullOrWhiteSpace(normalized)) return "El código es obligatorio.";
+        if (string.IsNullOrWhiteSpace(model.Name)) return "El nombre es obligatorio.";
+        if (string.IsNullOrWhiteSpace(model.Description)) return "La descripción es obligatoria.";
+
+        var totalDigits = nivelesCentros.Sum();
+        if (totalDigits > 0 && normalized.Length != totalDigits)
+            return $"El código debe tener {totalDigits} dígitos según el formato {formatoCentros}.";
+
+        var modelId = model.CostCenterId;
+        var codigoDuplicado = centros.Any(c =>
+        string.Equals(NormalizeCode(c.Code), normalized, StringComparison.OrdinalIgnoreCase) &&
+        (!modelId.HasValue || ToNullableLong(c.CostCenterId) != modelId));
+
+        if (codigoDuplicado)
+            return "El codigo ya existe.";
+
+        if (model.IsPeriodic)
+        {
+            if (!model.StartDate.HasValue || !model.EndDate.HasValue)
+                return "Las fechas de inicio y fin son obligatorias cuando el centro es periódico.";
+            if (model.StartDate.Value > model.EndDate.Value)
+                return "La fecha inicial no puede ser mayor a la fecha final.";
+        }
+        return null;
+    }
+
+    private void RecalcularFormatos()
+    {
+        nivelesCentros = ParseFormatoNiveles(formatoCentros);
+        nivelesCuentas = ParseFormatoNiveles(formatoCuentas);
+        maskedFormatoCentros = string.Join("", formatoCentros.Select(ch => ch == '#' ? '0' : ch));
+        maskedFormatoCuentas = string.Join("", formatoCuentas.Select(ch => ch == '#' ? '0' : ch));
+    }
+
+    // NUEVO MÉTODO AGREGADO AQUÍ PARA FORMATEAR CENTROS
+    private string FormatCentroCode(string? raw) => FormatFromMask(NormalizeCode(raw), nivelesCentros);
+
+    private string FormatCuentaCode(string? raw) => FormatFromMask(NormalizeCode(raw), nivelesCuentas);
+
+    private string FormatFromMask(string normalized, IReadOnlyList<int> niveles)
+    {
+        if (string.IsNullOrWhiteSpace(normalized)) return string.Empty;
+        if (niveles.Count == 0) return normalized;
+
+        var sep = string.IsNullOrWhiteSpace(separadorCodigo) ? "-" : separadorCodigo;
+        var parts = new List<string>();
+        var index = 0;
+
+        foreach (var len in niveles)
+        {
+            if (index >= normalized.Length) break;
+            var take = Math.Min(len, normalized.Length - index);
+            parts.Add(normalized.Substring(index, take));
+            index += take;
+        }
+        if (index < normalized.Length) parts.Add(normalized.Substring(index));
+        return string.Join(sep, parts);
+    }
+
+    private static string NormalizeCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return string.Empty;
+        return new string(value.Where(char.IsLetterOrDigit).ToArray());
+    }
+
+    private static IReadOnlyList<int> ParseFormatoNiveles(string? formato)
+    {
+        if (string.IsNullOrWhiteSpace(formato)) return Array.Empty<int>();
+        var grupos = new List<int>();
+        var current = 0;
+
+        foreach (var ch in formato)
+        {
+            if (ch == '#' || ch == 'X' || ch == 'x') { current++; continue; }
+            if (current > 0) { grupos.Add(current); current = 0; }
+        }
+        if (current > 0) grupos.Add(current);
+        return grupos;
+    }
+
+    private static long? ToNullableLong(object? value)
+    {
+        if (value is null) return null;
+        try
+        {
+            var v = System.Convert.ToInt64(value);
+            return v <= 0 ? null : v;
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private static bool IsCentroActivo(CentroCostoDto item)
+    {
+        return item.LegacyStatus || string.Equals(item.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    class CentroCostoEditModel
     {
         public long? CostCenterId { get; set; }
-        public string? Code { get; set; }
-        public string? Name { get; set; }
-        public string? Description { get; set; }
-        public string? Status { get; set; } = "ACTIVE";
+
+        [Required(ErrorMessage = "Código es obligatorio.")]
+        public string Code { get; set; } = string.Empty;
+
+        public string CodeDisplay { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Nombre es obligatorio.")]
+        public string Name { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "Descripción es obligatoria.")]
+        public string Description { get; set; } = string.Empty;
+
+        public bool AllowsMovement { get; set; }
+        public bool IsPeriodic { get; set; }
+        public DateTime? StartDate { get; set; }
+        public DateTime? EndDate { get; set; }
+        public bool IsActive { get; set; } = true;
+    }
+
+    class DeleteCentroCostoInfo
+    {
+        public long Id { get; set; }
+        public string Code { get; set; } = "";
+        public string Name { get; set; } = "";
+    }
+
+    enum PendingGridAction
+    {
+        None,
+        Refresh,
+        NewRow,
+        EditRow
     }
 }

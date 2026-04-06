@@ -2,12 +2,14 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.DTOs.AuxiliarLectura;
 using SIAD.Services.AuxiliarLectura;
+using apc.Security;
+using SIAD.Core.Constants;
 
 namespace apc.Controllers;
 
 [ApiController]
 [Route("api/[controller]")]
-[Authorize] // o AllowAnonymous si prefieres
+[ModuleAuthorize(PermissionModules.Inventario)] // o AllowAnonymous si prefieres
 public class AuxiliarLecturaController : ControllerBase
 {
     private readonly IAuxiliarLecturaService _service;
@@ -22,14 +24,18 @@ public class AuxiliarLecturaController : ControllerBase
     public async Task<IActionResult> Get([FromQuery] AuxiliarLecturaFilterDto filtro, CancellationToken ct)
         => Ok(await _service.SearchAsync(filtro, ct));
 
+    [HttpGet("paged")]
+    public async Task<IActionResult> GetPaged([FromQuery] AuxiliarLecturaFilterDto filtro, CancellationToken ct)
+        => Ok(await _service.SearchPagedAsync(filtro, ct));
+
     [HttpPost]
     public async Task<IActionResult> Post([FromBody] GenerarPeriodoRequest request, CancellationToken ct)
     {
-        var ok = await _service.GenerarPeriodoAsync(request.Anio, request.Mes, request.Usuario, ct);
+        var ok = await _service.GenerarPeriodoAsync(request.Anio, request.Mes, request.Ciclo, request.Usuario, ct);
         return ok ? NoContent() : BadRequest("No se pudo generar el periodo (posible duplicado).");
     }
 
-    public record GenerarPeriodoRequest(int Anio, int Mes, string Usuario);
+    public record GenerarPeriodoRequest(int Anio, int Mes, string Ciclo, string Usuario);
 
     [HttpPost("cierre")]
     public async Task<IActionResult> Cerrar([FromBody] PeriodoRequest request, CancellationToken ct)
@@ -54,3 +60,4 @@ public class AuxiliarLecturaController : ControllerBase
 
     public record PeriodoRequest(int Anio, int Mes);
 }
+

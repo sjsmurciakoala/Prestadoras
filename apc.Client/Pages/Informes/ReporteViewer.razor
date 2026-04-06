@@ -1,0 +1,102 @@
+@page "/informes/reportes/{Codigo}/viewer"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using apc.Client.Services.Informes
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Informes
+@inject InformesClient InformesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Visor de Reporte</PageTitle>
+
+<div class="page-container">
+    @if (!isLoading && detalle is not null)
+    {
+        <div class="header-section">
+            <div>
+                <h2 class="page-title">@detalle.Nombre</h2>
+                <p class="page-subtitle">@detalle.Descripcion</p>
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+                <DxButton Text="Volver"
+                          Click="@(() => NavigationManager.NavigateTo("/informes/reportes"))"
+                          IconCssClass="bi bi-arrow-left"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <AuthorizeView Policy="@PermissionNames.Reporteria.Edit">
+                    <Authorized>
+                        <DxButton Text="Diseñar"
+                                  Click="@(() => NavigationManager.NavigateTo(detalle.DesignerRoute))"
+                                  IconCssClass="bi bi-pencil-square"
+                                  RenderStyle="ButtonRenderStyle.Primary" />
+                    </Authorized>
+                </AuthorizeView>
+            </div>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    @if (!isLoading && detalle is not null && !detalle.TieneLayoutPublicado)
+    {
+        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            Este reporte todavía no tiene una versión publicada en base de datos. Publica un borrador para visualizarlo aquí.
+        </DxAlert>
+    }
+
+    <div class="modern-card p-3">
+        @if (isLoading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else if (detalle is not null && detalle.TieneLayoutPublicado)
+        {
+            <DxDocumentViewer ReportName="@detalle.ViewerReportName"
+                              Height="calc(100vh - 260px)"
+                              Width="100%" />
+        }
+        else if (detalle is not null)
+        {
+            <div class="text-center text-muted py-5">
+                No hay una versión publicada disponible para este reporte.
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string Codigo { get; set; } = string.Empty;
+
+    private bool isLoading;
+    private string? errorMessage;
+    private ReporteDisenoDetalleDto? detalle;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            detalle = await InformesClient.GetReporteDisenoAsync(Codigo);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            detalle = null;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+}

@@ -1,21 +1,89 @@
-@using SIAD.Core.DTOs.Clientes
+﻿@using SIAD.Core.DTOs.Clientes
 
-<DxFormLayout>
-    <DxFormLayoutItem Caption="Código">@Cliente.Codigo</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="Nombre">@Cliente.Nombre</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="Identidad">@Cliente.Identidad</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="RTN">@Cliente.Rtn</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="Dirección">@Cliente.Direccion</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="Teléfono">@Cliente.Telefono</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="Barrio">@Cliente.Barrio</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="Ciclo">@Cliente.Ciclo</DxFormLayoutItem>
-    <DxFormLayoutItem Caption="Activo">
-        <span>@(Cliente.Activo ? "Sí" : "No")</span>
-    </DxFormLayoutItem>
+<DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+    <DxFormLayoutGroup Caption="Datos personales" HeaderIconCssClass="bi bi-person-lines-fill" ColSpanXs="12">
+        <DxFormLayoutItem Caption="Clave" ColSpanXs="12" ColSpanMd="3">@Cliente.Codigo</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Nombre" ColSpanXs="12" ColSpanMd="5">@MostrarTexto(Cliente.Nombre)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Apellidos" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Apellidos)</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="DNI" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Dni)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Rtn)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Fecha nacimiento" ColSpanXs="12" ColSpanMd="4">@MostrarFecha(Cliente.FechaNacimiento)</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Tercera edad" ColSpanXs="12" ColSpanMd="3">@MostrarBooleano(Cliente.TerceraEdad)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Bloqueado cobranza" ColSpanXs="12" ColSpanMd="3">@MostrarBooleano(Cliente.BloqueadoCobranza)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" ColSpanMd="6">@MostrarAbogado()</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Telefono)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Teléfono móvil" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.TelefonoMovil)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Email)</DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
+    <DxFormLayoutGroup Caption="Dirección" HeaderIconCssClass="bi bi-geo-alt-fill" ColSpanXs="12" CssClass="mt-2">
+        <DxFormLayoutItem Caption="Barrio" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.BarrioNombre ?? Cliente.BarrioCodigo)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Color casa" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.ColorCasa)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Dirección" ColSpanXs="12">@MostrarTexto(Cliente.Direccion)</DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
+    <DxFormLayoutGroup Caption="Datos empresa" HeaderIconCssClass="bi bi-building" ColSpanXs="12" CssClass="mt-2">
+        <DxFormLayoutItem Caption="Empresa" ColSpanXs="12" ColSpanMd="6">@MostrarTexto(Cliente.EmpresaNombre)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="RTN / RIF" ColSpanXs="12" ColSpanMd="6">@MostrarTexto(Cliente.EmpresaRtn)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.EmpresaTelefono)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Dirección" ColSpanXs="12" ColSpanMd="8">@MostrarTexto(Cliente.EmpresaDireccion)</DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
+    <DxFormLayoutGroup Caption="Datos servicios" HeaderIconCssClass="bi bi-gear" ColSpanXs="12" CssClass="mt-2">
+        <DxFormLayoutItem Caption="Servicio" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.ServicioNombre ?? Cliente.ServicioId?.ToString())</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Categoría" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.CategoriaServicioNombre ?? Cliente.CategoriaServicioId?.ToString())</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Tipo uso" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.TipoUsoCodigo)</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.LetraCodigo)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.CicloDescripcion ?? Cliente.CicloId?.ToString())</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Libreta" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.Libreta)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Secuencia" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.Secuencia)</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Indicativo ruta" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.IndicativoRuta)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.ClaveCatastral)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Clave SURE" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.ClaveSure)</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Contador" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Contador)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Tiene medidor" ColSpanXs="12" ColSpanMd="4">@MostrarBooleano(Cliente.TieneMedidor)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Medidor" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.MedidorNumero ?? Cliente.MedidorId?.ToString())</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Tiene convenio" ColSpanXs="12" ColSpanMd="4">@MostrarBooleano(Cliente.TieneConvenio)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Número convenio" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.NumeroConvenio)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Tiene contrato" ColSpanXs="12" ColSpanMd="4">@MostrarBooleano(Cliente.TieneContrato)</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Número contrato" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.NumeroContrato)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Observaciones" ColSpanXs="12" ColSpanMd="8">@MostrarTexto(Cliente.Observaciones)</DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
+    <DxFormLayoutGroup Caption="Auditoría" HeaderIconCssClass="bi bi-person-check" ColSpanXs="12" CssClass="mt-2">
+        <DxFormLayoutItem Caption="Usuario creación" ColSpanXs="12" ColSpanMd="6">@MostrarTexto(Cliente.UsuarioCreacion)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Fecha creación" ColSpanXs="12" ColSpanMd="6">@MostrarFecha(Cliente.FechaCreacion)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Descuento tercera edad" ColSpanXs="12" ColSpanMd="6">@MostrarDecimal(Cliente.DescuentoTerceraEdad)</DxFormLayoutItem>
+    </DxFormLayoutGroup>
 </DxFormLayout>
 
 @code {
     [Parameter]
     [EditorRequired]
     public ClienteDetailDto Cliente { get; set; } = default!;
+
+    private static string MostrarTexto(string? valor)
+        => string.IsNullOrWhiteSpace(valor) ? "—" : valor;
+
+    private static string MostrarFecha(DateTime? fecha)
+        => fecha.HasValue ? fecha.Value.ToString("d") : "—";
+
+    private static string MostrarBooleano(bool? valor)
+        => valor.HasValue ? (valor.Value ? "Sí" : "No") : "—";
+
+    private static string MostrarDecimal(double? valor)
+        => valor.HasValue ? valor.Value.ToString("N2") : "—";
+
+    private string MostrarAbogado()
+        => !string.IsNullOrWhiteSpace(Cliente.AbogadoNombre)
+            ? Cliente.AbogadoNombre!
+            : (Cliente.AbogadoId?.ToString() ?? "—");
 }

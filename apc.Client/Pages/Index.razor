@@ -1,9 +1,10 @@
-@page "/"
+﻿@page "/"
 @rendermode InteractiveServer
+@attribute [Authorize]
 
 <PageTitle>SIAD - Dashboard</PageTitle>
 
-<div class="main-content">
+<div class="dashboard-content">
     <div class="container-fluid pt-4">
         <div class="row mb-4">
             <div class="col-12">
@@ -55,6 +56,7 @@
                         <p>Accede a los diferentes módulos del sistema usando el menú de navegación superior:</p>
                         <ul>
                             <li>Clientes - Gestión de información de clientes</li>
+                            <li>Proveedores - Gestión de información de proveedores</li>
                             <li>Medidores - Control de lecturas y mediciones</li>
                             <li>Solicitudes - Tramitación de servicios solicitados</li>
                             <li>Órdenes - Administración de órdenes de trabajo</li>
@@ -69,7 +71,7 @@
 </div>
 
 <style>
-    .main-content {
+    .dashboard-content {
         background-color: #f8f9fa;
         min-height: 100vh;
         padding: 20px 0;

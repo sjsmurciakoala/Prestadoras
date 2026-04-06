@@ -1,0 +1,17 @@
+.transaccion-modal-body {
+    max-height: calc(100vh - 220px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    box-sizing: border-box;
+}
+
+.transaccion-modal-body.no-internal-scroll {
+    max-height: none;
+    overflow: visible;
+}
+
+@media (max-width: 768px) {
+    .transaccion-modal-body {
+        max-height: calc(100vh - 180px);
+    }
+}

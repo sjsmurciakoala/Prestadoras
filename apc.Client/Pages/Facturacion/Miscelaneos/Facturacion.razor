@@ -1,4 +1,4 @@
-@page "/facturacion/miscelaneos"
+﻿@page "/facturacion/miscelaneos"
 @attribute [Authorize]
 @using System.Text.Json
 @using DevExpress.Blazor
@@ -10,24 +10,31 @@
 @inject IToastNotificationService ToastService
 
 <DxScrollView Height="100%">
-    <DxToastProvider Name="@ToastName" MaxToastCount="4" />
+    <div class="page-container">
+        <DxToastProvider Name="@ToastName" MaxToastCount="4" />
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
-    }
+        <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+            <div>
+                <h2 class="page-title">Facturación Misceláneos</h2>
+                <p class="page-subtitle">Generación de recibos por conceptos misceláneos</p>
+            </div>
+        </div>
 
-    @if (!string.IsNullOrWhiteSpace(info))
-    {
-        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@info</DxAlert>
-    }
+        @if (!string.IsNullOrWhiteSpace(error))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+        }
 
-    <DxCard CssClass="mb-4">
-        <HeaderTemplate>
-            <h5 class="mb-0">Datos del cliente</h5>
-        </HeaderTemplate>
-        <BodyTemplate>
-            <DxFormLayout>
+        @if (!string.IsNullOrWhiteSpace(info))
+        {
+            <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@info</DxAlert>
+        }
+
+        <div class="modern-card mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h5 class="mb-0">Datos del cliente</h5>
+            </div>
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
                 <DxFormLayoutItem Caption="Buscar cliente">
                     <div class="d-flex gap-2 flex-wrap">
                         <DxTextBox @bind-Text="criterioCliente"
@@ -71,98 +78,97 @@
                                 DisplayFormat="d" />
                 </DxFormLayoutItem>
             </DxFormLayout>
-        </BodyTemplate>
-    </DxCard>
+        </div>
 
-    <DxCard CssClass="mb-4">
-        <HeaderTemplate>
-            <div class="d-flex justify-content-between align-items-center">
+        <div class="modern-card mb-4">
+            <div class="d-flex justify-content-between align-items-center mb-3">
                 <h5 class="mb-0">Conceptos misceláneos</h5>
                 <DxButton Text="Agregar misceláneos"
-                          CssClass="ms-auto"
+                          CssClass="ms-auto btn-modern shadow-sm"
                           SizeMode="SizeMode.Small"
                           ButtonType="ButtonType.Normal"
                           RenderStyle="ButtonRenderStyle.Primary"
                           Enabled="@PuedeAgregarConceptos"
                           Click="@MostrarCatalogo" />
             </div>
-        </HeaderTemplate>
-        <BodyTemplate>
-            <DxGrid Data="@detalles"
-                    KeyFieldName="@nameof(MiscelaneoDetalleVm.Codigo)"
-                    ShowPager="false"
-                    ShowGroupPanel="false"
-                    ShowFilterRow="false">
-                <Columns>
-                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Codigo)"
-                                      Caption="Código"
-                                      Width="140px"
-                                      AllowSort="false" />
-                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Nombre)"
-                                      Caption="Concepto"
-                                      Width="260px"
-                                      AllowSort="false" />
-                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Unidad)"
-                                      Caption="Unidad"
-                                      Width="120px">
-                        <CellDisplayTemplate Context="cellContext">
-                            @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
-                            {
-                                <DxSpinEdit TValue="decimal"
-                                            CssClass="w-100"
-                                            Value="@detalle.Unidad"
-                                            Min="@(0.01M)"
-                                            Increment="1"
-                                            DisplayFormat="n2"
-                                            Enabled="@PuedeEditarDetalles"
-                                            ValueChanged="@((decimal value) => OnUnidadChanged(detalle, value))"
-                                            ValueExpression="@(() => detalle.Unidad)" />
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.ValorUnitario)"
-                                      Caption="Valor Unit."
-                                      Width="140px">
-                        <CellDisplayTemplate Context="cellContext">
-                            @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
-                            {
-                                <DxSpinEdit TValue="decimal"
-                                            CssClass="w-100"
-                                            Value="@detalle.ValorUnitario"
-                                            Min="@(0.01M)"
-                                            Increment="1"
-                                            DisplayFormat="c2"
-                                            Enabled="@PuedeEditarDetalles"
-                                            ValueChanged="@((decimal value) => OnValorUnitarioChanged(detalle, value))"
-                                            ValueExpression="@(() => detalle.ValorUnitario)" />
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.ValorTotal)"
-                                      Caption="Valor Total"
-                                      DisplayFormat="c2"
-                                      Width="150px"
-                                      AllowSort="false" />
-                    <DxGridCommandColumn Width="90px">
-                        <CellDisplayTemplate Context="cellContext">
-                            @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
-                            {
-                                <DxButton RenderStyle="ButtonRenderStyle.Danger"
-                                          ButtonType="ButtonType.Normal"
-                                          SizeMode="SizeMode.Small"
-                                          IconCssClass="oi oi-trash"
-                                          Disabled="@(!PuedeEditarDetalles)"
-                                          Click="@(() => RemoverDetalle(detalle))" />
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridCommandColumn>
-                </Columns>
-                <EmptyDataAreaTemplate>
-                    <DxAlert AlertType="AlertType.Info">
-                        Aún no se han agregado conceptos misceláneos. Usa el botón "Agregar misceláneos" para seleccionar del catálogo.
-                    </DxAlert>
-                </EmptyDataAreaTemplate>
-            </DxGrid>
+            <div class="grid-wrapper">
+                <DxGrid Data="@detalles"
+                        KeyFieldName="@nameof(MiscelaneoDetalleVm.Codigo)"
+                        ShowPager="false"
+                        ShowGroupPanel="false"
+                        ShowFilterRow="false"
+                        CssClass="grid-solicitudes">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Codigo)"
+                                          Caption="Código"
+                                          Width="140px"
+                                          AllowSort="false" />
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Nombre)"
+                                          Caption="Concepto"
+                                          Width="260px"
+                                          AllowSort="false" />
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.Unidad)"
+                                          Caption="Unidad"
+                                          Width="120px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
+                                {
+                                    <DxSpinEdit TValue="decimal"
+                                                CssClass="w-100"
+                                                Value="@detalle.Unidad"
+                                                Min="@(0.01M)"
+                                                Increment="1"
+                                                DisplayFormat="n2"
+                                                Enabled="@PuedeEditarDetalles"
+                                                ValueChanged="@((decimal value) => OnUnidadChanged(detalle, value))"
+                                                ValueExpression="@(() => detalle.Unidad)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.ValorUnitario)"
+                                          Caption="Valor Unit."
+                                          Width="140px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
+                                {
+                                    <DxSpinEdit TValue="decimal"
+                                                CssClass="w-100"
+                                                Value="@detalle.ValorUnitario"
+                                                Min="@(0.01M)"
+                                                Increment="1"
+                                                DisplayFormat="c2"
+                                                Enabled="@PuedeEditarDetalles"
+                                                ValueChanged="@((decimal value) => OnValorUnitarioChanged(detalle, value))"
+                                                ValueExpression="@(() => detalle.ValorUnitario)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoDetalleVm.ValorTotal)"
+                                          Caption="Valor Total"
+                                          DisplayFormat="c2"
+                                          Width="150px"
+                                          AllowSort="false" />
+                        <DxGridCommandColumn Width="90px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is MiscelaneoDetalleVm detalle)
+                                {
+                                    <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                              ButtonType="ButtonType.Normal"
+                                              SizeMode="SizeMode.Small"
+                                              IconCssClass="oi oi-trash"
+                                              Disabled="@(!PuedeEditarDetalles)"
+                                              Click="@(() => RemoverDetalle(detalle))" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridCommandColumn>
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <DxAlert AlertType="AlertType.Info">
+                            Aún no se han agregado conceptos misceláneos. Usa el botón "Agregar misceláneos" para seleccionar del catálogo.
+                        </DxAlert>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
 
             <div class="d-flex justify-content-end align-items-center mt-3">
                 <strong class="me-3">Total:</strong>
@@ -170,7 +176,7 @@
             </div>
 
             <DxButton Text="Generar recibo"
-                      CssClass="mt-3"
+                      CssClass="mt-3 btn-modern shadow-sm"
                       RenderStyle="ButtonRenderStyle.Primary"
                       Enabled="@PuedeGenerarRecibo"
                       Click="GenerarReciboAsync"
@@ -179,30 +185,49 @@
                       IconCssClass="oi oi-check"
                       IsBusy="@generandoRecibo"
                       BusyText="Generando..." />
-        </BodyTemplate>
-    </DxCard>
+        </div>
 
-    @if (ultimoRecibo is not null)
-    {
-        <DxAlert AlertType="AlertType.Success">
-            Recibo @ultimoRecibo.NumeroRecibo generado para el cliente @ultimoRecibo.ClienteClave el @ultimoRecibo.FechaEmision:d. Total @ultimoRecibo.Total.ToString("C2").
-        </DxAlert>
-    }
+        @if (ultimoRecibo is not null)
+        {
+            <DxAlert AlertType="AlertType.Success">
+                Recibo @ultimoRecibo.NumeroRecibo generado para el cliente @ultimoRecibo.ClienteClave el @ultimoRecibo.FechaEmision:d. Total @ultimoRecibo.Total.ToString("C2").
+            </DxAlert>
+        }
+    </div>
 </DxScrollView>
 
-<DxPopup Title="Resultados de clientes"
-         Visible="@selectorClientesVisible"
-         Width="700px"
-         Height="400px"
+<DxPopup Visible="@selectorClientesVisible"
+         Width="min(900px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
          ShowFooter="false"
+         CssClass="custom-popup"
          CloseButtonDisplayMode="PopupCloseButtonDisplayMode.Visible"
          CloseOnOutsideClick="true"
          VisibleChanged="@OnSelectorClientesVisibleChanged">
-    <DxGrid Data="@clientesEncontrados"
-            KeyFieldName="@nameof(ClienteLookupDto.Clave)"
-            ShowFilterRow="false"
-            ShowGroupPanel="false"
-            ShowPager="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-people fs-6"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Resultados de clientes</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    Selecciona un cliente de la lista
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        <div class="grid-wrapper">
+            <DxGrid Data="@clientesEncontrados"
+                    KeyFieldName="@nameof(ClienteLookupDto.Clave)"
+                    ShowFilterRow="false"
+                    ShowGroupPanel="false"
+                    ShowPager="false"
+                    CssClass="grid-solicitudes">
         <Columns>
             <DxGridDataColumn FieldName="@nameof(ClienteLookupDto.Clave)" Caption="Clave" Width="120px" />
             <DxGridDataColumn FieldName="@nameof(ClienteLookupDto.Nombre)" Caption="Nombre" />
@@ -218,28 +243,49 @@
                 </CellDisplayTemplate>
             </DxGridCommandColumn>
         </Columns>
-        <EmptyDataAreaTemplate>
+        <EmptyDataAreaTemplate Context="emptyContext">
             <DxAlert AlertType="AlertType.Info">
                 No se encontraron clientes que coincidan con el criterio proporcionado.
             </DxAlert>
         </EmptyDataAreaTemplate>
-    </DxGrid>
+            </DxGrid>
+        </div>
+    </BodyContentTemplate>
 </DxPopup>
 
-<DxPopup Title="Catálogo de misceláneos"
-         Visible="@catalogoVisible"
-         Width="800px"
-         Height="500px"
+<DxPopup Visible="@catalogoVisible"
+         Width="min(1000px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
          ShowFooter="false"
+         CssClass="custom-popup"
          CloseButtonDisplayMode="PopupCloseButtonDisplayMode.Visible"
          CloseOnOutsideClick="true"
          VisibleChanged="@OnCatalogoVisibleChanged">
-    <DxGrid Data="@catalogo"
-                KeyFieldName="@nameof(MiscelaneoCatalogoDto.Id)"
-                ShowFilterRow="true"
-                FilterRowOperatorType="FilterRowOperatorType.Contains"
-                FilterRowValueChangedDelay="250"
-                PageSize="10">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-info bg-opacity-10 text-info p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-basket fs-6"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Catálogo de misceláneos</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    Selecciona los conceptos a facturar
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        <div class="grid-wrapper">
+            <DxGrid Data="@catalogo"
+                    KeyFieldName="@nameof(MiscelaneoCatalogoDto.Id)"
+                    ShowFilterRow="true"
+                    FilterRowOperatorType="FilterRowOperatorType.Contains"
+                    FilterRowValueChangedDelay="250"
+                    PageSize="10"
+                    CssClass="grid-solicitudes">
         <Columns>
             <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.Codigo)"
                               Caption="Código"
@@ -262,7 +308,9 @@
                 </CellDisplayTemplate>
             </DxGridCommandColumn>
         </Columns>
-    </DxGrid>
+            </DxGrid>
+        </div>
+    </BodyContentTemplate>
 </DxPopup>
 
 @code {
@@ -311,7 +359,7 @@
             catalogo = (await FacturacionClient.GetCatalogoAsync()).OrderBy(c => c.Nombre).ToList();
             if (catalogo.Count == 0)
             {
-                info = "No hay conceptos misceláneos configurados. Ejecuta el seed 2025-11-11_facturacion_miscelaneos.sql para cargar datos de ejemplo.";
+                info = "El catálogo de misceláneos está vacío. Configura conceptos antes de facturar.";
             }
         }
         catch (Exception ex)
@@ -339,11 +387,7 @@
         {
             clientesEncontrados = (await FacturacionClient.SearchClientesAsync(criterio)).ToList();
 
-            if (clientesEncontrados.Count == 1)
-            {
-                SeleccionarCliente(clientesEncontrados[0]);
-            }
-            else if (clientesEncontrados.Count == 0)
+            if (clientesEncontrados.Count == 0)
             {
                 info = "No se encontraron clientes. Ajusta el criterio de búsqueda.";
             }
@@ -371,6 +415,8 @@
         criterioCliente = seleccionado.Clave;
         selectorClientesVisible = false;
         detalles.Clear();
+        error = null;
+        info = null;
     }
 
     private void LimpiarCliente()
@@ -379,6 +425,8 @@
         criterioCliente = null;
         detalles.Clear();
         ultimoRecibo = null;
+        error = null;
+        info = null;
     }
 
     private void OnSelectorClientesVisibleChanged(bool visible)
@@ -515,11 +563,15 @@
     {
         if (resultado.Data is JsonElement json)
         {
-            if (json.TryGetProperty("numrecibo", out var reciboProp) && reciboProp.TryGetInt32(out var numero))
+            if (json.TryGetProperty("numrecibo", out var reciboProp)
+                && reciboProp.ValueKind == JsonValueKind.Number
+                && reciboProp.TryGetInt32(out var numero))
             {
                 return numero;
             }
-            if (json.TryGetProperty("numRecibo", out var camelRecibo) && camelRecibo.TryGetInt32(out numero))
+            if (json.TryGetProperty("numRecibo", out var camelRecibo)
+                && camelRecibo.ValueKind == JsonValueKind.Number
+                && camelRecibo.TryGetInt32(out numero))
             {
                 return numero;
             }

@@ -1,0 +1,161 @@
+/* =========================
+   Base look & feel (tipo ClientesList)
+   ========================= */
+
+.cliente-historico-consumo-container {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.02);
+    padding: 1.25rem;
+}
+
+/* Header del card */
+.modern-card-header {
+    margin-bottom: 1rem;
+}
+
+.section-title {
+    font-weight: 800;
+    color: #2c3e50;
+    letter-spacing: -0.4px;
+    font-size: 1.25rem;
+    line-height: 1.2;
+}
+
+.badge-count {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    display: inline-block;
+    background: rgba(13, 110, 253, 0.10);
+    color: #0d6efd;
+}
+
+/* Grid wrapper (scroll horizontal limpio) */
+.grid-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+/* ===== Botones icono (idénticos a ClientesList) ===== */
+.btn-icon {
+    border: none;
+    background: transparent;
+    height: 32px;
+    border-radius: 10px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 0.95rem;
+    cursor: pointer;
+    padding: 0.35rem 0.7rem;
+    gap: 0.35rem;
+    background: rgba(13, 110, 253, 0.08);
+    color: #0d6efd;
+}
+.btn-icon:hover {
+    background: #0d6efd;
+    color: white;
+    transform: translateY(-1px);
+}
+
+/* =========================
+   DxGrid LOOK “Solicitudes / ClientesList”
+   ========================= */
+::deep .grid-solicitudes {
+    border: 1px solid rgba(0,0,0,0.10);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Header gris claro */
+::deep .grid-solicitudes .dxg-headerrow,
+::deep .grid-solicitudes .dxbs-grid-header-row {
+    background: #f1f3f5 !important;
+}
+
+::deep .grid-solicitudes th,
+::deep .grid-solicitudes .dxg-headerrow td {
+    font-weight: 700;
+    color: #2c3e50;
+    border-bottom: 1px solid rgba(0,0,0,0.10) !important;
+}
+
+::deep .grid-solicitudes td {
+    border-bottom: 1px solid rgba(0,0,0,0.08) !important;
+}
+
+::deep .grid-solicitudes .dxg-selected-row,
+::deep .grid-solicitudes .dxg-focused-row,
+::deep .grid-solicitudes .dxbs-table-row-selected {
+    background: transparent !important;
+}
+
+::deep .grid-solicitudes .dxg-data-row:hover,
+::deep .grid-solicitudes .dxbs-table-row:hover {
+    background: rgba(13, 110, 253, 0.04) !important;
+}
+
+/* =========================
+   POPUP de columnas (tu estilo global)
+   ========================= */
+:global(.consumo-popup .dxbl-popup),
+:global(.consumo-popup .dx-popup) {
+    border-radius: 14px !important;
+    overflow: hidden !important;
+    box-shadow: 0 12px 30px rgba(0,0,0,0.18) !important;
+    border: 1px solid rgba(0,0,0,0.08) !important;
+}
+
+:global(.consumo-popup .dxbl-popup-header),
+:global(.consumo-popup .dx-popup-header) {
+    background: linear-gradient(180deg, rgba(13,110,253,.10), rgba(13,110,253,.04)) !important;
+    border-bottom: 2px solid rgba(13,110,253,.12) !important;
+    padding: 0.9rem 1.1rem !important;
+    font-weight: 800 !important;
+    color: #2c3e50 !important;
+    font-size: 1.05rem !important;
+}
+
+:global(.consumo-popup .dxbl-popup-content),
+:global(.consumo-popup .dx-popup-content) {
+    padding: 1.1rem !important;
+    background: #f8f9fa !important;
+}
+
+:global(.consumo-popup .dxbl-popup-footer),
+:global(.consumo-popup .dx-popup-footer) {
+    background: #f8f9fa !important;
+    border-top: 1px solid rgba(0,0,0,0.08) !important;
+    padding: 0.9rem 1.1rem !important;
+}
+
+:global(.consumo-popup .modern-popup-body) {
+    background: #ffffff !important;
+    border-radius: 12px !important;
+    padding: 1rem !important;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.06) !important;
+    border: 1px solid rgba(0,0,0,0.08) !important;
+}
+
+/* Ensure checkbox labels are visible inside the popup */
+:global(.consumo-popup .dxbl-checkbox),
+:global(.consumo-popup .dxbs-checkbox),
+:global(.consumo-popup .dxbl-checkbox-text),
+:global(.consumo-popup .dxbs-checkbox-text),
+:global(.consumo-popup .dxbl-checkbox-label) {
+    color: #2c3e50 !important;
+}
+
+:global(.consumo-popup .dxbl-checkbox-text),
+:global(.consumo-popup .dxbs-checkbox-text) {
+    margin-left: 0.4rem;
+    font-weight: 600;
+    font-size: 0.9rem;
+}

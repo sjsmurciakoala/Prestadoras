@@ -1,0 +1,80 @@
+@using SIAD.Core.DTOs.Bancos
+
+<DxPopup Visible="@Visible"
+         VisibleChanged="OnVisibleChanged"
+         Width="720px"
+         CloseOnOutsideClick="false"
+         ShowCloseButton="true"
+         ShowFooter="false"
+         BodyCssClass="p-0">
+    <BodyTemplate Context="popupContext">
+        <div class="card border-0 shadow-sm mb-0" style="max-height:80vh;">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-0 text-primary fw-bold">
+                    <i class="@(EditModel.BancoId > 0 ? "bi bi-pencil-square me-2" : "bi bi-bank me-2")"></i>
+                    @PopupTitle
+                </h6>
+            </div>
+
+            <div class="card-body p-3" style="overflow:auto;">
+                @if (EditContext is not null)
+                {
+                    <EditForm EditContext="@EditContext" Context="editCtx">
+                        <DataAnnotationsValidator />
+                        <DxFormLayout ColumnCountMd="12"
+                                      ColumnCountSm="1"
+                                      ReadOnly="@IsSaving">
+                            <DxFormLayoutGroup Caption="Datos generales" ColSpanMd="12">
+                                <DxFormLayoutItem Caption="Activo" ColSpanMd="3" ColSpanSm="12">
+                                    <DxCheckBox @bind-Checked="EditModel.Activo" CheckType="CheckType.Switch" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Nombre *" ColSpanMd="12" ColSpanSm="12">
+                                    <DxTextBox @bind-Text="EditModel.Nombre" />
+                                    <ValidationMessage For="@(() => EditModel.Nombre)" />
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+
+                            <DxFormLayoutItem ColSpanMd="12">
+                                <ValidationSummary />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </EditForm>
+                }
+            </div>
+
+            <div class="card-footer bg-white border-top p-2 text-end">
+                <DxButton Text="Cancelar"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          CssClass="me-2"
+                          Click="@OnCancel" />
+                <DxButton Text="Guardar"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!IsSaving)"
+                          Click="@OnSave" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+    [Parameter] public BancoEditDto EditModel { get; set; } = new();
+    [Parameter] public EditContext? EditContext { get; set; }
+    [Parameter] public bool IsSaving { get; set; }
+    [Parameter] public string PopupTitle { get; set; } = string.Empty;
+    [Parameter] public string BancoIdDisplay { get; set; } = string.Empty;
+    [Parameter] public EventCallback OnSave { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+
+    private async Task OnVisibleChanged(bool value)
+    {
+        if (Visible == value)
+        {
+            return;
+        }
+
+        Visible = value;
+        await VisibleChanged.InvokeAsync(value);
+    }
+}

@@ -6,5 +6,7 @@ public interface ITenantCompanyService
 {
     Task<IReadOnlyList<TenantCompanyDto>> ObtenerEmpresasAsync(CancellationToken ct = default);
 
+    Task<bool> HayEmpresasAsync(CancellationToken ct = default);
+
     Task<bool> ExisteEmpresaAsync(long companyId, CancellationToken ct = default);
 }

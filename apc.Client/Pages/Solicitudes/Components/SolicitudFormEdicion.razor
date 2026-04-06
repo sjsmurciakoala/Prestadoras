@@ -1,0 +1,103 @@
+@using SIAD.Core.DTOs.Solicitudes
+
+<DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+    
+    <DxFormLayoutGroup Caption="Datos del Cliente" HeaderIconCssClass="bi bi-person-lines-fill" ColSpanXs="12">
+        <DxFormLayoutItem Caption="Identificación (Solo lectura)" ColSpanXs="12" ColSpanMd="6">
+            <DxMaskedInput @bind-Value="@Solicitud.IdentificacionCliente" Mask="0000-0000-00000" ReadOnly="true" CssClass="bg-light" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="6">
+            <DxMaskedInput @bind-Value="@Solicitud.Rtn" Mask="00000000000000" NullValue="" Placeholder="14 dígitos" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Nombre Completo *" ColSpanXs="12" ColSpanMd="6">
+            <DxTextBox @bind-Text="@Solicitud.NombreCliente" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Categoría *" ColSpanXs="12" ColSpanMd="6">
+            <DxComboBox Data="@Categorias" @bind-Value="@Solicitud.CategoriaServicioId" ValueFieldName="Id" TextFieldName="Nombre" />
+        </DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
+    <DxFormLayoutGroup Caption="Contacto y Ubicación" HeaderIconCssClass="bi bi-geo-alt-fill" ColSpanXs="12">
+        <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="4">
+            <DxMaskedInput @bind-Value="@Solicitud.Telefono" Mask="(000) 0000-0000" NullValue="" Placeholder="(504) 2222-3333" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Celular" ColSpanXs="12" ColSpanMd="4">
+            <DxMaskedInput @bind-Value="@Solicitud.Movil" Mask="(000) 0000-0000" NullValue="" Placeholder="(504) 9888-7777" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Correo" ColSpanXs="12" ColSpanMd="4">
+            <DxTextBox @bind-Text="@Solicitud.Correo" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Dirección Exacta *" ColSpanXs="12">
+            <DxMemo @bind-Text="@Solicitud.Direccion" Rows="3" />
+        </DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Observaciones" ColSpanXs="12">
+            <DxMemo @bind-Text="@Solicitud.Observacion" Rows="2" />
+        </DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
+    <DxFormLayoutItem ColSpanXs="12">
+        <Template>
+            <div class="form-actions mt-4 pt-3 border-top">
+                <DxButton Text="Cancelar"
+                          Click="@CancelarAsync"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          CssClass="form-btn" />
+                <DxButton Text="Actualizar Datos"
+                          Click="@GuardarAsync"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          IconCssClass="bi bi-save"
+                          CssClass="form-btn" />
+            </div>
+        </Template>
+    </DxFormLayoutItem>
+
+</DxFormLayout>
+
+@if (!string.IsNullOrEmpty(validationError))
+{
+    <DxAlert AlertType="AlertType.Danger" CssClass="mt-3">@validationError</DxAlert>
+}
+
+@code {
+    [Parameter] public SolicitudUpdateDto Solicitud { get; set; } = default!;
+    [Parameter] public List<SolicitudCategoriaDto> Categorias { get; set; } = new();
+    [Parameter] public EventCallback OnGuardar { get; set; }
+
+    private string? validationError;
+
+    private async Task GuardarAsync()
+    {
+        validationError = null;
+        if (!ValidarFormulario())
+        {
+            validationError = "Completa los campos obligatorios y verifica las máscaras.";
+            return;
+        }
+
+        await OnGuardar.InvokeAsync();
+    }
+    private async Task CancelarAsync() { }
+
+    private bool ValidarFormulario()
+    {
+        var identidadOk = CountDigits(Solicitud.IdentificacionCliente) == 13;
+        var telefonoOk = CountDigits(Solicitud.Telefono) >= 11;
+        var movilOk = CountDigits(Solicitud.Movil) >= 11;
+        var rtnOk = string.IsNullOrWhiteSpace(Solicitud.Rtn) || CountDigits(Solicitud.Rtn) == 14;
+
+        if (!identidadOk ||
+            string.IsNullOrWhiteSpace(Solicitud.NombreCliente) ||
+            Solicitud.CategoriaServicioId == 0 ||
+            !telefonoOk ||
+            !movilOk ||
+            string.IsNullOrWhiteSpace(Solicitud.Direccion) ||
+            !rtnOk)
+        {
+            return false;
+        }
+        return true;
+    }
+
+    private static int CountDigits(string? value) => string.IsNullOrWhiteSpace(value) ? 0 : value.Count(char.IsDigit);
+}

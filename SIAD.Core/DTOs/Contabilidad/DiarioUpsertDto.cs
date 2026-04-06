@@ -8,4 +8,5 @@ public record DiarioUpsertDto(
     string User,
     long? JournalId = null,
     string? Description = null,
-    string? SequencePrefix = null);
+    string? SequencePrefix = null,
+    bool IsDefaultManual = false);

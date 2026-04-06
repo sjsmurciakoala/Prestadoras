@@ -10,5 +10,6 @@ namespace apc.Client
         public required string Email { get; set; }
         public long CompanyId { get; set; }
         public string[] Roles { get; set; } = Array.Empty<string>();
+        public string[] Permissions { get; set; } = Array.Empty<string>();
     }
 }

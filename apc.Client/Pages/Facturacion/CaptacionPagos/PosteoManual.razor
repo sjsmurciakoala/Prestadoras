@@ -1,0 +1,551 @@
+@using System.ComponentModel.DataAnnotations
+@using System.Text.Json
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.CaptacionPagos
+@inject apc.Client.Services.CaptacionPagos.CaptacionPagosClient CaptacionClient
+@inject IToastNotificationService ToastService
+
+<div class="tab-content-section">
+
+    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+        <DxFormLayoutGroup ColSpanXs="12" ColSpanMd="12">
+            <DxFormLayoutItem Caption="Cliente" ColSpanXs="12" ColSpanMd="6">
+                <ClienteLookup Items="@Clientes"
+                               @bind-Value="form.ClienteClave" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Recibo / Factura" ColSpanXs="12" ColSpanMd="3">
+                <DxTextBox Text="@reciboBusqueda"
+                           TextChanged="OnReciboBusquedaChanged"
+                           NullText="Buscar recibo..."
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                @if (coincidenciasRecibo.Count > 0)
+                {
+                    <div class="list-group shadow-sm mt-1">
+                        @foreach (var fac in coincidenciasRecibo)
+                        {
+                            <button type="button" class="list-group-item list-group-item-action"
+                                    @onclick="() => SeleccionarReciboAsync(fac)">
+                                <div class="fw-bold">@fac.NumFactura</div>
+                                <small class="text-muted">@fac.ClienteNombre (@fac.ClienteClave) · @fac.Total.ToString("C2")</small>
+                            </button>
+                        }
+                    </div>
+                }
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Banco" ColSpanXs="12" ColSpanMd="3">
+                @if (UsaCatalogoBancoCuenta)
+                {
+                    <DxComboBox TData="BancoDto" TValue="long?" Data="@BancosConCuenta"
+                                TextFieldName="Nombre" ValueFieldName="BancoCuentaId"
+                                @bind-Value="form.BancoCuentaId"
+                                NullText="Seleccione banco"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                }
+                else
+                {
+                    <DxComboBox TData="BancoDto" TValue="string" Data="@Bancos"
+                                TextFieldName="Nombre" ValueFieldName="Codigo"
+                                @bind-Value="form.BancoCodigo"
+                                NullText="Seleccione banco"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                }
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Acciones" ColSpanXs="12" ColSpanMd="3">
+                <div class="d-flex gap-2 flex-wrap">
+                    <DxButton Text="Cargar saldos" Click="LoadSaldosAsync" Enabled="@(!cargando && !procesando)" />
+                    <DxButton Text="Limpiar" RenderStyle="ButtonRenderStyle.Secondary" Click="Limpiar" Enabled="@(!cargando && !procesando)" />
+                </div>
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+    </DxFormLayout>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mt-3">@error</DxAlert>
+    }
+    @if (!string.IsNullOrWhiteSpace(info))
+    {
+        <DxAlert AlertType="AlertType.Info" CssClass="mt-3">@info</DxAlert>
+    }
+
+    <DxDataGrid Data="@saldos" ShowFilterRow="false" ShowGroupPanel="false" PageSize="10"
+                CssClass="mt-3"
+                SelectionMode="DataGridSelectionMode.Single"
+                SelectedDataItemChanged="OnSeleccionadoChanged">
+        <Columns>
+            <DxDataGridColumn FieldName="@nameof(SaldoPosteoManualVm.ReciboActual)" Caption="Recibo" Width="100px" />
+            <DxDataGridColumn FieldName="@nameof(SaldoPosteoManualVm.ReciboAnterior)" Caption="Recibo Anterior" Width="130px" />
+            <DxDataGridSpinEditColumn FieldName="@nameof(SaldoPosteoManualVm.Valor)" Caption="Valor" DisplayFormat="c2" Width="120px" TextAlignment="DataGridTextAlignment.Right" />
+            <DxDataGridSpinEditColumn FieldName="@nameof(SaldoPosteoManualVm.DistribucionAguaEditable)" Caption="Agua" DisplayFormat="c2" Width="110px" TextAlignment="DataGridTextAlignment.Right" />
+            <DxDataGridSpinEditColumn FieldName="@nameof(SaldoPosteoManualVm.DistribucionAlcantarilladoEditable)" Caption="Alcantarillado" DisplayFormat="c2" Width="130px" TextAlignment="DataGridTextAlignment.Right" />
+            <DxDataGridSpinEditColumn FieldName="@nameof(SaldoPosteoManualVm.DistribucionOtrosEditable)" Caption="Otros" DisplayFormat="c2" Width="110px" TextAlignment="DataGridTextAlignment.Right" />
+            <DxDataGridSpinEditColumn FieldName="@nameof(SaldoPosteoManualVm.TotalEditable)" Caption="Total Distribuido" DisplayFormat="c2" Width="140px" TextAlignment="DataGridTextAlignment.Right" />
+        </Columns>
+    </DxDataGrid>
+
+    @if (seleccionado is not null)
+    {
+        <div class="card mt-3">
+            <div class="card-body">
+                <div class="d-flex flex-wrap gap-3 align-items-end">
+                    <div>
+                        <label class="form-label mb-1">Recibo seleccionado</label>
+                        <div class="fw-bold">@seleccionado.ReciboActual</div>
+                    </div>
+                    <div>
+                        <label class="form-label mb-1">Valor total</label>
+                        <div class="fw-semibold text-primary">@seleccionado.Valor.ToString("C2")</div>
+                    </div>
+                    <div class="flex-grow-1">
+                        <DxFormLayout ColCountMd="3" CaptionPosition="CaptionPosition.Vertical">
+                            <DxFormLayoutItem Caption="Distribución Agua">
+                                <DxSpinEdit @bind-Value="distAgua" DisplayFormat="c2" MinValue="0" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Distribución Alcantarillado">
+                                <DxSpinEdit @bind-Value="distAlc" DisplayFormat="c2" MinValue="0" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Distribución Otros">
+                                <DxSpinEdit @bind-Value="distOtros" DisplayFormat="c2" MinValue="0" />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </div>
+                    <div class="d-flex gap-2">
+                        <DxButton Text="Registrar" RenderStyle="ButtonRenderStyle.Success" Click="RegistrarAsync" Enabled="@(!procesando)" />
+                        <DxButton Text="Reversar" RenderStyle="ButtonRenderStyle.Danger" Click="ReversarAsync" Enabled="@(!procesando)" />
+                    </div>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<BancoDto> Bancos { get; set; } = new();
+    [Parameter] public List<ClienteComboDto> Clientes { get; set; } = new();
+    [Parameter] public string? UsuarioActual { get; set; }
+    [Parameter] public PeriodoActualDto? PeriodoActual { get; set; }
+
+    private sealed class FormModel
+    {
+        public string? ClienteClave { get; set; }
+        public string? BancoCodigo { get; set; }
+        public long? BancoCuentaId { get; set; }
+    }
+
+    private sealed class SaldoPosteoManualVm : SaldoPosteoManualDto
+    {
+        public decimal DistribucionAguaEditable { get; set; }
+        public decimal DistribucionAlcantarilladoEditable { get; set; }
+        public decimal DistribucionOtrosEditable { get; set; }
+        public decimal TotalEditable => DistribucionAguaEditable + DistribucionAlcantarilladoEditable + DistribucionOtrosEditable;
+    }
+
+    private readonly FormModel form = new();
+    private readonly List<SaldoPosteoManualVm> saldos = new();
+    private string? reciboBusqueda;
+    private readonly List<BusquedaFacturaDto> coincidenciasRecibo = new();
+
+    private SaldoPosteoManualVm? seleccionado
+    {
+        get => _seleccionado;
+        set
+        {
+            _seleccionado = value;
+            if (value is not null)
+            {
+                distAgua = value.DistribucionAguaEditable;
+                distAlc = value.DistribucionAlcantarilladoEditable;
+                distOtros = value.DistribucionOtrosEditable;
+            }
+        }
+    }
+    private SaldoPosteoManualVm? _seleccionado;
+
+    private decimal distAgua;
+    private decimal distAlc;
+    private decimal distOtros;
+
+    private bool cargando;
+    private bool procesando;
+    private string? error;
+    private string? info;
+    private bool UsaCatalogoBancoCuenta => Bancos.Any(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
+    private IEnumerable<BancoDto> BancosConCuenta => Bancos.Where(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
+
+    private async Task LoadSaldosAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.ClienteClave))
+        {
+            ShowValidation("Seleccione un cliente.");
+            return;
+        }
+
+        error = null;
+        info = null;
+        cargando = true;
+
+        try
+        {
+            saldos.Clear();
+            seleccionado = null;
+            await InvokeAsync(StateHasChanged);
+
+            var clave = form.ClienteClave.Trim();
+            var data = await CaptacionClient.GetSaldosPosteoManualAsync(clave, CancellationToken.None);
+
+            foreach (var item in data)
+            {
+                saldos.Add(new SaldoPosteoManualVm
+                {
+                    ReciboActual = item.ReciboActual,
+                    ReciboAnterior = item.ReciboAnterior,
+                    Valor = item.Valor,
+                    DistribucionAgua = item.DistribucionAgua,
+                    DistribucionAlcantarillado = item.DistribucionAlcantarillado,
+                    DistribucionOtros = item.DistribucionOtros,
+                    DetalleId = item.DetalleId,
+                    DetalleAguaId = item.DetalleAguaId,
+                    DetalleAlcantarilladoId = item.DetalleAlcantarilladoId,
+                    DetalleOtrosId = item.DetalleOtrosId,
+                    DistribucionAguaEditable = item.DistribucionAgua,
+                    DistribucionAlcantarilladoEditable = item.DistribucionAlcantarillado,
+                    DistribucionOtrosEditable = item.DistribucionOtros
+                });
+            }
+
+            if (saldos.Count > 0)
+            {
+                seleccionado = saldos.First();
+            }
+            else
+            {
+                info = "No se encontraron saldos para el cliente seleccionado.";
+            }
+
+            if (!string.IsNullOrWhiteSpace(reciboBusqueda))
+            {
+                SeleccionarPorRecibo(reciboBusqueda);
+            }
+        }
+        catch (Exception ex)
+        {
+            error = $"Error al cargar saldos: {ex.Message}";
+            ShowToast(error, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargando = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private async Task RegistrarAsync()
+    {
+        if (procesando)
+            return;
+
+        error = null;
+
+        if (seleccionado is null)
+        {
+            ShowValidation("Seleccione un recibo pendiente.");
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(form.ClienteClave))
+        {
+            ShowValidation("Seleccione un cliente.");
+            return;
+        }
+
+        if (!TieneBancoSeleccionado())
+        {
+            ShowValidation("Seleccione un banco.");
+            return;
+        }
+
+        var total = distAgua + distAlc + distOtros;
+        if (total <= 0)
+        {
+            ShowValidation("El monto distribuido debe ser mayor a cero.");
+            return;
+        }
+
+        if (Math.Abs(total - seleccionado.Valor) > 0.01m)
+        {
+            ShowValidation("La distribucion debe ser igual al valor total.");
+            return;
+        }
+
+        var distribuciones = new List<PagoManualDistribucionDto>();
+        if (!TryAgregarDistribucion(seleccionado.DetalleAguaId, distAgua, "Agua", distribuciones))
+            return;
+
+        if (!TryAgregarDistribucion(seleccionado.DetalleAlcantarilladoId, distAlc, "Alcantarillado", distribuciones))
+            return;
+
+        if (!TryAgregarDistribucion(seleccionado.DetalleOtrosId, distOtros, "Otros", distribuciones))
+            return;
+
+        if (distribuciones.Count == 0)
+        {
+            ShowValidation("No se encontraron detalles validos para acreditar.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        procesando = true;
+
+        try
+        {
+            var bancoSeleccionado = GetBancoSeleccionado();
+            if (bancoSeleccionado is null || string.IsNullOrWhiteSpace(bancoSeleccionado.Codigo))
+            {
+                ShowValidation("No se pudo resolver el banco seleccionado.");
+                return;
+            }
+
+            var dto = new PagoManualCrearDto
+            {
+                ClienteClave = form.ClienteClave!.Trim(),
+                NumRecibo = seleccionado.ReciboActual,
+                Banco = bancoSeleccionado.Codigo.Trim(),
+                BancoCuentaId = bancoSeleccionado.BancoCuentaId,
+                Valor = total,
+                Distribucion = distribuciones,
+                Usuario = UsuarioActual ?? "system"
+            };
+
+            var result = await CaptacionClient.RegistrarPagoManualAsync(dto, CancellationToken.None);
+
+            if (result.Success)
+            {
+                var mensaje = BuildSuccessMessage(result.Message ?? "Posteo manual registrado.", TryGetPolizaId(result.Data));
+                ShowToast(mensaje, ToastRenderStyle.Success);
+                await LoadSaldosAsync();
+            }
+            else
+            {
+                ShowToast(result.Message ?? "No se pudo registrar.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Error registrando: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            procesando = false;
+        }
+    }
+
+    private async Task ReversarAsync()
+    {
+        if (procesando)
+            return;
+
+        error = null;
+
+        if (seleccionado is null)
+        {
+            ShowValidation("Seleccione un recibo para reversar.");
+            return;
+        }
+
+        procesando = true;
+
+        try
+        {
+            var dto = new ReversoManualRequestDto
+            {
+                ClienteClave = form.ClienteClave?.Trim() ?? string.Empty,
+                Recibo = seleccionado.ReciboActual,
+                Usuario = UsuarioActual ?? "system"
+            };
+
+            var result = await CaptacionClient.ReversarPagoManualAsync(dto, CancellationToken.None);
+
+            if (result.Success)
+            {
+                var mensaje = BuildSuccessMessage(result.Message ?? "Posteo manual reversado.", TryGetPolizaId(result.Data));
+                ShowToast(mensaje, ToastRenderStyle.Success);
+                await LoadSaldosAsync();
+            }
+            else
+            {
+                ShowToast(result.Message ?? "No se pudo reversar.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Error reversando: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            procesando = false;
+        }
+    }
+
+    private void Limpiar()
+    {
+        saldos.Clear();
+        seleccionado = null;
+        distAgua = distAlc = distOtros = 0;
+        reciboBusqueda = null;
+        coincidenciasRecibo.Clear();
+    }
+
+    private void OnSeleccionadoChanged(SaldoPosteoManualVm? item)
+    {
+        if (item is not null)
+        {
+            seleccionado = item;
+            distAgua = item.DistribucionAguaEditable;
+            distAlc = item.DistribucionAlcantarilladoEditable;
+            distOtros = item.DistribucionOtrosEditable;
+        }
+    }
+
+    private bool TryAgregarDistribucion(long? detalleId, decimal monto, string etiqueta, List<PagoManualDistribucionDto> distribuciones)
+    {
+        if (monto <= 0)
+            return true;
+
+        if (detalleId is null || detalleId <= 0)
+        {
+            ShowValidation($"No se encontro el detalle de {etiqueta} para acreditar.", ToastRenderStyle.Danger);
+            return false;
+        }
+
+        distribuciones.Add(new PagoManualDistribucionDto
+        {
+            Id = detalleId.Value,
+            ValorDistribuido = monto
+        });
+
+        return true;
+    }
+
+    private async Task OnReciboBusquedaChanged(string value)
+    {
+        reciboBusqueda = value?.Trim();
+        coincidenciasRecibo.Clear();
+
+        if (string.IsNullOrWhiteSpace(reciboBusqueda) || reciboBusqueda.Length < 3)
+        {
+            return;
+        }
+
+        try
+        {
+            var results = await CaptacionClient.BuscarFacturasAsync(reciboBusqueda);
+            if (!string.IsNullOrWhiteSpace(form.ClienteClave))
+            {
+                results = results.Where(r => r.ClienteClave == form.ClienteClave).ToList();
+            }
+
+            coincidenciasRecibo.AddRange(results.Take(10));
+        }
+        catch (Exception ex)
+        {
+            ShowToast($"Error buscando recibo: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task SeleccionarReciboAsync(BusquedaFacturaDto factura)
+    {
+        reciboBusqueda = factura.NumFactura;
+        coincidenciasRecibo.Clear();
+
+        if (saldos.Count == 0)
+        {
+            await LoadSaldosAsync();
+        }
+
+        SeleccionarPorRecibo(factura.NumFactura);
+    }
+
+    private void SeleccionarPorRecibo(string? reciboTexto)
+    {
+        if (string.IsNullOrWhiteSpace(reciboTexto) || saldos.Count == 0)
+        {
+            return;
+        }
+
+        SaldoPosteoManualVm? match = null;
+        if (int.TryParse(reciboTexto, out var recibo))
+        {
+            match = saldos.FirstOrDefault(s => s.ReciboActual == recibo);
+        }
+
+        if (match is null)
+        {
+            match = saldos.FirstOrDefault(s => s.ReciboActual.ToString() == reciboTexto);
+        }
+
+        if (match is not null)
+        {
+            seleccionado = match;
+        }
+    }
+
+    private void ShowToast(string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Posteo Manual",
+            Text = message,
+            RenderStyle = style,
+            ProviderName = "GlobalToast"
+        });
+    }
+
+    private void ShowValidation(string message, ToastRenderStyle style = ToastRenderStyle.Warning)
+    {
+        error = message;
+        ShowToast(message, style);
+    }
+
+    private static string BuildSuccessMessage(string baseText, long? polizaId) =>
+        polizaId.HasValue ? $"{baseText} Poliza #{polizaId.Value}." : baseText;
+
+    private static long? TryGetPolizaId(object? data)
+    {
+        if (data is not JsonElement json || json.ValueKind != JsonValueKind.Object)
+        {
+            return null;
+        }
+
+        return json.TryGetProperty("polizaId", out var polizaElement)
+               && polizaElement.ValueKind == JsonValueKind.Number
+               && polizaElement.TryGetInt64(out var polizaId)
+            ? polizaId
+            : null;
+    }
+
+    private bool TieneBancoSeleccionado() =>
+        UsaCatalogoBancoCuenta
+            ? form.BancoCuentaId.HasValue && form.BancoCuentaId.Value > 0
+            : !string.IsNullOrWhiteSpace(form.BancoCodigo);
+
+    private BancoDto? GetBancoSeleccionado()
+    {
+        if (UsaCatalogoBancoCuenta)
+        {
+            if (!form.BancoCuentaId.HasValue || form.BancoCuentaId.Value <= 0)
+            {
+                return null;
+            }
+
+            return Bancos.FirstOrDefault(b => b.BancoCuentaId == form.BancoCuentaId);
+        }
+
+        return Bancos
+            .FirstOrDefault(b => string.Equals(b.Codigo, form.BancoCodigo, StringComparison.OrdinalIgnoreCase))
+            ?? (string.IsNullOrWhiteSpace(form.BancoCodigo)
+                ? null
+                : new BancoDto { Codigo = form.BancoCodigo.Trim() });
+    }
+}

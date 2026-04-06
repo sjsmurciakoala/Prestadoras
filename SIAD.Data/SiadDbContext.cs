@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Entities;
@@ -7,6 +7,7 @@ namespace SIAD.Data;
 
 public partial class SiadDbContext : DbContext
 {
+
     public SiadDbContext()
     {
     }
@@ -27,6 +28,25 @@ public partial class SiadDbContext : DbContext
     public virtual DbSet<axl_observacion_cobranza> axl_observacion_cobranzas { get; set; }
 
     public virtual DbSet<barrio> barrios { get; set; }
+    public virtual DbSet<ban_banco> ban_banco { get; set; }
+
+    public virtual DbSet<ban_config> ban_config { get; set;}
+ 
+    public virtual DbSet<ban_cta> ban_cta { get; set;}
+
+    public virtual DbSet<ban_cuenta> ban_cuenta { get;set; }
+
+    public virtual DbSet<ban_moneda> ban_moneda { get;set; }
+
+    public virtual DbSet<ban_movimiento> ban_movimiento { get; set;}
+
+    public virtual DbSet<ban_kardex> ban_kardex { get; set; }
+
+    public virtual DbSet<ban_movimiento_detalle> ban_movimiento_detalle { get; set;}
+
+    public virtual DbSet<ban_movimiento_transito> ban_movimiento_transito { get; set; }
+
+    public virtual DbSet<ban_tipos_transacciones> ban_tipos_transacciones { get; set; }
 
     public virtual DbSet<bnc_banco> bnc_bancos { get; set; }
 
@@ -138,6 +158,8 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<informativo> informativos { get; set; }
 
+    public virtual DbSet<letra> letras { get; set; }
+
     public virtual DbSet<log_cliclo_descarga_app> log_cliclo_descarga_apps { get; set; }
 
     public virtual DbSet<maestro_medidor> maestro_medidors { get; set; }
@@ -163,6 +185,8 @@ public partial class SiadDbContext : DbContext
     public virtual DbSet<pagos_hdr> pagos_hdrs { get; set; }
 
     public virtual DbSet<pagos_miscelaneo> pagos_miscelaneos { get; set; }
+
+    public virtual DbSet<pagos_miscelaneos_dtl> pagos_miscelaneos_dtl { get; set; }
 
     public virtual DbSet<pagovariostemp> pagovariostemps { get; set; }
 
@@ -192,11 +216,11 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<servicio> servicios { get; set; }
 
+    public virtual DbSet<servicios_roles_ws> servicios_roles_ws { get; set; }
+
     public virtual DbSet<solicitud_servicio> solicitud_servicios { get; set; }
 
     public virtual DbSet<tarifa> tarifas { get; set; }
-
-    public virtual DbSet<tarifas_catalogo> tarifas_catalogos { get; set; }
 
     public virtual DbSet<tarifas_contador> tarifas_contadors { get; set; }
 
@@ -301,7 +325,7 @@ public partial class SiadDbContext : DbContext
 
             entity.ToTable("barrio");
 
-            entity.Property(e => e.barrio_codigo).HasMaxLength(3);
+            entity.Property(e => e.barrio_codigo).HasMaxLength(7);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.usuariocreacion).HasMaxLength(256);
@@ -492,7 +516,7 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.maestro_cliente_id)
                 .UseIdentityAlwaysColumn()
                 .HasIdentityOptions(102789L, null, null, null, null, null);
-            entity.Property(e => e.barrio_codigo).HasMaxLength(5);
+            entity.Property(e => e.barrio_codigo).HasMaxLength(7);
             entity.Property(e => e.bloqueado_cobranza).HasDefaultValue(false);
             entity.Property(e => e.clave_sure).HasMaxLength(40);
             entity.Property(e => e.cliente_fecha_nac).HasColumnType("timestamp without time zone");
@@ -855,8 +879,6 @@ public partial class SiadDbContext : DbContext
         {
             entity.HasKey(e => e.configuracion_tasas_id).HasName("configuracion_tasas_id_pkey");
 
-            entity.HasIndex(e => new { e.maestro_cliente_id, e.tarifa_catalogo_id }, "ix_configuracion_tasas_cliente_tarifa");
-
             entity.Property(e => e.configuracion_tasas_id)
                 .UseIdentityAlwaysColumn()
                 .HasIdentityOptions(38784L, null, null, null, null, null);
@@ -869,11 +891,6 @@ public partial class SiadDbContext : DbContext
                 .HasForeignKey(d => d.maestro_cliente_id)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("maestro_cliente_id_fkey");
-
-            entity.HasOne(d => d.tarifa_catalogo).WithMany(p => p.configuracion_tasas)
-                .HasForeignKey(d => d.tarifa_catalogo_id)
-                .OnDelete(DeleteBehavior.SetNull)
-                .HasConstraintName("fk_configuracion_tasas_tarifas_catalogo");
         });
 
         modelBuilder.Entity<configuracion_tasas_detalle>(entity =>
@@ -1354,6 +1371,23 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.descripcion).HasColumnType("character varying");
         });
 
+        modelBuilder.Entity<letra>(entity =>
+        {
+            entity.HasKey(e => e.letras).HasName("letra_pkey");
+
+            entity.ToTable("letras");
+
+            entity.Property(e => e.letras)
+                .HasMaxLength(1)
+                .IsFixedLength()
+                .HasColumnType("character");
+            entity.Property(e => e.num).HasColumnType("numeric(1,0)");
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(256);
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
+        });
+
         modelBuilder.Entity<log_cliclo_descarga_app>(entity =>
         {
             entity
@@ -1407,6 +1441,15 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.codigo).HasColumnType("character varying");
             entity.Property(e => e.nombre).HasColumnType("character varying");
             entity.Property(e => e.valor).HasPrecision(18, 2);
+
+            entity.HasOne(e => e.cont_account)
+                .WithMany()
+                .HasForeignKey(e => e.cont_account_id)
+                .HasConstraintName("fk_miscelaneos_catalogo_cont_account")
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => e.cont_account_id)
+                .HasDatabaseName("ix_miscelaneos_catalogo_cont_account_id");
         });
 
         modelBuilder.Entity<ops_compromiso>(entity =>
@@ -1664,6 +1707,7 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.nombre).HasMaxLength(150);
             entity.Property(e => e.nombrebanco1).HasMaxLength(80);
             entity.Property(e => e.nombrebanco2).HasMaxLength(80);
+            entity.Property(e => e.nombre_contacto).HasMaxLength(150);
             entity.Property(e => e.pagina_web).HasMaxLength(150);
             entity.Property(e => e.razon_social).HasMaxLength(150);
             entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
@@ -1673,9 +1717,9 @@ public partial class SiadDbContext : DbContext
 
         modelBuilder.Entity<prv_tipoproveedor>(entity =>
         {
-            entity
-                .HasNoKey()
-                .ToTable("prv_tipoproveedor");
+            entity.HasKey(e => e.cod_tipoproveedor);
+
+            entity.ToTable("prv_tipoproveedor");
 
             entity.Property(e => e.cod_tipoproveedor).ValueGeneratedOnAdd();
             entity.Property(e => e.nombre).HasMaxLength(150);
@@ -1727,11 +1771,16 @@ public partial class SiadDbContext : DbContext
 
         modelBuilder.Entity<ruta>(entity =>
         {
-            entity.HasNoKey();
+            entity.HasKey(e => e.id);
 
             entity.Property(e => e.codruta).HasColumnType("character varying");
             entity.Property(e => e.descripcion).HasColumnType("character varying");
+            entity.Property(e => e.estado);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.id).ValueGeneratedOnAdd();
+            entity.Property(e => e.usuariocreacion).HasMaxLength(256);
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
 
             entity.HasOne(d => d.codcicloNavigation).WithMany()
                 .HasForeignKey(d => d.codciclo)
@@ -1743,14 +1792,50 @@ public partial class SiadDbContext : DbContext
         {
             entity.HasKey(e => e.servicios_id).HasName("servicios_id_pkey");
 
+            entity.HasIndex(e => new { e.company_id, e.servicios_codigo })
+                .IsUnique()
+                .HasDatabaseName("ix_servicios_company_codigo");
+
+            entity.HasIndex(e => e.company_id)
+                .HasDatabaseName("ix_servicios_company");
+
+            entity.HasIndex(e => e.cont_account_id)
+                .HasDatabaseName("ix_servicios_cont_account");
+
             entity.Property(e => e.servicios_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.app_grupo).HasMaxLength(20);
+            entity.Property(e => e.company_id).HasColumnName("company_id");
+            entity.Property(e => e.cont_account_id).HasColumnName("cont_account_id");
+            entity.Property(e => e.es_servicio_base).HasColumnName("es_servicio_base");
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.facturable_app).HasDefaultValue(false);
             entity.Property(e => e.servicios_codigo).HasMaxLength(50);
             entity.Property(e => e.servicios_descripcioncorta).HasMaxLength(100);
             entity.Property(e => e.servicios_descripcionlarga).HasMaxLength(300);
             entity.Property(e => e.usuariocreacion).HasMaxLength(256);
             entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .HasConstraintName("servicios_company_id_fkey");
+
+            entity.HasOne(e => e.cont_account)
+                .WithMany()
+                .HasForeignKey(e => e.cont_account_id)
+                .HasConstraintName("servicios_cont_account_id_fkey");
+        });
+
+        modelBuilder.Entity<servicios_roles_ws>(entity =>
+        {
+            entity.HasKey(e => new { e.rol, e.servicios_codigo }).HasName("servicios_roles_ws_pkey");
+
+            entity.ToTable("servicios_roles_ws");
+
+            entity.Property(e => e.rol).HasMaxLength(50);
+            entity.Property(e => e.servicios_codigo).HasMaxLength(50);
+            entity.Property(e => e.descripcion).HasColumnType("text");
         });
 
         modelBuilder.Entity<solicitud_servicio>(entity =>
@@ -1777,26 +1862,18 @@ public partial class SiadDbContext : DbContext
         {
             entity.HasKey(e => new { e.tipo, e.categoria_id, e.codigo }).HasName("tarifas_pkey");
 
+            entity.ToTable("tarifas");
+
             entity.Property(e => e.codigo).HasColumnType("character varying");
             entity.Property(e => e.descripcion).HasColumnType("character varying");
             entity.Property(e => e.valor).HasPrecision(18, 2);
-        });
 
-        modelBuilder.Entity<tarifas_catalogo>(entity =>
-        {
-            entity.HasKey(e => e.tarifa_catalogo_id).HasName("tarifas_catalogo_pkey");
+            entity.HasIndex(e => e.categoria_id).HasDatabaseName("ix_tarifas_categoria_servicio");
 
-            entity.ToTable("tarifas_catalogo");
-
-            entity.Property(e => e.activo).HasDefaultValue(true);
-            entity.Property(e => e.cargo_fijo).HasPrecision(11, 4);
-            entity.Property(e => e.descripcion).HasMaxLength(250);
-            entity.Property(e => e.fecha_creacion)
-                .HasDefaultValueSql("now()")
-                .HasColumnType("timestamp without time zone");
-            entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.nombre).HasMaxLength(120);
-            entity.Property(e => e.precio_base).HasPrecision(11, 4);
+            entity.HasOne<categoria_servicio>()
+                .WithMany()
+                .HasForeignKey(e => e.categoria_id)
+                .HasConstraintName("fk_tarifas_categoria_servicio");
         });
 
         modelBuilder.Entity<tarifas_contador>(entity =>
@@ -1815,6 +1892,20 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.maximo).HasPrecision(12);
             entity.Property(e => e.minimo).HasPrecision(12);
             entity.Property(e => e.valor_base).HasPrecision(12, 2);
+
+            entity.HasIndex(e => e.categoria_id).HasDatabaseName("ix_tarifas_contador_categoria_servicio");
+            entity.HasIndex(e => new { e.tipo, e.categoria_id, e.codigo }).HasDatabaseName("ix_tarifas_contador_tarifa");
+
+            entity.HasOne<categoria_servicio>()
+                .WithMany()
+                .HasForeignKey(e => e.categoria_id)
+                .HasConstraintName("fk_tarifas_contador_categoria_servicio");
+
+            entity.HasOne<tarifa>()
+                .WithMany()
+                .HasForeignKey(e => new { e.tipo, e.categoria_id, e.codigo })
+                .HasPrincipalKey(e => new { e.tipo, e.categoria_id, e.codigo })
+                .HasConstraintName("fk_tarifas_contador_tarifa");
         });
 
         modelBuilder.Entity<tipo_d>(entity =>
@@ -1828,7 +1919,12 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.depto).HasMaxLength(2);
             entity.Property(e => e.depto_appmitrabajo).HasMaxLength(2);
             entity.Property(e => e.descripcion).HasMaxLength(80);
+            entity.Property(e => e.estado);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.tipo).HasMaxLength(2);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(256);
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
         });
 
         modelBuilder.Entity<tipo_transaccion>(entity =>
@@ -2086,9 +2182,583 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.total).HasColumnType("numeric(18,2)");
         });
 
+        modelBuilder.Entity<ban_banco>(entity =>
+        {
+            entity.HasKey(e => e.ban_banco_id).HasName("ban_banco_pkey");
+
+            entity.HasIndex(e => new { e.company_id, e.code }, "ban_banco_company_id_code_key").IsUnique();
+
+            entity.HasIndex(e => e.company_id, "ix_ban_banco_company");
+
+            entity.Property(e => e.ban_banco_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.ciudad_id).HasDefaultValue(0);
+            entity.Property(e => e.code).HasMaxLength(30);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.direccion1).HasMaxLength(40);
+            entity.Property(e => e.direccion2).HasMaxLength(40);
+            entity.Property(e => e.email).HasMaxLength(25);
+            entity.Property(e => e.estado_id).HasDefaultValue(0);
+            entity.Property(e => e.fax).HasMaxLength(25);
+            entity.Property(e => e.gerente).HasMaxLength(30);
+            entity.Property(e => e.municipio_id).HasDefaultValue(0);
+            entity.Property(e => e.nombre).HasMaxLength(60);
+            entity.Property(e => e.nombre_sucursal).HasMaxLength(40);
+            entity.Property(e => e.pais_id).HasDefaultValue(0);
+            entity.Property(e => e.sucursal).HasMaxLength(50);
+            entity.Property(e => e.telefonos).HasMaxLength(25);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.zipcode).HasMaxLength(20);
+
+            entity.HasOne(d => d.company).WithMany(p => p.ban_banco)
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("ban_banco_company_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_config>(entity =>
+        {
+            entity.HasKey(e => e.ban_config_id).HasName("ban_config_pkey");
+
+            entity.HasIndex(e => e.company_id, "ban_config_company_id_key").IsUnique();
+
+            entity.HasIndex(e => e.company_id, "ix_ban_config_company");
+
+            entity.Property(e => e.ban_config_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.a_ctas0).HasDefaultValue(0);
+            entity.Property(e => e.a_ctas1).HasDefaultValue(0);
+            entity.Property(e => e.a_ctas2).HasDefaultValue(0);
+            entity.Property(e => e.a_ctas3).HasDefaultValue(0);
+            entity.Property(e => e.a_ctas4).HasDefaultValue(0);
+            entity.Property(e => e.a_ctas5).HasDefaultValue(0);
+            entity.Property(e => e.alertar_nd).HasDefaultValue(0);
+            entity.Property(e => e.cc_db).HasMaxLength(70);
+            entity.Property(e => e.cc_descrip).HasMaxLength(40);
+            entity.Property(e => e.cc_prefix).HasDefaultValue(0);
+            entity.Property(e => e.cc_pwd).HasMaxLength(70);
+            entity.Property(e => e.cc_server).HasMaxLength(70);
+            entity.Property(e => e.cc_ssw).HasDefaultValue(0);
+            entity.Property(e => e.cc_tipo).HasDefaultValue(0);
+            entity.Property(e => e.cc_user).HasMaxLength(70);
+            entity.Property(e => e.cod_sucu).HasMaxLength(5);
+            entity.Property(e => e.consolidado).HasDefaultValue(false);
+            entity.Property(e => e.cuenta_mayor).HasMaxLength(30);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.cta_aux1).HasMaxLength(30);
+            entity.Property(e => e.cta_aux2).HasMaxLength(30);
+            entity.Property(e => e.cta_aux3).HasMaxLength(30);
+            entity.Property(e => e.dias_d1).HasDefaultValue(0);
+            entity.Property(e => e.dias_d2).HasDefaultValue(0);
+            entity.Property(e => e.dias_d3).HasDefaultValue(0);
+            entity.Property(e => e.dir_contab).HasMaxLength(70);
+            entity.Property(e => e.dir_dta_cont).HasMaxLength(70);
+            entity.Property(e => e.i_c_egreso).HasDefaultValue(0);
+            entity.Property(e => e.i_cheque_ne).HasDefaultValue(0);
+            entity.Property(e => e.m_ope_conc).HasDefaultValue(0);
+            entity.Property(e => e.max_cheque).HasPrecision(28, 4);
+            entity.Property(e => e.meses_h).HasDefaultValue(0);
+            entity.Property(e => e.n_ope1).HasDefaultValue(0);
+            entity.Property(e => e.n_ope10).HasDefaultValue(0);
+            entity.Property(e => e.n_ope2).HasDefaultValue(0);
+            entity.Property(e => e.n_ope3).HasDefaultValue(0);
+            entity.Property(e => e.n_ope4).HasDefaultValue(0);
+            entity.Property(e => e.n_ope5).HasDefaultValue(0);
+            entity.Property(e => e.n_ope6).HasDefaultValue(0);
+            entity.Property(e => e.n_ope7).HasDefaultValue(0);
+            entity.Property(e => e.n_ope8).HasDefaultValue(0);
+            entity.Property(e => e.n_ope9).HasDefaultValue(0);
+            entity.Property(e => e.nro_cxb).HasDefaultValue(0);
+            entity.Property(e => e.p_deb_ban).HasPrecision(28, 4);
+            entity.Property(e => e.prx_c_egreso).HasDefaultValue(0);
+            entity.Property(e => e.prx_deposito).HasDefaultValue(0);
+            entity.Property(e => e.prx_n_credito).HasDefaultValue(0);
+            entity.Property(e => e.prx_n_debito).HasDefaultValue(0);
+            entity.Property(e => e.st_dta).HasMaxLength(90);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.company).WithOne(p => p.ban_config)
+                .HasForeignKey<ban_config>(d => d.company_id)
+                .HasConstraintName("ban_config_company_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_tipos_transacciones>(entity =>
+        {
+            entity.HasKey(e => e.ban_tipo_transaccion_id)
+                .HasName("pk_ban_tipos_transacciones");
+
+            entity.ToTable("ban_tipos_transacciones");
+
+            entity.HasIndex(e => e.company_id, "ix_ban_tipos_transacciones_company");
+
+            entity.HasIndex(
+                    e => new
+                    {
+                        e.company_id,
+                        e.tipo_transaccion,
+                        e.cod_tipopartida,
+                        e.correlativo,
+                        e.entra_sale
+                    },
+                    "ux_ban_tipos_transacciones_company_tipo")
+                .IsUnique();
+
+            entity.HasIndex(e => e.cod_centrocosto, "ix_ban_tipos_transacciones_centrocosto");
+
+            entity.HasIndex(e => e.cod_tipopartida, "ix_ban_tipos_transacciones_tipopartida");
+
+            entity.Property(e => e.ban_tipo_transaccion_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.tipo_transaccion).HasMaxLength(3);
+            entity.Property(e => e.cod_tipopartida)
+                .HasMaxLength(3)
+                .IsFixedLength();
+            entity.Property(e => e.correlativo).HasMaxLength(6);
+            entity.Property(e => e.cuenta_contable).HasMaxLength(13);
+            entity.Property(e => e.destino).HasMaxLength(9);
+            entity.Property(e => e.nombre).HasMaxLength(40);
+            entity.Property(e => e.entra_sale)
+                .HasMaxLength(1)
+                .IsFixedLength();
+            entity.Property(e => e.del_sistema)
+                .HasMaxLength(1)
+                .IsFixedLength();
+            entity.Property(e => e.emite_cheque)
+                .HasMaxLength(1)
+                .IsFixedLength();
+            entity.Property(e => e.pad)
+                .HasMaxLength(1)
+                .IsFixedLength();
+            entity.Property(e => e.pda)
+                .HasMaxLength(1)
+                .IsFixedLength();
+            entity.Property(e => e.rel_empleados)
+                .HasMaxLength(1)
+                .IsFixedLength();
+            entity.Property(e => e.trn_prestamo)
+                .HasMaxLength(1)
+                .IsFixedLength();
+            entity.Property(e => e.cuenta_alterna).HasDefaultValue(false);
+            entity.Property(e => e.estado)
+                .HasMaxLength(20)
+                .HasDefaultValue("ACTIVE");
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.cost_center).WithMany()
+                .HasForeignKey(d => d.cod_centrocosto)
+                .HasConstraintName("fk_ban_tipos_transacciones_centrocosto");
+        });
+
+        modelBuilder.Entity<ban_cta>(entity =>
+        {
+            entity.HasKey(e => e.ban_cta_id).HasName("ban_cta_pkey");
+
+            entity.HasIndex(e => new { e.company_id, e.codigo }, "ban_cta_company_id_codigo_key").IsUnique();
+
+            entity.HasIndex(e => e.company_id, "ix_ban_cta_company");
+
+            entity.Property(e => e.ban_cta_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.cod_centro).HasMaxLength(30);
+            entity.Property(e => e.codigo).HasMaxLength(30);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.cta_base).HasDefaultValue(0);
+            entity.Property(e => e.cta_cc).HasDefaultValue(0);
+            entity.Property(e => e.cta_cf).HasDefaultValue(0);
+            entity.Property(e => e.cta_mov).HasDefaultValue(0);
+            entity.Property(e => e.cta_ter).HasDefaultValue(0);
+            entity.Property(e => e.descripcion).HasMaxLength(60);
+            entity.Property(e => e.ecg).HasDefaultValue(0);
+            entity.Property(e => e.es_banco).HasDefaultValue(false);
+            entity.Property(e => e.grupo).HasMaxLength(30);
+            entity.Property(e => e.iea).HasDefaultValue(0);
+            entity.Property(e => e.saldo_actual).HasPrecision(28, 4);
+            entity.Property(e => e.tdc).HasDefaultValue(0);
+            entity.Property(e => e.tercero).HasMaxLength(30);
+            entity.Property(e => e.u_banco).HasMaxLength(30);
+            entity.Property(e => e.u_benef).HasMaxLength(50);
+            entity.Property(e => e.u_coment1).HasMaxLength(50);
+            entity.Property(e => e.u_coment2).HasMaxLength(50);
+            entity.Property(e => e.u_dcto).HasMaxLength(25);
+            entity.Property(e => e.u_monto).HasPrecision(28, 4);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.company).WithMany(p => p.ban_cta)
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("ban_cta_company_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_cuenta>(entity =>
+        {
+            entity.HasKey(e => e.banco_cuenta_id).HasName("ban_cuenta_pkey");
+
+            entity.HasIndex(e => new { e.company_id, e.code }, "ban_cuenta_company_id_code_key").IsUnique();
+
+            entity.HasIndex(e => new { e.company_id, e.numero_cuenta }, "ban_cuenta_company_id_numero_cuenta_key").IsUnique();
+
+            entity.HasIndex(e => e.ban_banco_id, "ix_ban_cuenta_banco");
+
+            entity.HasIndex(e => e.company_id, "ix_ban_cuenta_company");
+
+            entity.HasIndex(e => e.ban_cta_id, "ix_ban_cuenta_cta");
+
+            entity.Property(e => e.banco_cuenta_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.allow_reconciliation).HasDefaultValue(true);
+            entity.Property(e => e.banco_nombre).HasMaxLength(150);
+            entity.Property(e => e.code).HasMaxLength(30);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.cta_conc)
+                .HasColumnType("integer");
+            entity.Property(e => e.cta_debito).HasMaxLength(30);
+            entity.Property(e => e.currency_code)
+                .HasMaxLength(3)
+                .IsFixedLength();
+            entity.Property(e => e.estado)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'ACTIVE'::character varying");
+            entity.Property(e => e.idb).HasDefaultValue(0);
+            entity.Property(e => e.inversion_cheque).HasDefaultValue(0);
+            entity.Property(e => e.meses_h).HasDefaultValue(0);
+            entity.Property(e => e.n_comp0).HasDefaultValue(0);
+            entity.Property(e => e.n_comp1).HasDefaultValue(0);
+            entity.Property(e => e.n_comp2).HasDefaultValue(0);
+            entity.Property(e => e.n_comp3).HasDefaultValue(0);
+            entity.Property(e => e.n_comp4).HasDefaultValue(0);
+            entity.Property(e => e.n_comp5).HasDefaultValue(0);
+            entity.Property(e => e.nombre).HasMaxLength(150);
+            entity.Property(e => e.numero_cuenta).HasMaxLength(50);
+            entity.Property(e => e.pdb).HasPrecision(28, 4);
+            entity.Property(e => e.proxima_conciliacion).HasDefaultValue(0);
+            entity.Property(e => e.proximo_cheque).HasPrecision(28, 4);
+            entity.Property(e => e.proximo_nddb).HasDefaultValue(0);
+            entity.Property(e => e.r_transf).HasDefaultValue(0);
+            entity.Property(e => e.saldo_actual).HasPrecision(28, 4);
+            entity.Property(e => e.saldo_c1).HasPrecision(28, 4);
+            entity.Property(e => e.saldo_c2).HasPrecision(28, 4);
+            entity.Property(e => e.saldo_inicial).HasPrecision(18, 2);
+            entity.Property(e => e.tdc).HasDefaultValue(0);
+            entity.Property(e => e.tipo)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'CHEQUES'::character varying");
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.v_no_ch).HasDefaultValue(0);
+            entity.Property(e => e.v_no_dp).HasDefaultValue(0);
+            entity.Property(e => e.v_no_nc).HasDefaultValue(0);
+            entity.Property(e => e.v_no_nd).HasDefaultValue(0);
+
+            entity.HasOne(d => d.ban_banco).WithMany(p => p.ban_cuenta)
+                .HasForeignKey(d => d.ban_banco_id)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_ban_cuenta_banco");
+
+            entity.HasOne(d => d.ban_cta).WithMany(p => p.ban_cuenta)
+                .HasForeignKey(d => d.ban_cta_id)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_ban_cuenta_cta");
+
+            entity.HasOne(d => d.company).WithMany(p => p.ban_cuenta)
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("ban_cuenta_company_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_moneda>(entity =>
+        {
+            entity.HasKey(e => e.ban_moneda_id).HasName("ban_moneda_pkey");
+
+            entity.HasIndex(e => new { e.company_id, e.codigo }, "ban_moneda_company_id_codigo_key").IsUnique();
+
+            entity.HasIndex(e => e.company_id, "ix_ban_moneda_company");
+
+            entity.Property(e => e.ban_moneda_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.codigo).HasMaxLength(5);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.descripcion).HasMaxLength(60);
+            entity.Property(e => e.es_base).HasDefaultValue(false);
+            entity.Property(e => e.factor).HasPrecision(28, 4);
+            entity.Property(e => e.pais).HasMaxLength(25);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.company).WithMany(p => p.ban_moneda)
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("ban_moneda_company_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_movimiento>(entity =>
+        {
+            entity.HasKey(e => e.movimiento_id).HasName("ban_movimiento_pkey");
+
+            entity.HasIndex(e => e.banco_cuenta_id, "ix_ban_movimiento_cuenta");
+
+            entity.HasIndex(e => new { e.origen_modulo, e.origen_documento_id }, "ix_ban_movimiento_origen");
+
+            entity.Property(e => e.movimiento_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.aod)
+                .HasMaxLength(1)
+                .HasDefaultValueSql("'N'::bpchar");
+            entity.Property(e => e.bene_ori).HasMaxLength(50);
+            entity.Property(e => e.bene_origen).HasMaxLength(40);
+            entity.Property(e => e.c_refer).HasMaxLength(35);
+            entity.Property(e => e.cdcd).HasDefaultValue(0);
+            entity.Property(e => e.cod_bene).HasMaxLength(30);
+            entity.Property(e => e.cod_esta).HasMaxLength(30);
+            entity.Property(e => e.cod_oper).HasMaxLength(10);
+            entity.Property(e => e.cod_sucu).HasMaxLength(5);
+            entity.Property(e => e.cod_usua).HasMaxLength(30);
+            entity.Property(e => e.comentario1).HasMaxLength(50);
+            entity.Property(e => e.comentario2).HasMaxLength(50);
+            entity.Property(e => e.comentario3).HasMaxLength(50);
+            entity.Property(e => e.conciliado).HasDefaultValue(false);
+            entity.Property(e => e.consolidado).HasDefaultValue(0);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.cta_idb).HasMaxLength(30);
+            entity.Property(e => e.currency_code)
+                .HasMaxLength(3)
+                .IsFixedLength();
+            entity.Property(e => e.estado)
+                .HasMaxLength(20)
+                .HasDefaultValueSql("'POSTED'::character varying");
+            entity.Property(e => e.estado_legacy).HasDefaultValue(0);
+            entity.Property(e => e.exchange_rate)
+                .HasPrecision(18, 6)
+                .HasDefaultValueSql("1");
+            entity.Property(e => e.monto).HasPrecision(18, 2);
+            entity.Property(e => e.monto1).HasPrecision(28, 4);
+            entity.Property(e => e.monto2).HasPrecision(28, 4);
+            entity.Property(e => e.monto_local).HasPrecision(18, 2);
+            entity.Property(e => e.mto_cr).HasPrecision(28, 4);
+            entity.Property(e => e.mto_db).HasPrecision(28, 4);
+            entity.Property(e => e.mto_deb).HasPrecision(28, 4);
+            entity.Property(e => e.mto_debito).HasPrecision(28, 4);
+            entity.Property(e => e.mto_idb).HasPrecision(28, 4);
+            entity.Property(e => e.mto_ori).HasPrecision(28, 4);
+            entity.Property(e => e.mto_origen).HasPrecision(28, 4);
+            entity.Property(e => e.no_conc).HasDefaultValue(0);
+            entity.Property(e => e.no_ope).HasDefaultValue(0);
+            entity.Property(e => e.nro_comp).HasDefaultValue(0);
+            entity.Property(e => e.nro_egreso).HasPrecision(28, 4);
+            entity.Property(e => e.nro_ppal).HasDefaultValue(0);
+            entity.Property(e => e.obcp).HasMaxLength(1);
+            entity.Property(e => e.ope_rel).HasDefaultValue(0);
+            entity.Property(e => e.origen_legacy).HasMaxLength(35);
+            entity.Property(e => e.origen_modulo).HasMaxLength(30);
+            entity.Property(e => e.referencia).HasMaxLength(100);
+            entity.Property(e => e.saldo).HasPrecision(28, 4);
+            entity.Property(e => e.tdc).HasDefaultValue(0);
+            entity.Property(e => e.tip_ben).HasDefaultValue(0);
+            entity.Property(e => e.tipo).HasMaxLength(20);
+            entity.Property(e => e.tipo_ope).HasDefaultValue(0);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.banco_cuenta).WithMany(p => p.ban_movimiento)
+                .HasForeignKey(d => d.banco_cuenta_id)
+                .HasConstraintName("ban_movimiento_banco_cuenta_id_fkey");
+
+            entity.HasOne(d => d.company).WithMany(p => p.ban_movimiento)
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("ban_movimiento_company_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_kardex>(entity =>
+        {
+            entity.HasKey(e => e.ban_kardex_id).HasName("ban_kardex_pkey");
+
+            entity.HasIndex(e => new { e.company_id, e.banco_cuenta_id, e.fecha_movimiento }, "ix_ban_kardex_cuenta_fecha");
+
+            entity.HasIndex(e => new { e.company_id, e.banco_cuenta_id, e.fecha_movimiento, e.estado }, "ix_ban_kardex_cuenta_fecha_estado");
+
+            entity.HasIndex(e => e.partida_cuenta_id, "ix_ban_kardex_poliza");
+
+            entity.HasIndex(e => e.id_tipo_transaccion, "ix_ban_kardex_tipo_transaccion");
+
+            entity.Property(e => e.ban_kardex_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.correlativo_t_transacc).HasMaxLength(100);
+            entity.Property(e => e.descripcion).HasMaxLength(500);
+            entity.Property(e => e.estado).HasDefaultValue(1);
+            entity.Property(e => e.estado_conciliacion).HasMaxLength(10);
+            entity.Property(e => e.monto)
+                .HasPrecision(28, 4)
+                .HasDefaultValue(0);
+            entity.Property(e => e.referencia).HasMaxLength(100);
+            entity.Property(e => e.tasa_cambio)
+                .HasPrecision(28, 4)
+                .HasDefaultValue(1);
+            entity.Property(e => e.saldo)
+                .HasPrecision(28, 4)
+                .HasDefaultValue(0);
+            entity.Property(e => e.fecha_registro).HasDefaultValueSql("now()");
+            entity.Property(e => e.usuario_conciliacion).HasMaxLength(100);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.banco_cuenta).WithMany()
+                .HasForeignKey(d => d.banco_cuenta_id)
+                .HasConstraintName("fk_ban_kardex_cuenta");
+
+            entity.HasOne(d => d.ban_banco).WithMany()
+                .HasForeignKey(d => d.ban_banco_id)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_ban_kardex_banco");
+
+            entity.HasOne(d => d.ban_moneda).WithMany()
+                .HasForeignKey(d => d.ban_moneda_id)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("fk_ban_kardex_moneda");
+
+            entity.HasOne(d => d.company).WithMany()
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("fk_ban_kardex_company");
+        });
+
+        modelBuilder.Entity<ban_movimiento_detalle>(entity =>
+        {
+            entity.HasKey(e => e.movimiento_detalle_id).HasName("ban_movimiento_detalle_pkey");
+
+            entity.HasIndex(e => new { e.movimiento_id, e.linea_num }, "ban_movimiento_detalle_movimiento_id_linea_num_key").IsUnique();
+
+            entity.HasIndex(e => e.company_id, "ix_ban_mov_detalle_company");
+
+            entity.HasIndex(e => e.movimiento_id, "ix_ban_mov_detalle_movimiento");
+
+            entity.Property(e => e.movimiento_detalle_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.base_tr).HasPrecision(28, 4);
+            entity.Property(e => e.cdcd).HasDefaultValue(0);
+            entity.Property(e => e.cod_cen_cto).HasMaxLength(30);
+            entity.Property(e => e.cod_cta).HasMaxLength(30);
+            entity.Property(e => e.cod_esta).HasMaxLength(30);
+            entity.Property(e => e.cod_oper).HasMaxLength(10);
+            entity.Property(e => e.cod_sucu).HasMaxLength(5);
+            entity.Property(e => e.cod_tercero).HasMaxLength(30);
+            entity.Property(e => e.cod_usua).HasMaxLength(30);
+            entity.Property(e => e.consolidado).HasDefaultValue(0);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.descripcion).HasMaxLength(60);
+            entity.Property(e => e.dh).HasDefaultValue(0);
+            entity.Property(e => e.enc_ope).HasDefaultValue(0);
+            entity.Property(e => e.es_cuenta).HasDefaultValue(0);
+            entity.Property(e => e.es_transf).HasDefaultValue(0);
+            entity.Property(e => e.estado).HasDefaultValue(0);
+            entity.Property(e => e.flujo_e).HasPrecision(28, 3);
+            entity.Property(e => e.linea_num).HasDefaultValue(0);
+            entity.Property(e => e.monto).HasPrecision(28, 4);
+            entity.Property(e => e.mto_cr).HasPrecision(28, 4);
+            entity.Property(e => e.mto_db).HasPrecision(28, 4);
+            entity.Property(e => e.n_mo).HasDefaultValue(0);
+            entity.Property(e => e.origen).HasMaxLength(35);
+            entity.Property(e => e.si_centro).HasDefaultValue(0);
+            entity.Property(e => e.si_tercero).HasDefaultValue(0);
+            entity.Property(e => e.tercero).HasMaxLength(50);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.company).WithMany(p => p.ban_movimiento_detalle)
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("ban_movimiento_detalle_company_id_fkey");
+
+            entity.HasOne(d => d.movimiento).WithMany(p => p.ban_movimiento_detalle)
+                .HasForeignKey(d => d.movimiento_id)
+                .HasConstraintName("ban_movimiento_detalle_movimiento_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_movimiento_transito>(entity =>
+        {
+            entity.HasKey(e => e.movimiento_transito_id).HasName("ban_movimiento_transito_pkey");
+
+            entity.HasIndex(e => e.company_id, "ix_ban_mov_transito_company");
+
+            entity.HasIndex(e => e.banco_cuenta_id, "ix_ban_mov_transito_cuenta");
+
+            entity.HasIndex(e => e.movimiento_id, "ix_ban_mov_transito_movimiento");
+
+            entity.Property(e => e.movimiento_transito_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.aod)
+                .HasMaxLength(1)
+                .HasDefaultValueSql("'N'::bpchar");
+            entity.Property(e => e.c_refer).HasMaxLength(35);
+            entity.Property(e => e.cdcd).HasDefaultValue(0);
+            entity.Property(e => e.cod_bene).HasMaxLength(30);
+            entity.Property(e => e.cod_usua).HasMaxLength(30);
+            entity.Property(e => e.comentario1).HasMaxLength(60);
+            entity.Property(e => e.comentario2).HasMaxLength(50);
+            entity.Property(e => e.comentario3).HasMaxLength(50);
+            entity.Property(e => e.created_at).HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.descripcion).HasMaxLength(50);
+            entity.Property(e => e.documento).HasMaxLength(25);
+            entity.Property(e => e.estado).HasDefaultValue(0);
+            entity.Property(e => e.monto).HasPrecision(28, 4);
+            entity.Property(e => e.monto1).HasPrecision(28, 4);
+            entity.Property(e => e.monto2).HasPrecision(28, 4);
+            entity.Property(e => e.mto_cr).HasPrecision(28, 4);
+            entity.Property(e => e.mto_db).HasPrecision(28, 4);
+            entity.Property(e => e.no_conc).HasDefaultValue(0);
+            entity.Property(e => e.no_ope).HasDefaultValue(0);
+            entity.Property(e => e.obcp)
+                .HasMaxLength(1)
+                .HasDefaultValueSql("'N'::character varying");
+            entity.Property(e => e.origen).HasMaxLength(35);
+            entity.Property(e => e.saldo).HasPrecision(28, 4);
+            entity.Property(e => e.tdc).HasDefaultValue(0);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasOne(d => d.banco_cuenta).WithMany(p => p.ban_movimiento_transito)
+                .HasForeignKey(d => d.banco_cuenta_id)
+                .HasConstraintName("ban_movimiento_transito_banco_cuenta_id_fkey");
+
+            entity.HasOne(d => d.company).WithMany(p => p.ban_movimiento_transito)
+                .HasForeignKey(d => d.company_id)
+                .HasConstraintName("ban_movimiento_transito_company_id_fkey");
+
+            entity.HasOne(d => d.movimiento).WithMany(p => p.ban_movimiento_transito)
+                .HasForeignKey(d => d.movimiento_id)
+                .OnDelete(DeleteBehavior.SetNull)
+                .HasConstraintName("ban_movimiento_transito_movimiento_id_fkey");
+        });
+
+        modelBuilder.Entity<pagos_miscelaneos_dtl>(entity =>
+        {
+            entity.HasKey(e => new { e.recibo, e.linea }).HasName("pagos_miscelaneos_dtl_pkey");
+
+            entity.ToTable("pagos_miscelaneos_dtl");
+
+            entity.Property(e => e.concepto).HasMaxLength(500);
+            entity.Property(e => e.monto).HasPrecision(18, 2);
+
+            entity.HasOne(d => d.reciboNavigation).WithMany(p => p.pagos_miscelaneos_dtl)
+                .HasForeignKey(d => d.recibo)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("pagos_miscelaneos_dtl_recibo_fkey");
+        });
+
         OnModelCreatingPartial(modelBuilder);
         ApplyCompanyScope(modelBuilder);
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }
+

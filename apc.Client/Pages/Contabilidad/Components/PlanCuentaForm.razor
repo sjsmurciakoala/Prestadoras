@@ -12,15 +12,55 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
 
 <DxFormLayout>
     <DxFormLayoutItem Caption="Codigo *">
-        <DxTextBox Text="@formModel.Code" TextChanged="OnCodeChanged" />
+        <DxTextBox Text="@codigoDisplay" TextChanged="OnCodeChanged" TextExpression="@(() => codigoDisplay)"
+                   ReadOnly="@(formModel.AccountId is not null)" />
         @if (codigoInvalido)
         {
             <div class="text-danger small">Codigo es obligatorio.</div>
         }
     </DxFormLayoutItem>
 
+    @if (formModel.AccountId is null)
+    {
+        <DxFormLayoutItem Caption="Cuenta padre (opcional)">
+            <DxComboBox Data="@CuentaPadreOpciones"
+                        TData="CuentaLookup"
+                        TValue="long?"
+                        Value="@formModel.ParentAccountId"
+                        ValueChanged="OnParentChanged"
+                        ValueExpression="@(() => formModel.ParentAccountId)"
+                        TextFieldName="@nameof(CuentaLookup.Display)"
+                        ValueFieldName="@nameof(CuentaLookup.Id)"
+                        NullText="Sin padre"
+                        AllowUserInput="true"
+                        DropDownStyle="DropDownStyle.DropDown"
+                        FilterCondition="DataEditorFilterCondition.Contains"
+                        FilterMinLength="0"
+                        FilterDelay="250"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                <ItemTemplate Context="cuenta">
+                    <div class="combo-item">
+                        <span class="combo-item-text">@cuenta.Code</span>
+                        <small class="combo-item-hint">@cuenta.Name</small>
+                    </div>
+                </ItemTemplate>
+            </DxComboBox>
+            @if (!string.IsNullOrWhiteSpace(parentValidationMessage))
+            {
+                <div class="text-danger small">@parentValidationMessage</div>
+            }
+            @if (!string.IsNullOrWhiteSpace(parentSuggestionMessage))
+            {
+                <div class="text-muted small d-flex align-items-center gap-2 mt-1">
+                    <span>@parentSuggestionMessage</span>
+                    <DxButton Text="Usar sugerencia" RenderStyle="ButtonRenderStyle.Secondary" Click="UseSuggestedCode" />
+                </div>
+            }
+        </DxFormLayoutItem>
+    }
+
     <DxFormLayoutItem Caption="Descripcion *">
-        <DxTextBox Text="@formModel.Description" TextChanged="OnDescriptionChanged" />
+        <DxTextBox Text="@formModel.Description" TextChanged="OnDescriptionChanged" TextExpression="@(() => formModel.Description)" />
         @if (descripcionInvalida)
         {
             <div class="text-danger small">Descripcion es obligatoria.</div>
@@ -166,7 +206,16 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
     public EventCallback<long> OnSaved { get; set; }
 
     [Parameter]
+    public EventCallback<string> OnError { get; set; }
+
+    [Parameter]
     public EventCallback OnCanceled { get; set; }
+
+    [Parameter]
+    public string SeparadorCodigo { get; set; } = "-";
+
+    [Parameter]
+    public IReadOnlyList<int> NivelesFormato { get; set; } = Array.Empty<int>();
 
     private readonly PlanCuentaFormModel formModel = new();
     private bool isSaving;
@@ -174,14 +223,42 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
     private bool descripcionInvalida;
     private string? ErrorMessage;
     private string? SuccessMessage;
+    private string codigoDisplay = string.Empty;
+    private Dictionary<long, PlanCuentaDto> accountsById = new();
+    private Dictionary<string, PlanCuentaDto> accountsByCode = new(StringComparer.OrdinalIgnoreCase);
+    private string? parentValidationMessage;
+    private string? parentSuggestionMessage;
+    private string? suggestedCode;
 
     private IReadOnlyList<CuentaLookup> CuentaOpciones => Accounts
         .Where(c => formModel.AccountId == null || c.AccountId != formModel.AccountId)
-        .Select(c => new CuentaLookup(c.AccountId, $"{c.Code} - {c.Name}", c.Code, c.Name))
+        .Select(c =>
+        {
+            var formatted = FormatCodeDisplay(NormalizeCode(c.Code));
+            var display = $"{formatted} - {c.Name}";
+            return new CuentaLookup(c.AccountId, display, formatted, c.Name);
+        })
+        .ToList();
+
+    private IReadOnlyList<CuentaLookup> CuentaPadreOpciones => Accounts
+        .Where(c => formModel.AccountId == null || c.AccountId != formModel.AccountId)
+        .Select(c =>
+        {
+            var formatted = FormatCodeDisplay(NormalizeCode(c.Code));
+            var display = $"{formatted} - {c.Name}";
+            return new CuentaLookup(c.AccountId, display, formatted, c.Name);
+        })
         .ToList();
 
     protected override void OnParametersSet()
     {
+        accountsById = Accounts.ToDictionary(c => c.AccountId);
+        accountsByCode = Accounts
+            .Select(c => new { Cuenta = c, Codigo = NormalizeCode(c.Code) })
+            .Where(x => !string.IsNullOrWhiteSpace(x.Codigo))
+            .GroupBy(x => x.Codigo)
+            .ToDictionary(g => g.Key, g => g.First().Cuenta, StringComparer.OrdinalIgnoreCase);
+
         if (Cuenta == null)
         {
             formModel.Reset();
@@ -195,16 +272,32 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
             formModel.LoadFrom(Cuenta);
         }
 
+        formModel.Code = NormalizeCode(formModel.Code);
+        codigoDisplay = FormatCodeDisplay(formModel.Code);
+
+        parentValidationMessage = null;
+        parentSuggestionMessage = null;
+        suggestedCode = null;
+
         ErrorMessage = null;
         SuccessMessage = null;
         codigoInvalido = false;
         descripcionInvalida = false;
+
+        if (formModel.ParentAccountId.HasValue)
+        {
+            UpdateParentSuggestion();
+            ValidateParentSelection();
+        }
     }
 
     private void OnCodeChanged(string? value)
     {
-        formModel.Code = value ?? string.Empty;
-        if (!string.IsNullOrWhiteSpace(formModel.Code))
+        var normalized = NormalizeCode(value);
+        formModel.Code = normalized;
+        codigoDisplay = FormatCodeDisplay(normalized);
+        ValidateParentSelection();
+        if (!string.IsNullOrWhiteSpace(normalized))
         {
             codigoInvalido = false;
         }
@@ -245,7 +338,7 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
                 formModel.IsActive ? "ACTIVE" : "INACTIVE",
                 string.Empty,
                 formModel.AccountId,
-                formModel.ParentAccountId,
+                formModel.AccountId is null ? formModel.ParentAccountId : null,
                 string.IsNullOrWhiteSpace(formModel.Category) ? null : formModel.Category.Trim(),
                 string.IsNullOrWhiteSpace(formModel.ShortDescription) ? null : formModel.ShortDescription.Trim(),
                 null,
@@ -253,7 +346,16 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
                 formModel.CorrectionAccountId);
 
             var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/plan-cuentas", payload);
-            response.EnsureSuccessStatusCode();
+            if (!response.IsSuccessStatusCode)
+            {
+                var detail = await response.Content.ReadAsStringAsync();
+                var message = string.IsNullOrWhiteSpace(detail)
+                    ? $"No se pudo guardar la cuenta. Codigo: {response.StatusCode}"
+                    : detail;
+                ErrorMessage = message;
+                await OnError.InvokeAsync(message);
+                return;
+            }
 
             var result = await response.Content.ReadFromJsonAsync<SaveResult>();
             var savedId = result?.Id ?? 0;
@@ -263,6 +365,7 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
         catch (Exception ex)
         {
             ErrorMessage = $"No se pudo guardar la cuenta: {ex.Message}";
+            await OnError.InvokeAsync(ErrorMessage);
         }
         finally
         {
@@ -277,11 +380,280 @@ else if (!string.IsNullOrEmpty(SuccessMessage))
         await OnCanceled.InvokeAsync();
     }
 
+    private void OnParentChanged(long? value)
+    {
+        formModel.ParentAccountId = value;
+        UpdateParentSuggestion();
+        ValidateParentSelection();
+    }
+
+    private void UpdateParentSuggestion()
+    {
+        suggestedCode = null;
+        parentSuggestionMessage = null;
+
+        if (!formModel.ParentAccountId.HasValue ||
+            !accountsById.TryGetValue(formModel.ParentAccountId.Value, out var parent))
+        {
+            return;
+        }
+
+        var nextCode = SuggestNextCode(parent);
+        if (string.IsNullOrWhiteSpace(nextCode))
+        {
+            return;
+        }
+
+        suggestedCode = nextCode;
+        parentSuggestionMessage = $"Sugerencia: {FormatCodeDisplay(nextCode)}";
+    }
+
+    private void UseSuggestedCode()
+    {
+        if (string.IsNullOrWhiteSpace(suggestedCode))
+        {
+            return;
+        }
+
+        formModel.Code = suggestedCode;
+        codigoDisplay = FormatCodeDisplay(suggestedCode);
+        codigoInvalido = false;
+        ValidateParentSelection();
+    }
+
     private bool Validar()
     {
         codigoInvalido = string.IsNullOrWhiteSpace(formModel.Code);
         descripcionInvalida = string.IsNullOrWhiteSpace(formModel.Description);
-        return !(codigoInvalido || descripcionInvalida);
+
+        // La validación de padre solo aplica en modo creación
+        // (en edición el campo padre está oculto y no puede modificarse)
+        if (formModel.AccountId is null)
+        {
+            ValidateParentSelection();
+        }
+        else
+        {
+            parentValidationMessage = null;
+        }
+
+        return !(codigoInvalido || descripcionInvalida || !string.IsNullOrWhiteSpace(parentValidationMessage));
+    }
+
+    private static string NormalizeCode(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+            return string.Empty;
+        return new string(value.Where(char.IsLetterOrDigit).ToArray());
+    }
+
+    private string FormatCodeDisplay(string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        if (NivelesFormato.Count > 0)
+            return FormatFromMask(normalized);
+
+        var parent = FindParentByPrefix(normalized);
+        if (parent is null)
+            return FormatFromMask(normalized);
+
+        return FormatFromParentChain(parent, normalized);
+    }
+
+    private PlanCuentaDto? FindParentByPrefix(string normalized)
+    {
+        PlanCuentaDto? best = null;
+        var bestLen = 0;
+
+        foreach (var kvp in accountsByCode)
+        {
+            var code = kvp.Key;
+            if (code.Length >= normalized.Length)
+                continue;
+
+            if (normalized.StartsWith(code, StringComparison.OrdinalIgnoreCase) && code.Length > bestLen)
+            {
+                best = kvp.Value;
+                bestLen = code.Length;
+            }
+        }
+
+        return best;
+    }
+
+    private string FormatFromParentChain(PlanCuentaDto parent, string normalized)
+    {
+        var sep = string.IsNullOrWhiteSpace(SeparadorCodigo) ? "-" : SeparadorCodigo;
+        var segments = new Stack<string>();
+        var current = parent;
+        var currentCode = NormalizeCode(parent.Code);
+
+        if (string.IsNullOrWhiteSpace(currentCode) ||
+            !normalized.StartsWith(currentCode, StringComparison.OrdinalIgnoreCase))
+        {
+            return FormatFromMask(normalized);
+        }
+
+        var suffix = normalized.Substring(currentCode.Length);
+        if (string.IsNullOrWhiteSpace(suffix))
+            return FormatFromMask(normalized);
+
+        segments.Push(suffix);
+
+        var visited = new HashSet<long>();
+        while (true)
+        {
+            if (!visited.Add(current.AccountId))
+                return FormatFromMask(normalized);
+
+            if (current.ParentAccountId is null || current.ParentAccountId == 0 ||
+                !accountsById.TryGetValue(current.ParentAccountId.Value, out var parentAccount))
+            {
+                segments.Push(currentCode);
+                break;
+            }
+
+            var parentCode = NormalizeCode(parentAccount.Code);
+            if (string.IsNullOrWhiteSpace(parentCode) ||
+                !currentCode.StartsWith(parentCode, StringComparison.OrdinalIgnoreCase))
+            {
+                return FormatFromMask(normalized);
+            }
+
+            var currentSuffix = currentCode.Substring(parentCode.Length);
+            if (string.IsNullOrWhiteSpace(currentSuffix))
+                return FormatFromMask(normalized);
+
+            segments.Push(currentSuffix);
+            current = parentAccount;
+            currentCode = parentCode;
+        }
+
+        return string.Join(sep, segments);
+    }
+
+    private string FormatFromMask(string normalized)
+    {
+        if (string.IsNullOrWhiteSpace(normalized))
+            return string.Empty;
+
+        if (NivelesFormato.Count == 0)
+            return normalized;
+
+        var sep = string.IsNullOrWhiteSpace(SeparadorCodigo) ? "-" : SeparadorCodigo;
+        var parts = new List<string>();
+        var index = 0;
+
+        foreach (var len in NivelesFormato)
+        {
+            if (index >= normalized.Length)
+                break;
+
+            var take = Math.Min(len, normalized.Length - index);
+            parts.Add(normalized.Substring(index, take));
+            index += take;
+        }
+
+        if (index < normalized.Length)
+            parts.Add(normalized.Substring(index));
+
+        return string.Join(sep, parts);
+    }
+
+    private void ValidateParentSelection()
+    {
+        parentValidationMessage = null;
+
+        if (!formModel.ParentAccountId.HasValue ||
+            !accountsById.TryGetValue(formModel.ParentAccountId.Value, out var parent))
+        {
+            return;
+        }
+
+        var parentCode = NormalizeCode(parent.Code);
+        if (string.IsNullOrWhiteSpace(parentCode))
+        {
+            parentValidationMessage = "La cuenta padre no tiene codigo valido.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(formModel.Code))
+        {
+            return;
+        }
+
+        if (!formModel.Code.StartsWith(parentCode, StringComparison.OrdinalIgnoreCase) ||
+            formModel.Code.Length <= parentCode.Length)
+        {
+            parentValidationMessage = $"El codigo debe iniciar con {FormatCodeDisplay(parentCode)}.";
+        }
+    }
+
+    private string? SuggestNextCode(PlanCuentaDto parent)
+    {
+        var parentCode = NormalizeCode(parent.Code);
+        if (string.IsNullOrWhiteSpace(parentCode))
+        {
+            return null;
+        }
+
+        var children = Accounts.Where(c => c.ParentAccountId == parent.AccountId).ToList();
+        var segmentLength = 0;
+        if (parent.Level > 0 && NivelesFormato.Count >= parent.Level + 1)
+        {
+            segmentLength = NivelesFormato[parent.Level];
+        }
+
+        if (segmentLength <= 0)
+        {
+            var maxLen = 1;
+            foreach (var child in children)
+            {
+                var childCode = NormalizeCode(child.Code);
+                if (!childCode.StartsWith(parentCode, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var suffix = childCode.Substring(parentCode.Length);
+                if (suffix.Length > maxLen)
+                {
+                    maxLen = suffix.Length;
+                }
+            }
+
+            segmentLength = maxLen;
+        }
+
+        var maxValue = 0;
+        foreach (var child in children)
+        {
+            var childCode = NormalizeCode(child.Code);
+            if (!childCode.StartsWith(parentCode, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+
+            var suffix = childCode.Substring(parentCode.Length);
+            if (suffix.Length == 0 || !suffix.All(char.IsDigit))
+            {
+                continue;
+            }
+
+            if (int.TryParse(suffix, out var value) && value > maxValue)
+            {
+                maxValue = value;
+            }
+        }
+
+        var nextValue = maxValue + 1;
+        var suffixText = segmentLength > 0
+            ? nextValue.ToString().PadLeft(segmentLength, '0')
+            : nextValue.ToString();
+
+        return parentCode + suffixText;
     }
 
     private sealed record CuentaLookup(long Id, string Display, string Code, string Name);

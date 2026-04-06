@@ -8,4 +8,6 @@ public class AuxiliarLecturaFilterDto
     public bool? SoloPendientes { get; set; }
     public int? Skip { get; set; }
     public int? Take { get; set; }
+    public string? SortField { get; set; }
+    public bool? SortDesc { get; set; }
 }

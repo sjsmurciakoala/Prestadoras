@@ -1,0 +1,62 @@
+@using SIAD.Core.DTOs.Proveedores
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+
+    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+        <DxFormLayoutGroup Caption="Datos del tipo" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Nombre *" ColSpanXs="12">
+                <DxTextBox @bind-Text="Model.Nombre" MaxLength="150" />
+                <ValidationMessage For="() => Model.Nombre" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Observaciones" ColSpanXs="12">
+                <DxMemo @bind-Text="Model.Observaciones" Rows="4" MaxLength="500" ResizeMode="MemoResizeMode.Vertical" />
+                <ValidationMessage For="() => Model.Observaciones" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+    </DxFormLayout>
+
+    <DxValidationSummary CssClass="mb-3" />
+
+    <div class="d-flex justify-content-end">
+        <DxButton SubmitFormOnClick="true"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar"
+                  Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal"
+                  CssClass="ms-2"
+                  Text="Cancelar"
+                  Enabled="@(!IsBusy)"
+                  Click="CancelarAsync" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public TipoProveedorUpsertDto Model { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task CancelarAsync()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}

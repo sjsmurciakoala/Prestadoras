@@ -1,0 +1,438 @@
+@page "/facturacion/miscelaneos/catalogo"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.FacturacionMiscelaneos
+@using apc.Client.Services.Facturacion
+
+@inject FacturacionMiscelaneosClient Client
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="CatalogoToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Catalogo de Miscelaneos</h2>
+            <p class="page-subtitle">Mantenimiento de conceptos miscelaneos y cuentas contables</p>
+        </div>
+
+        <DxButton Text="Nuevo concepto"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card position-relative">
+        @if (loading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando catalogo..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else
+        {
+            <div class="grid-wrapper">
+                <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(MiscelaneoCatalogoDto.Id)" PageSize="15"
+                        PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                       TextExpression="@(() => filtroBusqueda)"
+                                       Placeholder="Buscar concepto..." InputDelay="400"
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                       Style="min-width: 260px;" />
+
+                            <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarAsync" CssClass="me-1" />
+
+                            <div class="ms-auto text-muted small">
+                                Total: <span class="fw-bold">@totalItems.ToString("N0")</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
+
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.Codigo)" Caption="Codigo" Width="120px" />
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.Nombre)" Caption="Nombre" MinWidth="200">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MiscelaneoCatalogoDto item)
+                                {
+                                    <div class="text-truncate" title="@item.Nombre">@item.Nombre</div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.ValorUnitario)" Caption="Valor" Width="130px"
+                                          DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                        <DxGridDataColumn FieldName="@nameof(MiscelaneoCatalogoDto.CuentaContableDisplay)" Caption="Cuenta contable" MinWidth="220">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MiscelaneoCatalogoDto item)
+                                {
+                                    if (!string.IsNullOrWhiteSpace(item.CuentaContableDisplay))
+                                    {
+                                        <div class="text-truncate" title="@item.CuentaContableDisplay">@item.CuentaContableDisplay</div>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted fst-italic">Sin cuenta</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="160px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MiscelaneoCatalogoDto item)
+                                {
+                                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                        <button type="button" class="btn-icon btn-edit" title="Editar"
+                                                @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+
+                                        <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                                @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">No hay conceptos miscelaneos registrados.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="min(720px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando concepto..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3">
+                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+            </div>
+        }
+        else
+        {
+            <div class="p-3">
+                <CatalogoMiscelaneosForm Model="formModel"
+                                         CuentasContables="cuentasContables"
+                                         OnValidSubmit="GuardarAsync"
+                                         OnCancel="CerrarForm"
+                                         IsBusy="isSaving" />
+            </div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-danger"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Eliminar concepto?</h5>
+            <p class="text-muted">El concepto sera eliminado permanentemente del catalogo.</p>
+            @if (itemParaEliminar is not null)
+            {
+                <div class="fw-semibold">@itemParaEliminar.Codigo - @itemParaEliminar.Nombre</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarEliminar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, eliminar"
+                          Click="EliminarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-trash" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private IReadOnlyList<MiscelaneoCatalogoDto> dataSource = Array.Empty<MiscelaneoCatalogoDto>();
+    private IReadOnlyList<MiscelaneoCatalogoDto> dataSourceFull = Array.Empty<MiscelaneoCatalogoDto>();
+    private IReadOnlyList<CuentaContableLookupDto> cuentasContables = Array.Empty<CuentaContableLookupDto>();
+
+    private string filtroBusqueda = string.Empty;
+    private string? errorMessage;
+    private int totalItems;
+    private bool loading = true;
+
+    private bool formVisible;
+    private bool formLoading;
+    private bool isSaving;
+    private string? formError;
+    private MiscelaneoCatalogoEditDto formModel = new();
+
+    private bool confirmVisible;
+    private MiscelaneoCatalogoDto? itemParaEliminar;
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar concepto" : "Nuevo concepto";
+    private string PopupSubtitle => formModel.Id.HasValue
+        ? "Actualice la informacion del concepto"
+        : "Complete el formulario de registro";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-clipboard-plus";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        loading = true;
+        errorMessage = null;
+
+        try
+        {
+            var catalogoTask = Client.GetCatalogoAsync();
+            var cuentasTask = Client.GetCuentasContablesAsync();
+
+            await Task.WhenAll(catalogoTask, cuentasTask);
+
+            dataSourceFull = await catalogoTask;
+            cuentasContables = await cuentasTask;
+            AplicarFiltro();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"Error al cargar el catalogo: {ex.Message}";
+        }
+        finally
+        {
+            loading = false;
+        }
+    }
+
+    private void AplicarFiltro()
+    {
+        if (string.IsNullOrWhiteSpace(filtroBusqueda))
+        {
+            dataSource = dataSourceFull;
+        }
+        else
+        {
+            var term = filtroBusqueda.Trim().ToLowerInvariant();
+            dataSource = dataSourceFull
+                .Where(c =>
+                    c.Codigo.ToLowerInvariant().Contains(term) ||
+                    c.Nombre.ToLowerInvariant().Contains(term) ||
+                    (c.CuentaContableDisplay ?? string.Empty).ToLowerInvariant().Contains(term))
+                .ToList();
+        }
+
+        totalItems = dataSource.Count;
+    }
+
+    private void OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        AplicarFiltro();
+    }
+
+    private async Task RecargarAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private void AbrirNuevo()
+    {
+        formError = null;
+        formModel = new MiscelaneoCatalogoEditDto();
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null;
+        formLoading = true;
+        formVisible = true;
+
+        try
+        {
+            var detalle = await Client.GetCatalogoItemAsync(id);
+            if (detalle is null)
+            {
+                formError = "No se encontro el concepto.";
+                formModel = new MiscelaneoCatalogoEditDto();
+                return;
+            }
+
+            formModel = detalle;
+        }
+        catch (Exception ex)
+        {
+            formError = $"Error al cargar el concepto: {ex.Message}";
+        }
+        finally
+        {
+            formLoading = false;
+        }
+    }
+
+    private void CerrarForm()
+    {
+        if (isSaving) return;
+
+        formVisible = false;
+        formError = null;
+        formModel = new MiscelaneoCatalogoEditDto();
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+
+        try
+        {
+            if (formModel.Id.HasValue)
+            {
+                await Client.ActualizarCatalogoItemAsync(formModel.Id.Value, formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Concepto actualizado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "CatalogoToast"
+                });
+            }
+            else
+            {
+                await Client.CrearCatalogoItemAsync(formModel);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Concepto registrado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "CatalogoToast"
+                });
+            }
+
+            formVisible = false;
+            formModel = new MiscelaneoCatalogoEditDto();
+            await CargarDatosAsync();
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "CatalogoToast"
+            });
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarEliminar(MiscelaneoCatalogoDto item)
+    {
+        itemParaEliminar = item;
+        confirmVisible = true;
+    }
+
+    private void CancelarEliminar()
+    {
+        confirmVisible = false;
+        itemParaEliminar = null;
+    }
+
+    private async Task EliminarConfirmadoAsync()
+    {
+        if (itemParaEliminar is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await Client.EliminarCatalogoItemAsync(itemParaEliminar.Id);
+            if (!ok)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Error",
+                    Text = "No se pudo eliminar el concepto.",
+                    RenderStyle = ToastRenderStyle.Danger,
+                    ProviderName = "CatalogoToast"
+                });
+            }
+            else
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Concepto eliminado correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "CatalogoToast"
+                });
+
+                await CargarDatosAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "CatalogoToast"
+            });
+        }
+        finally
+        {
+            confirmVisible = false;
+            itemParaEliminar = null;
+        }
+    }
+}

@@ -1,103 +1,355 @@
 @page "/rutas"
 @attribute [Authorize]
-@inject apc.Client.Services.Rutas.RutasClient Client
 
-<DxScrollView Height="100%">
-    <h3 class="mb-3">Rutas de lectura y cuadrillas</h3>
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Rutas
+@using apc.Client.Pages.Rutas
+@inject apc.Client.Services.Rutas.RutasClient Client
+@inject IToastNotificationService ToastService
+
+<div class="page-container">
+    <DxToastProvider Name="RutasToast" MaxToastCount="4" />
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Rutas de lectura y cuadrillas</h2>
+            <p class="page-subtitle">Catalogo operativo de rutas y ciclos</p>
+        </div>
+
+        <DxButton Text="Nueva ruta"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="@(() => OpenFormAsync(null))" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(ciclosError))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@ciclosError</DxAlert>
+    }
+
+    @if (mostrarFiltros)
+    {
+        <div class="modern-card mb-4">
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutGroup Caption="Filtros" HeaderIconCssClass="bi bi-funnel" ColSpanXs="12">
+
+                    <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="3">
+                        <Template>
+                            <DxComboBox TData="CicloLookupDto"
+                                        TValue="int?"
+                                        Data="@ciclos"
+                                        ValueFieldName="@nameof(CicloLookupDto.Id)"
+                                        TextFieldName="@nameof(CicloLookupDto.Descripcion)"
+                                        @bind-Value="filtro.CodCiclo"
+                                        NullText="Todos los ciclos"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        DropDownStyle="DropDownStyle.DropDownList" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Codigo ruta" ColSpanXs="12" ColSpanMd="3">
+                        <Template>
+                            <DxTextBox Text="@filtro.CodRuta"
+                                       TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                       TextExpression="@(() => filtro.CodRuta)"
+                                       Placeholder="Buscar por codigo"
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       InputDelay="600"
+                                       MaxLength="50" />
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Estado" ColSpanXs="12" ColSpanMd="3">
+                        <Template>
+                            <div class="pt-md-4 pt-2">
+                                <DxCheckBox Checked="@filtroSoloActivos"
+                                            CheckedChanged="@((bool v) => OnEstadoChanged(v))"
+                                            LabelText=""
+                                            CheckType="CheckType.Switch" />
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem ColSpanXs="12" ColSpanMd="3" CssClass="align-self-end">
+                        <Template>
+                            <div class="filters-actions">
+                                <DxButton Text="Filtrar"
+                                          IconCssClass="bi bi-search"
+                                          CssClass="filters-btn filters-btn-primary"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="BuscarAsync" />
+
+                                <button type="button" class="filters-link" @onclick="LimpiarAsync">
+                                    Limpiar
+                                </button>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                </DxFormLayoutGroup>
+            </DxFormLayout>
+        </div>
+    }
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
         <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
     }
 
-    <DxFormLayout CssClass="mb-3">
-        <DxFormLayoutItem Caption="Ciclo">
-            <DxComboBox TData="CicloLookupDto"
-                        TValue="int?"
-                        Data="@ciclos"
-                        ValueFieldName="@nameof(CicloLookupDto.Id)"
-                        TextFieldName="@nameof(CicloLookupDto.Descripcion)"
-                        @bind-Value="filtro.CodCiclo"
-                        NullText="Todos los ciclos"
-                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                        DropDownStyle="DropDownStyle.DropDownList" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Codigo ruta">
-            <DxTextBox @bind-Text="filtro.CodRuta"
-                       NullText="Buscar por codigo"
-                       MaxLength="50" />
-        </DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
-            <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
-            <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
-        </DxFormLayoutItem>
-    </DxFormLayout>
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="Id" PageSize="15"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
 
-    <div class="d-flex justify-content-between mb-2">
-        <DxButton Text="Nueva ruta"
-                  RenderStyle="ButtonRenderStyle.Secondary"
-                  Click="@(() => OpenFormAsync(null))" />
-        <DxButton Text="Actualizar"
-                  CssClass="ms-2"
-                  Click="LoadRutasAsync" />
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtro.CodRuta" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtro.CodRuta)" Placeholder="Buscar ruta..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Filtros" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="ToggleFiltros" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalRutas.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(RutaListItemDto.CodCiclo)" Caption="Ciclo" Width="120px" />
+                    <DxGridDataColumn FieldName="@nameof(RutaListItemDto.CodRuta)" Caption="Codigo" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RutaListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.CodRuta</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(RutaListItemDto.Descripcion)" Caption="Descripcion" MinWidth="260">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RutaListItemDto item)
+                            {
+                                <div class="text-truncate" title="@item.Descripcion">@item.Descripcion</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RutaListItemDto item)
+                            {
+                                if (item.Activo)
+                                {
+                                    <span class="badge-status active">ACTIVO</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">INACTIVO</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RutaListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => OpenFormAsync(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay rutas para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
     </div>
-
-    @if (isLoading)
-    {
-        <p>Cargando rutas...</p>
-    }
-
-    <DxGrid Data="@rutas"
-            PageSize="15"
-            KeyboardNavigationEnabled="true">
-        <Columns>
-            <DxGridDataColumn FieldName="@nameof(RutaListItemDto.CodCiclo)" Caption="Ciclo" Width="120px" />
-            <DxGridDataColumn FieldName="@nameof(RutaListItemDto.CodRuta)" Caption="Codigo" Width="160px" />
-            <DxGridDataColumn FieldName="@nameof(RutaListItemDto.Descripcion)" Caption="Descripcion" />
-            <DxGridDataColumn Caption="Acciones" Width="140px">
-                <CellDisplayTemplate Context="cellContext">
-                    @if (cellContext.DataItem is RutaListItemDto item)
-                    {
-                        <DxButton Text="Editar"
-                                  Size="ButtonSize.Small"
-                                  RenderStyle="ButtonRenderStyle.Secondary"
-                                  Click="@(() => OpenFormAsync(item))" />
-                    }
-                </CellDisplayTemplate>
-            </DxGridDataColumn>
-        </Columns>
-    </DxGrid>
-</DxScrollView>
+</div>
 
 <DxPopup @bind-Visible="formVisible"
-         Width="520px"
-         HeaderText="@PopupTitle"
-         CloseOnOutsideClick="false"
-         ShowCloseButton="true">
-    <RutaForm Model="rutaEdit"
-              Ciclos="ciclos"
-              OnValidSubmit="SaveRutaAsync"
-              OnCancel="CloseForm"
-              IsBusy="@isSaving" />
+         Width="min(720px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    @PopupSubtitle
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando ruta..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3">
+                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+            </div>
+        }
+        else
+        {
+            <RutaForm Model="rutaEdit"
+                      Ciclos="ciclos"
+                      OnValidSubmit="SaveRutaAsync"
+                      OnCancel="CloseForm"
+                      IsBusy="@isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Desactivar ruta?</h5>
+            <p class="text-muted">La ruta pasara a estado inactivo pero no se eliminara del sistema.</p>
+            @if (rutaParaDesactivar is not null)
+            {
+                <div class="fw-semibold">@rutaParaDesactivar.CodRuta - @rutaParaDesactivar.Descripcion</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarDesactivar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, desactivar"
+                          Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
 </DxPopup>
 
 @code {
-    private readonly List<RutaListItemDto> rutas = new();
+    private DxGrid? grid;
+    private RutasGridDataSource dataSource = default!;
+
     private readonly List<CicloLookupDto> ciclos = new();
     private RutaFilterDto filtro = new();
+    private bool filtroSoloActivos = true;
     private RutaUpsertDto rutaEdit = new();
-    private bool isLoading;
+
     private bool isSaving;
     private bool formVisible;
+    private bool formLoading;
+    private string? formError;
+    private bool mostrarFiltros = true;
+
     private string? errorMessage;
+    private string? ciclosError;
+    private int totalRutas;
+
+    private bool confirmVisible;
+    private RutaListItemDto? rutaParaDesactivar;
 
     private string PopupTitle => rutaEdit.Id.HasValue ? "Editar ruta" : "Nueva ruta";
+    private string PopupSubtitle => rutaEdit.Id.HasValue
+        ? "Actualice la informacion de la ruta"
+        : "Complete el formulario de registro";
+    private string PopupIcon => rutaEdit.Id.HasValue ? "bi bi-pencil-square" : "bi bi-signpost-split";
+    private string PopupIconWrapperClass => rutaEdit.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override void OnInitialized()
+    {
+        dataSource = new RutasGridDataSource(Client, OnGridStateChanged);
+        ApplyFilters();
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await LoadCiclosAsync();
-        await LoadRutasAsync();
     }
+
+    private void OnGridStateChanged()
+    {
+        errorMessage = dataSource.LastError;
+        totalRutas = dataSource.LastTotalCount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyFilters()
+    {
+        dataSource.CodCiclo = filtro.CodCiclo;
+        dataSource.CodRuta = filtro.CodRuta;
+        dataSource.SoloActivos = filtroSoloActivos;
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtro.CodRuta = valor;
+        await BuscarAsync();
+    }
+
+    private async Task OnEstadoChanged(bool valor)
+    {
+        filtroSoloActivos = valor;
+        await BuscarAsync();
+    }
+
+    private Task BuscarAsync()
+    {
+        ApplyFilters();
+        dataSource.Invalidate();
+        grid?.Reload();
+        return Task.CompletedTask;
+    }
+
+    private async Task LimpiarAsync()
+    {
+        filtro = new RutaFilterDto();
+        filtroSoloActivos = true;
+        ApplyFilters();
+        dataSource.Invalidate();
+        grid?.Reload();
+    }
+
+    private void RecargarGrid()
+    {
+        dataSource.Invalidate();
+        grid?.Reload();
+    }
+
+    private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
     private async Task LoadCiclosAsync()
     {
@@ -106,76 +358,75 @@
             var data = await Client.GetCiclosAsync();
             ciclos.Clear();
             ciclos.AddRange(data ?? Enumerable.Empty<CicloLookupDto>());
+            ciclosError = null;
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo cargar la lista de ciclos: {ex.Message}";
+            ciclosError = $"No se pudo cargar la lista de ciclos: {ex.Message}";
         }
-    }
-
-    private async Task LoadRutasAsync()
-    {
-        try
-        {
-            isLoading = true;
-            errorMessage = null;
-            var data = await Client.GetAsync(filtro);
-            rutas.Clear();
-            rutas.AddRange(data ?? Enumerable.Empty<RutaListItemDto>());
-        }
-        catch (Exception ex)
-        {
-            errorMessage = $"No se pudo cargar el catalogo de rutas: {ex.Message}";
-        }
-        finally
-        {
-            isLoading = false;
-            StateHasChanged();
-        }
-    }
-
-    private Task BuscarAsync() => LoadRutasAsync();
-
-    private async Task LimpiarAsync()
-    {
-        filtro = new RutaFilterDto();
-        await LoadRutasAsync();
     }
 
     private async Task OpenFormAsync(RutaListItemDto? ruta)
     {
         errorMessage = null;
+        formError = null;
 
         if (ruta is null)
         {
-            rutaEdit = new RutaUpsertDto();
+            rutaEdit = new RutaUpsertDto { Activo = true };
+            formVisible = true;
+            return;
         }
-        else
+
+        formLoading = true;
+        formVisible = true;
+
+        try
         {
             var detail = await Client.GetAsync(ruta.Id);
-            rutaEdit = detail is null
-                ? new RutaUpsertDto
+            if (detail is null)
+            {
+                formError = "No se encontro la ruta.";
+                rutaEdit = new RutaUpsertDto
                 {
                     Id = ruta.Id,
                     CodCiclo = ruta.CodCiclo,
                     CodRuta = ruta.CodRuta,
-                    Descripcion = ruta.Descripcion ?? string.Empty
-                }
-                : new RutaUpsertDto
-                {
-                    Id = detail.Id,
-                    CodCiclo = detail.CodCiclo,
-                    CodRuta = detail.CodRuta,
-                    Descripcion = detail.Descripcion ?? string.Empty
+                    Descripcion = ruta.Descripcion ?? string.Empty,
+                    Activo = ruta.Activo
                 };
-        }
+                return;
+            }
 
-        formVisible = true;
+            rutaEdit = new RutaUpsertDto
+            {
+                Id = detail.Id,
+                CodCiclo = detail.CodCiclo,
+                CodRuta = detail.CodRuta,
+                Descripcion = detail.Descripcion ?? string.Empty,
+                Activo = detail.Activo
+            };
+        }
+        catch (Exception ex)
+        {
+            formError = $"Error al cargar la ruta: {ex.Message}";
+        }
+        finally
+        {
+            formLoading = false;
+        }
     }
 
     private void CloseForm()
     {
+        if (isSaving)
+        {
+            return;
+        }
+
         formVisible = false;
+        formLoading = false;
+        formError = null;
         rutaEdit = new RutaUpsertDto();
     }
 
@@ -184,26 +435,112 @@
         try
         {
             isSaving = true;
+            formError = null;
             if (rutaEdit.Id.HasValue)
             {
                 await Client.UpdateAsync(rutaEdit.Id.Value, rutaEdit);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Ruta actualizada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "RutasToast"
+                });
             }
             else
             {
                 await Client.CreateAsync(rutaEdit);
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Ruta registrada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "RutasToast"
+                });
             }
 
             formVisible = false;
             rutaEdit = new RutaUpsertDto();
-            await LoadRutasAsync();
+            dataSource.Invalidate();
+            grid?.Reload();
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo guardar la ruta: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "RutasToast"
+            });
         }
         finally
         {
             isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(RutaListItemDto ruta)
+    {
+        rutaParaDesactivar = ruta;
+        confirmVisible = true;
+    }
+
+    private void CancelarDesactivar()
+    {
+        confirmVisible = false;
+        rutaParaDesactivar = null;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (rutaParaDesactivar is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await Client.DeactivateAsync(rutaParaDesactivar.Id);
+            if (!ok)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Error",
+                    Text = "No se pudo desactivar la ruta.",
+                    RenderStyle = ToastRenderStyle.Danger,
+                    ProviderName = "RutasToast"
+                });
+            }
+            else
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Exito",
+                    Text = "Ruta desactivada correctamente.",
+                    RenderStyle = ToastRenderStyle.Success,
+                    ProviderName = "RutasToast"
+                });
+
+                dataSource.Invalidate();
+                grid?.Reload();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "RutasToast"
+            });
+        }
+        finally
+        {
+            confirmVisible = false;
+            rutaParaDesactivar = null;
         }
     }
 }

@@ -1,0 +1,384 @@
+@page "/informes/reportes"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using apc.Client.Services.Informes
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Informes
+@inject InformesClient InformesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>Reportes Web</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Reportes Web</h2>
+            <p class="page-subtitle">Diseño y publicación de reportes por empresa.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Actualizar"
+                      Click="LoadAsync"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Datasets"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/reportes/datasets"))"
+                      IconCssClass="bi bi-database"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <AuthorizeView Policy="@PermissionNames.Reporteria.Create">
+                <Authorized>
+                    <DxButton Text="Nuevo reporte"
+                              Click="OpenCreatePopup"
+                              IconCssClass="bi bi-plus-circle"
+                              RenderStyle="ButtonRenderStyle.Primary" />
+                </Authorized>
+            </AuthorizeView>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(successMessage))
+    {
+        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        @if (isLoading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else if (items.Count == 0)
+        {
+            <div class="text-center text-muted py-5">
+                No hay reportes web configurados todavía.
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                @foreach (var item in items)
+                {
+                    <div class="col-12 col-xl-6">
+                        <div class="border rounded-3 p-4 h-100 bg-white shadow-sm">
+                            <div class="d-flex align-items-start justify-content-between gap-3">
+                                <div>
+                                    <div class="fw-semibold fs-5">@item.Nombre</div>
+                                    <div class="text-muted small">@item.Categoria · @item.Codigo</div>
+                                </div>
+                                <span class="@GetEstadoCss(item.Estado)">@item.Estado</span>
+                            </div>
+
+                            <p class="text-muted mt-3 mb-3">
+                                @(string.IsNullOrWhiteSpace(item.Descripcion) ? "Sin descripción configurada." : item.Descripcion)
+                            </p>
+
+                            <div class="d-flex flex-wrap gap-3 text-muted small mb-4">
+                                <span>Publicado: <strong>@(item.PublishedVersion?.ToString() ?? "N/A")</strong></span>
+                                <span>Borrador: <strong>@(item.DraftVersion?.ToString() ?? "N/A")</strong></span>
+                            </div>
+
+                            <div class="d-flex flex-wrap gap-2">
+                                <DxButton Text="Ver"
+                                          Click="@(() => NavigationManager.NavigateTo(item.ViewerRoute))"
+                                          IconCssClass="bi bi-eye"
+                                          RenderStyle="ButtonRenderStyle.Primary" />
+
+                                <AuthorizeView Policy="@PermissionNames.Reporteria.Edit">
+                                    <Authorized>
+                                        <DxButton Text="Diseñar"
+                                                  Click="@(() => NavigationManager.NavigateTo(item.DesignerRoute))"
+                                                  IconCssClass="bi bi-pencil-square"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" />
+                                        <DxButton Text="Publicar"
+                                                  Click="@(() => PublicarGuardedAsync(item.Codigo))"
+                                                  Enabled="@CanPublish(item)"
+                                                  IconCssClass="bi bi-cloud-arrow-up"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" />
+                                    </Authorized>
+                                </AuthorizeView>
+
+                                <AuthorizeView Policy="@PermissionNames.Reporteria.Delete">
+                                    <Authorized>
+                                        <DxButton Text="Eliminar"
+                                                  Click="@(() => OpenDeletePopupFor(item))"
+                                                  Enabled="@CanDelete(item)"
+                                                  IconCssClass="bi bi-trash"
+                                                  RenderStyle="ButtonRenderStyle.Danger" />
+                                    </Authorized>
+                                </AuthorizeView>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </div>
+</div>
+
+<DxPopup @bind-Visible="isCreatePopupVisible"
+         Width="620px"
+         ShowCloseButton="true"
+         HeaderText="Nuevo reporte web">
+    <BodyTemplate Context="popupContext">
+        <div class="p-2">
+            <DxFormLayout ColCountMd="12">
+                <DxFormLayoutItem Caption="Código" ColSpanMd="6">
+                    <DxTextBox @bind-Text="createModel.Codigo"
+                               NullText="ej. estado-cuenta"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Categoría" ColSpanMd="6">
+                    <DxTextBox @bind-Text="createModel.Categoria"
+                               NullText="General"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Nombre" ColSpanMd="12">
+                    <DxTextBox @bind-Text="createModel.Nombre"
+                               NullText="Nombre visible del reporte"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Dataset" ColSpanMd="12">
+                    <DxComboBox Data="@datasets"
+                                TData="ReporteDatasetCatalogoItemDto"
+                                TValue="string"
+                                ValueFieldName="@nameof(ReporteDatasetCatalogoItemDto.Codigo)"
+                                TextFieldName="@nameof(ReporteDatasetCatalogoItemDto.Nombre)"
+                                @bind-Value="createModel.DatasetCodigo"
+                                NullText="Plantilla en blanco"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <DxMemo @bind-Text="createModel.Descripcion"
+                            Rows="4"
+                            NullText="Contexto funcional del reporte" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar"
+                          Click="CloseCreatePopup"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Crear y diseñar"
+                          Click="CrearAsync"
+                          Enabled="@(!isSaving)"
+                          IconCssClass="bi bi-check-circle"
+                          RenderStyle="ButtonRenderStyle.Primary" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="isDeletePopupVisible"
+         Width="460px"
+         ShowCloseButton="true"
+         HeaderText="Eliminar reporte">
+    <BodyTemplate Context="popupContext">
+        <div class="p-3">
+            @if (!string.IsNullOrWhiteSpace(deleteErrorMessage))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@deleteErrorMessage</DxAlert>
+            }
+
+            <p class="mb-3">
+                @(deleteCandidate is null
+                    ? "No hay reporte seleccionado."
+                    : $"Se eliminará el reporte '{deleteCandidate.Nombre}' ({deleteCandidate.Codigo}) y sus layouts asociados. Esta acción no se puede deshacer.")
+            </p>
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton Text="Cancelar"
+                          Click="CloseDeletePopupSafe"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Eliminar"
+                          Click="DeleteConfirmedAsync"
+                          Enabled="@(!isDeleting && deleteCandidate is not null)"
+                          IconCssClass="bi bi-trash"
+                          RenderStyle="ButtonRenderStyle.Danger" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private List<ReporteDisenoCatalogoItemDto> items = [];
+    private List<ReporteDatasetCatalogoItemDto> datasets = [];
+    private readonly HashSet<string> publishingCodes = new(StringComparer.OrdinalIgnoreCase);
+    private ReporteDisenoCreateDto createModel = new();
+    private ReporteDisenoCatalogoItemDto? deleteCandidate;
+    private bool isLoading;
+    private bool isSaving;
+    private bool isCreatePopupVisible;
+    private bool isDeletePopupVisible;
+    private bool isDeleting;
+    private string? errorMessage;
+    private string? successMessage;
+    private string? deleteErrorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            items = (await InformesClient.GetReportesDisenoAsync()).OrderBy(x => x.Categoria).ThenBy(x => x.Nombre).ToList();
+            datasets = (await InformesClient.GetReportesDatasetsAsync()).Where(x => x.IsActive).OrderBy(x => x.Nombre).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+            items = [];
+            datasets = [];
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OpenCreatePopup()
+    {
+        errorMessage = null;
+        successMessage = null;
+        createModel = new ReporteDisenoCreateDto { Categoria = "General" };
+        isCreatePopupVisible = true;
+    }
+
+    private void CloseCreatePopup()
+    {
+        isCreatePopupVisible = false;
+    }
+
+    private async Task CrearAsync()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+            var created = await InformesClient.CreateReporteDisenoAsync(createModel);
+            isCreatePopupVisible = false;
+            await LoadAsync();
+            successMessage = $"Reporte '{created.Nombre}' creado con borrador inicial persistido en base de datos.";
+            NavigationManager.NavigateTo(created.DesignerRoute);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task PublicarAsync(string codigo)
+    {
+        try
+        {
+            errorMessage = null;
+            var result = await InformesClient.PublishReporteDisenoAsync(codigo);
+            successMessage = $"Se publicó la versión {result.PublishedVersion?.ToString() ?? "actual"} de '{result.Nombre}'.";
+            await LoadAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+    }
+
+    private async Task PublicarGuardedAsync(string codigo)
+    {
+        if (!publishingCodes.Add(codigo))
+        {
+            return;
+        }
+
+        try
+        {
+            errorMessage = null;
+            var result = await InformesClient.PublishReporteDisenoAsync(codigo);
+            await LoadAsync();
+            successMessage = $"Se publicó la versión {result.PublishedVersion?.ToString() ?? "actual"} de '{result.Nombre}'.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            publishingCodes.Remove(codigo);
+        }
+    }
+
+    private void OpenDeletePopupFor(ReporteDisenoCatalogoItemDto item)
+    {
+        if (!CanDelete(item))
+        {
+            return;
+        }
+
+        deleteCandidate = item;
+        deleteErrorMessage = null;
+        isDeletePopupVisible = true;
+    }
+
+    private async Task DeleteConfirmedAsync()
+    {
+        if (deleteCandidate is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isDeleting = true;
+            errorMessage = null;
+            deleteErrorMessage = null;
+            var deletedName = deleteCandidate.Nombre;
+            await InformesClient.DeleteReporteDisenoAsync(deleteCandidate.Codigo);
+            isDeletePopupVisible = false;
+            deleteCandidate = null;
+            await LoadAsync();
+            successMessage = $"Reporte '{deletedName}' eliminado.";
+        }
+        catch (Exception ex)
+        {
+            deleteErrorMessage = ex.Message;
+        }
+        finally
+        {
+            isDeleting = false;
+        }
+    }
+
+    private void CloseDeletePopupSafe()
+    {
+        isDeletePopupVisible = false;
+        deleteCandidate = null;
+    }
+
+    private static string GetEstadoCss(string estado) => estado switch
+    {
+        "Publicado" => "badge-status badge-status--success",
+        "Borrador pendiente" => "badge-status badge-status--warning",
+        "Solo borrador" => "badge-status badge-status--warning",
+        "Inactivo" => "badge-status badge-status--danger",
+        _ => "badge-status"
+    };
+
+    private bool CanPublish(ReporteDisenoCatalogoItemDto item)
+        => item.TieneBorrador && !publishingCodes.Contains(item.Codigo);
+
+    private bool CanDelete(ReporteDisenoCatalogoItemDto item)
+        => !isDeleting && !publishingCodes.Contains(item.Codigo);
+}
+

@@ -14,4 +14,13 @@ public interface IFacturacionMiscelaneosService
     Task<ResponseModelDto> CrearReciboAsync(FacturaMiscelaneoCrearDto dto, CancellationToken ct = default);
 
     Task<FacturaMiscelaneoResponseDto?> ObtenerReciboAsync(int numeroRecibo, CancellationToken ct = default);
+
+    // CRUD catálogo misceláneos
+    Task<MiscelaneoCatalogoEditDto?> ObtenerCatalogoItemAsync(int id, CancellationToken ct = default);
+
+    Task<MiscelaneoCatalogoEditDto> CrearCatalogoItemAsync(MiscelaneoCatalogoEditDto dto, string user, CancellationToken ct = default);
+
+    Task<MiscelaneoCatalogoEditDto> ActualizarCatalogoItemAsync(int id, MiscelaneoCatalogoEditDto dto, string user, CancellationToken ct = default);
+
+    Task<bool> EliminarCatalogoItemAsync(int id, CancellationToken ct = default);
 }
