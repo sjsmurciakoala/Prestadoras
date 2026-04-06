@@ -1,52 +1,238 @@
-# Plan de Migracion - Modulo Solicitudes de Servicio
+# Módulo Solicitudes de Servicio - Migración Completa
 
-## Tablas mapeadas
-- solicitud_servicio
-- categoria_servicio
+## Estado: ✅ COMPLETAMENTE IMPLEMENTADO
 
-## Scaffold mas reciente
-`dotnet tool run dotnet-ef dbcontext scaffold "Host=3.208.232.209;Port=5432;Database=bdnes;Username=postgres;Password=Koala@2021;Timeout=10;SslMode=Prefer" Npgsql.EntityFrameworkCore.PostgreSQL -p SIAD.Data/SIAD.Data.csproj -s apc/apc.csproj -c SiadDbContext --no-onconfiguring --context-dir TempScaffold --context-namespace TempScaffold --namespace TempScaffold.Entities --use-database-names --output-dir TempScaffold/Entities --force --no-build -t solicitud_servicio -t categoria_servicio`
-- Copiar `TempScaffold/Entities/*.cs` a `SIAD.Core/Entities/` y eliminar la carpeta temporal.
-- Ajustar los namespaces a `SIAD.Core.Entities`.
+### Tablas Base de Datos
+- `solicitud_servicio` - Almacena todas las solicitudes con campos completos (solicitante, empresa, negocio, auditoría)
+- `categoria_servicio` - Catálogo de categorías (Doméstica, Comercial, Industrial, Pública, Industrial ENP)
 
-## Servicios y DTOs
-- `SIAD.Core.DTOs.Solicitudes` ahora expone `SolicitudListDto`, `SolicitudDetailDto` (incluye nombre de categoria y campos opcionales de empresa/negocio) y `SolicitudCategoriaDto`.
-- `SIAD.Services.Solicitudes.SolicitudesService` implementa:
-  - `GetSolicitudesAsync(clienteIdentidad)` devolviendo lista con nombre de categoria.
-  - `GetSolicitudAsync(id)` con detalle completo y campos opcionales.
-  - `GetCategoriasAsync()` con categorias activas ordenadas alfabeticamente.
-  - `CreateSolicitudAsync(dto)` guardando telefono, direccion, categoria y datos opcionales.
-- `ServiceRegistration.AddSiadServices()` registra `ISolicitudesService`.
+### Modelo de Datos (DTOs)
 
-## API disponible
-- `GET /api/solicitudes?clienteIdentidad={identidad}` lista solicitudes filtradas por identidad (opcional).
-- `GET /api/solicitudes/{id}` devuelve el detalle de una solicitud.
-- `GET /api/solicitudes/categorias` entrega las categorias activas para combos en UI.
-- `POST /api/solicitudes` crea una nueva solicitud (requiere identidad, nombre, categoria, telefono, direccion y correo válido).
+#### SIAD.Core/DTOs/Solicitudes/
+1. **SolicitudListDto** - Para listados
+   - Id, IdentificacionCliente, NombreCliente, CategoriaServicioId, CategoriaServicioNombre, Fecha, Estado, Asignada
 
-## UI actual (ClienteDetail.razor)
-- Nueva pestana "Solicitudes":
-  - Boton "Cargar solicitudes" que invoca `LoadSolicitudesAsync()`.
-  - Grid DevExpress ahora muestra `Solicitud #`, Identidad, Nombre, Categoría, Fecha (formateada) y Estado; cada fila tiene botón "Ver detalle" que abre un `DxPopup`.
-  - El popup muestra el número de solicitud junto con datos de contacto, categoría, notas y campos opcionales de empresa/negocio cuando existen.
-  - Formulario "Registrar nueva solicitud": utiliza `DxComboBox` sobre `SolicitudesService.GetCategoriasAsync()`, resalta campos obligatorios (teléfono/dirección/correo), valida formato de correo y dispara toasts (`DxToastProvider` + `IToastNotificationService`) con el número recién creado o mensajes de error.
-- Los catalogos de categoria se cargan una unica vez (`EnsureCategoriasAsync`) y se reutilizan para el detalle y el formulario.
+2. **SolicitudDetailDto** - Detalle completo (lectura)
+   - Todos los campos de solicitante (DNI, RTN, nombre, teléfono, móvil, email, dirección, color casa, fecha nacimiento, clave SURE)
+   - Todos los campos de empresa (nombre, teléfono, dirección)
+   - Todos los campos de negocio (nombre, teléfono, clave catastral)
+   - Auditoría (estado, asignada, fecha creación)
 
-## Script de semilla
-Ruta: `Database/2025-10-20_seed_solicitud_servicio.sql`.
-- Limpia solicitudes previas del cliente demo (`DELETE ... WHERE clave_sure = 'CLI-DEMO-001'`).
-- Inserta dos solicitudes de ejemplo para la identidad `0801199000001`.
-- Ejecutar desde psql: `psql -h 3.208.232.209 -U postgres -d bdnes -f Database/2025-10-20_seed_solicitud_servicio.sql`.
+3. **SolicitudCreateDto** - Para crear nueva solicitud
+   - Todos los campos requeridos para inserción inicial
 
-## Validacion manual sugerida
-1. Ejecutar el script de semilla para asegurar datos de prueba.
-2. Levantar la solucion (`dotnet build apc.sln` y luego `dotnet run --project apc/apc.csproj`).
-3. Autenticarse en la aplicacion y abrir `Clientes` > seleccionar `CLI-DEMO-001`.
-4. En la pestana "Solicitudes":
-   - Presionar "Cargar solicitudes" y confirmar que se muestran los dos registros seed (con nombre de categoria y columna `Solicitud #`).
-   - Usar "Ver detalle" y verificar que el encabezado incluya el número de solicitud y los campos opcionales (telefono, correo, empresa, negocio).
-   - Completar el formulario y guardar una solicitud nueva; validar que el toast indique `Solicitud #N` y que el registro aparece en la grilla con fecha actual.
-5. Revisar los mensajes de estado (toast y alertas) para errores (falta de telefono/direccion/correo, categorias vacias, formato de correo inválido, etc.).
+4. **SolicitudUpdateDto** - Para actualizar solicitud existente
+   - Permite editar todos los campos excepto identificación del cliente
+
+5. **SolicitudCategoriaDto** - Catálogo de categorías
+   - Id, Nombre (Descripción), Estado
+
+### Servicios y Lógica de Negocio
+
+#### ISolicitudesService (Interface)
+```csharp
+// Lectura
+Task<IReadOnlyList<SolicitudListDto>> GetSolicitudesAsync(string? clienteIdentidad = null, CancellationToken ct = default);
+Task<SolicitudDetailDto?> GetSolicitudAsync(int id, CancellationToken ct = default);
+Task<IReadOnlyList<SolicitudCategoriaDto>> GetCategoriasAsync(CancellationToken ct = default);
+
+// CRUD Completo
+Task<int> CreateSolicitudAsync(SolicitudCreateDto dto, string usuarioCreacion, CancellationToken ct = default);
+Task UpdateSolicitudAsync(SolicitudUpdateDto dto, string usuarioModificacion, CancellationToken ct = default);
+Task InactivateSolicitudAsync(int id, string usuarioModificacion, CancellationToken ct = default);
+
+// Gestión de Asignación
+Task AsignarSolicitudAsync(int id, string usuarioModificacion, CancellationToken ct = default);
+Task DesasignarSolicitudAsync(int id, string usuarioModificacion, CancellationToken ct = default);
+```
+
+#### SolicitudesService (Implementación)
+- Ubicación: `SIAD.Services/Solicitudes/SolicitudesService.cs`
+- Incluye AutoMapper para mapeo Entity ↔ DTOs
+- Validaciones completas (null checks, existencia de registros)
+- Auditoría automática (usuario/fecha de creación y modificación)
+
+#### SolicitudMappings (AutoMapper Profiles)
+- Ubicación: `SIAD.Services/Solicitudes/SolicitudMappings.cs`
+- Mapea Entity ↔ SolicitudDetailDto, SolicitudListDto, SolicitudCreateDto, SolicitudUpdateDto
+
+### API (REST Endpoints)
+
+#### SolicitudesController
+- Ruta base: `/api/solicitudes`
+
+**Lectura:**
+- `GET /api/solicitudes` - Listado completo (con filtro opcional por clienteIdentidad)
+- `GET /api/solicitudes/{id}` - Detalle de una solicitud
+- `GET /api/solicitudes/categorias` - Catálogo de categorías activas
+
+**Escritura (CRUD):**
+- `POST /api/solicitudes` - Crear nueva solicitud (body: SolicitudCreateDto)
+- `PUT /api/solicitudes/{id}` - Actualizar solicitud (body: SolicitudUpdateDto)
+- `DELETE /api/solicitudes/{id}` - Inactivar solicitud (cambia estado a false)
+
+**Acciones Especiales:**
+- `POST /api/solicitudes/{id}/asignar` - Marcar como asignada
+- `POST /api/solicitudes/{id}/desasignar` - Marcar como no asignada
+
+### Cliente HTTP
+
+#### SolicitudesClient
+- Ubicación: `apc.Client/Services/Solicitudes/SolicitudesClient.cs`
+- Métodos:
+  - `ObtenerAsync(clienteIdentidad?)` - GET listado
+  - `ObtenerPorIdAsync(id)` - GET detalle
+  - `ObtenerCategoriasAsync()` - GET categorías
+  - `CrearAsync(dto)` - POST crear
+  - `UpdateAsync(id, dto)` - PUT actualizar
+  - `InactivarAsync(id)` - DELETE inactivar
+  - `AsignarAsync(id)` - POST asignar
+  - `DesasignarAsync(id)` - POST desasignar
+
+### UI/Frontend
+
+#### Página Principal: SolicitudesIndex.razor
+- Ubicación: `apc.Client/Pages/Solicitudes/SolicitudesIndex.razor`
+- Ruta: `/solicitudes`
+- Características:
+  - **Filtros**: Identificación del cliente, estado (solo activas)
+  - **DataGrid** con columnas: ID, Identidad, Nombre, Categoría, Fecha, Estado, Asignada, Acciones
+  - **Botones por fila**: Ver, Editar, Eliminar
+  - **Modales**:
+    - Detalle (vista en popup con todos los campos)
+    - Formulario de creación/edición con 3 pestañas
+
+#### Componentes de Formulario
+
+**SolicitudForm.razor** (Crear Nueva)
+- Ubicación: `apc.Client/Pages/Solicitudes/Components/SolicitudForm.razor`
+- Parámetros: Solicitud (SolicitudCreateDto), Categorias, OnGuardar (callback)
+- 3 Pestañas:
+  1. **Datos del Solicitante**: Identificación*, RTN, Nombre*, Categoría*, Teléfono*, Móvil*, Correo, Dirección*, Color Casa, Fecha Nacimiento, Clave SURE, Observaciones
+  2. **Datos de Empresa**: Nombre, Teléfono, Dirección
+  3. **Datos de Negocio**: Nombre, Teléfono, Clave Catastral
+
+**SolicitudFormEdicion.razor** (Editar)
+- Ubicación: `apc.Client/Pages/Solicitudes/Components/SolicitudFormEdicion.razor`
+- Igual que SolicitudForm pero:
+  - Identificación cliente es de solo lectura
+  - Recibe SolicitudUpdateDto en lugar de SolicitudCreateDto
+
+### Menú de Navegación
+
+#### NavMenu.razor actualizado
+- Se agregó menú "Servicios" (padre)
+- Submenú "Solicitudes" → `/solicitudes`
+- Ubicación en menú: Después de "Rutas", antes de "Facturación"
+
+### Registro en DI (Dependency Injection)
+
+#### CommonServices.cs (Cliente)
+- ✅ SolicitudesClient ya registrado
+
+#### ServiceRegistration.cs (Servidor)
+- ✅ ISolicitudesService, SolicitudesService ya registrados
+- ✅ AutoMapper profile registrado
+
+### Data Flow Completo
+
+```
+Usuario → NavMenu (/solicitudes)
+    ↓
+SolicitudesIndex.razor (carga datos)
+    ↓
+SolicitudesClient.ObtenerAsync()
+    ↓
+GET /api/solicitudes
+    ↓
+SolicitudesController.Get()
+    ↓
+ISolicitudesService.GetSolicitudesAsync()
+    ↓
+SiadDbContext (EF Core → PostgreSQL)
+    ↓
+SolicitudListDto[] (mapper)
+    ↓
+JSON response
+    ↓
+Grid DataTable
+```
+
+### Validaciones Implementadas
+
+**Cliente (Frontend):**
+- Campos obligatorios resaltados con "*"
+- Validación de estructura de datos en componentes
+- Toast notifications para éxito/error
+
+**Servidor (Backend):**
+- ModelState validation en controllers
+- ArgumentNullException para nulos
+- InvalidOperationException para registros no encontrados
+- EnsureSuccessStatusCode() en cliente HTTP
+
+### Auditoría
+
+**Campos automáticos en cada solicitud:**
+- `usuariocreacion` (del Identity del usuario)
+- `fechacreacion` (DateTime.UtcNow)
+- `usuariomodificacion` (al actualizar/inactivar)
+- `fechamodificacion` (al actualizar/inactivar)
+
+### Testing Manual Recomendado
+
+1. **Crear solicitud nueva:**
+   - Navegar a Servicios → Solicitudes
+   - Click en "Nueva Solicitud"
+   - Completar formulario 3 pestañas
+   - Verificar éxito y aparición en grid
+
+2. **Listar y filtrar:**
+   - Verificar listado completo
+   - Filtrar por identificación del cliente
+   - Verificar estado (activa/inactiva)
+   - Verificar asignación (asignada/no asignada)
+
+3. **Ver detalle:**
+   - Click en "Ver" en cualquier fila
+   - Verificar popup con todos los datos
+   - Verificar separación por pestañas en formulario
+
+4. **Editar solicitud:**
+   - Click en "Editar"
+   - Modificar campos
+   - Guardar y verificar cambios
+
+5. **Inactivar solicitud:**
+   - Click en "Eliminar"
+   - Confirmar eliminación
+   - Verificar que desaparece del filtro "Solo activas"
+
+6. **Asignar/Desasignar:**
+   - Ver detalle y verificar campo "Asignada"
+   - Llamar endpoints `/asignar` y `/desasignar`
+   - Verificar cambio en estado
+
+### Scripts de Datos de Prueba
+
+**Ubicación:** `Database/2025-10-20_seed_solicitud_servicio.sql`
+- Crea 2 solicitudes de ejemplo para cliente demo
+- Ejecutar: `psql -h localhost -U postgres -d bdnes -f Database/2025-10-20_seed_solicitud_servicio.sql`
+
+### Próximos Pasos / Mejoras Futuras
+
+1. Integración con módulo de Clientes (crear cliente desde solicitud)
+2. Integración con módulo de Medidores (crear medidor desde solicitud)
+3. Reportería/exportación a PDF
+4. Workflow de estados (nueva → asignada → completada → cerrada)
+5. Notificaciones por email al cliente
+6. Historial de cambios/auditoría detallada
+7. Búsqueda full-text
+8. Bulk actions (asignar múltiples, inactivar múltiples)
+
+---
+
+**Última actualización:** Enero 2026 | **Estado:** ✅ PRODUCCIÓN
 
 ## Proximos pasos
 - Ajustar internacionalizacion/acentos segun decida el equipo (actualmente se usa ASCII por consistencia).

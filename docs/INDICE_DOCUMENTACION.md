@@ -1,13 +1,16 @@
-# 📚 ÍNDICE DE DOCUMENTACIÓN - ANÁLISIS MIGRACION CONTABILIDAD
+# �Y"s �?NDICE DE DOCUMENTACI�"N - AN�?LISIS MIGRACION CONTABILIDAD
 
-**Proyecto**: SIAD (Sistema Integral de Administración Domiciliaria)  
-**Versión**: Migración .NET 9 Blazor - Arquitectura Multiempresa  
-**Fecha de Compilación**: 23 de Diciembre 2025  
-**Estado**: ✅ COMPLETO Y LISTO PARA REVISIÓN
+**Proyecto**: SIAD (Sistema Integral de Administraci��n Domiciliaria)  
+**Versi��n**: Migraci��n .NET 9 Blazor - Arquitectura Multiempresa  
+**Fecha de Compilaci��n**: 14 de Enero 2026  
+**Estado**: Avance actualizado (cat�logos + reglas); faltan comprobantes manuales
+
+Actualizaci�n 2026-01-14: cat�logos y reglas de tipos de transacci�n listos en UI/API; pendientes p�lizas manuales (type_id en con_partida_hdr, third_party_id en con_partida_dtl, posteo de saldos).
 
 ---
 
-## 📄 DOCUMENTOS CREADOS (5 archivos)
+
+## 📄 DOCUMENTOS CREADOS (7 archivos)
 
 ### 1. 📊 **ANALISIS_CONTABILIDAD_MIGRACION.md**
 **Ubicación**: `/docs/ANALISIS_CONTABILIDAD_MIGRACION.md`  
@@ -27,7 +30,7 @@
   - TIER 8: Configuración & Auditoría
 - **Diseño Completo SQL** (10 tablas nuevas detalladas)
   - con_tipo_transaccion
-  - con_poliza + con_poliza_linea
+  - con_partida_hdr + con_partida_dtl
   - con_apertura_saldo
   - con_saldo_cuenta + con_balance_mensual
   - con_tercero
@@ -195,7 +198,7 @@ d:\jesse\Documents\proyectos\HODSOFT_DEVEXPRESS\Prestadoras\
 │   │       ├── (existentes: Plan cuentas, Centros costo, etc.)
 │   │       └── (FALTA: TipoTransaccion, Poliza, Apertura, etc.)
 │   └── Entities/
-│       └── (FALTA: con_poliza, con_saldo_cuenta, etc.)
+│       └── (FALTA: con_partida_hdr, con_saldo_cuenta, etc.)
 │
 ├── SIAD.Services/
 │   └── Contabilidad/
@@ -289,8 +292,8 @@ d:\jesse\Documents\proyectos\HODSOFT_DEVEXPRESS\Prestadoras\
 ### ¿Qué es lo más crítico?
 **Respuesta**: Las 5 tablas en TIER 2 (Transacciones Contables):
 - `con_tipo_transaccion`
-- `con_poliza`
-- `con_poliza_linea`
+- `con_partida_hdr`
+- `con_partida_dtl`
 - `con_apertura_saldo`
 - `con_saldo_cuenta`
 
@@ -419,3 +422,6 @@ Se ha completado un análisis exhaustivo de la migración de Contabilidad del si
 **Status**: 🟢 LISTO PARA PRESENTACIÓN
 
 *Documento generado automáticamente por Sistema de Análisis de Proyectos HODSOFT*
+
+
+

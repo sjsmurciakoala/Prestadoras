@@ -52,6 +52,10 @@ Tabla generada desde los controllers de Ventas. Incluye metodo, ruta y nombre de
 | FacturacionMiscelaneosController | ObtenerCatalogo | GET | `api/facturacion/miscelaneos/categorias` |
 | FacturacionMiscelaneosController | BuscarClientes | GET | `api/facturacion/miscelaneos/clientes` |
 | FacturacionMiscelaneosController | ObtenerCliente | GET | `api/facturacion/miscelaneos/clientes/{clave}` |
+| FacturacionMiscelaneosController | ObtenerCatalogoItem | GET | `api/facturacion/miscelaneos/catalogo/{id:int}` |
+| FacturacionMiscelaneosController | CrearCatalogoItem | POST | `api/facturacion/miscelaneos/catalogo` |
+| FacturacionMiscelaneosController | ActualizarCatalogoItem | PUT | `api/facturacion/miscelaneos/catalogo/{id:int}` |
+| FacturacionMiscelaneosController | EliminarCatalogoItem | DELETE | `api/facturacion/miscelaneos/catalogo/{id:int}` |
 | FacturacionMiscelaneosController | CrearRecibo | POST | `api/facturacion/miscelaneos/recibos` |
 | FacturacionMiscelaneosController | ObtenerRecibo | GET | `api/facturacion/miscelaneos/recibos/{numero:int}` |
 | NotasCreditoDebitoController | RegistrarNota | POST | `api/facturacion/notas` |

@@ -52,6 +52,10 @@ Descripcion aproximada basada en el nombre de la funcion.
 | Facturacion Miscelaneos | `api/facturacion/miscelaneos/categorias` | Consultar Catalogo |
 | Facturacion Miscelaneos | `api/facturacion/miscelaneos/clientes` | Buscar Clientes |
 | Facturacion Miscelaneos | `api/facturacion/miscelaneos/clientes/{clave}` | Consultar Cliente |
+| Facturacion Miscelaneos | `api/facturacion/miscelaneos/catalogo/{id:int}` | Consultar Concepto del Catalogo |
+| Facturacion Miscelaneos | `api/facturacion/miscelaneos/catalogo` | Crear Concepto del Catalogo |
+| Facturacion Miscelaneos | `api/facturacion/miscelaneos/catalogo/{id:int}` | Actualizar Concepto del Catalogo |
+| Facturacion Miscelaneos | `api/facturacion/miscelaneos/catalogo/{id:int}` | Eliminar Concepto del Catalogo |
 | Facturacion Miscelaneos | `api/facturacion/miscelaneos/recibos` | Registrar Recibo |
 | Facturacion Miscelaneos | `api/facturacion/miscelaneos/recibos/{numero:int}` | Consultar Recibo |
 | Notas Credito Debito | `api/facturacion/notas` | Registrar Nota |

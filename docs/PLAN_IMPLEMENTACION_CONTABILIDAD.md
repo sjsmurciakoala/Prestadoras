@@ -65,8 +65,8 @@ Agregar los DbSets:
 ```csharp
 // Contabilidad - Transacciones
 public DbSet<con_tipo_transaccion> con_tipo_transacciones { get; set; }
-public DbSet<con_poliza> con_polizas { get; set; }
-public DbSet<con_poliza_linea> con_poliza_lineas { get; set; }
+public DbSet<con_partida_hdr> con_partida_hdrs { get; set; }
+public DbSet<con_partida_dtl> con_partida_dtls { get; set; }
 
 // Contabilidad - Saldos
 public DbSet<con_apertura_saldo> con_apertura_saldos { get; set; }
@@ -343,7 +343,7 @@ public sealed class PolizaService : IPolizaService
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(voucherId);
 
-        var poliza = await _context.con_polizas
+        var poliza = await _context.con_partida_hdrs
             .Where(x => x.voucher_id == voucherId)
             .Select(MapearDto)
             .FirstOrDefaultAsync(ct);
@@ -359,7 +359,7 @@ public sealed class PolizaService : IPolizaService
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(periodId);
 
-        return await _context.con_polizas
+        return await _context.con_partida_hdrs
             .Where(x => x.company_id == companyId && x.period_id == periodId)
             .OrderByDescending(x => x.voucher_date)
             .ThenByDescending(x => x.voucher_id)
@@ -381,11 +381,11 @@ public sealed class PolizaService : IPolizaService
         if (periodo is null)
             throw new InvalidOperationException("Período contable no encontrado.");
 
-        if (periodo.status != "OPEN")
+        if (periodo.status_id != 0)
             throw new InvalidOperationException("El período contable no está abierto.");
 
         // Generar número de póliza
-        var lastVoucher = await _context.con_polizas
+        var lastVoucher = await _context.con_partida_hdrs
             .Where(x => x.company_id == companyId && x.journal_id == dto.JournalId)
             .OrderByDescending(x => x.voucher_id)
             .FirstOrDefaultAsync(ct);
@@ -393,7 +393,7 @@ public sealed class PolizaService : IPolizaService
         var voucherNumber = (long.Parse(lastVoucher?.voucher_number ?? "0") + 1).ToString();
 
         // Crear póliza
-        var poliza = new con_poliza
+        var poliza = new con_partida_hdr
         {
             company_id = companyId,
             period_id = periodo.period_id,
@@ -415,7 +415,7 @@ public sealed class PolizaService : IPolizaService
         // Agregar líneas
         foreach (var lineaDto in dto.Lineas)
         {
-            var linea = new con_poliza_linea
+            var linea = new con_partida_dtl
             {
                 line_number = lineaDto.LineNumber,
                 account_id = lineaDto.AccountId,
@@ -431,10 +431,10 @@ public sealed class PolizaService : IPolizaService
                 created_by = userId
             };
 
-            poliza.con_poliza_lineas.Add(linea);
+            poliza.con_partida_dtls.Add(linea);
         }
 
-        _context.con_polizas.Add(poliza);
+        _context.con_partida_hdrs.Add(poliza);
         await _context.SaveChangesAsync(ct);
 
         return poliza.voucher_id;
@@ -445,8 +445,8 @@ public sealed class PolizaService : IPolizaService
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(voucherId);
         ArgumentNullException.ThrowIfNull(dto);
 
-        var poliza = await _context.con_polizas
-            .Include(x => x.con_poliza_lineas)
+        var poliza = await _context.con_partida_hdrs
+            .Include(x => x.con_partida_dtls)
             .FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
 
         if (poliza is null)
@@ -462,11 +462,11 @@ public sealed class PolizaService : IPolizaService
         poliza.updated_by = userId;
 
         // Eliminar líneas existentes y agregar nuevas
-        _context.con_poliza_lineas.RemoveRange(poliza.con_poliza_lineas);
+        _context.con_partida_dtls.RemoveRange(poliza.con_partida_dtls);
 
         foreach (var lineaDto in dto.Lineas)
         {
-            poliza.con_poliza_lineas.Add(new con_poliza_linea
+            poliza.con_partida_dtls.Add(new con_partida_dtl
             {
                 line_number = lineaDto.LineNumber,
                 account_id = lineaDto.AccountId,
@@ -494,7 +494,7 @@ public sealed class PolizaService : IPolizaService
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(voucherId);
 
-        var poliza = await _context.con_polizas.FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
+        var poliza = await _context.con_partida_hdrs.FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
 
         if (poliza is null)
             throw new InvalidOperationException($"Póliza {voucherId} no encontrada.");
@@ -502,7 +502,7 @@ public sealed class PolizaService : IPolizaService
         if (poliza.status == "POSTED")
             throw new InvalidOperationException("No se puede eliminar una póliza registrada.");
 
-        _context.con_polizas.Remove(poliza);
+        _context.con_partida_hdrs.Remove(poliza);
         await _context.SaveChangesAsync(ct);
     }
 
@@ -511,7 +511,7 @@ public sealed class PolizaService : IPolizaService
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(voucherId);
         ArgumentNullException.ThrowIfNull(userId);
 
-        var poliza = await _context.con_polizas.FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
+        var poliza = await _context.con_partida_hdrs.FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
 
         if (poliza is null)
             throw new InvalidOperationException($"Póliza {voucherId} no encontrada.");
@@ -534,7 +534,7 @@ public sealed class PolizaService : IPolizaService
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(voucherId);
         ArgumentNullException.ThrowIfNull(userId);
 
-        var poliza = await _context.con_polizas.FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
+        var poliza = await _context.con_partida_hdrs.FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
 
         if (poliza is null)
             throw new InvalidOperationException($"Póliza {voucherId} no encontrada.");
@@ -553,7 +553,7 @@ public sealed class PolizaService : IPolizaService
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(voucherId);
 
-        var poliza = await _context.con_polizas
+        var poliza = await _context.con_partida_hdrs
             .FirstOrDefaultAsync(x => x.voucher_id == voucherId, ct);
 
         if (poliza is null)
@@ -562,7 +562,7 @@ public sealed class PolizaService : IPolizaService
         return poliza.is_balanced;
     }
 
-    private static PolizaDto MapearDto(con_poliza p) => new(
+    private static PolizaDto MapearDto(con_partida_hdr p) => new(
         p.voucher_id,
         p.company_id,
         p.period_id,
@@ -1007,3 +1007,5 @@ ON CONFLICT (company_id, code) DO NOTHING;
 **Complejidad**: MEDIA-ALTA  
 **Tiempo estimado**: 2-3 semanas de desarrollo  
 **Riesgo**: BAJO (siguiendo patrones existentes)
+
+

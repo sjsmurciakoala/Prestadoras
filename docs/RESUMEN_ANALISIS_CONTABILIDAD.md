@@ -33,8 +33,8 @@ Hemos implementado:
 ### 🔴 CRÍTICO (SIN ESTO NO HAY CONTABILIDAD)
 | Tabla | Descripción | Impacto |
 |-------|-------------|--------|
-| **con_poliza** | Encabezado de pólizas contables | ALTO - Transacciones |
-| **con_poliza_linea** | Líneas de pólizas (débito/crédito) | ALTO - Transacciones |
+| **con_partida_hdr** | Encabezado de pólizas contables | ALTO - Transacciones |
+| **con_partida_dtl** | Líneas de pólizas (débito/crédito) | ALTO - Transacciones |
 | **con_apertura_saldo** | Saldos iniciales de período | ALTO - Balances |
 | **con_saldo_cuenta** | Saldos actuales de cuentas | ALTO - Reportes |
 | **con_tipo_transaccion** | Clasificación de pólizas | MEDIO - Controles |
@@ -61,7 +61,7 @@ Todas las tablas incluyen:
 - company_id (FK a cfg_company)
 - Índice único (company_id, código)
 - Auditoría (created_at/by, updated_at/by)
-- Status (ACTIVE/INACTIVE/LOCKED)
+- Estados de periodo: `status_id` 0 Abierto, 1 Precierre, 2 Cerrado
 ```
 
 ### Ejemplo: De LEGADO a NUEVA
@@ -93,8 +93,8 @@ cfg_company (1)
     ├── con_periodo_contable
     ├── con_diario
     ├── con_tipo_transaccion (NUEVA)
-    ├── con_poliza (NUEVA) ← Transacciones
-    │   └── con_poliza_linea (NUEVA)
+    ├── con_partida_hdr (NUEVA) ← Transacciones
+    │   └── con_partida_dtl (NUEVA)
     ├── con_apertura_saldo (NUEVA)
     ├── con_saldo_cuenta (NUEVA)
     ├── con_balance_mensual (NUEVA)
@@ -114,10 +114,10 @@ cfg_company (1)
 
 ## 📐 ESPECIFICACIÓN SQL - EXCERPT
 
-### Tabla Crítica: con_poliza
+### Tabla Crítica: con_partida_hdr
 
 ```sql
-CREATE TABLE con_poliza (
+CREATE TABLE con_partida_hdr (
     voucher_id bigint PRIMARY KEY IDENTITY,
     company_id bigint NOT NULL,
     period_id bigint NOT NULL,
@@ -139,7 +139,7 @@ CREATE TABLE con_poliza (
 
 **Validaciones clave:**
 - `total_debit = total_credit` para POSTED
-- `period_id` debe estar en estado OPEN
+- `period_id` debe estar en `status_id = 0`
 - Solo se puede editar si status = DRAFT
 - Auditoría completa (quién, cuándo, estado anterior)
 
@@ -302,3 +302,5 @@ Revisa los documentos en:
 **Análisis compilado**: 23 de Diciembre 2025  
 **Documentación**: 3 archivos markdown detallados  
 **Estado**: ✅ LISTO PARA PRESENTACIÓN A EQUIPO DE DESARROLLO
+
+

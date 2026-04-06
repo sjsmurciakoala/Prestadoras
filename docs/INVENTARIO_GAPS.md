@@ -22,7 +22,7 @@
 
 Sin estas tablas, **NO hay contabilidad**. Son el núcleo transaccional.
 
-### 1. `con_poliza` (Encabezado de Pólizas)
+### 1. `con_partida_hdr` (Encabezado de Pólizas)
 - **Equivalente LEGADO**: `C01Entry`
 - **Función**: Registro de pólizas contables
 - **Campos principales**:
@@ -41,19 +41,19 @@ Sin estas tablas, **NO hay contabilidad**. Son el núcleo transaccional.
 - **Validaciones**:
   - Si status=POSTED: total_debit MUST = total_credit
   - No se puede editar si POSTED
-  - Period MUST estar en estado OPEN
+  - Period MUST estar en `status_id = 0` (Abierto)
 - **Auditoría**: created_at/by, updated_at/by
 - **Índices**: company, period, journal, status, date
 - **Criticidad**: 🔴🔴🔴 MÁXIMA
 
 ---
 
-### 2. `con_poliza_linea` (Detalle de Pólizas)
+### 2. `con_partida_dtl` (Detalle de Pólizas)
 - **Equivalente LEGADO**: `C01Trans`
 - **Función**: Líneas de débito/crédito en pólizas
 - **Campos principales**:
   - `line_id` (PK)
-  - `voucher_id` (FK a con_poliza) ON DELETE CASCADE
+  - `voucher_id` (FK a con_partida_hdr) ON DELETE CASCADE
   - `line_number`
   - `account_id` (FK a con_plan_cuentas)
   - `cost_center_id` (FK a con_centro_costo, nullable)
@@ -258,7 +258,7 @@ Incompleto sin estas. Contabilidad funciona pero sin información complementaria
   - `month_number`
   - `depreciation_amount`
   - `accumulated_to_date`
-  - `voucher_id` (FK a con_poliza) - póliza de cierre generada
+  - `voucher_id` (FK a con_partida_hdr) - póliza de cierre generada
 - **Validaciones**:
   - UNIQUE (asset_id, period_id, month_number)
 - **Uso**: Generación automática de pólizas de cierre
@@ -373,8 +373,8 @@ Necesario para funcionalidad completa pero puede implementarse después.
 
 ```
 TIER 0 (CRÍTICO - SIN ESTOS NO FUNCIONA):
-├─ con_poliza ✅ ESPECIFICADA
-├─ con_poliza_linea ✅ ESPECIFICADA
+├─ con_partida_hdr ✅ ESPECIFICADA
+├─ con_partida_dtl ✅ ESPECIFICADA
 ├─ con_apertura_saldo ✅ ESPECIFICADA
 ├─ con_saldo_cuenta ✅ ESPECIFICADA
 └─ con_tipo_transaccion ✅ ESPECIFICADA
@@ -564,3 +564,5 @@ TIER 3 (FUTURO - OPTIONAL):
 
 **Documento compilado**: 23 Diciembre 2025  
 **Estado**: ✅ LISTO PARA PRIORIZACIÓN DE TRABAJO
+
+

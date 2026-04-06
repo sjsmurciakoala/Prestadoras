@@ -21,11 +21,11 @@
 | # | Tabla LEGADO | Nueva Tabla | Estado | Observaciones |
 |----|--------------|------------|--------|---------------|
 | 1 | **C01Account** | **con_plan_cuentas** | ✅ HECHO | Migrado a multiempresa con jerarquía |
-| 2 | **C01Periods** | **con_periodo_contable** | ✅ HECHO | Estados: OPEN, CLOSED, LOCKED |
+| 2 | **C01Periods** | **con_periodo_contable** | ✅ HECHO | Estados: 0 Abierto, 1 Precierre, 2 Cerrado |
 | 3 | **C01CostCenter** | **con_centro_costo** | ✅ HECHO | Ahora multiempresa, auditoría |
 | 4 | **C01TransClass** | **con_tipo_transaccion** | ⚠️ PENDIENTE | Categorías: DIARIO, AJUSTE, CIERRE, APERTURA |
-| 5 | **C01Entry** | **con_poliza** | ⚠️ PENDIENTE | Header de póliza contable |
-| 6 | **C01Trans** | **con_poliza_linea** | ⚠️ PENDIENTE | Detalle de póliza (débito/crédito) |
+| 5 | **C01Entry** | **con_partida_hdr** | ⚠️ PENDIENTE | Header de póliza contable |
+| 6 | **C01Trans** | **con_partida_dtl** | ⚠️ PENDIENTE | Detalle de póliza (débito/crédito) |
 | 7 | **C01Detail** | **con_detalle_tecnico** | ⚠️ PENDIENTE | Catálogo de detalles descriptivos |
 | 8 | **C01Opening** | **con_apertura_saldo** | ⚠️ PENDIENTE | Saldos iniciales por período |
 | 9 | **C01AcctBalance** | **con_saldo_cuenta** | ⚠️ PENDIENTE | Saldos actuales por cuenta |
@@ -52,8 +52,8 @@
 | 30 | **C01FixedAdd** | **con_activo_adicion** | ⚠️ PENDIENTE | Adiciones a activos fijos |
 | 31 | (No existe) | **con_deprecacion** | ⚠️ PENDIENTE | Nuevo: cálculo automático depreciación |
 | 32 | **C01LibroIVA** | **con_libro_iva** | ⚠️ PENDIENTE | Registro fiscal de IVA |
-| 33 | **C01Policys** | **con_poliza_seguros** | ⚠️ PENDIENTE | Pólizas de seguros (Phase 2) |
-| 34 | **C01PolicyItem** | **con_poliza_seguros_linea** | ⚠️ PENDIENTE | Detalles de pólizas seguros (Phase 2) |
+| 33 | **C01Policys** | **con_partida_hdr_seguros** | ⚠️ PENDIENTE | Pólizas de seguros (Phase 2) |
+| 34 | **C01PolicyItem** | **con_partida_hdr_seguros_linea** | ⚠️ PENDIENTE | Detalles de pólizas seguros (Phase 2) |
 | 35 | **C01Thirds** | **con_tercero** | ⚠️ PENDIENTE | Terceros contables (Clientes/Proveedores/Otros) |
 | 36 | **C01ThdAccount** | **con_tercero_cuenta** | ⚠️ PENDIENTE | Cuentas por cobrar/pagar por tercero |
 | 37 | **C01ThdOpening** | **con_tercero_apertura_saldo** | ⚠️ PENDIENTE | Saldos de apertura de terceros |
@@ -119,7 +119,7 @@
 | Plan de cuentas | C01Account | con_plan_cuentas | ✅ |
 | Períodos | C01Periods | con_periodo_contable | ✅ |
 | Centros costo | C01CostCenter | con_centro_costo | ✅ |
-| Pólizas | C01Entry + C01Trans | con_poliza + con_poliza_linea | ⚠️ |
+| Pólizas | C01Entry + C01Trans | con_partida_hdr + con_partida_dtl | ⚠️ |
 | Saldos | C01AcctBalance + C01Opening | con_saldo_cuenta + con_apertura_saldo | ⚠️ |
 | Tipos transacción | C01TransClass | con_tipo_transaccion | ⚠️ |
 
@@ -176,8 +176,8 @@ TOTALES:
 ### Desglose por Fase
 
 **PHASE 1 (CRÍTICO) - ~14 tablas**
-- con_poliza ✓
-- con_poliza_linea ✓
+- con_partida_hdr ✓
+- con_partida_dtl ✓
 - con_apertura_saldo ✓
 - con_saldo_cuenta ✓
 - con_balance_mensual ✓
@@ -256,3 +256,5 @@ TOTALES:
 **Documento compilado**: 23 Diciembre 2025  
 **Cobertura**: 47/48 tablas LEGADO mapeadas (98%)  
 **Estado**: ✅ LISTO PARA DECISIÓN DE ALCANCE
+
+

@@ -324,6 +324,10 @@
 - `GET` `api/facturacion/miscelaneos/categorias`
 - `GET` `api/facturacion/miscelaneos/clientes`
 - `GET` `api/facturacion/miscelaneos/clientes/{clave}`
+- `GET` `api/facturacion/miscelaneos/catalogo/{id:int}`
+- `POST` `api/facturacion/miscelaneos/catalogo`
+- `PUT` `api/facturacion/miscelaneos/catalogo/{id:int}`
+- `DELETE` `api/facturacion/miscelaneos/catalogo/{id:int}`
 - `POST` `api/facturacion/miscelaneos/recibos`
 - `GET` `api/facturacion/miscelaneos/recibos/{numero:int}`
 ### NotasCreditoDebitoController

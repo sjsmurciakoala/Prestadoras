@@ -8,13 +8,14 @@ Implementar completamente la capa contable del proyecto SIAD-Blazor para que cad
 - Administración del **Plan de Cuentas** (`con_plan_cuentas`) con niveles ilimitados y atributos (tipo, categoría, cuenta padre).  
 - **Centros de costo**: alta, edición y asignación a líneas de póliza/movimientos de inventario y gastos.  
 - **Diarios contables** (generales, ventas, compras, bancos) con control de secuencias.  
+- Catalogo de bancos (`ban_banco`): gestion de bancos y sucursales.  
 - **Períodos contables**: apertura, bloqueo, cierre con registro de usuario/fecha.  
-- **Plantillas y reglas de integración** (`con_plantilla_poliza`, `con_regla_integracion`): definición por módulo/documento, fórmulas (`{total}`, `{iva}`, `{retencion_isr}`) y cost centers.  
+- **Plantillas y reglas de integración** (`con_plantilla_partida_hdr`, `con_regla_integracion`): definición por módulo/documento, fórmulas (`{total}`, `{iva}`, `{retencion_isr}`) y cost centers.  
 - Parámetros globales (cuentas por defecto, diarios por módulo, tolerancias de cuadratura).
 
 ### 2.2 Procesos contables  
 1. **Generación automática de pólizas**  
-   - Triggers/servicios que, al confirmar documentos de Ventas, Compras, Bancos, Inventarios y Administración, crean `con_poliza` + `con_poliza_linea`.  
+   - Triggers/servicios que, al confirmar documentos de Ventas, Compras, Bancos, Inventarios y Administración, crean `con_partida_hdr` + `con_partida_dtl`.  
    - Reutilizan las fórmulas de plantillas y las reglas de integración; admiten complementos (ej. retenciones, notas).  
    - Manejo de vouchers reversibles (VOID) y re-procesamiento idempotente.  
 
@@ -23,7 +24,7 @@ Implementar completamente la capa contable del proyecto SIAD-Blazor para que cad
    - Validaciones: periodos abiertos, cuadratura débito=crédito, bloqueo por usuario/rol.  
 
 3. **Conciliación y cierres**  
-   - Asociación entre `ban_conciliacion` y `con_poliza` para marcar movimientos conciliados.  
+   - Asociación entre `ban_conciliacion` y `con_partida_hdr` para marcar movimientos conciliados.  
    - Proceso de cierre mensual: bloquea períodos, genera asiento de cierre y traspaso a resultados acumulados.  
 
 4. **Libros contables y reportes**  
@@ -54,14 +55,14 @@ Implementar completamente la capa contable del proyecto SIAD-Blazor para que cad
 
 ### Fase 2 – Integraciones automáticas (2-3 sprints)  
 1. Diseñar servicio `AccountingIntegrationService` con métodos por módulo (`PostSalesDocument`, `PostPurchaseDocument`, etc.).  
-2. Implementar en Ventas/Compras/Bancos los hooks post-estado que invocan al servicio y registran `con_poliza`.  
-3. Manejo de reintentos/idempotencia: se marca el documento origen con `con_poliza_id` y no se vuelve a generar si ya existe.  
+2. Implementar en Ventas/Compras/Bancos los hooks post-estado que invocan al servicio y registran `con_partida_hdr`.  
+3. Manejo de reintentos/idempotencia: se marca el documento origen con `con_partida_hdr_id` y no se vuelve a generar si ya existe.  
 4. Pruebas unitarias/integración simulando facturas con retenciones, notas y pagos parciales.  
 
 ### Fase 3 – Pólizas manuales y reportes (2 sprints)  
 1. API/UI para captura manual (plantilla vacía, validaciones).  
 2. Implementar consultas:  
-   - Libro Diario (`con_poliza`+`con_poliza_linea`).  
+   - Libro Diario (`con_partida_hdr`+`con_partida_dtl`).  
    - Libro Mayor (saldos acumulados por cuenta).  
    - Balance de comprobación (período seleccionado).  
 3. Exportación a Excel/PDF y filtros (por diario, cuenta, centro de costo).  
@@ -91,3 +92,21 @@ Al finalizar el plan, SIAD-Blazor contará con un módulo contable robusto que:
 ## 7. Progreso inicial
 - Se incorporaron las entidades `con_*` en `SIAD.Core` y se configuró `SiadDbContext` para mapear plan de cuentas, centros de costo, diarios, periodos y pólizas definidos en el DDL v2.
 - Se agregó `IContabilidadCatalogosService` en `SIAD.Services` con operaciones básicas para cuentas, centros, diarios y periodos (alta/edición/listado), desbloqueando el Sprint 1 de la Fase 1.
+
+## 8. Avances al 2026-01-14
+- Catálogos listos en UI/API: plan de cuentas, centros de costo, tipos de transacción y reglas por rangos (cuentas/centros/terceros). Reglas validadas contra catálogos y línea correlativa automática.
+- DDL y mapeo de `con_partida_hdr` y `con_partida_dtl` completos (header/detalle de comprobantes).
+- Aperturas (`con_apertura_saldo`, `con_apertura_centro_costo`) y saldos (`con_saldo_cuenta`, `con_balance_mensual`) ya modelados.
+
+## 9. Pendientes inmediatos (para comprobantes manuales)
+1) Agregar a `con_partida_hdr` el `type_id` (FK a `con_tipo_transaccion`), campos de control de posteo (`posted_at/by`, `status` Draft/Posted/Void) y totales de control opcionales (`total_debit/credit`).
+2) Agregar `third_party_id` a `con_partida_dtl` para soportar terceros cuando el tipo lo requiera.
+3) Servicio/API de pólizas manuales:
+   - CRUD header + líneas, validación de cuadratura y período abierto.
+   - Aplicar reglas del tipo (rangos y flags allows_cost_center/third/cash_flow).
+   - Generar correlativo por diario/tipo y bloquear edición al postear.
+4) Rutina de “posteo” que actualice `con_saldo_cuenta`/`con_balance_mensual` y controle estado de período.
+5) UI DevExpress para captura de pólizas manuales con autocompletes de cuenta/centro/tercero.
+
+
+
