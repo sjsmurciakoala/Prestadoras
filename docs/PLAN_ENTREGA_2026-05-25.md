@@ -1,10 +1,10 @@
 # Plan de entrega — Deadline 2026-05-25
 
-**Hoy:** 2026-05-15 (Sprint 3 día 2 — bugs colaterales motor V3 cerrados, NC/ND V3 cerrado, reglas Plan de Arbitrios parcial cerrado, mapeo cuentas regulatorias cerrado, tests automatizados creados).
+**Hoy:** 2026-05-15 (Sprint 3 día 2 — bugs colaterales motor V3 cerrados, NC/ND V3 cerrado, reglas Plan de Arbitrios parcial cerrado, mapeo cuentas regulatorias cerrado, tests automatizados creados, bug #8 cerrado).
 **Deadline:** 2026-05-25 (10 días corridos)
 **Objetivo:** dejar el sistema APC completo, **legalmente emitible al cliente** (CAI conforme SAR Acuerdo 481-2017), listo para operación real.
 
-> ⚠️ **Bug crítico encontrado por la suite de tests 2026-05-15**: `sp_adm_emitir_nota_credito` (línea ~441 de [20260514_nc_nd_v3_modelo.sql](../Database/ddl_v3/20260514_nc_nd_v3_modelo.sql)) escribe `factura.updated_at` pero la columna **no existe**. Anular factura total via NC falla con `42703`. Fix: `ALTER TABLE factura ADD COLUMN updated_at timestamptz` o quitar la línea del SP. Bloqueante para el criterio "Anulación de factura via NC con justificación auditada".
+> ✅ **Bug #8 cerrado 2026-05-15** (detectado por la suite de tests): `factura.updated_at` agregada vía [20260516_factura_updated_at.sql](../Database/ddl_v3/20260516_factura_updated_at.sql) (`ALTER TABLE ... ADD COLUMN IF NOT EXISTS`). Aplicado a Azure PG; la suite `SIAD.Tests` queda en **24 passed, 1 skipped, 0 failed**. El script entra al backup que se restaura a PROD APC el 18-may. **Nota**: agregar `updated_at` cierra el bug puntual; auditoría completa de tablas legacy (`factura_detalle`, `transaccion_abonado`, `historicomedicion`, `cliente_maestro`, `maestro_medidor`) queda como deuda Sprint 4 dentro del refactor `factura → adm_factura`.
 
 ---
 
@@ -219,7 +219,7 @@ Para considerar el sistema entregado:
 - [x] **Modelo NC/ND V3** funcionando: `adm_nota_credito`, `adm_nota_debito` con `factura_origen_id` + `motivo_anulacion_id` (validado por `SIAD.Tests/AnulacionTests`).
 - [x] **`tipo_documento_fiscal`** (Factura/Recibo/NC/ND) explícito en cada documento emitido.
 - [x] CAI con correlativo único, no saltar correlativos, no usar CAI vencido (validación SP — `cfg_estado_cai` + `sp_adm_obtener_o_reservar_bloque_cai_ruta` cubierto por test `CaiCorrelativoTests`).
-- [ ] **Anulación de factura** vía NC con justificación auditada — ⚠️ **BLOQUEADO** por bug `factura.updated_at` descubierto por tests 2026-05-15 (ver bandera arriba).
+- [x] **Anulación de factura** vía NC con justificación auditada — HECHO 2026-05-15. `factura.updated_at` agregada vía `20260516_factura_updated_at.sql`. Validado por `SIAD.Tests/AnulacionTests` (3/3 pass).
 
 ### 🟡 Cumplimiento regulatorio ERSAPS + Plan Arbitrios PC 2026
 - [x] Cada servicio en `adm_servicio` mapeado a cuenta contable regulatoria (`5.1.1.x`/`5.1.2.x`/`5.1.3.x`) — enforcement en `ServicioTarifarioV3Service.GuardarAsync` (Sprint 3 día 10).
@@ -357,29 +357,27 @@ Detalle completo: [BUGS_MOTOR_FACTURACION_2026-05-13.md](BUGS_MOTOR_FACTURACION_
 | Día | Tarea | Esfuerzo | Notas |
 |---|---|---|---|
 | **14 may** ✅ | **Sprint 3 día 1+2 condensados** en una jornada larga: Bugs motor #1–#7 + validación CAI + Modelo NC/ND V3 + Reglas Plan de Arbitrios (parcial) + Bugs UI Sprint 2 + Mapeo cuentas regulatorias 5.1.x | 1 día | ✅ Hecho. 4 facturas E2E Azure a L. 331.11. Ver [BUGS_MOTOR_FACTURACION_2026-05-13.md](BUGS_MOTOR_FACTURACION_2026-05-13.md). |
-| **15 may** ✅ | **Tests automatizados** + commit consolidado Sprint 2+3 + alineación de docs + CLAUDE.md | 1 día | ✅ Hecho. 25 tests xUnit (`SIAD.Tests/`); commit `4a59e65` con 5 semanas acumuladas; bug descubierto: `factura.updated_at` faltante. |
-| **16 may** | Fix bug `factura.updated_at` + validar E2E anulación total via NC con BD limpia | 4 h | bloqueante para criterio "anulación SAR" |
-| **17 may** | Validar bug #6 E2E (cliente `090041008` saldo previo, app con APK actualizado) | 4 h | |
-| **18 may** | Aplicar fixes 14-may a **PROD APC** (no sólo Azure): regla 29, regla 5 cuadro, `tiene_medidor`, 9 scripts SQL del 14-may, scripts NC/ND, recargo mora, mapeo cuentas | 1 día | crítico para ir a producción |
-| **19 may** | Distribuir APK a los 5 lectores + smoke real ruta 01001 con cada uno | 1 día | |
+| **15 may** ✅ | **Tests automatizados** + commit consolidado Sprint 2+3 + alineación de docs + CLAUDE.md + **fix bug #8** (`factura.updated_at`) | 1 día | ✅ Hecho. 25 tests xUnit (`SIAD.Tests/`) → 24 passed / 1 skipped / 0 failed; commit `4a59e65` con 5 semanas acumuladas; bug #8 resuelto con `20260516_factura_updated_at.sql` aplicado a Azure. |
+| **16–17 may** | Buffer + validación E2E anulación total via NC con BD limpia (cliente real, verificación de leyenda fiscal en NC impresa) | 2 días | colchón pre-PROD |
+| **18 may** | **Backup de Azure PG → restore a PROD APC** (snapshot completo, no aplicar scripts uno a uno). Validación post-restore: counts, queries clave, conectividad WS+portal | 1 día | crítico para ir a producción |
+| **19 may** | **Validar app**: distribuir APK `app-debug.apk` (~11 MB) a los 5 lectores + smoke real ruta 01001 + validar bug #6 (cliente con saldo previo, factura impresa) | 1 día | |
 | **20–22 may** | Buffer regulatorio: validación SAR del cliente real + ajustes finales (leyenda, prefijo, fecha límite) | 3 días | |
 | **23–25 may** | Buffer / handoff / smoke E2E final / runbook de operación | 3 días | colchón |
 
-### Pendientes operativos para el equipo APC (al 2026-05-15)
+### Pendientes operativos para el equipo APC (al 2026-05-15, cierre del día)
 
-1. Aplicar a **PROD APC** los 9 scripts del 14-may + scripts del 7-9 may + NC/ND + recargo mora + mapeo cuentas (hasta ahora sólo aplicados a Azure demo).
-2. **Fix bug crítico** `factura.updated_at` faltante (ver bandera al inicio del doc).
-3. Distribuir APK `app-debug.apk` (~11 MB) a los 5 lectores en campo.
-4. Smoke real: cliente `090041008` (Empresa Demo, saldo L. 331.11) — validar 4 servicios en cobros anteriores + impresión.
-5. Validar query `transaccion_abonado.company_id` en PROD: `SELECT COUNT(*) FROM transaccion_abonado WHERE company_id IS NULL;` debe ser 0.
-6. Configurar `cfg_recargo_mora` por empresa con la tasa real (hoy está creada pero `activo=false` por defecto; cada empresa la activa al confirmar tasa).
+1. **18-may** — Sacar backup de Azure PG (`pg_dump` o snapshot del Flexible Server) y restaurarlo en **PROD APC** PostgreSQL. Reemplaza la aplicación manual de 20+ scripts en orden — el backup ya trae Sprint 2+3 completo + bug #8 fixed.
+2. **19-may** — Distribuir APK `app-debug.apk` (~11 MB) a los 5 lectores en campo.
+3. **19-may** — Smoke real: cliente `090041008` (Empresa Demo, saldo L. 331.11) — validar 4 servicios en cobros anteriores + impresión + bug #6.
+4. Post-restore PROD: validar `SELECT COUNT(*) FROM transaccion_abonado WHERE company_id IS NULL` → debe ser 0.
+5. Post-restore PROD: configurar `cfg_recargo_mora` por empresa con la tasa real (hoy está creada pero `activo=false` por defecto; cada empresa la activa al confirmar tasa).
 
 ### Resumen del cierre 2026-05-15
 
 - **Commit `4a59e65`**: consolida 5 semanas de trabajo Sprint 2+3 (170 modificados + 119 untracked → 293 entradas). Hasta hoy nada estaba commiteado desde el 2026-04-06.
-- **Tests automatizados**: proyecto [`SIAD.Tests`](../SIAD.Tests/) con 25 tests xUnit + Npgsql + Dapper, transacciones BEGIN/ROLLBACK por test, skip automático sin `SIAD_TEST_DB`.
-- **Bug crítico descubierto por los tests**: `sp_adm_emitir_nota_credito` línea ~441 escribe `factura.updated_at` inexistente → anulación total de factura via NC rompe con `42703`. **Fix urgente para entrega**: `ALTER TABLE factura ADD COLUMN updated_at timestamptz` o quitar la línea del SP.
+- **Tests automatizados**: proyecto [`SIAD.Tests`](../SIAD.Tests/) con 25 tests xUnit + Npgsql + Dapper, transacciones BEGIN/ROLLBACK por test, skip automático sin `SIAD_TEST_DB`. **Resultado final contra Azure PG: 24 passed, 1 skipped, 0 failed.**
+- **Bug #8 descubierto por los tests y cerrado el mismo día**: `sp_adm_emitir_nota_credito` línea ~441 escribía `factura.updated_at` inexistente. Fix: [`20260516_factura_updated_at.sql`](../Database/ddl_v3/20260516_factura_updated_at.sql) (`ALTER TABLE factura ADD COLUMN IF NOT EXISTS updated_at timestamptz NULL`) — aplicado a Azure, viaja a PROD APC dentro del backup del 18-may.
 - **`CLAUDE.md`** creado: mapa rápido del repo para futuras sesiones (arquitectura, multi-tenancy, permisos, reporting, scaffold).
 
 ### Sprint 3 días pendientes (16-25 may)
-Fix `factura.updated_at` → aplicar fixes a PROD → distribuir APK + smoke real → buffer regulatorio → handoff. Ver tabla cronograma arriba.
+Buffer pre-PROD → **backup Azure → restore PROD APC (18-may)** → validar app + bug #6 con APK (19-may) → buffer regulatorio → handoff. Ver tabla cronograma arriba.

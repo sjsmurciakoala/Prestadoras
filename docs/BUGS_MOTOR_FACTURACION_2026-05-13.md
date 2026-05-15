@@ -155,7 +155,7 @@ UPDATE public.adm_cai_bloque_reservado
 **Archivos a modificar**:
 - `Prestadoras/Database/ddl_v3/20260508_estados_numericos_02_sp_lectura_v3_estado_id.sql` (línea ~220-260 donde inserta en factura)
 
-### Bug #8 (CRÍTICO, descubierto 2026-05-15 por suite de tests) — `sp_adm_emitir_nota_credito` escribe `factura.updated_at` inexistente
+### Bug #8 — `sp_adm_emitir_nota_credito` escribe `factura.updated_at` inexistente — ✅ RESUELTO 2026-05-15
 
 **Síntoma**: la suite [`SIAD.Tests/AnulacionTests`](../SIAD.Tests/AnulacionTests.cs) ejecutada contra Azure PG detectó que la columna `factura.updated_at` no existe. El SP de NC ([20260514_nc_nd_v3_modelo.sql:441](../Database/ddl_v3/20260514_nc_nd_v3_modelo.sql#L441)) hace:
 
@@ -170,14 +170,20 @@ WHERE id = v_factura.id;
 
 → `42703: column "updated_at" of relation "factura" does not exist`. La anulación TOTAL de factura via NC falla en producción. La NC parcial (que no entra a este branch porque `v_anula = false`) sí funciona.
 
-**Impacto**: bloquea el criterio de aceptación SAR "Anulación de factura via NC con justificación auditada".
+**Impacto** (antes del fix): bloqueaba el criterio de aceptación SAR "Anulación de factura via NC con justificación auditada".
 
-**Fix recomendado (uno de los dos)**:
-- A. `ALTER TABLE factura ADD COLUMN updated_at timestamptz`. Pro: deja huella audit en todas las anulaciones. Contra: requiere migración de datos vacíos (NULL en filas históricas).
-- B. Quitar `updated_at = now()` del UPDATE del SP. Pro: 1-liner. Contra: pierdes timestamp explícito de la anulación (queda implícito en el `created_at` de la NC).
+**Fix aplicado (opción A)**: agregar la columna como nullable para preservar audit trail explícito sin migración de datos.
 
-**Archivos**:
-- [Database/ddl_v3/20260514_nc_nd_v3_modelo.sql:441](../Database/ddl_v3/20260514_nc_nd_v3_modelo.sql#L441)
+Script: [`Database/ddl_v3/20260516_factura_updated_at.sql`](../Database/ddl_v3/20260516_factura_updated_at.sql)
+```sql
+ALTER TABLE public.factura ADD COLUMN IF NOT EXISTS updated_at timestamptz NULL;
+```
+
+Aplicado a Azure PG demo el 2026-05-15. Validación: suite `SIAD.Tests` queda en **24 passed, 1 skipped, 0 failed**. `AnulacionTests` pasa al 100%.
+
+**Pendiente operativo**: el script entra al backup que se restaura a PROD APC el 18-may, por lo que no requiere aplicación manual adicional.
+
+**Deuda anotada**: las demás tablas con writes activos (`factura_detalle`, `transaccion_abonado`, `historicomedicion`, `cliente_maestro`, `maestro_medidor`) no tienen columnas de auditoría. Cierre completo del audit trail = parte del refactor `factura → adm_factura` en Sprint 4 post-25.
 
 ### Bug #4 — Estado de cuenta del cliente muestra "Saldo Actual" del último movimiento
 
@@ -255,7 +261,7 @@ El CAI debe pasar TODAS:
 | 5 | Captación en Caja "No se encontraron saldos" | Mediano | ✅ **Quick fix + aplicado Azure** | `20260514_bug5_fix_fn_getclientesaldos_posteomanual.sql` + `CaptacionPagosService.cs:2582` |
 | 6 | App no incluye saldo previo (cliente con saldo) | Bajo | ✅ Ya estaba fixed (V3_2 09-may) | Pendiente validar E2E con `090041008` (anular factura activa primero) |
 | 7 | Descarga de ruta re-trae clientes ya facturados del periodo | Mediano | ✅ **Resuelto + aplicado Azure** | `20260514_bug7_sp_medidores_por_ruta_ws_excluir_facturados.sql` |
-| 8 | `sp_adm_emitir_nota_credito` escribe `factura.updated_at` inexistente → anulación total via NC rompe con 42703 | **Crítico** | 🟥 **Pendiente** (detectado 2026-05-15 por `SIAD.Tests/AnulacionTests`) | Bandera en [PLAN_ENTREGA_2026-05-25.md](PLAN_ENTREGA_2026-05-25.md); fix día 16-may. |
+| 8 | `sp_adm_emitir_nota_credito` escribe `factura.updated_at` inexistente → anulación total via NC rompe con 42703 | **Crítico** | ✅ **Resuelto + aplicado Azure 2026-05-15** | `20260516_factura_updated_at.sql` (`ALTER TABLE factura ADD COLUMN IF NOT EXISTS updated_at timestamptz`). Suite `SIAD.Tests` queda en 24 pass / 1 skip / 0 fail. |
 | — | Validación CAI: tabla maestra `cfg_estado_cai` + SP con filtros completos | Mejora | ✅ **Aplicado Azure** | `20260514_validacion_cai_seleccion.sql` |
 
 ### Lo aplicado en Azure 14-may (tarde)
