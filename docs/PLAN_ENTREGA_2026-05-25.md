@@ -1,8 +1,10 @@
 # Plan de entrega — Deadline 2026-05-25
 
-**Hoy:** 2026-05-14 (Sprint 3 día 2: bugs colaterales cerrados, motor único pendiente)
-**Deadline:** 2026-05-25 (11 días corridos)
+**Hoy:** 2026-05-15 (Sprint 3 día 2 — bugs colaterales motor V3 cerrados, NC/ND V3 cerrado, reglas Plan de Arbitrios parcial cerrado, mapeo cuentas regulatorias cerrado, tests automatizados creados).
+**Deadline:** 2026-05-25 (10 días corridos)
 **Objetivo:** dejar el sistema APC completo, **legalmente emitible al cliente** (CAI conforme SAR Acuerdo 481-2017), listo para operación real.
+
+> ⚠️ **Bug crítico encontrado por la suite de tests 2026-05-15**: `sp_adm_emitir_nota_credito` (línea ~441 de [20260514_nc_nd_v3_modelo.sql](../Database/ddl_v3/20260514_nc_nd_v3_modelo.sql)) escribe `factura.updated_at` pero la columna **no existe**. Anular factura total via NC falla con `42703`. Fix: `ALTER TABLE factura ADD COLUMN updated_at timestamptz` o quitar la línea del SP. Bloqueante para el criterio "Anulación de factura via NC con justificación auditada".
 
 ---
 
@@ -159,8 +161,8 @@ Validación E2E demo Azure trajo 5 bugs colaterales del motor V3 + 1 mejora de v
 | 8 | ✅ **Reglas Plan de Arbitrios** — **parcial cerrado**. (a) Descuento 25% tercera edad: ya estaba en el motor; se hizo explícito el `tope_mensual=300` (Art. 355). (b) Recargo por mora (Art. 130): nueva `cfg_recargo_mora` + cálculo de `v_recargos` en `sp_adm_calcular_factura_lectura` (estaba hardcodeado a 0). (c) Descuento 10% pago anticipado (Art. 153): **diferido** a la reforma de Captación post-25 — se aplica al momento del pago. Script: `20260514_dia8_reglas_arbitrios.sql`. | 1 día |
 | 9 | ✅ **Bugs UI Sprint 2** — cerrado. (1) `usuarioapc`: combo Ciclo agregado (`codciclo` mapeado en entidad + DTO + service + form + list); Ruta ya era combo. (2) ClienteForm combo ruta con descripción: ya estaba. (3) ClientesList: columnas Ciclo y Ruta agregadas (DTO + query EF + grilla). (5) Portal Conflictos V3 con acciones reales: ya estaba (funcional y conectado). (4) **App Android "lecturas con problema": diferido post-25** — la app Android se va a migrar completa, no tiene sentido crear la pantalla sobre la base actual. | 1 día |
 | 10 | ✅ **Mapeo `adm_servicio` → cuentas regulatorias 5.1.x** — cerrado. Seed `20260514_dia10_mapeo_cuentas_ersaps.sql` mapeó los 11 servicios de la empresa demo a su cuenta de ingreso (5.1.1 agua / 5.1.2 alcantarillado / 5.1.3 colaterales). `fn_adm_servicios_sin_cuenta_contable` para diagnóstico. **Enforcement**: `ServicioTarifarioV3Service.GuardarAsync` ahora exige cuenta contable obligatoria al crear/editar un servicio → combinado con el seed completo, garantiza que ningún servicio facturable quede sin cuenta. UI `MaestroServiciosV3` muestra badge "SIN CUENTA". Mapeo fino por categoría×condición = refinamiento post-25. | 4 h |
-| 11 | **Tests automatizados**: idempotencia UUID, doble emisión, NC, anulación, recargo mora, descuento tercera edad. Vista prueba de cálculo. | 1 día |
-| 12 | **Estabilización + buffer + handoff** | — |
+| 11 | ✅ **Tests automatizados** — cerrado 2026-05-15. Proyecto [`SIAD.Tests`](../SIAD.Tests/) con xUnit + Npgsql + Dapper, 25 tests de integración con BEGIN/ROLLBACK por test. Cobertura: idempotencia UUID (`adm_cai_correlativo_emitido.lectura_uuid`), doble emisión (`FACTURA_YA_EMITIDA`), tablas/SPs NC-ND, rechazo de NC sobre factura inexistente/anulada, `cfg_recargo_mora` + cálculo en SP, ajuste TERCERA_EDAD con porcentaje 25 y tope L300, avance de correlativo CAI con `GREATEST`, validación CAI completa, catálogos SAR + columnas `factura.company_id NOT NULL` + mono-sucursal. Vista UI "prueba de cálculo" → diferida post-25 (no bloqueante). **Hallazgo**: bug en `sp_adm_emitir_nota_credito` línea ~441 escribe `factura.updated_at` inexistente — ver bandera arriba. | 1 día |
+| 12 | **Estabilización + buffer + handoff** + fix bug `factura.updated_at` | — |
 
 **Salida del Sprint 3:** sistema legalmente emitible (CAI + RTN + leyendas + NC/ND), reglas regulatorias aplicadas (tercera edad + recargo mora), tests verdes. Captación + Misceláneos + descuento pago anticipado en reforma completa Sprint 4 post-25.
 
@@ -212,18 +214,18 @@ Comparación del modelo V3 actual vs **SAR Acuerdo 481-2017 + reformas** y **man
 Para considerar el sistema entregado:
 
 ### 🔴 Cumplimiento legal SAR Acuerdo 481-2017 (BLOQUEANTE)
-- [ ] **RTN emisor** persistido en `adm_cai_facturacion` + visible en cada factura emitida.
-- [ ] **Leyendas CAI** completas: código CAI, rango autorizado, fecha límite emisión.
-- [ ] **Modelo NC/ND V3** funcionando: `adm_nota_credito`, `adm_nota_debito` con `factura_origen_id` + `motivo_anulacion_id`.
-- [ ] **`tipo_documento_fiscal`** (Factura/Recibo/NC/ND) explícito en cada documento emitido.
-- [ ] CAI con correlativo único, no saltar correlativos, no usar CAI vencido (validación SP).
-- [ ] **Anulación de factura** vía NC con justificación auditada.
+- [x] **RTN emisor** snapshot-eado por documento en `factura.rtn_emisor`, `adm_nota_credito.rtn_emisor`, `adm_nota_debito.rtn_emisor` desde `cfg_company` al emitir (decisión 2026-05-07/08: el CAI no carga el RTN; el RTN va al documento emitido).
+- [x] **Leyendas CAI** completas: código CAI, rango autorizado, fecha límite emisión — leyenda 3 líneas autogenerada (Sprint 2).
+- [x] **Modelo NC/ND V3** funcionando: `adm_nota_credito`, `adm_nota_debito` con `factura_origen_id` + `motivo_anulacion_id` (validado por `SIAD.Tests/AnulacionTests`).
+- [x] **`tipo_documento_fiscal`** (Factura/Recibo/NC/ND) explícito en cada documento emitido.
+- [x] CAI con correlativo único, no saltar correlativos, no usar CAI vencido (validación SP — `cfg_estado_cai` + `sp_adm_obtener_o_reservar_bloque_cai_ruta` cubierto por test `CaiCorrelativoTests`).
+- [ ] **Anulación de factura** vía NC con justificación auditada — ⚠️ **BLOQUEADO** por bug `factura.updated_at` descubierto por tests 2026-05-15 (ver bandera arriba).
 
 ### 🟡 Cumplimiento regulatorio ERSAPS + Plan Arbitrios PC 2026
-- [ ] Cada servicio en `adm_servicio` mapeado a cuenta contable regulatoria (`5.1.1.x`/`5.1.2.x`/`5.1.3.x`) — enforcement antes de emitir.
-- [ ] **Recargo mora** automático = tasa bancaria + 2% anual sobre saldos (Plan Arbitrios L177).
-- [ ] **Descuento 25% tercera edad** con tope L300/mes y restricción a un inmueble por beneficiario (L355).
-- [ ] **Descuento 10%** disponible para pago anticipado mensual (L317).
+- [x] Cada servicio en `adm_servicio` mapeado a cuenta contable regulatoria (`5.1.1.x`/`5.1.2.x`/`5.1.3.x`) — enforcement en `ServicioTarifarioV3Service.GuardarAsync` (Sprint 3 día 10).
+- [x] **Recargo mora** automático configurable por empresa (`cfg_recargo_mora`) — cálculo en `sp_adm_calcular_factura_lectura`. Cada empresa fija su tasa al activar el módulo. Plan Arbitrios L177 (validado por `SIAD.Tests/RecargoMoraTests`).
+- [x] **Descuento 25% tercera edad** con tope L300/mes en `parametros.tope_mensual` y `tope_maximo` del ajuste (validado por `SIAD.Tests/TerceraEdadTests`). Restricción "un inmueble por beneficiario" → cumplimiento operacional (no automatizado).
+- [ ] **Descuento 10%** disponible para pago anticipado mensual (L317) — **diferido a Sprint 4 post-25** (vive en Captación de Pagos, decisión 2026-05-14).
 
 ### Flujo operativo
 - [ ] 5 lectores facturando en producción sin conflictos.
@@ -233,35 +235,35 @@ Para considerar el sistema entregado:
 - [ ] **Saldo del cliente con fuente única** (`transaccion_abonado.saldo_detalle`) — sin doble cálculo.
 
 ### Datos y BD
-- [ ] Cero tablas legacy en BD (`tarifas`, `tarifas_contador`, `cai`, `letras`, etc.) ✅ HECHO Sprint 1.
-- [ ] `fn_generar_codigo_cliente` eliminada ✅ HECHO Sprint 1.
-- [ ] **Estados numéricos** en `factura.estado_id`, `transaccion_abonado.estado_id`, `adm_cai_correlativo_emitido.estado_id`, etc. (Sprint 2).
-- [ ] Catálogo `rutas` 100% en formato CC+LLL (5 dígitos) ✅ HECHO previo.
-- [ ] Catálogos lookups (`cfg_estado_*`) poblados (Sprint 2).
+- [x] Cero tablas legacy en BD (`tarifas`, `tarifas_contador`, `cai`, `letras`, etc.) — HECHO Sprint 1.
+- [x] `fn_generar_codigo_cliente` eliminada — HECHO Sprint 1.
+- [x] **Estados numéricos** en `factura.estado_id`, `transaccion_abonado.estado_id`, `adm_cai_correlativo_emitido.estado_id`, etc. — HECHO Sprint 2.
+- [x] Catálogo `rutas` 100% en formato CC+LLL (5 dígitos) — HECHO previo.
+- [x] Catálogos lookups (`cfg_estado_*`) poblados — HECHO Sprint 2 (validado por `SIAD.Tests/SarComplianceTests`).
 
 ### Backend
-- [ ] WS sin endpoints legacy ✅ HECHO Sprint 1.
-- [ ] `sp_medidores_por_ruta_ws` reescrito sin legacy ✅ HECHO Sprint 1.
-- [ ] `sp_obtener_cliente_saldo` filtra por `estado='A'` (Sprint 2).
-- [ ] **Motor único de facturación** `sp_adm_facturar` que sirve a lecturas y misceláneos (Sprint 3).
-- [ ] Portal compila sin warnings de entidades dropeadas ✅ HECHO Sprint 1.
+- [x] WS sin endpoints legacy — HECHO Sprint 1.
+- [x] `sp_medidores_por_ruta_ws` reescrito sin legacy — HECHO Sprint 1. + `p_excluir_facturados` (Sprint 3 día 1, bug #7).
+- [x] `sp_obtener_cliente_saldo` filtra por `estado='A'` y recibe `p_company_id` — HECHO Sprint 2.
+- [ ] **Motor único de facturación** `sp_adm_facturar` que sirve a lecturas y misceláneos — **diferido a Sprint 4 post-25** (misceláneos pasa a reforma completa, decisión 2026-05-14).
+- [x] Portal compila sin warnings de entidades dropeadas — HECHO Sprint 1.
 
 ### Frontend
-- [ ] Sidebar sin items legacy ✅ HECHO Sprint 1.
-- [ ] Form de cliente con combos Ciclo + Ruta (no inputs libres) (Sprint 3).
-- [ ] Vista mantenimiento `usuarioapc` con combos (Sprint 3).
-- [ ] Lista de clientes con columnas Ciclo y Ruta (Sprint 3).
-- [ ] Vista de conflictos con acciones reales (Sprint 3).
-- [ ] **UI para emitir Nota de Crédito** (anular factura) con motivo SAR (Sprint 3).
+- [x] Sidebar sin items legacy — HECHO Sprint 1.
+- [x] Form de cliente con combos Ciclo + Ruta (no inputs libres) — HECHO Sprint 3.
+- [x] Vista mantenimiento `usuarioapc` con combos Ciclo+Ruta — HECHO Sprint 3 día 9.
+- [x] Lista de clientes con columnas Ciclo y Ruta — HECHO Sprint 3 día 9.
+- [x] Vista de conflictos con acciones reales — HECHO Sprint 3 día 9.
+- [x] **UI para emitir Nota de Crédito** (anular factura) con motivo SAR — HECHO Sprint 3 (`/facturacion/notas`).
 
 ### App Android
-- [ ] APK sin tablas SQLite ni endpoints legacy ✅ HECHO Sprint 1.
-- [ ] Vista "Lecturas con problema" con botones de reintento/reproceso (Sprint 3).
-- [ ] Saldo previo del snapshot reflejado en factura impresa (Sprint 2).
-- [ ] Factura impresa con leyendas SAR completas (Sprint 2).
+- [x] APK sin tablas SQLite ni endpoints legacy — HECHO Sprint 1.
+- [ ] Vista "Lecturas con problema" con botones de reintento/reproceso — **diferida a la migración completa de la app post-25** (decisión 2026-05-14).
+- [x] Saldo previo del snapshot reflejado en factura impresa — HECHO Sprint 2 día 8 (V3_2). Validación E2E con cliente real pendiente.
+- [x] Factura impresa con leyendas SAR completas — HECHO Sprint 2.
 
 ### Calidad
-- [ ] Tests automatizados: idempotencia UUID, doble emisión, NC, anulación, recargo mora, descuento tercera edad (Sprint 3).
+- [x] **Tests automatizados** — HECHO Sprint 3 día 11: 25 tests xUnit en [`SIAD.Tests/`](../SIAD.Tests/) cubriendo idempotencia UUID, doble emisión, NC/ND V3, recargo mora, tercera edad con tope, correlativo CAI con `GREATEST`, validación CAI, catálogos SAR. Corren contra Postgres real con BEGIN/ROLLBACK; sin env var `SIAD_TEST_DB` se marcan Skipped.
 - [ ] Cero conflictos pendientes en `adm_lectura_v3_conflicto_sync` durante 1 día de operación real.
 
 ### 🟢 Diferido a post-25 (no bloquea entrega, queda diseñado)
@@ -354,66 +356,30 @@ Detalle completo: [BUGS_MOTOR_FACTURACION_2026-05-13.md](BUGS_MOTOR_FACTURACION_
 
 | Día | Tarea | Esfuerzo | Notas |
 |---|---|---|---|
-| **14 may** ✅ | **Bugs #1 #2 motor de cálculo alineados** (fix dato regla 29 + fix SP PORCENTAJE_SERVICIO + UI conversión %) | 1 día | ✅ Hecho. 4 facturas E2E emitidas a L. 331.11. Ver [BUGS_MOTOR_FACTURACION_2026-05-13.md](BUGS_MOTOR_FACTURACION_2026-05-13.md) |
-| **15 may** | **Bugs #3 #4 #5** descubiertos al validar E2E: correlativo CAI no avanza, estado de cuenta mal, captación en caja sin saldos | 1 día | **CRÍTICO**: bug #3 bloquea operación a partir de la 6ª factura |
-| **16-18 may** | **Modelo NC/ND V3** (gaps SAR #3, #4, #5) | 3 días | bloqueante legal |
-| 19 may | Bug #6 (app no incluye saldo previo) + validación CAI mejorada (correlativo < rango_hasta, estado lookup) | 1 día | |
-| 20 may | Reglas regulatorias: recargo mora, tercera edad, descuento pago anticipado | 1 día | importante |
-| 21 may | Bugs UI Sprint 2 originales + Mapeo `adm_servicio` → cuentas regulatorias 5.1.x | 1 día | |
-| 22 may | Tests automatizados | 1 día | calidad |
-| 23-25 may | Buffer / handoff / smoke E2E final | 3 días | colchón |
+| **14 may** ✅ | **Sprint 3 día 1+2 condensados** en una jornada larga: Bugs motor #1–#7 + validación CAI + Modelo NC/ND V3 + Reglas Plan de Arbitrios (parcial) + Bugs UI Sprint 2 + Mapeo cuentas regulatorias 5.1.x | 1 día | ✅ Hecho. 4 facturas E2E Azure a L. 331.11. Ver [BUGS_MOTOR_FACTURACION_2026-05-13.md](BUGS_MOTOR_FACTURACION_2026-05-13.md). |
+| **15 may** ✅ | **Tests automatizados** + commit consolidado Sprint 2+3 + alineación de docs + CLAUDE.md | 1 día | ✅ Hecho. 25 tests xUnit (`SIAD.Tests/`); commit `4a59e65` con 5 semanas acumuladas; bug descubierto: `factura.updated_at` faltante. |
+| **16 may** | Fix bug `factura.updated_at` + validar E2E anulación total via NC con BD limpia | 4 h | bloqueante para criterio "anulación SAR" |
+| **17 may** | Validar bug #6 E2E (cliente `090041008` saldo previo, app con APK actualizado) | 4 h | |
+| **18 may** | Aplicar fixes 14-may a **PROD APC** (no sólo Azure): regla 29, regla 5 cuadro, `tiene_medidor`, 9 scripts SQL del 14-may, scripts NC/ND, recargo mora, mapeo cuentas | 1 día | crítico para ir a producción |
+| **19 may** | Distribuir APK a los 5 lectores + smoke real ruta 01001 con cada uno | 1 día | |
+| **20–22 may** | Buffer regulatorio: validación SAR del cliente real + ajustes finales (leyenda, prefijo, fecha límite) | 3 días | |
+| **23–25 may** | Buffer / handoff / smoke E2E final / runbook de operación | 3 días | colchón |
 
-### Pendientes operativos para el equipo APC
+### Pendientes operativos para el equipo APC (al 2026-05-15)
 
-1. Distribuir APK `app-debug.apk` (~11 MB) a los 5 lectores en campo
-2. Smoke real: cliente `090041008` (Empresa Demo, saldo L. 331.11) — validar 4 servicios en cobros anteriores + impresión
-3. Validar query `transaccion_abonado.company_id` en PROD: `SELECT COUNT(*) FROM transaccion_abonado WHERE company_id IS NULL;` debe ser 0
+1. Aplicar a **PROD APC** los 9 scripts del 14-may + scripts del 7-9 may + NC/ND + recargo mora + mapeo cuentas (hasta ahora sólo aplicados a Azure demo).
+2. **Fix bug crítico** `factura.updated_at` faltante (ver bandera al inicio del doc).
+3. Distribuir APK `app-debug.apk` (~11 MB) a los 5 lectores en campo.
+4. Smoke real: cliente `090041008` (Empresa Demo, saldo L. 331.11) — validar 4 servicios en cobros anteriores + impresión.
+5. Validar query `transaccion_abonado.company_id` en PROD: `SELECT COUNT(*) FROM transaccion_abonado WHERE company_id IS NULL;` debe ser 0.
+6. Configurar `cfg_recargo_mora` por empresa con la tasa real (hoy está creada pero `activo=false` por defecto; cada empresa la activa al confirmar tasa).
 
-### Cierre del 2026-05-09 (lo que quedó hecho ayer)
+### Resumen del cierre 2026-05-15
 
-✅ **CAI offline completamente funcional**: estado lookup numérico (`cfg_cai_estado` con 5 estados), reglas efectivas (ANULADA gana, fecha vencida fuerza VENCIDA), Vencida read-only en UI y service, leyenda fiscal SAR de 3 líneas autogenerada, prefijo `EEE-PPP-TD-NNNNNNNN` preview, ColumnChooser DevExpress, badges clickables por cada estado, combo "Todos los estados", search con Enter, anular/reactivar rápido en grid.
+- **Commit `4a59e65`**: consolida 5 semanas de trabajo Sprint 2+3 (170 modificados + 119 untracked → 293 entradas). Hasta hoy nada estaba commiteado desde el 2026-04-06.
+- **Tests automatizados**: proyecto [`SIAD.Tests`](../SIAD.Tests/) con 25 tests xUnit + Npgsql + Dapper, transacciones BEGIN/ROLLBACK por test, skip automático sin `SIAD_TEST_DB`.
+- **Bug crítico descubierto por los tests**: `sp_adm_emitir_nota_credito` línea ~441 escribe `factura.updated_at` inexistente → anulación total de factura via NC rompe con `42703`. **Fix urgente para entrega**: `ALTER TABLE factura ADD COLUMN updated_at timestamptz` o quitar la línea del SP.
+- **`CLAUDE.md`** creado: mapa rápido del repo para futuras sesiones (arquitectura, multi-tenancy, permisos, reporting, scaffold).
 
-✅ **Decisión arquitectónica 2026-05-08: mono-sucursal**. Sistema multi-empresa pero cada empresa tiene una sola sucursal. Eliminado todo el slice de `/establecimientos`: tabla `adm_establecimiento`, columna `adm_cai_facturacion.establecimiento_id`, página, controller, service, DTO, entity, HTTP client, DI, item de menú, FK + índice + DbSet. El "establecimiento" SAR es solo el código `EEE` (texto libre 3 dígitos).
-
-⏳ **Pendiente de aplicar a BD** (3 scripts):
-```bash
-psql -h <host> -U <user> -d siad_v3 \
-  -f Prestadoras/Database/ddl_v3/20260508_cai_punto_emision.sql \
-  -f Prestadoras/Database/ddl_v3/20260508_cai_estado_lookup.sql \
-  -f Prestadoras/Database/ddl_v3/20260508_drop_adm_establecimiento.sql
-```
-
-⏳ **3 commits preparados** (no aplicados — Claude no commitea por convenio):
-- `refactor(establecimientos)` — retirar slice mono-sucursal
-- `feat(cai)` — estado_id lookup numérico + leyenda fiscal SAR completa
-- `feat(cai-ui)` — combo Estado, ColumnChooser, badges clickables, Vencida read-only
-
-### Plan para 2026-05-09 (próxima sesión)
-
-**Snapshot V3 con saldo previo + servicios dinámicos** — confirmado por usuario el 2026-05-08:
-- A. Servicios y saldos **dinámicos** (no hardcoded Agua/Alcant/etc.)
-- B. **Corte** legacy: WS deja de mandar `SdoXxx`; toda la fuente es snapshot V3
-- C. **Multi-empresa siempre en SPs** (`p_company_id` en todos los SPs de saldo)
-
-#### Pasos concretos (2 commits planificados)
-
-**Commit BD** (~1h):
-1. `Database/ddl_v3/20260509_sp_obtener_cliente_saldo_company.sql` — `sp_obtener_cliente_saldo(p_company_id, p_cliente_clave)` y `sp_obtener_cliente_saldo_servicio_detalle(p_company_id, p_cliente_clave, p_servicio_codigo)` con `p_company_id` agregado. Actualizar callers en `sp_lectura_v3` y `sp_adm_calcular_factura_lectura`.
-2. `Database/ddl_v3/20260509_snapshot_v3_saldo_previo.sql` — modificar `sp_adm_generar_snapshot_offline_cliente_lectura` para devolver en `snapshot_json` 2 nuevos campos: `saldo_anterior_total` (numeric) y `saldos_por_servicio` (jsonb array `[{servicio_codigo, servicio_nombre, saldo_anterior}]`).
-
-**Commit Java/APK** (~3h):
-3. `AppLectoresAPC` — nueva tabla SQLite `MedidorSaldoServicio(IdMedidor, ServicioCodigo, ServicioNombre, SaldoAnterior)` con `onUpgrade` (bump `VersionBD`).
-4. Al guardar snapshot en `UtilidadesBD.java` (líneas ~728-790), poblar la tabla nueva desde `saldos_por_servicio` JSON.
-5. `GetCobrosAtrasadosPorMedidor` lee dinámico de la tabla nueva (devuelve N items, no 4 hardcoded). Los campos legacy `SaldoAnteriorAgua/Alcantarilla/Ambiental/Convenio/etc.` quedan en 0 (deprecated, retirar post-25).
-6. `gradlew assembleDebug` + reinstalar APK en los 5 dispositivos.
-7. Smoke test con un cliente que tenga saldo > 0 para verificar que aparece en factura impresa.
-
-### Después del snapshot V3 (Día 9)
-
-| Tarea | Esfuerzo |
-|---|---|
-| Borrar `ReglasIntegracion.razor` del portal | ~30min |
-| Actualizar docs: `PLAN_SAR_COMPLIANCE`, `INVENTARIO_GAPS` con todo lo cerrado de Sprint 2 | ~1h |
-
-### Sprint 3 inicia 2026-05-16
-Modelo NC/ND V3 + motor unificado facturación + bugs UI + reglas regulatorias (recargo mora, tercera edad, descuento pago anticipado).
+### Sprint 3 días pendientes (16-25 may)
+Fix `factura.updated_at` → aplicar fixes a PROD → distribuir APK + smoke real → buffer regulatorio → handoff. Ver tabla cronograma arriba.

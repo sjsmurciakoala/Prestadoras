@@ -155,6 +155,30 @@ UPDATE public.adm_cai_bloque_reservado
 **Archivos a modificar**:
 - `Prestadoras/Database/ddl_v3/20260508_estados_numericos_02_sp_lectura_v3_estado_id.sql` (línea ~220-260 donde inserta en factura)
 
+### Bug #8 (CRÍTICO, descubierto 2026-05-15 por suite de tests) — `sp_adm_emitir_nota_credito` escribe `factura.updated_at` inexistente
+
+**Síntoma**: la suite [`SIAD.Tests/AnulacionTests`](../SIAD.Tests/AnulacionTests.cs) ejecutada contra Azure PG detectó que la columna `factura.updated_at` no existe. El SP de NC ([20260514_nc_nd_v3_modelo.sql:441](../Database/ddl_v3/20260514_nc_nd_v3_modelo.sql#L441)) hace:
+
+```sql
+UPDATE public.factura
+SET estado = 'N',
+    estado_id = 3,  -- ANULADA
+    motivo_anulacion_id = p_motivo_anulacion_id,
+    updated_at = now()
+WHERE id = v_factura.id;
+```
+
+→ `42703: column "updated_at" of relation "factura" does not exist`. La anulación TOTAL de factura via NC falla en producción. La NC parcial (que no entra a este branch porque `v_anula = false`) sí funciona.
+
+**Impacto**: bloquea el criterio de aceptación SAR "Anulación de factura via NC con justificación auditada".
+
+**Fix recomendado (uno de los dos)**:
+- A. `ALTER TABLE factura ADD COLUMN updated_at timestamptz`. Pro: deja huella audit en todas las anulaciones. Contra: requiere migración de datos vacíos (NULL en filas históricas).
+- B. Quitar `updated_at = now()` del UPDATE del SP. Pro: 1-liner. Contra: pierdes timestamp explícito de la anulación (queda implícito en el `created_at` de la NC).
+
+**Archivos**:
+- [Database/ddl_v3/20260514_nc_nd_v3_modelo.sql:441](../Database/ddl_v3/20260514_nc_nd_v3_modelo.sql#L441)
+
 ### Bug #4 — Estado de cuenta del cliente muestra "Saldo Actual" del último movimiento
 
 **Síntoma**: cliente Jessel (LZV2CF1JFW) en /clientes → estado de cuenta:
@@ -226,11 +250,12 @@ El CAI debe pasar TODAS:
 | 1 | App calcula 12,404.48 en lugar de 331.11 | Crítico | ✅ Resuelto | fix dato regla 29 |
 | 2 | Server calcula 209.16 en lugar de 331.11 (omite PORCENTAJE_SERVICIO) | Crítico | ✅ Resuelto | `20260514_fix_motor_facturacion_v3.sql` |
 | 3 | `correlativo_actual` no avanza tras emitir factura | Crítico | ✅ **Resuelto + aplicado Azure** | `20260514_bug3_avance_correlativo_cai.sql` + `_FIX_BACKFILL.sql` |
-| 4 | Estado de cuenta saldo del último mov, no total | Mediano | ✅ **Resuelto + portal republicado** | `ClientesServices.cs:479` |
-| 4b | Grid de movimientos no muestra `numfactura` (1 fila por servicio confunde al lector) | Bajo | ✅ **Resuelto + portal republicado** | `ClienteMovimientoDto.cs`, `ClientesServices.cs:555/610`, `ClienteEstadoCuentaTab.razor` |
-| 5 | Captación en Caja "No se encontraron saldos" | Mediano | ✅ **Quick fix + aplicado Azure** | `20260514_bug5_fix_fn_getclientesaldos_posteomanual.sql` + `CaptacionPagosService.cs:2580` |
+| 4 | Estado de cuenta saldo del último mov, no total | Mediano | ✅ **Resuelto + portal republicado** | `ClientesServices.cs:514` (sp_obtener_cliente_saldo) |
+| 4b | Grid de movimientos no muestra `numfactura` (1 fila por servicio confunde al lector) | Bajo | ✅ **Resuelto + portal republicado** | `ClienteMovimientoDto.cs`, `ClientesServices.cs:578-581`, `ClienteEstadoCuentaTab.razor` |
+| 5 | Captación en Caja "No se encontraron saldos" | Mediano | ✅ **Quick fix + aplicado Azure** | `20260514_bug5_fix_fn_getclientesaldos_posteomanual.sql` + `CaptacionPagosService.cs:2582` |
 | 6 | App no incluye saldo previo (cliente con saldo) | Bajo | ✅ Ya estaba fixed (V3_2 09-may) | Pendiente validar E2E con `090041008` (anular factura activa primero) |
 | 7 | Descarga de ruta re-trae clientes ya facturados del periodo | Mediano | ✅ **Resuelto + aplicado Azure** | `20260514_bug7_sp_medidores_por_ruta_ws_excluir_facturados.sql` |
+| 8 | `sp_adm_emitir_nota_credito` escribe `factura.updated_at` inexistente → anulación total via NC rompe con 42703 | **Crítico** | 🟥 **Pendiente** (detectado 2026-05-15 por `SIAD.Tests/AnulacionTests`) | Bandera en [PLAN_ENTREGA_2026-05-25.md](PLAN_ENTREGA_2026-05-25.md); fix día 16-may. |
 | — | Validación CAI: tabla maestra `cfg_estado_cai` + SP con filtros completos | Mejora | ✅ **Aplicado Azure** | `20260514_validacion_cai_seleccion.sql` |
 
 ### Lo aplicado en Azure 14-may (tarde)
