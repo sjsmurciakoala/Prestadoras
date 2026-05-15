@@ -1,0 +1,9 @@
+.conflictos-v3-filters {
+    row-gap: .35rem;
+}
+
+.conflictos-v3-stats {
+    display: flex;
+    gap: .5rem;
+    flex-wrap: wrap;
+}

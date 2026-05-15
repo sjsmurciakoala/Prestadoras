@@ -1,0 +1,662 @@
+@page "/tarifario/cai-offline"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Tarifario
+@using apc.Client.Pages.Tarifario
+@using apc.Client.Services.Tarifario
+
+@inject CaiTarifarioClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>Correlativos</PageTitle>
+
+<DxToastProvider Name="CaiOfflineToast" MaxToastCount="4" />
+
+<div class="cai-offline-page" id="cai-offline-grid-shell">
+
+    @* ── Encabezado patron Periodos ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-receipt-cutoff me-2 text-primary"></i>Correlativos
+            </h4>
+            <small class="text-muted">CAI autorizados, rangos y bloques reservados.</small>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="ReloadAsync"
+                      Enabled="@(!isSaving)" />
+            <DxButton Text="Reservar bloque"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-box-arrow-in-down"
+                      Click="AbrirReservaBloque" />
+            <DxButton Text="Nuevo CAI"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="AbrirNuevoCai" />
+        </div>
+    </div>
+
+    @* ── Indicadores: 1 badge por cada estado (clic para filtrar) ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="button"
+                class="cai-stat-badge @(estadoFiltroId is null ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => SetEstadoFiltro(null))">
+            <i class="bi bi-receipt"></i> Total: <strong>@(dataSource?.LastTotalCount ?? 0)</strong>
+        </button>
+        <button type="button"
+                class="cai-stat-badge cai-stat-badge--info @(estadoFiltroId == 1 ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => SetEstadoFiltro(1))">
+            <i class="bi bi-circle"></i> Disponibles: <strong>@TotalPorEstado(1)</strong>
+        </button>
+        <button type="button"
+                class="cai-stat-badge cai-stat-badge--info @(estadoFiltroId == 2 ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => SetEstadoFiltro(2))">
+            <i class="bi bi-arrow-repeat"></i> En uso: <strong>@TotalPorEstado(2)</strong>
+        </button>
+        <button type="button"
+                class="cai-stat-badge cai-stat-badge--success @(estadoFiltroId == 3 ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => SetEstadoFiltro(3))">
+            <i class="bi bi-check-circle"></i> Vigentes: <strong>@TotalPorEstado(3)</strong>
+        </button>
+        <button type="button"
+                class="cai-stat-badge cai-stat-badge--danger @(estadoFiltroId == 4 ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => SetEstadoFiltro(4))">
+            <i class="bi bi-exclamation-triangle"></i> Vencidos: <strong>@TotalPorEstado(4)</strong>
+        </button>
+        <button type="button"
+                class="cai-stat-badge @(estadoFiltroId == 5 ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => SetEstadoFiltro(5))">
+            <i class="bi bi-x-octagon"></i> Anulados: <strong>@TotalPorEstado(5)</strong>
+        </button>
+        @if (!string.IsNullOrWhiteSpace(dataSource?.LastError))
+        {
+            <span class="cai-stat-badge cai-stat-badge--danger">@dataSource.LastError</span>
+        }
+    </div>
+
+    @* ── Grid principal con carga remota + filtros ── *@
+    <div class="cai-offline-grid-wrapper shadow-sm">
+        <DxGrid @ref="caisGrid"
+                Data="@dataSource"
+                KeyFieldName="@nameof(CaiFacturacionListDto.CaiId)"
+                ShowPager="true"
+                PageSize="15"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 10, 15, 25, 50 }"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                CssClass="border-0">
+            <ToolbarTemplate Context="gridToolbarCtx">
+                <DxToolbar ItemRenderStyleMode="ToolbarRenderStyleMode.Contained">
+                    <Items>
+                        <DxToolbarItem BeginGroup="true" Alignment="ToolbarItemAlignment.Right">
+                            <Template Context="estadoTpl">
+                                <DxComboBox Data="@EstadosConTodos"
+                                            ValueFieldName="@nameof(CaiEstadoLookupDto.CaiEstadoId)"
+                                            TextFieldName="@nameof(CaiEstadoLookupDto.Descripcion)"
+                                            Value="@(estadoFiltroId ?? (short)0)"
+                                            ValueChanged="@((short v) => OnEstadoComboChange(v))"
+                                            CssClass="cai-estado-filter" />
+                            </Template>
+                        </DxToolbarItem>
+                        <DxToolbarItem Alignment="ToolbarItemAlignment.Right">
+                            <Template Context="searchTpl">
+                                <DxTextBox @bind-Text="searchText"
+                                           BindValueMode="BindValueMode.OnInput"
+                                           NullText="Buscar por código, prefijo, establecimiento..."
+                                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                           CssClass="cai-search"
+                                           @onkeydown="OnSearchKeyDown" />
+                            </Template>
+                        </DxToolbarItem>
+                        <DxToolbarItem Text="Aplicar"
+                                       Alignment="ToolbarItemAlignment.Right"
+                                       IconCssClass="bi bi-funnel"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       Click="ApplyFilter" />
+                        <DxToolbarItem Tooltip="Mostrar/ocultar columnas"
+                                       Alignment="ToolbarItemAlignment.Right"
+                                       IconCssClass="bi bi-layout-three-columns"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       Click="MostrarColumnChooser" />
+                    </Items>
+                </DxToolbar>
+            </ToolbarTemplate>
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="130px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false">
+                    <CellDisplayTemplate Context="cellAction">
+                        @if (cellAction.DataItem is CaiFacturacionListDto item)
+                        {
+                            var fechaVigente = !item.VigenciaHasta.HasValue || item.VigenciaHasta.Value.Date >= DateTime.Today;
+                            <div class="d-flex gap-1 justify-content-center">
+                                @* Vencida (4): solo lectura. No se edita ni se anula (la fecha ya pasó). *@
+                                @if (item.EstadoId == 4)
+                                {
+                                    <DxButton RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Text"
+                                              SizeMode="SizeMode.Small"
+                                              IconCssClass="bi bi-eye fs-5"
+                                              Tooltip="Solo lectura (CAI vencido)"
+                                              Enabled="false" />
+                                }
+                                @* Anulada (5): permite reactivar solo si la fecha aún vige. *@
+                                else if (item.EstadoId == 5)
+                                {
+                                    <DxButton RenderStyle="ButtonRenderStyle.Success"
+                                              RenderStyleMode="ButtonRenderStyleMode.Text"
+                                              SizeMode="SizeMode.Small"
+                                              IconCssClass="bi bi-arrow-counterclockwise fs-5"
+                                              Tooltip="@(fechaVigente ? "Reactivar (a Disponible)" : "No se puede reactivar: fecha vencida")"
+                                              Enabled="@fechaVigente"
+                                              Click="@(() => CambiarEstadoRapidoAsync(item, 1))" />
+                                }
+                                @* 1, 2, 3: editable + anulable. *@
+                                else
+                                {
+                                    <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                              RenderStyleMode="ButtonRenderStyleMode.Text"
+                                              SizeMode="SizeMode.Small"
+                                              IconCssClass="bi bi-pencil-square fs-5"
+                                              Tooltip="Editar"
+                                              Click="@(() => AbrirEditarCai(item))" />
+                                    <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                              RenderStyleMode="ButtonRenderStyleMode.Text"
+                                              SizeMode="SizeMode.Small"
+                                              IconCssClass="bi bi-x-octagon fs-5"
+                                              Tooltip="Anular"
+                                              Click="@(() => CambiarEstadoRapidoAsync(item, 5))" />
+                                }
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.CodigoCai)" Caption="Código CAI" MinWidth="220">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@((cell.DataItem as CaiFacturacionListDto)?.CodigoCai)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.PrefijoDocumento)" Caption="Prefijo" Width="140px" />
+
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.TipoDocumentoFiscalDescripcion)" Caption="Tipo doc" Width="130px" />
+
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.EstablecimientoCodigo)" Caption="EEE" Width="80px" TextAlignment="GridTextAlignment.Center" />
+
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.RangoDesde)" Caption="Desde" Width="100px" />
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.RangoHasta)" Caption="Hasta" Width="100px" />
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.SiguienteCorrelativoDisponible)" Caption="Siguiente" Width="110px">
+                    <CellDisplayTemplate Context="cell">
+                        @{
+                            var item = cell.DataItem as CaiFacturacionListDto;
+                            var siguiente = item?.SiguienteCorrelativoDisponible ?? 0;
+                        }
+                        <span class="fw-bold">@siguiente</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.VigenciaDesde)" Caption="Solicitud"
+                                  DisplayFormat="{0:dd/MM/yyyy}" Width="110px" />
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.VigenciaHasta)" Caption="Lím. emisión"
+                                  DisplayFormat="{0:dd/MM/yyyy}" Width="115px" />
+
+                <DxGridDataColumn FieldName="@nameof(CaiFacturacionListDto.EstadoId)"
+                                  Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cellEstado">
+                        @if (cellEstado.DataItem is CaiFacturacionListDto e)
+                        {
+                            var (txt, css) = BadgeEstado(e.EstadoId, e.EstadoDescripcion);
+                            <span class="cai-badge @css">@txt</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-receipt-cutoff fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay CAI registrados</h5>
+                    <p class="mb-0">Crea el primer CAI para empezar a emitir documentos fiscales.</p>
+                </div>
+            </EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
+</div>
+
+@* ── Popup CAI ── *@
+<DxPopup HeaderText="@popupCaiHeader"
+         @bind-Visible="popupCaiVisible"
+         Width="min(820px, 96vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate Context="popupCtx">
+        @if (editCai is not null)
+        {
+            var (estadoTxt, estadoCss) = BadgeEstado(editCai.EstadoId);
+            <div class="cai-status-banner">
+                <span class="text-muted small">Estado actual:</span>
+                <span class="cai-badge @estadoCss fs-6">@estadoTxt</span>
+            </div>
+
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Código CAI" ColSpanMd="8">
+                    <Template>
+                        <DxTextBox @bind-Text="editCai.CodigoCai"
+                                   NullText="XXXXXX-XXXXXX-XXXXXX-XXXXXX-XXXXXX-XX" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Estado" ColSpanMd="4">
+                    <Template>
+                        <DxComboBox Data="@estados"
+                                    ValueFieldName="@nameof(CaiEstadoLookupDto.CaiEstadoId)"
+                                    TextFieldName="@nameof(CaiEstadoLookupDto.Descripcion)"
+                                    @bind-Value="editCai.EstadoId"
+                                    NullText="Seleccione..." />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Establecimiento (EEE)" ColSpanMd="4">
+                    <Template>
+                        <DxTextBox @bind-Text="editCai.EstablecimientoCodigo"
+                                   NullText="000"
+                                   MaxLength="3" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Punto de emisión (PPP)" ColSpanMd="4">
+                    <Template>
+                        <DxTextBox @bind-Text="editCai.PuntoEmision"
+                                   NullText="001"
+                                   MaxLength="3" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Tipo de documento (TD)" ColSpanMd="4">
+                    <Template>
+                        <DxComboBox Data="@tiposDocumento"
+                                    ValueFieldName="TipoDocumentoFiscalId"
+                                    TextFieldName="Descripcion"
+                                    @bind-Value="editCai.TipoDocumentoFiscalId"
+                                    NullText="..." />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Prefijo final (EEE-PPP-TD-NNNNNNNN, computado)" ColSpanMd="12">
+                    <Template>
+                        <span class="cai-prefijo-preview">@PrefijoComputado</span>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Rango desde" ColSpanMd="3">
+                    <Template>
+                        <DxSpinEdit @bind-Value="editCai.RangoDesde" MinValue="1" MaxValue="999999999" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Rango hasta" ColSpanMd="3">
+                    <Template>
+                        <DxSpinEdit @bind-Value="editCai.RangoHasta" MinValue="1" MaxValue="999999999" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Correlativo actual" ColSpanMd="6">
+                    <Template>
+                        <DxSpinEdit @bind-Value="correlativoActualEdit" MinValue="0" MaxValue="999999999" />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Fecha solicitud" ColSpanMd="6">
+                    <Template>
+                        <DxDateEdit @bind-Date="editCai.VigenciaDesde" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha límite emisión" ColSpanMd="6">
+                    <Template>
+                        <DxDateEdit @bind-Date="editCai.VigenciaHasta" />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Leyenda" ColSpanMd="12">
+                    <Template>
+                        <DxTextBox @bind-Text="editCai.LeyendaRango"
+                                   NullText="Si se deja vacío, se genera automáticamente al guardar" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Observaciones" ColSpanMd="12">
+                    <Template>
+                        <DxTextBox @bind-Text="editCai.Observaciones" />
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <small class="text-muted d-block mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>Correlativo actual</strong>: último número emitido. El siguiente arranca desde este valor + 1.
+                Útil cuando ya se emitieron facturas en otro sistema antes de empezar (ej. rango 800-900, ya van 40 → poner 840).
+            </small>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="d-flex gap-2 justify-content-end w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => popupCaiVisible = false)" />
+            <DxButton Text="Guardar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(!isSaving)"
+                      Click="GuardarCaiAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@* ── Popup reservar bloque ── *@
+<DxPopup HeaderText="Reservar bloque CAI"
+         @bind-Visible="popupBloqueVisible"
+         Width="min(720px, 96vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate Context="popupBloqueCtx">
+        @if (editBloque is not null)
+        {
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="CAI" ColSpanMd="6">
+                    <Template>
+                        <DxComboBox Data="@caisActivos"
+                                    ValueFieldName="CaiId"
+                                    TextFieldName="CodigoCai"
+                                    @bind-Value="editBloque.CaiId"
+                                    NullText="Seleccione CAI..." />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cantidad de correlativos" ColSpanMd="6">
+                    <Template>
+                        <DxSpinEdit @bind-Value="editBloque.CantidadCorrelativos" MinValue="1" MaxValue="5000" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Usuario asignado" ColSpanMd="4">
+                    <Template>
+                        <DxTextBox @bind-Text="editBloque.UsuarioAsignado" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Dispositivo" ColSpanMd="4">
+                    <Template>
+                        <DxTextBox @bind-Text="editBloque.DispositivoId" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Ruta" ColSpanMd="4">
+                    <Template>
+                        <DxTextBox @bind-Text="editBloque.RutaCodigo" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha expiración" ColSpanMd="6">
+                    <Template>
+                        <DxDateEdit @bind-Date="editBloque.FechaExpiracion" />
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="d-flex gap-2 justify-content-end w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => popupBloqueVisible = false)" />
+            <DxButton Text="Reservar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(!isSaving)"
+                      Click="ReservarBloqueAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? caisGrid;
+    private CaisGridDataSource? dataSource;
+    private string? searchText;
+    private short? estadoFiltroId;
+
+    private List<CaiFacturacionListDto> caisActivos = new();
+    private List<TipoDocumentoFiscalLookupDto> tiposDocumento = new();
+    private List<CaiEstadoLookupDto> estados = new();
+    private bool isSaving;
+
+    private bool popupCaiVisible;
+    private string popupCaiHeader = "Nuevo CAI";
+    private CaiFacturacionSaveRequest? editCai;
+    private long correlativoActualEdit;
+
+    private bool popupBloqueVisible;
+    private CaiBloqueReservadoSaveRequest? editBloque;
+
+    // Indicadores: caisActivos viene del lookup completo (todos los estados, ya con
+    // CASE de la BD aplicado). 1=DISPONIBLE 2=EN_USO 3=VIGENTE 4=VENCIDA 5=ANULADA.
+    private int TotalPorEstado(short estadoId) => caisActivos.Count(c => c.EstadoId == estadoId);
+
+    private string PrefijoComputado
+    {
+        get
+        {
+            if (editCai is null) return string.Empty;
+            var est = (editCai.EstablecimientoCodigo ?? "000").Trim().PadLeft(3, '0');
+            var pp = (editCai.PuntoEmision ?? "001").Trim().PadLeft(3, '0');
+            var td = editCai.TipoDocumentoFiscalId.ToString("D2");
+            var correlativo = correlativoActualEdit.ToString("D8");
+            return $"{est}-{pp}-{td}-{correlativo}";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        dataSource = new CaisGridDataSource(Client, () => InvokeAsync(StateHasChanged));
+        await CargarLookupsAsync();
+    }
+
+    private async Task CargarLookupsAsync()
+    {
+        try
+        {
+            var tiposTask = Client.ObtenerTiposDocumentoLookupAsync();
+            var estadosTask = Client.ObtenerEstadosLookupAsync();
+            var caisTask = Client.ObtenerCaisAsync();
+            await Task.WhenAll(tiposTask, estadosTask, caisTask);
+            tiposDocumento = tiposTask.Result.ToList();
+            estados = estadosTask.Result.ToList();
+            caisActivos = caisTask.Result.ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No fue posible cargar los catálogos: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task ReloadAsync()
+    {
+        dataSource?.Invalidate();
+        caisGrid?.Reload();
+        await CargarLookupsAsync();
+    }
+
+    private void ApplyFilter()
+    {
+        if (dataSource is null) return;
+        dataSource.SearchText = searchText;
+        dataSource.EstadoId = estadoFiltroId;
+        dataSource.Invalidate();
+        caisGrid?.Reload();
+    }
+
+    private async Task OnSearchKeyDown(KeyboardEventArgs e)
+    {
+        if (e.Key == "Enter") ApplyFilter();
+        await Task.CompletedTask;
+    }
+
+    private void SetEstadoFiltro(short? estadoId)
+    {
+        estadoFiltroId = estadoId;
+        ApplyFilter();
+    }
+
+    // Sentinel 0 = "Todos" para el combo (DxComboBox no acepta null como valor en lookup numerico).
+    private List<CaiEstadoLookupDto> EstadosConTodos =>
+        new List<CaiEstadoLookupDto>
+        {
+            new() { CaiEstadoId = 0, Codigo = "TODOS", Descripcion = "Todos los estados", Orden = 0 }
+        }.Concat(estados).ToList();
+
+    private void OnEstadoComboChange(short value)
+    {
+        estadoFiltroId = value == 0 ? (short?)null : value;
+        ApplyFilter();
+    }
+
+    private void MostrarColumnChooser()
+    {
+        caisGrid?.ShowColumnChooser();
+    }
+
+    private async Task CambiarEstadoRapidoAsync(CaiFacturacionListDto item, short nuevoEstadoId)
+    {
+        try
+        {
+            var resp = await Client.CambiarEstadoAsync(item.CaiId, nuevoEstadoId);
+            if (resp?.Success == true)
+            {
+                ShowToast("Éxito", resp.Message ?? "Estado actualizado.", ToastRenderStyle.Success);
+                await ReloadAsync();
+            }
+            else
+            {
+                ShowToast("Atención", resp?.Message ?? "No se pudo cambiar el estado.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void AbrirNuevoCai()
+    {
+        popupCaiHeader = "Nuevo CAI";
+        editCai = new CaiFacturacionSaveRequest
+        {
+            Activo = true,
+            VigenciaDesde = DateTime.Today,
+            VigenciaHasta = DateTime.Today.AddYears(1),
+            EstablecimientoCodigo = "000",
+            PuntoEmision = "001",
+            TipoDocumentoFiscalId = 1,
+            EstadoId = 1 // DISPONIBLE por default
+        };
+        correlativoActualEdit = 0;
+        popupCaiVisible = true;
+    }
+
+    private void AbrirEditarCai(CaiFacturacionListDto item)
+    {
+        popupCaiHeader = $"Editar CAI {item.PrefijoDocumento}";
+        editCai = new CaiFacturacionSaveRequest
+        {
+            CaiId = item.CaiId,
+            CodigoCai = item.CodigoCai ?? string.Empty,
+            RangoDesde = item.RangoDesde,
+            RangoHasta = item.RangoHasta,
+            VigenciaDesde = item.VigenciaDesde,
+            VigenciaHasta = item.VigenciaHasta ?? item.VigenciaDesde.AddYears(1),
+            Observaciones = item.Observaciones,
+            Activo = item.StatusId == 1,
+            EstablecimientoCodigo = item.EstablecimientoCodigo ?? "000",
+            PuntoEmision = item.PuntoEmision ?? "001",
+            TipoDocumentoFiscalId = item.TipoDocumentoFiscalId,
+            LeyendaRango = item.LeyendaRango,
+            EstadoId = item.EstadoId
+        };
+        correlativoActualEdit = item.CorrelativoActual;
+        popupCaiVisible = true;
+    }
+
+    private void AbrirReservaBloque()
+    {
+        editBloque = new CaiBloqueReservadoSaveRequest { CantidadCorrelativos = 100 };
+        popupBloqueVisible = true;
+    }
+
+    private async Task GuardarCaiAsync()
+    {
+        if (editCai is null) return;
+        editCai.CorrelativoActual = correlativoActualEdit;
+
+        isSaving = true;
+        try
+        {
+            var response = await Client.GuardarCaiAsync(editCai);
+            if (response?.Success == true)
+            {
+                popupCaiVisible = false;
+                ShowToast("Éxito", response.Message ?? "Guardado.", ToastRenderStyle.Success);
+                await ReloadAsync();
+            }
+            else
+            {
+                ShowToast("Atención", response?.Message ?? "No se pudo guardar el CAI.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No fue posible guardar el CAI: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally { isSaving = false; }
+    }
+
+    private async Task ReservarBloqueAsync()
+    {
+        if (editBloque is null) return;
+        isSaving = true;
+        try
+        {
+            var response = await Client.ReservarBloqueAsync(editBloque);
+            if (response?.Success == true)
+            {
+                popupBloqueVisible = false;
+                ShowToast("Éxito", response.Message ?? "Reservado.", ToastRenderStyle.Success);
+                await ReloadAsync();
+            }
+            else
+            {
+                ShowToast("Atención", response?.Message ?? "No se pudo reservar el bloque.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No fue posible reservar el bloque: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally { isSaving = false; }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "CaiOfflineToast",
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+    }
+
+    // Estado lookup numerico: 1=DISPONIBLE 2=EN_USO 3=VIGENTE 4=VENCIDA 5=ANULADA
+    private static (string Texto, string Css) BadgeEstado(short estadoId, string? descripcion = null) => estadoId switch
+    {
+        1 => (descripcion ?? "Disponible", "cai-badge--disponible"),
+        2 => (descripcion ?? "En uso",     "cai-badge--enuso"),
+        3 => (descripcion ?? "Vigente",    "cai-badge--vigente"),
+        4 => (descripcion ?? "Vencida",    "cai-badge--vencido"),
+        5 => (descripcion ?? "Anulada",    "cai-badge--inactivo"),
+        _ => (descripcion ?? "—",          "cai-badge--inactivo")
+    };
+}

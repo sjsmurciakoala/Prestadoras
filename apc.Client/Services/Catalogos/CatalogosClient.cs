@@ -28,15 +28,6 @@ public sealed class CatalogosClient
         => await http.GetFromJsonAsync<List<TipoUsoLookupDto>>("api/catalogos/tipos-uso", ct)
            ?? new List<TipoUsoLookupDto>();
 
-    public async Task<List<string>> ObtenerLetrasAsync(CancellationToken ct = default)
-        => await http.GetFromJsonAsync<List<string>>("api/catalogos/letras", ct)
-           ?? new List<string>();
-
-    public async Task<List<LetraServicioLookupDto>> ObtenerLetrasServicioAsync(string tipoUsoCodigo, int categoriaId, CancellationToken ct = default)
-        => await http.GetFromJsonAsync<List<LetraServicioLookupDto>>(
-               $"api/catalogos/letras-servicio?tipoUsoCodigo={tipoUsoCodigo}&categoriaId={categoriaId}", ct)
-           ?? new List<LetraServicioLookupDto>();
-
     public async Task<List<int>> ObtenerCategoriasPorTipoAsync(int tipoUsoCodigo, CancellationToken ct = default)
         => await http.GetFromJsonAsync<List<int>>($"api/catalogos/categorias-por-tipo?tipoUsoCodigo={tipoUsoCodigo}", ct)
            ?? new List<int>();

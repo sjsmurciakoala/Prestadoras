@@ -423,6 +423,7 @@ public class CaptacionPagosService : ICaptacionPagosService
             var saldoActualCliente = await ObtenerSaldoClienteAsync(clienteClave, ct);
             var transaccion = new transaccion_abonado
             {
+                company_id = _currentCompanyService.GetCompanyId(),
                 cliente_clave = clienteClave,
                 recibo = factura.numrecibo,
                 tipotransaccion = "201",
@@ -1085,6 +1086,7 @@ public class CaptacionPagosService : ICaptacionPagosService
             var descripcion = $"Pago comprobante de banco # {bancoCodigo} :Recibo # :{dto.NumRecibo}";
             var transaccion = new transaccion_abonado
             {
+                company_id = _currentCompanyService.GetCompanyId(),
                 cliente_clave = clienteClave,
                 recibo = dto.NumRecibo,
                 tipotransaccion = "201",
@@ -1552,6 +1554,7 @@ public class CaptacionPagosService : ICaptacionPagosService
             var saldoActual = await ObtenerSaldoClienteAsync(clienteClave, ct);
             var transaccion = new transaccion_abonado
             {
+                company_id = _currentCompanyService.GetCompanyId(),
                 cliente_clave = clienteClave,
                 recibo = factura.numrecibo,
                 tipotransaccion = "201",
@@ -2576,6 +2579,7 @@ public class CaptacionPagosService : ICaptacionPagosService
         {
             "101" => "AGUA",
             "AGUA" => "AGUA",
+            "AGUA_POTABLE" => "AGUA",
             "102" => "ALCANTARILLADO",
             "ALCANTARILLADO" => "ALCANTARILLADO",
             _ => "OTROS"

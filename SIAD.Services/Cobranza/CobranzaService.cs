@@ -2,6 +2,7 @@ using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Cobranza;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.Entities;
+using SIAD.Core.Tenancy;
 using SIAD.Data;
 
 namespace SIAD.Services.Cobranza;
@@ -9,10 +10,12 @@ namespace SIAD.Services.Cobranza;
 public class CobranzaService : ICobranzaService
 {
     private readonly SiadDbContext _context;
+    private readonly ICurrentCompanyService _currentCompanyService;
 
-    public CobranzaService(SiadDbContext context)
+    public CobranzaService(SiadDbContext context, ICurrentCompanyService currentCompanyService)
     {
         _context = context;
+        _currentCompanyService = currentCompanyService;
     }
 
     public async Task<IReadOnlyList<CobranzaSaldoDetalleDto>> ObtenerSaldosClienteAsync(string clienteClave, CancellationToken ct = default)
@@ -249,6 +252,7 @@ public class CobranzaService : ICobranzaService
 
             var trasladoFondos = new transaccion_abonado
             {
+                company_id = _currentCompanyService.GetCompanyId(),
                 cliente_clave = cliente.Clave,
                 recibo = recibo,
                 tipotransaccion = "PLAN",
@@ -270,6 +274,7 @@ public class CobranzaService : ICobranzaService
 
             var prima = new transaccion_abonado
             {
+                company_id = _currentCompanyService.GetCompanyId(),
                 cliente_clave = cliente.Clave,
                 recibo = recibo,
                 tipotransaccion = "PLAN-PR",
@@ -304,6 +309,7 @@ public class CobranzaService : ICobranzaService
 
                 transaccionesCuotas.Add(new transaccion_abonado
                 {
+                    company_id = _currentCompanyService.GetCompanyId(),
                     cliente_clave = cliente.Clave,
                     recibo = recibo,
                     tipotransaccion = "PLAN-CUOTA",

@@ -8,4 +8,6 @@ public record ClienteMovimientoDto(
     string Tipo,
     string? Descripcion,
     decimal Monto,
-    decimal SaldoInline);
+    decimal SaldoInline,
+    decimal? NumRecibo,
+    string? NumFactura);

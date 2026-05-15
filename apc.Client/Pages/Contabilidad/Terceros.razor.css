@@ -1,0 +1,60 @@
+/* ── Layout ── */
+.terceros-page {
+    padding: 1rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.terceros-grid-wrapper {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    overflow: hidden;
+}
+
+/* ── Stat badges (indicadores rapidos) ── */
+.terceros-stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+}
+
+.terceros-stat-badge--success  { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.terceros-stat-badge--info     { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.terceros-stat-badge--secondary { background: #f1f5f9; color: #334155; border-color: #cbd5e1; }
+
+/* ── Grid: badges de estado/categoría ── */
+.terceros-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.terceros-badge--success { background: #dcfce7; color: #166534; }
+.terceros-badge--info    { background: #dbeafe; color: #1d4ed8; }
+.terceros-badge--accent  { background: #fef3c7; color: #92400e; }
+.terceros-badge--neutral { background: #f1f5f9; color: #64748b; }
+
+/* ── Popup edit form (PopupEditFormCssClass) ── */
+:deep(.terceros-popup-edit) {
+    width: 760px;
+    max-width: 95vw;
+    max-height: 90vh;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .terceros-page { padding: 0.75rem; }
+}

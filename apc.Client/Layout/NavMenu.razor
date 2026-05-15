@@ -78,11 +78,6 @@
                         IconCssClass="bi bi-arrow-repeat"
                         CssClass="@ActiveClass("/ciclos")"
                         Attributes="@ItemAttrs("Ciclos")" />
-            <DxMenuItem NavigateUrl="/letras"
-                        Text="Letras"
-                        IconCssClass="bi bi-type"
-                        CssClass="@ActiveClass("/letras")"
-                        Attributes="@ItemAttrs("Letras")" />
             <DxMenuItem NavigateUrl="/medidores"
                         Text="Medidores"
                         IconCssClass="bi bi-speedometer2"
@@ -99,31 +94,32 @@
                                 Attributes="@ItemAttrs("Auxiliar de Lectura")" />
                 </Items>
             </DxMenuItem>
-            <DxMenuItem Text="Servicios"
-                        IconCssClass="bi bi-tools"
-                        CssClass="@GroupClass("/servicios", "/conceptos", "/tarifas", "/tarifas-contador", "/solicitudes")"
-                        Attributes="@ItemAttrs("Servicios")">
+            <DxMenuItem NavigateUrl="/solicitudes"
+                        Text="Solicitudes"
+                        IconCssClass="bi bi-chat-text"
+                        CssClass="@ActiveClass("/solicitudes")"
+                        Attributes="@ItemAttrs("Solicitudes")" />
+            <DxMenuItem Text="Tarifario"
+                        IconCssClass="bi bi-calculator"
+                        CssClass="@GroupClass("/tarifario/cliente-servicio-v3", "/tarifario/maestro-servicios-v3", "/tarifario/cai-offline", "/tarifario/conflictos-v3")"
+                        Attributes="@ItemAttrs("Tarifario")">
                 <Items>
-                    <DxMenuItem NavigateUrl="/servicios"
-                                Text="Servicios"
-                                CssClass="@ActiveClass("/servicios")"
-                                Attributes="@ItemAttrs("Servicios")" />
-                    <DxMenuItem NavigateUrl="/conceptos"
-                                Text="Conceptos"
-                                CssClass="@ActiveClass("/conceptos")"
-                                Attributes="@ItemAttrs("Conceptos")" />
-                    <DxMenuItem NavigateUrl="/tarifas"
-                                Text="Tarifas"
-                                CssClass="@ActiveClass("/tarifas")"
-                                Attributes="@ItemAttrs("Tarifas")" />
-                    <DxMenuItem NavigateUrl="/tarifas-contador"
-                                Text="Tarifas Contador"
-                                CssClass="@ActiveClass("/tarifas-contador")"
-                                Attributes="@ItemAttrs("Tarifas Contador")" />
-                    <DxMenuItem NavigateUrl="/solicitudes"
-                                Text="Solicitudes"
-                                CssClass="@ActiveClass("/solicitudes")"
-                                Attributes="@ItemAttrs("Solicitudes")" />
+                    <DxMenuItem NavigateUrl="/tarifario/cliente-servicio-v3"
+                                Text="Cliente servicio"
+                                CssClass="@ActiveClass("/tarifario/cliente-servicio-v3")"
+                                Attributes="@ItemAttrs("Cliente servicio")" />
+                    <DxMenuItem NavigateUrl="/tarifario/maestro-servicios-v3"
+                                Text="Maestro servicios"
+                                CssClass="@ActiveClass("/tarifario/maestro-servicios-v3")"
+                                Attributes="@ItemAttrs("Maestro servicios")" />
+                    <DxMenuItem NavigateUrl="/tarifario/cai-offline"
+                                Text="CAI offline"
+                                CssClass="@ActiveClass("/tarifario/cai-offline")"
+                                Attributes="@ItemAttrs("CAI offline")" />
+                    <DxMenuItem NavigateUrl="/tarifario/conflictos-v3"
+                                Text="Conflictos"
+                                CssClass="@ActiveClass("/tarifario/conflictos-v3")"
+                                Attributes="@ItemAttrs("Conflictos")" />
                 </Items>
             </DxMenuItem>
         </Items>
@@ -203,7 +199,7 @@
             </DxMenuItem>
             <DxMenuItem Text="Contabilidad"
                         IconCssClass="bi bi-journal"
-                        CssClass="@GroupClass("/contabilidad/empresas", "/contabilidad/plan-cuentas", "/contabilidad/centros-costo", "/contabilidad/terceros", "/contabilidad/diarios", "/contabilidad/periodos", "/contabilidad/tipos-transaccion", "/contabilidad/reglas-integracion", "/contabilidad/polizas", "/contabilidad/partidas")"
+                        CssClass="@GroupClass("/contabilidad/empresas", "/contabilidad/plan-cuentas", "/contabilidad/centros-costo", "/contabilidad/terceros", "/contabilidad/diarios", "/contabilidad/periodos", "/contabilidad/tipos-transaccion", "/contabilidad/polizas", "/contabilidad/partidas")"
                         Attributes="@ItemAttrs("Contabilidad")">
                 <Items>
                     <DxMenuItem NavigateUrl="/contabilidad/empresas"
@@ -242,10 +238,6 @@
                                 Text="Tipos de comprobantes"
                                 CssClass="@ActiveClass("/contabilidad/tipos-transaccion")"
                                 Attributes="@ItemAttrs("Tipos de comprobantes")" />
-                    <DxMenuItem NavigateUrl="/contabilidad/reglas-integracion"
-                                Text="Reglas legacy (lectura)"
-                                CssClass="@ActiveClass("/contabilidad/reglas-integracion")"
-                                Attributes="@ItemAttrs("Reglas legacy (lectura)")" />
                     <DxMenuItem NavigateUrl="/contabilidad/partidas"
                                 Text="Partidas"
                                 CssClass="@((!string.IsNullOrEmpty(ActiveClass("/contabilidad/partidas")) || !string.IsNullOrEmpty(ActiveClass("/contabilidad/polizas"))) ? "menu-item-active" : string.Empty)"
@@ -263,21 +255,11 @@
             CollapseItemsToHamburgerMenu="false"
             CssClass="custom-dx-menu">
         <Items>
-            <DxMenuItem Text="Mi App"
+            <DxMenuItem NavigateUrl="/mi-app/usuarios"
+                        Text="Usuarios App"
                         IconCssClass="bi bi-phone"
-                        CssClass="@GroupClass("/mi-app/usuarios", "/mi-app/configuracion")"
-                        Attributes="@ItemAttrs("Mi App")">
-                <Items>
-                    <DxMenuItem NavigateUrl="/mi-app/usuarios"
-                                Text="Usuarios App"
-                                CssClass="@ActiveClass("/mi-app/usuarios")"
-                                Attributes="@ItemAttrs("Usuarios App")" />
-                    <DxMenuItem NavigateUrl="/mi-app/configuracion"
-                                Text="Configuraciones App"
-                                CssClass="@ActiveClass("/mi-app/configuracion")"
-                                Attributes="@ItemAttrs("Configuraciones App")" />
-                </Items>
-            </DxMenuItem>
+                        CssClass="@ActiveClass("/mi-app/usuarios")"
+                        Attributes="@ItemAttrs("Usuarios App")" />
             <AuthorizeView Context="authContext">
                 <Authorized>
                     <DxMenuItem NavigateUrl="Account/Manage"

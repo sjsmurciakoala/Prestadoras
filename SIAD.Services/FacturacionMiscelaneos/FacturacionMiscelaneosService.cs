@@ -270,8 +270,10 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
 
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
 
+        var companyId = EnsureCompanyId();
         var factura = new factura
         {
+            company_id = companyId,
             numfactura = string.Empty,
             clientecodigo = cliente.Clave,
             tipofactura = "R",
@@ -293,6 +295,7 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
 
         var facturaDetalles = detallesValidos.Select(d => new factura_detalle
         {
+            company_id = companyId,
             factura_id = factura.id,
             numrecibo = factura.numrecibo,
             codigo = d.Codigo,
@@ -312,6 +315,7 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
             saldoActual += detalle.ValorTotal;
             transacciones.Add(new transaccion_abonado
             {
+                company_id = companyId,
                 cliente_clave = cliente.Clave,
                 recibo = factura.numrecibo,
                 tipotransaccion = detalle.Codigo,
@@ -340,7 +344,6 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
         await _context.SaveChangesAsync(ct);
 
         // === Contabilidad automática: generar y postear póliza VENTAS/MIS ===
-        var companyId = EnsureCompanyId();
         var contabilidadDetails = detallesValidos.Select(d => new
         {
             code = d.Codigo,

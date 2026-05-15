@@ -27,6 +27,7 @@ public sealed class UsuariosAppService : IUsuariosAppService
                 u.usuario ?? string.Empty,
                 u.nombre,
                 u.ruta,
+                u.codciclo,
                 IsActive(u.estado)))
             .ToListAsync(ct);
     }
@@ -61,6 +62,7 @@ public sealed class UsuariosAppService : IUsuariosAppService
                 u.usuario ?? string.Empty,
                 u.nombre,
                 u.ruta,
+                u.codciclo,
                 IsActive(u.estado)))
             .ToListAsync(ct);
 
@@ -79,6 +81,7 @@ public sealed class UsuariosAppService : IUsuariosAppService
                 Clave = u.clave ?? string.Empty,
                 Nombre = u.nombre ?? string.Empty,
                 Ruta = u.ruta,
+                CodCiclo = u.codciclo,
                 Activo = IsActive(u.estado)
             })
             .FirstOrDefaultAsync(ct);
@@ -94,6 +97,7 @@ public sealed class UsuariosAppService : IUsuariosAppService
             clave = NormalizeRequired(dto.Clave, 30, "contrasena"),
             nombre = NormalizeRequired(dto.Nombre, 50, "nombre"),
             ruta = NormalizeOptional(dto.Ruta, 6, "ruta"),
+            codciclo = dto.CodCiclo,
             estado = ToEstado(dto.Activo)
         };
 
@@ -107,6 +111,7 @@ public sealed class UsuariosAppService : IUsuariosAppService
             Clave = entity.clave ?? string.Empty,
             Nombre = entity.nombre ?? string.Empty,
             Ruta = entity.ruta,
+            CodCiclo = entity.codciclo,
             Activo = IsActive(entity.estado)
         };
     }
@@ -125,6 +130,7 @@ public sealed class UsuariosAppService : IUsuariosAppService
         entity.clave = NormalizeRequired(dto.Clave, 30, "contrasena");
         entity.nombre = NormalizeRequired(dto.Nombre, 50, "nombre");
         entity.ruta = NormalizeOptional(dto.Ruta, 6, "ruta");
+        entity.codciclo = dto.CodCiclo;
         entity.estado = ToEstado(dto.Activo);
 
         await _context.SaveChangesAsync(ct);
@@ -136,6 +142,7 @@ public sealed class UsuariosAppService : IUsuariosAppService
             Clave = entity.clave ?? string.Empty,
             Nombre = entity.nombre ?? string.Empty,
             Ruta = entity.ruta,
+            CodCiclo = entity.codciclo,
             Activo = IsActive(entity.estado)
         };
     }

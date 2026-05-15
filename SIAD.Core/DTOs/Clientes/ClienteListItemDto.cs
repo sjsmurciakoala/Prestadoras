@@ -6,4 +6,6 @@ public record ClienteListItemDto(
     string Nombre,
     string? Identidad,
     string? Barrio,
-    bool Activo);
+    bool Activo,
+    string? CicloCodigo,
+    string? Ruta);

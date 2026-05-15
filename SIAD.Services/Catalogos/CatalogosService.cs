@@ -65,64 +65,8 @@ public class CatalogosService : ICatalogosService
             .ToListAsync(ct);
     }
 
-    public async Task<IReadOnlyList<string>> GetLetrasAsync(CancellationToken ct = default)
+    public Task<IReadOnlyList<int>> GetCategoriasPorTipoAsync(int tipoUsoCodigo, CancellationToken ct = default)
     {
-        return await _context.letras
-            .AsNoTracking()
-            .Where(l => l.letras != null && l.letras.Trim() != string.Empty)
-            .OrderBy(l => l.num)
-            .ThenBy(l => l.letras)
-            .Select(l => l.letras!)
-            .ToListAsync(ct);
-    }
-
-    public async Task<IReadOnlyList<LetraServicioLookupDto>> GetLetrasTarifaAsync(int tipoUsoCodigo, int categoriaId, CancellationToken ct = default)
-    {
-        var letrasFijas = _context.tarifas
-            .AsNoTracking()
-            .Where(t => t.tipo == tipoUsoCodigo && t.categoria_id == categoriaId)
-            .Select(t => t.codigo);
-
-        var letrasContador = _context.tarifas_contadors
-            .AsNoTracking()
-            .Where(t => t.tipo == tipoUsoCodigo
-                        && t.categoria_id == categoriaId
-                        && t.codigo != null
-                        && t.codigo.Trim() != string.Empty)
-            .Select(t => t.codigo!);
-
-        var letras = await letrasFijas
-            .Union(letrasContador)
-            .Distinct()
-            .OrderBy(codigo => codigo)
-            .Select(codigo => new LetraServicioLookupDto(codigo, codigo))
-            .ToListAsync(ct);
-
-        return letras;
-    }
-
-    public async Task<IReadOnlyList<int>> GetCategoriasPorTipoAsync(int tipoUsoCodigo, CancellationToken ct = default)
-    {
-        var categoriasTarifaFija = _context.tarifas
-            .AsNoTracking()
-            .Where(t => t.tipo == tipoUsoCodigo)
-            .Select(t => t.categoria_id);
-
-        var categoriasTarifaContador = _context.tarifas_contadors
-            .AsNoTracking()
-            .Where(t => t.tipo == tipoUsoCodigo && t.categoria_id.HasValue)
-            .Select(t => t.categoria_id!.Value);
-
-        var categoriasConfiguradas = categoriasTarifaFija
-            .Union(categoriasTarifaContador);
-
-        return await (from categoriaId in categoriasConfiguradas
-                      join c in _context.categoria_servicios.AsNoTracking()
-                          on categoriaId equals c.categoria_servicio_id
-                      where c.estado
-                      select c.categoria_servicio_id)
-            .Distinct()
-            .OrderBy(id => id)
-            .ToListAsync(ct);
+        return Task.FromResult<IReadOnlyList<int>>(Array.Empty<int>());
     }
 }

@@ -1,0 +1,307 @@
+@page "/tarifario/cliente-servicio-v3"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Pages.Clientes.Components
+@using apc.Client.Services.Clientes
+
+@inject ClientesClient ClientesClient
+@inject NavigationManager Navigation
+
+<div class="page-container cliente-servicio-operativo-page">
+    <div class="modern-card">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-3">
+            <div>
+                <h2 class="page-title mb-1">Operación tarifaria por cliente</h2>
+            </div>
+        </div>
+
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical" CssClass="cliente-servicio-operativo-filters">
+            <DxFormLayoutItem Caption="Buscar cliente" ColSpanXs="12" ColSpanMd="6" ColSpanLg="4">
+                <Template>
+                    <DxTextBox @bind-Text="searchText"
+                               NullText="Código, nombre o apellido"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                               InputId="buscarClienteV3" />
+                </Template>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Coincidencias" ColSpanXs="12" ColSpanMd="6" ColSpanLg="5">
+                <Template>
+                    <DxComboBox Data="@clientesEncontrados"
+                                @bind-Value="selectedClienteId"
+                                ValueFieldName="Id"
+                                TextFieldName="NombreCompleto"
+                                NullText="Seleccione cliente..."
+                                DropDownWidthMode="DropDownWidthMode.EditorWidth"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                Enabled="@(clientesEncontrados.Count > 0)"
+                                @bind-Value:after="OnClienteSeleccionado" />
+                </Template>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption=" " ColSpanXs="12" ColSpanMd="12" ColSpanLg="3" CssClass="align-self-end">
+                <Template>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <DxButton Text="Buscar"
+                                  IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Click="BuscarClientesAsync"
+                                  Enabled="@(!isSearching)" />
+                        <DxButton Text="Limpiar"
+                                  IconCssClass="bi bi-x-circle"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                  Click="LimpiarSeleccion" />
+                    </div>
+                </Template>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+
+        @if (isSearching)
+        {
+            <DxLoadingPanel Visible="true" Text="Buscando clientes..." />
+        }
+        else if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <div class="alert alert-danger mt-3">@errorMessage</div>
+        }
+        else if (selectedCliente is null)
+        {
+            <div class="alert alert-info mt-3 mb-0">
+                Seleccione un cliente para administrar su configuración de servicios.
+            </div>
+        }
+        else
+        {
+            <div class="cliente-seleccionado-banner mt-3">
+                <div>
+                    <div class="fw-semibold">@selectedCliente.NombreCompleto</div>
+                    <div class="text-muted small">Código: @selectedCliente.Codigo</div>
+                </div>
+
+                <div class="d-flex gap-2 flex-wrap">
+                    <span class="badge bg-secondary">ID @selectedCliente.Id</span>
+                    @if (selectedClienteDetalle is not null)
+                    {
+                        <span class="badge bg-light text-dark border">@GetMedicionBadge()</span>
+                        <span class="badge bg-light text-dark border">Ruta @MostrarTexto(selectedClienteDetalle.IndicativoRuta)</span>
+                        <span class="badge bg-light text-dark border">Ciclo @MostrarTexto(selectedClienteDetalle.CicloDescripcion)</span>
+                    }
+                    <DxButton Text="Ver ficha"
+                              IconCssClass="bi bi-person-vcard"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="AbrirFichaCliente" />
+                    <DxButton Text="Prueba de cálculo"
+                              IconCssClass="bi bi-calculator"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="AbrirPruebaCalculoCliente" />
+                    <DxButton Text="Conflictos"
+                              IconCssClass="bi bi-exclamation-diamond"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="AbrirConflictosCliente" />
+                </div>
+            </div>
+
+            @if (isLoadingClienteDetalle)
+            {
+                <div class="mt-3">
+                    <DxLoadingPanel Visible="true" Text="Cargando detalle operativo del cliente..." />
+                    <div style="height:80px"></div>
+                </div>
+            }
+            else if (selectedClienteDetalle is null)
+            {
+                <div class="alert alert-warning mt-3 mb-0">
+                    No se pudo cargar el detalle operativo del cliente seleccionado.
+                </div>
+            }
+            else
+            {
+                <div class="mt-3">
+                    <ClienteTarifarioV3Panel ClienteId="@selectedCliente.Id"
+                                             Cliente="@selectedClienteDetalle" />
+                </div>
+            }
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "clienteId")]
+    public int? ClienteIdFromQuery { get; set; }
+
+    private string? searchText;
+    private bool isSearching;
+    private string? errorMessage;
+    private int? selectedClienteId;
+    private List<ClienteSearchItem> clientesEncontrados = new();
+    private ClienteSearchItem? selectedCliente;
+    private ClienteDetailDto? selectedClienteDetalle;
+    private bool isLoadingClienteDetalle;
+
+    protected override async Task OnInitializedAsync()
+    {
+        selectedClienteId = ClienteIdFromQuery;
+        await BuscarClientesAsync();
+    }
+
+    private async Task BuscarClientesAsync()
+    {
+        isSearching = true;
+        errorMessage = null;
+
+        try
+        {
+            var resultado = await ClientesClient.SearchAsync(searchText, soloActivos: true);
+            clientesEncontrados = resultado
+                .OrderBy(c => c.Nombre)
+                .Select(c => new ClienteSearchItem(
+                    c.Id,
+                    c.Codigo,
+                    c.Nombre,
+                    $"{c.Codigo} · {c.Nombre}".Trim()))
+                .ToList();
+
+            if (clientesEncontrados.Count == 0)
+            {
+                selectedClienteId = null;
+                selectedCliente = null;
+                return;
+            }
+
+            if (selectedClienteId.HasValue && clientesEncontrados.All(c => c.Id != selectedClienteId.Value))
+            {
+                selectedClienteId = null;
+            }
+
+            if (!selectedClienteId.HasValue)
+            {
+                selectedClienteId = clientesEncontrados[0].Id;
+            }
+
+            await CargarClienteSeleccionadoAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No fue posible buscar clientes: {ex.Message}";
+        }
+        finally
+        {
+            isSearching = false;
+        }
+    }
+
+    private async Task OnClienteSeleccionado()
+    {
+        await CargarClienteSeleccionadoAsync();
+    }
+
+    private void LimpiarSeleccion()
+    {
+        searchText = null;
+        selectedClienteId = null;
+        selectedCliente = null;
+        selectedClienteDetalle = null;
+        clientesEncontrados = new();
+        errorMessage = null;
+    }
+
+    private void AbrirFichaCliente()
+    {
+        if (selectedCliente is null)
+        {
+            return;
+        }
+
+        Navigation.NavigateTo($"/clientes/{selectedCliente.Id}");
+    }
+
+    private void AbrirPruebaCalculoCliente()
+    {
+        if (selectedCliente is null)
+        {
+            return;
+        }
+
+        Navigation.NavigateTo($"/clientes/{selectedCliente.Id}?abrirPruebaCalculoV3=true");
+    }
+
+    private void AbrirConflictosCliente()
+    {
+        if (selectedCliente is null)
+        {
+            return;
+        }
+
+        Navigation.NavigateTo($"/tarifario/conflictos-v3?clienteId={selectedCliente.Id}");
+    }
+
+    private async Task CargarClienteSeleccionadoAsync()
+    {
+        if (!selectedClienteId.HasValue)
+        {
+            selectedCliente = null;
+            selectedClienteDetalle = null;
+            return;
+        }
+
+        selectedCliente = clientesEncontrados.FirstOrDefault(c => c.Id == selectedClienteId.Value);
+        isLoadingClienteDetalle = true;
+        errorMessage = null;
+
+        try
+        {
+            selectedClienteDetalle = await ClientesClient.ObtenerPorIdAsync(selectedClienteId.Value);
+
+            if (selectedClienteDetalle is null)
+            {
+                errorMessage = "No se encontró el detalle del cliente seleccionado.";
+                return;
+            }
+
+            if (selectedCliente is null)
+            {
+                selectedCliente = MapearCliente(selectedClienteDetalle);
+                clientesEncontrados.Insert(0, selectedCliente);
+            }
+        }
+        catch (Exception ex)
+        {
+            selectedClienteDetalle = null;
+            errorMessage = $"No fue posible cargar el detalle del cliente: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingClienteDetalle = false;
+        }
+    }
+
+    private static ClienteSearchItem MapearCliente(ClienteDetailDto detalle)
+    {
+        var nombre = $"{detalle.Nombre} {detalle.Apellidos}".Trim();
+        var nombreCompleto = string.IsNullOrWhiteSpace(detalle.Codigo)
+            ? nombre
+            : $"{detalle.Codigo} · {nombre}";
+
+        return new ClienteSearchItem(
+            detalle.Id,
+            detalle.Codigo,
+            nombre,
+            nombreCompleto.Trim());
+    }
+
+    private string GetMedicionBadge()
+        => selectedClienteDetalle?.TieneMedidor == true ? "Cliente medido" : "Cliente sin medidor";
+
+    private static string MostrarTexto(string? valor)
+        => string.IsNullOrWhiteSpace(valor) ? "—" : valor;
+
+    private sealed record ClienteSearchItem(int Id, string? Codigo, string? Nombre, string NombreCompleto);
+}

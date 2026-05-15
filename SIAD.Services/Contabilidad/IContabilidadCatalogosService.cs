@@ -47,10 +47,4 @@ public interface IContabilidadCatalogosService
     Task<long> SaveTipoTransaccionRuleAsync(TipoTransaccionRuleUpsertDto request, CancellationToken cancellationToken = default);
     Task<bool> DeleteTipoTransaccionRuleAsync(long ruleId, CancellationToken cancellationToken = default);
 
-    Task<IReadOnlyList<DocumentTypeLookupDto>> GetDocumentTypesAsync(string? module, CancellationToken cancellationToken = default);
-    Task<IReadOnlyList<ReglaIntegracionDto>> GetReglasIntegracionAsync(ReglaIntegracionFilterDto filter, CancellationToken cancellationToken = default);
-    Task<long> SaveReglaIntegracionAsync(ReglaIntegracionUpsertDto request, CancellationToken cancellationToken = default);
-    Task<bool> DeleteReglaIntegracionAsync(long ruleId, CancellationToken cancellationToken = default);
-
-
 }

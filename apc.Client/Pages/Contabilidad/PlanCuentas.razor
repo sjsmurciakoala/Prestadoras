@@ -4,10 +4,8 @@
 @inject NavigationManager NavigationManager
 
 @using apc.Client.Pages.Contabilidad.Components
-@using DevExpress.Blazor
 @using System.Net.Http.Headers
 @using System.Collections.Generic
-@using System.Linq
 @using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Tenant
 @using System.Text
@@ -16,316 +14,357 @@
 @inject TenantState TenantState
 
 <PageTitle>Plan de Cuentas</PageTitle>
-<div class="contabilidad-page contabilidad-content plan-cuentas-page h-100">
-    @* Alerta moderna mediante DxPopup. Muestra mensajes de éxito, error o información con iconos y un botón de cierre *@
-    <DxPopup @bind-Visible="@popupVisible" HeaderText="@popupTitle" ShowFooter="true" Width="400px"
-        CloseOnOutsideClick="false" ShowCloseButton="false" HeaderCssClass="bg-primary text-white" BodyCssClass="p-3"
-        FooterCssClass="p-2 text-end">
-        <BodyContentTemplate>
-            <div class="d-flex align-items-center p-3">
-                @if (popupType == "success")
-                {
-                    <i class="bi bi-check-circle-fill text-success fs-1 me-3"></i>
-                }
-                else if (popupType == "error")
-                {
-                    <i class="bi bi-x-circle-fill text-danger fs-1 me-3"></i>
-                }
-                else
-                {
-                    <i class="bi bi-info-circle-fill text-primary fs-1 me-3"></i>
-                }
-                <div>
-                    <p class="mb-0 fs-6">@popupMessage</p>
-                </div>
-            </div>
-        </BodyContentTemplate>
-        <FooterContentTemplate>
-            <div class="p-2 text-end">
-                <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Entendido"
-                    Click="@(() => popupVisible = false)" />
-            </div>
-        </FooterContentTemplate>
-    </DxPopup>
+<DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall" @bind-IsActive="isXSmallScreen" />
+<DxMessageBox @bind-Visible="statusMessageVisible"
+              Type="MessageBoxType.Alert"
+              Title="@statusMessageTitle"
+              Text="@statusMessageText"
+              RenderStyle="@statusMessageRenderStyle"
+              OkButtonText="Entendido"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false" />
 
-    <div id="plan-cuentas-view" class="h-100">
-        <DxCard CssClass="shadow-sm border-0 rounded w-100 h-100">
-            <HeaderContent>
-                <div class="d-flex align-items-center py-2 px-1">
-                    <i class="bi bi-journal-text me-2 fs-4 text-primary"></i>
-                    <h5 class="mb-0 fw-bold text-secondary">Plan de Cuentas</h5>
-                </div>
-            </HeaderContent>
+<div class="pc-page" id="plan-cuentas-view">
 
-            <ChildContent>
-                <div class="px-2">
-                    <DxToolbar CssClass="mb-3" ItemSpacing="10px">
-                        <DxToolbarItem IconCssClass="bi bi-plus-lg" Text="Nuevo" Click="@(() => OpenForm(null))"
-                            RenderStyle="ButtonRenderStyle.Primary" />
-                        <DxToolbarItem IconCssClass="bi bi-pencil" Text="Editar"
-                            Disabled="@(cuentaSeleccionada == null || isFormVisible)"
-                            Click="@(() => OpenForm(cuentaSeleccionada))" />
-                        <DxToolbarItem IconCssClass="bi bi-trash" Text="Eliminar"
-                            Disabled="@(cuentaSeleccionada == null || isFormVisible)" Click="@DeleteCuentaAsync"
-                            RenderStyle="ButtonRenderStyle.Danger" />
-                        <DxToolbarItem IconCssClass="bi bi-arrow-clockwise" Text="Actualizar"
-                            Click="@(() => LoadPlanCuentasAsync())" BeginGroup="true" />
-                        <DxToolbarItem BeginGroup="true" IconCssClass="bi bi-file-earmark-excel" Text="Plantilla"
-                            Click="@DownloadTemplate" />
-                        <DxToolbarItem BeginGroup="true">
-                            <Template>
-                                <div class="d-flex align-items-center px-2">
-                                    <InputFile OnChange="@OnImportFileSelected" accept=".xlsx"
-                                        class="form-control form-control-sm" style="max-width: 250px;" />
-                                </div>
-                            </Template>
-                        </DxToolbarItem>
-                        <DxToolbarItem IconCssClass="bi bi-cloud-arrow-up" Text="Importar"
-                            Disabled="@(importFile == null || importInProgress)" Click="@ImportPlanCuentasAsync"
-                            RenderStyle="ButtonRenderStyle.Success" />
-                    </DxToolbar>
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-journal-text me-2 text-primary"></i>Plan de Cuentas
+            </h4>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="@(() => LoadPlanCuentasAsync())"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nuevo"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@(() => OpenForm(null))"
+                      Enabled="@(!IsBusy)" />
+        </div>
+    </div>
 
-                    <hr class="my-4 text-muted opacity-25" />
+    @* ── Indicadores rápidos ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="pc-stat-badge">
+            <i class="bi bi-journal-text"></i> Total: <strong>@planCuentas.Length.ToString("N0")</strong>
+        </span>
+        <span class="pc-stat-badge pc-stat-badge--success">
+            <i class="bi bi-arrow-left-right"></i> Con movimiento: <strong>@CuentasConMovimiento</strong>
+        </span>
+        <span class="pc-stat-badge pc-stat-badge--info">
+            <i class="bi bi-people"></i> Con tercero: <strong>@CuentasConTercero</strong>
+        </span>
+        <span class="pc-stat-badge pc-stat-badge--warning">
+            <i class="bi bi-diagram-3"></i> Con centro: <strong>@CuentasConCentro</strong>
+        </span>
+    </div>
 
-                    <DxFormLayout ColCount="12" CssClass="mb-4" CaptionPosition="CaptionPosition.Vertical">
-                        <DxFormLayoutItem Caption="Cuenta" ColSpanSm="12" ColSpanMd="3">
-                            <DxTextBox Placeholder="Código..." Text="@filtroCuenta" TextChanged="@OnCuentaFilterChanged"
-                                TextExpression="@(() => filtroCuenta)"
-                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Descripción" ColSpanSm="12" ColSpanMd="3">
-                            <DxTextBox Placeholder="Nombre..." Text="@filtroDescripcion"
-                                TextChanged="@OnDescripcionFilterChanged"
-                                TextExpression="@(() => filtroDescripcion)"
-                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Mov" ColSpanSm="4" ColSpanMd="2">
-                            <DxComboBox Data="@boolFilterOptions" TData="BoolFilterOption" TValue="bool?"
-                                Value="@filtroMov" ValueChanged="@OnMovFilterChanged" TextFieldName="Text"
-                                ValueFieldName="Value" NullText="Todos" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Tercero" ColSpanSm="4" ColSpanMd="2">
-                            <DxComboBox Data="@boolFilterOptions" TData="BoolFilterOption" TValue="bool?"
-                                Value="@filtroTercero" ValueChanged="@OnTerceroFilterChanged" TextFieldName="Text"
-                                ValueFieldName="Value" NullText="Todos" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Centro" ColSpanSm="4" ColSpanMd="2">
-                            <DxComboBox Data="@boolFilterOptions" TData="BoolFilterOption" TValue="bool?"
-                                Value="@filtroCentro" ValueChanged="@OnCentroFilterChanged" TextFieldName="Text"
-                                ValueFieldName="Value" NullText="Todos" />
-                        </DxFormLayoutItem>
-                    </DxFormLayout>
-                </div>
-
-                <div class="row g-0 h-100 border-top" style="min-height: 400px;">
-                        <div class="col-12 col-md-7 pe-md-3 d-flex flex-column pt-3 plan-cuentas-grid-pane">
-                            <DxGrid Data="@cuentasFiltradas" KeyFieldName="@nameof(PlanCuentaDto.AccountId)"
-                                SelectionMode="GridSelectionMode.Single" AllowSelectRowByClick="true"
-                                @bind-SelectedDataItem="SelectedRow" ShowFilterRow="true" ShowSearchBox="true"
-                                PagerPosition="GridPagerPosition.Bottom" PageSizeSelectorVisible="true"
-                                PageSizeSelectorItems="@(new int[] { 25, 50, 100 })" PageSize="25"
-                                CssClass="w-100 flex-grow-1 border-0">
-                                <Columns>
-                                    <DxGridDataColumn Caption="Cuenta" Width="140px">
-                                        <CellDisplayTemplate Context="cell">
-                                            @if (cell.DataItem is PlanCuentaDto item)
-                                            {
-                                                @FormatAccountCode(item)
-                                            }
-                                        </CellDisplayTemplate>
-                                    </DxGridDataColumn>
-                                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Name)" Caption="Descripción" />
-                                    <DxGridDataColumn Caption="Flags" Width="110px"
-                                        TextAlignment="GridTextAlignment.Center">
-                                        <CellDisplayTemplate Context="cell">
-                                            @if (cell.DataItem is PlanCuentaDto item)
-                                            {
-                                                <div class="d-flex gap-1 justify-content-center">
-                                                    @if (item.AllowsPosting)
-                                                    {
-                                                        <span class="badge bg-primary" title="Movimiento">M</span>
-                                                    }
-                                                    @if (item.AllowsThird)
-                                                    {
-                                                        <span class="badge bg-info text-dark" title="Terceros">T</span>
-                                                    }
-                                                    @if (item.AllowsCostCenter)
-                                                    {
-                                                        <span class="badge bg-warning text-dark" title="Centros">C</span>
-                                                    }
-                                                    @if (HasChildren(item))
-                                                    {
-                                                        <span class="badge bg-danger" title="Cuenta padre">P</span>
-                                                    }
-                                                    @if (item.AllowsBudget)
-                                                    {
-                                                        <span class="badge bg-secondary" title="Presupuesto">B</span>
-                                                    }
-                                                    @if (item.AllowsMultiCurrency)
-                                                    {
-                                                        <span class="badge bg-dark" title="Multimoneda">MC</span>
-                                                    }
-                                                </div>
-                                            }
-                                        </CellDisplayTemplate>
-                                    </DxGridDataColumn>
-                                </Columns>
-                            </DxGrid>
+    @* ── Barra de acciones secundarias ── *@
+    <div class="pc-actions-bar mb-3">
+        <DxToolbar ItemRenderStyleMode="ToolbarRenderStyleMode.Contained">
+            <Items>
+                <DxToolbarItem Text="Editar"
+                               IconCssClass="bi bi-pencil"
+                               Disabled="@(cuentaSeleccionada == null || isFormVisible || IsBusy)"
+                               Click="@(() => OpenForm(cuentaSeleccionada))" />
+                <DxToolbarItem Text="Eliminar"
+                               IconCssClass="bi bi-trash"
+                               RenderStyle="ButtonRenderStyle.Danger"
+                               Disabled="@(cuentaSeleccionada == null || isFormVisible || IsBusy)"
+                               Click="@DeleteCuentaAsync" />
+                <DxToolbarItem Text="Plantilla"
+                               IconCssClass="bi bi-file-earmark-excel"
+                               Alignment="ToolbarItemAlignment.Right"
+                               Click="@DownloadTemplate" />
+                <DxToolbarItem Alignment="ToolbarItemAlignment.Right">
+                    <Template>
+                        <div class="d-flex align-items-center px-2">
+                            <InputFile OnChange="@OnImportFileSelected" accept=".xlsx"
+                                class="form-control form-control-sm" style="max-width: 220px;" />
                         </div>
+                    </Template>
+                </DxToolbarItem>
+                <DxToolbarItem Text="Importar"
+                               IconCssClass="bi bi-cloud-arrow-up"
+                               RenderStyle="ButtonRenderStyle.Success"
+                               Alignment="ToolbarItemAlignment.Right"
+                               Disabled="@(importFile == null || importInProgress)"
+                               Click="@ImportPlanCuentasAsync" />
+            </Items>
+        </DxToolbar>
+    </div>
 
-                        <div class="col-12 col-md-5 ps-md-4 pt-3 bg-light bg-opacity-25 plan-cuentas-detail-pane" style="overflow-y: auto;">
-                            <div class="h-100 pe-2">
-                                @if (isFormVisible)
+    @* ── Filtros ── *@
+    <div class="pc-filter-bar mb-3">
+        <DxFormLayout ColCount="12" CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Cuenta" ColSpanSm="12" ColSpanMd="3">
+                <DxTextBox Placeholder="Código..." Text="@filtroCuenta" TextChanged="@OnCuentaFilterChanged"
+                    TextExpression="@(() => filtroCuenta)"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Descripción" ColSpanSm="12" ColSpanMd="3">
+                <DxTextBox Placeholder="Nombre..." Text="@filtroDescripcion"
+                    TextChanged="@OnDescripcionFilterChanged"
+                    TextExpression="@(() => filtroDescripcion)"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Mov" ColSpanSm="4" ColSpanMd="2">
+                <DxComboBox Data="@boolFilterOptions" TData="BoolFilterOption" TValue="bool?"
+                    Value="@filtroMov" ValueChanged="@OnMovFilterChanged"
+                    TextFieldName="Text" ValueFieldName="Value" NullText="Todos" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tercero" ColSpanSm="4" ColSpanMd="2">
+                <DxComboBox Data="@boolFilterOptions" TData="BoolFilterOption" TValue="bool?"
+                    Value="@filtroTercero" ValueChanged="@OnTerceroFilterChanged"
+                    TextFieldName="Text" ValueFieldName="Value" NullText="Todos" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Centro" ColSpanSm="4" ColSpanMd="2">
+                <DxComboBox Data="@boolFilterOptions" TData="BoolFilterOption" TValue="bool?"
+                    Value="@filtroCentro" ValueChanged="@OnCentroFilterChanged"
+                    TextFieldName="Text" ValueFieldName="Value" NullText="Todos" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    @* ── Layout master-detail ── *@
+    <div class="row g-0 pc-master-detail" style="min-height: 400px;">
+
+        @* ── Grid principal ── *@
+        <div class="col-12 col-md-7 pe-md-3 d-flex flex-column pc-grid-pane">
+            <div class="pc-grid-wrapper shadow-sm">
+                <DxGrid Data="@cuentasFiltradas"
+                        KeyFieldName="@nameof(PlanCuentaDto.AccountId)"
+                        SelectionMode="GridSelectionMode.Single"
+                        AllowSelectRowByClick="true"
+                        @bind-SelectedDataItem="SelectedRow"
+                        ShowFilterRow="true"
+                        ShowSearchBox="true"
+                        ShowPager="true"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="@(new int[] { 25, 50, 100 })"
+                        PageSize="25"
+                        SizeMode="SizeMode.Medium"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        CssClass="border-0">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Code)" Caption="Cuenta" Width="140px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is PlanCuentaDto item)
                                 {
-                                    <DxCard CssClass="border-0 shadow-sm mb-4">
-                                        <HeaderContent>
-                                            <h6 class="mb-0 text-primary fw-bold">
-                                                <i class="bi bi-pencil-square me-2"></i>
-                                                @(cuentaSeleccionada == null ? "Nueva Cuenta" : "Editar Cuenta")
-                                            </h6>
-                                        </HeaderContent>
-                                        <ChildContent>
-                                            <PlanCuentaForm Cuenta="cuentaSeleccionada" Accounts="planCuentas"
-                                                AccountTypes="accountTypes" CategoryOptions="categoryOptions"
-                                                SeparadorCodigo="@separadorCodigo" NivelesFormato="@nivelesFormato"
-                                                OnSaved="HandleFormSavedAsync" OnCanceled="HandleFormCanceled"
-                                                OnError="HandleFormError" />
-                                        </ChildContent>
-                                    </DxCard>
+                                    <span class="fw-bold text-primary font-monospace">@FormatAccountCode(item)</span>
                                 }
-                                else if (cuentaSeleccionada != null)
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Name)" Caption="Descripción" />
+                        <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.AllowsPosting)" Caption="Flags" Width="110px"
+                                          TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is PlanCuentaDto item)
                                 {
-                                    <DxFormLayout CssClass="w-100" CaptionPosition="CaptionPosition.Vertical"
-                                        ItemSpacing="15px">
-                                        <DxFormLayoutGroup Caption="Información General" ColCount="1"
-                                            HeaderCssClass="text-primary fw-bold border-bottom mb-3 pb-2">
-                                            <DxFormLayoutItem Caption="Identificación">
-                                                <Template Context="flc">
-                                                    <div class="d-flex gap-2">
-                                                        <div class="flex-grow-1">
-                                                            <label class="small text-muted mb-1">Código</label>
-                                                            <DxTextBox
-                                                                Text="@FormatAccountCode(cuentaSeleccionada)"
-                                                                ReadOnly="true" />
-
-
-                                                        </div>
-                                                        <div style="width: 120px;">
-                                                            <label class="small text-muted mb-1">Tipo</label>
-                                                            <DxTextBox Text="@cuentaSeleccionada.AccountType" ReadOnly="true" />
-                                                        </div>
-                                                    </div>
-                                                </Template>
-                                            </DxFormLayoutItem>
-                                            <DxFormLayoutItem Caption="Nombre de la Cuenta">
-                                                <DxTextBox Text="@cuentaSeleccionada.Name" ReadOnly="true" />
-                                            </DxFormLayoutItem>
-                                            <DxFormLayoutItem Caption="Detalles">
-                                                <Template Context="flc">
-                                                    <div class="row g-2">
-                                                        <div class="col-6">
-                                                            <label class="small text-muted mb-1">Moneda</label>
-                                                            <DxTextBox Text="@GetCurrencyDisplay(cuentaSeleccionada)"
-                                                                ReadOnly="true" />
-                                                        </div>
-                                                        <div class="col-6">
-                                                            <label class="small text-muted mb-1">Clasificación</label>
-                                                            <DxTextBox Text="@GetCategoryDisplay(cuentaSeleccionada)"
-                                                                ReadOnly="true" />
-                                                        </div>
-                                                    </div>
-                                                </Template>
-                                            </DxFormLayoutItem>
-                                            <DxFormLayoutItem Caption="Descripción Corta">
-                                                <DxMemo Text="@GetDescriptionDisplay(cuentaSeleccionada)" ReadOnly="true"
-                                                    Rows="2" ResizeMode="MemoResizeMode.Disabled" />
-                                            </DxFormLayoutItem>
-                                        </DxFormLayoutGroup>
-
-                                        <DxFormLayoutGroup Caption="Configuración" ColCount="1"
-                                            HeaderCssClass="text-secondary fw-bold border-bottom mb-3 pb-2 mt-2">
-                                            <DxFormLayoutItem>
-                                                <Template Context="flc">
-                                                    <div class="row g-3">
-                                                        <div class="col-6">
-                                                            <DxCheckBox Checked="@cuentaSeleccionada.AllowsPosting"
-                                                                Enabled="false">Movimientos</DxCheckBox>
-                                                        </div>
-                                                        <div class="col-6">
-                                                            <DxCheckBox Checked="@cuentaSeleccionada.AllowsBudget"
-                                                                Enabled="false">Presupuesto</DxCheckBox>
-                                                        </div>
-                                                        <div class="col-6">
-                                                            <DxCheckBox Checked="@cuentaSeleccionada.AllowsThird"
-                                                                Enabled="false">Terceros</DxCheckBox>
-                                                        </div>
-                                                        <div class="col-6">
-                                                            <DxCheckBox Checked="@cuentaSeleccionada.IsTaxBase" Enabled="false">
-                                                                Impuestos</DxCheckBox>
-                                                        </div>
-                                                        <div class="col-6">
-                                                            <DxCheckBox Checked="@cuentaSeleccionada.AllowsCostCenter"
-                                                                Enabled="false">C. Costos</DxCheckBox>
-                                                        </div>
-                                                        <div class="col-6">
-                                                            <DxCheckBox Checked="@cuentaSeleccionada.AllowsMultiCurrency"
-                                                                Enabled="false">Multimoneda</DxCheckBox>
-                                                        </div>
-                                                    </div>
-                                                </Template>
-                                            </DxFormLayoutItem>
-                                        </DxFormLayoutGroup>
-
-                                        <DxFormLayoutGroup Caption="Auditoría" ColCount="1"
-                                            HeaderCssClass="text-muted small border-bottom mb-3 pb-2 mt-2">
-                                            <DxFormLayoutItem>
-                                                <Template Context="flc">
-                                                    <div
-                                                        class="d-flex justify-content-between align-items-center bg-white p-2 border rounded">
-                                                        <div>
-                                                            <small class="text-muted d-block">Nivel Jerárquico</small>
-                                                            <span class="fw-bold">@cuentaSeleccionada.Level</span>
-                                                        </div>
-                                                        <div>
-                                                            <small class="text-muted d-block text-end">Estado</small>
-                                                            <span
-                                                                class="badge @(cuentaSeleccionada.Status == "ACTIVO" ? "bg-success" : "bg-secondary")">
-                                                                @cuentaSeleccionada.Status
-                                                            </span>
-                                                        </div>
-                                                    </div>
-                                                </Template>
-                                            </DxFormLayoutItem>
-                                        </DxFormLayoutGroup>
-                                    </DxFormLayout>
-                                }
-                                else
-                                {
-                                    <div
-                                        class="d-flex flex-column align-items-center justify-content-center h-100 text-muted opacity-50 py-5">
-                                        <i class="bi bi-hand-index-thumb fs-1 mb-3"></i>
-                                        <p class="text-center">Selecciona una cuenta del listado<br />para ver sus propiedades.
-                                        </p>
+                                    <div class="d-flex gap-1 justify-content-center flex-wrap">
+                                        @if (item.AllowsPosting)
+                                        {
+                                            <span class="pc-flag-badge pc-flag-badge--primary" title="Movimiento">M</span>
+                                        }
+                                        @if (item.AllowsThird)
+                                        {
+                                            <span class="pc-flag-badge pc-flag-badge--info" title="Terceros">T</span>
+                                        }
+                                        @if (item.AllowsCostCenter)
+                                        {
+                                            <span class="pc-flag-badge pc-flag-badge--warning" title="Centros">C</span>
+                                        }
+                                        @if (HasChildren(item))
+                                        {
+                                            <span class="pc-flag-badge pc-flag-badge--danger" title="Cuenta padre">P</span>
+                                        }
+                                        @if (item.AllowsBudget)
+                                        {
+                                            <span class="pc-flag-badge pc-flag-badge--secondary" title="Presupuesto">B</span>
+                                        }
+                                        @if (item.AllowsMultiCurrency)
+                                        {
+                                            <span class="pc-flag-badge pc-flag-badge--dark" title="Multimoneda">MC</span>
+                                        }
                                     </div>
                                 }
-                            </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="text-center p-5 text-muted">
+                            <i class="bi bi-journal-text fs-1 d-block mb-2"></i>
+                            <h5 class="fw-bold text-dark">No hay cuentas</h5>
+                            <p class="mb-0">Agrega la primera cuenta o ajusta los filtros.</p>
                         </div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        </div>
+
+        @* ── Panel de detalle / formulario ── *@
+        <div class="col-12 col-md-5 ps-md-4 pt-3 pc-detail-pane">
+            @if (isFormVisible)
+            {
+                <div class="pc-detail-card shadow-sm">
+                    <div class="pc-detail-card-header">
+                        <h6 class="mb-0 fw-bold text-primary">
+                            <i class="bi bi-pencil-square me-2"></i>
+                            @(cuentaSeleccionada == null ? "Nueva Cuenta" : "Editar Cuenta")
+                        </h6>
                     </div>
-            </ChildContent>
-        </DxCard>
-        <DxLoadingPanel Visible="@cargando" PositionTarget="#plan-cuentas-view"
-            ApplyBackgroundShading="true" IsContentBlocked="true" Text="Cargando plan de cuentas..." IndicatorVisible="true" />
-        <DxLoadingPanel Visible="@importInProgress" PositionTarget="#plan-cuentas-view" CssClass="w-100"
-            ApplyBackgroundShading="true" IsContentBlocked="true" Text="@importStatusMessage" IndicatorVisible="true" />
+                    <div class="p-3">
+                        <PlanCuentaForm Cuenta="cuentaSeleccionada" Accounts="planCuentas"
+                            AccountTypes="accountTypes" CategoryOptions="categoryOptions"
+                            SeparadorCodigo="@separadorCodigo" NivelesFormato="@nivelesFormato"
+                            OnSaved="HandleFormSavedAsync" OnCanceled="HandleFormCanceled"
+                            OnError="HandleFormError" />
+                    </div>
+                </div>
+            }
+            else if (cuentaSeleccionada != null)
+            {
+                <div class="pc-detail-card shadow-sm">
+                    <div class="pc-detail-card-header">
+                        <h6 class="mb-0 fw-bold text-secondary">
+                            <i class="bi bi-info-circle me-2 text-primary"></i>Detalle de cuenta
+                        </h6>
+                    </div>
+                    <div class="p-3">
+                        <DxFormLayout CssClass="w-100" CaptionPosition="CaptionPosition.Vertical" ItemSpacing="15px">
+                            <DxFormLayoutGroup Caption="Información General" ColCount="1"
+                                HeaderCssClass="text-primary fw-bold border-bottom mb-3 pb-2">
+                                <DxFormLayoutItem Caption="Identificación">
+                                    <Template Context="flc">
+                                        <div class="d-flex gap-2">
+                                            <div class="flex-grow-1">
+                                                <label class="small text-muted mb-1">Código</label>
+                                                <DxTextBox Text="@FormatAccountCode(cuentaSeleccionada)" ReadOnly="true" />
+                                            </div>
+                                            <div style="width: 120px;">
+                                                <label class="small text-muted mb-1">Tipo</label>
+                                                <DxTextBox Text="@cuentaSeleccionada.AccountType" ReadOnly="true" />
+                                            </div>
+                                        </div>
+                                    </Template>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Nombre de la Cuenta">
+                                    <DxTextBox Text="@cuentaSeleccionada.Name" ReadOnly="true" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Detalles">
+                                    <Template Context="flc">
+                                        <div class="row g-2">
+                                            <div class="col-6">
+                                                <label class="small text-muted mb-1">Moneda</label>
+                                                <DxTextBox Text="@GetCurrencyDisplay(cuentaSeleccionada)" ReadOnly="true" />
+                                            </div>
+                                            <div class="col-6">
+                                                <label class="small text-muted mb-1">Clasificación</label>
+                                                <DxTextBox Text="@GetCategoryDisplay(cuentaSeleccionada)" ReadOnly="true" />
+                                            </div>
+                                        </div>
+                                    </Template>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Descripción Corta">
+                                    <DxMemo Text="@GetDescriptionDisplay(cuentaSeleccionada)" ReadOnly="true"
+                                        Rows="2" ResizeMode="MemoResizeMode.Disabled" />
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+
+                            <DxFormLayoutGroup Caption="Configuración" ColCount="1"
+                                HeaderCssClass="text-secondary fw-bold border-bottom mb-3 pb-2 mt-2">
+                                <DxFormLayoutItem>
+                                    <Template Context="flc">
+                                        <div class="row g-3">
+                                            <div class="col-6">
+                                                <DxCheckBox Checked="@cuentaSeleccionada.AllowsPosting" Enabled="false">Movimientos</DxCheckBox>
+                                            </div>
+                                            <div class="col-6">
+                                                <DxCheckBox Checked="@cuentaSeleccionada.AllowsBudget" Enabled="false">Presupuesto</DxCheckBox>
+                                            </div>
+                                            <div class="col-6">
+                                                <DxCheckBox Checked="@cuentaSeleccionada.AllowsThird" Enabled="false">Terceros</DxCheckBox>
+                                            </div>
+                                            <div class="col-6">
+                                                <DxCheckBox Checked="@cuentaSeleccionada.IsTaxBase" Enabled="false">Impuestos</DxCheckBox>
+                                            </div>
+                                            <div class="col-6">
+                                                <DxCheckBox Checked="@cuentaSeleccionada.AllowsCostCenter" Enabled="false">C. Costos</DxCheckBox>
+                                            </div>
+                                            <div class="col-6">
+                                                <DxCheckBox Checked="@cuentaSeleccionada.AllowsMultiCurrency" Enabled="false">Multimoneda</DxCheckBox>
+                                            </div>
+                                        </div>
+                                    </Template>
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+
+                            <DxFormLayoutGroup Caption="Auditoría" ColCount="1"
+                                HeaderCssClass="text-muted small border-bottom mb-3 pb-2 mt-2">
+                                <DxFormLayoutItem>
+                                    <Template Context="flc">
+                                        <div class="d-flex justify-content-between align-items-center bg-white p-2 border rounded">
+                                            <div>
+                                                <small class="text-muted d-block">Nivel Jerárquico</small>
+                                                <span class="fw-bold">@cuentaSeleccionada.Level</span>
+                                            </div>
+                                            <div>
+                                                <small class="text-muted d-block text-end">Estado</small>
+                                                <span class="@(cuentaSeleccionada.Status == "ACTIVO" ? "pc-badge pc-badge--success" : "pc-badge pc-badge--neutral")">
+                                                    @cuentaSeleccionada.Status
+                                                </span>
+                                            </div>
+                                        </div>
+                                    </Template>
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+                        </DxFormLayout>
+                    </div>
+                </div>
+            }
+            else
+            {
+                <div class="d-flex flex-column align-items-center justify-content-center h-100 text-muted opacity-50 py-5">
+                    <i class="bi bi-hand-index-thumb fs-1 mb-3"></i>
+                    <p class="text-center">Selecciona una cuenta del listado<br />para ver sus propiedades.</p>
+                </div>
+            }
+        </div>
     </div>
+
+    <DxLoadingPanel Visible="@cargando"
+                    PositionTarget="#plan-cuentas-view"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="Cargando plan de cuentas..." />
+    <DxLoadingPanel Visible="@importInProgress"
+                    PositionTarget="#plan-cuentas-view"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="@importStatusMessage" />
 </div>
 
 @code {
-    // --- LÓGICA DE POPUP VISUAL ---
-    private bool popupVisible;
-    private string popupTitle = string.Empty;
-    private string popupMessage = string.Empty;
-    private string popupType = "info";
+    // --- Estado ---
+    private bool isXSmallScreen;
+    private bool statusMessageVisible;
+    private string statusMessageTitle = string.Empty;
+    private string statusMessageText = string.Empty;
+    private MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
+
+    private bool IsBusy => cargando || importInProgress;
+    private int CuentasConMovimiento => planCuentas.Count(c => c.AllowsPosting);
+    private int CuentasConTercero => planCuentas.Count(c => c.AllowsThird);
+    private int CuentasConCentro => planCuentas.Count(c => c.AllowsCostCenter);
+
     private string formatoCuentas = "###-###-##";
     private string separadorCodigo = "-";
 
@@ -352,8 +391,7 @@
         }
         catch (Exception ex)
         {
-            ShowAlert("Error", $"Error al cargar configuración: {ex.Message}" + " se utilizó la configuración predeterminada.",
-            "error");
+            ShowStatusMessage("Error de configuración", $"Error al cargar configuración: {ex.Message}. Se utilizó la configuración predeterminada.", MessageBoxRenderStyle.Danger);
         }
     }
 
@@ -589,25 +627,12 @@
 
         return string.Join(sep, parts);
     }
-    private void ShowAlert(string title, string message, string type = "info")
+    private void ShowStatusMessage(string title, string text, MessageBoxRenderStyle renderStyle = MessageBoxRenderStyle.Info)
     {
-        popupTitle = title;
-        popupMessage = message;
-        popupType = type;
-        popupVisible = true;
-    }
-
-    /// <summary>
-    /// Devuelve la clase de ícono de Bootstrap en función del tipo de mensaje para el popup.
-    /// </summary>
-    private string GetPopupIcon()
-    {
-        return popupType switch
-        {
-            "success" => "bi bi-check-circle-fill text-success",
-            "error" => "bi bi-x-circle-fill text-danger",
-            _ => "bi bi-info-circle-fill text-primary"
-        };
+        statusMessageTitle = title;
+        statusMessageText = text;
+        statusMessageRenderStyle = renderStyle;
+        statusMessageVisible = true;
     }
 
     private static readonly BoolFilterOption[] boolFilterOptions = new[]
@@ -690,7 +715,7 @@ new BoolFilterOption("No", false)
         }
         catch (Exception ex)
         {
-            ShowAlert("Error", $"Error al cargar: {ex.Message}", "error");
+            ShowStatusMessage("Error", $"Error al cargar: {ex.Message}", MessageBoxRenderStyle.Danger);
         }
         finally
         {
@@ -758,12 +783,12 @@ new BoolFilterOption("No", false)
     {
         await LoadPlanCuentasAsync(savedId == 0 ? null : savedId);
         isFormVisible = false;
-        ShowAlert("éxito", "Cuenta guardada correctamente", "success");
+        ShowStatusMessage("Éxito", "Cuenta guardada correctamente.", MessageBoxRenderStyle.Success);
     }
 
     private Task HandleFormError(string message)
     {
-        ShowAlert("Error", message, "error");
+        ShowStatusMessage("Error", message, MessageBoxRenderStyle.Danger);
         return Task.CompletedTask;
     }
 
@@ -777,7 +802,7 @@ new BoolFilterOption("No", false)
     {
         if (cuentaSeleccionada == null)
             return;
-        ShowAlert("Info", "Función de eliminar en desarrollo...", "info");
+        ShowStatusMessage("Info", "Función de eliminar en desarrollo.", MessageBoxRenderStyle.Info);
         await Task.CompletedTask;
     }
 
@@ -790,7 +815,7 @@ new BoolFilterOption("No", false)
     {
         if (importFile is null)
         {
-            ShowAlert("Atención", "Selecciona un archivo primero.", "error");
+            ShowStatusMessage("Atención", "Selecciona un archivo primero.", MessageBoxRenderStyle.Warning);
             return;
         }
 
@@ -810,7 +835,7 @@ new BoolFilterOption("No", false)
             var response = await Http.PostAsync("api/contabilidad/catalogos/plan-cuentas/import", content);
             if (!response.IsSuccessStatusCode)
             {
-                ShowAlert("Error Importación", $"Falló la importación: {response.ReasonPhrase}", "error");
+                ShowStatusMessage("Error en importación", $"Falló la importación: {response.ReasonPhrase}", MessageBoxRenderStyle.Danger);
                 return;
             }
 
@@ -821,18 +846,17 @@ new BoolFilterOption("No", false)
                 var rowLabel = firstError.RowNumber > 0 ? $"Fila {firstError.RowNumber}" : "Importación";
                 var codeLabel = string.IsNullOrWhiteSpace(firstError.Code) ? string.Empty : $" ({firstError.Code})";
                 var extraErrors = result.Errors.Count > 1 ? $" Se detectaron {result.Errors.Count} errores." : string.Empty;
-                ShowAlert("Error en Archivo", $"{rowLabel}{codeLabel}: {firstError.Message}{extraErrors}", "error");
+                ShowStatusMessage("Error en archivo", $"{rowLabel}{codeLabel}: {firstError.Message}{extraErrors}", MessageBoxRenderStyle.Danger);
             }
             else
             {
-                ShowAlert("Importación Completada", $"Insertadas: {result?.Inserted ?? 0}. Actualizadas: {result?.Updated ?? 0}.",
-                "success");
+                ShowStatusMessage("Importación completada", $"Insertadas: {result?.Inserted ?? 0}. Actualizadas: {result?.Updated ?? 0}.", MessageBoxRenderStyle.Success);
                 await LoadPlanCuentasAsync();
             }
         }
         catch (Exception ex)
         {
-            ShowAlert("Error Crítico", ex.Message, "error");
+            ShowStatusMessage("Error crítico", ex.Message, MessageBoxRenderStyle.Danger);
         }
         finally
         {

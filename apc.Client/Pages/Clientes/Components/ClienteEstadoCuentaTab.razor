@@ -113,9 +113,18 @@
                                           Width="110px"
                                           DisplayFormat="d" />
 
+                        <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.NumRecibo)"
+                                          Caption="Núm. recibo"
+                                          Width="110px"
+                                          TextAlignment="GridTextAlignment.Right" />
+
+                        <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.NumFactura)"
+                                          Caption="Núm. factura"
+                                          Width="180px" />
+
                         <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Tipo)"
                                           Caption="Tipo"
-                                          Width="100px" />
+                                          Width="130px" />
 
                         <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.Descripcion)"
                                           Caption="Descripción"

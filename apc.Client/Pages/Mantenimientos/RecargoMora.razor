@@ -1,0 +1,162 @@
+@page "/mantenimientos/recargo-mora"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Mantenimientos
+@using apc.Client.Services.Mantenimientos
+
+@inject MantenimientosClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>Recargo por mora</PageTitle>
+
+<DxToastProvider Name="RecargoMoraToast" MaxToastCount="4" />
+
+<div class="mant-page">
+
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-clock-history me-2 text-primary"></i>Recargo por mora
+            </h4>
+            <small class="text-muted">Plan de Arbitrios PC 2026 Art. 130 — recargo sobre saldos vencidos.</small>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Recargar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="CargarAsync"
+                      Enabled="@(!isSaving)" />
+        </div>
+    </div>
+
+    @if (config is null)
+    {
+        <div class="text-center p-5">
+            <DxLoadingPanel Visible="true" Text="Cargando configuración..." />
+            <div style="height:80px"></div>
+        </div>
+    }
+    else
+    {
+        <div class="mant-card shadow-sm">
+            <div class="mant-status-banner">
+                <span class="text-muted small">Estado actual:</span>
+                <span class="cai-badge @(config.Activo ? "cai-badge--vigente" : "cai-badge--inactivo")">
+                    @(config.Activo ? "Activo" : "Inactivo")
+                </span>
+            </div>
+
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Recargo activo" ColSpanMd="12">
+                    <Template Context="t">
+                        <DxCheckBox @bind-Checked="config.Activo">
+                            Aplicar recargo por mora al facturar
+                        </DxCheckBox>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Tasa mensual (%)" ColSpanMd="6">
+                    <Template Context="t">
+                        <DxSpinEdit @bind-Value="tasaMensualPorcentaje"
+                                    Decimals="4"
+                                    MinValue="0"
+                                    MaxValue="100"
+                                    Increment="0.05m" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Días de gracia" ColSpanMd="6">
+                    <Template Context="t">
+                        <DxSpinEdit @bind-Value="config.DiasGracia"
+                                    MinValue="0"
+                                    MaxValue="365" />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <Template Context="t">
+                        <DxTextBox @bind-Text="config.Descripcion"
+                                   NullText="Referencia de la regla (ej. Plan de Arbitrios Art. 130)" />
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <small class="text-muted d-block mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                La <strong>tasa mensual</strong> se aplica sobre el saldo vencido del cliente al facturar.
+                Referencia Art. 130: 2% anual ≈ <strong>0.1667%</strong> mensual.
+                Los <strong>días de gracia</strong> quedan reservados para uso futuro.
+            </small>
+
+            <div class="d-flex justify-content-end mt-3">
+                <DxButton Text="Guardar"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          IconCssClass="bi bi-check-lg"
+                          Enabled="@(!isSaving)"
+                          Click="GuardarAsync" />
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    private RecargoMoraDto? config;
+    private bool isSaving;
+
+    // La BD guarda tasa_mensual como fracción (0.001667). La UI la muestra como % (0.1667).
+    private decimal tasaMensualPorcentaje;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            config = await Client.ObtenerRecargoMoraAsync();
+            tasaMensualPorcentaje = config.TasaMensual * 100m;
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No se pudo cargar la configuración: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (config is null) return;
+        isSaving = true;
+        try
+        {
+            config.TasaMensual = tasaMensualPorcentaje / 100m;
+            var resp = await Client.GuardarRecargoMoraAsync(config);
+            if (resp.Success)
+            {
+                ShowToast("Éxito", resp.Message ?? "Configuración guardada.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+            else
+            {
+                ShowToast("Atención", resp.Message ?? "No se pudo guardar.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "RecargoMoraToast",
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+}

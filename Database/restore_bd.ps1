@@ -48,7 +48,7 @@ Write-Host ""
 Write-Host "Backup seleccionado: $($selectedBackup.Name)" -ForegroundColor Green
 Write-Host ""
 
-$pgHost = "localhost"
+$pgHost = "172.16.0.9"
 $pgPort = "5432"
 $pgUser = "postgres"
 $pgDatabase = "siad"

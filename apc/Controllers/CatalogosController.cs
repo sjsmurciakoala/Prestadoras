@@ -35,21 +35,6 @@ public class CatalogosController : ControllerBase
     public async Task<IActionResult> GetTiposUso(CancellationToken ct)
         => Ok(await _catalogosService.GetTiposUsoAsync(ct));
 
-    [HttpGet("letras")]
-    public async Task<IActionResult> GetLetras(CancellationToken ct)
-        => Ok(await _catalogosService.GetLetrasAsync(ct));
-
-    [HttpGet("letras-servicio")]
-    public async Task<IActionResult> GetLetrasServicio([FromQuery] string? tipoUsoCodigo, [FromQuery] int? categoriaId, CancellationToken ct)
-    {
-        if (!int.TryParse(tipoUsoCodigo, out var tipo) || categoriaId is null)
-        {
-            return Ok(Array.Empty<LetraServicioLookupDto>());
-        }
-
-        return Ok(await _catalogosService.GetLetrasTarifaAsync(tipo, categoriaId.Value, ct));
-    }
-
     [HttpGet("categorias-por-tipo")]
     public async Task<IActionResult> GetCategoriasPorTipo([FromQuery] int? tipoUsoCodigo, CancellationToken ct)
     {

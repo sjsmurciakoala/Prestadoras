@@ -26,7 +26,7 @@
         }
 
         <DxTabs RenderStyle="TabsRenderStyle.Default" CssClass="mb-3">
-            
+
             <DxTabPage>
                 <TextTemplate>
                     <div class="d-flex align-items-center gap-2 px-1">
@@ -38,12 +38,10 @@
                     <div class="p-3">
                         <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
                             <DxFormLayoutGroup Caption="Identificación" ColSpanMd="12">
-                                                                <DxFormLayoutItem Caption="Código Sistema" ColSpanMd="3">
-                                    <DxTextBox Text="@CodigoSistemaPreview"
-                                               TextExpression="@(() => CodigoSistemaPreview)"
-                                               NullText="Se generará al guardar"
-                                               ReadOnly="true"
-                                               EnableValidation="false" />
+                                <DxFormLayoutItem Caption="Código Sistema *" ColSpanMd="3">
+                                    <DxTextBox @bind-Text="Modelo.Clave"
+                                               NullText="Ingrese el código" />
+                                    <ValidationMessage For="() => Modelo.Clave" />
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="DNI / Identidad" ColSpanMd="4">
                                     <DxMaskedInput @bind-Value="Modelo.Dni" Mask="0000-0000-00000" NullText="0000-0000-00000" />
@@ -107,11 +105,11 @@
                                             <DxCheckBox @bind-Checked="Modelo.Activo">
                                                 <span class="fw-bold text-success"><i class="bi bi-check-circle-fill me-1"></i>Cliente Activo</span>
                                             </DxCheckBox>
-                                            
+
                                             <DxCheckBox @bind-Checked="Modelo.TerceraEdad">
                                                 <span><i class="bi bi-person-wheelchair me-1"></i>Tercera Edad</span>
                                             </DxCheckBox>
-                                            
+
                                             <DxCheckBox @bind-Checked="Modelo.BloqueadoCobranza">
                                                 <span class="text-danger fw-bold"><i class="bi bi-slash-circle me-1"></i>Bloqueo de Cobro</span>
                                             </DxCheckBox>
@@ -129,61 +127,21 @@
                 <TextTemplate>
                     <div class="d-flex align-items-center gap-2 px-1">
                         <i class="bi bi-speedometer text-primary"></i>
-                        <span>Servicio</span>
+                        <span>Lectura app</span>
                     </div>
                 </TextTemplate>
                 <ChildContent>
                     <div class="p-3">
                         <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
-                            <DxFormLayoutGroup Caption="Configuración Técnica" ColSpanMd="12">
-                                <DxFormLayoutItem Caption="Tipo de Servicio" ColSpanMd="6">
-                                    <DxComboBox Data="@servicios"
-                                                @bind-Value="Modelo.ServicioId"
-                                                ValueFieldName="Id"
-                                                TextFieldName="Nombre"
-                                                NullText="Seleccione Servicio" />
-                                </DxFormLayoutItem>
-                                <DxFormLayoutItem Caption="Categoría Tarifaria" ColSpanMd="6">
-                                    <DxComboBox Data="@categorias"
-                                                @bind-Value="Modelo.CategoriaServicioId"
-                                                @bind-Value:after="OnCategoriaChanged"
-                                                ValueFieldName="Id"
-                                                TextFieldName="Nombre"
-                                                NullText="Seleccione Categoría" />
-                                    @if (categoriasInvalid)
-                                    {
-                                        <div class="text-danger small mt-1">No hay categorías válidas para el tipo de uso seleccionado.</div>
-                                    }
-                                </DxFormLayoutItem>
-                                
-                                <DxFormLayoutItem Caption="Ciclo de Facturación" ColSpanMd="4">
+                            <DxFormLayoutGroup Caption="Configuración de lectura" ColSpanMd="12">
+
+                                <DxFormLayoutItem Caption="Ciclo de lectura" ColSpanMd="4">
                                     <DxComboBox Data="@ciclos"
                                                 @bind-Value="Modelo.CicloId"
                                                 @bind-Value:after="OnCicloChanged"
                                                 ValueFieldName="Id"
                                                 TextFieldName="Descripcion"
                                                 NullText="Seleccione Ciclo" />
-                                </DxFormLayoutItem>
-                                <DxFormLayoutItem Caption="Letra" ColSpanMd="4">
-                                    <DxComboBox Data="@letras"
-                                                @bind-Value="Modelo.LetraCodigo"
-                                                ValueFieldName="Value"
-                                                TextFieldName="Text"
-                                                NullText="Seleccione..." />
-                                    @if (letrasInvalid)
-                                    {
-                                        <div class="text-danger small mt-1">@letrasAviso</div>
-                                    }
-                                </DxFormLayoutItem>
-                                <DxFormLayoutItem Caption="Tipo Uso" ColSpanMd="4">
-                                    <DxComboBox Data="@tiposUso"
-                                                @bind-Value="Modelo.TipoUsoCodigo"
-                                                @bind-Value:after="OnTipoUsoChanged"
-                                                ValueFieldName="Codigo"
-                                                TextFieldName="Descripcion"
-                                                NullText="Seleccione..."
-                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-                                    <ValidationMessage For="() => Modelo.TipoUsoCodigo" />
                                 </DxFormLayoutItem>
 
                                 <DxFormLayoutItem Caption="Ruta / Libreta" ColSpanMd="4">
@@ -206,9 +164,6 @@
                                 <DxFormLayoutItem Caption="Secuencia" ColSpanMd="4">
                                     <DxTextBox @bind-Text="Modelo.Secuencia" />
                                 </DxFormLayoutItem>
-                                <DxFormLayoutItem Caption="Contador Manual" ColSpanMd="4">
-                                    <DxTextBox @bind-Text="Modelo.Contador" NullText="Opcional" />
-                                </DxFormLayoutItem>
 
                                 <DxFormLayoutItem Caption="Indicativo ruta" ColSpanMd="12">
                                     <Template>
@@ -216,7 +171,7 @@
                                         <div class="text-muted small mt-1">Formado por: Ciclo-Barrio-Ruta/Libreta-Secuencia. Si no hay secuencia, se usa "----".</div>
                                     </Template>
                                 </DxFormLayoutItem>
-                                
+
                                 <DxFormLayoutItem Caption="Clave SURE" ColSpanMd="6">
                                     <DxTextBox @bind-Text="Modelo.ClaveSure" />
                                 </DxFormLayoutItem>
@@ -225,8 +180,7 @@
                                 </DxFormLayoutItem>
                             </DxFormLayoutGroup>
 
-                            <DxFormLayoutGroup Caption="Instrumentación y Contratos" ColSpanMd="12" CssClass="mt-3">
-                                
+                            <DxFormLayoutGroup Caption="Medición y contratos" ColSpanMd="12" CssClass="mt-3">
                                 <DxFormLayoutItem ColSpanMd="4">
                                     <Template>
                                         <div class="card bg-light border-0 h-100">
@@ -235,7 +189,7 @@
                                                     <i class="bi bi-speedometer2 me-2"></i>
                                                     <span class="fw-bold">Medición</span>
                                                 </div>
-                                                
+
                                                 <div class="mb-2">
                                                     <DxCheckBox @bind-Checked="Modelo.TieneMedidor" CssClass="fw-bold">
                                                         Instalar Medidor
@@ -275,7 +229,7 @@
                                                     </div>
                                                 </div>
 
-                                                <DxTextBox @bind-Text="Modelo.NumeroContrato" Enabled="@(Modelo.TieneContrato == true)" NullText="Ingrese N° de Contrato" />
+                                                <DxTextBox @bind-Text="Modelo.NumeroContrato" Enabled="@(Modelo.TieneContrato == true)" NullText="Ingrese No. de Contrato" />
                                             </div>
                                         </div>
                                     </Template>
@@ -299,7 +253,7 @@
                                                     </div>
                                                 </div>
 
-                                                <DxTextBox @bind-Text="Modelo.NumeroConvenio" Enabled="@(Modelo.TieneConvenio == true)" NullText="Ingrese N° de Convenio" />
+                                                <DxTextBox @bind-Text="Modelo.NumeroConvenio" Enabled="@(Modelo.TieneConvenio == true)" NullText="Ingrese No. de Convenio" />
                                             </div>
                                         </div>
                                     </Template>
@@ -408,7 +362,7 @@
     [Parameter] public EventCallback OnGuardar { get; set; }
     [Parameter] public EventCallback OnCancelar { get; set; }
 
-    private List<string> ColorOptions = new() { "Blanco", "Negro", "Gris", "Rojo", "Verde", "Azul", "Amarillo", "Naranja", "Café", "Beige" };
+    private List<string> ColorOptions = new() { "Blanco", "Negro", "Gris", "Rojo", "Verde", "Azul", "Amarillo", "Naranja", "CafÃƒÂ©", "Beige" };
     private List<SolicitudCategoriaDto> categorias = new();
     private List<SolicitudCategoriaDto> categoriasTodas = new();
     private List<CicloLookupDto> ciclos = new();
@@ -417,20 +371,15 @@
     private List<TipoUsoLookupDto> tiposUso = new();
     private List<AbogadoLookupDto> abogados = new();
     private List<BarrioLookupDto> barrios = new();
-    private List<LetraServicioLookupDto> letras = new();
     private List<MedidorListDto> medidoresDisponibles = new();
     private List<int> categoriasPermitidas = new();
-    private bool letrasInvalid;
-    private bool categoriasInvalid;
-    private string letrasAviso = "No hay letras para la combinación seleccionada.";
 
     private string IndicativoRutaPreview => ConstruirIndicativoPreview();
-    private string CodigoSistemaPreview => ConstruirCodigoSistemaPreview();
     private int? medidorIdCargado;
     private int? cicloCargado;
     private string? tipoUsoCargado;
     private int? categoriaCargada;
-    private bool PuedeGuardar => !letrasInvalid && !categoriasInvalid;
+    private bool PuedeGuardar => true;
 
     protected override async Task OnParametersSetAsync()
     {
@@ -456,7 +405,6 @@
             tipoUsoCargado = Modelo.TipoUsoCodigo;
             categoriaCargada = Modelo.CategoriaServicioId;
             await CargarCategoriasPorTipoAsync();
-            await CargarLetrasServicioAsync();
         }
 
         if (Modelo.CicloId != cicloCargado)
@@ -490,7 +438,6 @@
         };
 
         await Task.WhenAll(tareas);
-        await CargarLetrasServicioAsync();
         await CargarRutasAsync();
     }
 
@@ -596,51 +543,8 @@
         try { barrios = await CatalogosClient.ObtenerBarriosAsync(); }
         catch { barrios = new(); }
     }
-    private async Task CargarLetrasServicioAsync()
-    {
-        if (!int.TryParse(Modelo.TipoUsoCodigo, out _) || Modelo.CategoriaServicioId is null)
-        {
-            letras = new();
-            Modelo.LetraCodigo = null;
-            letrasInvalid = false;
-            return;
-        }
-
-        try
-        {
-            letras = await CatalogosClient.ObtenerLetrasServicioAsync(Modelo.TipoUsoCodigo!, Modelo.CategoriaServicioId.Value);
-        }
-        catch
-        {
-            letras = new();
-        }
-
-        if (letras.Count == 0)
-        {
-            try
-            {
-                letras = (await CatalogosClient.ObtenerLetrasAsync())
-                    .Where(l => !string.IsNullOrWhiteSpace(l))
-                    .Select(l => new LetraServicioLookupDto(l, l))
-                    .ToList();
-            }
-            catch
-            {
-                letras = new();
-            }
-        }
-
-        if (!string.IsNullOrWhiteSpace(Modelo.LetraCodigo) && letras.All(l => l.Value != Modelo.LetraCodigo))
-        {
-            Modelo.LetraCodigo = null;
-        }
-
-        letrasInvalid = false;
-    }
-
     private async Task CargarCategoriasPorTipoAsync()
     {
-        categoriasInvalid = false;
         categoriasPermitidas.Clear();
 
         if (!int.TryParse(Modelo.TipoUsoCodigo, out var tipo))
@@ -666,16 +570,10 @@
 
         if (categorias.Count == 0)
         {
-            categoriasInvalid = true;
             Modelo.CategoriaServicioId = null;
-            letras = new();
-            Modelo.LetraCodigo = null;
-            letrasInvalid = true;
-            letrasAviso = "No hay letras para la combinación seleccionada.";
             return;
         }
 
-        categoriasInvalid = false;
 
         if (Modelo.CategoriaServicioId is not null && categorias.All(c => c.Id != Modelo.CategoriaServicioId.Value))
         {
@@ -686,12 +584,6 @@
     private async Task OnTipoUsoChanged()
     {
         await CargarCategoriasPorTipoAsync();
-        await CargarLetrasServicioAsync();
-    }
-
-    private async Task OnCategoriaChanged()
-    {
-        await CargarLetrasServicioAsync();
     }
 
     private async Task OnCicloChanged()
@@ -713,24 +605,14 @@
 
         if (!tieneValores)
         {
-            return "—";
+            return "-";
         }
 
         // Format: Ciclo-Barrio-Ruta/Libreta-Secuencia. Secuencia uses "----" when empty.
         return $"{ciclo}-{barrio}-{libreta}-{secuencia}";
     }
 
-    private string ConstruirCodigoSistemaPreview()
-    {
-        // Si hay código asignado (ya sea en edición o generado en creación), mostrarlo
-        if (!string.IsNullOrWhiteSpace(Modelo.Clave))
-        {
-            return Modelo.Clave;
-        }
 
-        // Si no hay código, mostrar placeholder
-        return string.Empty;
-    }
 
     private static string NormalizarSegmento(string? valor, int longitud, char relleno, bool padLeft)
     {

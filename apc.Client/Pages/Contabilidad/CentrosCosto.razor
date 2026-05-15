@@ -5,67 +5,116 @@
 @using apc.Client.Services.Tenant
 @using System.Linq
 @using System.ComponentModel.DataAnnotations
-@using DevExpress.Blazor
-@using Microsoft.AspNetCore.Components.Web
-@using System.Net.Http.Json
 
 @inject HttpClient Http
 @inject ConfiguracionSistemaClient ConfiguracionClient
 @inject TenantState TenantState
 
 <PageTitle>Centros de Costo</PageTitle>
-<div class="contabilidad-page" id="centros-costo-view">
-    <DxMessageBox @bind-Visible="statusMessageVisible"
-                  Type="MessageBoxType.Alert"
-                  Title="@statusMessageTitle"
-                  Text="@statusMessageText"
-                  RenderStyle="@statusMessageRenderStyle"
-                  OkButtonText="Entendido"
-                  ShowCloseButton="false"
-                  CloseOnOutsideClick="false" />
+<DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall" @bind-IsActive="isXSmallScreen" />
+<DxMessageBox @bind-Visible="statusMessageVisible"
+              Type="MessageBoxType.Alert"
+              Title="@statusMessageTitle"
+              Text="@statusMessageText"
+              RenderStyle="@statusMessageRenderStyle"
+              OkButtonText="Entendido"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false" />
+<DxMessageBox @bind-Visible="discardChangesVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Cambios sin guardar"
+              Text="Hay cambios sin guardar en el formulario actual. Si continúas, se descartarán. ¿Deseas continuar?"
+              RenderStyle="MessageBoxRenderStyle.Warning"
+              OkButtonText="Descartar"
+              CancelButtonText="Seguir editando"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false"
+              Closed="OnDiscardChangesMessageClosed" />
+<DxMessageBox @bind-Visible="deleteConfirmVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Eliminar centro de costo"
+              Text="@deleteConfirmText"
+              RenderStyle="MessageBoxRenderStyle.Danger"
+              OkButtonText="Sí, eliminar"
+              CancelButtonText="Cancelar"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false"
+              Closed="OnDeleteConfirmClosed" />
+<div class="cc-page" id="centros-costo-view">
 
-    <DxMessageBox @bind-Visible="discardChangesVisible"
-                  Type="MessageBoxType.Confirmation"
-                  Title="Cambios sin guardar"
-                  Text="Hay cambios sin guardar en el formulario actual. Si continúas, se descartarán. ¿Deseas continuar?"
-                  RenderStyle="MessageBoxRenderStyle.Warning"
-                  OkButtonText="Descartar"
-                  CancelButtonText="Seguir editando"
-                  ShowCloseButton="false"
-                  CloseOnOutsideClick="false"
-                  Closed="OnDiscardChangesMessageClosed" />
-
-    <div class="cc-toolbar-container">
-        <DxStackLayout Orientation="Orientation.Horizontal" Wrap="true" Spacing="10px" Class="w-100 justify-content-between align-items-center">
-            <Items>
-                <DxStackLayoutItem>
-                    <Template>
-                         <h4 class="mb-0 fw-bold text-secondary"><i class="bi bi-diagram-3 me-2 text-primary"></i>Centros de Costo</h4>
-                    </Template>
-                </DxStackLayoutItem>
-                <DxStackLayoutItem>
-                    <Template>
-                        <div class="d-flex gap-2">
-                             <DxButton Text="Actualizar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" IconCssClass="bi bi-arrow-clockwise"
-                                  Click="@OnActualizarClick" />
-                            <DxButton Text="Nuevo" RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-plus-lg"
-                                  Click="@OnNuevoToolbarClick" />
-                        </div>
-                    </Template>
-                </DxStackLayoutItem>
-            </Items>
-        </DxStackLayout>
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-diagram-3 me-2 text-primary"></i>Centros de Costo
+            </h4>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="@OnActualizarClick"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nuevo"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@OnNuevoToolbarClick"
+                      Enabled="@(!IsBusy)" />
+        </div>
     </div>
 
-    <div class="cc-grid-wrapper shadow-sm">
-        <DxGrid @ref="gridCentros" Data="@centros" KeyFieldName="@nameof(CentroCostoDto.CostCenterId)" ShowFilterRow="true"
-                ShowPager="true" PageSize="10" PageSizeSelectorVisible="true" PageSizeSelectorItems="new int[] { 10, 20, 50 }"
-                SizeMode="SizeMode.Medium" EditMode="GridEditMode.PopupEditForm" PopupEditFormHeaderText="@popupHeaderText"
-                PopupEditFormCssClass="cc-popup-responsive" EditFormButtonsVisible="false" CustomizeEditModel="OnCustomizeEditModel"
-                EditModelSaving="OnEditModelSaving">
+    @* ── Indicadores rápidos ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="cc-stat-badge">
+            <i class="bi bi-diagram-3"></i> Total: <strong>@centros.Count.ToString("N0")</strong>
+        </span>
+        <span class="cc-stat-badge cc-stat-badge--success">
+            <i class="bi bi-check2-circle"></i> Activos: <strong>@ActiveCount</strong>
+        </span>
+        <span class="cc-stat-badge cc-stat-badge--info">
+            <i class="bi bi-check-circle"></i> Con movimiento: <strong>@AllowsMovementCount</strong>
+        </span>
+        <span class="cc-stat-badge cc-stat-badge--warning">
+            <i class="bi bi-clock-history"></i> Periódicos: <strong>@PeriodicCount</strong>
+        </span>
+    </div>
 
+    @* ── Grid principal ── *@
+    <div class="cc-grid-wrapper shadow-sm">
+        <DxGrid @ref="gridCentros"
+                Data="@centros"
+                KeyFieldName="@nameof(CentroCostoDto.CostCenterId)"
+                ShowFilterRow="true"
+                ShowPager="true"
+                PageSize="10"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 10, 20, 50 }"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                DetailRowDisplayMode="@GetGridDetailRowDisplayMode()"
+                EditMode="GridEditMode.PopupEditForm"
+                PopupEditFormHeaderText="@popupHeaderText"
+                PopupEditFormCssClass="cc-popup-edit"
+                EditFormButtonsVisible="false"
+                CustomizeEditModel="OnCustomizeEditModel"
+                EditModelSaving="OnEditModelSaving"
+                CssClass="border-0">
+            <ToolbarTemplate>
+                <DxToolbar ItemRenderStyleMode="ToolbarRenderStyleMode.Contained">
+                    <Items>
+                        <DxToolbarItem Text="Columnas"
+                                       Alignment="ToolbarItemAlignment.Right"
+                                       IconCssClass="bi bi-layout-three-columns"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       CssClass="cc-column-chooser-button"
+                                       Click="MostrarColumnChooser" />
+                    </Items>
+                </DxToolbar>
+            </ToolbarTemplate>
             <Columns>
-                <DxGridCommandColumn Caption="Acciones" Width="140px" VisibleIndex="99">
+                <DxGridCommandColumn Caption="Acciones" Width="100px" VisibleIndex="99"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false">
                     <CellDisplayTemplate Context="cellContext">
                         <div class="d-flex gap-1 justify-content-center">
                              <DxButton RenderStyle="ButtonRenderStyle.Info" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small"
@@ -90,27 +139,58 @@
                 <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Name)" Caption="Nombre" MinWidth="200" />
                 <DxGridDataColumn FieldName="@nameof(CentroCostoDto.Description)" Caption="Descripción" Visible="false" />
 
-                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.AllowsMovement)" Caption="Movimientos" Width="100px" TextAlignment="GridTextAlignment.Center">
-                    <CellDisplayTemplate>
-                         @if((bool)context.Value) { <i class="bi bi-check-circle-fill text-success"></i> } else { <span class="text-muted">-</span> }
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.AllowsMovement)" Caption="Movimientos" Width="110px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if ((bool)cell.Value) { <i class="bi bi-check-circle-fill text-success"></i> } else { <span class="text-muted">-</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
                 <DxGridDataColumn FieldName="@nameof(CentroCostoDto.IsPeriodic)" Caption="Periódico" Width="100px" TextAlignment="GridTextAlignment.Center">
-                     <CellDisplayTemplate>
-                          @if((bool)context.Value) { <i class="bi bi-clock-history text-info"></i> } else { <span class="text-muted">-</span> }
+                    <CellDisplayTemplate Context="cell">
+                        @if ((bool)cell.Value) { <i class="bi bi-clock-history text-info"></i> } else { <span class="text-muted">-</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
                 <DxGridDataColumn FieldName="@nameof(CentroCostoDto.StartDate)" Caption="Inicio" DisplayFormat="{0:d}" Width="100px" />
                 <DxGridDataColumn FieldName="@nameof(CentroCostoDto.EndDate)" Caption="Fin" DisplayFormat="{0:d}" Width="100px" />
 
-                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.LegacyStatus)" Caption="Activo" Width="80px" TextAlignment="GridTextAlignment.Center">
+                <DxGridDataColumn FieldName="@nameof(CentroCostoDto.LegacyStatus)" Caption="Estado" Width="100px" TextAlignment="GridTextAlignment.Center">
                     <CellDisplayTemplate Context="cell">
-                         @if (cell.DataItem is CentroCostoDto item && IsCentroActivo(item)) { <span class="badge bg-success">Sí</span> } else { <span class="badge bg-secondary">No</span> }
+                        @if (cell.DataItem is CentroCostoDto item && IsCentroActivo(item))
+                        { <span class="cc-badge cc-badge--success">Activo</span> }
+                        else
+                        { <span class="cc-badge cc-badge--neutral">Inactivo</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
             </Columns>
+            <DetailRowTemplate Context="detail">
+                @if (detail.DataItem is CentroCostoDto item)
+                {
+                    <div class="p-3">
+                        <div class="row g-3">
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Descripción</small>
+                                <strong>@(string.IsNullOrWhiteSpace(item.Description) ? "—" : item.Description)</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Inicio vigencia</small>
+                                <strong>@(item.StartDate.HasValue ? item.StartDate.Value.ToString("d") : "—")</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Fin vigencia</small>
+                                <strong>@(item.EndDate.HasValue ? item.EndDate.Value.ToString("d") : "—")</strong>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </DetailRowTemplate>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-diagram-3 fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay centros de costo</h5>
+                    <p class="mb-0">Crea el primer centro de costo usando el botón "Nuevo".</p>
+                </div>
+            </EmptyDataAreaTemplate>
 
             <EditFormTemplate Context="ctx">
                 @{ var model = (CentroCostoEditModel)ctx.EditModel; }
@@ -192,7 +272,7 @@
                         </DxFormLayout>
                     </div>
 
-                    <div class="modal-footer-custom d-flex justify-content-between align-items-center p-3 border-top bg-light">
+                    <div class="d-flex justify-content-between align-items-center p-3 border-top bg-light">
                         <div>
                             @if (model.CostCenterId.HasValue)
                             {
@@ -217,7 +297,7 @@
             <DxGrid Data="@cuentasCentro" ShowFilterRow="true" ShowPager="true" PageSize="5" SizeMode="SizeMode.Medium"
                     CssClass="border-0">
                 <Columns>
-                    <DxGridDataColumn Caption="Cuenta" Width="150px">
+                    <DxGridDataColumn FieldName="@nameof(PlanCuentaDto.Code)" Caption="Cuenta" Width="150px">
                         <CellDisplayTemplate Context="cell">
                             <span class="font-monospace fw-bold text-primary">@FormatCuentaCode(((PlanCuentaDto)cell.DataItem).Code)</span>
                         </CellDisplayTemplate>
@@ -229,63 +309,12 @@
         </ChildContent>
     </DxCard>
 
-    <DxPopup @bind-Visible="deleteConfirmVisible"
-             HeaderText=" " 
-             ShowCloseButton="true"
-             CloseOnOutsideClick="true"
-             Width="min(450px, 90vw)"
-             ShowFooter="false"
-             CssClass="cc-confirm-popup"
-             data-qa="delete-confirm-popup"> <BodyTemplate>
-            <div class="cc-modal-wrapper">
-                
-                <div class="cc-confirm-body">
-                    <div class="cc-icon-circle">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                    </div>
-
-                    <div class="flex-grow-1">
-                        <div class="cc-confirm-title">¿Eliminar registro?</div>
-                        <div class="cc-confirm-subtitle">
-                            Esta acción eliminará el centro de costo permanentemente. No se puede deshacer.
-                        </div>
-
-                        @if (deleteItem is not null)
-                        {
-                            <div class="cc-details-card">
-                                <div class="cc-detail-row">
-                                    <span class="cc-label">Código:</span>
-                                    <span class="cc-value">@deleteItem.Code</span>
-                                </div>
-                                <div class="cc-detail-row mb-0">
-                                    <span class="cc-label">Nombre:</span>
-                                    <span class="cc-value text-end">@deleteItem.Name</span>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-
-                <div class="cc-modal-footer">
-                    <DxButton Text="Cancelar"
-                              RenderStyle="ButtonRenderStyle.Secondary"
-                              RenderStyleMode="ButtonRenderStyleMode.Outline"
-                              Click="@OnCancelDeleteClick"
-                              CssClass="cc-btn-cancel" />
-
-                    <DxButton Text="Sí, Eliminar"
-                              RenderStyle="ButtonRenderStyle.None"
-                              CssClass="dx-btn dx-btn-danger cc-btn-delete"
-                              IconCssClass="bi bi-trash3-fill"
-                              Click="@OnConfirmDeleteClick" />
-                </div>
-
-            </div>
-        </BodyTemplate>
-    </DxPopup>
-
-    <DxLoadingPanel Visible="@cargando" PositionTarget="#centros-costo-view"
-        ApplyBackgroundShading="true" IsContentBlocked="true" Text="Cargando centros de costo..." IndicatorVisible="true" />
+    <DxLoadingPanel Visible="@IsBusy"
+                    PositionTarget="#centros-costo-view"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="Cargando centros de costo..." />
 
 </div>
 
@@ -293,6 +322,7 @@
     private IList<CentroCostoDto> centros = new List<CentroCostoDto>();
     private IList<PlanCuentaDto> cuentasCentro = new List<PlanCuentaDto>();
     private bool cargando;
+    private bool isXSmallScreen;
 
     private string formatoCentros = "###-##";
     private string formatoCuentas = "###-###-##";
@@ -314,8 +344,14 @@
     private string statusMessageText = string.Empty;
     private MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
     private bool discardChangesVisible;
+    private string deleteConfirmText = string.Empty;
     private PendingGridAction pendingGridAction = PendingGridAction.None;
     private int pendingVisibleIndex = -1;
+
+    private bool IsBusy => cargando;
+    private int ActiveCount => centros.Count(IsCentroActivo);
+    private int AllowsMovementCount => centros.Count(c => c.AllowsMovement);
+    private int PeriodicCount => centros.Count(c => c.IsPeriodic);
 
     protected override async Task OnInitializedAsync()
     {
@@ -343,6 +379,7 @@
             Code = item.Code ?? "",
             Name = item.Name ?? ""
         };
+        deleteConfirmText = $"Se eliminará '{item.Code} - {item.Name}' permanentemente. Esta acción no se puede deshacer.";
         deleteConfirmVisible = true;
     }
 
@@ -354,34 +391,26 @@
             Code = model.Code ?? "",
             Name = model.Name ?? ""
         };
+        deleteConfirmText = $"Se eliminará '{model.Code} - {model.Name}' permanentemente. Esta acción no se puede deshacer.";
         deleteConfirmVisible = true;
     }
 
-    private Task OnCancelDeleteClick(MouseEventArgs e)
+    private async Task OnDeleteConfirmClosed(bool confirmed)
     {
-        deleteConfirmVisible = false;
-        deleteItem = null;
-        return Task.CompletedTask;
-    }
-
-    private async Task OnConfirmDeleteClick(MouseEventArgs e)
-    {
-        try
-        {
-            if (deleteItem is null) { deleteConfirmVisible = false; return; }
-            var id = deleteItem.Id;
-            if (id <= 0) { deleteConfirmVisible = false; deleteItem = null; return; }
-
-            deleteConfirmVisible = false;
-            var deleted = await DeleteCentroCostoAsync(id);
-
-            if (deleted && gridCentros is not null && gridCentros.IsEditing())
-                await gridCentros.CancelEditAsync();
-        }
-        finally
+        if (!confirmed || deleteItem is null)
         {
             deleteItem = null;
+            deleteConfirmText = string.Empty;
+            return;
         }
+
+        var id = deleteItem.Id;
+        deleteItem = null;
+        deleteConfirmText = string.Empty;
+
+        var deleted = await DeleteCentroCostoAsync(id);
+        if (deleted && gridCentros is not null && gridCentros.IsEditing())
+            await gridCentros.CancelEditAsync();
     }
 
     private async Task LoadConfiguracionAsync()
@@ -758,6 +787,16 @@
     private static bool IsCentroActivo(CentroCostoDto item)
     {
         return item.LegacyStatus || string.Equals(item.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private void MostrarColumnChooser()
+    {
+        gridCentros?.ShowColumnChooser(".cc-column-chooser-button");
+    }
+
+    private GridDetailRowDisplayMode GetGridDetailRowDisplayMode()
+    {
+        return isXSmallScreen ? GridDetailRowDisplayMode.Always : GridDetailRowDisplayMode.Never;
     }
 
     class CentroCostoEditModel

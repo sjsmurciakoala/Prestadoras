@@ -1,0 +1,342 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Clientes
+@using SIAD.Core.DTOs.Tarifario
+@using apc.Client.Services.Tarifario
+
+@inject ClienteServicioTarifarioClient TarifarioClient
+
+<div class="modern-card cliente-tarifario-v3-panel" id="cliente-tarifario-v3">
+    <div class="section-header">
+        <i class="bi bi-diagram-3"></i>
+        <h3>Configuración tarifaria</h3>
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center p-4">
+            <DxLoadingPanel Visible="true" Text="Cargando configuración tarifaria..." />
+            <div style="height:60px"></div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="alert alert-danger mb-0">@error</div>
+    }
+    else
+    {
+        <div class="v3-state-banner @(IsConfiguracionCompleta ? "is-complete" : "is-incomplete")">
+            <div>
+                <div class="v3-state-title">
+                    @(IsConfiguracionCompleta ? "Configuración completa" : "Configuración incompleta")
+                </div>
+                <div class="v3-state-subtitle">
+                    @GetEstadoConfiguracionDescripcion()
+                </div>
+
+                @if (incompleteReasons.Count > 0)
+                {
+                    <ul class="v3-state-reasons">
+                        @foreach (var reason in incompleteReasons)
+                        {
+                            <li>@reason</li>
+                        }
+                    </ul>
+                }
+            </div>
+
+            <div class="v3-state-badges">
+                <span class="v3-pill">@GetMedicionTexto()</span>
+                @if (Cliente?.TerceraEdad == true)
+                {
+                    <span class="v3-pill v3-pill-accent">Beneficio tercera edad</span>
+                }
+            </div>
+        </div>
+
+        <div class="v3-stats-grid">
+            <div class="v3-stat-card">
+                <div class="v3-stat-label">Servicios activos</div>
+                <div class="v3-stat-value">@serviciosActivos.Count</div>
+            </div>
+            <div class="v3-stat-card">
+                <div class="v3-stat-label">Categorías regulatorias</div>
+                <div class="v3-stat-value">@categoriasResumen.Count</div>
+            </div>
+            <div class="v3-stat-card">
+                <div class="v3-stat-label">Condiciones de medición</div>
+                <div class="v3-stat-value">@condicionesResumen.Count</div>
+            </div>
+            <div class="v3-stat-card">
+                <div class="v3-stat-label">Segmentos activos</div>
+                <div class="v3-stat-value">@segmentosResumen.Count</div>
+            </div>
+        </div>
+
+        @if (warnings.Count > 0)
+        {
+            <div class="alert alert-warning mt-3 mb-3">
+                <div class="fw-bold mb-2">Revisión recomendada</div>
+                <ul class="mb-0">
+                    @foreach (var warning in warnings)
+                    {
+                        <li>@warning</li>
+                    }
+                </ul>
+            </div>
+        }
+
+        <div class="v3-summary-grid">
+            <div class="v3-summary-block">
+                <div class="v3-summary-title">Servicios del cliente</div>
+                <div class="v3-tag-list">
+                    @if (serviciosActivos.Count == 0)
+                    {
+                        <span class="text-muted">Sin servicios activos en adm_cliente_servicio.</span>
+                    }
+                    else
+                    {
+                        @foreach (var servicio in serviciosActivos)
+                        {
+                            <span class="v3-tag">@servicio.ServicioNombre</span>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="v3-summary-block">
+                <div class="v3-summary-title">Categoría regulatoria</div>
+                <div class="v3-tag-list">
+                    @if (categoriasResumen.Count == 0)
+                    {
+                        <span class="text-muted">Sin categoría resuelta.</span>
+                    }
+                    else
+                    {
+                        @foreach (var categoria in categoriasResumen)
+                        {
+                            <span class="v3-tag v3-tag-secondary">@categoria</span>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="v3-summary-block">
+                <div class="v3-summary-title">Condición de medición</div>
+                <div class="v3-tag-list">
+                    @if (condicionesResumen.Count == 0)
+                    {
+                        <span class="text-muted">Sin condición resuelta.</span>
+                    }
+                    else
+                    {
+                        @foreach (var condicion in condicionesResumen)
+                        {
+                            <span class="v3-tag v3-tag-secondary">@condicion</span>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="v3-summary-block">
+                <div class="v3-summary-title">Segmento tarifario</div>
+                <div class="v3-tag-list">
+                    @if (segmentosResumen.Count == 0)
+                    {
+                        <span class="text-muted">No aplica o no está configurado.</span>
+                    }
+                    else
+                    {
+                        @foreach (var segmento in segmentosResumen)
+                        {
+                            <span class="v3-tag v3-tag-secondary">@segmento</span>
+                        }
+                    }
+                </div>
+            </div>
+
+            <div class="v3-summary-block">
+                <div class="v3-summary-title">Beneficios y ajustes</div>
+                <div class="v3-benefits">
+                    <div>
+                        <span class="v3-benefit-label">Tercera edad:</span>
+                        <span class="v3-benefit-value">@(Cliente?.TerceraEdad == true ? "Sí" : "No")</span>
+                    </div>
+                    <div>
+                        <span class="v3-benefit-label">Descuento actual:</span>
+                        <span class="v3-benefit-value">@GetDescuentoTerceraEdad()</span>
+                    </div>
+                    <div class="text-muted small">
+                        Las reglas pendientes de adulto mayor, topes y exoneraciones se cerrarán aquí cuando entren al flujo tarifario nuevo.
+                    </div>
+                </div>
+            </div>
+
+            <div class="v3-summary-block">
+                <div class="v3-summary-title">Lectura y facturación</div>
+                <div class="v3-benefits">
+                    <div>
+                        <span class="v3-benefit-label">Ruta:</span>
+                        <span class="v3-benefit-value">@MostrarTexto(Cliente?.IndicativoRuta)</span>
+                    </div>
+                    <div>
+                        <span class="v3-benefit-label">Ciclo:</span>
+                        <span class="v3-benefit-value">@MostrarTexto(Cliente?.CicloDescripcion)</span>
+                    </div>
+                    <div>
+                        <span class="v3-benefit-label">Contador:</span>
+                        <span class="v3-benefit-value">@MostrarTexto(Cliente?.MedidorNumero ?? Cliente?.Contador)</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="alert alert-info mt-3 mb-0">
+            En <strong>Servicios del cliente</strong> puedes agregar, editar y desactivar asignaciones tarifarias.
+        </div>
+
+        <DxTabs RenderMode="TabsRenderMode.OnDemand"
+                CssClass="cliente-v3-tabs mt-4">
+            <DxTabPage Text="Servicios del cliente" CssClass="p-3">
+                <ClienteServiciosTarifarioTab ClienteId="@ClienteId"
+                                             OnChanged="ReloadAsync" />
+            </DxTabPage>
+        </DxTabs>
+    }
+</div>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public int ClienteId { get; set; }
+
+    [Parameter]
+    [EditorRequired]
+    public ClienteDetailDto? Cliente { get; set; }
+
+    private bool isLoading = true;
+    private string? error;
+    private List<ClienteServicioItemDto> servicios = new();
+    private readonly List<string> warnings = new();
+    private readonly List<string> incompleteReasons = new();
+
+    private List<ClienteServicioItemDto> serviciosActivos =>
+        servicios.Where(s => s.StatusId == 1).ToList();
+
+    private List<string> categoriasResumen =>
+        serviciosActivos
+            .Select(s => s.CategoriaNombre)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
+
+    private List<string> condicionesResumen =>
+        serviciosActivos
+            .Select(s => s.CondicionNombre)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
+
+    private List<string> segmentosResumen =>
+        serviciosActivos
+            .Select(s => s.SegmentoNombre)
+            .Where(s => !string.IsNullOrWhiteSpace(s))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Cast<string>()
+            .ToList();
+
+    private bool IsConfiguracionCompleta =>
+        serviciosActivos.Count > 0
+        && serviciosActivos.All(s => !string.IsNullOrWhiteSpace(s.CuadroCodigo))
+        && serviciosActivos.All(s => !string.IsNullOrWhiteSpace(s.CategoriaNombre))
+        && serviciosActivos.All(s => !string.IsNullOrWhiteSpace(s.CondicionNombre));
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await ReloadAsync();
+    }
+
+    public async Task ReloadAsync()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            servicios = (await TarifarioClient.ObtenerServiciosAsync(ClienteId)).ToList();
+            BuildWarnings();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo cargar la configuración tarifaria del cliente: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void BuildWarnings()
+    {
+        warnings.Clear();
+        incompleteReasons.Clear();
+
+        if (serviciosActivos.Count == 0)
+        {
+            const string noServicios = "El cliente no tiene servicios activos en adm_cliente_servicio.";
+            warnings.Add(noServicios);
+            incompleteReasons.Add(noServicios);
+            return;
+        }
+
+        if (serviciosActivos.Any(s => string.IsNullOrWhiteSpace(s.CuadroCodigo)))
+        {
+            const string cuadroPendiente = "Hay servicios activos sin cuadro tarifario resuelto.";
+            warnings.Add(cuadroPendiente);
+            incompleteReasons.Add(cuadroPendiente);
+        }
+
+        if (serviciosActivos.Any(s => string.IsNullOrWhiteSpace(s.CategoriaNombre)))
+        {
+            incompleteReasons.Add("Hay servicios activos sin categoría regulatoria asignada.");
+        }
+
+        if (serviciosActivos.Any(s => string.IsNullOrWhiteSpace(s.CondicionNombre)))
+        {
+            incompleteReasons.Add("Hay servicios activos sin condición de medición definida.");
+        }
+
+        if (Cliente?.TieneMedidor == true && serviciosActivos.Any(s => string.Equals(s.CondicionCodigo, "SIN_MEDICION", StringComparison.OrdinalIgnoreCase)))
+        {
+            warnings.Add("El cliente tiene medidor, pero uno o más servicios están configurados como sin medición.");
+        }
+
+        if (Cliente?.TieneMedidor == false && serviciosActivos.Any(s => string.Equals(s.CondicionCodigo, "CON_MEDICION", StringComparison.OrdinalIgnoreCase)))
+        {
+            warnings.Add("El cliente no tiene medidor, pero uno o más servicios están configurados como con medición.");
+        }
+
+        if (categoriasResumen.Count > 1)
+        {
+            warnings.Add("El cliente tiene más de una categoría regulatoria activa. Conviene revisar si realmente aplica.");
+        }
+    }
+
+    private string GetMedicionTexto()
+        => Cliente?.TieneMedidor == true ? "Cliente medido" : "Cliente sin medidor";
+
+    private string GetEstadoConfiguracionDescripcion()
+        => IsConfiguracionCompleta
+            ? "Resumen operativo completo del cliente en adm_cliente_servicio, categorías regulatorias, medición y servicios activos."
+            : "Se detectaron pendientes en la configuración tarifaria. Revise el detalle para completar los datos operativos del cliente.";
+
+    private string GetDescuentoTerceraEdad()
+        => Cliente?.DescuentoTerceraEdad is > 0
+            ? $"{Cliente.DescuentoTerceraEdad.Value:N2}%"
+            : "Sin descuento configurado";
+
+    private static string MostrarTexto(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "—" : value;
+}

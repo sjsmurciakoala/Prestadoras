@@ -10,7 +10,7 @@ Write-Host " BACKUP DE BASE DE DATOS POSTGRESQL" -ForegroundColor Cyan
 Write-Host "========================================" -ForegroundColor Cyan
 Write-Host ""
 
-$pgHost = "localhost"
+$pgHost = "172.16.0.9"
 $pgPort = "5432"
 $pgUser = "postgres"
 $pgDatabase = "siad_v3"

@@ -1,0 +1,407 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Tarifario
+@using apc.Client.Services.Tarifario
+@using System.Text.Json
+
+@inject PruebaCalculoClient CalculoClient
+
+<div class="prueba-calculo-container">
+
+    <!-- FORMULARIO DE ENTRADA -->
+    <div class="modern-card mb-3">
+        <div class="section-header">
+            <i class="bi bi-calculator"></i>
+            <h3>Parámetros de cálculo</h3>
+        </div>
+
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutGroup ColSpanXs="12">
+                <DxFormLayoutItem Caption="Año" ColSpanXs="6" ColSpanMd="3">
+                    <DxSpinEdit @bind-Value="anio" MinValue="2020" MaxValue="2040" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Mes" ColSpanXs="6" ColSpanMd="3">
+                    <DxSpinEdit @bind-Value="mes" MinValue="1" MaxValue="12" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Lectura actual" ColSpanXs="6" ColSpanMd="3">
+                    <DxSpinEdit @bind-Value="lecturaActual"
+                                MinValue="0m"
+                                Increment="1m"
+                                NullText="Opcional"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Condición lectura" ColSpanXs="6" ColSpanMd="3">
+                    <DxComboBox Data="condicionesLectura"
+                                @bind-Value="condicionLectura"
+                                TextFieldName="Label"
+                                ValueFieldName="Value"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Fecha lectura" ColSpanXs="6" ColSpanMd="3">
+                    <DxDateEdit @bind-Date="fechaLectura"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                NullText="Hoy" />
+                </DxFormLayoutItem>
+
+                @if (condicionLectura == "PD")
+                {
+                    <DxFormLayoutItem Caption="Lectura promedio" ColSpanXs="6" ColSpanMd="3">
+                        <DxSpinEdit @bind-Value="lecturaPromedio"
+                                    MinValue="0m"
+                                    Increment="1m"
+                                    NullText="Promedio" />
+                    </DxFormLayoutItem>
+                }
+
+                <DxFormLayoutItem ColSpanXs="12" ColSpanMd="3" CaptionPosition="CaptionPosition.Vertical">
+                    <div class="d-flex align-items-end h-100">
+                        <DxButton Text="Calcular"
+                                  Click="EjecutarCalculo"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  IconCssClass="bi bi-play-fill"
+                                  CssClass="btn-modern w-100"
+                                  Enabled="@(!isCalculating)" />
+                    </div>
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+        </DxFormLayout>
+    </div>
+
+    <!-- LOADING -->
+    @if (isCalculating)
+    {
+        <div class="modern-card text-center p-4">
+            <DxLoadingPanel Visible="true" Text="Ejecutando cálculo..." />
+            <div style="height:60px"></div>
+        </div>
+    }
+
+    <!-- ERROR -->
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger d-flex align-items-center gap-2 mb-3">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>@errorMessage</span>
+        </div>
+    }
+
+    <!-- RESULTADOS -->
+    @if (resultado is not null)
+    {
+        <!-- WARNINGS -->
+        @if (warningsList.Count > 0)
+        {
+            <div class="alert alert-warning d-flex flex-wrap align-items-center gap-2 mb-3">
+                <i class="bi bi-exclamation-circle-fill"></i>
+                <strong>Advertencias:</strong>
+                @foreach (var w in warningsList)
+                {
+                    <span class="badge bg-warning text-dark">@w</span>
+                }
+            </div>
+        }
+
+        <!-- RESUMEN CLIENTE -->
+        <div class="modern-card mb-3">
+            <div class="section-header">
+                <i class="bi bi-person-badge"></i>
+                <h3>Datos del cliente</h3>
+            </div>
+
+            <div class="d-flex flex-wrap gap-3">
+                <div class="stat-card">
+                    <div class="stat-label">Clave</div>
+                    <div class="stat-value">@resultado.ClienteClave</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Nombre</div>
+                    <div class="stat-value">@resultado.ClienteNombre</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Ciclo / Ruta / Sec</div>
+                    <div class="stat-value">@resultado.Ciclo / @resultado.Ruta / @resultado.Secuencia</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Medidor</div>
+                    <div class="stat-value">
+                        @(resultado.TieneMedidor
+                            ? $"Sí — {resultado.Contador}"
+                            : "Sin medidor")
+                    </div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Condición</div>
+                    <div class="stat-value">@resultado.CondicionLecturaAplicada</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- LECTURAS Y CONSUMO -->
+        <div class="modern-card mb-3">
+            <div class="section-header">
+                <i class="bi bi-speedometer2"></i>
+                <h3>Lecturas y consumo</h3>
+            </div>
+
+            <div class="d-flex flex-wrap gap-3">
+                <div class="stat-card">
+                    <div class="stat-label">Lectura anterior</div>
+                    <div class="stat-value">@resultado.LecturaAnterior.ToString("N2")</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Lectura actual</div>
+                    <div class="stat-value">@resultado.LecturaActualEfectiva.ToString("N2")</div>
+                </div>
+                <div class="stat-card highlight">
+                    <div class="stat-label">Consumo facturable</div>
+                    <div class="stat-value">@resultado.ConsumoFacturable.ToString("N2") m³</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TOTALES -->
+        <div class="modern-card mb-3">
+            <div class="section-header">
+                <i class="bi bi-cash-coin"></i>
+                <h3>Totales</h3>
+            </div>
+
+            <div class="d-flex flex-wrap gap-3">
+                <div class="stat-card">
+                    <div class="stat-label">Agua Potable</div>
+                    <div class="stat-value">L @resultado.Taservi1.ToString("N2")</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Alcantarillado</div>
+                    <div class="stat-value">L @resultado.Taservi2.ToString("N2")</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Tasa Ambiental</div>
+                    <div class="stat-value">L @resultado.Taservi3.ToString("N2")</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Tasa SVA/ERSAPS</div>
+                    <div class="stat-value">L @resultado.Taservi4.ToString("N2")</div>
+                </div>
+            </div>
+
+            <hr class="my-3" />
+
+            <div class="d-flex flex-wrap gap-3">
+                <div class="stat-card">
+                    <div class="stat-label">Subtotal servicios</div>
+                    <div class="stat-value">L @resultado.SubtotalServicios.ToString("N2")</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Ajustes</div>
+                    <div class="stat-value">L @resultado.SubtotalAjustes.ToString("N2")</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Saldos anteriores</div>
+                    <div class="stat-value">L @resultado.SaldosAnteriores.ToString("N2")</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Recargos</div>
+                    <div class="stat-value">L @resultado.Recargos.ToString("N2")</div>
+                </div>
+                <div class="stat-card total">
+                    <div class="stat-label">TOTAL FACTURA</div>
+                    <div class="stat-value">L @resultado.TotalFactura.ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- DESGLOSE POR SERVICIO -->
+        @if (detalleServicios.Count > 0)
+        {
+            <div class="modern-card mb-3">
+                <div class="section-header">
+                    <i class="bi bi-list-columns-reverse"></i>
+                    <h3>Desglose por servicio</h3>
+                </div>
+
+                <DxGrid Data="detalleServicios"
+                        ShowGroupPanel="false"
+                        ShowFilterRow="false"
+                        CssClass="grid-prueba-calculo">
+                    <Columns>
+                        <DxGridDataColumn FieldName="ServicioNombre" Caption="Servicio" Width="180px" />
+                        <DxGridDataColumn FieldName="TipoServicio" Caption="Tipo" Width="100px">
+                            <CellDisplayTemplate>
+                                @{
+                                    var tipo = (string?)context.Value;
+                                    var badgeClass = tipo == "BASE" ? "bg-primary" : "bg-info";
+                                }
+                                <span class="badge @badgeClass">@tipo</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="CuadroCodigo" Caption="Cuadro" Width="120px" />
+                        <DxGridDataColumn FieldName="Cantidad" Caption="Cantidad" Width="100px" DisplayFormat="N2" />
+                        <DxGridDataColumn FieldName="Monto" Caption="Monto" Width="120px" DisplayFormat="N4" />
+                        <DxGridDataColumn FieldName="MontoDescuento" Caption="Descuento" Width="120px" DisplayFormat="N4" />
+                        <DxGridDataColumn FieldName="MontoFinal" Caption="Monto final" Width="120px" DisplayFormat="N4" />
+                    </Columns>
+                    <DetailRowTemplate>
+                        @{
+                            var item = (PruebaCalculoServicioDetalleDto)context.DataItem;
+                            if (item.Componentes is { Count: > 0 })
+                            {
+                                <div class="p-2">
+                                    <h6 class="mb-2">Reglas tarifarias aplicadas</h6>
+                                    <DxGrid Data="item.Componentes"
+                                            ShowGroupPanel="false"
+                                            ShowFilterRow="false"
+                                            CssClass="grid-componentes">
+                                        <Columns>
+                                            <DxGridDataColumn FieldName="ReglaOrden" Caption="#" Width="50px" />
+                                            <DxGridDataColumn FieldName="TipoReglaNombre" Caption="Tipo regla" Width="150px" />
+                                            <DxGridDataColumn FieldName="ModoCalculo" Caption="Modo" Width="100px" />
+                                            <DxGridDataColumn FieldName="ConsumoMinimo" Caption="Cons. mín" Width="90px" DisplayFormat="N2" />
+                                            <DxGridDataColumn FieldName="ConsumoMaximo" Caption="Cons. máx" Width="90px" DisplayFormat="N2" />
+                                            <DxGridDataColumn FieldName="MontoFijo" Caption="Monto fijo" Width="100px" DisplayFormat="N4" />
+                                            <DxGridDataColumn FieldName="MontoUnitario" Caption="Unitario" Width="100px" DisplayFormat="N4" />
+                                            <DxGridDataColumn FieldName="Porcentaje" Caption="%" Width="70px" DisplayFormat="N2" />
+                                            <DxGridDataColumn FieldName="UnidadesAplicadas" Caption="Uds." Width="80px" DisplayFormat="N2" />
+                                            <DxGridDataColumn FieldName="MontoCalculado" Caption="Calculado" Width="110px" DisplayFormat="N4" />
+                                            <DxGridDataColumn FieldName="DetalleCalculo" Caption="Detalle" Width="200px" />
+                                        </Columns>
+                                    </DxGrid>
+                                </div>
+                            }
+                            else
+                            {
+                                <div class="p-2 text-muted">Sin componentes</div>
+                            }
+                        }
+                    </DetailRowTemplate>
+                </DxGrid>
+            </div>
+        }
+
+        <!-- INFO TÉCNICA -->
+        <div class="modern-card mb-3" style="padding: 0.75rem;">
+            <div class="d-flex flex-wrap align-items-center gap-2">
+                <span class="badge bg-secondary">Contrato: @resultado.SnapshotContractVersion</span>
+                <span class="badge bg-secondary">Período: @resultado.Anio-@resultado.Mes.ToString("D2")</span>
+                @if (resultado.FechaFactura.HasValue)
+                {
+                    <span class="badge bg-secondary">Fecha factura: @resultado.FechaFactura.Value.ToString("d")</span>
+                }
+                @if (resultado.FechaVencimiento.HasValue)
+                {
+                    <span class="badge bg-secondary">Vencimiento: @resultado.FechaVencimiento.Value.ToString("d")</span>
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<style>
+    .prueba-calculo-container .stat-card {
+        background: #f8f9fa;
+        border-radius: 8px;
+        padding: 0.75rem 1rem;
+        min-width: 140px;
+        flex: 1;
+    }
+    .prueba-calculo-container .stat-card.highlight {
+        background: #e8f4fd;
+        border: 1px solid #b8daff;
+    }
+    .prueba-calculo-container .stat-card.total {
+        background: #d4edda;
+        border: 2px solid #28a745;
+    }
+    .prueba-calculo-container .stat-label {
+        font-size: 0.78rem;
+        color: #6c757d;
+        font-weight: 500;
+        text-transform: uppercase;
+    }
+    .prueba-calculo-container .stat-value {
+        font-size: 1.05rem;
+        font-weight: 600;
+        color: #2c3e50;
+    }
+    .grid-prueba-calculo, .grid-componentes {
+        font-size: 0.88rem;
+    }
+</style>
+
+@code {
+    [Parameter] public int ClienteId { get; set; }
+
+    int anio = DateTime.Today.Year;
+    int mes = DateTime.Today.Month;
+    decimal? lecturaActual;
+    string condicionLectura = "N";
+    DateTime? fechaLectura;
+    decimal? lecturaPromedio;
+    bool isCalculating = false;
+    string? errorMessage;
+
+    PruebaCalculoResultDto? resultado;
+    List<PruebaCalculoServicioDetalleDto> detalleServicios = new();
+    List<string> warningsList = new();
+
+    record CondicionItem(string Value, string Label);
+
+    static readonly CondicionItem[] condicionesLectura =
+    {
+        new("N",   "N — Normal"),
+        new("MIN", "MIN — Consumo mínimo"),
+        new("PND", "PND — Promedio no disponible"),
+        new("PD",  "PD — Promedio disponible"),
+    };
+
+    async Task EjecutarCalculo()
+    {
+        isCalculating = true;
+        errorMessage = null;
+        resultado = null;
+        detalleServicios.Clear();
+        warningsList.Clear();
+
+        try
+        {
+            var request = new PruebaCalculoRequest(
+                Anio: anio,
+                Mes: mes,
+                ClienteId: ClienteId,
+                LecturaActual: lecturaActual,
+                CondicionLectura: condicionLectura,
+                FechaLectura: fechaLectura,
+                LecturaPromedio: lecturaPromedio);
+
+            resultado = await CalculoClient.CalcularAsync(request);
+
+            if (resultado is not null)
+            {
+                // Parse detalle_servicios_json
+                if (!string.IsNullOrEmpty(resultado.DetalleServiciosJson))
+                {
+                    detalleServicios = JsonSerializer.Deserialize<List<PruebaCalculoServicioDetalleDto>>(
+                        resultado.DetalleServiciosJson) ?? new();
+                }
+
+                // Parse warnings_json
+                if (!string.IsNullOrEmpty(resultado.WarningsJson))
+                {
+                    warningsList = JsonSerializer.Deserialize<List<string>>(
+                        resultado.WarningsJson) ?? new();
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            isCalculating = false;
+        }
+    }
+}

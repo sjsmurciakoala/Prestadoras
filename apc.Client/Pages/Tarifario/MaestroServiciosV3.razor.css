@@ -1,0 +1,16 @@
+.maestro-servicios-v3-filters {
+    border: 1px solid var(--bs-border-color);
+    border-radius: 12px;
+    padding: 0.85rem;
+    background: var(--bs-light);
+}
+
+.maestro-servicios-v3-stats {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+}
+
+.servicio-v3-form :global(.dxbl-fl-item-content) {
+    min-height: 42px;
+}

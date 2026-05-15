@@ -15,40 +15,6 @@ public sealed class ClientesClient
 
     public ClientesClient(HttpClient http) => this.http = http;
 
-    public async Task<string> GenerarCodigoAsync(CancellationToken ct = default)
-    {
-        try
-        {
-            var response = await http.PostAsync("api/clientes/generar-codigo", null, cancellationToken: ct);
-
-            var resultado = await response.ReadFromJsonAsyncWithAuthCheck<GenerarCodigoResponse>(ct);
-            
-            if (resultado is null || string.IsNullOrWhiteSpace(resultado.Codigo))
-            {
-                throw new HttpRequestException("El servidor no retornó un código válido.");
-            }
-
-            return resultado.Codigo;
-        }
-        catch (UnauthorizedAccessException)
-        {
-            throw;
-        }
-        catch (HttpRequestException)
-        {
-            throw;
-        }
-        catch (Exception ex)
-        {
-            throw new HttpRequestException("Error generando código de cliente.", ex);
-        }
-    }
-
-    private sealed class GenerarCodigoResponse
-    {
-        public string Codigo { get; set; } = string.Empty;
-    }
-
     public async Task<ClienteCreateResponseDto> CrearAsync(ClienteCreateDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
@@ -147,41 +113,6 @@ public sealed class ClientesClient
     /// </summary>
     public async Task<ClienteDetailDto?> ObtenerPorIdAsync(int id, CancellationToken ct = default)
         => await http.GetFromJsonAsync<ClienteDetailDto?>($"api/clientes/{id}", ct);
-
-    public async Task<ClienteConfiguracionTarifaHeaderDto?> ObtenerConfiguracionTarifaHeaderAsync(int clienteId, CancellationToken ct = default)
-        => await http.GetFromJsonAsync<ClienteConfiguracionTarifaHeaderDto?>(
-               $"api/clientes/{clienteId}/configuracion-tarifa/header", ct);
-
-    public async Task<ClienteConfiguracionTarifaDetalleDto[]> ObtenerConfiguracionTarifaDetalleAsync(
-        int clienteId,
-        int? categoriaId,
-        CancellationToken ct = default)
-    {
-        var query = categoriaId.HasValue ? $"?categoriaId={categoriaId.Value}" : string.Empty;
-        return await http.GetFromJsonAsync<ClienteConfiguracionTarifaDetalleDto[]>(
-                   $"api/clientes/{clienteId}/configuracion-tarifa/detalle{query}", ct)
-               ?? Array.Empty<ClienteConfiguracionTarifaDetalleDto>();
-    }
-
-    public async Task<ResponseModelDto?> ActualizarConfiguracionTarifaAsync(
-        int clienteId,
-        ClienteConfiguracionTarifaUpdateRequest request,
-        CancellationToken ct = default)
-    {
-        var response = await http.PostAsJsonAsync($"api/clientes/{clienteId}/configuracion-tarifa", request, ct);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ResponseModelDto>(cancellationToken: ct);
-    }
-
-    public async Task<ResponseModelDto?> AgregarConfiguracionTarifaServicioAsync(
-        int clienteId,
-        ClienteConfiguracionTarifaAddRequest request,
-        CancellationToken ct = default)
-    {
-        var response = await http.PostAsJsonAsync($"api/clientes/{clienteId}/configuracion-tarifa/agregar", request, ct);
-        response.EnsureSuccessStatusCode();
-        return await response.Content.ReadFromJsonAsync<ResponseModelDto>(cancellationToken: ct);
-    }
 
     public async Task<ClienteFotoMedidorHeaderDto?> ObtenerFotoMedidorHeaderAsync(int clienteId, CancellationToken ct = default)
         => await http.GetFromJsonAsync<ClienteFotoMedidorHeaderDto?>($"api/clientes/{clienteId}/foto-medidor/header", ct);

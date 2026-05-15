@@ -1,0 +1,259 @@
+@page "/facturacion/notas/motivos"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.NotasCreditoDebito
+@using apc.Client.Services.Facturacion
+
+@inject NotasCreditoDebitoClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>Motivos de NC / ND</PageTitle>
+
+<DxToastProvider Name="MotivosToast" MaxToastCount="4" />
+
+<div class="notas-page">
+
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-tags me-2 text-primary"></i>Motivos de Notas de Crédito / Débito
+            </h4>
+            <small class="text-muted">Catálogo de motivos para anulación (NC) y aumento (ND).</small>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="ReloadAsync"
+                      Enabled="@(!isSaving)" />
+            <DxButton Text="Nuevo motivo"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="AbrirNuevo" />
+        </div>
+    </div>
+
+    @* ── Selector de catálogo ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <button type="button"
+                class="cai-stat-badge cai-stat-badge--success @(catalogo == "NC" ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => CambiarCatalogo("NC"))">
+            <i class="bi bi-arrow-down-circle"></i> Motivos de Nota de Crédito
+        </button>
+        <button type="button"
+                class="cai-stat-badge cai-stat-badge--warning @(catalogo == "ND" ? "cai-stat-badge--active" : "")"
+                @onclick="@(() => CambiarCatalogo("ND"))">
+            <i class="bi bi-arrow-up-circle"></i> Motivos de Nota de Débito
+        </button>
+    </div>
+
+    @* ── Grid ── *@
+    <div class="notas-grid-wrapper shadow-sm">
+        <DxGrid Data="@motivos"
+                KeyFieldName="@nameof(MotivoCrudDto.Id)"
+                ShowPager="true"
+                PageSize="15"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                CssClass="border-0">
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="90px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is MotivoCrudDto m)
+                        {
+                            <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                      RenderStyleMode="ButtonRenderStyleMode.Text"
+                                      SizeMode="SizeMode.Small"
+                                      IconCssClass="bi bi-pencil-square fs-5"
+                                      Tooltip="Editar"
+                                      Click="@(() => AbrirEditar(m))" />
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+
+                <DxGridDataColumn FieldName="@nameof(MotivoCrudDto.Id)" Caption="ID" Width="70px"
+                                  TextAlignment="GridTextAlignment.Center" />
+                <DxGridDataColumn FieldName="@nameof(MotivoCrudDto.Codigo)" Caption="Código" Width="180px">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@((cell.DataItem as MotivoCrudDto)?.Codigo)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(MotivoCrudDto.Descripcion)" Caption="Descripción" MinWidth="220" />
+                <DxGridDataColumn FieldName="@nameof(MotivoCrudDto.Activo)" Caption="Estado" Width="110px"
+                                  TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is MotivoCrudDto m)
+                        {
+                            <span class="cai-badge @(m.Activo ? "cai-badge--vigente" : "cai-badge--inactivo")">
+                                @(m.Activo ? "Activo" : "Inactivo")
+                            </span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-tags fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay motivos registrados</h5>
+                    <p class="mb-0">Crea el primer motivo con el botón "Nuevo motivo".</p>
+                </div>
+            </EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
+</div>
+
+@* ── Popup motivo ── *@
+<DxPopup HeaderText="@popupHeader"
+         @bind-Visible="popupVisible"
+         Width="min(560px, 96vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate>
+        @if (editMotivo is not null)
+        {
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Código" ColSpanMd="12">
+                    <Template Context="t">
+                        <DxTextBox @bind-Text="editMotivo.Codigo"
+                                   NullText="Ej. ERROR_LECTURA"
+                                   MaxLength="20" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <Template Context="t">
+                        <DxTextBox @bind-Text="editMotivo.Descripcion"
+                                   NullText="Descripción del motivo"
+                                   MaxLength="150" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
+                    <Template Context="t">
+                        <DxCheckBox @bind-Checked="editMotivo.Activo">Disponible para uso</DxCheckBox>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+            <small class="text-muted d-block mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                El código se guarda en mayúsculas. Catálogo:
+                <strong>@(catalogo == "NC" ? "Nota de Crédito" : "Nota de Débito")</strong>.
+            </small>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="d-flex gap-2 justify-content-end w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => popupVisible = false)" />
+            <DxButton Text="Guardar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(PuedeGuardar && !isSaving)"
+                      Click="GuardarAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private string catalogo = "NC";   // "NC" | "ND"
+    private List<MotivoCrudDto> motivos = new();
+    private bool isSaving;
+
+    private bool popupVisible;
+    private string popupHeader = "Nuevo motivo";
+    private MotivoSaveRequestDto? editMotivo;
+
+    private bool PuedeGuardar =>
+        editMotivo is not null &&
+        !string.IsNullOrWhiteSpace(editMotivo.Codigo) &&
+        !string.IsNullOrWhiteSpace(editMotivo.Descripcion);
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            var data = catalogo == "NC"
+                ? await Client.ListarMotivosAnulacionCrudAsync()
+                : await Client.ListarMotivosAumentoCrudAsync();
+            motivos = data.ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No se pudieron cargar los motivos: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task ReloadAsync() => await CargarAsync();
+
+    private async Task CambiarCatalogo(string cat)
+    {
+        if (catalogo == cat) return;
+        catalogo = cat;
+        await CargarAsync();
+    }
+
+    private void AbrirNuevo()
+    {
+        popupHeader = $"Nuevo motivo ({(catalogo == "NC" ? "Nota de Crédito" : "Nota de Débito")})";
+        editMotivo = new MotivoSaveRequestDto { Activo = true };
+        popupVisible = true;
+    }
+
+    private void AbrirEditar(MotivoCrudDto m)
+    {
+        popupHeader = $"Editar motivo {m.Codigo}";
+        editMotivo = new MotivoSaveRequestDto
+        {
+            Id = m.Id,
+            Codigo = m.Codigo,
+            Descripcion = m.Descripcion,
+            Activo = m.Activo
+        };
+        popupVisible = true;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (editMotivo is null || !PuedeGuardar) return;
+        isSaving = true;
+        try
+        {
+            var resp = catalogo == "NC"
+                ? await Client.GuardarMotivoAnulacionAsync(editMotivo)
+                : await Client.GuardarMotivoAumentoAsync(editMotivo);
+
+            if (resp.Success)
+            {
+                popupVisible = false;
+                ShowToast("Éxito", resp.Message ?? "Motivo guardado.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+            else
+            {
+                ShowToast("Atención", resp.Message ?? "No se pudo guardar el motivo.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "MotivosToast",
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+}

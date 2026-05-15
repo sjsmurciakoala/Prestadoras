@@ -11,7 +11,7 @@ Usa esta skill para trabajar sobre la capa UI sin romper el flujo real del proye
 
 1. Ubica el modulo en `apc.Client/Pages/<Modulo>/`.
 2. Revisa si ya existe un cliente HTTP en `apc.Client/Services/<Modulo>/`.
-3. Si el cambio toca un componente DevExpress, consulta primero la skill `$hodsoft-devexpress-docs` o el MCP `dxdocs`.
+3. Si el cambio toca un componente DevExpress, **call `devexpress_docs_search`** con el nombre exacto del control (e.g. `DxGrid`, `DxPopup`) y luego **call `devexpress_docs_get_content`** para leer el articulo relevante antes de implementar.
 4. Manten la pagina como orquestadora de estado y llamadas HTTP, no de reglas de negocio profundas.
 5. Si agregas un cliente HTTP nuevo, registralo en `apc.Client/CommonServices.cs`.
 

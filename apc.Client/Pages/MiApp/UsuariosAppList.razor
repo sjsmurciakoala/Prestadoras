@@ -4,12 +4,15 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.AppLectores
 @using SIAD.Core.DTOs.Rutas
+@using SIAD.Core.DTOs.Ciclos
 @using apc.Client.Pages.MiApp
 @using apc.Client.Services.AppLectores
 @using apc.Client.Services.Rutas
+@using apc.Client.Services.Ciclos
 
 @inject UsuariosAppClient UsuariosClient
 @inject RutasClient RutasClient
+@inject CiclosClient CiclosClient
 @inject IToastNotificationService ToastService
 
 <div class="page-container">
@@ -238,6 +241,7 @@
         {
             <UsuariosAppForm Model="formModel"
                              Rutas="rutas"
+                             Ciclos="ciclos"
                              OnValidSubmit="GuardarAsync"
                              OnCancel="CerrarForm"
                              IsBusy="isSaving" />
@@ -292,6 +296,7 @@
     private UsuarioAppListItemDto? usuarioParaDesactivar;
 
     private readonly List<RutaListItemDto> rutas = new();
+    private readonly List<CicloListItemDto> ciclos = new();
 
     private string PopupTitle => formModel.Id.HasValue ? "Editar usuario" : "Nuevo usuario";
     private string PopupSubtitle => formModel.Id.HasValue
@@ -311,6 +316,7 @@
     protected override async Task OnInitializedAsync()
     {
         await LoadRutasAsync();
+        await LoadCiclosAsync();
     }
 
     private void OnGridStateChanged()
@@ -537,6 +543,20 @@
         catch (Exception ex)
         {
             rutasError = $"No se pudo cargar la lista de rutas: {ex.Message}";
+        }
+    }
+
+    private async Task LoadCiclosAsync()
+    {
+        try
+        {
+            var data = await CiclosClient.GetAsync();
+            ciclos.Clear();
+            ciclos.AddRange(data.Where(c => c.Activo).OrderBy(c => c.Codigo));
+        }
+        catch (Exception ex)
+        {
+            rutasError = $"No se pudo cargar la lista de ciclos: {ex.Message}";
         }
     }
 }

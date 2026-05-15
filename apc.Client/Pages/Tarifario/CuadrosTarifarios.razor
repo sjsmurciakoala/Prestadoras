@@ -1,0 +1,435 @@
+@page "/tarifario/cuadros"
+@attribute [Authorize]
+
+@using SIAD.Core.DTOs.Tarifario
+@using SIAD.Core.DTOs.Common
+@using apc.Client.Services.Tarifario
+
+@inject CuadroTarifarioClient Client
+
+<PageTitle>Cuadros Tarifarios</PageTitle>
+
+<DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall" @bind-IsActive="isXSmallScreen" />
+
+<DxMessageBox @bind-Visible="statusMessageVisible"
+              Type="MessageBoxType.Alert"
+              Title="@statusMessageTitle"
+              Text="@statusMessageText"
+              RenderStyle="@statusMessageRenderStyle"
+              OkButtonText="Entendido"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false" />
+
+<DxMessageBox @bind-Visible="deleteConfirmVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Desactivar cuadro"
+              Text="@deleteConfirmText"
+              RenderStyle="MessageBoxRenderStyle.Danger"
+              OkButtonText="Sí, desactivar"
+              CancelButtonText="Cancelar"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false"
+              Closed="OnDeleteConfirmClosed" />
+
+<div class="cuadros-page" id="cuadros-view">
+
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-table me-2 text-primary"></i>Cuadros Tarifarios
+            </h4>
+            <small class="text-muted">Administre los cuadros y reglas del motor tarifario.</small>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="@OnActualizarClick"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nuevo cuadro"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@OnNuevoCuadroClick"
+                      Enabled="@(!IsBusy)" />
+        </div>
+    </div>
+
+    @* ── Indicadores ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="badge bg-primary bg-opacity-10 text-primary border px-3 py-2">
+            <i class="bi bi-table"></i> Total: <strong>@cuadros.Count</strong>
+        </span>
+        <span class="badge bg-success bg-opacity-10 text-success border px-3 py-2">
+            <i class="bi bi-check2-circle"></i> Activos: <strong>@cuadros.Count(c => c.StatusId == 1)</strong>
+        </span>
+    </div>
+
+    @* ── Grid maestro de cuadros ── *@
+    <div class="shadow-sm rounded">
+        <DxGrid @ref="gridCuadros"
+                Data="@cuadros"
+                KeyFieldName="@nameof(CuadroTarifarioListDto.CuadroTarifarioId)"
+                ShowFilterRow="true"
+                ShowPager="true"
+                PageSize="20"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 10, 20, 50, 100 }"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                DetailRowDisplayMode="GridDetailRowDisplayMode.Auto"
+                CssClass="border-0">
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="100px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false"
+                                     VisibleIndex="99">
+                    <CellDisplayTemplate Context="cellContext">
+                        @if (cellContext.DataItem is CuadroTarifarioListDto item)
+                        {
+                            <div class="d-flex gap-1 justify-content-center">
+                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-pencil-square fs-5"
+                                          title="Editar"
+                                          Enabled="@(!IsBusy)"
+                                          Click="@(() => OnEditarCuadroClick(item))" />
+                                @if (item.StatusId == 1)
+                                {
+                                    <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                              RenderStyleMode="ButtonRenderStyleMode.Text"
+                                              SizeMode="SizeMode.Small"
+                                              IconCssClass="bi bi-x-circle fs-5"
+                                              title="Desactivar"
+                                              Enabled="@(!IsBusy)"
+                                              Click="@(() => OpenDeleteConfirm(item))" />
+                                }
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.Codigo)" Caption="Código" Width="140px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.Nombre)" Caption="Nombre" Width="200px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.ServicioCodigo)" Caption="Servicio" Width="160px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.CategoriaCodigo)" Caption="Categoría" Width="120px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.CondicionCodigo)" Caption="Condición" Width="120px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.SegmentoCodigo)" Caption="Segmento" Width="120px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.VigenciaDesde)" Caption="Vigencia desde" Width="130px" DisplayFormat="dd/MM/yyyy" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.VigenciaHasta)" Caption="Vigencia hasta" Width="130px" DisplayFormat="dd/MM/yyyy" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.Prioridad)" Caption="Prior." Width="70px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.TotalReglas)" Caption="Reglas" Width="80px" />
+                <DxGridDataColumn FieldName="@nameof(CuadroTarifarioListDto.StatusId)" Caption="Estado" Width="90px">
+                    <CellDisplayTemplate Context="cellCtx">
+                        @{
+                            var st = (int)(cellCtx.Value ?? 0);
+                            <span class="badge @(st == 1 ? "bg-success" : "bg-secondary")">@(st == 1 ? "Activo" : "Inactivo")</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+
+            @* ── Detail row: reglas tarifarias ── *@
+            <DetailRowTemplate Context="detailCtx">
+                @{
+                    var cuadro = (CuadroTarifarioListDto)detailCtx.DataItem;
+                }
+                <CuadroReglasDetail CuadroTarifarioId="cuadro.CuadroTarifarioId"
+                                    CuadroCodigo="@cuadro.Codigo"
+                                    Catalogos="catalogos"
+                                    OnChanged="OnActualizarClick" />
+            </DetailRowTemplate>
+        </DxGrid>
+    </div>
+</div>
+
+@* ── Popup edición cuadro ── *@
+<DxPopup @bind-Visible="popupCuadroVisible"
+         HeaderText="@popupCuadroHeaderText"
+         Width="700px"
+         CloseOnOutsideClick="false"
+         ShowCloseButton="true">
+    <BodyContentTemplate Context="popupCtx">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Servicio" ColSpanMd="6">
+                <Template>
+                    <DxComboBox Data="@catalogos?.Servicios"
+                                ValueFieldName="Id"
+                                TextFieldName="Codigo"
+                                @bind-Value="editCuadro_ServicioId"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="Seleccione..." />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Categoría regulatoria" ColSpanMd="6">
+                <Template>
+                    <DxComboBox Data="@catalogos?.Categorias"
+                                ValueFieldName="Id"
+                                TextFieldName="Codigo"
+                                @bind-Value="editCuadro_CategoriaId"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="(todas)" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Condición medición" ColSpanMd="6">
+                <Template>
+                    <DxComboBox Data="@catalogos?.Condiciones"
+                                ValueFieldName="Id"
+                                TextFieldName="Codigo"
+                                @bind-Value="editCuadro_CondicionId"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="(todas)" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Segmento tarifario" ColSpanMd="6">
+                <Template>
+                    <DxComboBox Data="@filteredSegmentos"
+                                ValueFieldName="Id"
+                                TextFieldName="Codigo"
+                                @bind-Value="editCuadro_SegmentoId"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="(todos)" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Código" ColSpanMd="6">
+                <Template>
+                    <DxTextBox @bind-Text="editCuadro_Codigo" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Nombre" ColSpanMd="6">
+                <Template>
+                    <DxTextBox @bind-Text="editCuadro_Nombre" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                <Template>
+                    <DxTextBox @bind-Text="editCuadro_Descripcion" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Vigencia desde" ColSpanMd="4">
+                <Template>
+                    <DxDateEdit @bind-Date="editCuadro_VigenciaDesde" DisplayFormat="dd/MM/yyyy" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Vigencia hasta" ColSpanMd="4">
+                <Template>
+                    <DxDateEdit @bind-Date="editCuadro_VigenciaHasta" DisplayFormat="dd/MM/yyyy" NullText="(indefinida)" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Prioridad" ColSpanMd="4">
+                <Template>
+                    <DxSpinEdit @bind-Value="editCuadro_Prioridad" MinValue="1" MaxValue="999" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Referencia normativa" ColSpanMd="12">
+                <Template>
+                    <DxTextBox @bind-Text="editCuadro_ReferenciaNormativa" />
+                </Template>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => popupCuadroVisible = false)" />
+            <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="OnGuardarCuadroClick" Enabled="@(!IsBusy)" />
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    IGrid gridCuadros = null!;
+    List<CuadroTarifarioListDto> cuadros = new();
+    CuadroTarifarioCatalogosDto? catalogos;
+
+    bool IsBusy;
+    bool isXSmallScreen;
+
+    // Status message
+    bool statusMessageVisible;
+    string statusMessageTitle = "";
+    string statusMessageText = "";
+    MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
+
+    // Delete confirm
+    bool deleteConfirmVisible;
+    string deleteConfirmText = "";
+    CuadroTarifarioListDto? cuadroToDelete;
+
+    // Popup cuadro
+    bool popupCuadroVisible;
+    string popupCuadroHeaderText = "Nuevo cuadro";
+    long? editCuadro_Id;
+    long editCuadro_ServicioId;
+    long? editCuadro_CategoriaId;
+    long? editCuadro_CondicionId;
+    long? editCuadro_SegmentoId;
+    string editCuadro_Codigo = "";
+    string editCuadro_Nombre = "";
+    string? editCuadro_Descripcion;
+    DateTime editCuadro_VigenciaDesde = DateTime.Today;
+    DateTime? editCuadro_VigenciaHasta;
+    int editCuadro_Prioridad = 1;
+    string? editCuadro_ReferenciaNormativa;
+
+    IEnumerable<SegmentoLookupDto> filteredSegmentos =>
+        catalogos?.Segmentos?.Where(s => !editCuadro_CategoriaId.HasValue || s.CategoriaRegulatoriaId == editCuadro_CategoriaId)
+        ?? Enumerable.Empty<SegmentoLookupDto>();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDatos();
+    }
+
+    async Task CargarDatos()
+    {
+        IsBusy = true;
+        try
+        {
+            var t1 = Client.ObtenerCuadrosAsync();
+            var t2 = Client.ObtenerCatalogosAsync();
+            await Task.WhenAll(t1, t2);
+            cuadros = (await t1).ToList();
+            catalogos = await t2;
+        }
+        catch (Exception ex)
+        {
+            ShowMessage("Error", $"No se pudieron cargar los datos: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    async Task OnActualizarClick() => await CargarDatos();
+
+    void OnNuevoCuadroClick()
+    {
+        editCuadro_Id = null;
+        editCuadro_ServicioId = catalogos?.Servicios?.FirstOrDefault()?.Id ?? 0;
+        editCuadro_CategoriaId = null;
+        editCuadro_CondicionId = null;
+        editCuadro_SegmentoId = null;
+        editCuadro_Codigo = "";
+        editCuadro_Nombre = "";
+        editCuadro_Descripcion = null;
+        editCuadro_VigenciaDesde = DateTime.Today;
+        editCuadro_VigenciaHasta = null;
+        editCuadro_Prioridad = 1;
+        editCuadro_ReferenciaNormativa = null;
+        popupCuadroHeaderText = "Nuevo cuadro tarifario";
+        popupCuadroVisible = true;
+    }
+
+    void OnEditarCuadroClick(CuadroTarifarioListDto item)
+    {
+        editCuadro_Id = item.CuadroTarifarioId;
+        editCuadro_ServicioId = item.ServicioId;
+        editCuadro_CategoriaId = item.CategoriaRegulatoriaId;
+        editCuadro_CondicionId = item.CondicionMedicionId;
+        editCuadro_SegmentoId = item.SegmentoTarifarioId;
+        editCuadro_Codigo = item.Codigo;
+        editCuadro_Nombre = item.Nombre;
+        editCuadro_Descripcion = item.Descripcion;
+        editCuadro_VigenciaDesde = item.VigenciaDesde;
+        editCuadro_VigenciaHasta = item.VigenciaHasta;
+        editCuadro_Prioridad = item.Prioridad;
+        editCuadro_ReferenciaNormativa = item.ReferenciaNormativa;
+        popupCuadroHeaderText = $"Editar cuadro: {item.Codigo}";
+        popupCuadroVisible = true;
+    }
+
+    async Task OnGuardarCuadroClick()
+    {
+        if (string.IsNullOrWhiteSpace(editCuadro_Codigo) || string.IsNullOrWhiteSpace(editCuadro_Nombre))
+        {
+            ShowMessage("Validación", "Código y Nombre son obligatorios.", MessageBoxRenderStyle.Warning);
+            return;
+        }
+
+        IsBusy = true;
+        try
+        {
+            var request = new CuadroTarifarioSaveRequest(
+                editCuadro_Id,
+                editCuadro_ServicioId,
+                editCuadro_CategoriaId,
+                editCuadro_CondicionId,
+                editCuadro_SegmentoId,
+                editCuadro_Codigo.Trim(),
+                editCuadro_Nombre.Trim(),
+                editCuadro_Descripcion?.Trim(),
+                editCuadro_VigenciaDesde,
+                editCuadro_VigenciaHasta,
+                editCuadro_Prioridad,
+                editCuadro_ReferenciaNormativa?.Trim());
+
+            var resp = await Client.GuardarCuadroAsync(request);
+            if (resp?.Success == true)
+            {
+                popupCuadroVisible = false;
+                ShowMessage("Éxito", resp.Message ?? "Guardado.", MessageBoxRenderStyle.Success);
+                await CargarDatos();
+            }
+            else
+            {
+                ShowMessage("Error", resp?.Message ?? "Error al guardar.", MessageBoxRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowMessage("Error", ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            IsBusy = false;
+        }
+    }
+
+    void OpenDeleteConfirm(CuadroTarifarioListDto item)
+    {
+        cuadroToDelete = item;
+        deleteConfirmText = $"¿Desactivar el cuadro «{item.Codigo} – {item.Nombre}»?";
+        deleteConfirmVisible = true;
+    }
+
+    async Task OnDeleteConfirmClosed(bool confirmed)
+    {
+        if (confirmed && cuadroToDelete != null)
+        {
+            IsBusy = true;
+            try
+            {
+                var resp = await Client.DesactivarCuadroAsync(cuadroToDelete.CuadroTarifarioId);
+                if (resp?.Success == true)
+                {
+                    ShowMessage("Éxito", resp.Message ?? "Desactivado.", MessageBoxRenderStyle.Success);
+                    await CargarDatos();
+                }
+                else
+                {
+                    ShowMessage("Error", resp?.Message ?? "Error al desactivar.", MessageBoxRenderStyle.Danger);
+                }
+            }
+            catch (Exception ex)
+            {
+                ShowMessage("Error", ex.Message, MessageBoxRenderStyle.Danger);
+            }
+            finally
+            {
+                IsBusy = false;
+            }
+        }
+        cuadroToDelete = null;
+    }
+
+    void ShowMessage(string title, string text, MessageBoxRenderStyle style)
+    {
+        statusMessageTitle = title;
+        statusMessageText = text;
+        statusMessageRenderStyle = style;
+        statusMessageVisible = true;
+    }
+}

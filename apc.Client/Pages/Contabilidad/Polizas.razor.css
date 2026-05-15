@@ -1,5 +1,85 @@
 /* Polizas / Partidas manuales - DevExpress layout */
 
+.partidas-page {
+    padding: 1.5rem;
+}
+
+.partidas-hero {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.partidas-hero__copy {
+    flex: 1;
+    min-width: 280px;
+}
+
+.partidas-hero__eyebrow {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: #64748b;
+    margin-bottom: 0.25rem;
+}
+
+.partidas-hero__title {
+    font-size: 1.75rem;
+    font-weight: 800;
+    color: #0f172a;
+    margin: 0 0 0.5rem 0;
+}
+
+.partidas-hero__subtitle {
+    font-size: 0.95rem;
+    color: #64748b;
+    margin: 0;
+    max-width: 600px;
+}
+
+.partidas-hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    align-items: center;
+}
+
+.partidas-shell {
+    background: #fff;
+    border: 1px solid #e2e8f0;
+    border-radius: 0.75rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+    overflow: hidden;
+}
+
+.partidas-shell__header {
+    display: flex;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    background: #f8fafc;
+    border-bottom: 1px solid #e2e8f0;
+}
+
+.partidas-shell__body {
+    padding: 1rem;
+}
+
+.partidas-warning-box {
+    display: flex;
+    align-items: center;
+    padding: 0.85rem 1rem;
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 0.75rem;
+    background: linear-gradient(135deg, rgba(254, 243, 199, 0.95), rgba(254, 249, 195, 0.9));
+    color: #92400e;
+    font-weight: 500;
+}
+
 .periodo-contexto {
     display: flex;
     justify-content: space-between;
@@ -30,23 +110,15 @@
     color: #1e3a8a;
 }
 
-.poliza-correlativo-box {
-    display: inline-flex;
-    min-width: 110px;
-    align-items: center;
-    justify-content: center;
-    padding: 0.72rem 1rem;
-    border: 1px solid rgba(37, 99, 235, 0.14);
-    border-radius: 0.85rem;
-    background: linear-gradient(135deg, rgba(239, 246, 255, 0.96), rgba(255, 255, 255, 0.98));
-    box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.7);
+/* Campo correlativo readonly - estilo destacado */
+::deep .correlativo-field input {
+    font-weight: 600 !important;
+    color: #1e40af !important;
+    background-color: #f8fafc !important;
 }
 
-.poliza-correlativo-box__value {
-    color: #0f172a;
-    font-size: 1.2rem;
-    font-weight: 800;
-    letter-spacing: 0.04em;
+::deep .correlativo-field .dxbl-spin-edit-input-container {
+    background-color: #f8fafc !important;
 }
 
 .table-responsive table {
@@ -83,10 +155,6 @@ tr.detail-row:hover {
 
     .periodo-contexto__meta {
         text-align: left;
-    }
-
-    .poliza-correlativo-box {
-        width: 100%;
     }
 
     .table-responsive table {

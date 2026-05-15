@@ -74,7 +74,5 @@ public partial class cliente_maestro : ICompanyScopedEntity
 
     public virtual ICollection<cln_plan_pago_hdr> cln_plan_pago_hdrs { get; set; } = new List<cln_plan_pago_hdr>();
 
-    public virtual ICollection<configuracion_tasa> configuracion_tasas { get; set; } = new List<configuracion_tasa>();
-
     public virtual tipo_uso_servicio? tipo_uso_codigoNavigation { get; set; }
 }

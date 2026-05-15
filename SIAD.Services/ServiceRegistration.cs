@@ -13,6 +13,7 @@ using SIAD.Services.Rutas;
 using SIAD.Services.CaptacionPagos;
 using SIAD.Services.FacturacionMiscelaneos;
 using SIAD.Services.NotasCreditoDebito;
+using SIAD.Services.Mantenimientos;
 using SIAD.Services.Cobranza;
 using SIAD.Services.Bancos;
 using SIAD.Services.Contabilidad;
@@ -20,12 +21,9 @@ using SIAD.Services.Tenancy;
 using SIAD.Services.Catalogos;
 using SIAD.Services.Abogados;
 using SIAD.Services.Ciclos;
-using SIAD.Services.Servicios;
-using SIAD.Services.Conceptos;
-using SIAD.Services.Letras;
-using SIAD.Services.TarifasBase;
-using SIAD.Services.TarifasContador;
+// [Sprint1/FaseC 2026-05-05] Removidos namespaces Letras, TarifasBase, TarifasContador (legacy).
 using SIAD.Services.AppLectores;
+using SIAD.Services.Tarifario;
 
 namespace SIAD.Services;
 
@@ -67,7 +65,10 @@ public static class ServiceRegistration
         
         // notas crédito/débito
         services.AddScoped<INotasCreditoDebitoService, NotasCreditoDebitoService>();
-        
+
+        // mantenimientos (recargo mora, ajustes tarifarios)
+        services.AddScoped<IMantenimientosService, MantenimientosService>();
+
         // cobranza
         services.AddScoped<ICobranzaService, CobranzaService>();
         
@@ -93,28 +94,28 @@ public static class ServiceRegistration
         // ciclos
         services.AddScoped<ICiclosService, CiclosService>();
         
-        // servicios
-        services.AddScoped<IServiciosService, ServiciosService>();
-
-        // conceptos
-        services.AddScoped<IConceptosService, ConceptosService>();
-        
-        // letras
-        services.AddScoped<ILetrasService, LetrasService>();
-
-        // tarifas
-        services.AddScoped<ITarifasBaseService, TarifasBaseService>();
-        services.AddScoped<ITarifasContadorService, TarifasContadorService>();
-
         // app lectores
         services.AddScoped<IUsuariosAppService, UsuariosAppService>();
-        services.AddScoped<IConfiguracionAppService, ConfiguracionAppService>();
-        services.AddScoped<IServiciosRolesWsService, ServiciosRolesWsService>();
+
+        // tipos de documento fiscal (catalogo SAR Acuerdo 481-2017)
+        services.AddScoped<SIAD.Services.TiposDocumentoFiscal.ITiposDocumentoFiscalService,
+                           SIAD.Services.TiposDocumentoFiscal.TiposDocumentoFiscalService>();
 
         services.AddScoped<ICuentasBancosService, CuentasBancosService>();
         services.AddScoped<IBanMonedasService, BanMonedasService>();
         services.AddScoped<IBanTiposTransaccionesService, BanTiposTransaccionesService>();
         services.AddScoped<IBanTransaccionesService, BanTransaccionesService>();
+
+        // tarifario v3
+        services.AddScoped<IClienteServicioTarifarioService, ClienteServicioTarifarioService>();
+        services.AddScoped<IPruebaCalculoService, PruebaCalculoService>();
+        services.AddScoped<ICuadroTarifarioService, CuadroTarifarioService>();
+        services.AddScoped<ServicioTarifarioV3Service>();
+        services.AddScoped<IServicioTarifarioV3Service, ServicioTarifarioV3Service>();
+        services.AddScoped<CaiTarifarioService>();
+        services.AddScoped<ICaiTarifarioService, CaiTarifarioService>();
+        services.AddScoped<ITarifarioConflictoService, TarifarioConflictoService>();
+
         return services;
     }
 }

@@ -15,7 +15,6 @@ namespace SIAD.Services.Clientes;
 
 public class ClientesService : IClientesService
 {
-    private const int MaxCodigoClienteGenerationAttempts = 5;
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _currentCompanyService;
 
@@ -53,86 +52,85 @@ public class ClientesService : IClientesService
             throw new InvalidOperationException($"Ya existe un cliente con el DNI {identidad}.");
         }
 
-        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-        var indicativoRuta = ConstruirIndicativoRuta(dto.CicloId, dto.BarrioCodigo, dto.Libreta, dto.Secuencia);
-        var clave = await GenerarCodigoClienteAsync(ct);
-
-        for (var intento = 1; intento <= MaxCodigoClienteGenerationAttempts; intento++)
+        var clave = Limpiar(dto.Clave);
+        if (string.IsNullOrWhiteSpace(clave))
         {
-            var maestro = new cliente_maestro
-            {
-                maestro_cliente_clave = clave,
-                maestro_cliente_identidad = identidad,
-                maestro_cliente_rtn = Limpiar(dto.Rtn),
-                maestro_cliente_nombre = nombreCompleto,
-                maestro_cliente_tercera_edad = dto.TerceraEdad,
-                categoria_servicio_id = dto.CategoriaServicioId,
-                barrio_codigo = Limpiar(dto.BarrioCodigo),
-                maestro_cliente_indicativo_ruta = indicativoRuta,
-                maestro_cliente_secuencia = Limpiar(dto.Secuencia),
-                estado = dto.Activo,
-                usuariocreacion = usuarioCreacion,
-                fechacreacion = ahora,
-                tipo_uso_codigo = Limpiar(dto.TipoUsoCodigo),
-                ciclos_id = dto.CicloId,
-                cliente_fecha_nac = dto.FechaNacimiento?.Date,
-                maestro_cliente_tiene_contrato = dto.TieneContrato,
-                maestro_cliente_tiene_convenio = dto.TieneConvenio,
-                maestro_cliente_tiene_medidor = dto.TieneMedidor,
-                clave_sure = Limpiar(dto.ClaveSure),
-                contador = Limpiar(dto.Contador),
-                letracodigo = Limpiar(dto.LetraCodigo),
-                bloqueado_cobranza = dto.BloqueadoCobranza,
-                abogado = dto.AbogadoId
-            };
-
-            var detalle = new cliente_detalle
-            {
-                maestro_cliente = maestro,
-                detalle_cliente_telefono = Limpiar(dto.Telefono),
-                detalle_cliente_movil = Limpiar(dto.TelefonoMovil),
-                detalle_cliente_email = Limpiar(dto.Email),
-                detalle_cliente_direccion = Limpiar(dto.Direccion),
-                detalle_cliente_color_casa = Limpiar(dto.ColorCasa),
-                maestro_medidor_id = dto.MedidorId,
-                empresa_nombre = Limpiar(dto.EmpresaNombre),
-                empresa_telefono = Limpiar(dto.EmpresaTelefono),
-                empresa_direccion = Limpiar(dto.EmpresaDireccion),
-                clave = Limpiar(dto.EmpresaRtn),
-                negocio_clave_catastral = Limpiar(dto.ClaveCatastral),
-                observaciones = ConstruirObservaciones(dto.Observaciones, dto.NumeroConvenio),
-                numero_contrato = Limpiar(dto.NumeroContrato),
-                estado = dto.Activo,
-                usuariocreacion = usuarioCreacion,
-                fechacreacion = ahora
-            };
-
-            maestro.cliente_detalles.Add(detalle);
-            _context.cliente_maestros.Add(maestro);
-
-            try
-            {
-                await _context.SaveChangesAsync(ct);
-                return new ClienteCreateResponseDto
-                {
-                    Id = maestro.maestro_cliente_id,
-                    Codigo = clave
-                };
-            }
-            catch (DbUpdateException ex) when (IsClienteClaveUniqueViolation(ex))
-            {
-                _context.ChangeTracker.Clear();
-
-                if (intento == MaxCodigoClienteGenerationAttempts)
-                {
-                    throw new InvalidOperationException("No fue posible generar un código único para el cliente.", ex);
-                }
-
-                clave = await GenerarCodigoClienteAsync(ct);
-            }
+            throw new ArgumentException("El código del sistema es obligatorio.", nameof(dto.Clave));
         }
 
-        throw new InvalidOperationException("No fue posible generar un código único para el cliente.");
+        if (await _context.cliente_maestros.AnyAsync(c => c.maestro_cliente_clave == clave, ct))
+        {
+            throw new InvalidOperationException($"Ya existe un cliente con el código {clave}.");
+        }
+
+        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var indicativoRuta = ConstruirIndicativoRuta(dto.CicloId, dto.BarrioCodigo, dto.Libreta, dto.Secuencia);
+
+        var maestro = new cliente_maestro
+        {
+            maestro_cliente_clave = clave!,
+            maestro_cliente_identidad = identidad,
+            maestro_cliente_rtn = Limpiar(dto.Rtn),
+            maestro_cliente_nombre = nombreCompleto,
+            maestro_cliente_tercera_edad = dto.TerceraEdad,
+            categoria_servicio_id = dto.CategoriaServicioId,
+            barrio_codigo = Limpiar(dto.BarrioCodigo),
+            maestro_cliente_indicativo_ruta = indicativoRuta,
+            maestro_cliente_secuencia = Limpiar(dto.Secuencia),
+            estado = dto.Activo,
+            usuariocreacion = usuarioCreacion,
+            fechacreacion = ahora,
+            tipo_uso_codigo = Limpiar(dto.TipoUsoCodigo),
+            ciclos_id = dto.CicloId,
+            cliente_fecha_nac = dto.FechaNacimiento?.Date,
+            maestro_cliente_tiene_contrato = dto.TieneContrato,
+            maestro_cliente_tiene_convenio = dto.TieneConvenio,
+            maestro_cliente_tiene_medidor = dto.TieneMedidor,
+            clave_sure = Limpiar(dto.ClaveSure),
+            contador = Limpiar(dto.Contador),
+            letracodigo = Limpiar(dto.LetraCodigo),
+            bloqueado_cobranza = dto.BloqueadoCobranza,
+            abogado = dto.AbogadoId
+        };
+
+        var detalle = new cliente_detalle
+        {
+            maestro_cliente = maestro,
+            detalle_cliente_telefono = Limpiar(dto.Telefono),
+            detalle_cliente_movil = Limpiar(dto.TelefonoMovil),
+            detalle_cliente_email = Limpiar(dto.Email),
+            detalle_cliente_direccion = Limpiar(dto.Direccion),
+            detalle_cliente_color_casa = Limpiar(dto.ColorCasa),
+            maestro_medidor_id = dto.MedidorId,
+            empresa_nombre = Limpiar(dto.EmpresaNombre),
+            empresa_telefono = Limpiar(dto.EmpresaTelefono),
+            empresa_direccion = Limpiar(dto.EmpresaDireccion),
+            clave = Limpiar(dto.EmpresaRtn),
+            negocio_clave_catastral = Limpiar(dto.ClaveCatastral),
+            observaciones = ConstruirObservaciones(dto.Observaciones, dto.NumeroConvenio),
+            numero_contrato = Limpiar(dto.NumeroContrato),
+            estado = dto.Activo,
+            usuariocreacion = usuarioCreacion,
+            fechacreacion = ahora
+        };
+
+        maestro.cliente_detalles.Add(detalle);
+        _context.cliente_maestros.Add(maestro);
+
+        try
+        {
+            await _context.SaveChangesAsync(ct);
+        }
+        catch (DbUpdateException ex) when (IsClienteClaveUniqueViolation(ex))
+        {
+            throw new InvalidOperationException($"Ya existe un cliente con el código {clave}.", ex);
+        }
+
+        return new ClienteCreateResponseDto
+        {
+            Id = maestro.maestro_cliente_id,
+            Codigo = clave!
+        };
     }
 
     public async Task<ClienteDetailDto> ActualizarClienteAsync(int id, ClienteUpdateDto dto, string usuarioModificacion, CancellationToken ct = default)
@@ -296,7 +294,9 @@ public class ClientesService : IClientesService
                 c.maestro_cliente_nombre,
                 c.maestro_cliente_identidad,
                 c.barrio_codigo,
-                c.estado))
+                c.estado,
+                c.ciclos != null ? c.ciclos.ciclos_codigo : null,
+                c.maestro_cliente_indicativo_ruta))
             .ToListAsync(cancellationToken);
     }
 
@@ -335,7 +335,9 @@ public class ClientesService : IClientesService
                 c.maestro_cliente_nombre,
                 c.maestro_cliente_identidad,
                 c.barrio_codigo,
-                c.estado))
+                c.estado,
+                c.ciclos != null ? c.ciclos.ciclos_codigo : null,
+                c.maestro_cliente_indicativo_ruta))
             .ToListAsync(cancellationToken);
 
         return new PagedResult<ClienteListItemDto>(items, totalCount);
@@ -352,7 +354,9 @@ public class ClientesService : IClientesService
                 c.maestro_cliente_nombre,
                 c.maestro_cliente_identidad,
                 c.barrio_codigo,
-                c.estado))
+                c.estado,
+                c.ciclos != null ? c.ciclos.ciclos_codigo : null,
+                c.maestro_cliente_indicativo_ruta))
             .ToListAsync(cancellationToken);
     }
 
@@ -480,6 +484,12 @@ public class ClientesService : IClientesService
     }
     public async Task<ClienteEstadoCuentaDto> GetEstadoCuentaAsync(int clienteId, CancellationToken ct = default)
     {
+        var companyId = _currentCompanyService.GetCompanyId();
+        if (companyId <= 0)
+        {
+            throw new InvalidOperationException("No se pudo determinar la empresa (tenant) actual.");
+        }
+
         var clave = await _context.cliente_maestros
             .AsNoTracking()
             .Where(c => c.maestro_cliente_id == clienteId)
@@ -491,22 +501,32 @@ public class ClientesService : IClientesService
             return new ClienteEstadoCuentaDto(null, null, null, null, null);
         }
 
-        var movimientosQuery = _context.transaccion_abonados
+        // Saldo total acumulado: SP es la unica fuente de verdad (ORDER BY ide DESC
+        // sobre transaccion_abonado activo). El query EF anterior usaba fecha_docu DESC
+        // que es ambiguo cuando una factura V3 inserta 4 rows (uno por servicio) con
+        // misma fecha — devolvia un saldo parcial en lugar del total.
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        const string sqlSaldo = "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@CompanyId, @Clave)";
+        var saldoActual = await connection.ExecuteScalarAsync<decimal?>(
+            new CommandDefinition(sqlSaldo,
+                new { CompanyId = companyId, Clave = clave },
+                cancellationToken: ct)) ?? 0m;
+
+        var ultimoPago = await _context.transaccion_abonados
             .AsNoTracking()
-            .Where(t => t.cliente_clave == clave);
-
-        var ultimoMovimiento = await movimientosQuery
-            .OrderByDescending(t => t.fecha_docu)
-            .Select(t => new { t.fecha_docu, t.saldo })
+            .Where(t => t.company_id == companyId
+                        && t.cliente_clave == clave
+                        && t.tipotransaccion != null
+                        && EF.Functions.ILike(t.tipotransaccion, "%PAGO%"))
+            .OrderByDescending(t => t.ide)
+            .Select(t => new { t.fecha_docu, t.creditos, t.debitos })
             .FirstOrDefaultAsync(ct);
 
-        var ultimoPago = await movimientosQuery
-            .Where(t => t.tipotransaccion != null && EF.Functions.ILike(t.tipotransaccion, "%PAGO%"))
-            .OrderByDescending(t => t.fecha_docu)
-            .Select(t => new { t.fecha_docu, t.creditos, t.debitos, t.saldo })
-            .FirstOrDefaultAsync(ct);
-
-        var saldoActual = ultimoMovimiento?.saldo ?? ultimoPago?.saldo ?? 0m;
         DateTime? fechaPago = ultimoPago?.fecha_docu.HasValue == true
             ? ultimoPago.fecha_docu.Value.ToDateTime(TimeOnly.MinValue)
             : null;
@@ -546,14 +566,19 @@ public class ClientesService : IClientesService
         return await _context.transaccion_abonados
             .AsNoTracking()
             .Where(t => t.cliente_clave == clave)
-            .OrderByDescending(t => t.fecha_docu)
+            .OrderByDescending(t => t.ide)
             .Select(t => new ClienteMovimientoDto(
                 t.ide,
                 t.fecha_docu.HasValue ? t.fecha_docu.Value.ToDateTime(TimeOnly.MinValue) : DateTime.MinValue,
                 t.tipotransaccion ?? string.Empty,
                 t.descripcion,
                 (t.creditos ?? 0) - (t.debitos ?? 0),
-                t.saldo ?? 0))
+                t.saldo ?? 0,
+                t.recibo,
+                _context.facturas
+                    .Where(f => f.numrecibo == t.recibo && f.clientecodigo == t.cliente_clave)
+                    .Select(f => f.numfactura)
+                    .FirstOrDefault()))
             .ToListAsync(ct);
     }
 
@@ -602,7 +627,12 @@ public class ClientesService : IClientesService
                 t.tipotransaccion ?? string.Empty,
                 t.descripcion,
                 (t.creditos ?? 0) - (t.debitos ?? 0),
-                t.saldo ?? 0))
+                t.saldo ?? 0,
+                t.recibo,
+                _context.facturas
+                    .Where(f => f.numrecibo == t.recibo && f.clientecodigo == t.cliente_clave)
+                    .Select(f => f.numfactura)
+                    .FirstOrDefault()))
             .ToListAsync(ct);
 
         return new PagedResult<ClienteMovimientoDto>(items, totalCount);
@@ -845,334 +875,6 @@ public class ClientesService : IClientesService
         return new ClienteHistoricoConsumoPagedResponseDto(header, items, summary.TotalCount, summary.TotalConsumo);
     }
 
-    public async Task<ClienteConfiguracionTarifaHeaderDto?> GetConfiguracionTarifaHeaderAsync(int clienteId, string usuario, CancellationToken ct = default)
-    {
-        var clave = await GetClienteClaveAsync(clienteId, ct);
-        if (string.IsNullOrWhiteSpace(clave))
-        {
-            return null;
-        }
-
-        clave = clave.Trim();
-
-        await using var connection = _context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync(ct);
-        }
-
-        await EnsureConfiguracionTarifaGeneradaAsync(clienteId, clave, usuario, connection, ct);
-
-        const string sql = @"
-            SELECT
-                r_cliente_id AS ""ClienteId"",
-                r_cliente_clave AS ""ClienteClave"",
-                r_cliente_nombre AS ""ClienteNombre"",
-                r_cliente_direccion AS ""ClienteDireccion"",
-                r_cliente_tiene_med AS ""ClienteTieneMedidor"",
-                r_cliente_categoria_id AS ""ClienteCategoriaId"",
-                r_categoria_descripcion AS ""CategoriaDescripcion"",
-                r_cliente_medidor_id AS ""MaestroMedidorId"",
-                r_medidor_numero AS ""MedidorNumero"",
-                r_lect_act AS ""LecturaActual"",
-                r_lect_ant AS ""LecturaAnterior"",
-                r_consumo AS ""Consumo"",
-                r_tipouso AS ""TipoUsoCodigo"",
-                r_letracodigo AS ""LetraCodigo""
-            FROM sp_hdinfo_configuracion_tasas(@p_cliente_clave)";
-
-        var row = await connection.QueryFirstOrDefaultAsync<ConfiguracionTarifaHeaderRow>(
-            new CommandDefinition(sql, new { p_cliente_clave = clave }, cancellationToken: ct));
-
-        return row is not null
-            ? MapConfiguracionTarifaHeader(row, clave)
-            : await BuildConfiguracionTarifaHeaderFallbackAsync(clienteId, clave, ct);
-    }
-
-    public async Task<IReadOnlyList<ClienteConfiguracionTarifaDetalleDto>> GetConfiguracionTarifaDetalleAsync(
-        int clienteId,
-        int? categoriaSeleccionada,
-        string usuario,
-        CancellationToken ct = default)
-    {
-        var clave = await GetClienteClaveAsync(clienteId, ct);
-        if (string.IsNullOrWhiteSpace(clave))
-        {
-            return Array.Empty<ClienteConfiguracionTarifaDetalleDto>();
-        }
-
-        var categoriaActual = await _context.cliente_maestros
-            .AsNoTracking()
-            .Where(c => c.maestro_cliente_id == clienteId)
-            .Select(c => c.categoria_servicio_id)
-            .FirstOrDefaultAsync(ct);
-
-        await using var connection = _context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync(ct);
-        }
-
-        clave = clave.Trim();
-
-        await EnsureConfiguracionTarifaGeneradaAsync(clienteId, clave, usuario, connection, ct);
-
-
-        const string sqlDetalle = @"
-            SELECT
-                r_configuracion_tasas_id AS ""ConfiguracionTasasId"",
-                r_configuracion_tasas_detalle_id AS ""ConfiguracionTasasDetalleId"",
-                r_servicios_id AS ""ServiciosId"",
-                r_servicios_codigo AS ""ServicioCodigo"",
-                r_servicios_descripcioncorta AS ""DescripcionTasa"",
-                r_configuracion_tasas_detalle_aplicaservicio AS ""ConfiguracionTasasDetalleAplicaservicio"",
-                r_configuracion_tasas_detalle_monto AS ""ConfiguracionTasasDetalleMonto""
-            FROM sp_configuracion_tasas_cliente(@p_cliente_clave)";
-
-        var rows = await connection.QueryAsync<ConfiguracionTarifaDetalleRow>(
-            new CommandDefinition(sqlDetalle, new { p_cliente_clave = clave }, cancellationToken: ct));
-
-        var list = rows.Select(r => new ClienteConfiguracionTarifaDetalleDto
-            {
-                ConfiguracionTasasId = r.ConfiguracionTasasId,
-                ConfiguracionTasasDetalleId = r.ConfiguracionTasasDetalleId,
-                ServiciosId = r.ServiciosId,
-                ServicioCodigo = r.ServicioCodigo,
-                DescripcionTasa = r.DescripcionTasa,
-                ConfiguracionTasasDetalleAplicaservicio = r.ConfiguracionTasasDetalleAplicaservicio,
-                ConfiguracionTasasDetalleMonto = r.ConfiguracionTasasDetalleMonto
-            })
-            .ToList();
-
-        if (categoriaSeleccionada.HasValue
-            && categoriaActual.HasValue
-            && categoriaSeleccionada.Value != categoriaActual.Value)
-        {
-            var servicioPrimario = await _context.tarifas_contadors
-                .AsNoTracking()
-                .Where(t => t.categoria_id == categoriaSeleccionada.Value && t.valor_base.HasValue && t.valor_base.Value > 0m)
-                .FirstOrDefaultAsync(ct);
-
-            if (servicioPrimario?.valor_base is { } valorBase)
-            {
-                var servicioBaseId = await _context.servicios
-                    .AsNoTracking()
-                    .Where(s => s.estado && s.es_servicio_base)
-                    .Select(s => (int?)s.servicios_id)
-                    .FirstOrDefaultAsync(ct);
-
-                for (var i = 0; i < list.Count; i++)
-                {
-                    if (servicioBaseId.HasValue && list[i].ServiciosId == servicioBaseId.Value)
-                    {
-                        list[i].ConfiguracionTasasDetalleMonto = valorBase;
-                    }
-                }
-
-                var configuraciones = await _context.configuracion_cobros_adicionales
-                    .AsNoTracking()
-                    .Where(c => c.categoria_id == categoriaSeleccionada.Value)
-                    .ToListAsync(ct);
-
-                var detalles = await _context.configuracion_cobros_adicionales_detalles
-                    .AsNoTracking()
-                    .Where(d => configuraciones.Select(c => c.ide).Contains(d.configuracion_cobro_adicional_ide))
-                    .ToListAsync(ct);
-
-                var detallesPorConfig = detalles
-                    .GroupBy(d => d.configuracion_cobro_adicional_ide)
-                    .ToDictionary(g => g.Key, g => g.ToList());
-
-                foreach (var config in configuraciones)
-                {
-                    if (!config.servicio_id.HasValue)
-                    {
-                        continue;
-                    }
-
-                    if (!detallesPorConfig.TryGetValue(config.ide, out var detallesConfig))
-                    {
-                        continue;
-                    }
-
-                    var valorTasa = 0m;
-                    foreach (var detalle in detallesConfig)
-                    {
-                        valorTasa += valorBase * (detalle.porcentaje ?? 0m);
-                    }
-
-                    for (var i = 0; i < list.Count; i++)
-                    {
-                        if (list[i].ServiciosId == config.servicio_id.Value)
-                        {
-                            list[i].ConfiguracionTasasDetalleMonto = valorTasa;
-                        }
-                    }
-                }
-            }
-        }
-
-        return list;
-    }
-
-    public async Task<ResponseModelDto> ActualizarConfiguracionTarifaAsync(
-        int clienteId,
-        ClienteConfiguracionTarifaUpdateRequest request,
-        string usuario,
-        CancellationToken ct = default)
-    {
-        if (request is null)
-        {
-            throw new ArgumentNullException(nameof(request));
-        }
-
-        var cliente = await _context.cliente_maestros
-            .FirstOrDefaultAsync(c => c.maestro_cliente_id == clienteId, ct);
-
-        if (cliente is null)
-        {
-            return ResponseModelDto.Fail("Cliente no encontrado.");
-        }
-
-        var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-
-        await using var trx = await _context.Database.BeginTransactionAsync(ct);
-        try
-        {
-            if (cliente.categoria_servicio_id != request.CategoriaSelected)
-            {
-                cliente.categoria_servicio_id = request.CategoriaSelected;
-                _context.Update(cliente);
-            }
-
-            foreach (var item in request.DetalleTasas ?? Array.Empty<ClienteConfiguracionTarifaUpdateItemDto>())
-            {
-                var detalle = await _context.configuracion_tasas_detalles
-                    .FirstOrDefaultAsync(f => f.configuracion_tasas_detalle_id == item.ConfiguracionTasasDetalleId, ct);
-
-                if (detalle is null)
-                {
-                    continue;
-                }
-
-                detalle.configuracion_tasas_detalle_monto = item.ConfiguracionTasasDetalleMonto;
-                detalle.configuracion_tasas_detalle_aplicaservicio = item.ConfiguracionTasasDetalleAplicaservicio;
-                detalle.usuariomodificacion = usuario;
-                detalle.fechamodificacion = now;
-                _context.Update(detalle);
-            }
-
-            await _context.SaveChangesAsync(ct);
-            await trx.CommitAsync(ct);
-            return ResponseModelDto.Ok(null, "Se guardó la configuración de tasa.");
-        }
-        catch
-        {
-            await trx.RollbackAsync(ct);
-            return ResponseModelDto.Fail("No se pudo configurar la tasa.");
-        }
-    }
-
-    public async Task<ResponseModelDto> AgregarConfiguracionTarifaServicioAsync(
-        int clienteId,
-        ClienteConfiguracionTarifaAddRequest request,
-        string usuario,
-        CancellationToken ct = default)
-    {
-        if (request is null)
-        {
-            throw new ArgumentNullException(nameof(request));
-        }
-
-        var cliente = await _context.cliente_maestros
-            .AsNoTracking()
-            .FirstOrDefaultAsync(c => c.maestro_cliente_id == clienteId, ct);
-
-        if (cliente is null)
-        {
-            return ResponseModelDto.Fail("Cliente no encontrado.");
-        }
-
-        if (request.ServiciosId <= 0)
-        {
-            return ResponseModelDto.Fail("Servicio inválido.");
-        }
-
-        await using var trx = await _context.Database.BeginTransactionAsync(ct);
-        try
-        {
-            var config = await _context.configuracion_tasas
-                .FirstOrDefaultAsync(t => t.maestro_cliente_id == clienteId, ct);
-
-            if (config is null)
-            {
-                var clave = await GetClienteClaveAsync(clienteId, ct);
-                if (string.IsNullOrWhiteSpace(clave))
-                {
-                    return ResponseModelDto.Fail("No se pudo determinar la clave del cliente.");
-                }
-
-                await using var connection = _context.Database.GetDbConnection();
-                if (connection.State != ConnectionState.Open)
-                {
-                    await connection.OpenAsync(ct);
-                }
-
-                const string sqlGenerar = "call sp_generar_configuracion_tasas_cliente(@p_cliente_clave, @p_usuario)";
-                await connection.ExecuteAsync(new CommandDefinition(
-                    sqlGenerar,
-                    new
-                    {
-                        p_cliente_clave = clave.Trim(),
-                        p_usuario = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario
-                    },
-                    cancellationToken: ct));
-
-                config = await _context.configuracion_tasas
-                    .FirstOrDefaultAsync(t => t.maestro_cliente_id == clienteId, ct);
-            }
-
-            if (config is null)
-            {
-                await trx.RollbackAsync(ct);
-                return ResponseModelDto.Fail("No se pudo crear la configuración de tasas.");
-            }
-
-            var existeDetalle = await _context.configuracion_tasas_detalles
-                .AnyAsync(d => d.configuracion_tasas_id == config.configuracion_tasas_id
-                               && d.servicios_id == request.ServiciosId, ct);
-
-            if (existeDetalle)
-            {
-                await trx.RollbackAsync(ct);
-                return ResponseModelDto.Fail("El servicio ya está configurado.");
-            }
-
-            var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-            var detalle = new configuracion_tasas_detalle
-            {
-                configuracion_tasas_id = config.configuracion_tasas_id,
-                servicios_id = request.ServiciosId,
-                configuracion_tasas_detalle_aplicaservicio = request.Aplicable,
-                configuracion_tasas_detalle_monto = request.Monto,
-                estado = true,
-                usuariocreacion = usuario,
-                fechacreacion = now
-            };
-
-            _context.configuracion_tasas_detalles.Add(detalle);
-            await _context.SaveChangesAsync(ct);
-            await trx.CommitAsync(ct);
-
-            return ResponseModelDto.Ok(null, "Servicio agregado a la configuración.");
-        }
-        catch
-        {
-            await trx.RollbackAsync(ct);
-            return ResponseModelDto.Fail("No se pudo agregar el servicio.");
-        }
-    }
-
     public async Task<ClienteFotoMedidorHeaderDto?> GetFotoMedidorHeaderAsync(int clienteId, CancellationToken ct = default)
     {
         var clave = await GetClienteClaveAsync(clienteId, ct);
@@ -1323,35 +1025,6 @@ public class ClientesService : IClientesService
         public decimal TotalConsumo { get; init; }
     }
 
-    private sealed class ConfiguracionTarifaHeaderRow
-    {
-        public int ClienteId { get; init; }
-        public string? ClienteClave { get; init; }
-        public string? ClienteNombre { get; init; }
-        public string? ClienteDireccion { get; init; }
-        public bool ClienteTieneMedidor { get; init; }
-        public int? ClienteCategoriaId { get; init; }
-        public string? CategoriaDescripcion { get; init; }
-        public int? MaestroMedidorId { get; init; }
-        public string? MedidorNumero { get; init; }
-        public string? LecturaActual { get; init; }
-        public string? LecturaAnterior { get; init; }
-        public string? Consumo { get; init; }
-        public string? TipoUsoCodigo { get; init; }
-        public string? LetraCodigo { get; init; }
-    }
-
-    private sealed class ConfiguracionTarifaDetalleRow
-    {
-        public int ConfiguracionTasasId { get; init; }
-        public int ConfiguracionTasasDetalleId { get; init; }
-        public int ServiciosId { get; init; }
-        public string? ServicioCodigo { get; init; }
-        public string? DescripcionTasa { get; init; }
-        public bool ConfiguracionTasasDetalleAplicaservicio { get; init; }
-        public decimal ConfiguracionTasasDetalleMonto { get; init; }
-    }
-
     private sealed class FotoMedidorHeaderRow
     {
         public string? CodigoCliente { get; init; }
@@ -1369,26 +1042,6 @@ public class ClientesService : IClientesService
         public int Ano { get; init; }
         public int Mes { get; init; }
         public string? Usuario { get; init; }
-    }
-
-    public async Task<string> GenerarCodigoClienteAsync(CancellationToken ct)
-    {
-        var connection = _context.Database.GetDbConnection();
-
-        const string sql = @"
-            SELECT public.fn_generar_codigo_cliente()";
-
-        var codigo = await connection.ExecuteScalarAsync<string?>(
-            new CommandDefinition(
-                sql,
-                cancellationToken: ct));
-
-        if (string.IsNullOrWhiteSpace(codigo))
-        {
-            throw new InvalidOperationException("No fue posible generar el código del cliente.");
-        }
-
-        return codigo.Trim();
     }
 
     private static bool IsClienteClaveUniqueViolation(DbUpdateException ex)
@@ -1415,109 +1068,6 @@ public class ClientesService : IClientesService
             .FirstOrDefaultAsync(ct);
     }
 
-    private static ClienteConfiguracionTarifaHeaderDto MapConfiguracionTarifaHeader(ConfiguracionTarifaHeaderRow row, string clave)
-    {
-        return new ClienteConfiguracionTarifaHeaderDto(
-            row.ClienteId,
-            row.ClienteClave ?? clave,
-            row.ClienteNombre,
-            row.ClienteDireccion,
-            row.ClienteTieneMedidor,
-            row.ClienteCategoriaId,
-            row.CategoriaDescripcion,
-            row.MaestroMedidorId,
-            row.MedidorNumero,
-            row.LecturaActual,
-            row.LecturaAnterior,
-            row.Consumo,
-            row.TipoUsoCodigo,
-            row.LetraCodigo);
-    }
-
-    private async Task EnsureConfiguracionTarifaGeneradaAsync(
-        int clienteId,
-        string clave,
-        string usuario,
-        IDbConnection connection,
-        CancellationToken ct)
-    {
-        var existeConfiguracion = await _context.configuracion_tasas
-            .AsNoTracking()
-            .AnyAsync(t => t.maestro_cliente_id == clienteId, ct);
-
-        if (existeConfiguracion)
-        {
-            return;
-        }
-
-        const string sqlGenerar = "call sp_generar_configuracion_tasas_cliente(@p_cliente_clave, @p_usuario)";
-        await connection.ExecuteAsync(new CommandDefinition(
-            sqlGenerar,
-            new
-            {
-                p_cliente_clave = clave,
-                p_usuario = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario
-            },
-            cancellationToken: ct));
-    }
-
-    private async Task<ClienteConfiguracionTarifaHeaderDto?> BuildConfiguracionTarifaHeaderFallbackAsync(
-        int clienteId,
-        string clave,
-        CancellationToken ct)
-    {
-        var cliente = await _context.cliente_maestros
-            .AsNoTracking()
-            .Where(c => c.maestro_cliente_id == clienteId)
-            .Select(c => new
-            {
-                c.maestro_cliente_id,
-                c.maestro_cliente_clave,
-                c.maestro_cliente_nombre,
-                c.maestro_cliente_tiene_medidor,
-                c.categoria_servicio_id,
-                CategoriaDescripcion = c.categoria_servicio != null ? c.categoria_servicio.descripcion : null,
-                c.tipo_uso_codigo,
-                c.letracodigo
-            })
-            .FirstOrDefaultAsync(ct);
-
-        if (cliente is null)
-        {
-            return null;
-        }
-
-        var detalle = await _context.cliente_detalles
-            .AsNoTracking()
-            .Where(d => d.maestro_cliente_id == clienteId)
-            .OrderByDescending(d => d.detalle_cliente_id)
-            .Select(d => new
-            {
-                d.detalle_cliente_direccion,
-                d.maestro_medidor_id,
-                MedidorNumero = d.maestro_medidor != null ? d.maestro_medidor.maestro_medidor_numero : null
-            })
-            .FirstOrDefaultAsync(ct);
-
-        var tieneMedidor = cliente.maestro_cliente_tiene_medidor ?? detalle?.maestro_medidor_id is not null;
-
-        return new ClienteConfiguracionTarifaHeaderDto(
-            cliente.maestro_cliente_id,
-            string.IsNullOrWhiteSpace(cliente.maestro_cliente_clave) ? clave : cliente.maestro_cliente_clave,
-            cliente.maestro_cliente_nombre,
-            detalle?.detalle_cliente_direccion,
-            tieneMedidor,
-            cliente.categoria_servicio_id,
-            cliente.CategoriaDescripcion,
-            detalle?.maestro_medidor_id,
-            detalle?.MedidorNumero,
-            null,
-            null,
-            null,
-            cliente.tipo_uso_codigo,
-            cliente.letracodigo);
-    }
-
     private static string? Limpiar(string? valor) => string.IsNullOrWhiteSpace(valor) ? null : valor.Trim();
 
     private static string BuildHistoricoConsumoOrderBy(string? sortField, bool sortDesc)
@@ -1534,16 +1084,20 @@ public class ClientesService : IClientesService
         };
     }
 
+    private const int CicloLongitud = 2;
+    private const int LibretaLongitud = 3;
+    private const int RutaCodigoLongitud = CicloLongitud + LibretaLongitud; // = 5
+
     private static string? ConstruirIndicativoRuta(int? cicloId, string? barrioCodigo, string? libreta, string? secuencia)
     {
-        var ciclo = cicloId?.ToString() ?? string.Empty;
         var barrio = Limpiar(barrioCodigo) ?? string.Empty;
-        var libretaLimpia = Limpiar(libreta) ?? string.Empty;
         var secuenciaLimpia = Limpiar(secuencia);
+        var rutaCodigo = ConstruirCodigoRutaDeCicloYLibreta(cicloId, libreta);
 
-        var tieneValores = !string.IsNullOrWhiteSpace(ciclo)
+        var tieneCiclo = cicloId.HasValue;
+        var tieneValores = tieneCiclo
                            || !string.IsNullOrWhiteSpace(barrio)
-                           || !string.IsNullOrWhiteSpace(libretaLimpia)
+                           || !string.IsNullOrWhiteSpace(rutaCodigo)
                            || !string.IsNullOrWhiteSpace(secuenciaLimpia);
 
         if (!tieneValores)
@@ -1551,8 +1105,81 @@ public class ClientesService : IClientesService
             return null;
         }
 
+        var cicloStr = tieneCiclo ? cicloId.Value.ToString() : string.Empty;
         secuenciaLimpia ??= "----";
-        return $"{ciclo}-{barrio}-{libretaLimpia}-{secuenciaLimpia}";
+        var rutaStr = rutaCodigo ?? string.Empty;
+        return $"{cicloStr}-{barrio}-{rutaStr}-{secuenciaLimpia}";
+    }
+
+    /// <summary>
+    /// Construye el codigo de ruta de 5 digitos = ciclo (2d) + libreta (3d).
+    /// Por regla de negocio: prefijo siempre coincide con el ciclo. La "libreta"
+    /// son los 3 digitos finales (1..999) que el usuario tipea para identificar
+    /// la subruta dentro del ciclo.
+    /// Devuelve null si no hay datos suficientes.
+    /// Lanza ArgumentException si los inputs estan fuera de rango.
+    /// </summary>
+    private static string? ConstruirCodigoRutaDeCicloYLibreta(int? cicloId, string? libreta)
+    {
+        var libretaLimpia = Limpiar(libreta);
+
+        if (!cicloId.HasValue && string.IsNullOrWhiteSpace(libretaLimpia))
+        {
+            return null;
+        }
+
+        if (!cicloId.HasValue)
+        {
+            throw new ArgumentException(
+                "El ciclo es obligatorio cuando se especifica libreta.",
+                nameof(cicloId));
+        }
+
+        if (cicloId.Value < 1 || cicloId.Value > 99)
+        {
+            throw new ArgumentException(
+                $"El ciclo {cicloId.Value} debe estar entre 1 y 99 (cabe en {CicloLongitud} digitos).",
+                nameof(cicloId));
+        }
+
+        if (string.IsNullOrWhiteSpace(libretaLimpia))
+        {
+            // Permitir ciclo sin libreta -> ruta = ciclo + "000" (referencia general del ciclo)
+            return cicloId.Value.ToString().PadLeft(CicloLongitud, '0').PadRight(RutaCodigoLongitud, '0');
+        }
+
+        if (!libretaLimpia.All(char.IsDigit))
+        {
+            throw new ArgumentException(
+                $"La libreta '{libreta}' debe contener solo digitos.",
+                nameof(libreta));
+        }
+
+        var cicloStr = cicloId.Value.ToString().PadLeft(CicloLongitud, '0');
+
+        // Caso 1: viene la ruta completa (5 digitos) ya armada -> validar prefijo y conservar
+        if (libretaLimpia.Length == RutaCodigoLongitud)
+        {
+            if (!libretaLimpia.StartsWith(cicloStr, StringComparison.Ordinal))
+            {
+                throw new ArgumentException(
+                    $"La ruta '{libreta}' no pertenece al ciclo {cicloId.Value}. " +
+                    $"Una ruta del ciclo {cicloId.Value} debe comenzar con '{cicloStr}'.",
+                    nameof(libreta));
+            }
+            return libretaLimpia;
+        }
+
+        // Caso 2: viene solo la libreta (1..3 digitos) -> padear y prefijar con ciclo
+        if (libretaLimpia.Length > LibretaLongitud)
+        {
+            throw new ArgumentException(
+                $"La libreta '{libreta}' debe tener 1-3 digitos (o ser la ruta completa de 5 digitos).",
+                nameof(libreta));
+        }
+
+        var libretaStr = libretaLimpia.PadLeft(LibretaLongitud, '0');
+        return cicloStr + libretaStr;
     }
 
     private static string? ExtraerLibreta(string? indicativoRuta)

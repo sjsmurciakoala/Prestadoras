@@ -1,0 +1,221 @@
+@page "/tipos-documento-fiscal"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.TiposDocumentoFiscal
+@using apc.Client.Services.TiposDocumentoFiscal
+
+@inject TiposDocumentoFiscalClient Client
+@inject IToastNotificationService ToastService
+
+<div class="page-container tipos-documento-page">
+    <DxToastProvider Name="TiposDocToast" MaxToastCount="3" />
+
+    <div class="modern-card">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-3">
+            <div>
+                <h2 class="page-title mb-1">Tipos de documento fiscal (SAR)</h2>
+                <p class="text-muted mb-0">
+                    Catálogo según Acuerdo 481-2017 SAR Honduras. Cada CAI ampara un único tipo.
+                    Los códigos numéricos son fijos (ID); la descripción y los flags se pueden ajustar.
+                </p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <DxButton Text="Recargar"
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="CargarAsync" />
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <DxLoadingPanel Visible="true" Text="Cargando..." />
+            <div style="height:64px"></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="alert alert-danger mb-0">@error</div>
+        }
+        else
+        {
+            <DxGrid Data="@items"
+                    PageSize="20"
+                    KeyFieldName="TipoDocumentoFiscalId">
+                <Columns>
+                    <DxGridDataColumn FieldName="TipoDocumentoFiscalId" Caption="ID" Width="60px" TextAlignment="GridTextAlignment.Center" />
+                    <DxGridDataColumn FieldName="Codigo" Caption="Código" Width="80px" />
+                    <DxGridDataColumn FieldName="Descripcion" Caption="Descripción" />
+                    <DxGridDataColumn FieldName="EsComprobanteFiscal" Caption="Comprobante fiscal" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (((TipoDocumentoFiscalDto)cell.DataItem).EsComprobanteFiscal)
+                            {
+                                <span class="badge bg-success">Sí</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="EsDocumentoComplementario" Caption="Doc. complementario" Width="160px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (((TipoDocumentoFiscalDto)cell.DataItem).EsDocumentoComplementario)
+                            {
+                                <span class="badge bg-info text-dark">Sí</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="RequiereFacturaOrigen" Caption="Requiere origen" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (((TipoDocumentoFiscalDto)cell.DataItem).RequiereFacturaOrigen)
+                            {
+                                <span class="badge bg-warning text-dark">Sí</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="CaisAsociados" Caption="CAIs" Width="80px" TextAlignment="GridTextAlignment.Center" />
+                    <DxGridDataColumn FieldName="Activo" Caption="Activo" Width="80px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (((TipoDocumentoFiscalDto)cell.DataItem).Activo)
+                            {
+                                <span class="badge bg-primary">Sí</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridCommandColumn Width="90px">
+                        <HeaderTemplate>Acciones</HeaderTemplate>
+                        <CellDisplayTemplate Context="cell">
+                            <DxButton Text="Editar"
+                                      IconCssClass="bi bi-pencil"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                      Click="@(() => AbrirEditar((TipoDocumentoFiscalDto)cell.DataItem))" />
+                        </CellDisplayTemplate>
+                    </DxGridCommandColumn>
+                </Columns>
+            </DxGrid>
+        }
+    </div>
+</div>
+
+<DxPopup HeaderText="@($"Editar tipo de documento {editandoCodigo}")"
+         @bind-Visible="popupVisible"
+         Width="min(560px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate Context="popupCtx">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                <Template>
+                    <DxTextBox @bind-Text="form.Descripcion" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Es comprobante fiscal" ColSpanMd="6">
+                <Template>
+                    <DxCheckBox @bind-Checked="form.EsComprobanteFiscal" CheckType="CheckType.Switch" LabelText="Sí" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Es documento complementario" ColSpanMd="6">
+                <Template>
+                    <DxCheckBox @bind-Checked="form.EsDocumentoComplementario" CheckType="CheckType.Switch" LabelText="Sí" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Requiere factura origen (NC/ND)" ColSpanMd="6">
+                <Template>
+                    <DxCheckBox @bind-Checked="form.RequiereFacturaOrigen" CheckType="CheckType.Switch" LabelText="Sí" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Activo" ColSpanMd="6">
+                <Template>
+                    <DxCheckBox @bind-Checked="form.Activo" CheckType="CheckType.Switch" LabelText="Sí" />
+                </Template>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        @if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="alert alert-danger mt-3 mb-0">@formError</div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="d-flex gap-2 justify-content-end w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => popupVisible = false)" />
+            <DxButton Text="Guardar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="GuardarAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private List<TipoDocumentoFiscalDto> items = new();
+    private bool isLoading = true;
+    private string? error;
+
+    private bool popupVisible;
+    private short editandoId;
+    private string editandoCodigo = string.Empty;
+    private string? formError;
+    private TipoDocumentoFiscalUpdateDto form = new();
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        error = null;
+        try
+        {
+            items = await Client.ListarAsync();
+        }
+        catch (Exception ex)
+        {
+            error = $"No se pudo cargar la lista: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AbrirEditar(TipoDocumentoFiscalDto item)
+    {
+        editandoId = item.TipoDocumentoFiscalId;
+        editandoCodigo = item.Codigo;
+        form = new TipoDocumentoFiscalUpdateDto
+        {
+            Descripcion = item.Descripcion,
+            EsComprobanteFiscal = item.EsComprobanteFiscal,
+            EsDocumentoComplementario = item.EsDocumentoComplementario,
+            RequiereFacturaOrigen = item.RequiereFacturaOrigen,
+            Activo = item.Activo
+        };
+        formError = null;
+        popupVisible = true;
+    }
+
+    private async Task GuardarAsync()
+    {
+        formError = null;
+        try
+        {
+            var resp = await Client.ActualizarAsync(editandoId, form);
+            if (resp is { Success: false }) { formError = resp.Message; return; }
+            ToastService.ShowToast(new ToastOptions { ProviderName = "TiposDocToast", Text = "Actualizado.", RenderStyle = ToastRenderStyle.Success });
+            popupVisible = false;
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            formError = ex.Message;
+        }
+    }
+}

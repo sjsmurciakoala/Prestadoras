@@ -7,6 +7,8 @@ public partial class transaccion_abonado
 {
     public int ide { get; set; }
 
+    public long company_id { get; set; }
+
     public string? cliente_clave { get; set; }
 
     public decimal? recibo { get; set; }

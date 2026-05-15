@@ -22,7 +22,7 @@
             <p class="page-subtitle">Gestión centralizada de cartera y expedientes</p>
         </div>
 
-        <DxButton Text="Nuevo Cliente" Click="@AbrirModalCreacionAsync" IconCssClass="bi bi-plus-lg"
+        <DxButton Text="Nuevo Cliente" Click="@AbrirModalCreacion" IconCssClass="bi bi-plus-lg"
             RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" />
     </div>
 
@@ -137,6 +137,24 @@
                                 var c = (ClienteListItemDto)cell.DataItem;
                             }
                             <div class="text-truncate text-muted" title="@c.Barrio">@c.Barrio</div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="CicloCodigo" Caption="Ciclo" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var c = (ClienteListItemDto)cell.DataItem;
+                            }
+                            <span class="text-muted">@(string.IsNullOrWhiteSpace(c.CicloCodigo) ? "—" : c.CicloCodigo)</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Ruta" Caption="Ruta" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var c = (ClienteListItemDto)cell.DataItem;
+                            }
+                            <div class="text-truncate text-muted" title="@c.Ruta">@(string.IsNullOrWhiteSpace(c.Ruta) ? "—" : c.Ruta)</div>
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
@@ -407,7 +425,7 @@
     
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
-    private async Task AbrirModalCreacionAsync()
+    private void AbrirModalCreacion()
     {
         nuevoCliente = new ClienteCreateDto
         {
@@ -418,17 +436,6 @@
             TieneConvenio = false,
             ColorCasa = "Blanco"
         };
-
-        try
-        {
-            // Generar código automáticamente cuando se abre el modal
-            var codigo = await ClientesClient.GenerarCodigoAsync();
-            nuevoCliente.Clave = codigo;
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error generando código: {ex.Message}");
-        }
 
         mostrarModal = true;
     }

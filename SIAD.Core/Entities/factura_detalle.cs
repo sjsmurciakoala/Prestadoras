@@ -7,6 +7,8 @@ public partial class factura_detalle
 {
     public int id { get; set; }
 
+    public long company_id { get; set; }
+
     public int? numrecibo { get; set; }
 
     public string? codigo { get; set; }

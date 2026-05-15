@@ -326,60 +326,6 @@ public async Task<IActionResult> SaveTipoTransaccionRule(long typeId, [FromBody]
       });
   }
 
-    [HttpGet("documentos")]
-    public async Task<IActionResult> GetDocumentTypes([FromQuery] string? module, CancellationToken cancellationToken)
-    {
-        return await ExecuteCatalogActionAsync(async () =>
-        {
-            var items = await _catalogosService.GetDocumentTypesAsync(module, cancellationToken);
-            return Ok(items);
-        });
-    }
-
-    [HttpGet("reglas-integracion")]
-    public async Task<IActionResult> GetReglasIntegracion(
-        [FromQuery] string? module,
-        [FromQuery] long? documentTypeId,
-        [FromQuery] string? search,
-        CancellationToken cancellationToken)
-    {
-        return await ExecuteCatalogActionAsync(async () =>
-        {
-            var filter = new ReglaIntegracionFilterDto(module, documentTypeId, search);
-            var rules = await _catalogosService.GetReglasIntegracionAsync(filter, cancellationToken);
-            return Ok(rules);
-        });
-    }
-
-    [HttpPost("reglas-integracion")]
-    public async Task<IActionResult> SaveReglaIntegracion([FromBody] ReglaIntegracionUpsertDto request, CancellationToken cancellationToken)
-    {
-        try
-        {
-            var userName = User?.Identity?.Name ?? "system";
-            var id = await _catalogosService.SaveReglaIntegracionAsync(request with { User = userName }, cancellationToken);
-            return Ok(new { id });
-        }
-        catch (InvalidOperationException ex) when (ex.Message.Contains("Ya existe", StringComparison.OrdinalIgnoreCase))
-        {
-            return Conflict(ex.Message);
-        }
-        catch (InvalidOperationException ex)
-        {
-            return BadRequest(ex.Message);
-        }
-    }
-
-    [HttpDelete("reglas-integracion/{ruleId:long}")]
-    public async Task<IActionResult> DeleteReglaIntegracion(long ruleId, CancellationToken cancellationToken)
-    {
-        return await ExecuteCatalogActionAsync(async () =>
-        {
-            var deleted = await _catalogosService.DeleteReglaIntegracionAsync(ruleId, cancellationToken);
-            return deleted ? Ok() : NotFound();
-        });
-    }
-
     private static async Task<IActionResult> ExecuteCatalogActionAsync(Func<Task<IActionResult>> action)
     {
         try

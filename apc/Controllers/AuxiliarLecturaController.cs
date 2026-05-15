@@ -31,8 +31,15 @@ public class AuxiliarLecturaController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Post([FromBody] GenerarPeriodoRequest request, CancellationToken ct)
     {
-        var ok = await _service.GenerarPeriodoAsync(request.Anio, request.Mes, request.Ciclo, request.Usuario, ct);
-        return ok ? NoContent() : BadRequest("No se pudo generar el periodo (posible duplicado).");
+        try
+        {
+            var ok = await _service.GenerarPeriodoAsync(request.Anio, request.Mes, request.Ciclo, request.Usuario, ct);
+            return ok ? NoContent() : BadRequest("No se pudo generar el período (posible duplicado).");
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
     }
 
     public record GenerarPeriodoRequest(int Anio, int Mes, string Ciclo, string Usuario);

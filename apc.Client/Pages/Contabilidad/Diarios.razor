@@ -4,6 +4,8 @@
 
 <PageTitle>Diarios contables</PageTitle>
 
+<DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall" @bind-IsActive="isXSmallScreen" />
+
 <DxMessageBox @bind-Visible="statusMessageVisible"
               Type="MessageBoxType.Alert"
               Title="@statusMessageTitle"
@@ -13,187 +15,176 @@
               ShowCloseButton="false"
               CloseOnOutsideClick="false" />
 
-<div class="diarios-page">
-    <section class="diarios-hero">
-        <div class="diarios-hero__copy">
-            <span class="diarios-hero__eyebrow">Contabilidad</span>
-            <h1 class="diarios-hero__title">Diarios contables</h1>
-            <p class="diarios-hero__subtitle">Catalogo de diarios para organizar y registrar partidas contables con una estructura clara y consistente.</p>
-        </div>
+<div class="diarios-page" id="diarios-grid-shell">
 
-        <div class="diarios-hero__actions">
-            <DxButton Text="Nuevo diario"
-                      Click="@(() => OpenForm(null))"
-                      IconCssClass="bi bi-plus-lg"
-                      RenderStyle="ButtonRenderStyle.Primary"
-                      CssClass="diarios-action diarios-action--primary"
-                      Enabled="@(!isLoading && !isSaving)" />
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-book me-2 text-primary"></i>Diarios contables
+            </h4>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
             <DxButton Text="Actualizar"
-                      Click="LoadDiariosAsync"
-                      IconCssClass="bi bi-arrow-clockwise"
                       RenderStyle="ButtonRenderStyle.Secondary"
-                      CssClass="diarios-action"
-                      Enabled="@(!isLoading && !isSaving)" />
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="LoadDiariosAsync"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nuevo diario"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@(() => OpenForm(null))"
+                      Enabled="@(!IsBusy)" />
         </div>
-    </section>
+    </div>
 
-    <section class="diarios-summary">
-        <article class="diarios-stat">
-            <div class="diarios-stat__icon diarios-stat__icon--slate">
-                <i class="bi bi-journal-text"></i>
-            </div>
-            <div class="diarios-stat__body">
-                <span class="diarios-stat__label">Total diarios</span>
-                <strong class="diarios-stat__value">@diarios.Length.ToString("N0")</strong>
-                <span class="diarios-stat__hint">Catalogo disponible</span>
-            </div>
-        </article>
+    @* ── Indicadores rapidos ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="diarios-stat-badge">
+            <i class="bi bi-book"></i> Total: <strong>@diarios.Length.ToString("N0")</strong>
+        </span>
+        <span class="diarios-stat-badge diarios-stat-badge--success">
+            <i class="bi bi-check2-circle"></i> Activos: <strong>@ActiveCount</strong>
+        </span>
+        <span class="diarios-stat-badge diarios-stat-badge--info">
+            <i class="bi bi-keyboard"></i> Captura manual: <strong>@ManualCount</strong>
+        </span>
+    </div>
 
-        <article class="diarios-stat">
-            <div class="diarios-stat__icon diarios-stat__icon--green">
-                <i class="bi bi-check2-circle"></i>
-            </div>
-            <div class="diarios-stat__body">
-                <span class="diarios-stat__label">Activos</span>
-                <strong class="diarios-stat__value">@ActiveCount.ToString("N0")</strong>
-                <span class="diarios-stat__hint">Listos para operar</span>
-            </div>
-        </article>
+    @* ── Grid principal ── *@
+    <div class="diarios-grid-wrapper shadow-sm">
+        <DxGrid @ref="diariosGrid"
+                Data="@diarios"
+                KeyFieldName="@nameof(DiarioDto.JournalId)"
+                ShowFilterRow="true"
+                ShowPager="true"
+                PageSize="12"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 10, 20, 50 }"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                DetailRowDisplayMode="@GetGridDetailRowDisplayMode()"
+                CssClass="border-0">
+            <ToolbarTemplate>
+                <DxToolbar ItemRenderStyleMode="ToolbarRenderStyleMode.Contained">
+                    <Items>
+                        <DxToolbarItem Text="Columnas"
+                                       Alignment="ToolbarItemAlignment.Right"
+                                       IconCssClass="bi bi-layout-three-columns"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       CssClass="diarios-column-chooser-button"
+                                       Click="MostrarColumnChooser" />
+                    </Items>
+                </DxToolbar>
+            </ToolbarTemplate>
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="80px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false"
+                                     ShowInColumnChooser="false">
+                    <CellDisplayTemplate Context="cellContext">
+                        @if (cellContext.DataItem is DiarioDto item)
+                        {
+                            <div class="d-flex gap-1 justify-content-center">
+                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-pencil-square fs-5"
+                                          title="Editar"
+                                          Enabled="@(!IsBusy)"
+                                          Click="@(() => OpenForm(item))" />
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
 
-        <article class="diarios-stat">
-            <div class="diarios-stat__icon diarios-stat__icon--blue">
-                <i class="bi bi-keyboard"></i>
-            </div>
-            <div class="diarios-stat__body">
-                <span class="diarios-stat__label">Captura manual</span>
-                <strong class="diarios-stat__value">@ManualCount.ToString("N0")</strong>
-                <span class="diarios-stat__hint">Permiten registro manual</span>
-            </div>
-        </article>
-    </section>
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.Code)" Caption="Codigo" Width="110px">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@((cell.DataItem as DiarioDto)?.Code)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
 
-    <section class="diarios-shell" id="diarios-grid-shell">
-        <div class="diarios-shell__toolbar">
-            <div>
-                <h2 class="diarios-shell__title">Listado de diarios</h2>
-                <p class="diarios-shell__description">Consulta el codigo, descripcion operativa, prefijo y reglas de uso de cada diario.</p>
-            </div>
-            <div class="diarios-shell__legend">
-                <span class="diarios-chip">
-                    <span class="diarios-chip__dot diarios-chip__dot--green"></span>
-                    Activo
-                </span>
-                <span class="diarios-chip">
-                    <span class="diarios-chip__dot diarios-chip__dot--blue"></span>
-                    Manual
-                </span>
-                <span class="diarios-chip">
-                    <span class="diarios-chip__dot diarios-chip__dot--amber"></span>
-                    Default manual
-                </span>
-            </div>
-        </div>
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.Name)" Caption="Nombre" Width="18%" />
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.Description)" Caption="Descripcion" Width="28%" />
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.SequencePrefix)" Caption="Prefijo" Width="100px" />
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.LastSequence)" Caption="Ultima secuencia" Width="130px" />
 
-        <div class="diarios-grid-wrap">
-            <DxGrid @ref="diariosGrid"
-                    Data="@diarios"
-                    KeyFieldName="@nameof(DiarioDto.JournalId)"
-                    PageSize="12"
-                    SizeMode="SizeMode.Medium"
-                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
-                    CssClass="diarios-grid">
-                <ToolbarTemplate>
-                    <div class="diarios-grid__toolbar">
-                        <span class="diarios-grid__toolbar-copy">Defina los diarios que se usan para clasificar los movimientos contables.</span>
-                        <div class="diarios-grid__toolbar-actions">
-                            <DxButton Text="Columnas"
-                                      IconCssClass="bi bi-layout-three-columns"
-                                      RenderStyle="ButtonRenderStyle.Secondary"
-                                      CssClass="diarios-grid__toolbar-button diarios-column-chooser-button"
-                                      Click="MostrarColumnChooser" />
-                            <div class="diarios-grid__toolbar-total">
-                                Total: <span>@diarios.Length.ToString("N0")</span>
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.IsActive)" Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is DiarioDto diario)
+                        {
+                            <span class="@GetActiveBadgeCss(diario.IsActive)">
+                                @(diario.IsActive ? "Activo" : "Inactivo")
+                            </span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.AllowsManual)" Caption="Manual" Width="132px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is DiarioDto diario)
+                        {
+                            <span class="@GetManualBadgeCss(diario.AllowsManual)">
+                                @(diario.AllowsManual ? "Permitido" : "Solo sistema")
+                            </span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(DiarioDto.IsDefaultManual)" Caption="Predeterminado" Width="150px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is DiarioDto diario)
+                        {
+                            <span class="@GetDefaultBadgeCss(diario.IsDefaultManual)">
+                                @(diario.IsDefaultManual ? "Si" : "No")
+                            </span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+            <DetailRowTemplate Context="detail">
+                @if (detail.DataItem is DiarioDto item)
+                {
+                    <div class="p-3">
+                        <div class="row g-3">
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Estado</small>
+                                <strong>@(item.IsActive ? "Activo" : "Inactivo")</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Captura manual</small>
+                                <strong>@(item.AllowsManual ? "Permitido" : "Solo sistema")</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Predeterminado manual</small>
+                                <strong>@(item.IsDefaultManual ? "Si" : "No")</strong>
                             </div>
                         </div>
                     </div>
-                </ToolbarTemplate>
-                <Columns>
-                    <DxGridDataColumn FieldName="@nameof(DiarioDto.Code)" Caption="Codigo" Width="110px" />
-                    <DxGridDataColumn FieldName="@nameof(DiarioDto.Name)" Caption="Nombre" Width="18%" />
-                    <DxGridDataColumn FieldName="@nameof(DiarioDto.Description)" Caption="Descripcion" Width="28%" />
-                    <DxGridDataColumn FieldName="@nameof(DiarioDto.SequencePrefix)" Caption="Prefijo" Width="100px" />
-                    <DxGridDataColumn FieldName="@nameof(DiarioDto.LastSequence)" Caption="Ultima secuencia" Width="130px" />
-                    <DxGridDataColumn Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is DiarioDto diario)
-                            {
-                                <span class="@GetActiveBadgeCss(diario.IsActive)">
-                                    @(diario.IsActive ? "Activo" : "Inactivo")
-                                </span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="Manual" Width="132px" TextAlignment="GridTextAlignment.Center">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is DiarioDto diario)
-                            {
-                                <span class="@GetManualBadgeCss(diario.AllowsManual)">
-                                    @(diario.AllowsManual ? "Permitido" : "Solo sistema")
-                                </span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="Predeterminado" Width="150px" TextAlignment="GridTextAlignment.Center">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is DiarioDto diario)
-                            {
-                                <span class="@GetDefaultBadgeCss(diario.IsDefaultManual)">
-                                    @(diario.IsDefaultManual ? "Si" : "No")
-                                </span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="Acciones" Width="92px" TextAlignment="GridTextAlignment.Center" ShowInColumnChooser="false">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is DiarioDto item)
-                            {
-                                <div class="diarios-grid__actions">
-                                    <button type="button"
-                                            class="diarios-icon-button diarios-icon-button--edit"
-                                            title="Editar diario"
-                                            @onclick="() => OpenForm(item)"
-                                            @onclick:stopPropagation="true">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
-                                </div>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                </Columns>
-                <EmptyDataAreaTemplate>
-                    <div class="diarios-empty">
-                        <div class="diarios-empty__icon">
-                            <i class="bi bi-journal-x"></i>
-                        </div>
-                        <h3>No hay diarios registrados</h3>
-                        <p>Crea el primer diario para empezar a organizar tus movimientos contables.</p>
-                    </div>
-                </EmptyDataAreaTemplate>
-            </DxGrid>
-        </div>
+                }
+            </DetailRowTemplate>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-journal-x fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay diarios registrados</h5>
+                    <p class="mb-0">Crea el primer diario para empezar a organizar tus movimientos contables.</p>
+                </div>
+            </EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
 
-        <DxLoadingPanel Visible="@isLoading"
-                        PositionTarget="#diarios-grid-shell"
-                        CssClass="diarios-loading w-100"
-                        ApplyBackgroundShading="false"
-                        IsContentBlocked="true"
-                        Text="Cargando diarios..." />
-    </section>
+    <DxLoadingPanel Visible="@isLoading"
+                    PositionTarget="#diarios-grid-shell"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="Cargando diarios..." />
 </div>
 
+@* ── Popup de formulario ── *@
 <DxPopup @bind-Visible="isFormVisible"
          Width="720px"
-         MaxWidth="96vw"
+         MaxWidth="95vw"
          MinWidth="320px"
          MaxHeight="90vh"
          Scrollable="true"
@@ -201,111 +192,120 @@
          ShowCloseButton="true"
          CloseOnOutsideClick="false"
          HeaderText="@popupTitle"
-         CssClass="diarios-popup"
-         HeaderCssClass="diarios-popup__header"
-         BodyCssClass="diarios-popup__body"
-         FooterCssClass="diarios-popup__footer">
+         CssClass="diarios-popup">
     <BodyContentTemplate Context="popupBody">
-        <div class="diarios-form-shell">
-            <div class="diarios-form-intro">
-                <div>
-                    <span class="diarios-form-intro__eyebrow">Formulario</span>
-                    <h3 class="diarios-form-intro__title">@GetPopupHeading()</h3>
-                    <p class="diarios-form-intro__subtitle">Completa la informacion principal y define si el diario queda activo, permite captura manual y sera el predeterminado para partidas manuales.</p>
-                </div>
-                <span class="diarios-form-mode">@GetPopupModeLabel()</span>
-            </div>
+        @if (!string.IsNullOrWhiteSpace(formErrorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">
+                @formErrorMessage
+            </DxAlert>
+        }
 
-            @if (!string.IsNullOrWhiteSpace(formErrorMessage))
-            {
-                <DxAlert AlertType="AlertType.Danger">@formErrorMessage</DxAlert>
-            }
-
-            <DxFormLayout CssClass="w-100 diarios-form-layout"
-                          CaptionPosition="CaptionPosition.Vertical">
-                <DxFormLayoutItem Caption="Codigo" ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
-                    <DxTextBox @bind-Text="formModel.Code"
-                               NullText="Ej. VEN"
-                               InputId="diario-code" />
+        <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical" CssClass="w-100">
+            <DxFormLayoutGroup Caption="Datos del diario" HeaderIconCssClass="bi bi-book">
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Codigo</span></CaptionTemplate>
+                    <Template>
+                        <DxTextBox @bind-Text="formModel.Code" NullText="Ej. VEN" InputId="diario-code" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Nombre" ColSpanMd="8" ColSpanSm="6" ColSpanXs="12">
-                    <DxTextBox @bind-Text="formModel.Name"
-                               NullText="Nombre del diario"
-                               InputId="diario-name" />
+                <DxFormLayoutItem ColSpanMd="8" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Nombre</span></CaptionTemplate>
+                    <Template>
+                        <DxTextBox @bind-Text="formModel.Name" NullText="Nombre del diario" InputId="diario-name" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Descripcion" ColSpanMd="12" ColSpanXs="12">
-                    <DxMemo @bind-Text="formModel.Description"
-                            Rows="4"
-                            NullText="Describe el uso operativo del diario" />
+                <DxFormLayoutItem ColSpanMd="12" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Descripcion</span></CaptionTemplate>
+                    <Template>
+                        <DxMemo @bind-Text="formModel.Description"
+                                Rows="3"
+                                NullText="Describe el uso operativo del diario" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Prefijo de secuencia" ColSpanMd="6" ColSpanSm="6" ColSpanXs="12">
-                    <DxTextBox @bind-Text="formModel.SequencePrefix"
-                               NullText="Ej. DIA-" />
+                <DxFormLayoutItem ColSpanMd="6" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Prefijo de secuencia</span></CaptionTemplate>
+                    <Template>
+                        <DxTextBox @bind-Text="formModel.SequencePrefix" NullText="Ej. DIA-" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Resumen" ColSpanMd="6" ColSpanSm="6" ColSpanXs="12">
-                    <div class="diarios-preview-card">
-                        <div class="diarios-preview-card__row">
-                            <span class="diarios-preview-card__label">Codigo visible</span>
-                            <strong class="diarios-preview-card__value">@GetPreviewCode()</strong>
+                <DxFormLayoutItem ColSpanMd="6" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Resumen</span></CaptionTemplate>
+                    <Template>
+                        <div class="diarios-preview-card">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Codigo</span>
+                                <strong>@GetPreviewCode()</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Prefijo</span>
+                                <strong>@GetPreviewPrefix()</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Por defecto</span>
+                                <strong>@(formModel.IsDefaultManual ? "Si" : "No")</strong>
+                            </div>
                         </div>
-                        <div class="diarios-preview-card__row">
-                            <span class="diarios-preview-card__label">Prefijo actual</span>
-                            <strong class="diarios-preview-card__value">@GetPreviewPrefix()</strong>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+
+            <DxFormLayoutGroup Caption="Configuracion de uso" HeaderIconCssClass="bi bi-toggles" CssClass="mt-3">
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Activo</span></CaptionTemplate>
+                    <Template>
+                        <div class="diarios-toggle-card @(formModel.IsActive ? "is-on" : string.Empty)">
+                            <div>
+                                <div class="diarios-toggle-card__title">Estado del diario</div>
+                                <div class="diarios-toggle-card__description">Permite usar este diario en operaciones nuevas.</div>
+                            </div>
+                            <DxCheckBox @bind-Checked="formModel.IsActive" />
                         </div>
-                        <div class="diarios-preview-card__row">
-                            <span class="diarios-preview-card__label">Manual por defecto</span>
-                            <strong class="diarios-preview-card__value">@(formModel.IsDefaultManual ? "Si" : "No")</strong>
-                        </div>
-                    </div>
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Estado del diario" ColSpanMd="6" ColSpanXs="12">
-                    <div class="diarios-toggle-card @(formModel.IsActive ? "is-on" : string.Empty)">
-                        <div>
-                            <div class="diarios-toggle-card__title">Activo</div>
-                            <div class="diarios-toggle-card__description">Permite usar el diario en operaciones nuevas.</div>
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Captura manual</span></CaptionTemplate>
+                    <Template>
+                        <div class="diarios-toggle-card @(formModel.AllowsManual ? "is-on is-blue" : string.Empty)">
+                            <div>
+                                <div class="diarios-toggle-card__title">Permite manual</div>
+                                <div class="diarios-toggle-card__description">Habilita registros manuales ademas del sistema.</div>
+                            </div>
+                            <DxCheckBox @bind-Checked="formModel.AllowsManual" />
                         </div>
-                        <DxCheckBox @bind-Checked="formModel.IsActive" />
-                    </div>
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Tipo de captura" ColSpanMd="6" ColSpanXs="12">
-                    <div class="diarios-toggle-card @(formModel.AllowsManual ? "is-on is-blue" : string.Empty)">
-                        <div>
-                            <div class="diarios-toggle-card__title">Permite manual</div>
-                            <div class="diarios-toggle-card__description">Habilita registros manuales ademas de procesos del sistema.</div>
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="12" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Manual por defecto</span></CaptionTemplate>
+                    <Template>
+                        <div class="diarios-toggle-card @(formModel.IsDefaultManual ? "is-on is-amber" : string.Empty)">
+                            <div>
+                                <div class="diarios-toggle-card__title">Diario predeterminado</div>
+                                <div class="diarios-toggle-card__description">Se usara al registrar partidas manuales.</div>
+                            </div>
+                            <DxCheckBox @bind-Checked="formModel.IsDefaultManual"
+                                        Enabled="@(formModel.IsActive && formModel.AllowsManual)" />
                         </div>
-                        <DxCheckBox @bind-Checked="formModel.AllowsManual" />
-                    </div>
+                    </Template>
                 </DxFormLayoutItem>
-
-                <DxFormLayoutItem Caption="Partidas manuales" ColSpanMd="12" ColSpanXs="12">
-                    <div class="diarios-toggle-card @(formModel.IsDefaultManual ? "is-on is-amber" : string.Empty)">
-                        <div>
-                            <div class="diarios-toggle-card__title">Diario manual por defecto</div>
-                            <div class="diarios-toggle-card__description">Se usara automaticamente al registrar partidas manuales. Debe estar activo y permitir captura manual.</div>
-                        </div>
-                        <DxCheckBox @bind-Checked="formModel.IsDefaultManual"
-                                    Enabled="@(formModel.IsActive && formModel.AllowsManual)" />
-                    </div>
-                </DxFormLayoutItem>
-            </DxFormLayout>
-        </div>
+            </DxFormLayoutGroup>
+        </DxFormLayout>
     </BodyContentTemplate>
     <FooterContentTemplate Context="popupFooter">
-        <div class="diarios-popup-actions">
+        <div class="d-flex justify-content-end gap-2 w-100">
             <DxButton Text="Cancelar"
                       RenderStyle="ButtonRenderStyle.Secondary"
-                      CssClass="diarios-popup-actions__button"
                       Click="CloseForm"
                       Enabled="@(!isSaving)" />
             <DxButton Text="@(isSaving ? "Guardando..." : "Guardar diario")"
                       RenderStyle="ButtonRenderStyle.Primary"
-                      CssClass="diarios-popup-actions__button diarios-popup-actions__button--primary"
+                      IconCssClass="bi bi-check-lg"
                       Click="SaveDiarioAsync"
                       Enabled="@(!isSaving)" />
         </div>
@@ -319,6 +319,7 @@
     private bool isFormVisible;
     private bool isSaving;
     private bool isLoading;
+    private bool isXSmallScreen;
     private string popupTitle = "Nuevo diario";
     private string? formErrorMessage;
     private bool statusMessageVisible;
@@ -326,6 +327,7 @@
     private string statusMessageText = string.Empty;
     private MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
 
+    private bool IsBusy => isLoading || isSaving;
     private int ActiveCount => diarios.Count(item => item.IsActive);
     private int ManualCount => diarios.Count(item => item.AllowsManual);
 
@@ -492,6 +494,11 @@
     private void MostrarColumnChooser()
     {
         diariosGrid?.ShowColumnChooser(".diarios-column-chooser-button");
+    }
+
+    private GridDetailRowDisplayMode GetGridDetailRowDisplayMode()
+    {
+        return isXSmallScreen ? GridDetailRowDisplayMode.Always : GridDetailRowDisplayMode.Never;
     }
 
     private sealed class DiarioFormModel

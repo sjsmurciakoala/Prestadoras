@@ -27,243 +27,197 @@
               CloseOnOutsideClick="false"
               Closed="OnCloseConfirmClosed" />
 
-<div class="periodos-page">
-    <section class="periodos-hero">
-        <div class="periodos-hero__copy">
-            <span class="periodos-hero__eyebrow">Contabilidad</span>
-            <h1 class="periodos-hero__title">Periodos contables</h1>
-            <div class="periodos-hero__meta">
+<div class="periodos-page" id="periodos-grid-shell">
+
+    @* ── Encabezado (patron DxStackLayout igual que CentrosCosto) ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-calendar-range me-2 text-primary"></i>Periodos contables
+            </h4>
+            <div class="d-flex flex-wrap align-items-center gap-2">
                 @if (CurrentOpenPeriodo is not null)
                 {
-                    <span class="periodos-current-badge">
-                        <span class="periodos-current-badge__dot"></span>
-                        Periodo abierto en uso: @CurrentOpenPeriodo.Code
+                    <span class="badge bg-success">
+                        <i class="bi bi-circle-fill me-1" style="font-size:0.45rem;vertical-align:middle"></i>
+                        Activo: @CurrentOpenPeriodo.Code
                     </span>
-                    <span class="periodos-current-caption">@CurrentOpenPeriodo.Name | @CurrentOpenPeriodo.StartDate.ToString("dd/MM/yyyy") - @CurrentOpenPeriodo.EndDate.ToString("dd/MM/yyyy")</span>
+                    <small class="text-muted">@CurrentOpenPeriodo.Name &middot; @CurrentOpenPeriodo.StartDate.ToString("dd/MM/yyyy") – @CurrentOpenPeriodo.EndDate.ToString("dd/MM/yyyy")</small>
                 }
                 else if (HasMultipleOpenPeriodos)
                 {
-                    <span class="periodos-current-badge periodos-current-badge--warning">
-                        <span class="periodos-current-badge__dot"></span>
-                        Hay multiples periodos abiertos
-                    </span>
-                    <span class="periodos-current-caption">Revisa el calendario contable y deja un unico periodo abierto para operar.</span>
+                    <span class="badge bg-warning text-dark">Multiples periodos abiertos</span>
+                    <small class="text-muted">Deja un unico periodo abierto para operar.</small>
                 }
                 else
                 {
-                    <span class="periodos-current-badge periodos-current-badge--warning">
-                        <span class="periodos-current-badge__dot"></span>
-                        No hay periodo abierto en uso
-                    </span>
-                    <span class="periodos-current-caption">Abre un periodo para habilitar operaciones contables nuevas.</span>
+                    <span class="badge bg-secondary">Sin periodo abierto</span>
+                    <small class="text-muted">Abre un periodo para habilitar operaciones.</small>
                 }
             </div>
         </div>
-
-        <div class="periodos-hero__actions">
-            <DxButton Text="Nuevo periodo"
-                      Click="@(() => OpenForm(null))"
-                      IconCssClass="bi bi-plus-lg"
-                      RenderStyle="ButtonRenderStyle.Primary"
-                      CssClass="periodos-action periodos-action--primary"
-                      Enabled="@(!IsBusy)" />
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
             <DxButton Text="Actualizar"
-                      Click="LoadPeriodosAsync"
-                      IconCssClass="bi bi-arrow-clockwise"
                       RenderStyle="ButtonRenderStyle.Secondary"
-                      CssClass="periodos-action"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="LoadPeriodosAsync"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nuevo periodo"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@(() => OpenForm(null))"
                       Enabled="@(!IsBusy)" />
         </div>
-    </section>
+    </div>
 
-    <section class="periodos-summary">
-        <article class="periodos-stat">
-            <div class="periodos-stat__icon periodos-stat__icon--slate">
-                <i class="bi bi-calendar-range"></i>
-            </div>
-            <div class="periodos-stat__body">
-                <span class="periodos-stat__label">Total periodos</span>
-                <strong class="periodos-stat__value">@periodos.Length.ToString("N0")</strong>
-                <span class="periodos-stat__hint">Calendario disponible</span>
-            </div>
-        </article>
+    @* ── Indicadores rapidos ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="periodos-stat-badge">
+            <i class="bi bi-calendar-range"></i> Total: <strong>@periodos.Length.ToString("N0")</strong>
+        </span>
+        <span class="periodos-stat-badge periodos-stat-badge--success">
+            <i class="bi bi-unlock"></i> Abiertos: <strong>@OpenCount</strong>
+        </span>
+        <span class="periodos-stat-badge periodos-stat-badge--warning">
+            <i class="bi bi-clock-history"></i> Precierre: <strong>@PreCloseCount</strong>
+        </span>
+        <span class="periodos-stat-badge periodos-stat-badge--secondary">
+            <i class="bi bi-lock"></i> Cerrados: <strong>@ClosedCount</strong>
+        </span>
+    </div>
 
-        <article class="periodos-stat">
-            <div class="periodos-stat__icon periodos-stat__icon--green">
-                <i class="bi bi-unlock"></i>
-            </div>
-            <div class="periodos-stat__body">
-                <span class="periodos-stat__label">Abiertos</span>
-                <strong class="periodos-stat__value">@OpenCount.ToString("N0")</strong>
-                <span class="periodos-stat__hint">Aceptan movimientos</span>
-            </div>
-        </article>
+    @* ── Grid principal ── *@
+    <div class="periodos-grid-wrapper shadow-sm">
+        <DxGrid @ref="periodosGrid"
+                Data="@periodos"
+                KeyFieldName="@nameof(PeriodoContableDto.PeriodId)"
+                ShowFilterRow="true"
+                ShowPager="true"
+                PageSize="12"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 10, 20, 50 }"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                DetailRowDisplayMode="@GetGridDetailRowDisplayMode()"
+                CssClass="border-0">
+            <ToolbarTemplate>
+                <DxToolbar ItemRenderStyleMode="ToolbarRenderStyleMode.Contained">
+                    <Items>
+                        <DxToolbarItem Text="Columnas"
+                                       Alignment="ToolbarItemAlignment.Right"
+                                       IconCssClass="bi bi-layout-three-columns"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       CssClass="periodos-column-chooser-button"
+                                       Click="MostrarColumnChooser" />
+                    </Items>
+                </DxToolbar>
+            </ToolbarTemplate>
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="120px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false"
+                                     VisibleIndex="99">
+                    <CellDisplayTemplate Context="cellContext">
+                        @if (cellContext.DataItem is PeriodoContableDto item)
+                        {
+                            <div class="d-flex gap-1 justify-content-center">
+                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-pencil-square fs-5"
+                                          title="Editar"
+                                          Enabled="@(!IsBusy)"
+                                          Click="@(() => OpenForm(item))" />
+                                <DxButton RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-lock fs-5"
+                                          title="Cerrar periodo"
+                                          Enabled="@(!IsPeriodoClosed(item) && !IsBusy)"
+                                          Click="@(() => AskClosePeriodo(item))" />
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
 
-        <article class="periodos-stat">
-            <div class="periodos-stat__icon periodos-stat__icon--stone">
-                <i class="bi bi-lock"></i>
-            </div>
-            <div class="periodos-stat__body">
-                <span class="periodos-stat__label">Cerrados</span>
-                <strong class="periodos-stat__value">@ClosedCount.ToString("N0")</strong>
-                <span class="periodos-stat__hint">Historico consolidado</span>
-            </div>
-        </article>
-    </section>
+                <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.Code)" Caption="Codigo" Width="120px">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@((cell.DataItem as PeriodoContableDto)?.Code)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
 
-    <section class="periodos-shell" id="periodos-grid-shell">
-        <div class="periodos-shell__toolbar">
-            <div>
-                <h2 class="periodos-shell__title">Listado de periodos</h2>
-                <p class="periodos-shell__description">Consulta el codigo, rango de fechas y estado operativo de cada periodo contable.</p>
-            </div>
-            <div class="periodos-shell__legend">
-                <span class="periodos-chip">
-                    <span class="periodos-chip__dot periodos-chip__dot--green"></span>
-                    Abiertos: @OpenCount
-                </span>
-                <span class="periodos-chip">
-                    <span class="periodos-chip__dot periodos-chip__dot--amber"></span>
-                    Precierre: @PreCloseCount
-                </span>
-                <span class="periodos-chip">
-                    <span class="periodos-chip__dot periodos-chip__dot--slate"></span>
-                    Cerrados: @ClosedCount
-                </span>
-            </div>
-        </div>
+                <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.Name)" Caption="Nombre" MinWidth="200" />
 
-        <div class="periodos-grid-wrap">
-            <DxGrid @ref="periodosGrid"
-                    Data="@periodos"
-                    KeyFieldName="@nameof(PeriodoContableDto.PeriodId)"
-                    PageSize="12"
-                    SizeMode="SizeMode.Medium"
-                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
-                    DetailRowDisplayMode="@GetGridDetailRowDisplayMode()"
-                    CssClass="periodos-grid">
-                <ToolbarTemplate>
-                    <div class="periodos-grid__toolbar">
-                        <span class="periodos-grid__toolbar-copy">Define que periodos aceptan movimientos, cuales estan en precierre y cuales ya forman parte del historico contable.</span>
-                        <div class="periodos-grid__toolbar-actions">
-                            <DxButton Text="Columnas"
-                                      IconCssClass="bi bi-layout-three-columns"
-                                      RenderStyle="ButtonRenderStyle.Secondary"
-                                      CssClass="periodos-grid__toolbar-button periodos-column-chooser-button"
-                                      Click="MostrarColumnChooser" />
-                            <div class="periodos-grid__toolbar-total">
-                                Total: <span>@periodos.Length.ToString("N0")</span>
+                <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.StartDate)" Caption="Inicio"
+                                  DisplayFormat="{0:dd/MM/yyyy}" Width="120px" />
+
+                <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.EndDate)" Caption="Fin"
+                                  DisplayFormat="{0:dd/MM/yyyy}" Width="120px" />
+
+                <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.StatusId)" Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is PeriodoContableDto item)
+                        {
+                            <span class="@GetPeriodoBadgeCss(item)">@GetPeriodoStatusLabel(item)</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.ClosedAt)" Caption="Fecha cierre" Width="160px" Visible="@GetAuditColumnsVisible()">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is PeriodoContableDto item)
+                        {
+                            @(item.ClosedAt?.ToString("dd/MM/yyyy HH:mm") ?? "—")
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.ClosedBy)" Caption="Cerrado por"
+                                  Width="160px" Visible="@GetAuditColumnsVisible()" />
+            </Columns>
+            <DetailRowTemplate Context="detail">
+                @if (detail.DataItem is PeriodoContableDto item)
+                {
+                    <div class="p-3">
+                        <div class="row g-3">
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Estado</small>
+                                <strong>@GetPeriodoStatusLabel(item)</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Fecha de cierre</small>
+                                <strong>@(item.ClosedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente")</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Cerrado por</small>
+                                <strong>@(string.IsNullOrWhiteSpace(item.ClosedBy) ? "—" : item.ClosedBy)</strong>
                             </div>
                         </div>
                     </div>
-                </ToolbarTemplate>
-                <DetailRowTemplate Context="detail">
-                    @if (detail.DataItem is PeriodoContableDto item)
-                    {
-                        <div class="periodos-detail-card">
-                            <div class="periodos-detail-card__row">
-                                <span class="periodos-detail-card__label">Estado</span>
-                                <strong class="periodos-detail-card__value">@GetPeriodoStatusLabel(item)</strong>
-                            </div>
-                            <div class="periodos-detail-card__row">
-                                <span class="periodos-detail-card__label">Cerrado</span>
-                                <strong class="periodos-detail-card__value">@(item.ClosedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente")</strong>
-                            </div>
-                            <div class="periodos-detail-card__row">
-                                <span class="periodos-detail-card__label">Cerrado por</span>
-                                <strong class="periodos-detail-card__value">@(string.IsNullOrWhiteSpace(item.ClosedBy) ? "Pendiente" : item.ClosedBy)</strong>
-                            </div>
-                        </div>
-                    }
-                </DetailRowTemplate>
-                <Columns>
-                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.Code)" Caption="Codigo" Width="118px" />
-                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.Name)" Caption="Nombre" Width="24%" />
-                    <DxGridDataColumn Caption="Inicio" Width="128px">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is PeriodoContableDto item)
-                            {
-                                @item.StartDate.ToString("dd/MM/yyyy")
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="Fin" Width="128px">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is PeriodoContableDto item)
-                            {
-                                @item.EndDate.ToString("dd/MM/yyyy")
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="Estado" Width="126px" TextAlignment="GridTextAlignment.Center">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is PeriodoContableDto item)
-                            {
-                                <span class="@GetPeriodoBadgeCss(item)">
-                                    @GetPeriodoStatusLabel(item)
-                                </span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn Caption="Cerrado" Width="168px" Visible="@GetAuditColumnsVisible()">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is PeriodoContableDto item)
-                            {
-                                @(item.ClosedAt?.ToString("dd/MM/yyyy HH:mm") ?? "Pendiente")
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                    <DxGridDataColumn FieldName="@nameof(PeriodoContableDto.ClosedBy)" Caption="Cerrado por" Width="170px" Visible="@GetAuditColumnsVisible()" />
-                    <DxGridDataColumn Caption="Acciones" Width="106px" TextAlignment="GridTextAlignment.Center" ShowInColumnChooser="false">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is PeriodoContableDto item)
-                            {
-                                <div class="periodos-grid__actions">
-                                    <button type="button"
-                                            class="periodos-icon-button periodos-icon-button--edit"
-                                            title="Editar periodo"
-                                            disabled="@IsBusy"
-                                            @onclick="() => OpenForm(item)"
-                                            @onclick:stopPropagation="true">
-                                        <i class="bi bi-pencil-square"></i>
-                                    </button>
-                                    <button type="button"
-                                            class="periodos-icon-button periodos-icon-button--close"
-                                            title="Cerrar periodo"
-                                            disabled="@(IsPeriodoClosed(item) || IsBusy)"
-                                            @onclick="() => AskClosePeriodo(item)"
-                                            @onclick:stopPropagation="true">
-                                        <i class="bi bi-lock"></i>
-                                    </button>
-                                </div>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                </Columns>
-                <EmptyDataAreaTemplate>
-                    <div class="periodos-empty">
-                        <div class="periodos-empty__icon">
-                            <i class="bi bi-calendar-x"></i>
-                        </div>
-                        <h3>No hay periodos registrados</h3>
-                        <p>Crea el primer periodo contable para empezar a controlar aperturas, precierres y cierres.</p>
-                    </div>
-                </EmptyDataAreaTemplate>
-            </DxGrid>
-        </div>
+                }
+            </DetailRowTemplate>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-calendar-x fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay periodos registrados</h5>
+                    <p class="mb-0">Crea el primer periodo contable para empezar a operar.</p>
+                </div>
+            </EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
 
-        <DxLoadingPanel Visible="@(isLoading || isClosingPeriod)"
-                        PositionTarget="#periodos-grid-shell"
-                        CssClass="periodos-loading w-100"
-                        ApplyBackgroundShading="false"
-                        IsContentBlocked="true"
-                        Text="@GetLoadingText()" />
-    </section>
+    <DxLoadingPanel Visible="@(isLoading || isClosingPeriod)"
+                    PositionTarget="#periodos-grid-shell"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="@GetLoadingText()" />
 </div>
 
+@* ── Popup de formulario ── *@
 <DxPopup @bind-Visible="isFormVisible"
-         Width="760px"
-         MaxWidth="96vw"
+         Width="720px"
+         MaxWidth="95vw"
          MinWidth="320px"
          MaxHeight="90vh"
          Scrollable="true"
@@ -271,105 +225,115 @@
          ShowCloseButton="true"
          CloseOnOutsideClick="false"
          HeaderText="@popupTitle"
-         CssClass="periodos-popup"
-         HeaderCssClass="periodos-popup__header"
-         BodyCssClass="periodos-popup__body"
-         FooterCssClass="periodos-popup__footer">
+         CssClass="periodos-popup">
     <BodyContentTemplate Context="popupBody">
-        <div class="periodos-form-shell">
-            <div class="periodos-form-intro">
-                <div>
-                    <span class="periodos-form-intro__eyebrow">Formulario</span>
-                    <h3 class="periodos-form-intro__title">@GetPopupHeading()</h3>
-                    <p class="periodos-form-intro__subtitle">Configura el codigo, el rango de fechas y el estado operativo con un esquema adaptivo basado en DxFormLayout.</p>
-                </div>
-                <span class="periodos-form-mode">@GetPopupModeLabel()</span>
-            </div>
+        @if (!string.IsNullOrWhiteSpace(formErrorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">
+                @formErrorMessage
+            </DxAlert>
+        }
 
-            @if (!string.IsNullOrWhiteSpace(formErrorMessage))
-            {
-                <div class="periodos-inline-error" role="alert">
-                    <i class="bi bi-exclamation-triangle-fill"></i>
-                    <span>@formErrorMessage</span>
-                </div>
-            }
-
-            <DxFormLayout CssClass="w-100 periodos-form-layout"
-                          CaptionPosition="CaptionPosition.Vertical">
-                <DxFormLayoutItem Caption="Codigo" ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
-                    <DxTextBox @bind-Text="formModel.Code"
-                               NullText="Ej. 2026-01"
-                               InputId="periodo-code" />
+        <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical" CssClass="w-100">
+            <DxFormLayoutGroup Caption="Datos del periodo" HeaderIconCssClass="bi bi-calendar-range">
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Codigo</span></CaptionTemplate>
+                    <Template>
+                        <DxTextBox @bind-Text="formModel.Code" NullText="Ej. 202602" InputId="periodo-code" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Nombre" ColSpanMd="8" ColSpanSm="6" ColSpanXs="12">
-                    <DxTextBox @bind-Text="formModel.Name"
-                               NullText="Nombre del periodo"
-                               InputId="periodo-name" />
+                <DxFormLayoutItem ColSpanMd="8" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Nombre</span></CaptionTemplate>
+                    <Template>
+                        <DxTextBox @bind-Text="formModel.Name" NullText="Nombre del periodo" InputId="periodo-name" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Inicio" ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
-                    <DxDateEdit @bind-Date="formModel.StartDate"
-                                InputId="periodo-start" />
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Inicio</span></CaptionTemplate>
+                    <Template>
+                        <DxDateEdit @bind-Date="formModel.StartDate"
+                                    Format="@PeriodoDateFormat"
+                                    DisplayFormat="@PeriodoDateFormat"
+                                    Mask="@PeriodoDateFormat"
+                                    InputId="periodo-start" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Fin" ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
-                    <DxDateEdit @bind-Date="formModel.EndDate"
-                                InputId="periodo-end" />
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Fin</span></CaptionTemplate>
+                    <Template>
+                        <DxDateEdit @bind-Date="formModel.EndDate"
+                                    Format="@PeriodoDateFormat"
+                                    DisplayFormat="@PeriodoDateFormat"
+                                    Mask="@PeriodoDateFormat"
+                                    InputId="periodo-end" />
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Estado" ColSpanMd="4" ColSpanSm="12" ColSpanXs="12">
-                    <DxComboBox Data="@statusOptions"
-                                TData="PeriodoStatusOption"
-                                TValue="short"
-                                @bind-Value="formModel.StatusId"
-                                TextFieldName="@nameof(PeriodoStatusOption.Text)"
-                                ValueFieldName="@nameof(PeriodoStatusOption.Value)"
-                                NullText="Selecciona estado"
-                                InputId="periodo-status" />
+                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="12" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Estado</span></CaptionTemplate>
+                    <Template>
+                        <DxComboBox Data="@statusOptions"
+                                    TData="PeriodoStatusOption"
+                                    TValue="short"
+                                    @bind-Value="formModel.StatusId"
+                                    TextFieldName="@nameof(PeriodoStatusOption.Text)"
+                                    ValueFieldName="@nameof(PeriodoStatusOption.Value)"
+                                    NullText="Selecciona estado"
+                                    InputId="periodo-status" />
+                    </Template>
                 </DxFormLayoutItem>
+            </DxFormLayoutGroup>
 
-                <DxFormLayoutItem Caption="Resumen" ColSpanMd="6" ColSpanXs="12">
-                    <div class="periodos-preview-card">
-                        <div class="periodos-preview-card__row">
-                            <span class="periodos-preview-card__label">Codigo visible</span>
-                            <strong class="periodos-preview-card__value">@GetPreviewCode()</strong>
+            <DxFormLayoutGroup Caption="Vista previa" HeaderIconCssClass="bi bi-eye" CssClass="mt-3">
+                <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Resumen</span></CaptionTemplate>
+                    <Template>
+                        <div class="periodos-preview-card">
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Codigo</span>
+                                <strong>@GetPreviewCode()</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Rango</span>
+                                <strong>@GetPreviewRange()</strong>
+                            </div>
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Duracion</span>
+                                <strong>@GetPreviewDuration()</strong>
+                            </div>
                         </div>
-                        <div class="periodos-preview-card__row">
-                            <span class="periodos-preview-card__label">Rango</span>
-                            <strong class="periodos-preview-card__value">@GetPreviewRange()</strong>
-                        </div>
-                        <div class="periodos-preview-card__row">
-                            <span class="periodos-preview-card__label">Duracion</span>
-                            <strong class="periodos-preview-card__value">@GetPreviewDuration()</strong>
-                        </div>
-                    </div>
+                    </Template>
                 </DxFormLayoutItem>
 
-                <DxFormLayoutItem Caption="Estado operativo" ColSpanMd="6" ColSpanXs="12">
-                    <div class="@GetStatusPanelCss(formModel.StatusId)">
-                        <div>
-                            <div class="periodos-status-panel__title">@GetStatusHelpTitle(formModel.StatusId)</div>
-                            <div class="periodos-status-panel__description">@GetStatusHelpDescription(formModel.StatusId)</div>
+                <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12">
+                    <CaptionTemplate><span class="fw-semibold">Estado operativo</span></CaptionTemplate>
+                    <Template>
+                        <div class="@GetStatusPanelCss(formModel.StatusId)">
+                            <div>
+                                <div class="fw-bold">@GetStatusHelpTitle(formModel.StatusId)</div>
+                                <small class="text-muted">@GetStatusHelpDescription(formModel.StatusId)</small>
+                            </div>
+                            <span class="@GetPeriodoBadgeCss(formModel.StatusId)">
+                                @GetPeriodoStatusLabel(formModel.StatusId)
+                            </span>
                         </div>
-                        <span class="@GetPeriodoBadgeCss(formModel.StatusId)">
-                            @GetPeriodoStatusLabel(formModel.StatusId)
-                        </span>
-                    </div>
+                    </Template>
                 </DxFormLayoutItem>
-            </DxFormLayout>
-        </div>
+            </DxFormLayoutGroup>
+        </DxFormLayout>
     </BodyContentTemplate>
     <FooterContentTemplate Context="popupFooter">
-        <div class="periodos-popup-actions">
+        <div class="d-flex justify-content-end gap-2 w-100">
             <DxButton Text="Cancelar"
                       RenderStyle="ButtonRenderStyle.Secondary"
-                      CssClass="periodos-popup-actions__button"
                       Click="CloseForm"
                       Enabled="@(!isSaving)" />
             <DxButton Text="@(isSaving ? "Guardando..." : "Guardar periodo")"
                       RenderStyle="ButtonRenderStyle.Primary"
-                      CssClass="periodos-popup-actions__button periodos-popup-actions__button--primary"
+                      IconCssClass="bi bi-check-lg"
                       Click="SavePeriodoAsync"
                       Enabled="@(!isSaving)" />
         </div>
@@ -615,16 +579,6 @@
         return isClosingPeriod ? "Cerrando periodo..." : "Cargando periodos...";
     }
 
-    private string GetPopupHeading()
-    {
-        return formModel.PeriodId.HasValue ? "Actualizar periodo contable" : "Crear nuevo periodo contable";
-    }
-
-    private string GetPopupModeLabel()
-    {
-        return formModel.PeriodId.HasValue ? "Edicion" : "Nuevo";
-    }
-
     private string GetPreviewCode()
     {
         return string.IsNullOrWhiteSpace(formModel.Code) ? "Sin definir" : formModel.Code.Trim().ToUpperInvariant();
@@ -632,7 +586,7 @@
 
     private string GetPreviewRange()
     {
-        return $"{formModel.StartDate:dd/MM/yyyy} - {formModel.EndDate:dd/MM/yyyy}";
+        return $"{formModel.StartDate.ToString(PeriodoDateFormat)} - {formModel.EndDate.ToString(PeriodoDateFormat)}";
     }
 
     private string GetPreviewDuration()
@@ -640,6 +594,8 @@
         var totalDays = Math.Max(1, (formModel.EndDate.Date - formModel.StartDate.Date).Days + 1);
         return totalDays == 1 ? "1 dia" : $"{totalDays} dias";
     }
+
+    private const string PeriodoDateFormat = "dd/MM/yyyy";
 
     private static string GetPeriodoBadgeCss(PeriodoContableDto periodo) =>
         GetPeriodoBadgeCss(periodo.StatusId);
@@ -716,4 +672,3 @@
 
     private sealed record PeriodoStatusOption(short Value, string Text);
 }
-

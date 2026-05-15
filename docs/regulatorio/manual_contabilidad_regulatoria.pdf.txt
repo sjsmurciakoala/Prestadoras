@@ -1,0 +1,3206 @@
+MANUAL DE CONTABILIDAD REGULATORIA. 
+ENTE REGULADOR DE LOS SERVICIOS DE AGUA 
+POTABLE Y SANEAMIENTO (ERSAPS) 
+Índice 
+OBJETIVOS 	3 
+ALCANCES 	3 
+PRINCIPIOS CONTABLES GENERALES DE LA CONTABILIDAD REGULATORIA 	4 
+MARCO CONCEPTUAL PARA LA PREPARACIÓN Y PRESENTACIÓN DE LOS ESTADOS FINANCIEROS 	4 
+PERIODICIDAD Y FECHAS DE REPORTE DE LA INFORMACIÓN 	7 
+PLAN DE CUENTAS REGULATORIO 	8 
+ESTRUCTURA DEL PLAN DE CUENTAS REGULATORIO 	8 
+CATÁLOGO DE CUENTAS DEL PRESTADOR 	9 
+DESCRIPCIÓN Y DINÁMICA DE LAS CUENTAS 	31 5.4 PROCEDIMIENTOS DE ACTUALIZACIÓN 	72 
+5.5 	PROCEDIMIENTOS DE CONSULTA 	72 
+ESTADOS FINANCIEROS DEL PRESTADOR 	73 
+FORMATO Y CONTENIDO DE LOS ESTADOS FINANCIEROS 	73 
+APROBACIÓN DE ESTADOS FINANCIEROS DE CIERRE DEL EJERCICIO ECONÓMICO 	77 
+REPORTES REGULATORIOS COMPLEMENTARIOS 	77 
+REPORTE DE ACTIVOS 	78 
+REPORTE DE FACTURACIÓN Y COBRANZAS 	79 
+REPORTE DE INGRESOS, COSTOS Y GASTOS 	80 
+1 Objetivos 
+El Ente Regulador del Servicio de Agua Potable y Saneamiento (ERSAPS), en ejercicio de las facultades que la Ley le confiere, ha elaborado el presente Manual de Contabilidad para las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento, de acuerdo con normas y prácticas contables de uso nacional e internacional.  
+El Manual de Contabilidad para las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento tiene como principales objetivos, los siguientes:  
+Uniformar el registro contable de las operaciones que realizan las instituciones autorizadas para operar como Empresas Prestadoras del Servicio de Agua Potable y Saneamiento, de acuerdo con la Ley vigente, así como con las normas que disponga el Ente Regulador.  
+Obtener estados financieros que reflejen, de manera transparente, la situación económica financiera y resultados de la gestión de dichas empresa o instituciones. 
+Constituir en un instrumento útil la información financiera que se obtenga para el análisis y el autocontrol; así como, para la toma de decisiones por parte de los accionistas, directores y administradores de las instituciones prestadoras de servicios de agua potable y saneamiento, usuarios de los servicios y otras partes interesadas.  
+Disponer de una base de datos homogénea, que permita el funcionamiento fluido de un sistema de indicadores que asegure el seguimiento y control de cada una de las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento y del sistema en su conjunto, a la vez que haga posible las comparaciones y validaciones que permitan determinar los costos eficientes de la prestación del servicio.  
+2 Alcances 
+Las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento bajo la regulación del ERSAPS deberán cumplir con las disposiciones del presente Manual, sin perjuicio de la observación de las demás regulaciones contables vigentes que les sean aplicables. En este sentido, el diseño y desarrollo del plan de cuenta regulatorio se basa en las Normas Internacionales de Información Financiera (NIIF), teniendo en cuenta los lineamientos del Manual de Contabilidad para el Sector Público emitido por la Contaduría General de la República, en aquellos casos en los que aplica. 
+En caso de discrepancias entre las disposiciones del presente Manual y las NIIF, prevalecerán las primeras a los fines regulatorios. 
+Cuando en el presente Manual se haga referencia a las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento, se incluyen las Sociedades Privadas, Municipalidades y miembros de la Junta Administradora de Agua cuando su aplicación sea requerida por el Ente Regulador.  
+Las cuentas contenidas en el presente Manual no implican de por sí una autorización para realizar las operaciones relacionadas con tales cuentas, debiendo las Empresas de sujetarse a las normas legales y reglamentarias vigentes.  
+Las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento no podrán abrir nuevas cuentas o subcuentas sin la previa autorización del Ente Regulador, sin embargo, podrán crear cuentas analíticas adicionales a las establecidas en el presente catálogo que consideren necesarias para un mejor registro y control de sus operaciones, según sea el caso, siempre y cuando no exista abierto el nivel de detalle que requiere. No obstante deben ser informadas previamente al Ente Regulador. 
+3 Principios contables generales de la contabilidad regulatoria 
+Los Principios contables de la contabilidad regulatoria para las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento definida en el presente Manual, se basan en el Manual de Contabilidad para el Sector Público y las Normas Internacionales de Información Financiera (NIIF). 
+Las NIIF se encuentran diseñadas para ser aplicadas en todas las entidades con fines de lucro. No obstante ello, también aplica para las entidades sin fines de lucro. Adicionalmente, la Junta de Normas Internacionales de Contabilidad del Sector Público (JNICSP por sus siglas en idioma castellano), de la Federación Internacional de Contadores (IFAC por sus siglas en inglés), establece que las NIIF son igualmente aplicables a las empresas del gobierno. 
+Las NIIF tienen por finalidad establecer los requisitos de reconocimiento, medición, presentación e información a revelar, respecto de hechos y estimaciones de carácter económico, los que de forma resumida y estructurada se presentan en los estados financieros con propósito general. Se construyen tomando en cuenta el Marco Conceptual, que tiene como objetivo facilitar la formulación coherente y lógica de las NIIF, sobre la base de una estructura teórica única, para resolver las cuestiones de tratamiento contable. 
+3.1 Marco Conceptual para la preparación y presentación de los Estados Financieros 
+El marco conceptual para la preparación y presentación de los estados financieros abarca los siguientes elementos: 
+El objetivo de los estados financieros; 
+Las características cualitativas que determinan la calidad de la información de los estados financieros; 
+La definición, reconocimiento y medición de los elementos que constituyen los estados financieros;  - Los conceptos de capital y mantenimiento de capital. 
+Objetivo de los estados financieros 
+El objetivo de los estados financieros es suministrar información acerca de la situación financiera, desempeño y cambios en la situación financiera para asistir a una amplia gama de usuarios en la toma de decisiones económicas. 
+Un juego completo de estados financieros incluye un balance general, un estado de ganancias y pérdidas, un estado de cambios en el patrimonio neto, y un estado de flujos de efectivo, así como notas explicativas. 
+Una entidad que presenta estados financieros, es aquella para la cual existen usuarios que se sirven de los estados financieros como fuente principal de información de la empresa. Entre estos usuarios se pueden mencionar a los inversionistas, empleados, prestamistas (bancos y financieras), proveedores y acreedores comerciales, clientes, el gobierno y organismos públicos, principalmente. 
+La responsabilidad de la preparación y presentación de estados financieros recae en la gerencia de la empresa. Consecuentemente, la adopción de políticas contables que permitan una presentación razonable de la situación financiera, resultados de gestión y flujos de efectivo, también es parte de esa responsabilidad.  
+Existen dos premisas básicas sobre las cuales se basa el desarrollo, la adopción y aplicación de políticas contables: 
+Base de acumulación o devengo 
+Los efectos de las transacciones y demás sucesos se reconocen cuando ocurren (no cuando se recibe o paga dinero u otro equivalente de efectivo). Asimismo, se registran en los libros contables y se informa sobre ellos en los estados financieros de los períodos con los que se relacionan. Así, se informa a los usuarios no sólo de las transacciones pasadas que suponen cobro o pago de dinero, sino también de las obligaciones de pago en el futuro y de los recursos que representan efectivo a cobrar en el futuro. 
+Negocio en marcha 
+Los estados financieros se preparan sobre la base de que la entidad se encuentra en funcionamiento y que continuará sus actividades operativas en el futuro previsible (se estima por lo menos de doce meses hacia adelante). Si existiera la intención o necesidad de liquidar la empresa o disminuir significativamente sus operaciones, los estados financieros deberían prepararse sobre una base distinta, la que debe ser revelada adecuadamente. 
+Características cualitativas de los estados financieros 
+Comprensión 
+La información de los estados financieros debe ser fácilmente comprensible por usuarios con conocimiento razonable de las actividades económicas y del mundo de los negocios, así como de su contabilidad, y con voluntad de estudiar la información con razonable diligencia. No obstante ello, la información sobre temas complejos debe ser incluida por razones de su relevancia, a pesar que sea de difícil comprensión para ciertos usuarios. 
+Relevancia (importancia relativa o materialidad) 
+La relevancia de la información se encuentra afectada por su naturaleza e importancia relativa; en algunos casos la naturaleza por sí sola (presentación de un nuevo segmento, contrato a futuro, cambio de fórmula de costo, entre otros) puede determinar la relevancia de la información. La información tiene importancia relativa cuando, si se omite o se presenta de manera errónea, puede influir en las decisiones económicas de los usuarios (evaluación de sucesos pasados, actuales o futuros) tomadas a partir de los estados financieros. 
+Fiabilidad 
+La información debe encontrarse libre de errores materiales, sesgos o prejuicios (debe ser neutral) para que sea útil, y los usuarios puedan confiar en ella. 
+Además, para que la información sea fiable, debe representar fielmente las transacciones y demás sucesos que se pretenden; presentarse de acuerdo con su esencia y realidad económica, y no solamente según su forma legal. 
+Asimismo, se debe tener en cuenta que en la elaboración de la información financiera surgen una serie de situaciones sujetas a incertidumbre, que requieren de juicios que deben ser realizados ejerciendo prudencia. Esto implica que los activos e ingresos así como las obligaciones y gastos no se sobrevaloren o se subvaloren. 
+Para que la información de los estados financieros se considere fiable, debe ser completa. 
+Comparabilidad 
+La información debe presentarse en forma comparativa, de manera que permita que los usuarios puedan observar la evolución de la empresa, la tendencia de su negocio, e, inclusive, pueda ser comparada con información de otras empresas. 
+La comparabilidad también se sustenta en la aplicación uniforme de políticas contables en la preparación y presentación de información financiera. Ello no significa que las empresas no deban modificar políticas contables, en tanto existan otras más relevantes y confiables. Los usuarios de la información financiera deben ser informados de las políticas contables empleadas en la preparación de los estados financieros, de cualquier cambio habido en ellas, y de los efectos de dichos cambios. 
+La información relevante y fiable está sujeta a las siguientes restricciones: 
+Oportunidad: Para que pueda ser útil la información financiera debe ser puesta en conocimiento de los usuarios oportunamente, a fin que no pierda su relevancia. Ello, sin perder de vista que en ciertos casos no se conozca cabalmente un hecho o no se haya concluido una transacción; en estos casos debe lograrse un equilibrio entre relevancia y fiabilidad. 
+Equilibrio entre costo y beneficio: Se refiere a una restricción más que a una característica cualitativa. Si bien es cierto la evaluación de beneficios y costos es un proceso de juicios de valor, se debe centrar en que los beneficios derivados de la información deben exceder los costos de suministrarla. 
+Equilibrio entre características cualitativas: Sin perder de vista el objetivo de los estados financieros, se propugna conseguir un equilibrio entre las características cualitativas citadas. 
+Imagen fiel / presentación razonable 
+La aplicación de las principales características cualitativas y de las normas contables apropiadas debe dar lugar a estados financieros presentados razonablemente. 
+Elementos de los estados financieros 
+Los estados financieros reflejan los efectos de las transacciones y otros sucesos de una empresa, agrupándolos por categorías, según sus características económicas, a los que se les llama elementos. En el caso del balance, los elementos que miden la situación financiera son: el activo, el pasivo y el patrimonio neto. En el estado de ganancias y pérdidas, los elementos son los ingresos y los gastos. 
+El Marco Conceptual no identifica ningún elemento exclusivo del estado de cambios en el patrimonio neto ni del estado de flujos de efectivo, el que más bien combina elementos del balance general y del estado de ganancias y pérdidas. 
+Las características esenciales de cada elemento se discuten a continuación. 
+Activo: recurso controlado por la entidad como resultado de sucesos pasados, del que la empresa espera obtener beneficios económicos. 
+Pasivo: obligación presente de la empresa, surgida de eventos pasados, en cuyo vencimiento, y para pagarla, la entidad espera desprenderse de recursos que incorporan beneficios económicos. 
+Patrimonio neto: parte residual de los activos de la empresa una vez deducidos los pasivos. 
+Ingresos: son incrementos en los beneficios económicos, producidos durante el período contable, en forma de entradas o incrementos de valor de los activos, o bien como disminuciones de las obligaciones que resultan en aumentos del patrimonio neto,  no están relacionados con las aportaciones de los propietarios a este patrimonio.  
+Gastos: disminuciones en los beneficios económicos, producidos en el período contable, en forma de salidas o disminuciones del valor de los activos, o bien originados en una obligación o aumento de los pasivos, que dan como resultado disminuciones en el patrimonio neto, y no están relacionados con las distribuciones realizadas a los propietarios de ese patrimonio. Reconocimiento de los elementos de los estados financieros  
+Debe reconocerse toda partida que cumpla la definición de elemento siempre que: 
+sea probable que cualquier beneficio económico asociado con la partida llegue a, o salga de la empresa; y 
+la partida tenga un costo o valor que pueda ser medido con fiabilidad. 
+Medición de los elementos de los estados financieros  
+Las bases de medición, o determinación de los importes monetarios en los que se reconocen los elementos de los estados financieros son: 
+Costo histórico: el activo se registra por el importe de efectivo y otras partidas que representan obligaciones, o por el valor razonable de la contrapartida entregada a cambio en el momento de la adquisición; el pasivo, por el valor del producto recibido a cambio de incurrir en una deuda, o, en otras circunstancias, por la cantidad de efectivo y otras partidas equivalentes que se espera pagar para satisfacer la correspondiente deuda, en el curso normal de la operación. 
+Costo corriente: el activo se lleva contablemente por el importe de efectivo y otras partidas equivalentes al efectivo, que debería pagarse si se adquiriese en la actualidad el mismo activo u otro equivalente; el pasivo, por el importe, sin descontar, de efectivo u otras partidas equivalentes al efectivo, que se requeriría para liquidar el pasivo en el momento presente. 
+Valor realizable (de liquidación): el activo se lleva contablemente por el importe de efectivo y otras partidas equivalentes al efectivo que podrían ser obtenidas, en el momento presente por la venta no forzada del mismo. El pasivo se lleva por sus valores de liquidación, es decir, por los importes, sin descontar, de efectivo u otros equivalentes del efectivo, que se espera utilizar en el pago de las deudas. 
+Valor presente: el activo se lleva contablemente a valor presente, descontando las entradas netas de efectivo que se espera genere la partida en el curso normal de la operación. El pasivo se lleva contablemente al valor presente, descontando las salidas netas de efectivo que se espera necesitar para pagar tales deudas, en el curso normal de operaciones. 
+Valor razonable 
+El valor razonable es el precio por el que puede ser adquirido un activo o pagado un pasivo, entre partes interesadas, debidamente informadas, en una transacción en condiciones de libre competencia. 
+El valor razonable es calculado por referencia a un valor de mercado fiable. En consecuencia, el precio de cotización en un mercado activo es la mejor referencia de valor razonable, entendiendo por mercado activo el que cumple las siguientes condiciones: 
+los bienes intercambiados son homogéneos; 
+concurren permanentemente compradores y vendedores; y 
+los precios son conocidos y de fácil acceso al público. Además, estos precios reflejan transacciones de mercado reales, actuales y producidas con regularidad. 
+4 Periodicidad y fechas de reporte de la información 
+Las empresas de servicios de saneamiento deberán presentar a ERSAPS dentro de los treinta (60) días calendario del cierre de cada año calendario, la siguiente información:  
+Reportes financieros:  
+Balance 
+Estado de ganancias y pérdidas o Estado de flujos de efectivo 
+Memorias 
+Otros reportes regulatorios 	 
+Activos fijos o Ingresos, costos y gastos o Ingresos y Cobranzas 
+Los reportes deberán presentarse según los formatos establecidos para cada uno de ellos en el presente Manual. El ERSAPS podrá solicitar información complementaria y de respaldo de los anteriores reportes cuando lo considerase necesario. 
+Adicionalmente y dentro de los primeros noventa (90) días calendario, contados a partir de la fecha de cierre del año regulatorio, deberá entregar a ERSAPS los reportes mencionados del año regulatorio terminado, debidamente auditados y con los formatos establecidos en el presente Manual.  
+ERSAPS definirá los medios tecnológicos mediante los cuales las empresas concesionarias deberán remitir dicha información. 
+5 Plan de Cuentas Regulatorio 
+5.1 Estructura del Plan de Cuentas Regulatorio 
+La codificación y denominación de los elementos, rubros, clasificaciones, cuentas de Mayor, subcuentas y cuentas analíticas previstas en el presente Manual, han sido estructuradas sobre una base que contempla distintos niveles de agregación, distinguiéndolos en el siguiente diagrama: 
+X  .  X  .  X  .  XX  .  XX . XX . XX 
+ 	Rubro 
+ 	Cuenta de Sub - Cuenta 
+ 	Mayor 
+Los elementos definidos en el presente Manual (y que se identifican con el primer dígito) son los siguientes:  1.  Activo 
+Pasivo 
+Patrimonio 
+Ingresos 
+Costos 
+Gastos  
+Los elementos 1, 2, y 3 comprenden los rubros y cuentas correspondientes a la situación financiera de la entidad y conforman el Balance General y los elementos 5, 6 y 7 constituyen las cuentas de gestión y determinan el Estado de Resultados. 
+5.2 Catálogo de Cuentas del Prestador 
+1	0	0	00	00	00 00
+1	1	0	00	00	00 00
+1	1	1	00	00	00 00
+1	1	1	01	00	00 00	Caja 
+1	1	1	01	01	00 00	Caja Chica
+1	1	1	01	02	00 00	Caja General
+1	1	1	02	00	00 00	Bancos
+1	1	1	02	01	00 00	Cuentas en Moneda Nacional
+1	1	1	02	02	00 00	Cuentas en Moneda Extranjera
+1	1	1	02	03	00 00	Otras Cuentas
+1	1	1	03	00	00 00	Fondos Sujetos a Restricción
+1	1	1	03	01	00 00	Fondo de Reposición y Reservas para Inversión
+1	1	2	00	00	00 00
+1	1	2	01	00	00 00	Títulos y Valores de Corto Plazo
+1	1	2	09	00	00 00	Otras inversiones de Corto Plazo
+1	1	209	01	00 00	Depósitos a Plazo Fijo
+1	1	3	00	00	00 00
+1	1	3	01	00	00 00	Cuentas por Cobrar
+1	1	3	01	01	00 00	Cuentas por Cobrar - Abonados
+1	1	3	01	01	01 00	Servicio de Agua Potable
+1	1	3	01	01	01 01	Con Medición - Doméstico
+1	1	3	01	01	01 02	Con Medición - Comercial
+1	1	3	01	01	01 03	Con Medición - Industrial
+1	1	3	01	01	01 04	Con medición - Gubernamental
+1	1	3	01	01	01 05	Sin Medición - Doméstico
+1	1	3	01	01	01 06	Sin Medición - Comercial
+1	1	3	01	01	01 07	Sin Medición - Industrial
+1	1	3	01	01	01 08	Sin Medición - Gubernamental
+1	1	3	01	01	02 00	Servicio de Alcantarillado
+1	1	3	01	01	02 01	Doméstico
+1	1	3	01	01	02 02	Comercial
+1	1	3	01	01	02 03	Industrial
+1	1	3	01	01	02 04	Gubernamental
+1	1	3	01	01	03 00	Servicios Colaterales Regulados
+1	1	3	01	01	03 01	Cargo por Conexión
+1	1	3	01	01	03 02	Cargo por Corte y Reconexión
+1	1	3	01	01	03 03	Cargo por agua potable mediante cisterna
+1	1	3	01	01	03 04	Otros Cargos
+1	1	3	01	01	04 00	Actividades No Reguladas
+1	1	3	01	02	00 00	Cuentas por Cobrar - Municipalidad 
+1	1	3	01	03	00 00	Cuentas por Cobrar - Bancos
+1	1	3	01	04	00 00	Cuentas por Cobrar - Empleados
+1	1	3	01	05	00 00	Cuentas por Cobrar - Tasa por Servicios SVA (ERSAPS)
+1	1	3	02	00	00 00	Documentos y Efectos por Cobrar
+1	1	3	02	01	00 00	Documentos y Efectos por Cobrar - Abonados
+1	1	3	02	01	01 00	Servicio de Agua Potable
+1	1	3	02	01	01 01	Con Medición - Doméstico
+1	1	3	02	01	01 02	Con Medición - Comercial
+1	1	3	02	01	01 03	Con Medición - Industrial
+1	1	3	02	01	01 04	Con medición - Gubernamental	 
+	1	02	01	01 05	Sin Medición - Doméstico
+	1	02	01	01 06	Sin Medición - Comercial
+	1	02	01	01 07	Sin Medición - Industrial
+	1	02	01	01 08	Sin Medición - Gubernamental
+	1	02	01	02 00	Servicio de Alcantarillado
+	1	02	01	02 01	Doméstico
+	1	02	01	02 02	Comercial
+	1	02	01	02 03	Industrial
+	1	02	01	02 04	Gubernamental
+	1	02	01	03 00	Servicios Colaterales Regulados
+	1	02	01	03 01	Cargo por Conexión
+1	1	3	02	01	03 02	Cargo por Corte y Reconexión
+1	1	3	02	01	03 03	Cargo por agua potable mediante cisterna
+1	1	3	02	01	03 04	Otros Cargos
+1	1	3	02	01	04 00	Actividades No Reguladas
+1	1	3	02	02	00 00	Documentos y Efectos por Cobrar - Municipalidad 
+1	1	3	02	03	00 00	Documentos y Efectos por Cobrar - Bancos
+1	1	3	02	04	00 00	Documentos y Efectos por Cobrar - Empleados
+1	1	3	02	05	00 00	Documentos y Efectos por Cobrar - Tasa por Servicios SVA (ERSAPS)
+1	1	3	03	00	00 00	Previsión para Deudores Incobrables
+1	1	3	03	01	00 00	Previsión para Cuentas por Cobrar - Abonados
+1	1	3	03	01	01 00	Servicio de Agua Potable
+1	1	3	03	01	01 01	Con Medición - Doméstico
+1	1	3	03	01	01 02	Con Medición - Comercial
+1	1	3	03	01	01 03	Con Medición - Industrial
+1	1	3	03	01	01 04	Con medición - Gubernamental
+1	1	3	03	01	01 05	Sin Medición - Doméstico
+1	1	3	03	01	01 06	Sin Medición - Comercial
+1	1	3	03	01	01 07	Sin Medición - Industrial
+1	1	3	03	01	01 08	Sin Medición - Gubernamental
+1	1	3	03	01	02 00	Servicio de Alcantarillado
+1	1	3	03	01	02 01	Doméstico
+1	1	3	03	01	02 02	Comercial
+1	1	3	03	01	02 03	Industrial
+1	1	3	03	01	02 04	Gubernamental
+1	1	3	03	01	03 00	Servicios Colaterales Regulados
+1	1	3	03	01	03 01	Cargo por Conexión
+1	1	3	03	01	03 02	Cargo por Corte y Reconexión
+1	1	3	03	01	03 03	Cargo por agua potable mediante cisterna
+1	1	3	03	01	03 04	Otros Cargos
+1	1	3	03	01	04 00	Actividades No Reguladas
+1	1	3	03	02	00 00	Previsión para Cuentas por Cobrar - Municipalidad 
+1	1	3	03	03	00 00	Previsión para Cuentas por Cobrar - Bancos
+1	1	3	03	04	00 00	Previsión para Cuentas por Cobrar - Empleados
+1	1	3	03	05	00 00	Previsión para Cuentas por Cobrar - Tasa por Servicios SVA (ERSAPS)
+1	1	3	03	06	00 00	Previsión para Documentos y Efectos por Cobrar - Abonados
+1	1	3	03	06	01 00	Servicio de Agua Potable
+1	1	3	03	06	01 01	Con Medición - Doméstico
+1	1	3	03	06	01 02	Con Medición - Comercial
+1	1	3	03	06	01 03	Con Medición - Industrial
+1	1	3	03	06	01 04	Con medición - Gubernamental
+1	1	3	03	06	01 05	Sin Medición - Doméstico
+1	1	3	03	06	01 06	Sin Medición - Comercial
+1	1	3	03	06	01 07	Sin Medición - Industrial
+1	1	3	03	06	01 08	Sin Medición - Gubernamental
+1	1	3	03	06	02 00	Servicio de Alcantarillado
+1	1	3	03	06	02 01	Doméstico
+1	1	3	03	06	02 02	Comercial
+1	1	3	03	06	02 03	Industrial	  
+1	1	3	03	06	02 04	Gubernamental
+1	1	3	03	06	03 00	Servicios Colaterales Regulados
+1	1	3	03	06	03 01	Cargo por Conexión
+1	1	3	03	06	03 02	Cargo por Corte y Reconexión
+1	1	3	03	06	03 03	Cargo por agua potable mediante cisterna
+1	1	3	03	06	03 04	Otros Cargos
+1	1	3	03	06	04 00	Actividades No Reguladas
+1	1	3	03	07	00 00	Previsión para Documentos y Efectos por Cobrar - Municipalidad 
+1	1	3	03	08	00 00	Previsión para Documentos y Efectos por Cobrar - Bancos
+1	1	3	03	09	00 00	Previsión para Documentos y Efectos por Cobrar - Empleados
+1	1	3	03	10	00 00	Previsión para Documentos y Efectos por Cobrar - Tasa por Servicios SVA (ERSAPS)
+1	1	3	04	00	00 00	Anticipos
+1	1	3	05	00	00 00	Garantías
+1	1	3	05	01	00 00	Garantías por Alquileres 
+1	1	3	05	02	00 00	Garantías Varias
+1	1	3	09	00	00 00	Otras Cuentas por Cobrar
+1	1	4	00	00	00 00
+1	1	4	01	00	00 00	Materiales y Suministros
+1	1	4	01	01	00 00	Materiales (Ej. Tubería, Accesorios, material de Oficina, etc.) 
+1	1	4	01	02	00 00	Insumos (productos químicos, etc.)
+1	1	4	01	03	00 00	Combustibles y Lubricantes
+1	1	4	01	04	00 00	Repuestos
+1	1	4	02	00	00 00	Previsiones para pérdidas de Inventarios
+1	1	4	09	00	00 00	Otros Inventarios
+1	1	5	00	00	00 00
+1	1	5	01	00	00 00	Seguros 
+1	1	5	02	00	00 00	Alquileres
+1	1	5	03	00	00 00	Intereses 
+1	1	5	04	00	00 00	Impuestos
+1	2	0	00	00	00 00
+1	2	1	00	00	00 00
+1	2	2	00	00	00 00
+1	2	2	01	00	00 00	Títulos y Valores a Largo Plazo
+1	2	2	09	00	00 00	Otras Inversiones a Largo Plazo
+1	2	3	00	00	00 00
+1	2	3	01	00	00 00	Tierras y Terrenos
+1	2	3	01	01	00 00	Tierras y Terrenos
+1	2	3	01	01	01 00	Servicio de Agua Potable
+1	2	3	01	01	01 01	Adquirido con Recursos Propios
+1	2	3	01	01	01 02	Recibido en Donación 
+1	2	3	01	01	01 03	Recibido en Transferencia
+1	2	3	01	01	02 00	Servicio de Alcantarillado
+1	2	3	01	01	02 01	Adquirido con Recursos Propios
+1	2	3	01	01	02 02	Recibido en Donación 
+1	2	3	01	01	02 03	Recibido en Transferencia
+1	2	3	01	01	03 00	Servicios Colaterales Regulados
+1	2	3	01	01	03 01	Adquirido con Recursos Propios
+1	2	3	01	01	03 02	Recibido en Donación 
+1	2	3	01	01	03 03	Recibido en Transferencia
+1	2	3	01	01	04 00	Actividades No Reguladas
+1	2	3	01	01	05 00	Comunes
+1	2	3	01	01	05 01	Adquirido con Recursos Propios
+1	2	3	01	01	05 02	Recibido en Donación 
+1	2	3	01	01	05 03	Recibido en Transferencia
+1	2	3	01	02	00 00	Pérdidas por Deterioro de valor de Tierras y Terrenos  
+1	2	3	01	02	01 00	Servicio de Agua Potable
+1	2	3	01	02	01 01	Adquirido con Recursos Propios
+1	2	3	01	02	01 02	Recibido en Donación 
+1	2	3	01	02	01 03	Recibido en Transferencia
+1	2	3	01	02	02 00	Servicio de Alcantarillado
+1	2	3	01	02	02 01	Adquirido con Recursos Propios	 
+	01	02	02 02	Recibido en Donación 
+	01	02	02 03	Recibido en Transferencia
+	01	02	03 00	Servicios Colaterales Regulados
+	01	02	03 01	Adquirido con Recursos Propios
+	01	02	03 02	Recibido en Donación 
+	01	02	03 03	Recibido en Transferencia
+	01	02	04 00	Actividades No Reguladas
+	01	02	05 00	Comunes
+	01	02	05 01	Adquirido con Recursos Propios
+	01	02	05 02	Recibido en Donación 
+	01	02	05 03	Recibido en Transferencia
+1	2	3	01	03	00 00	Revalúo de Tierras y Terrenos 
+1	2	3	01	03	01 00	Servicio de Agua Potable
+1	2	3	01	03	01 01	Adquirido con Recursos Propios
+1	2	3	01	03	01 02	Recibido en Donación 
+1	2	3	01	03	01 03	Recibido en Transferencia
+1	2	3	01	03	02 00	Servicio de Alcantarillado
+1	2	3	01	03	02 01	Adquirido con Recursos Propios
+1	2	3	01	03	02 02	Recibido en Donación 
+1	2	3	01	03	02 03	Recibido en Transferencia
+1	2	3	01	03	03 00	Servicios Colaterales Regulados
+1	2	3	01	03	03 01	Adquirido con Recursos Propios
+1	2	3	01	03	03 02	Recibido en Donación 
+1	2	3	01	03	03 03	Recibido en Transferencia
+1	2	3	01	03	04 00	Actividades No Reguladas
+1	2	3	01	03	05 00	Comunes
+1	2	3	01	03	05 01	Adquirido con Recursos Propios
+1	2	3	01	03	05 02	Recibido en Donación 
+1	2	3	01	03	05 03	Recibido en Transferencia
+1	2	3	02	00	00 00	Edificios
+1	2	3	02	01	00 00	Edificios
+1	2	3	02	01	01 00	Servicio de Agua Potable
+1	2	3	02	01	01 01	Adquirido con Recursos Propios
+1	2	3	02	01	01 02	Recibido en Donación 
+1	2	3	02	01	01 03	Recibido en Transferencia
+1	2	3	02	01	02 00	Servicio de Alcantarillado
+1	2	3	02	01	02 01	Adquirido con Recursos Propios
+1	2	3	02	01	02 02	Recibido en Donación 
+1	2	3	02	01	02 03	Recibido en Transferencia
+1	2	3	02	01	03 00	Servicios Colaterales Regulados
+1	2	3	02	01	03 01	Adquirido con Recursos Propios
+1	2	3	02	01	03 02	Recibido en Donación 
+1	2	3	02	01	03 03	Recibido en Transferencia
+1	2	3	02	01	04 00	Actividades No Reguladas
+1	2	3	02	01	05 00	Comunes
+1	2	3	02	01	05 01	Adquirido con Recursos Propios
+1	2	3	02	01	05 02	Recibido en Donación 
+1	2	3	02	01	05 03	Recibido en Transferencia
+1	2	3	02	02	00 00	Pérdidas por Deterioro de Edificios  
+1	2	3	02	02	01 00	Servicio de Agua Potable
+1	2	3	02	02	01 01	Adquirido con Recursos Propios
+1	2	3	02	02	01 02	Recibido en Donación 
+1	2	3	02	02	01 03	Recibido en Transferencia
+1	2	3	02	02	02 00	Servicio de Alcantarillado
+1	2	3	02	02	02 01	Adquirido con Recursos Propios
+1	2	3	02	02	02 02	Recibido en Donación 
+1	2	3	02	02	02 03	Recibido en Transferencia
+1	2	3	02	02	03 00	Servicios Colaterales Regulados
+1	2	3	02	02	03 01	Adquirido con Recursos Propios	 
+	02	02	03 02	Recibido en Donación 
+	02	02	03 03	Recibido en Transferencia
+	02	02	04 00	Actividades No Reguladas
+	02	02	05 00	Comunes
+	02	02	05 01	Adquirido con Recursos Propios
+	02	02	05 02	Recibido en Donación 
+	02	02	05 03	Recibido en Transferencia
+	02	03	00 00	Mejoras de Edificios 
+	02	03	01 00	Servicio de Agua Potable
+	02	03	01 01	Adquirido con Recursos Propios
+	02	03	01 02	Recibido en Donación 
+1	2	3	02	03	01 03	Recibido en Transferencia
+1	2	3	02	03	02 00	Servicio de Alcantarillado
+1	2	3	02	03	02 01	Adquirido con Recursos Propios
+1	2	3	02	03	02 02	Recibido en Donación 
+1	2	3	02	03	02 03	Recibido en Transferencia
+1	2	3	02	03	03 00	Servicios Colaterales Regulados
+1	2	3	02	03	03 01	Adquirido con Recursos Propios
+1	2	3	02	03	03 02	Recibido en Donación 
+1	2	3	02	03	03 03	Recibido en Transferencia
+1	2	3	02	03	04 00	Actividades No Reguladas
+1	2	3	02	03	05 00	Comunes
+1	2	3	02	03	05 01	Adquirido con Recursos Propios
+1	2	3	02	03	05 02	Recibido en Donación 
+1	2	3	02	03	05 03	Recibido en Transferencia
+1	2	3	02	04	00 00	Revalúo de Edificios 
+1	2	3	02	04	01 00	Servicio de Agua Potable
+1	2	3	02	04	01 01	Adquirido con Recursos Propios
+1	2	3	02	04	01 02	Recibido en Donación 
+1	2	3	02	04	01 03	Recibido en Transferencia
+1	2	3	02	04	02 00	Servicio de Alcantarillado
+1	2	3	02	04	02 01	Adquirido con Recursos Propios
+1	2	3	02	04	02 02	Recibido en Donación 
+1	2	3	02	04	02 03	Recibido en Transferencia
+1	2	3	02	04	03 00	Servicios Colaterales Regulados
+1	2	3	02	04	03 01	Adquirido con Recursos Propios
+1	2	3	02	04	03 02	Recibido en Donación 
+1	2	3	02	04	03 03	Recibido en Transferencia
+1	2	3	02	04	04 00	Actividades No Reguladas
+1	2	3	02	04	05 00	Comunes
+1	2	3	02	04	05 01	Adquirido con Recursos Propios
+1	2	3	02	04	05 02	Recibido en Donación 
+1	2	3	02	04	05 03	Recibido en Transferencia
+1	2	3	03	00	00 00	Instalaciones
+1	2	3	03	01	00 00	Instalaciones
+1	2	3	03	01	01 00	Servicio de Agua Potable
+1	2	3	03	01	01 01	Adquirido con Recursos Propios
+1	2	3	03	01	01 02	Recibido en Donación 
+1	2	3	03	01	01 03	Recibido en Transferencia
+1	2	3	03	01	02 00	Servicio de Alcantarillado
+1	2	3	03	01	02 01	Adquirido con Recursos Propios
+1	2	3	03	01	02 02	Recibido en Donación 
+1	2	3	03	01	02 03	Recibido en Transferencia
+1	2	3	03	01	03 00	Servicios Colaterales Regulados
+1	2	3	03	01	03 01	Adquirido con Recursos Propios
+1	2	3	03	01	03 02	Recibido en Donación 
+1	2	3	03	01	03 03	Recibido en Transferencia
+1	2	3	03	01	04 00	Actividades No Reguladas
+1	2	3	03	01	05 00	Comunes	 
+	03	01	05 01	Adquirido con Recursos Propios
+	03	01	05 02	Recibido en Donación 
+	03	01	05 03	Recibido en Transferencia
+03	02	00 00	Pérdidas por Deterioro de Instalaciones 03	02	01 00	Servicio de Agua Potable
+	03	02	01 01	Adquirido con Recursos Propios
+	03	02	01 02	Recibido en Donación 
+	03	02	01 03	Recibido en Transferencia
+	03	02	02 00	Servicio de Alcantarillado
+	03	02	02 01	Adquirido con Recursos Propios
+	03	02	02 02	Recibido en Donación 
+1	2	3	03	02	02 03	Recibido en Transferencia
+1	2	3	03	02	03 00	Servicios Colaterales Regulados
+1	2	3	03	02	03 01	Adquirido con Recursos Propios
+1	2	3	03	02	03 02	Recibido en Donación 
+1	2	3	03	02	03 03	Recibido en Transferencia
+1	2	3	03	02	04 00	Actividades No Reguladas
+1	2	3	03	02	05 00	Comunes
+1	2	3	03	02	05 01	Adquirido con Recursos Propios
+1	2	3	03	02	05 02	Recibido en Donación 
+1	2	3	03	02	05 03	Recibido en Transferencia
+1	2	3	03	03	00 00	Mejoras de Instalaciones 
+1	2	3	03	03	01 00	Servicio de Agua Potable
+1	2	3	03	03	01 01	Adquirido con Recursos Propios
+1	2	3	03	03	01 02	Recibido en Donación 
+1	2	3	03	03	01 03	Recibido en Transferencia
+1	2	3	03	03	02 00	Servicio de Alcantarillado
+1	2	3	03	03	02 01	Adquirido con Recursos Propios
+1	2	3	03	03	02 02	Recibido en Donación 
+1	2	3	03	03	02 03	Recibido en Transferencia
+1	2	3	03	03	03 00	Servicios Colaterales Regulados
+1	2	3	03	03	03 01	Adquirido con Recursos Propios
+1	2	3	03	03	03 02	Recibido en Donación 
+1	2	3	03	03	03 03	Recibido en Transferencia
+1	2	3	03	03	04 00	Actividades No Reguladas
+1	2	3	03	03	05 00	Comunes
+1	2	3	03	03	05 01	Adquirido con Recursos Propios
+1	2	3	03	03	05 02	Recibido en Donación 
+1	2	3	03	03	05 03	Recibido en Transferencia
+1	2	3	03	04	00 00	Revalúo de Instalaciones
+1	2	3	03	04	01 00	Servicio de Agua Potable
+1	2	3	03	04	01 01	Adquirido con Recursos Propios
+1	2	3	03	04	01 02	Recibido en Donación 
+1	2	3	03	04	01 03	Recibido en Transferencia
+1	2	3	03	04	02 00	Servicio de Alcantarillado
+1	2	3	03	04	02 01	Adquirido con Recursos Propios
+1	2	3	03	04	02 02	Recibido en Donación 
+1	2	3	03	04	02 03	Recibido en Transferencia
+1	2	3	03	04	03 00	Servicios Colaterales Regulados
+1	2	3	03	04	03 01	Adquirido con Recursos Propios
+1	2	3	03	04	03 02	Recibido en Donación 
+1	2	3	03	04	03 03	Recibido en Transferencia
+1	2	3	03	04	04 00	Actividades No Reguladas
+1	2	3	03	04	05 00	Comunes
+1	2	3	03	04	05 01	Adquirido con Recursos Propios
+1	2	3	03	04	05 02	Recibido en Donación 
+1	2	3	03	04	05 03	Recibido en Transferencia	 
+	04	Equipos de Oficina
+	04	Equipos de Oficina
+	04	Servicio de Agua Potable
+	04	Adquirido con Recursos Propios
+	04	Recibido en Donación 
+	04	Recibido en Transferencia
+	04	Servicio de Alcantarillado
+	04	Adquirido con Recursos Propios
+	04	Recibido en Donación 
+	04	Recibido en Transferencia
+	04	Servicios Colaterales Regulados
+1	2	3	04	01	03 01	Adquirido con Recursos Propios
+1	2	3	04	01	03 02	Recibido en Donación 
+1	2	3	04	01	03 03	Recibido en Transferencia
+1	2	3	04	01	04 00	Actividades No Reguladas
+1	2	3	04	01	05 00	Comunes
+1	2	3	04	01	05 01	Adquirido con Recursos Propios
+1	2	3	04	01	05 02	Recibido en Donación 
+1	2	3	04	01	05 03	Recibido en Transferencia
+1	2	3	04	02	00 00	Pérdidas por Deterioro de Equipos de Oficina
+1	2	3	04	02	01 00	Servicio de Agua Potable
+1	2	3	04	02	01 01	Adquirido con Recursos Propios
+1	2	3	04	02	01 02	Recibido en Donación 
+1	2	3	04	02	01 03	Recibido en Transferencia
+1	2	3	04	02	02 00	Servicio de Alcantarillado
+1	2	3	04	02	02 01	Adquirido con Recursos Propios
+1	2	3	04	02	02 02	Recibido en Donación 
+1	2	3	04	02	02 03	Recibido en Transferencia
+1	2	3	04	02	03 00	Servicios Colaterales Regulados
+1	2	3	04	02	03 01	Adquirido con Recursos Propios
+1	2	3	04	02	03 02	Recibido en Donación 
+1	2	3	04	02	03 03	Recibido en Transferencia
+1	2	3	04	02	04 00	Actividades No Reguladas
+1	2	3	04	02	05 00	Comunes
+1	2	3	04	02	05 01	Adquirido con Recursos Propios
+1	2	3	04	02	05 02	Recibido en Donación 
+1	2	3	04	02	05 03	Recibido en Transferencia
+1	2	3	04	03	05 01	Adquirido con Recursos Propios
+1	2	3	04	03	05 02	Recibido en Donación 
+1	2	3	04	03	05 03	Recibido en Transferencia
+1	2	3	04	03	00 00	Revalúo de Equipos de Oficina
+1	2	3	04	03	01 00	Servicio de Agua Potable
+1	2	3	04	03	01 01	Adquirido con Recursos Propios
+1	2	3	04	03	01 02	Recibido en Donación 
+1	2	3	04	03	01 03	Recibido en Transferencia
+1	2	3	04	03	02 00	Servicio de Alcantarillado
+1	2	3	04	03	02 01	Adquirido con Recursos Propios
+1	2	3	04	03	02 02	Recibido en Donación 
+1	2	3	04	03	02 03	Recibido en Transferencia
+1	2	3	04	03	03 00	Servicios Colaterales Regulados
+1	2	3	04	03	03 01	Adquirido con Recursos Propios
+1	2	3	04	03	03 02	Recibido en Donación 
+1	2	3	04	03	03 03	Recibido en Transferencia
+1	2	3	04	03	04 00	Actividades No Reguladas
+1	2	3	04	03	05 00	Comunes
+1	2	3	04	03	05 01	Adquirido con Recursos Propios
+1	2	3	04	03	05 02	Recibido en Donación 
+1	2	3	04	03	05 03	Recibido en Transferencia	 
+	05	Equipos de Transporte
+	05	Equipos de Transporte
+	05	Servicio de Agua Potable
+	05	Adquirido con Recursos Propios
+	05	Recibido en Donación 
+	05	Recibido en Transferencia
+	05	Servicio de Alcantarillado
+	05	Adquirido con Recursos Propios
+	05	Recibido en Donación 
+	05	Recibido en Transferencia
+	05	Servicios Colaterales Regulados
+1	2	3	05	01	03 01	Adquirido con Recursos Propios
+1	2	3	05	01	03 02	Recibido en Donación 
+1	2	3	05	01	03 03	Recibido en Transferencia
+1	2	3	05	01	04 00	Actividades No Reguladas
+1	2	3	05	01	05 00	Comunes
+1	2	3	05	01	05 01	Adquirido con Recursos Propios
+1	2	3	05	01	05 02	Recibido en Donación 
+1	2	3	05	01	05 03	Recibido en Transferencia
+1	2	3	05	02	00 00	Pérdidas por Deterioro de Equipos de Transporte
+1	2	3	05	02	01 00	Servicio de Agua Potable
+1	2	3	05	02	01 01	Adquirido con Recursos Propios
+1	2	3	05	02	01 02	Recibido en Donación 
+1	2	3	05	02	01 03	Recibido en Transferencia
+1	2	3	05	02	02 00	Servicio de Alcantarillado
+1	2	3	05	02	02 01	Adquirido con Recursos Propios
+1	2	3	05	02	02 02	Recibido en Donación 
+1	2	3	05	02	02 03	Recibido en Transferencia
+1	2	3	05	02	03 00	Servicios Colaterales Regulados
+1	2	3	05	02	03 01	Adquirido con Recursos Propios
+1	2	3	05	02	03 02	Recibido en Donación 
+1	2	3	05	02	03 03	Recibido en Transferencia
+1	2	3	05	02	04 00	Actividades No Reguladas
+1	2	3	05	02	05 00	Comunes
+1	2	3	05	02	05 01	Adquirido con Recursos Propios
+1	2	3	05	02	05 02	Recibido en Donación 
+1	2	3	05	02	05 03	Recibido en Transferencia
+1	2	3	05	03	00 00	Revalúo de Equipos de Transporte
+1	2	3	05	03	01 00	Servicio de Agua Potable
+1	2	3	05	03	01 01	Adquirido con Recursos Propios
+1	2	3	05	03	01 02	Recibido en Donación 
+1	2	3	05	03	01 03	Recibido en Transferencia
+1	2	3	05	03	02 00	Servicio de Alcantarillado
+1	2	3	05	03	02 01	Adquirido con Recursos Propios
+1	2	3	05	03	02 02	Recibido en Donación 
+1	2	3	05	03	02 03	Recibido en Transferencia
+1	2	3	05	03	03 00	Servicios Colaterales Regulados
+1	2	3	05	03	03 01	Adquirido con Recursos Propios
+1	2	3	05	03	03 02	Recibido en Donación 
+1	2	3	05	03	03 03	Recibido en Transferencia
+1	2	3	05	03	04 00	Actividades No Reguladas
+1	2	3	05	03	05 00	Comunes
+1	2	3	05	03	05 01	Adquirido con Recursos Propios
+1	2	3	05	03	05 02	Recibido en Donación 
+	05	  
+	06	Equipos de Producción
+	06	Equipos de Producción
+	06	Servicio de Agua Potable
+	06	Adquirido con Recursos Propios
+	06	Recibido en Donación 
+	06	Recibido en Transferencia
+	06	Servicio de Alcantarillado
+	06	Adquirido con Recursos Propios
+	06	Recibido en Donación 
+	06	Recibido en Transferencia
+	06	Servicios Colaterales Regulados
+1	2	3	06	01	03 01	Adquirido con Recursos Propios
+1	2	3	06	01	03 02	Recibido en Donación 
+1	2	3	06	01	03 03	Recibido en Transferencia
+1	2	3	06	01	04 00	Actividades No Reguladas
+1	2	3	06	01	05 00	Comunes
+1	2	3	06	01	05 01	Adquirido con Recursos Propios
+1	2	3	06	01	05 02	Recibido en Donación 
+1	2	3	06	01	05 03	Recibido en Transferencia
+1	2	3	06	02	00 00	Pérdidas por Deterioro de Equipos de Producción
+1	2	3	06	02	01 00	Servicio de Agua Potable
+1	2	3	06	02	01 01	Adquirido con Recursos Propios
+1	2	3	06	02	01 02	Recibido en Donación 
+1	2	3	06	02	01 03	Recibido en Transferencia
+1	2	3	06	02	02 00	Servicio de Alcantarillado
+1	2	3	06	02	02 01	Adquirido con Recursos Propios
+1	2	3	06	02	02 02	Recibido en Donación 
+1	2	3	06	02	02 03	Recibido en Transferencia
+1	2	3	06	02	03 00	Servicios Colaterales Regulados
+1	2	3	06	02	03 01	Adquirido con Recursos Propios
+1	2	3	06	02	03 02	Recibido en Donación 
+1	2	3	06	02	03 03	Recibido en Transferencia
+1	2	3	06	02	04 00	Actividades No Reguladas
+1	2	3	06	02	05 00	Comunes
+1	2	3	06	02	05 01	Adquirido con Recursos Propios
+1	2	3	06	02	05 02	Recibido en Donación 
+1	2	3	06	02	05 03	Recibido en Transferencia
+1	2	3	06	03	00 00	Revalúo de Equipos de Producción
+1	2	3	06	03	01 00	Servicio de Agua Potable
+1	2	3	06	03	01 01	Adquirido con Recursos Propios
+1	2	3	06	03	01 02	Recibido en Donación 
+1	2	3	06	03	01 03	Recibido en Transferencia
+1	2	3	06	03	02 00	Servicio de Alcantarillado
+1	2	3	06	03	02 01	Adquirido con Recursos Propios
+1	2	3	06	03	02 02	Recibido en Donación 
+1	2	3	06	03	02 03	Recibido en Transferencia
+1	2	3	06	03	03 00	Servicios Colaterales Regulados
+1	2	3	06	03	03 01	Adquirido con Recursos Propios
+1	2	3	06	03	03 02	Recibido en Donación 
+1	2	3	06	03	03 03	Recibido en Transferencia
+1	2	3	06	03	04 00	Actividades No Reguladas
+1	2	3	06	03	05 00	Comunes
+1	2	3	06	03	05 01	Adquirido con Recursos Propios
+1	2	3	06	03	05 02	Recibido en Donación 
+	06	 
+	07	Equipos de Comunicaciones
+	07	Equipos de Comunicaciones
+	07	Servicio de Agua Potable
+	07	Adquirido con Recursos Propios
+	07	Recibido en Donación 
+	07	Recibido en Transferencia
+	07	Servicio de Alcantarillado
+	07	Adquirido con Recursos Propios
+	07	Recibido en Donación 
+	07	Recibido en Transferencia
+	07	Servicios Colaterales Regulados
+1	2	3	07	01	03 01	Adquirido con Recursos Propios
+1	2	3	07	01	03 02	Recibido en Donación 
+1	2	3	07	01	03 03	Recibido en Transferencia
+1	2	3	07	01	04 00	Actividades No Reguladas
+1	2	3	07	01	05 00	Comunes
+1	2	3	07	01	05 01	Adquirido con Recursos Propios
+1	2	3	07	01	05 02	Recibido en Donación 
+1	2	3	07	01	05 03	Recibido en Transferencia
+1	2	3	07	02	00 00	Pérdidas por Deterioro de Equipos de Comunicaciones
+1	2	3	07	02	01 00	Servicio de Agua Potable
+1	2	3	07	02	01 01	Adquirido con Recursos Propios
+1	2	3	07	02	01 02	Recibido en Donación 
+1	2	3	07	02	01 03	Recibido en Transferencia
+1	2	3	07	02	02 00	Servicio de Alcantarillado
+1	2	3	07	02	02 01	Adquirido con Recursos Propios
+1	2	3	07	02	02 02	Recibido en Donación 
+1	2	3	07	02	02 03	Recibido en Transferencia
+1	2	3	07	02	03 00	Servicios Colaterales Regulados
+1	2	3	07	02	03 01	Adquirido con Recursos Propios
+1	2	3	07	02	03 02	Recibido en Donación 
+1	2	3	07	02	03 03	Recibido en Transferencia
+1	2	3	07	02	04 00	Actividades No Reguladas
+1	2	3	07	02	05 00	Comunes
+1	2	3	07	02	05 01	Adquirido con Recursos Propios
+1	2	3	07	02	05 02	Recibido en Donación 
+1	2	3	07	02	05 03	Recibido en Transferencia
+1	2	3	07	03	00 00	Revalúo de Equipos de Comunicaciones
+1	2	3	07	03	01 00	Servicio de Agua Potable
+1	2	3	07	03	01 01	Adquirido con Recursos Propios
+1	2	3	07	03	01 02	Recibido en Donación 
+1	2	3	07	03	01 03	Recibido en Transferencia
+1	2	3	07	03	02 00	Servicio de Alcantarillado
+1	2	3	07	03	02 01	Adquirido con Recursos Propios
+1	2	3	07	03	02 02	Recibido en Donación 
+1	2	3	07	03	02 03	Recibido en Transferencia
+1	2	3	07	03	03 00	Servicios Colaterales Regulados
+1	2	3	07	03	03 01	Adquirido con Recursos Propios
+1	2	3	07	03	03 02	Recibido en Donación 
+1	2	3	07	03	03 03	Recibido en Transferencia
+1	2	3	07	03	04 00	Actividades No Reguladas
+1	2	3	07	03	05 00	Comunes
+1	2	3	07	03	05 01	Adquirido con Recursos Propios
+1	2	3	07	03	05 02	Recibido en Donación 
+	07	  
+	08	Equipos de Informática
+	08	Equipos de Informática
+	08	Servicio de Agua Potable
+	08	Adquirido con Recursos Propios
+	08	Recibido en Donación 
+	08	Recibido en Transferencia
+	08	Servicio de Alcantarillado
+	08	Adquirido con Recursos Propios
+	08	Recibido en Donación 
+	08	Recibido en Transferencia
+	08	Servicios Colaterales Regulados
+1	2	3	08	01	03 01	Adquirido con Recursos Propios
+1	2	3	08	01	03 02	Recibido en Donación 
+1	2	3	08	01	03 03	Recibido en Transferencia
+1	2	3	08	01	04 00	Actividades No Reguladas
+1	2	3	08	01	05 00	Comunes
+1	2	3	08	01	05 01	Adquirido con Recursos Propios
+1	2	3	08	01	05 02	Recibido en Donación 
+1	2	3	08	01	05 03	Recibido en Transferencia
+1	2	3	08	02	00 00	Pérdidas por Deterioro de Equipos de Informática
+1	2	3	08	02	01 00	Servicio de Agua Potable
+1	2	3	08	02	01 01	Adquirido con Recursos Propios
+1	2	3	08	02	01 02	Recibido en Donación 
+1	2	3	08	02	01 03	Recibido en Transferencia
+1	2	3	08	02	02 00	Servicio de Alcantarillado
+1	2	3	08	02	02 01	Adquirido con Recursos Propios
+1	2	3	08	02	02 02	Recibido en Donación 
+1	2	3	08	02	02 03	Recibido en Transferencia
+1	2	3	08	02	03 00	Servicios Colaterales Regulados
+1	2	3	08	02	03 01	Adquirido con Recursos Propios
+1	2	3	08	02	03 02	Recibido en Donación 
+1	2	3	08	02	03 03	Recibido en Transferencia
+1	2	3	08	02	04 00	Actividades No Reguladas
+1	2	3	08	02	05 00	Comunes
+1	2	3	08	02	05 01	Adquirido con Recursos Propios
+1	2	3	08	02	05 02	Recibido en Donación 
+1	2	3	08	02	05 03	Recibido en Transferencia
+1	2	3	08	03	00 00	Revalúo de Equipos de Informática
+1	2	3	08	03	01 00	Servicio de Agua Potable
+1	2	3	08	03	01 01	Adquirido con Recursos Propios
+1	2	3	08	03	01 02	Recibido en Donación 
+1	2	3	08	03	01 03	Recibido en Transferencia
+1	2	3	08	03	02 00	Servicio de Alcantarillado
+1	2	3	08	03	02 01	Adquirido con Recursos Propios
+1	2	3	08	03	02 02	Recibido en Donación 
+1	2	3	08	03	02 03	Recibido en Transferencia
+1	2	3	08	03	03 00	Servicios Colaterales Regulados
+1	2	3	08	03	03 01	Adquirido con Recursos Propios
+1	2	3	08	03	03 02	Recibido en Donación 
+1	2	3	08	03	03 03	Recibido en Transferencia
+1	2	3	08	03	04 00	Actividades No Reguladas
+1	2	3	08	03	05 00	Comunes
+1	2	3	08	03	05 01	Adquirido con Recursos Propios
+1	2	3	08	03	05 02	Recibido en Donación 
+	08	 
+	09	00	Depreciación Acumulada
+	09	01	00 00	Depreciaciones Acumuladas Edificios
+	09	01	01 00	Servicio de Agua Potable
+	09	01	01 01	Adquirido con Recursos Propios
+	09	01	01 02	Recibido en Donación 
+	09	01	01 03	Recibido en Transferencia
+	09	01	02 00	Servicio de Alcantarillado
+1	09	01	02 01	Adquirido con Recursos Propios
+1	09	01	02 02	Recibido en Donación 
+1	2	3	09	01	02 03	Recibido en Transferencia
+1	2	3	09	01	03 00	Servicios Colaterales Regulados
+1	2	3	09	01	03 01	Adquirido con Recursos Propios
+1	2	3	09	01	03 02	Recibido en Donación 
+1	2	3	09	01	03 03	Recibido en Transferencia
+1	2	3	09	01	04 00	Actividades No Reguladas
+1	2	3	09	01	05 00	Comunes
+1	2	3	09	01	05 01	Adquirido con Recursos Propios
+1	2	3	09	01	05 02	Recibido en Donación 
+1	2	3	09	01	05 03	Recibido en Transferencia
+1	2	3	09	02	00 00	Depreciaciones Acumuladas Instalaciones
+1	2	3	09	02	01 00	Servicio de Agua Potable
+1	2	3	09	02	01 01	Adquirido con Recursos Propios
+1	2	3	09	02	01 02	Recibido en Donación 
+1	2	3	09	02	01 03	Recibido en Transferencia
+1	2	3	09	02	02 00	Servicio de Alcantarillado
+1	2	3	09	02	02 01	Adquirido con Recursos Propios
+1	2	3	09	02	02 02	Recibido en Donación 
+1	2	3	09	02	02 03	Recibido en Transferencia
+1	2	3	09	02	03 00	Servicios Colaterales Regulados
+1	2	3	09	02	03 01	Adquirido con Recursos Propios
+1	2	3	09	02	03 02	Recibido en Donación 
+1	2	3	09	02	03 03	Recibido en Transferencia
+1	2	3	09	02	04 00	Actividades No Reguladas
+1	2	3	09	02	05 00	Comunes
+1	2	3	09	02	05 01	Adquirido con Recursos Propios
+1	2	3	09	02	05 02	Recibido en Donación 
+1	2	3	09	02	05 03	Recibido en Transferencia
+1	2	3	09	03	00 00	Depreciaciones Acumuladas Equipos de Oficina
+1	2	3	09	03	01 00	Servicio de Agua Potable
+1	2	3	09	03	01 01	Adquirido con Recursos Propios
+1	2	3	09	03	01 02	Recibido en Donación 
+1	2	3	09	03	01 03	Recibido en Transferencia
+1	2	3	09	03	02 00	Servicio de Alcantarillado
+1	2	3	09	03	02 01	Adquirido con Recursos Propios
+1	2	3	09	03	02 02	Recibido en Donación 
+1	2	3	09	03	02 03	Recibido en Transferencia
+1	2	3	09	03	03 00	Servicios Colaterales Regulados
+1	2	3	09	03	03 01	Adquirido con Recursos Propios
+1	2	3	09	03	03 02	Recibido en Donación 
+1	2	3	09	03	03 03	Recibido en Transferencia
+1	2	3	09	03	04 00	Actividades No Reguladas
+1	2	3	09	03	05 00	Comunes
+1	2	3	09	03	05 01	Adquirido con Recursos Propios
+1	2	3	09	03	05 02	Recibido en Donación 
+1	2	3	09	03	05 03	Recibido en Transferencia	 
+	3	09	04	Depreciaciones Acumuladas Equipos de Transporte
+	3	09	04	Servicio de Agua Potable
+	3	09	04	Adquirido con Recursos Propios
+	3	09	04	Recibido en Donación 
+	3	09	04	Recibido en Transferencia
+	3	09	04	Servicio de Alcantarillado
+	3	09	04	Adquirido con Recursos Propios
+	3	09	04	Recibido en Donación 
+	3	09	04	Recibido en Transferencia
+	3	09	04	Servicios Colaterales Regulados
+	3	09	04	Adquirido con Recursos Propios
+1	2	3	09	04	03 02	Recibido en Donación 
+1	2	3	09	04	03 03	Recibido en Transferencia
+1	2	3	09	04	04 00	Actividades No Reguladas
+1	2	3	09	04	05 00	Comunes
+1	2	3	09	04	05 01	Adquirido con Recursos Propios
+1	2	3	09	04	05 02	Recibido en Donación 
+1	2	3	09	04	05 03	Recibido en Transferencia
+1	2	3	09	05	00 00	Depreciaciones Acumuladas Equipos de Producción
+1	2	3	09	05	01 00	Servicio de Agua Potable
+1	2	3	09	05	01 01	Adquirido con Recursos Propios
+1	2	3	09	05	01 02	Recibido en Donación 
+1	2	3	09	05	01 03	Recibido en Transferencia
+1	2	3	09	05	02 00	Servicio de Alcantarillado
+1	2	3	09	05	02 01	Adquirido con Recursos Propios
+1	2	3	09	05	02 02	Recibido en Donación 
+1	2	3	09	05	02 03	Recibido en Transferencia
+1	2	3	09	05	03 00	Servicios Colaterales Regulados
+1	2	3	09	05	03 01	Adquirido con Recursos Propios
+1	2	3	09	05	03 02	Recibido en Donación 
+1	2	3	09	05	03 03	Recibido en Transferencia
+1	2	3	09	05	04 00	Actividades No Reguladas
+1	2	3	09	05	05 00	Comunes
+1	2	3	09	05	05 01	Adquirido con Recursos Propios
+1	2	3	09	05	05 02	Recibido en Donación 
+1	2	3	09	05	05 03	Recibido en Transferencia
+1	2	3	09	06	00 00	Depreciaciones Acumuladas Equipos de Comunicaciones
+1	2	3	09	06	01 00	Servicio de Agua Potable
+1	2	3	09	06	01 01	Adquirido con Recursos Propios
+1	2	3	09	06	01 02	Recibido en Donación 
+1	2	3	09	06	01 03	Recibido en Transferencia
+1	2	3	09	06	02 00	Servicio de Alcantarillado
+1	2	3	09	06	02 01	Adquirido con Recursos Propios
+1	2	3	09	06	02 02	Recibido en Donación 
+1	2	3	09	06	02 03	Recibido en Transferencia
+1	2	3	09	06	03 00	Servicios Colaterales Regulados
+1	2	3	09	06	03 01	Adquirido con Recursos Propios
+1	2	3	09	06	03 02	Recibido en Donación 
+1	2	3	09	06	03 03	Recibido en Transferencia
+1	2	3	09	06	04 00	Actividades No Reguladas
+1	2	3	09	06	05 00	Comunes
+1	2	3	09	06	05 01	Adquirido con Recursos Propios
+1	2	3	09	06	05 02	Recibido en Donación 
+1	2	3	09	06	05 03	Recibido en Transferencia	 
+	3	09	07	Depreciaciones Acumuladas Equipos de Informática
+	3	09	07	Servicio de Agua Potable
+	3	09	07	Adquirido con Recursos Propios
+	3	09	07	Recibido en Donación 
+	3	09	07	Recibido en Transferencia
+	3	09	07	Servicio de Alcantarillado
+	3	09	07	Adquirido con Recursos Propios
+	3	09	07	Recibido en Donación 
+	3	09	07	Recibido en Transferencia
+	3	09	07	Servicios Colaterales Regulados
+	3	09	07	Adquirido con Recursos Propios
+1	2	3	09	07	03 02	Recibido en Donación 
+1	2	3	09	07	03 03	Recibido en Transferencia
+1	2	3	09	07	04 00	Actividades No Reguladas
+1	2	3	09	07	05 00	Comunes
+1	2	3	09	07	05 01	Adquirido con Recursos Propios
+1	2	3	09	07	05 02	Recibido en Donación 
+1	2	3	09	07	05 03	Recibido en Transferencia
+1	2	4	00	00	00 00
+1	2	4	01	00	00 00	Obras en Proceso
+1	2	4	01	01	00 00	Obras en Proceso
+1	2	4	01	01	01 00	Servicio de Agua Potable
+1	2	4	01	01	01 01	Adquirido con Recursos Propios
+1	2	4	01	01	01 02	Recibido en Donación 
+1	2	4	01	01	01 03	Recibido en Transferencia
+1	2	4	01	01	02 00	Servicio de Alcantarillado
+1	2	4	01	01	02 01	Adquirido con Recursos Propios
+1	2	4	01	01	02 02	Recibido en Donación 
+1	2	4	01	01	02 03	Recibido en Transferencia
+1	2	4	01	01	03 00	Servicios Colaterales Regulados
+1	2	4	01	01	03 01	Adquirido con Recursos Propios
+1	2	4	01	01	03 02	Recibido en Donación 
+1	2	4	01	01	03 03	Recibido en Transferencia
+1	2	4	01	01	04 00	Actividades No Reguladas
+1	2	4	01	01	05 00	Comunes
+1	2	4	01	01	05 01	Adquirido con Recursos Propios
+1	2	4	01	01	05 02	Recibido en Donación 
+1	2	4	01	01	05 03	Recibido en Transferencia
+1	2	5	00	00	00 00
+1	2	5	01	00	00 00	Activos Intangibles
+1	2	5	01	01	00 00	Activos Intangibles
+1	2	5	01	01	01 00	Servicio de Agua Potable
+1	2	5	01	01	01 01	Adquirido con Recursos Propios
+1	2	5	01	01	01 02	Recibido en Donación 
+1	2	5	01	01	01 03	Recibido en Transferencia
+1	2	5	01	01	02 00	Servicio de Alcantarillado
+1	2	5	01	01	02 01	Adquirido con Recursos Propios
+1	2	5	01	01	02 02	Recibido en Donación 
+1	2	5	01	01	02 03	Recibido en Transferencia
+1	2	5	01	01	03 00	Servicios Colaterales Regulados
+1	2	5	01	01	03 01	Adquirido con Recursos Propios
+1	2	5	01	01	03 02	Recibido en Donación 
+1	2	5	01	01	03 003	Recibido en Transferencia
+1	2	5	01	01	04 00	Actividades No Reguladas
+1	2	5	01	01	05 00	Comunes
+1	2	5	01	01	05 01	Adquirido con Recursos Propios
+1	2	5	01	01	05 02	Recibido en Donación 
+1	2	5	01	01	05 03	Recibido en Transferencia	 
+	5	01	02	Amortización Acumuladas de Activos Intangibles
+	5	01	02	Servicio de Agua Potable
+	5	01	02	Adquirido con Recursos Propios
+	5	01	02	Recibido en Donación 
+	5	01	02	Recibido en Transferencia
+	5	01	02	Servicio de Alcantarillado
+	5	01	02	Adquirido con Recursos Propios
+	5	01	02	Recibido en Donación 
+	5	01	02	Recibido en Transferencia
+	5	01	02	Servicios Colaterales Regulados
+	5	01	02	Adquirido con Recursos Propios
+1	2	5	01	02	03 02	Recibido en Donación 
+1	2	5	01	02	03 03	Recibido en Transferencia
+1	2	5	01	02	04 00	Actividades No Reguladas
+1	2	5	01	02	05 00	Comunes
+1	2	5	01	02	05 01	Adquirido con Recursos Propios
+1	2	5	01	02	05 02	Recibido en Donación 
+1	2	5	01	02	05 03	Recibido en Transferencia
+1	2	5	01	03	00 00	Pérdidas por Deterioro de Activos Intangibles
+1	2	5	01	03	01 00	Servicio de Agua Potable
+1	2	5	01	03	01 01	Adquirido con Recursos Propios
+1	2	5	01	03	01 02	Recibido en Donación 
+1	2	5	01	03	01 03	Recibido en Transferencia
+1	2	5	01	03	02 00	Servicio de Alcantarillado
+1	2	5	01	03	02 01	Adquirido con Recursos Propios
+1	2	5	01	03	02 02	Recibido en Donación 
+1	2	5	01	03	02 03	Recibido en Transferencia
+1	2	5	01	03	03 00	Servicios Colaterales Regulados
+1	2	5	01	03	03 01	Adquirido con Recursos Propios
+1	2	5	01	03	03 02	Recibido en Donación 
+1	2	5	01	03	03 03	Recibido en Transferencia
+1	2	5	01	03	04 00	Actividades No Reguladas
+1	2	5	01	03	05 00	Comunes
+1	2	5	01	03	05 01	Adquirido con Recursos Propios
+1	2	5	01	03	05 02	Recibido en Donación 
+1	2	5	01	03	05 03	Recibido en Transferencia
+1	2	5	01	04	00 00	Revalúo de  Activos Intangibles
+1	2	5	01	04	01 00	Servicio de Agua Potable
+1	2	5	01	04	01 01	Adquirido con Recursos Propios
+1	2	5	01	04	01 02	Recibido en Donación 
+1	2	5	01	04	01 03	Recibido en Transferencia
+1	2	5	01	04	02 00	Servicio de Alcantarillado
+1	2	5	01	04	02 01	Adquirido con Recursos Propios
+1	2	5	01	04	02 02	Recibido en Donación 
+1	2	5	01	04	02 03	Recibido en Transferencia
+1	2	5	01	04	03 00	Servicios Colaterales Regulados
+1	2	5	01	04	03 01	Adquirido con Recursos Propios
+1	2	5	01	04	03 02	Recibido en Donación 
+1	2	5	01	04	03 03	Recibido en Transferencia
+1	2	5	01	04	04 00	Actividades No Reguladas
+1	2	5	01	04	05 00	Comunes
+1	2	5	01	04	05 01	Adquirido con Recursos Propios
+1	2	5	01	04	05 02	Recibido en Donación 
+2	5	01	04	05 03	Recibido en Transferencia	 
+0	0	00	00
+2	1	0	00	00
+2	1	1	00	00
+2	1	1	01	00	Cuentas por Pagar Comerciales
+2	1	1	02	00	Cuentas por Pagar Contratistas
+2	1	1	03	00	Remuneraciones por Pagar
+2	1	1	03	01	Sueldos y Salarios por Pagar
+2	1	1	03	09	Otros Servicios Personales por Pagar 2	1	1	04	00	Aportes y Deducciones por Pagar
+2	1	1	04	01	Contribuciones Patronales por Pagar
+2	1	1	04	02	00 00	Prestaciones Sociales por Pagar
+2	1	1	04	03	00 00	Beneficios y Compensaciones por Pagar
+2	1	1	04	04	00 00	Otras Deducciones por Pagar
+2	1	1	04	05	00 00	Garantías por Pagar
+2	1	1	05	00	00 00	Cargas fiscales
+2	1	1	05	01	00 00	Impuestos por Pagar
+2	1	1	05	02	00 00	Derechos y Tasas por Pagar
+2	1	1	05	03	00 00	Multas y Recargos por Pagar
+2	1	1	05	04	00 00	Gastos Judiciales por Pagar
+2	1	1	06	00	00 00	Municipalidad
+2	1	1	06	01	00 00	Canon de Arrendamiento
+2	1	1	06	09	00 00	Otros
+2	1	1	07	00	00 00	Tasa de SVA - ERSAPS
+2	1	1	09	00	00 00	Otras Cuentas por Pagar
+2	1	2	00	00	00 00
+2	1	2	01	00	00 00	Documentos Comerciales de Corto Plazo
+2 1 2 02 00 00 00 Títulos y Valores de Corto Plazo 2 1 2 03 00 00 00 Préstamos de Corto Plazo
+2	1	2	03	01	00 00	Préstamos Moneda Nacional
+2	1	2	03	02	00 00	Préstamos Moneda Extranjera
+2	1	2	03	03	00 00	Intereses Moneda Nacional
+2	1	2	03	04	00 00	Intereses Moneda Extranjera
+2	1	9	00	00	00 00
+2	1	9	01	00	00 00	Ingresos Cobrados por Adelantado
+2	1	9	02	00	00 00	Cuentas por Pagar de Ejercicios Anteriores
+2	2	0	00	00	00 00
+2	2	1	00	00	00 00
+2	2	1	01	00	00 00	Cuentas a Pagar Comerciales de Largo Plazo
+2	2	1	02	00	00 00	Documentos y Efectos a Pagar de Largo Plazo 
+2	2	1	03	00	00 00	Préstamos de Largo Plazo
+2	2	1	03	01	00 00	Préstamos Moneda Nacional
+2	2	1	03	02	00 00	Préstamos Moneda Extranjera
+2	2	1	03	03	00 00	Intereses Moneda Nacional
+2	2	1	03	04	00 00	Intereses Moneda Extranjera
+2	2	2	00	00	00 00
+2	2	2	01	00	00 00	Provisiones para Demandas Legales
+2	2	02	00	00 00	Provisiones por Servicios del Personal
+0	0	00	00	00 00
+3	1	0	00	00	00 00
+3	1	1	00	00	00 00
+3	1	2	00	00	00 00
+3	1	3	00	00	00 00
+3	1	4	00	00	00 00
+3	1	5	00	00	00 00
+3	1	5	01	00	00 00	Resultados Acumulados de Ejercicios Anteriores
+1	5	00	00 00	Resultados del Ejercicio	 
+0	0	00	00
+4	1	0	00	00
+4	1	1	00	00
+4	2	0	00	00
+2	1	00	00
+0	0	00	00
+5	1	0	00	00
+5	1	1	00	00
+5	1	1	01	00	Con Medición - Doméstico
+5	1	1	02	00	Con Medición - Comercial
+5	1	1	03	00	00 00	Con Medición - Industrial
+5	1	1	04	00	00 00	Con medición - Gubernamental
+5	1	1	05	00	00 00	Sin Medición - Doméstico
+5	1	1	06	00	00 00	Sin Medición - Comercial
+5	1	1	07	00	00 00	Sin Medición - Industrial
+5	1	1	08	00	00 00	Sin Medición - Gubernamental
+5	1	2	0	00	00 00
+5	1	2	01	00	00 00	Doméstico
+5	1	2	02	00	00 00	Comercial
+5	1	2	03	00	00 00	Industrial
+5	1	2	04	00	00 00	Gubernamental
+5	1	3	00	00	00 00
+5	1	3	01	00	00 00	Cargo por Conexión
+5	1	3	02	00	00 00	Cargo por Corte y Reconexión
+5	1	3	03	00	00 00	Cargo por agua potable mediante cisterna
+5	1	3	04	00	00 00	Otros Cargos
+5	1	4	00	00	00 00
+5	2	0	00	00	00 00
+5	2	1	00	00	00 00
+5	2	2	00	00	00 00
+5	2	3	00	00	00 00
+5	2	4	00	00	00 00
+5	2	5	00	00	00 00
+5	2	5	01	00	00 00	Alquileres de Tierras y Terrenos
+5	2	5	02	00	00 00	Otros Alquileres
+5	2	6	00	00	00 00
+5	3	0	00	00	00 00
+5	3	1	00	00	00 00
+5	9	0	00	00	00 00
+5	9	1	00	00	00 00
+5	9	1	01	00	00 00	Ganancias en Venta de Activos 
+5	9	1	02	00	00 00	Ganancias en Venta de Títulos y Valores 
+5	9	1	03	00	00 00	Ganancias en Venta de Acciones y Aportes de Capital 
+5	9	1	04	00	00 00	Ganancias en Diferencias de Cambio 
+9	9	00	00	00 00
+0	0	00	00	00 00
+6	1	0	00	00	00 00
+6	1	1	00	00	00 00
+6	1	1	01	00	00 00	Remuneraciones
+6	1	1	01	01	00 00	Sueldos y Salarios
+6	1	1	01	02	00 00	Contribuciones Patronales
+6	1	1	01	03	00 00	Prestaciones Sociales
+6	1	1	02	00	00 00	Servicios no personales
+6	1	1	02	01	00 00	Servicios Básicos
+6	1	1	02	01	01 00	Energía Eléctrica
+6	1	1	01	02 00	Otros Servicios Públicos	 
+1
+1
+1
+1
+1
+1
+	1	19	Otros Servicios no Personales
+	1	03	00	Materiales y Suministros
+	1	04	00	Depreciación y Amortización
+	1	05	00	Deterioros
+	1	2	00	00	Captación de Agua
+6	1	2	01	00	00 00	Remuneraciones
+6	1	2	01	01	00 00	Sueldos y Salarios
+6	1	2	01	02	00 00	Contribuciones Patronales
+6	1	2	01	03	00 00	Prestaciones Sociales
+6	1	2	02	00	00 00	Servicios no personales
+6	1	2	02	01	00 00	Servicios Básicos
+6	1	2	02	01	01 00	Energía Eléctrica
+6	1	2	02	01	02 00	Otros Servicios Públicos
+6	1	2	02	02	00 00	Alquileres y Derechos
+6	1	2	02	03	00 00	Mantenimiento y Reparación de Bienes
+6	1	2	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+6	1	2	02	05	00 00	Servicios Tercerizados
+6	1	2	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+6	1	2	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+6	1	2	02	19	00 00	Otros Servicios no Personales
+6	1	2	03	00	00 00	Materiales y Suministros
+6	1	2	04	00	00 00	Depreciación y Amortización
+6	1	2	05	00	00 00	Deterioros
+6	1	3	00	00	00 00
+6	1	3	01	00	00 00	Remuneraciones
+6	1	3	01	01	00 00	Sueldos y Salarios
+6	1	3	01	02	00 00	Contribuciones Patronales
+6	1	3	01	03	00 00	Prestaciones Sociales
+6	1	3	02	00	00 00	Servicios no personales
+6	1	3	02	01	00 00	Servicios Básicos
+6	1	3	02	01	01 00	Energía Eléctrica
+6	1	3	02	01	02 00	Otros Servicios Públicos
+6	1	3	02	02	00 00	Alquileres y Derechos
+6	1	3	02	03	00 00	Mantenimiento y Reparación de Bienes
+6	1	3	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+6	1	3	02	05	00 00	Servicios Tercerizados
+6	1	3	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+6	1	3	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+6	1	3	02	19	00 00	Otros Servicios no Personales
+6	1	3	03	00	00 00	Materiales y Suministros
+6	1	3	04	00	00 00	Depreciación y Amortización
+6	1	3	05	00	00 00	Deterioros
+6	1	4	00	00	00 00
+6	1	4	01	00	00 00	Remuneraciones
+6	1	4	01	01	00 00	Sueldos y Salarios
+6	1	4	01	02	00 00	Contribuciones Patronales
+6	1	4	01	03	00 00	Prestaciones Sociales
+6	1	4	02	00	00 00	Servicios no personales
+6	1	4	02	01	00 00	Servicios Básicos
+6	1	4	01	01 00	Energía Eléctrica
+6	1	4	02	01	02 00	Otros Servicios Públicos	 
+	1	408Insumos Químicos
+	1	4	02	19	Otros Servicios no Personales
+	1	4	03	00	Materiales y Suministros
+	1	4	04	00	Depreciación y Amortización
+	1	4	05	00	Deterioros
+6	1	5	00	00	00 00
+6	1	5	01	00	00 00	Remuneraciones
+6	1	5	01	01	00 00	Sueldos y Salarios
+6	1	5	01	02	00 00	Contribuciones Patronales
+6	1	5	01	03	00 00	Prestaciones Sociales
+6	1	5	02	00	00 00	Servicios no personales
+6	1	5	02	01	00 00	Servicios Básicos
+6	1	5	02	01	01 00	Energía Eléctrica
+6	1	5	02	01	02 00	Otros Servicios Públicos
+6	1	5	02	02	00 00	Alquileres y Derechos
+6	1	5	02	03	00 00	Mantenimiento y Reparación de Bienes
+6	1	5	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+6	1	5	02	05	00 00	Servicios Tercerizados
+6	1	5	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+6	1	5	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+6	1	5	02	19	00 00	Otros Servicios no Personales
+6	1	5	03	00	00 00	Materiales y Suministros
+6	1	5	04	00	00 00	Depreciación y Amortización
+6	1	5	05	00	00 00	Deterioros
+6	1	6	00	00	00 00
+6	1	6	01	00	00 00	Remuneraciones
+6	1	6	01	01	00 00	Sueldos y Salarios
+6	1	6	01	02	00 00	Contribuciones Patronales
+6	1	6	01	03	00 00	Prestaciones Sociales
+6	1	6	02	00	00 00	Servicios no personales
+6	1	6	02	01	00 00	Servicios Básicos
+6	1	6	02	01	01 00	Energía Eléctrica
+6	1	6	02	01	02 00	Otros Servicios Públicos
+6	1	6	02	02	00 00	Alquileres y Derechos
+6	1	6	02	03	00 00	Mantenimiento y Reparación de Bienes
+6	1	6	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+6	1	6	02	05	00 00	Servicios Tercerizados
+6	1	6	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+6	1	6	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+6	1	6	02	19	00 00	Otros Servicios no Personales
+6	1	6	03	00	00 00	Materiales y Suministros
+6	1	6	04	00	00 00	Depreciación y Amortización
+6	1	6	05	00	00 00	Deterioros
+6	2	0	00	00	00 00
+6	2	1	00	00	00 00
+6	2	1	01	00	00 00	Remuneraciones
+6	2	1	01	01	00 00	Sueldos y Salarios
+6	2	1	01	02	00 00	Contribuciones Patronales
+6	2	1	01	03	00 00	Prestaciones Sociales
+6	2	1	02	00	00 00	Servicios no personales
+6	2	1	02	01	00 00	Servicios Básicos
+6	2	1	02	01	01 00	Energía Eléctrica
+6	2	1	02	01	02 00	Otros Servicios Públicos	 2
+2
+2
+2
+2
+2
+	2	19	Otros Servicios no Personales
+	2	03	00	Materiales y Suministros
+	2	04	00	Depreciación y Amortización
+	2	05	00	Deterioros
+2 2 00 00 Depuración de Aguas Residuales 6 2 2 01 00 00 00 Remuneraciones
+6	2	2	01	01	00 00	Sueldos y Salarios
+6	2	2	01	02	00 00	Contribuciones Patronales
+6	2	2	01	03	00 00	Prestaciones Sociales
+6	2	2	02	00	00 00	Servicios no personales
+6	2	2	02	01	00 00	Servicios Básicos
+6	2	2	02	01	01 00	Energía Eléctrica
+6	2	2	02	01	02 00	Otros Servicios Públicos
+6	2	2	02	02	00 00	Alquileres y Derechos
+6	2	2	02	03	00 00	Mantenimiento y Reparación de Bienes
+6	2	2	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+6	2	2	02	05	00 00	Servicios Tercerizados
+6	2	2	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+6	2	2	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+6	2	2	02	08	00 00	Insumos Químicos
+6	2	2	02	19	00 00	Otros Servicios no Personales
+6	2	2	03	00	00 00	Materiales y Suministros
+6	2	2	04	00	00 00	Depreciación y Amortización
+6	2	2	05	00	00 00	Deterioros
+6	3	0	00	00	00 00
+6	3	1	00	00	00 00
+6	3	1	01	00	00 00	Remuneraciones
+6	3	1	01	01	00 00	Sueldos y Salarios
+6	3	1	01	02	00 00	Contribuciones Patronales
+6	3	1	01	03	00 00	Prestaciones Sociales
+6	3	1	02	00	00 00	Servicios no personales
+6	3	1	02	01	00 00	Servicios Básicos
+6	3	1	02	01	01 00	Energía Eléctrica
+6	3	1	02	01	02 00	Otros Servicios Públicos
+6	3	1	02	02	00 00	Alquileres y Derechos
+6	3	1	02	03	00 00	Mantenimiento y Reparación de Bienes
+6	3	1	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+6	3	1	02	05	00 00	Servicios Tercerizados
+6	3	1	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+6	3	1	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+6	3	1	02	19	00 00	Otros Servicios no Personales
+6	3	1	03	00	00 00	Materiales y Suministros
+6	3	1	04	00	00 00	Depreciación y Amortización
+6	3	1	05	00	00 00	Deterioros
+6	3	2	00	00	00 00
+6	3	2	01	00	00 00	Remuneraciones
+6	3	2	01	01	00 00	Sueldos y Salarios
+6	3	2	01	02	00 00	Contribuciones Patronales
+6	3	2	01	03	00 00	Prestaciones Sociales
+6	3	2	02	00	00 00	Servicios no personales
+6	3	2	02	01	00 00	Servicios Básicos
+6	3	2	02	01	01 00	Energía Eléctrica
+3	2	02	01	02 00	Otros Servicios Públicos	 
+	3	2
+	3	2
+	3	2
+	3	2
+	3	2
+	3	2
+	3	2	19	Otros Servicios no Personales
+	3	2	03	00	Materiales y Suministros
+	3	2	04	00	Depreciación y Amortización
+	3	2	05	00	Deterioros
+0	0	00	00
+7	1	0	00	00	00 00
+7	1	1	00	00	00 00
+7	1	1	01	00	00 00	Remuneraciones
+7	1	1	01	01	00 00	Sueldos y Salarios
+7	1	1	01	02	00 00	Contribuciones Patronales
+7	1	1	01	03	00 00	Prestaciones Sociales
+7	1	1	02	00	00 00	Servicios no personales
+7	1	1	02	01	00 00	Servicios Básicos
+7	1	1	02	01	01 00	Energía Eléctrica
+7	1	1	02	01	02 00	Otros Servicios Públicos
+7	1	1	02	02	00 00	Alquileres y Derechos
+7	1	1	02	03	00 00	Mantenimiento y Reparación de Bienes
+7	1	1	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+7	1	1	02	05	00 00	Servicios Tercerizados
+7	1	1	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+7	1	1	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+7	1	1	02	19	00 00	Otros Servicios no Personales
+7	1	1	03	00	00 00	Materiales y Suministros
+7	1	1	04	00	00 00	Depreciación y Amortización
+7	1	1	05	00	00 00	Deterioros
+7	1	2	00	00	00 00
+7	1	2	01	00	00 00	Remuneraciones
+7	1	2	01	01	00 00	Sueldos y Salarios
+7	1	2	01	02	00 00	Contribuciones Patronales
+7	1	2	01	03	00 00	Prestaciones Sociales
+7	1	2	02	00	00 00	Servicios no personales
+7	1	2	02	01	00 00	Servicios Básicos
+7	1	2	02	01	01 00	Energía Eléctrica
+7	1	2	02	01	02 00	Otros Servicios Públicos
+7	1	2	02	02	00 00	Alquileres y Derechos
+7	1	2	02	03	00 00	Mantenimiento y Reparación de Bienes
+7	1	2	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+7	1	2	02	05	00 00	Servicios Tercerizados
+7	1	2	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+7	1	2	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+7	1	2	02	19	00 00	Otros Servicios no Personales
+7	1	2	03	00	00 00	Materiales y Suministros
+7	1	2	04	00	00 00	Depreciación y Amortización
+7	1	2	05	00	00 00	Deterioros
+7	1	2	06	00	00 00	Pérdida por Deudores Incobrables
+7	1	3	00	00	00 00
+7	2	0	00	00	00 00
+7	2	1	00	00	00 00
+7	2	1	01	00	00 00	Remuneraciones
+7	2	1	01	01	00 00	Sueldos y Salarios
+7	2	1	01	02	00 00	Contribuciones Patronales	  
+7	2	01	03	Prestaciones Sociales
+7	2	02	00	Servicios no personales
+7	2	02	01	Servicios Básicos
+7	2	02	01	01 00	Energía Eléctrica
+7	2	02	01	02 00	Otros Servicios Públicos
+7	2	02	02	00 00	Alquileres y Derechos
+7	2	02	03	00 00	Mantenimiento y Reparación de Bienes
+7	2	02	04	00 00	Mantenimiento y Reparación de Maquinaria y Equipo
+7	2	02	05	00 00	Servicios Tercerizados
+7	2	02	06	00 00	Pasajes Viáticos y Otros Gastos de Viaje
+7	2	1	02	07	00 00	Impuestos, Derechos, Tasas y Gastos Judiciales
+7	2	1	02	19	00 00	Otros Servicios no Personales
+7	2	1	03	00	00 00	Materiales y Suministros
+7	2	1	04	00	00 00	Depreciación y Amortización
+7	2	1	05	00	00 00	Deterioros
+7	2	1	06	00	00 00	Canon de Arrendamiento
+7	3	0	00	00	00 00
+7	3	1	00	00	00 00
+7	3	1	01	00	00 00	Intereses de Títulos y Valores de Corto Plazo
+7	3	1	02	00	00 00	Intereses de Préstamos de Corto Plazo
+7	3	2	00	00	00 00
+7	3	2	01	00	00 00	Intereses de Títulos y Valores de Largo Plazo
+7	3	2	02	00	00 00	Intereses de Préstamos de Largo Plazo
+7	4	0	00	00	00 00
+7	4	1	00	00	00 00
+7	9	0	00	00	00 00
+7	9	1	00	00	00 00
+7	9	2	00	00	00 00
+7	9	3	00	00	00 00
+7	9	4	00	00	00 00 
+5.3 Descripción y Dinámica de las Cuentas 
+5.3.1 Activo 
+Agrupa a las cuentas representativas del dinero disponible, los derechos que se esperan sean, o puedan ser convertidos en efectivo, asimismo agrupa los bienes y derechos destinados a permanecer en la empresa. Comprende Efectivo y Equivalente de Efectivos, Inversiones en Valores, Cuentas y documentos por Cobrar, Activos no Corrientes, Activos Fijos y Gastos Anticipados. 
+DOCUMENTOS Y EFECTOS POR COBRAR                           1.1.3.02 
+1.1.3.03.05 Previsión para Cuentas por Cobrar - Tasa por Servicios SVA (ERSAPS) 
+1.1.3.03.06 Previsión para Documentos y Efectos por Cobrar - Abonados 
+1.1.3.03.07 Previsión para Documentos y Efectos por Cobrar - Municipalidad  
+1.1.3.03.08 Previsión para Documentos y Efectos por Cobrar - Bancos 
+1.1.3.03.09 Previsión para Documentos y Efectos por Cobrar - Empleados 
+1.1.3.03.10 Previsión para Documentos y Efectos por Cobrar - Tasa por Servicios SVA (ERSAPS) 
+1.2.3.03.04 Revalúo de Instalaciones 
+SUB-CUENTAS 
+1.2.3.06.01 Equipos de Producción 
+1.2.3.06.02 Pérdidas por Deterioro de Equipos de Producción 
+1.2.3.06.03 Revalúo de Equipos de Producción 
+ACTIVOS INTANGIBLES                                               1.2.5.01 
+5.3.2 	Pasivo 
+Agrupa las cuentas que representan obligaciones contraídas por la Entidad para las operaciones propias de la actividad, derivados de la asunción de riesgos, gastos incurridos por la producción del servicio, así como las obligaciones con entidades del Estado, con el personal, con entidades del Sistema Financiero, y provisiones diversas. 
+2.1.1.06.01 Canon de Arrendamiento 
+2.1.1.06.09 Otros 
+DOCUMENTOS COMERCIALES DE CORTO PLAZO          2.1.2.01 
+5.3.3 	PATRIMONIO 
+Representa la participación de los propietarios en el activo de la sociedad. Su importe se determina por la diferencia entre el activo y el pasivo. Comprende la acumulación de aportes de los accionistas, incluyendo capitalizaciones de utilidades y excedentes con carácter permanente. También incluye las reservas de capital, el superávit que incluye los ajustes al patrimonio por reevaluación, las donaciones, los resultados acumulados de ejercicios anteriores y los resultados del ejercicio. 
+RESERVAS                                                       3.1.3 
+RESULTADOS                                                 3.1.5 
+5.3.4 	Ingresos 
+Agrupa las cuentas que acumulan ingresos devengados en el período, provenientes de operaciones propias del Servicio de Agua Potable, Alcantarillado, Servicios Diversos y Otros Ingresos derivados de las actividades que los prestadores están autorizados a realizar. 
+5.1.1.08 Sin Medición – Gubernamental 
+SUB-CUENTAS 
+5.1.3.01 Cargo por Conexión 
+5.1.3.02 Cargo por Corte y Reconexión 
+5.1.3.03 Cargo por agua potable mediante cisterna 
+5.1.3.04 Otros Cargos 
+SUB-CUENTAS 
+5.2.1 Intereses por Préstamos  
+5.2.2 Intereses por Depósitos 	 
+5.2.3 Intereses por Títulos y Valores  	 
+5.2.4 Beneficios por Inversiones Empresariales  
+5.2.5 Alquileres  
+5.2.5.01 Alquileres de Tierras y Terrenos 
+5.2.5.02 Otros Alquileres 
+5.2.6 Derechos sobre Bienes 
+5.3.5 	Costos 
+Agrupa las cuentas que acumulan los costos directos de producir los servicios de abastecimiento de agua potable y el servicio de alcantarillado. Detalla para cada uno de estos elementos, las acumulaciones por concepto de protección de cuenca, captación, potabilización y desinfección, almacenaje de agua y distribución y elevación, así como los relacionados al mantenimiento de las redes de recolección y la depuración de aguas residuales incurridos durante el ejercicio. Estos se registrarán en la medida en que se incurran. 
+6.1.1.02.01.02 Otros Servicios Públicos 
+6.1.1.02.02 Alquileres y Derechos 	 
+6.1.1.02.03 Mantenimiento y Reparación de Bienes 	 
+6.1.1.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.1.1.02.05 Servicios Tercerizados 	 
+6.1.1.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.1.1.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.1.1.02.19 Otros Servicios no Personales 	 
+6.1.1.03 Materiales y Suministros 	 	 
+6.1.1.04 Depreciación y Amortización 	 	 
+6.1.1.05 Deterioros 	 	 
+SUB-CUENTAS 
+6.1.5.01 Remuneraciones 	 	 
+6.1.5.01.01 Sueldos y Salarios  
+6.1.5.01.02 Contribuciones Patronales  
+6.1.5.01.03 Prestaciones Sociales 	 
+6.1.5.02 Servicios no personales 	 	 
+6.1.5.02.01 Servicios Básicos 	 
+6.1.5.02.01.01 Energía Eléctrica 
+6.1.5.02.01.02 Otros Servicios Públicos 
+6.1.5.02.02 Alquileres y Derechos 	 
+6.1.5.02.03 Mantenimiento y Reparación de Bienes 	 
+6.1.5.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.1.5.02.05 Servicios Tercerizados 	 
+6.1.5.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.1.5.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.1.5.02.19 Otros Servicios no Personales 	 
+6.1.5.03 Materiales y Suministros 	 	 
+6.1.5.04 Depreciación y Amortización 	 	 
+6.1.5.05 Deterioros 	 
+6.1.6.02.03 Mantenimiento y Reparación de Bienes 	 
+6.1.6.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.1.6.02.05 Servicios Tercerizados 	 
+6.1.6.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.1.6.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.1.6.02.19 Otros Servicios no Personales 	 
+6.1.6.03 Materiales y Suministros 	 	 
+6.1.6.04 Depreciación y Amortización 	 	 
+6.1.6.05 Deterioros 	 
+SUB-CUENTAS 
+6.3.2.01 Remuneraciones 	 	 
+6.3.2.01.01 Sueldos y Salarios  
+6.3.2.01.02 Contribuciones Patronales  
+6.3.2.01.03 Prestaciones Sociales 	 
+6.3.2.02 Servicios no personales 	 	 
+6.3.2.02.01 Servicios Básicos 	 
+6.3.2.02.01.01 Energía Eléctrica 
+6.3.2.02.01.02 Otros Servicios Públicos 
+6.3.2.02.02 Alquileres y Derechos 	 
+6.3.2.02.03 Mantenimiento y Reparación de Bienes 	 
+6.3.2.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.3.2.02.05 Servicios Tercerizados 	 
+6.3.2.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.3.2.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.3.2.02.19 Otros Servicios no Personales 	 
+6.3.2.03 Materiales y Suministros 	 	 
+6.3.2.04 Depreciación y Amortización 	 	 
+6.3.2.05 Deterioros 	 
+5.3.6 	Gastos 
+Agrupa las cuentas que acumulan los gastos operativos relacionados a la comercialización, los gastos generales de administración y los gastos financieros, los que se registran en la medida en que se incurren, independientemente de la fecha y forma de pago. 
+7.1.1.01.02 Contribuciones Patronales  
+7.1.1.01.03 Prestaciones Sociales 	 
+7.1.1.02 Servicios no personales 	 	 
+7.1.1.02.01 Servicios Básicos 	 
+7.1.1.02.01.01 Energía Eléctrica 
+7.1.1.02.01.02 Otros Servicios Públicos 
+7.1.1.02.02 Alquileres y Derechos 	 
+7.1.1.02.03 Mantenimiento y Reparación de Bienes 	 
+7.1.1.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+7.1.1.02.05 Servicios Tercerizados 	 
+7.1.1.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+7.1.1.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+7.1.1.02.19 Otros Servicios no Personales 	 
+7.1.1.03 Materiales y Suministros 	 	 
+7.1.1.04 Depreciación y Amortización 	 	 
+7.1.1.05 Deterioros 	 
+7.1.2.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+7.1.2.02.19 Otros Servicios no Personales 	 
+7.1.2.03 Materiales y Suministros 	 	 
+7.1.2.04 Depreciación y Amortización 	 	 
+7.1.2.05 Deterioros 	 
+7.2.1.01.01 Sueldos y Salarios  
+7.2.1.01.02 Contribuciones Patronales  
+7.2.1.01.03 Prestaciones Sociales 	 
+7.2.1.02 Servicios no personales 	 	 
+7.2.1.02.01 Servicios Básicos 	 
+7.2.1.02.01.01 Energía Eléctrica 
+7.2.1.02.01.02 Otros Servicios Públicos 
+7.2.1.02.02 Alquileres y Derechos 	 
+7.2.1.02.03 Mantenimiento y Reparación de Bienes 	 
+7.2.1.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+7.2.1.02.05 Servicios Tercerizados 	 
+7.2.1.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+7.2.1.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+7.2.1.02.19 Otros Servicios no Personales 	 
+7.2.1.03 Materiales y Suministros 	 	 
+7.2.1.04 Depreciación y Amortización 	 	 
+7.2.1.05 Deterioros 	 
+5.4 Procedimientos de actualización  
+Con el objeto de mantener en el futuro un único cuerpo de normas contables para los Prestadores, la actualización del presente Manual deberá efectuarse toda vez que existieran cambios significativos en las normas contables, o en los usos y costumbres de los Prestadores o cuando las disposiciones regulatorias de ERSAPS lo ameriten. 
+En caso de efectuarse revisiones posteriores, las mismas deberán contemplar tanto la información histórica como presente, de manera tal de poder compatibilizar la información pasada, presente y futura a los fines comparativos. 
+Los Prestadores no podrán adoptar de manera unilateral criterios contables para reflejar situaciones controvertidas no previstas en este Manual. Cuando el tratamiento de un hecho no esté previsto en el Manual o no esté claramente definido por las normas contables, los Prestadores analizarán conjuntamente con sus auditores externos y con ERSAPS cada situación, a los fines de obtener una definición de una norma que establezca un criterio uniforme para todos los prestadores. 
+Una vez definido el criterio a seguir en la situación de controversia, el ERSAPS circulará el cambio efectuado y la fecha a partir de la cual el mismo tendrá vigencia. 
+5.5 Procedimientos de consulta 
+Se considera fundamental la habilitación de un servicio de soporte que atienda las inquietudes y solicitudes de los usuarios. Este servicio deberá ser provisto por personal calificado y capacitado en materia regulatoria así como en el uso del aplicativo de contabilidad regulatoria.  
+Se sugiere que las consultas así como las respuestas sean formuladas vía web o correo electrónico, recomendando la generación de un foro en el cual los usuarios puedan visualizar las consultas realizadas por otros usuarios y las respuestas conferidas por ERSAPS. Estos foros tienen la ventaja de generar sinergias en términos de recursos y tiempos (muchas consultas comunes se solucionarán respondiendo a una sola solicitud).  
+Adicionalmente y para la resolución de consultas urgentes (problemas en el acceso al sitio web, dificultades para el envío de los formularios, consultas vinculadas a imputación, etc.) se sugiere la habilitación de una mesa de ayuda con atención telefónica a los usuarios.  
+6 Estados Financieros del prestador 
+Los estados financieros básicos de las Empresas Prestadoras del Servicio de Agua Potable y 
+Saneamiento son: el Balance General, Estado de Resultados, Estado de Cambios en el Patrimonio y Estado de Flujos de Efectivo, los correspondientes al cierre del ejercicio deberán ser aprobados en Asamblea de accionistas, para su inclusión en la memoria anual.   
+Los estados financieros básicos deberán estar suscritos y contener las firmas y los nombres de quienes desempeñen los cargos de Contador General y Gerente General o conjuntamente con la del representante legal de la sociedad o funcionario autorizado, considerando que las mismas implican la declaración de que la información contenida en los documentos ha sido extraída de los libros legales y auxiliares de la entidad y verificada en cuanto a su exactitud e integridad.  
+Las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento deberán remitir al Ente Regulador dicha información por medios electrónicos o en cualquier otra forma que le sea requerida por dicha entidad.  
+Las Empresas Prestadoras del Servicio de Agua Potable y Saneamiento deberán presentar sus estados financieros al Ente Regulador en los formularios, plazos y periodicidad establecidos en el presente Manual y las que establezca el Ente Regulador. 
+6.1 Formato y Contenido de los Estados Financieros 
+Los estados financieros se elaborarán a partir del Balance de Comprobación de Saldos los que conjuntamente con las notas e información complementaria proporcionarán información transparente sobre la situación económica y/o financiera.  
+El Balance de Comprobación de Saldos comprende los saldos en moneda nacional, extranjera e integrados. A nivel de los rubros y correspondientes cuentas establecidas incluyendo las sub-cuentas adicionales que se hayan abierto, de forma tal que se muestre el saldo del período anterior, los débitos y créditos del período actual, y el saldo actual del período de que se trate.  
+Los modelos de los estados financieros son los siguientes: 
+BALANCE GENERAL AL __/__/__
+Inversiones Financieras Corrientes
+Cuentas a Cobrar Corrientes
+Inventarios
+Gastos Pagados por Adelantado
+TOTAL DEL ACTIVO CORRIENTE
+ACTIVO NO CORRIENTE
+Cuentas y Documentos por cobrar de Largo Plazo
+Inversiones Financieras no Corrientes
+Propiedad, Planta y Equipo
+Construcciones
+Bienes Inmateriales
+TOTAL DEL ACTIVO NO CORRIENTE
+PASIVO
+PASIVO CORRIENTE
+Cuentas por Pagar
+Endeudamiento de Corto Plazo
+TOTAL DEL PASIVO CORRIENTE
+PASIVO NO CORRIENTE
+Deudas de Largo Plazo
+Provisiones para Pasivos
+TOTAL DEL PASIVO NO CORRIENTE
+PATRIMONIO
+PATRIMONIO Y RESERVAS
+Capital Social
+Ajustes al Capital Social
+Donaciones y Transferencias de Capital Recibidas
+Reservas
+Revalúos
+Resultados
+TOTAL DEL PATRIMONIO
+TOTAL DEL PASIVO Y PATRIMONIO
+ESTADO DE RESULTADOS
+Servicio de Agua Potable
+Servicio de Alcantarillado
+Servicios Colaterales Regulados
+Actividades No reguladas
+Ingresos de No Operación
+Donaciones y Transferencias Corrientes
+Otros Ingresos
+TOTAL DE INGRESOS CORRIENTES
+COSTOS
+Costo de Agua Potable
+Costo Servicio de Alcantarillado
+Costo por Servicios Diversos
+Gastos de Comercialización
+Gastos de Administración
+Otros Gastos
+Utilidad antes de intereses e impuesto sobre la renta
+Gastos de Intereses
+Utilidad (pérdida) antes de impuesto sobre la renta
+Impuesto sobre la renta
+Utilidad (pérdida) del ejercicio
+ESTADO DE FLUJOS DE EFECTIVO DEL __/__/__ AL __/__/__
+ACTIVIDADES DE OPERACIÓN
+Cobranzas de ventas de bienes o servicios e ingresos operacionales
+Cobranzas de regalías, honorarios, comisiones y otros
+Cobranza de intereses y rendimientos (1) Otros cobros de efectivo relativos a la actividad Menos:
+Pagos a proveedores de bienes y servicios
+Pagos de remuneraciones y beneficios sociales
+Pagos de tributos
+Pagos de intereses y rendimientos (2)
+Otros pagos de efectivo relativos a la actividad
+Aumento (disminución) del Efectivo y Equivalente de Efectivo provenientes de las 
+Actividades de Operación
+ACTIVIDADES DE INVERSIÓN
+Cobranzas de ventas de valores e inversiones permanentes
+Cobranzas de ventas de inmuebles, maquinaria y equipo
+Cobranzas de ventas de activos intangibles
+Cobranzas de ventas de inmuebles, maquinaria y equipo
+Cobranzas de amortizaciones de préstamos otorgados
+Cobranza de intereses y rendimientos
+Cobranza de dividendos
+Otros cobros de efectivo relativos a la actividad Menos:
+Pagos por compras de valores e inversiones permanentes
+Pagos por compras de inmuebles, maquinaria y equipo
+Pagos por obras en curso 
+Pagos por compras y desarrollo de activos intangibles
+Otros pagos de efectivo relativos a la actividad
+Aumento (disminución) del Efectivo y Equivalente de Efectivo  provenientes de las Actividades de Inversión
+ACTIVIDADES DE FINANCIACIÓN
+Cobranza de emisión de acciones o nuevos aportes
+Cobranza de recursos obtenidos por emisión de valores u obligaciones de corto y largo plazo
+Cobranza de recursos obtenidos por préstamos de corto y largo plazo
+Otros cobros de efectivo relativos a la actividad Menos:
+Pagos de amortización o cancelación de valores u otras obligaciones de corto y largo plazo
+Pagos de intereses y rendimientos
+Pagos de dividendos y otras distribuciones
+Otros pagos de efectivo relativos a la actividad
+Aumento (disminución) del Efectivo y Equivalente de Efectivo  provenientes de las 
+Actividades de Financiación
+AUMENTO (DISMINUCIÓN) NETO DEL EFECTIVO Y EQUIVALENTE DE EFECTIVO
+No incluidos en actividades de inversión.
+No incluidos en actividades de financiación.	 
+6.2 Aprobación de Estados Financieros de Cierre del Ejercicio Económico 
+Los Prestadores de Servicio de Agua deberán cerrar su gestión económica contable al 31 de diciembre de cada año, salvo que el Ente Regulador, en algún caso específico, autorice un tratamiento alternativo diferente.  
+Los estados financieros de cierre de ejercicio económico y de gestión, elaborados en la forma establecida en el Capítulo 6.1 del presente Manual, deberán ser aprobados por la Junta Directiva o Consejos de Administración y la Asamblea General de Accionistas u órgano equivalente de la entidad prestadora del servicio de agua potable, así como la memoria anual correspondiente si fuera el caso de una prestadora de servicio gubernamental.  
+Los estados financieros a ser presentados al Ente deberán ser aprobados por la Junta Directiva, debiendo dejar constancia escrita en las actas respectivas sobre su revisión y análisis. En caso de existir observaciones, éstas deberán ser informadas de inmediato al Ente Regulador.  
+El Balance de Comprobación de Saldos deberá ser elaborado en atención a la estructura de cuentas prevista en el Catálogo de Cuentas. Los estados financieros a ser presentados al Ente Regulador deberán estar expresados en moneda nacional (sin decimales). 
+7 Reportes Regulatorios Complementarios 
+Adicionalmente a los reportes de índole financiera solicitados, se solicita información complementaria con fines regulatorios. A continuación se presenta el esquema y características de los reportes regulatorios solicitados: 
+7.1 Reporte de Activos 
+El reporte de activos tiene por objeto servir de herramienta para el seguimiento y control de los activos de los prestadores, así como también poder evaluar el nivel de inversiones realizadas durante los ejercicios analizados. El formato del Reporte de Activos tiene la siguiente estructura: 
+Manual de Contabilidad Regulatoria. Ente Regulador de los Servicios de Agua Potable y Saneamiento 
+Página | 78  
+7.2 Reporte de Facturación y Cobranzas 
+El reporte de Facturación y Cobranzas tiene por objeto evaluar la evolución de las cobranzas en el tiempo con relación a la facturación de la empresa y de esa manera, conocer la eficiencia en el cobro.  
+Este reporte debe ser realizado para cada una de las categorías de usuario en forma separada: Doméstico, Comercial, Industrial y Gubernamental. El formato del Reporte para cada categoría tiene la siguiente estructura: 
+Manual de Contabilidad Regulatoria. Ente Regulador de los Servicios de Agua Potable y Saneamiento 
+Página | 79  
+7.3 Reporte de Ingresos, Costos y Gastos 
+El reporte de ingresos, costos y gastos tiene por objetivo clasificar los ingresos y egresos de explotación de las empresas en función de las principales actividades que hacen al servicio de agua potable y alcantarillado. Esta información es de vital importancia en términos de regulación ya que es importante conocer los costos para las distintas etapas del servicio sanitario de manera separada, es decir, para las acciones de protección de cuenca, captación de agua, transporte y elevación de agua, potabilización y desinfección de agua, almacenaje de agua,  distribución y elevación de agua, servicio de redes de recolección de aguas residuales, depuración de aguas residuales, servicios colaterales regulados y actividades no reguladas. En cuanto a los gastos, se incluyen atención a clientes, gastos de lectura, facturación y cobranzas y gastos generales de administración.  
+En el caso de la desagregación de los ingresos, se propone una separación que permita identificar los ingresos en función de los servicios que le dieron origen y en función del tipo de cliente o usuario. La información suministrada en el reporte de ingresos deberá coincidir con la informada en la cuenta 50 del plan de cuentas regulatorio, correspondiente a las ventas de bienes y servicios. 
+En cuanto al reporte de costos y gastos, se pretende asociar los mismos a las actividades que les dieron origen. Las empresas deberán establecer la vinculación existente entre las actividades definidas y los recursos consumidos por las mismas.  
+Finalmente, los costos y gastos reportados se deberán conciliar con las cuentas de costos de explotación del plan de cuentas regulatorio, relacionadas con las actividades de agua potable, alcantarillado, servicios diversos, administración y comercialización (cuentas 60 y 70 del plan de cuentas regulatorio). 
+A continuación se presenta el esquema de reporte de ingresos en formato tabla: 
+A continuación se presenta el esquema de reporte de costos y gastos en formato tabla: 
+Activo
+Activo Corriente
+Efectivo y Equivalentes
+Inversiones Financieras Corrientes
+Cuentas y Documentos por Cobrar
+Inventarios
+Gastos Pagados por Adelantado
+Activo No Corriente
+Cuentas y Documentos por cobrar de Largo Plazo
+Inversiones Financieras no Corrientes
+Propiedad, Planta y Equipo
+Construcciones
+Bienes Inmateriales
+Pasivo
+Pasivo Corriente
+Cuentas por Pagar
+Endeudamiento de Corto Plazo
+Otros Pasivos Corrientes
+Pasivo No Corriente
+Deudas de Largo Plazo
+Provisiones para Pasivos
+Patrimonio
+Patrimonio y Reservas
+Capital Social
+Donaciones y Transferencias de Capital Recibidas
+Reservas
+Revalúos
+Resultados
+Cuentas de Orden
+Cuentas de Orden Deudoras
+Avales, Fianzas y Garantías
+Cuentas de Orden Acreedoras
+Avales, Fianzas y Garantías
+Ingresos
+Ingresos por Venta de Servicios
+Servicio de Agua Potable
+Servicio de Alcantarillado
+Servicios Colaterales Regulados
+Actividades No reguladas
+Ingresos de No Operación
+Intereses por Préstamos
+Intereses por Depósitos
+Intereses por Títulos y Valores 
+Beneficios por Inversiones Empresariales Alquileres
+Derechos sobre Bienes
+Donaciones y Transferencias
+Donaciones y Transferencias Corrientes
+Otros Ingresos
+Ganancias
+Otros Ingresos
+Costos
+Costos de Agua Potable
+Acciones de Protección de Cuenca
+Transporte y Elevación de Agua
+Potabilización y Desinfección del Agua
+1 | 4
+1 | 4
+1 | 4
+1 | 4
+1 | 4
+1 | 4
+Almacenaje de Agua
+Distribución y Elevación de Agua
+Costo Servicio de Alcantarillado
+Costo por Servicio de Redes de Recolección
+Costo por Servicios Diversos
+Costo Servicios Colaterales Regulados
+Costo Actividades No Reguladas
+Gastos
+Gastos de Comercialización
+Atención a Clientes
+Gastos de Lectura, Facturación y Cobranzas
+Gastos de Publicidad y Promoción
+Gastos de Administración
+Gastos Generales de Administración
+Gastos Financieros
+Gastos Financieros de Corto Plazo
+Gastos Financieros de Largo Plazo
+Impuesto sobre la renta
+Impuesto sobre la renta
+Otros Gastos
+Sentencias Judiciales
+Pérdidas de Inventarios
+Pérdidas en diferencias de cambio
+Pérdida en venta o baja de activos
+CAJA                                                                        1.1.1.01
+OBJETO  
+Registra las transacciones de recursos en dinero efectivo, cheques, giros y todo valor de poder cancelatorio legal de liquidez inmediata.
+SE  DEBITA: 
+Por: la recepción de dinero efectivo, cheques, giros y valores, acreditando la cuenta de recursos que corresponda.
+SE ACREDITA:  
+Por: la salida de dinero efectivo, cheques, giros y valores, debitando 1.1.1.02
+SALDO:  
+Deudor. Representa la disponibilidad de fondos en caja.
+SUB-CUENTAS
+BANCOS                                                                1.1.1.02
+OBJETO  
+Registra las transacciones de dinero bajo la forma de cuenta corrientes, cuentas de ahorro y otros depósitos en entidades bancarias, de liquidez inmediata y sin restricciones de disponibilidad.
+SE  DEBITA: 
+Por:  
+los ingresos por venta de bienes y servicios acreditando las cuentas que correspondan del grupo 5.1  el depósito de dinero efectivo, cheques y otros valores, acreditando 1.1.1.01  la recuperación de inversiones temporales, acreditando 1.1.2.02  la transferencia entre cuentas, acreditando 1.1.1.02  
+las rentas de la propiedad, intereses, dividendos, arrendamiento de tierras y terrenos, derechos sobre bienes intangibles, acreditando  las cuentas que correspondan del grupo 5.2  los ingresos de transferencias de capital recibidas, acreditando las cuentas que correspondan del grupo 3.1.3  
+los ingresos de transferencias corrientes recibidas, acreditando las cuentas que correspondan del grupo  5.3  
+la venta de títulos y valores, acreditando 1.1.2.01 - 1.2.2.01  
+la venta de activos fijos con utilidad, acreditando 5.9.1.01 por la utilidad y la cuenta de bienes
+correspondiente por el valor en libros 
+la venta de activos fijos con pérdida debitando 7.9.4 por el valor perdido y acreditando la cuenta de bienes correspondiente por el valor en libros la devolución de anticipos, acreditando 1.1.3.04  la obtención de préstamos, acreditando 2.1.2.03 - 2.2.1.03
+SE ACREDITA:  
+Por:  
+la emisión de cheques o transferencias de pago para gastos, debitando las cuentas que correspondan al grupo 2.1.1 el otorgamiento de fondos en anticipos, debitando 1.1.3.04  la transferencia entre cuentas bancarias, debitando 1.1.1.02
+SALDO:  
+Deudor - representa los fondos disponibles en las cuentas bancarias.
+SUB-CUENTAS 
+1.1.1.02.01 Cuentas en Moneda Nacional 
+1.1.1.02.02 Cuentas en Moneda Extranjera 
+1.1.1.02.03 Otras Cuentas
+TITULOS Y VALORES DE CORTO PLAZO                                1.1.2.01
+OBJETO  
+Registrar la colocación de excedentes transitorios de fondos en bonos, títulos y valores, públicos o privados, nacionales o del exterior, de renta fija o variable, con el objeto de obtener un ingreso financiero por intereses, dividendos y otros conceptos.
+SE  DEBITA: 
+Por:  
+las colocaciones de fondos efectuadas, acreditando 1.1.1.02 o 2.1.2.02
+SE ACREDITA:  
+Por:  
+las recuperaciones de fondos efectuadas, debitando 1.1.1.02
+SALDO:  
+Deudor - Representa el valor de las colocaciones de fondos en títulos y valores.
+SUB-CUENTAS
+OTRAS INVERSIONES A CORTO PLAZO                                       1.1.2.09
+OBJETO  
+Registra la tenencia en cartera de inversiones a corto plazo no incluidas en cuentas anteriores.
+SE  DEBITA: 
+Por:  
+las colocaciones de fondos efectuadas, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+el vencimiento, debitando 1.1.1.02
+SALDO:  
+Deudor -  Representa el valor de las inversiones en cartera.
+SUB-CUENTAS 
+1.1.2.09.01 Depósitos a Plazo Fijo
+CUENTAS POR COBRAR                                      1.1.3.01
+OBJETO  
+Registra los derechos de cobro a terceros, a favor de la entidad, provenientes de venta de servicios, intereses, dividendos, alquileres, transferencias voluntarias o forzosas y todos aquellos originados en el desarrollo de la función de la entidad, cuya percepción se prevé dentro de los doce meses de su concreción.
+SE  DEBITA: 
+Por:  
+la venta de bienes y servicios, acreditando la cuenta que corresponda del grupo 5.1 la liquidación de las rentas de la propiedad devengadas e impagas, acreditando la cuenta que corresponda del grupo  5.2
+SE ACREDITA:  
+Por:  
+la cancelación de los derechos de cobro del ente contra terceros, debitando 1.1.1.02   la documentación del derecho de cobro a terceros, debitando 1.1.3.02
+SALDO:  
+Deudor. Representa el monto total de los derechos de cobro en favor del ente con vencimiento dentro de los doce meses de su concreción.
+SUB-CUENTAS 
+1.1.3.01.01 Cuentas por Cobrar Corrientes – Abonados 
+1.1.3.01.02 Cuentas por Cobrar Corrientes - Municipalidad  
+1.1.3.01.03 Cuentas por Cobrar Corrientes - Bancos 
+1.1.3.01.04 Cuentas por Cobrar Corrientes – Empleados 
+1.1.3.01.05 Cuentas por Cobrar Corrientes – Tasa por Servicios SVA (ERSAPS)
+OBJETO  
+Registra los derechos de cobro a terceros, a favor de la entidad, sustentados por algún documento mercantil, proveniente de la actividad principal del ente, con vencimiento dentro de los doce meses de su suscripción.
+SE DEBITA: 
+Por:  
+por la documentación de un crédito, acreditando 1.1.3.01
+SE ACREDITA:  
+Por:  
+el cobro de documentos, debitando 1.1.1.02   
+la baja por incobrabilidad, debitando 1.1.3.03.05 - 1.1.3.03.06 - 1.1.3.03.07 - 1.1.3.03.08
+SALDO:  
+Deudor. Representa el monto de los documentos pendientes de cobro.
+SUB-CUENTAS 
+1.1.3.02.01 Documentos y Efectos por Cobrar – Abonados 
+1.1.3.02.02 Documentos y Efectos por Cobrar – Municipalidad 
+1.1.3.02.03 Documentos y Efectos por Cobrar – Bancos 
+1.1.3.02.04 Documentos y Efectos por Cobrar – Empleados 
+1.1.3.02.05 Documentos y Efectos por Cobrar – Tasa por Servicios SVA (ERSAPS)
+PREVISION PARA DEUDORES INCOBRABLES                    1.1.3.03
+OBJETO  
+Registro del monto estimado sobre contingencias de variaciones negativas o disminuciones de valor que puedan producirse en los montos adeudados por anticipos, ventas de bienes y servicios y todo otro derecho de cobro, realizado en forma preventiva en base a procedimientos legales.
+SE  DEBITA: 
+Por:  
+el monto real de deudas incobrables, acreditando 1.1.3.01 - 1.1.3.02 - 1.1.3.09
+SE ACREDITA:  
+Por:  
+el monto de la estimación realizada en forma preventiva, debitando 7.1.2.06
+SALDO:  
+Acreedor. Representa el monto reservado para afrontar los posibles o probables incobrables.
+SUB-CUENTAS 
+1.1.3.03.01 Previsión para Cuentas por Cobrar - Abonados 
+1.1.3.03.02 Previsión para Cuentas por Cobrar - Municipalidad  
+1.1.3.03.03 Previsión para Cuentas por Cobrar - Bancos 
+1.1.3.03.04 Previsión para Cuentas por Cobrar - Empleados
+ANTICIPOS                                       1.1.3.04
+OBJETO  
+Registra los montos entregados por adelantado para la ejecución de obras, suministro de bienes, prestaciones de servicios y otras, con cargo a rendición y/o devolución, a Instituciones gubernamentales.
+SE DEBITA: 
+Por: los anticipos realizados,
+SE ACREDITA:  
+Por:  
+la recepción del bien contratado y pagado por adelantado, debitando 1.1.4 - 1.2.3.03 - 1.2.3.04 - 
+1.2.3.05 - 1.2.3.06 - 1.2.3.07 - 1.2.3.08 - 1.2.5.01 
+la recepción del servicio contratado y pagado por adelantado, debitando 6.1.1.01 - 6.1.1.02 - 
+6.1.2.01 - 6.1.2.02 - 6.1.3.01 - 6.1.3.02 - 6.1.4.01 - 6.1.4.02 - 6.1.5.01 - 6.1.5.02 - 6.1.6.01 - 6.1.6.02 - 
+6.2.1.01 - 6.2.1.02 - 6.2.2.01 - 6.2.2.02 - 6.3.1.01 - 6.3.1.02 - 6.3.2.01 - 6.3.2.02 - 7.1.1.01 - 7.1.1.02 - 7.1.2.01 - 7.1.2.02 - 7.2.1.01 - 7.2.1.02 el vencimiento del plazo acordado para lo contratado, sin cumplirse el objeto del contrato, debitando 1.1.3.01 - 1.1.3.09  
+la devolución del importe adelantado, debitando 1.1.1.02
+SALDO:  
+Deudor. Indica el monto de los anticipos otorgados pendientes de cumplimiento del objeto de su entrega.
+SUB-CUENTAS
+GARANTIAS                                                      1.1.3.05
+OBJETO 
+Registra los depósitos efectuados a terceros, efectuados por la entidad, en concepto de respaldo por cumplimiento de contratos de alquileres y otras operaciones.
+SE  DEBITA: 
+Por:  
+el pago de la garantía, acreditando 1.1.1.02
+SE ACREDITA:
+Por:  
+el cobro de la garantía, debitando 1.1.1.02
+SALDO: 
+Deudor. Representa el monto de las garantías constituidas por el ente a favor de terceros.
+SUB-CUENTAS 
+1.1.3.05.01 Garantías por Alquileres  
+1.1.3.05.02 Garantías Varias
+OTRAS CUENTAS POR COBRAR                                1.1.3.09
+OBJETO  
+Registra los derechos de cobro a terceros, a favor de la entidad, no contempladas en la cuenta anterior, cuya percepción se prevé dentro de los doce meses de su concreción.
+SE  DEBITA: 
+Por:  
+Otros ingresos 5.9.9
+SE ACREDITA:  
+Por:  
+la cancelación de los derechos de cobro del ente contra terceros, debitando 1.1.1.02   la documentación del derecho de cobro a terceros, debitando 1.1.3.02
+SALDO:  
+Deudor. Representa el monto total de los derechos de cobro en favor del ente no contemplados en la cuenta anterior, con vencimiento dentro de los doce meses de su concreción.
+SUB-CUENTAS
+MATERIALES Y SUMINISTROS                                             1.1.4.01
+OBJETO 
+Registrar la existencia de insumos elaborados o adquiridos, con el fin de ser comercializados o consumidos en los procesos productivos o de prestación de servicios, en el desarrollo de las actividades de la entidad, derivadas de la actividad principal y que se encuentran almacenados en depósitos, bodegas, locales, etc.
+SE  DEBITA: 
+Por:  
+la adquisición de materiales y suministros, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+los consumos de materiales y suministros, debitando 6.1.1.03 - 6.1.2.03 – 6.1.3.03 – 6.1.4.03 –
+6.1.5.03 – 6.1.6.03 – 6.2.1.03 – 6.2.2.03 – 6.3.1.03 – 6.3.2.03 – 7.1.1.03 – 7.1.2.03 – 7.2.1.03
+SALDO:  
+Deudor. Representa el monto de las existencias de materiales y suministros.
+SUB-CUENTAS 
+1.1.4.01.01 Materiales (Ej. Tubería, Accesorios, material de Oficina, etc.)  
+1.1.4.01.02 Insumos (productos químicos, etc.) 
+1.1.4.01.03 Combustibles y Lubricantes 
+1.1.4.01.04 Repuestos
+GASTOS PAGADOS POR ADELANTADO                               1.1.5
+OBJETO 
+Registrar el monto de gastos pagados en el ejercicio en curso, cuyo devengamiento corresponde al siguiente ejercicio.
+SE  DEBITA: 
+Por:  
+el monto de los gastos pagados por adelantado, cuyo cumplimiento operará dentro de los doce meses de su  constitución
+SE ACREDITA: 
+Por: 
+el devengamiento de bienes y servicios anteriormente pagados
+SALDO:  
+Deudor. Indica los gastos pagados pendientes de devengamiento.
+SUB-CUENTAS 
+1.1.5.01 Seguros 
+1.1.5.02 Alquileres 
+1.1.5.03 Intereses  
+1.1.5.04 Impuestos
+TITULOS Y VALORES A LARGO PLAZO                                    1.2.2.01
+OBJETO 
+Registrar la colocación de excedentes transitorios de fondos en bonos, títulos y valores, públicos o privados, nacionales o del exterior, de renta fija o variable, a plazos de vencimiento mayores a doce meses, con el objeto de obtener un ingreso financiero por intereses, dividendos y otros conceptos.
+SE  DEBITA: 
+Por:  
+las colocaciones efectuadas, acreditando 1.1.1.02
+SE ACREDITA: 
+Por:  
+la venta o el cobro de los títulos y valores a su vencimiento, debitando 1.1.1.02
+SALDO:  
+Deudor. Indica el monto de los títulos y valores de largo plazo, en cartera.
+SUB-CUENTAS
+TIERRAS Y TERRENOS                                                      1.2.3.01
+OBJETO 
+Registra el movimiento de tierras y terrenos urbanos o rurales, adquiridos o incorporados para ser afectados a construcciones en bienes de dominio privado o beneficio y uso público. Incluye el valor atribuible a terrenos sobre los cuales se encuentran asentadas edificaciones y locales.
+SE  DEBITA: 
+Por:  
+la incorporación de los bienes por adquisición acreditando  2.1.1.01
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02
+SALDO:  
+Deudor. Representa el monto total de las tierras y terrenos disponibles en la institución, o atribuibles en parcelas edificadas.
+SUB-CUENTAS 
+1.2.3.01.01 Tierras y Terrenos 
+1.2.3.01.02 Pérdidas por Deterioro de valor de Tierras y Terrenos 
+1.2.3.01.03 Revalúo de Tierras y Terrenos
+EDIFICIOS                                                                1.2.3.02
+OBJETO 
+Registra el movimiento de bienes inmuebles y edificaciones urbanas o rurales durables de todo tipo, adquiridos o incorporados para ser utilizados en las operaciones habituales del organismo. Se excluye el valor de los terrenos sobre los cuales dicho bienes se encuentran asentados.
+SE  DEBITA: 
+Por:  
+la incorporación de los bienes por adquisición acreditando  2.1.1.01  mejoras 
+revalúos acreditando 3.1.5
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02   
+depreciaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 - 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total de los edificios disponibles en la institución, para las operaciones habituales.
+SUB-CUENTAS 
+1.2.3.02.01 Edificios 
+1.2.3.02.02 Pérdidas por Deterioro de Edificios 
+1.2.3.02.03 Mejoras de Edificios 
+1.2.3.02.04 Revalúo de Edificios
+INSTALACIONES                                                          1.2.3.03
+OBJETO 
+Registra  el  movimiento  de  instalaciones  durables,  adquiridas  o  incorporadas  como  estructura específica u otros bienes adheridos al terreno, para ser utilizados en las operaciones habituales del organismo.
+SE  DEBITA: 
+Por:  
+la incorporación de los bienes por adquisición acreditando  2.1.1.01  mejoras 
+revalúos acreditando 3.3
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02 
+depreciaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 
+- 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total de las instalaciones disponibles en la institución, para las operaciones habituales.
+SUB-CUENTAS 
+1.2.3.03.01 Instalaciones 
+1.2.3.03.02 Pérdidas por Deterioro de Instalaciones 
+1.2.3.03.03 Mejoras de Instalaciones
+EQUIPOS DE OFICINA                                                     1.2.3.04
+OBJETO 
+Registra el movimiento del equipamiento, muebles, dispositivos e implementos de oficina tales como fotocopiadoras, máquinas de escribir, de cálculo, que permiten la ejecución de las actividades y tareas administrativas de la institución.
+SE  DEBITA: 
+Por:  
+el costo de los bienes adquiridos o construidos, acreditando 2.1.1.01  los gastos inherentes a su puesta en uso como ser fletes, seguros, instalación, etc., acreditando 
+6.1.1.02 - 6.1.2.02 - 6.1.3.02 - 6.1.4.02 - 6.1.5.02 - 6.1.6.02 - 6.2.1.02 - 6.2.2.02 - 6.3.1.02 - 6.3.2.02 - 7.1.1.02 - 7.1.2.02 - 7.2.1.02 mejoras 
+revalúos acreditando 3.3
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02   
+depreciaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 - 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total del equipamiento de oficina incorporado a la operación de la institución.
+SUB-CUENTAS 
+1.2.3.04.01 Equipos de Oficina 
+1.2.3.04.02 Pérdidas por Deterioro de Equipos de Oficina 
+1.2.3.04.03 Revalúo de Equipos de Oficina
+EQUIPOS DE TRANSPORTE                                              1.2.3.05
+OBJETO 
+Registra  el  movimiento  del  equipamiento  de  transporte  terrestre,  marítimo  y  aéreo  adquiridos  o incorporados, que permiten la ejecución de las actividades y tareas de la institución.
+SE  DEBITA: 
+Por:  
+el costo de los bienes adquiridos o construidos, acreditando 2.1.1.01  los gastos inherentes a su puesta en uso como ser fletes, seguros, instalación, etc., acreditando 
+6.1.1.02 - 6.1.2.02 - 6.1.3.02 - 6.1.4.02 - 6.1.5.02 - 6.1.6.02 - 6.2.1.02 - 6.2.2.02 - 6.3.1.02 - 6.3.2.02 -
+7.1.1.02 - 7.1.2.02 - 7.2.1.02 mejoras 
+revalúos acreditando 3.3
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02   
+depreciaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 - 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total del equipamiento de transporte incorporado a la operación de la institución.
+SUB-CUENTAS 
+1.2.3.05.01 Equipos de Transporte 
+1.2.3.05.02 Pérdidas por Deterioro de Equipos de Transporte 
+1.2.3.05.03 Revalúo de Equipos de Transporte
+EQUIPOS DE PRODUCCIÓN                                              1.2.3.06
+OBJETO 
+Registra el movimiento del equipamiento de producción, repuestos mayores, herramientas e implementos que permiten las actividades productivas de la institución.
+SE  DEBITA: 
+Por:  
+el costo de los bienes adquiridos o construidos, acreditando 2.1.1.01  los gastos inherentes a su puesta en uso como ser fletes, seguros, instalación, etc., acreditando 
+6.1.1.02 - 6.1.2.02 - 6.1.3.02 - 6.1.4.02 - 6.1.5.02 - 6.1.6.02 - 6.2.1.02 - 6.2.2.02 - 6.3.1.02 - 6.3.2.02 - 7.1.1.02 - 7.1.2.02 - 7.2.1.02 mejoras 
+revalúos acreditando 3.3
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02   
+depreciaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 - 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total del equipamiento destinado a la producción, incorporado a la operación de la institución.
+EQUIPOS DE COMUNICACIONES                                       1.2.3.07
+OBJETO 
+Registra el movimiento del equipamiento de comunicaciones que permite la ejecución de las actividades y tareas de la institución.
+SE  DEBITA: 
+Por:  
+el costo de los bienes adquiridos o construidos, acreditando 2.1.1.01  los gastos inherentes a su puesta en uso como ser fletes, seguros, instalación, etc., acreditando 
+6.1.1.02 - 6.1.2.02 - 6.1.3.02 - 6.1.4.02 - 6.1.5.02 - 6.1.6.02 - 6.2.1.02 - 6.2.2.02 - 6.3.1.02 - 6.3.2.02 - 7.1.1.02 - 7.1.2.02 - 7.2.1.02 mejoras  
+revalúos acreditando 3.3
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02   
+depreciaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 - 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total del equipamiento de comunicaciones incorporado a la operación de la institución.
+SUB-CUENTAS 
+1.2.3.07.01 Equipos de Comunicaciones 
+1.2.3.07.02 Pérdidas por Deterioro de Equipos de Comunicaciones 
+1.2.3.07.03 Revalúo de Equipos de Comunicaciones
+EQUIPOS DE INFORMÁTICA                                     1.2.3.08
+OBJETO 
+Registra el movimiento del equipamiento informático que permite la ejecución de las actividades y tareas de la institución. Incluye computadoras, pantallas, UCP, impresoras, unidades de archivo y periféricos con sus accesorios.
+SE  DEBITA: 
+Por:
+el costo de los bienes adquiridos o construidos, acreditando 2.1.1.01  los gastos inherentes a su puesta en uso como ser fletes, seguros, instalación, etc., acreditando 
+6.1.1.02 - 6.1.2.02 - 6.1.3.02 - 6.1.4.02 - 6.1.5.02 - 6.1.6.02 - 6.2.1.02 - 6.2.2.02 - 6.3.1.02 - 6.3.2.02 - 7.1.1.02 - 7.1.2.02 - 7.2.1.02 mejoras  
+revalúos acreditando 3.3
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02   
+depreciaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 - 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total del equipamiento informático incorporado a la operación de la institución.
+SUB-CUENTAS 
+1.2.3.08.01 Equipos de Informática 
+1.2.3.08.02 Pérdidas por Deterioro de Equipos de Informática 
+1.2.3.08.03 Revalúo de Equipos de Informática
+OBRAS EN PROCESO                                     1.2.4.01
+OBJETO 
+Registrar los gastos incurridos durante el proceso de construcción de obras que permiten la adecuada prestación de los servicios.
+SE  DEBITA: 
+Por:  
+los costos incurridos en la construcción de obras por cuenta propia, acreditando 2.1.1.01 - 2.1.1.03 y 
+2.1.1.04  
+el avance de la obra por certificaciones a contratistas, acreditando 2.1.1.02
+SE ACREDITA:  
+Por:  
+la finalización de la obra debitando 1.2.3
+SALDO:  
+Deudor. Representa el total de las inversiones en obras en proceso de construcción.
+SUB-CUENTAS 
+1.2.4.01.01 Obras en Proceso
+OBJETO 
+Registra la adquisición de derechos por el uso de activos de la propiedad industrial, comercial, intelectual, el conocimiento científico y tecnológico, diseños, licencias, concesiones y otros.
+SE  DEBITA: 
+Por:  
+el costo de los bienes adquiridos, acreditando 2.1.1.01  el monto de los gastos por la obtención del activo intangible, acreditando 6.1.1.03 - 6.1.2.03 – 
+6.1.3.03 – 6.1.4.03 – 6.1.5.03 – 6.1.6.03 – 6.2.1.03 – 6.2.2.03 – 6.3.1.03 – 6.3.2.03 – 7.1.1.03 – 
+7.1.2.03 – 7.2.1.03 - 6.1.1.01 - 6.1.1.02 - 6.1.2.01 - 6.1.2.02 - 6.1.3.01 - 6.1.3.02 - 6.1.4.01 - 6.1.4.02 - 
+6.1.5.01 - 6.1.5.02 - 6.1.6.01 - 6.1.6.02 - 6.2.1.01 - 6.2.1.02 - 6.2.2.01 - 6.2.2.02 - 6.3.1.01 - 6.3.1.02 - 6.3.2.01 - 6.3.2.02 - 7.1.1.01 - 7.1.1.02 - 7.1.2.01 - 7.1.2.02 - 7.2.1.01 - 7.2.1.02 revalúos acreditando 3.3
+SE ACREDITA:  
+Por:  
+la venta de los bienes, debitando 1.1.1.02   
+amortizaciones debitando 6.1.1.04 - 6.1.2.04 - 6.1.3.04 - 6.1.4.04 - 6.1.5.04 - 6.1.6.04 - 6.2.1.04 - 
+6.2.2.04 - 6.3.1.04 - 6.3.2.04 - 7.1.1.04 - 6.1.2.04 - 7.2.1.04           deterioros debitando 6.1.1.05 - 6.1.2.05 - 6.1.3.05 - 6.1.4.05 - 6.1.5.05 - 6.1.6.05 - 6.2.1.05 - 6.2.2.05 - 6.3.1.05 - 6.3.2.05 - 7.1.1.05 - 6.1.2.05 - 7.2.1.05
+SALDO:  
+Deudor. Representa el monto total del valor de los activos intangibles de la entidad.
+SUB-CUENTAS 
+1.2.5.01.01 Activos Intangibles 
+1.2.5.01.02 Depreciaciones Acumuladas de Activos Intangibles 
+1.2.5.01.03 Pérdidas por Deterioro de Activos Intangibles 
+1.2.5.01.04 Revalúo de Activos Intangibles
+CUENTAS POR PAGAR COMERCIALES                             2.1.1.01
+OBJETO 
+Registra los movimientos de devengado, por deudas con proveedores, motivadas por operaciones habituales del organismo, con vencimiento dentro de los doce meses de su constitución.
+SE  DEBITA: 
+Por:  
+los pagos efectuados de las órdenes de pago devengadas, acreditando 1.1.1.02 los pagos efectuados por las deudas contratadas ya devengadas, acreditando 1.1.1.02
+la documentación de una deuda, acreditando 2.1.2.01  - 2.2.1.02
+SE ACREDITA:  
+Por:  
+el monto de los gastos devengados por la adquisición de bienes y elementos, debitando 6.1.1.02 - 
+6.1.2.02 - 6.1.3.02 - 6.1.4.02 - 6.1.5.02 - 6.1.6.02 - 6.2.1.02 - 6.2.2.02 - 6.3.1.02 - 6.3.2.02 - 7.1.1.02 - 
+7.1.2.02 - 7.2.1.02 y 6.1.1.03 - 6.1.2.03 – 6.1.3.03 – 6.1.4.03 – 6.1.5.03 – 6.1.6.03 – 6.2.1.03 – 6.2.2.03 – 6.3.1.03 – 6.3.2.03 – 7.1.1.03 – 7.1.2.03 – 7.2.1.03
+SALDO:  
+Acreedor. Representa el monto total de las cuentas por pagar comerciales de la entidad.
+SUB-CUENTAS
+CUENTAS POR PAGAR CONTRATISTAS                          2.1.1.02
+OBJETO 
+Registra los movimientos de devengado, por deudas con contratistas por certificados de obra, motivadas por operaciones habituales del organismo, con vencimiento dentro de los doce meses de su constitución.
+SE  DEBITA: 
+Por:  
+los pagos efectuados de las órdenes de pago devengadas, acreditando 1.1.1.02.  los pagos efectuados por las deudas contratadas ya devengadas, acreditando 1.1.1.02  la documentación de una deuda, acreditando 2.1.2.01  - 2.2.1.02
+SE ACREDITA:  
+Por:  
+el monto de los certificados de obra, debitando 1.2.4
+SALDO:  
+Acreedor. Representa el monto total de las cuentas por pagar a contratistas de la entidad.
+SUB-CUENTAS
+REMUNERACIONES POR PAGAR                                           2.1.1.03
+OBJETO 
+Registra el movimiento de las obligaciones relacionadas con servicios personales, prestados a la institución, en relación de dependencia.
+SE  DEBITA: 
+Por:  
+los pagos de obligaciones contraídas por remuneraciones al personal, acreditando  1.1.1.02
+SE ACREDITA:  
+Por:  
+los gastos devengados según la liquidación de remuneraciones, debitando 6.1.1.01 - 6.1.2.01 - 
+6.1.3.01 - 6.1.4.01 - 6.1.5.01 - 6.1.6.01 - 6.2.1.01 - 6.2.2.01 - 6.3.1.01 - 6.3.2.01 - 7.1.1.01 - 7.1.2.01 - 7.2.1.01  la capitalización de los gastos en personal, utilizados para la construcción por cuenta propia, debitando 1.2.4
+SALDO:  
+Acreedor. Representa el monto de haberes liquidados y pendientes de pago.
+SUB-CUENTAS 
+2.1.1.03.01 Sueldos y Salarios por Pagar 
+2.1.1.03.09 Otros Servicios Personales por Pagar
+APORTES Y DEDUCCIONES POR PAGAR                                   2.1.1.04
+OBJETO 
+Registra el movimiento de las obligaciones patronales y de empleados hacia entes públicos y privados que operan sobre las retribuciones por servicios personales, en cumplimiento de normas legales o acuerdos específicos.
+SE  DEBITA: 
+Por:  
+los pagos de obligaciones patronales y de empleados por aportes y deducciones, acreditando 1.1.1.2  los pagos por constitución de garantías hacia terceros, acreditando 1.1.1.2
+SE ACREDITA:  
+Por:  
+los gastos devengados de aportes y deducciones, según la liquidación de remuneraciones, debitando 
+6.1.1.01.02 - 6.1.1.01.03 - 6.1.2.01.02 - 6.1.2.01.03 - 6.1.3.01.02 - 6.1.3.01.03 - 6.1.4.01.02 - 6.1.4.01.03 - 6.1.5.01.02 - 6.1.5.01.03 - 6.1.6.01.02 - 6.1.6.01.03 - 6.2.1.01.02 - 6.2.1.01.03 - 
+6.2.2.01.02 - 6.2.2.01.03 - 6.3.1.01.02 - 6.3.1.01.03 - 6.3.2.01.02 - 6.3.2.01.03 – 7.1.1.01.02 - 7.1.1.01.03 - 7.1.2.01.02 - 7.1.2.01.03 – 7.2.1.01.02 - 7.2.1.01.03 la capitalización de los gastos en personal, utilizados para la construcción por cuenta propia, debitando 1.2.4
+SALDO:  
+Acreedor. Representa el monto de aportes y deducciones relacionados con gastos en personal, liquidados y pendientes de pago y las garantías a pagar.
+SUB-CUENTAS 
+2.1.1.04.01 Contribuciones Patronales por Pagar 
+2.1.1.04.02 Prestaciones Sociales por Pagar 
+2.1.1.04.03 Beneficios y Compensaciones por Pagar 
+2.1.1.04.04 Otras Deducciones por Pagar 
+2.1.1.04.05 Garantías por Pagar
+CARGAS FISCALES                                                        2.1.1.05
+OBJETO 
+Registrar el movimiento de tasas e impuestos u otras obligaciones fiscales semejantes, que hayan sido devengadas y que se encuentran pendientes de pago.
+SE  DEBITA: 
+Por:  
+el pago de tasas, impuestos y otras obligaciones fiscales devengadas, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+el devengamiento de tasas, impuestos y otras obligaciones fiscales devengadas, debitando 
+6.1.1.02.07 - 6.1.2.02.07 - 6.1.3.02.07 - 6.1.4.02.07 - 6.1.5.02.07 - 6.1.6.02.07 - 6.2.1.02.07 - 6.2.2.02.07 - 6.3.1.02.07 - 6.3.2.02.07 - 7.1.1.02.07 - 7.1.2.02.07 - 7.2.1.02.07 la capitalización de los gastos en impuestos que afectan la construcción por cuenta propia, debitando 1.2.4
+SALDO:  
+Acreedor. Representa el monto de los impuestos liquidados pendientes de pago.
+SUB-CUENTAS 
+2.1.1.05.01 Impuestos por Pagar 
+2.1.1.05.02 Derechos y Tasas por Pagar 
+2.1.1.05.03 Multas y Recargos por Pagar 
+2.1.1.05.04 Gastos Judiciales por Pagar
+MUNICIPALIDAD                                                        2.1.1.06
+OBJETO 
+Registrar el movimiento de obligaciones hacia la Municipalidad, que hayan sido devengadas y que se encuentran pendientes de pago.
+SE  DEBITA: 
+Por:  
+el pago de obligaciones hacia la Municipalidad devengadas, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+el devengamiento del canon de arrendamiento y otras obligaciones devengadas, debitando 7.2.1.06
+SALDO:  
+Acreedor. Representa el monto de las obligaciones hacia la Municipalidad liquidadas pendientes de pago.
+SUB-CUENTAS
+TASA DE SVA - ERSAPS                                      2.1.1.07
+OBJETO 
+Registrar los movimientos de deudas por obligaciones correspondientes a la Tasa de Supervisión, Vigilancia y Asesoramiento del ERSAPS
+SE  DEBITA: 
+Por:  
+el pago de obligaciones devengadas, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+el devengamiento de la Tasa de Supervisión, Vigilancia y Asesoramiento del ERSAPS, debitando 1.1.3.01.05 o 1.1.3.02.05
+SALDO:  
+Acreedor. Representa el monto de las obligaciones de Tasa de SVA - ERSAPS pendientes de pago.
+SUB-CUENTAS
+OTRAS CUENTAS  POR  PAGAR                                      2.1.1.09
+OBJETO 
+Registrar los movimientos de deudas por obligaciones a cancelar, no contempladas en las cuentas anteriores.
+SE  DEBITA: 
+Por:  
+el pago de otros gastos devengados, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+el devengamiento de otros gastos devengados, debitando 7.9.5
+SALDO:  
+Acreedor. Representa el monto de las obligaciones de otros gastos liquidadas pendientes de pago.
+SUB-CUENTAS
+OBJETO 
+Registrar el movimiento de obligaciones de pago sustentadas en algún documento mercantil, con plazo de cancelación previsto dentro de los doce meses de suscrito.
+SE  DEBITA: 
+Por:  
+la cancelación de los documentos, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+la documentación de una deuda, debitando 2.1.1.01 
+la adquisición de bienes con pago documentado, debitando 1.1.4
+SALDO:  
+Acreedor. Representa el monto total adeudado de obligaciones documentadas de corto plazo.
+SUB-CUENTAS
+TITULOS Y VALORES DE CORTO PLAZO                                 2.1.2.02
+OBJETO 
+Registrar el movimiento de títulos y valores colocados en el mercado por la entidad, con plazo de vencimiento menor a doce meses, con el objeto de obtener financiamientos transitorios para asegurar el adecuado flujo de caja y afrontar los pagos.
+SE  DEBITA: 
+Por:  
+al vencimiento del plazo de cancelación, acreditando 2.1.1.01    
+la transferencia a quien se disponga o su devolución, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+los ingresos recibidos, debitando 1.1.1.02
+SALDO:  
+Acreedor. Representa los montos adeudados a los tenedores de títulos por emisiones de la entidad.
+SUB-CUENTAS
+PRESTAMOS DE CORTO PLAZO                         2.1.2.03
+OBJETO 
+Registrar el movimiento de préstamos recibidos con plazo de vencimiento menor a doce meses, con el objeto de obtener financiamientos transitorios para asegurar el adecuado flujo de caja.
+SE  DEBITA: 
+Por:  
+al vencimiento del plazo de cancelación, acreditando 2.1.1.01    
+la transferencia a quien se disponga o su devolución, acreditando 1.1.1.02
+SE ACREDITA:  
+Por: los ingresos recibidos, debitando 1.1.1.02
+SALDO:  
+Acreedor. Representa los montos adeudados a los acreedores locales del gobierno por préstamos de corto plazo.
+SUB-CUENTAS 
+2.1.2.03.01 Préstamos Moneda Nacional 
+2.1.2.03.02 Préstamos Moneda Extranjera 
+2.1.2.03.03 Intereses Moneda Nacional 
+2.1.2.03.04 Intereses Moneda Extranjera
+INGRESOS COBRADOS POR ADELANTADO                       2.1.9.01
+OBJETO 
+Registrar el movimiento de fondos de propiedad de terceros, recibidos de modo transitorio por diversas causas tales como adelantos o depósitos y que fueran ingresados de acuerdo a convenios.
+SE  DEBITA: 
+Por:  
+la transferencia a quien se disponga o su devolución o su ingreso definitivo por  cumplimiento de lo acordado, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+los ingresos recibidos, debitando 1.1.1.02
+SALDO:  
+Acreedor. Representa el monto de fondos adelantados por terceros en poder de la entidad por depósitos o anticipos.
+SUB-CUENTAS
+CUENTAS POR PAGAR DE EJERCICIOS ANTERIORES               2.1.9.02
+OBJETO 
+Registro del movimiento de operaciones devengadas impagas, provenientes de ejercicios anteriores.
+SE  DEBITA: 
+Por:  
+los pagos efectuados acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+el monto de las transacciones devengadas y que al cierre de cada ejercicio no fueran pagadas, debitando 2.1.1.01 - 2.1.1.02 - 2.1.1.03 - 2.1.1.04 - 2.1.1.05 - 2.1.1.06 - 2.1.1.07 - 2.1.1.09
+SALDO:  
+Acreedor. Representa el monto pendiente de pagar de devengados provenientes de ejercicios anteriores.
+SUB-CUENTAS
+CUENTAS A PAGAR COMERCIALES DE LARGO PLAZO                 2.2.1.01
+OBJETO 
+Registra los movimientos de devengado, por deudas con proveedores, motivadas por operaciones habituales del organismo, con vencimiento mayor a los doce meses de su constitución.
+SE  DEBITA: 
+Por:  
+los pagos efectuados por las deudas contratadas ya devengadas, acreditando 1.1.1.02  la documentación de una deuda, acreditando 2.1.2.01  - 2.2.1.02
+SE ACREDITA: 
+Por: 
+el monto de los gastos devengados por la adquisición de bienes y elementos, debitando 6.1.1.02 - 
+6.1.2.02 - 6.1.3.02 - 6.1.4.02 - 6.1.5.02 - 6.1.6.02 - 6.2.1.02 - 6.2.2.02 - 6.3.1.02 - 6.3.2.02 - 7.1.1.02 - 
+7.1.2.02 - 7.2.1.02 y 6.1.1.03 - 6.1.2.03 – 6.1.3.03 – 6.1.4.03 – 6.1.5.03 – 6.1.6.03 – 6.2.1.03 – 6.2.2.03 – 6.3.1.03 – 6.3.2.03 – 7.1.1.03 – 7.1.2.03 – 7.2.1.03
+SALDO:  
+Acreedor. Representa el monto total de las cuentas por pagar comerciales de largo plazo de la entidad.
+SUB-CUENTAS
+DOCUMENTOS Y EFECTOS A PAGAR DE LARGO PLAZO                2.2.1.02
+OBJETO 
+Registrar el movimiento de deudas con terceros sustentadas en algún documento mercantil, con plazo de cancelación posterior a doce meses de su constitución.
+SE  DEBITA: 
+Por:  
+la cancelación del pago de la deuda, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+la constitución de la obligación documentada de pago en ejercicios futuros para la compra de bienes, debitando la cuenta del bien adquirido.  la obtención de préstamos, debitando 1.1.1.02
+SALDO:  
+Acreedor. Representa el monto total adeudado de las obligaciones de pago documentadas con vencimiento posterior a doce meses de su constitución
+SUB-CUENTAS
+PRÉSTAMOS DE LARGO PLAZO                                 2.2.1.03
+OBJETO 
+Registrar el movimiento de préstamos recibidos con plazo de vencimiento mayor a doce meses con sus intereses, amortizaciones y gastos.
+SE  DEBITA: 
+Por:  
+al vencimiento del plazo de cancelación, acreditando 2.1.1.01    
+la transferencia a quien se disponga o su devolución, acreditando 1.1.1.02
+SE ACREDITA:  
+Por:  
+la obtención de préstamos de largo plazo, de instituciones financieras debitando 1.1.1.02
+SALDO:  
+Acreedor. Representa el monto total adeudado de las obligaciones de pago documentadas con vencimiento posterior a doce meses de su constitución
+SUB-CUENTAS 
+2.2.1.03.01 Préstamos Moneda Nacional 
+2.2.1.03.02 Préstamos Moneda Extranjera 
+2.2.1.03.03 Intereses Moneda Nacional 
+2.2.1.03.04 Intereses Moneda Extranjera
+CAPITAL SOCIAL                                                3.1.1
+OBJETO 
+Registrar los aportes de socios o accionistas, en efectivo o en especie.
+SE  DEBITA: 
+Por:  
+las afectaciones o disminuciones por resultados negativos, acreditando 3.1.5
+SE ACREDITA:  
+Por:  
+la capitalización, cuando se disponga, debitando 3.1.5 
+Con el monto de las aportaciones que reciban de los accionistas
+SALDO:  
+Acreedor. Representa la propiedad de la Entidad sobre el Activo al cierre del Ejercicio
+SUB-CUENTAS
+DONACIONES Y TRANSFERENCIAS DE CAPITAL RECIBIDAS      3.1.2
+OBJETO 
+Registro de la acumulación de recursos de capital, percibidos de diversos orígenes, por transacciones sin contraprestación hacia las entidades otorgantes.
+SE  DEBITA: 
+Por:  
+la devolución de transferencias de capital recibidas, a través de las cuentas que correspondan
+SE ACREDITA:  
+Por:  el monto correspondiente a las transferencias de capital recibidas en función de las cuentas que correspondan
+SALDO:  
+Acreedor. Representa el monto acumulado total de las transferencias de capital recibidas.
+SUB-CUENTAS
+OBJETO 
+Registro de las apropiaciones de utilidades, autorizadas por ley, por los estatutos, o por acuerdo de los accionistas (o socios) y, que serán destinadas a fines específicos o para cubrir eventualidades.
+SE  DEBITA: 
+Por:  la capitalización de las reservas constituidas. 
+las disminuciones de las reservas por acuerdos societarios o dispositivos de ley, o cobertura de resultados.
+SE ACREDITA:  
+Por:  
+las detracciones de utilidades atendiendo a razones de orden legal, estatutario, contractual o por acuerdo de los accionistas (o socios), debitando 3.1.5
+SALDO:  
+Acreedor. Representa el saldo de las reservas de la Entidad.
+SUB-CUENTAS
+REVALUOS                                                     3.1.4
+OBJETO 
+Exponer la actualización registrada en el valor de determinados activos de propiedad de le empresa, tales como bienes de uso y moneda extranjera, por efecto de las modificaciones relativas a la capacidad adquisitiva de la moneda local o variaciones en los precios de mercado.
+SE  DEBITA: 
+Por:  
+la disminución en la valuación de los activos o por la baja de activos revaluados, acreditando las cuentas correspondientes
+SE ACREDITA:  
+Por:  
+el aumento en la valuación de los activos debitando las cuentas correspondientes.
+SALDO:  
+Deudor o Acreedor. Representa el monto acumulado correspondiente a las modificaciones en la valuación de activos.
+SUB-CUENTAS
+OBJETO 
+Exponer los déficit y/ o superávit generados por diferencias entre recursos y gastos de cada período o ejercicio y la sucesiva acumulación de resultados de periodos anteriores.
+SE  DEBITA: 
+Por:  
+El desahorro de la gestión a partir de los ingresos y gastos del ejercicio
+SE ACREDITA:  
+Por:  
+El ahorro de la gestión a partir de los ingresos y gastos del ejercicio
+SALDO:  
+Deudor o Acreedor. Representa el superávit o déficit de la Entidad.
+SUB-CUENTAS 
+3.1.5.01 Resultados Acumulados de Ejercicios Anteriores 3.1.5.02 Resultados del Ejercicio
+CUENTAS DE ORDEN DEUDORAS                               4.1
+OBJETO 
+Registrar eventos, que si bien por sus características no representan hechos económico-financieros que alteren el patrimonio y/o los resultados de la institución, mantienen información respecto de potenciales circunstancias relevantes que los podrían afectar.
+SE  DEBITA: 
+Por:  
+las operaciones de cuentas de orden acreedoras
+SE ACREDITA:  
+Por:  
+las operaciones de cuentas de orden deudoras
+SALDO:  
+Deudor. Representa las operaciones pendientes con posible incidencia patrimonial.
+SUB-CUENTAS 
+4.1.1 Avales, Fianzas y Garantías
+CUENTAS DE ORDEN ACREEDORAS                                  4.2
+OBJETO 
+Registrar eventos, que si bien por sus características no representan hechos económico-financieros que alteren el patrimonio y/o los resultados de la entidad, mantienen información respecto de
+potenciales circunstancias relevantes que los podrían afectar.
+SE  DEBITA: 
+Por:  
+las operaciones de cuentas de orden deudoras
+SE ACREDITA:  
+Por:  
+las operaciones de cuentas de orden acreedoras
+SALDO:  
+Acreedor. Representa las operaciones pendientes con posible incidencia patrimonial.
+SUB-CUENTAS 
+4.2.1 Avales, Fianzas y Garantías
+SERVICIO DE AGUA POTABLE                                  5.1.1
+OBJETO 
+Registrar el movimiento de los Ingresos por venta del servicio de agua potable
+SE  DEBITA: 
+Por:  
+Con los cargos por correcciones a los saldos registrados por cualquier concepto 
+El saldo al cierre del ejercicio transfiriéndose a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SE ACREDITA:  
+Por:  
+el monto de las ventas por estos conceptos, debitando 1.1.3.01
+SALDO:  
+Acreedor. Representa el monto de los ingresos por venta en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+5.1.1.01 Con Medición - Doméstico 
+5.1.1.02 Con Medición - Comercial 
+5.1.1.03 Con Medición - Industrial 
+5.1.1.04 Con medición - Gubernamental 
+5.1.1.05 Sin Medición - Doméstico 
+5.1.1.06 Sin Medición - Comercial 
+5.1.1.07 Sin Medición - Industrial
+SERVICIO DE ALCANTARILLADO                                  5.1.2
+OBJETO 
+Registrar el movimiento de los Ingresos por venta del servicio de alcantarillado
+SE  DEBITA: 
+Por:  
+Con los cargos por correcciones a los saldos registrados por cualquier concepto 
+El saldo al cierre del ejercicio transfiriéndose a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SE ACREDITA:  
+Por:  
+el monto de las ventas por estos conceptos, debitando 1.1.3.01
+SALDO:  
+Acreedor. Representa el monto de los ingresos por venta en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+5.1.2.01 Doméstico 
+5.1.2.02 Comercial 
+5.1.2.03 Industrial 
+5.1.2.04 Gubernamental
+SERVICIO DE COLATERALES REGULADOS                                  5.1.3
+OBJETO 
+Registrar el movimiento de los Ingresos por venta de los servicios colaterales regulados
+SE  DEBITA: 
+Por:  
+Con los cargos por correcciones a los saldos registrados por cualquier concepto 
+El saldo al cierre del ejercicio transfiriéndose a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SE ACREDITA:  
+Por:  
+el monto de las ventas por estos conceptos, debitando 1.1.3.01
+SALDO:  
+Acreedor. Representa el monto de los ingresos por venta en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+ACTIVIDADES NO REGULADAS                                  5.1.4
+OBJETO 
+Registrar el movimiento de los Ingresos por venta de actividades no reguladas
+SE  DEBITA: 
+Por:  
+Con los cargos por correcciones a los saldos registrados por cualquier concepto 
+El saldo al cierre del ejercicio transfiriéndose a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SE ACREDITA:  
+Por:  
+el monto de las ventas por estos conceptos, debitando 1.1.3.01
+SALDO:  
+Acreedor. Representa el monto de los ingresos por venta en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS
+INGRESOS DE NO OPERACIÓN                                  5.2
+OBJETO 
+Registrar el movimiento de los Ingresos de no operación
+SE  DEBITA: 
+Por:  
+Con los cargos por correcciones a los saldos registrados por cualquier concepto 
+El saldo al cierre del ejercicio transfiriéndose a la cuenta Resultados del ejercicio, acreditando 
+3.1.5.02
+SE ACREDITA:  
+Por:  
+el monto de las ventas por estos conceptos, debitando 1.1.3.01
+SALDO:  	 
+Acreedor. Representa el monto de los ingresos recaudados en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+DONACIONES Y TRANSFERENCIAS                                  5.3
+OBJETO 
+Registrar el movimiento de por este tipo de ingresos, que constituye una recaudación sin contraprestación
+SE  DEBITA: 
+Por:  
+el monto total de los ingresos de este tipo recaudados en el ejercicio transfiriéndose al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SE ACREDITA:  
+Por:  
+el monto de la recaudación percibida por este concepto, debitando las cuentas del Activo que correspondan a la donación
+SALDO:  
+Acreedor. Representa el monto de los ingresos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+5.3.1 Donaciones y Transferencias Corrientes
+OTROS INGRESOS                                  5.9
+OBJETO 
+Registrar el movimiento de este tipo de Ingresos
+SE  DEBITA: 
+Por:  
+el monto total de los ingresos de este tipo en el ejercicio, transfiriéndose al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SE ACREDITA:  
+Por:  
+el monto de la recaudación por este concepto, debitando 1.1.1.02
+SALDO:  
+Acreedor. Representa el monto de los ingresos recaudados en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+5.9.1 Ganancias 
+5.9.1.01 Ganancias en Venta de Activos  
+5.9.1.02 Ganancias en Venta de Títulos y Valores  
+5.9.1.03 Ganancias en Venta de Acciones y Aportes de Capital  
+5.9.1.04 Ganancias en Diferencias de Cambio  
+5.9.2 Otros Ingresos
+ACCIONES DE PROTECCIÓN DE CUENCAS                              6.1.1
+OBJETO 
+Registrar los costos directos de las acciones de protección de cuencas
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.1.1.01 Remuneraciones 	 	 
+6.1.1.01.01 Sueldos y Salarios  
+6.1.1.01.02 Contribuciones Patronales  
+6.1.1.01.03 Prestaciones Sociales 	 
+6.1.1.02 Servicios no personales 	 	 
+6.1.1.02.01 Servicios Básicos 	 
+6.1.1.02.01.01 Energía Eléctrica
+CAPTACIÓN DE AGUA                              6.1.2
+OBJETO 
+Registrar las costos directos de la captación de agua cruda
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.1.2.01 Remuneraciones 	 	 
+6.1.2.01.01 Sueldos y Salarios  
+6.1.2.01.02 Contribuciones Patronales  
+6.1.2.01.03 Prestaciones Sociales 	 
+6.1.2.02 Servicios no personales 	 	 
+6.1.2.02.01 Servicios Básicos 	 
+6.1.2.02.01.01 Energía Eléctrica 
+6.1.2.02.01.02 Otros Servicios Públicos 
+6.1.2.02.02 Alquileres y Derechos 	 
+6.1.2.02.03 Mantenimiento y Reparación de Bienes 	 
+6.1.2.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.1.2.02.05 Servicios Tercerizados 	 
+6.1.2.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.1.2.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.1.2.02.19 Otros Servicios no Personales 	 6.1.2.03 Materiales y Suministros 	 	 
+6.1.2.04 Depreciación y Amortización 	 	 
+6.1.2.05 Deterioros
+TRANSPORTE Y ELEVACIÓN DE AGUA                              6.1.3
+OBJETO 
+Registrar las costos directos del transporte y elevación de agua
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.1.3.01 Remuneraciones 	 	 
+6.1.3.01.01 Sueldos y Salarios  
+6.1.3.01.02 Contribuciones Patronales  
+6.1.3.01.03 Prestaciones Sociales 	 
+6.1.3.02 Servicios no personales 	 	 
+6.1.3.02.01 Servicios Básicos 	 
+6.1.3.02.01.01 Energía Eléctrica 
+6.1.3.02.01.02 Otros Servicios Públicos 
+6.1.3.02.02 Alquileres y Derechos 	 
+6.1.3.02.03 Mantenimiento y Reparación de Bienes 	 
+6.1.3.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.1.3.02.05 Servicios Tercerizados 	 
+6.1.3.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.1.3.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.1.3.02.19 Otros Servicios no Personales 	 6.1.3.03 Materiales y Suministros 	 	 
+6.1.3.04 Depreciación y Amortización 	 	 
+6.1.3.05 Deterioros
+POTABILIZACIÓN Y DESINFECCIÓN DEL AGUA                      6.1.4
+OBJETO 
+Registrar las costos directos de la potabilización y desinfección del agua
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.1.4.01 Remuneraciones 	 	 
+6.1.4.01.01 Sueldos y Salarios  
+6.1.4.01.02 Contribuciones Patronales  
+6.1.4.01.03 Prestaciones Sociales 	 
+6.1.4.02 Servicios no personales 	 	 
+6.1.4.02.01 Servicios Básicos 	 
+6.1.4.02.01.01 Energía Eléctrica 
+6.1.4.02.01.02 Otros Servicios Públicos 
+6.1.4.02.02 Alquileres y Derechos 	 
+6.1.4.02.03 Mantenimiento y Reparación de Bienes 	 
+6.1.4.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.1.4.02.05 Servicios Tercerizados 	 
+6.1.4.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.1.4.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.1.4.02.08 Insumos Químicos  
+6.1.4.02.19 Otros Servicios no Personales 	 
+6.1.4.03 Materiales y Suministros 	 	 
+6.1.4.04 Depreciación y Amortización 	 	 
+6.1.4.05 Deterioros
+ALMACENAJE                      6.1.5
+OBJETO 
+Registrar las costos directos del almacenaje del agua
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+DISTRIBUCIÓN Y ELEVACIÓN DE AGUA                      6.1.6
+OBJETO 
+Registrar las costos directos de la distribución y elevación de agua
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.1.6.01 Remuneraciones 	 	 
+6.1.6.01.01 Sueldos y Salarios  
+6.1.6.01.02 Contribuciones Patronales  
+6.1.6.01.03 Prestaciones Sociales 	 
+6.1.6.02 Servicios no personales 	 	 
+6.1.6.02.01 Servicios Básicos 	 
+6.1.6.02.01.01 Energía Eléctrica 
+6.1.6.02.01.02 Otros Servicios Públicos 
+6.1.6.02.02 Alquileres y Derechos
+COSTO POR SERVICIO DE REDES DE RECOLECCIÓN                      6.2.1
+OBJETO 
+Registrar las costos directos por servicio de redes de recolección
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.2.1.01 Remuneraciones 	 	 
+6.2.1.01.01 Sueldos y Salarios  
+6.2.1.01.02 Contribuciones Patronales  
+6.2.1.01.03 Prestaciones Sociales 	 
+6.2.1.02 Servicios no personales 	 	 
+6.2.1.02.01 Servicios Básicos 	 
+6.2.1.02.01.01 Energía Eléctrica 
+6.2.1.02.01.02 Otros Servicios Públicos 
+6.2.1.02.02 Alquileres y Derechos 	 
+6.2.1.02.03 Mantenimiento y Reparación de Bienes 	 
+6.2.1.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.2.1.02.05 Servicios Tercerizados 	 
+6.2.1.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.2.1.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.2.1.02.19 Otros Servicios no Personales 	 
+6.2.1.03 Materiales y Suministros 	 	 
+6.2.1.04 Depreciación y Amortización 	 	 
+6.2.1.05 Deterioros
+DEPURACIÓN DE AGUAS RESIDUALES                      6.2.2
+OBJETO 
+Registrar las costos directos por depuración de aguas residuales
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.2.2.01 Remuneraciones 	 	 
+6.2.2.01.01 Sueldos y Salarios  
+6.2.2.01.02 Contribuciones Patronales  
+6.2.2.01.03 Prestaciones Sociales 	 
+6.2.2.02 Servicios no personales 	 	 
+6.2.2.02.01 Servicios Básicos 	 
+6.2.2.02.01.01 Energía Eléctrica 
+6.2.2.02.01.02 Otros Servicios Públicos 
+6.2.2.02.02 Alquileres y Derechos 	 
+6.2.2.02.03 Mantenimiento y Reparación de Bienes 	 
+6.2.2.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.2.2.02.05 Servicios Tercerizados 	 
+6.2.2.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.2.2.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.2.2.02.08 Insumos Químicos 
+6.2.2.02.19 Otros Servicios no Personales 	 
+6.2.2.03 Materiales y Suministros 	 	 
+6.2.2.04 Depreciación y Amortización 	 	 
+6.2.2.05 Deterioros
+COSTO SERVICIOS COLATERALES REGULADOS                    6.3.1
+OBJETO 
+Registrar las costos directos por servicios colaterales regulados
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de costos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+6.3.1.01 Remuneraciones 	 	 
+6.3.1.01.01 Sueldos y Salarios  
+6.3.1.01.02 Contribuciones Patronales  
+6.3.1.01.03 Prestaciones Sociales 	 
+6.3.1.02 Servicios no personales 	 	 
+6.3.1.02.01 Servicios Básicos 	 
+6.3.1.02.01.01 Energía Eléctrica 
+6.3.1.02.01.02 Otros Servicios Públicos 
+6.3.1.02.02 Alquileres y Derechos 	 
+6.3.1.02.03 Mantenimiento y Reparación de Bienes 	 
+6.3.1.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+6.3.1.02.05 Servicios Tercerizados 	 
+6.3.1.02.06 Pasajes, Viáticos y Otros Gastos de Viaje 	 
+6.3.1.02.07 Impuestos, Derechos, Tasas y Gastos Judiciales 	 
+6.3.1.02.19 Otros Servicios no Personales 	 
+6.3.1.03 Materiales y Suministros 	 	 
+6.3.1.04 Depreciación y Amortización 	 	 
+6.3.1.05 Deterioros
+COSTO ACTIVIDADES NO REGULADAS                  6.3.2
+OBJETO 
+Registrar las costos directos de las actividades no reguladas
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de gastos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+ATENCIÓN A CLIENTES                7.1.1
+OBJETO 
+Registrar las gastos relacionados con la atención a los clientes de la entidad
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de gastos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+7.1.1.01 Remuneraciones 	 	 
+7.1.1.01.01 Sueldos y Salarios
+GASTOS DE LECTURA, FACTURACIÓN Y COBRANZAS                7.1.2
+OBJETO 
+Registrar las gastos relacionados con la lectura, facturación y cobranzas de la entidad
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de gastos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+7.1.2.01 Remuneraciones 	 	 
+7.1.2.01.01 Sueldos y Salarios  
+7.1.2.01.02 Contribuciones Patronales  
+7.1.2.01.03 Prestaciones Sociales 	 
+7.1.2.02 Servicios no personales 	 	 
+7.1.2.02.01 Servicios Básicos 	 
+7.1.2.02.01.01 Energía Eléctrica 
+7.1.2.02.01.02 Otros Servicios Públicos 
+7.1.2.02.02 Alquileres y Derechos 	 
+7.1.2.02.03 Mantenimiento y Reparación de Bienes 	 
+7.1.2.02.04 Mantenimiento y Reparación de Maquinaria y Equipo 	 
+7.1.2.02.05 Servicios Tercerizados 	 
+7.1.2.02.06 Pasajes, Viáticos y Otros Gastos de Viaje
+GASTOS DE PUBLICIDAD Y PROMOCIÓN                7.1.3
+OBJETO 
+Registrar las gastos relacionados con la publicidad y promoción que realiza la entidad
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de gastos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS
+GASTOS GENERALES DE ADMINISTRACIÓN                7.2.1
+OBJETO 
+Registrar las gastos relacionados con los gastos generales de administración de la entidad
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de gastos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+7.2.1.01 Remuneraciones
+GASTOS FINANCIEROS DE CORTO PLAZO                7.3.1
+OBJETO 
+Registrar las gastos relacionados con los gastos financieros de corto plazo de la entidad
+SE  DEBITA: 
+Por:  
+el monto correspondiente al devengamiento de gastos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+7.3.1.01 Intereses de Títulos y Valores de Corto Plazo 
+7.3.1.01 Intereses de Préstamos de Corto Plazo
+GASTOS FINANCIEROS DE LARGO PLAZO                7.3.1
+OBJETO 
+Registrar las gastos relacionados con los gastos financieros de largo plazo de la entidad
+SE  DEBITA:
+Por:  
+el monto correspondiente al devengamiento de gastos por todo concepto, acreditando 2.1.1
+SE ACREDITA:  
+Por:  
+La transferencia del monto total al cierre del ejercicio a la cuenta Resultados del ejercicio, acreditando 3.1.5.02
+SALDO:  
+Deudor. Representa el monto total de los costos incurridos en el ejercicio por estos conceptos.- Las cuentas se saldan al cierre del ejercicio.
+SUB-CUENTAS 
+7.3.2.01 Intereses de Títulos y Valores de Largo Plazo 
+7.3.2.01 Intereses de Préstamos de Largo Plazo
+Ejercicio Actual
+ACTIVO
+ACTIVO CORRIENTE
+Efectivo y Equivalentes | Ejercicio Anterior
+Ejercicio 
+Actual
+INGRESOS
+Ingresos por Venta de Servicios | Ejercicio 
+Anterior
+Ejercicio 
+Actual | Ejercicio anterior
+Estado (1) | Estado (1) | Código en la Base de Activos | Descripción del 
+Activo | Descripción del 
+Activo | Fecha de 
+Adquisición o activación | Valor Bruto del activo | Revaluación del activo | Revaluación del activo | Depreciación acumulada | Depreciación acumulada | Depreciación acumulada | Valor Neto del activo | Vida útil | Origen del 
+Activo (2) | Origen del 
+Activo (2) | Servicio (3) | Servicio (3) | Clase (4)
+(1) Estado | (1) Estado | (1) Estado | (1) Estado | (1) Estado | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | (4) Clase | (4) Clase | (4) Clase | (4) Clase | (4) Clase | (4) Clase | (4) Clase | • • • • • 
+• | • • • • • 
+• | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos
+(1) Estado | (1) Estado | (1) Estado | (1) Estado | (1) Estado | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes |  |  | • • • • • • 
+• | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | • • • • • 
+• | • • • • • 
+• | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos
+• 
+• | • 
+• | En operación 
+Fuera de operación | En operación 
+Fuera de operación | En operación 
+Fuera de operación | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes | El Origen del Activo puede ser:  
+Adquirido con Recursos Propios 
+Recibido en Donación  • 	Recibido en Transferencia 
+Servicio:  
+Servicio de Agua Potable 
+Servicio de Alcantarillado 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comunes |  |  | • • • • • • 
+• | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | Protección de Cuenca 
+Captación de Agua 
+Transporte y Elevación de Agua 
+Potabilización y Desinfección del Agua 
+Almacenaje de Agua 
+Distribución y Elevación de Agua 
+Recolección de Aguas Residuales | • • • • • 
+• | • • • • • 
+• | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos | Depuración de Aguas Residuales 
+Servicios Colaterales Regulados 
+Actividades No Reguladas 
+Comercialización 
+Activos Intangibles 
+Otros Activos fijos
+Facturación ( | en Lempiras) |  |  |  |  |  |  | Cobranza |  |  |  |  |  | 
+Mes |  | Enero | Febrero | Marzo | Abril | Mayo | Junio | Julio | Agosto | Septiembre | Octubre | Noviembre | Diciembre | Total Anual
+Enero |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Febrero |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Marzo |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Abril |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Mayo |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Junio |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Julio |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Agosto |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Septiembre |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Octubre |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Noviembre |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Diciembre |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Total Anual |  |  |  |  |  |  |  |  |  |  |  |  |  | 
+Transporte y Elevación de Agua | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 
+Potabilización y Desinfección del Agua | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Insumos Químicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 
+Almacenaje de Agua | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 
+Distribución y Elevación de Agua | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 
+Costo Servicio de Alcantarillado | 
+Costo por Servicio de Redes de Recolección | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 
+Depuración de Aguas Residuales | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Insumos Químicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 
+Costo por Servicios Diversos | 
+Costo Servicios Colaterales Regulados | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 
+Costo Actividades No Reguladas | 
+Remuneraciones | 
+Sueldos y Salarios | 
+Contribuciones Patronales | 
+Prestaciones Sociales | 
+Servicios no personales | 
+Servicios Básicos | 
+Energía Eléctrica | 
+Otros Servicios Públicos | 
+Alquileres y Derechos | 
+Mantenimiento y Reparación de Bienes | 
+Mantenimiento y Reparación de Maquinaria y Equipo | 
+Servicios Tercerizados | 
+Pasajes Viáticos y Otros Gastos de Viaje | 
+Impuestos, Derechos, Tasas y Gastos Judiciales | 
+Otros Servicios no Personales | 
+Materiales y Suministros | 
+Depreciación y Amortización | 
+Deterioros | 

@@ -11,17 +11,14 @@ using apc.Client.Services.AuxiliarLectura;
 using apc.Services;
 using apc.Client.Services.CaptacionPagos;
 using apc.Client.Services.Facturacion;
+using apc.Client.Services.Mantenimientos;
 using apc.Client.Services.Contabilidad;
 using apc.Client.Services.Bancos;
 using apc.Client.Services.Catalogos;
 using apc.Client.Services.Abogados;
 using apc.Client.Services.Ciclos;
-using apc.Client.Services.Servicios;
-using apc.Client.Services.Conceptos;
-using apc.Client.Services.Letras;
-using apc.Client.Services.TarifasBase;
-using apc.Client.Services.TarifasContador;
 using apc.Client.Services.AppLectores;
+using apc.Client.Services.Tarifario;
 using apc.Client.Services.Layout;
 using apc.Client.Services.Maps;
 using apc.Client.Services.Informes;
@@ -48,6 +45,7 @@ namespace apc.Client
             services.AddScoped<CaptacionPagosClient>();
             services.AddScoped<FacturacionMiscelaneosClient>();
             services.AddScoped<NotasCreditoDebitoClient>();
+            services.AddScoped<MantenimientosClient>();
             services.AddScoped<CobranzaClient>();
             services.AddScoped<EmpresasContabilidadClient>();
             services.AddScoped<ConfiguracionSistemaClient>();
@@ -70,16 +68,18 @@ namespace apc.Client
             services.AddScoped<CatalogosClient>();
             services.AddScoped<AbogadosClient>();
             services.AddScoped<CiclosClient>();
-            services.AddScoped<ServiciosClient>();
-            services.AddScoped<ConceptosClient>();
-            services.AddScoped<LetrasClient>();
             services.AddScoped<InformesClient>();
-            services.AddScoped<TarifasBaseClient>();
-            services.AddScoped<TarifasContadorClient>();
             services.AddScoped<UsuariosAppClient>();
-            services.AddScoped<ConfiguracionAppClient>();
-            services.AddScoped<ServiciosRolesWsClient>();
-            
+            services.AddScoped<ClienteServicioTarifarioClient>();
+            services.AddScoped<PruebaCalculoClient>();
+            services.AddScoped<CuadroTarifarioClient>();
+            services.AddScoped<ServicioTarifarioV3Client>();
+            services.AddScoped<CaiTarifarioClient>();
+            services.AddScoped<TarifarioConflictoClient>();
+
+            // tipos de documento fiscal (catalogo SAR Acuerdo 481-2017)
+            services.AddScoped<apc.Client.Services.TiposDocumentoFiscal.TiposDocumentoFiscalClient>();
+
             services.AddScoped<ITenantProvider, TenantProvider>();
             services.AddScoped<TenantState>();
             services.AddScoped<TenantCompanyContextClient>();

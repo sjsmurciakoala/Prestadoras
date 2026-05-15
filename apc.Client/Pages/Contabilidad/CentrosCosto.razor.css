@@ -1,85 +1,64 @@
-.contabilidad-page { padding: 1rem; background-color: #f8f9fa; min-height: 100vh; }
+/* ── Layout ── */
+.cc-page {
+    padding: 1rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
 
-.cc-toolbar { margin-bottom: 12px; align-items: center; }
-:deep(.cc-popup-responsive) { width: 800px; max-width: 95vw; max-height: 90vh; display: flex; flex-direction: column; }
-.cc-form { margin-top: 5px; }
-
-.alert-danger { border: 1px solid #f5c2c7; background-color: #f8d7da; color: #842029; }
-
-:deep(.cc-confirm-popup) {
-    border-radius: 14px;
+.cc-grid-wrapper {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.04);
     overflow: hidden;
 }
 
-:deep(.cc-confirm-popup .dxbl-popup-header),
-:deep(.cc-confirm-popup .dx-popup-header) {
-    background: transparent;
-    border-bottom: none;
-    padding: 1rem 1rem 0 1rem;
-    z-index: 10;
-}
-
-:deep(.cc-confirm-popup .dxbl-popup-content),
-:deep(.cc-confirm-popup .dx-popup-content) {
-    padding: 0 !important;
-}
-
-.cc-modal-wrapper {
-    padding: 0 1.5rem 1.5rem 1.5rem;
-}
-
-.cc-confirm-body {
-    display: flex;
-    gap: 1.25rem;
-    margin-top: 0.5rem;
-}
-
-.cc-icon-circle {
-    width: 48px;
-    height: 48px;
-    background-color: #fee2e2;
-    border-radius: 50%;
-    display: flex;
+/* ── Stat badges (indicadores rápidos) ── */
+.cc-stat-badge {
+    display: inline-flex;
     align-items: center;
-    justify-content: center;
-    flex-shrink: 0;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
 }
 
-.cc-icon-circle i {
-    color: #dc3545;
-    font-size: 1.4rem;
+.cc-stat-badge--success { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.cc-stat-badge--info    { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.cc-stat-badge--warning { background: #fef9c3; color: #854d0e; border-color: #fde68a; }
+
+/* ── Grid: badges de estado ── */
+.cc-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
 }
 
-.cc-confirm-title { font-size: 1.25rem; font-weight: 700; color: #1f2937; margin-bottom: 0.25rem; }
-.cc-confirm-subtitle { font-size: 0.9rem; color: #6b7280; line-height: 1.4; margin-bottom: 1rem; }
+.cc-badge--success { background: #dcfce7; color: #166534; }
+.cc-badge--neutral { background: #f1f5f9; color: #64748b; }
 
-.cc-details-card {
-    background-color: #f9fafb;
-    border: 1px solid #e5e7eb;
+/* ── Popup edit form (PopupEditFormCssClass) ── */
+:deep(.cc-popup-edit) {
+    width: 760px;
+    max-width: 95vw;
+    max-height: 90vh;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+/* ── Cuentas relacionadas section ── */
+.cc-page :deep(.dxbl-card) {
     border-radius: 8px;
-    padding: 12px;
-    font-size: 0.9rem;
+    overflow: hidden;
 }
 
-.cc-detail-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
-.cc-label { color: #6b7280; }
-.cc-value { font-weight: 600; color: #111827; }
-
-.cc-modal-footer {
-    display: flex;
-    justify-content: flex-end;
-    gap: 10px;
-    margin-top: 1.5rem;
-    padding-top: 1rem;
-}
-
-.cc-btn-cancel { min-width: 90px; }
-.cc-btn-delete { min-width: 110px; background-color: #dc3545; border-color: #dc3545; color: white; }
-.cc-btn-delete:hover { background-color: #bb2d3b; }
-
-@media (max-width: 576px) {
-    .cc-confirm-body { flex-direction: column; align-items: center; text-align: center; }
-    .cc-details-card { text-align: left; width: 100%; }
-    .cc-modal-footer { flex-direction: column-reverse; width: 100%; }
-    .cc-modal-footer .dx-btn { width: 100%; }
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .cc-page { padding: 0.75rem; }
 }

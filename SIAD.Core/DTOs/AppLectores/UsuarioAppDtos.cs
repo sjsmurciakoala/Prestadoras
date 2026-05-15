@@ -14,6 +14,7 @@ public record UsuarioAppListItemDto(
     string Usuario,
     string? Nombre,
     string? Ruta,
+    int? CodCiclo,
     bool Activo);
 
 public sealed class UsuarioAppEditDto
@@ -34,6 +35,8 @@ public sealed class UsuarioAppEditDto
 
     [StringLength(6, ErrorMessage = "La ruta no puede superar los 6 caracteres.")]
     public string? Ruta { get; set; }
+
+    public int? CodCiclo { get; set; }
 
     public bool Activo { get; set; } = true;
 }

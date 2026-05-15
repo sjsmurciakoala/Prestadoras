@@ -82,3 +82,17 @@ docker-compose.override.yml
 *.swp
 *~
 *.lock
+
+# --- Artefactos de despliegue Azure / on-prem ---
+publish_azure/
+publish_azure.zip
+publish_*/
+temp_excel_gen/
+temp_excel_read/
+
+# --- Backups grandes de BD ---
+Database/Backups/*.backup
+Database/Backups/*.sql
+
+# --- Archivos de carga con potencial PII ---
+Carga_*.xlsx

@@ -1,0 +1,256 @@
+@page "/mantenimientos/ajustes-tarifarios"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Mantenimientos
+@using apc.Client.Services.Mantenimientos
+
+@inject MantenimientosClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>Ajustes tarifarios</PageTitle>
+
+<DxToastProvider Name="AjustesToast" MaxToastCount="4" />
+
+<div class="mant-page">
+
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-percent me-2 text-primary"></i>Ajustes tarifarios
+            </h4>
+            <small class="text-muted">Descuentos, exoneraciones, recargos y topes por cuadro tarifario (incluye tercera edad).</small>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Recargar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="CargarAsync"
+                      Enabled="@(!isSaving)" />
+        </div>
+    </div>
+
+    <div class="mant-grid-wrapper shadow-sm">
+        <DxGrid Data="@ajustes"
+                KeyFieldName="@nameof(AjusteTarifarioDto.AjusteTarifarioId)"
+                ShowPager="true"
+                PageSize="15"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 10, 15, 25, 50 }"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                CssClass="border-0">
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="80px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is AjusteTarifarioDto a)
+                        {
+                            <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                      RenderStyleMode="ButtonRenderStyleMode.Text"
+                                      SizeMode="SizeMode.Small"
+                                      IconCssClass="bi bi-pencil-square fs-5"
+                                      Tooltip="Editar"
+                                      Click="@(() => AbrirEditar(a))" />
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.TipoAjusteNombre)" Caption="Tipo" Width="140px" />
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.CuadroCodigo)" Caption="Cuadro" MinWidth="200">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@((cell.DataItem as AjusteTarifarioDto)?.CuadroCodigo)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.CondicionCodigo)" Caption="Condición" MinWidth="180" />
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.Porcentaje)" Caption="%" Width="90px"
+                                  DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.MontoFijo)" Caption="Monto fijo" Width="110px"
+                                  DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" Visible="false" />
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.TopeMaximo)" Caption="Tope máx." Width="110px"
+                                  DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" Visible="false" />
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.TopeMensual)" Caption="Tope mensual" Width="120px"
+                                  DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.Activo)" Caption="Estado" Width="100px"
+                                  TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is AjusteTarifarioDto a)
+                        {
+                            <span class="cai-badge @(a.Activo ? "cai-badge--vigente" : "cai-badge--inactivo")">
+                                @(a.Activo ? "Activo" : "Inactivo")
+                            </span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(AjusteTarifarioDto.CuadroNombre)" Caption="Cuadro (nombre)" MinWidth="200" Visible="false" />
+            </Columns>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-percent fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay ajustes tarifarios</h5>
+                    <p class="mb-0">Los ajustes se crean junto con los cuadros tarifarios.</p>
+                </div>
+            </EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
+</div>
+
+@* ── Popup edición ── *@
+<DxPopup HeaderText="@popupHeader"
+         @bind-Visible="popupVisible"
+         Width="min(620px, 96vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate>
+        @if (editAjuste is not null && editOriginal is not null)
+        {
+            <div class="mant-status-banner">
+                <span class="text-muted small">@editOriginal.TipoAjusteNombre · @editOriginal.CuadroCodigo</span>
+                <span class="cai-badge @(editAjuste.Activo ? "cai-badge--vigente" : "cai-badge--inactivo")">
+                    @(editAjuste.Activo ? "Activo" : "Inactivo")
+                </span>
+            </div>
+
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Condición" ColSpanMd="12">
+                    <Template Context="t">
+                        <DxTextBox Text="@(editOriginal.CondicionCodigo ?? "— sin condición —")" ReadOnly="true" />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Porcentaje (%)" ColSpanMd="6">
+                    <Template Context="t">
+                        <DxSpinEdit @bind-Value="editAjuste.Porcentaje"
+                                    Decimals="2" MinValue="0" MaxValue="100" Increment="1m"
+                                    NullText="Sin porcentaje" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Monto fijo" ColSpanMd="6">
+                    <Template Context="t">
+                        <DxSpinEdit @bind-Value="editAjuste.MontoFijo"
+                                    Decimals="2" MinValue="0" Increment="10m"
+                                    NullText="Sin monto fijo" />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Tope máximo" ColSpanMd="6">
+                    <Template Context="t">
+                        <DxSpinEdit @bind-Value="editAjuste.TopeMaximo"
+                                    Decimals="2" MinValue="0" Increment="50m"
+                                    NullText="Sin tope" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Tope mensual" ColSpanMd="6">
+                    <Template Context="t">
+                        <DxSpinEdit @bind-Value="editAjuste.TopeMensual"
+                                    Decimals="2" MinValue="0" Increment="50m"
+                                    NullText="Sin tope mensual" />
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
+                    <Template Context="t">
+                        <DxCheckBox @bind-Checked="editAjuste.Activo">Ajuste disponible para el motor de cálculo</DxCheckBox>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <small class="text-muted d-block mt-2">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>Tope mensual</strong>: máximo descuento acumulado en el mes (ej. tercera edad L300/mes).
+                <strong>Tope máximo</strong>: límite por aplicación. Dejá un campo vacío para no aplicar ese límite.
+            </small>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="d-flex gap-2 justify-content-end w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => popupVisible = false)" />
+            <DxButton Text="Guardar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(!isSaving)"
+                      Click="GuardarAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private List<AjusteTarifarioDto> ajustes = new();
+    private bool isSaving;
+
+    private bool popupVisible;
+    private string popupHeader = "Editar ajuste tarifario";
+    private AjusteTarifarioSaveRequestDto? editAjuste;
+    private AjusteTarifarioDto? editOriginal;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            ajustes = (await Client.ListarAjustesTarifariosAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No se pudieron cargar los ajustes: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void AbrirEditar(AjusteTarifarioDto a)
+    {
+        editOriginal = a;
+        popupHeader = $"Editar ajuste · {a.TipoAjusteNombre} · {a.CuadroCodigo}";
+        editAjuste = new AjusteTarifarioSaveRequestDto
+        {
+            AjusteTarifarioId = a.AjusteTarifarioId,
+            Porcentaje = a.Porcentaje,
+            MontoFijo = a.MontoFijo,
+            TopeMaximo = a.TopeMaximo,
+            TopeMensual = a.TopeMensual,
+            Activo = a.Activo
+        };
+        popupVisible = true;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (editAjuste is null) return;
+        isSaving = true;
+        try
+        {
+            var resp = await Client.GuardarAjusteTarifarioAsync(editAjuste);
+            if (resp.Success)
+            {
+                popupVisible = false;
+                ShowToast("Éxito", resp.Message ?? "Ajuste guardado.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+            else
+            {
+                ShowToast("Atención", resp.Message ?? "No se pudo guardar el ajuste.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "AjustesToast",
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+}

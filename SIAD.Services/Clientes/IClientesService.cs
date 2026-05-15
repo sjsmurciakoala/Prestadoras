@@ -5,7 +5,6 @@ namespace SIAD.Services.Clientes;
 
 public interface IClientesService
 {
-    Task<string> GenerarCodigoClienteAsync(CancellationToken ct = default);
     Task<ClienteCreateResponseDto> CrearClienteAsync(ClienteCreateDto dto, string usuarioCreacion, CancellationToken ct = default);
     Task<ClienteDetailDto> ActualizarClienteAsync(int id, ClienteUpdateDto dto, string usuarioModificacion, CancellationToken ct = default);
 
@@ -23,23 +22,6 @@ public interface IClientesService
     Task<ClienteHistoricoConsumoResponseDto> GetHistoricoConsumoAsync(int clienteId, DateTime desde, DateTime hasta, CancellationToken ct = default);
     // NOTE: Added paged historico consumo to avoid loading large ranges in memory.
     Task<ClienteHistoricoConsumoPagedResponseDto> GetHistoricoConsumoPagedAsync(int clienteId, DateTime desde, DateTime hasta, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default);
-
-    Task<ClienteConfiguracionTarifaHeaderDto?> GetConfiguracionTarifaHeaderAsync(int clienteId, string usuario, CancellationToken ct = default);
-    Task<IReadOnlyList<ClienteConfiguracionTarifaDetalleDto>> GetConfiguracionTarifaDetalleAsync(
-        int clienteId,
-        int? categoriaSeleccionada,
-        string usuario,
-        CancellationToken ct = default);
-    Task<ResponseModelDto> ActualizarConfiguracionTarifaAsync(
-        int clienteId,
-        ClienteConfiguracionTarifaUpdateRequest request,
-        string usuario,
-        CancellationToken ct = default);
-    Task<ResponseModelDto> AgregarConfiguracionTarifaServicioAsync(
-        int clienteId,
-        ClienteConfiguracionTarifaAddRequest request,
-        string usuario,
-        CancellationToken ct = default);
 
     Task<ClienteFotoMedidorHeaderDto?> GetFotoMedidorHeaderAsync(int clienteId, CancellationToken ct = default);
     Task<IReadOnlyList<ClienteFotoMedidorItemDto>> GetFotoMedidorAsync(

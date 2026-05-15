@@ -88,14 +88,6 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "letras",
-                    Text = "Letras",
-                    IconCssClass = "bi bi-type",
-                    NavigateUrl = "/letras",
-                    MatchPrefixes = ["/letras"]
-                },
-                new SidebarNavItem
-                {
                     Id = "medidores",
                     Text = "Medidores",
                     IconCssClass = "bi bi-speedometer2",
@@ -115,18 +107,26 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "servicios",
-                    Text = "Servicios",
-                    IconCssClass = "bi bi-tools",
-                    MatchPrefixes = ["/servicios", "/conceptos", "/tarifas", "/tarifas-contador", "/solicitudes"],
+                    Id = "tarifario-v3",
+                    Text = "Tarifario",
+                    IconCssClass = "bi bi-calculator",
+                    MatchPrefixes = ["/tarifario"],
                     Children =
                     [
-                        new SidebarNavItem { Id = "serv-servicios", Text = "Servicios", NavigateUrl = "/servicios", MatchPrefixes = ["/servicios"], IconCssClass = "bi bi-lightning-charge" },
-                        new SidebarNavItem { Id = "serv-conceptos", Text = "Conceptos", NavigateUrl = "/conceptos", MatchPrefixes = ["/conceptos"], IconCssClass = "bi bi-diagram-2" },
-                        new SidebarNavItem { Id = "serv-tarifas", Text = "Tarifas", NavigateUrl = "/tarifas", MatchPrefixes = ["/tarifas"], IconCssClass = "bi bi-cash-coin" },
-                        new SidebarNavItem { Id = "serv-tarifas-contador", Text = "Tarifas Contador", NavigateUrl = "/tarifas-contador", MatchPrefixes = ["/tarifas-contador"], IconCssClass = "bi bi-graph-up" },
-                        new SidebarNavItem { Id = "serv-solicitudes", Text = "Solicitudes", NavigateUrl = "/solicitudes", MatchPrefixes = ["/solicitudes"], IconCssClass = "bi bi-chat-left-text" }
+                        new SidebarNavItem { Id = "tarv3-cuadros", Text = "Cuadros tarifarios", NavigateUrl = "/tarifario/cuadros", MatchPrefixes = ["/tarifario/cuadros"], IconCssClass = "bi bi-table" },
+                        new SidebarNavItem { Id = "tarv3-cliente-servicio", Text = "Cliente servicio", NavigateUrl = "/tarifario/cliente-servicio-v3", MatchPrefixes = ["/tarifario/cliente-servicio-v3"], IconCssClass = "bi bi-diagram-3" },
+                        new SidebarNavItem { Id = "tarv3-maestro-servicios", Text = "Maestro servicios", NavigateUrl = "/tarifario/maestro-servicios-v3", MatchPrefixes = ["/tarifario/maestro-servicios-v3"], IconCssClass = "bi bi-list-ul" },
+                        new SidebarNavItem { Id = "tarv3-cai-offline", Text = "CAI offline", NavigateUrl = "/tarifario/cai-offline", MatchPrefixes = ["/tarifario/cai-offline"], IconCssClass = "bi bi-upc-scan" },
+                        new SidebarNavItem { Id = "tarv3-conflictos", Text = "Conflictos", NavigateUrl = "/tarifario/conflictos-v3", MatchPrefixes = ["/tarifario/conflictos-v3"], IconCssClass = "bi bi-exclamation-diamond" }
                     ]
+                },
+                new SidebarNavItem
+                {
+                    Id = "solicitudes",
+                    Text = "Solicitudes",
+                    IconCssClass = "bi bi-chat-left-text",
+                    NavigateUrl = "/solicitudes",
+                    MatchPrefixes = ["/solicitudes"]
                 }
             ]
         },
@@ -177,6 +177,39 @@ public static class SidebarNavigationDefinition
             ]
         },
 
+        // ===== MANTENIMIENTOS =====
+        new SidebarNavSection
+        {
+            Label = "Mantenimientos",
+            Items =
+            [
+                new SidebarNavItem
+                {
+                    Id = "mant-recargo-mora",
+                    Text = "Recargo por mora",
+                    IconCssClass = "bi bi-clock-history",
+                    NavigateUrl = "/mantenimientos/recargo-mora",
+                    MatchPrefixes = ["/mantenimientos/recargo-mora"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "mant-ajustes-tarifarios",
+                    Text = "Ajustes tarifarios",
+                    IconCssClass = "bi bi-percent",
+                    NavigateUrl = "/mantenimientos/ajustes-tarifarios",
+                    MatchPrefixes = ["/mantenimientos/ajustes-tarifarios"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "mant-motivos-notas",
+                    Text = "Motivos de Notas C/D",
+                    IconCssClass = "bi bi-tags",
+                    NavigateUrl = "/facturacion/notas/motivos",
+                    MatchPrefixes = ["/facturacion/notas/motivos"]
+                }
+            ]
+        },
+
         // ===== CONTABILIDAD =====
         new SidebarNavSection
         {
@@ -201,7 +234,7 @@ public static class SidebarNavigationDefinition
                     Id = "cont-contab",
                     Text = "Contabilidad",
                     IconCssClass = "bi bi-journal-text",
-                    MatchPrefixes = ["/contabilidad/empresas", "/contabilidad/plan-cuentas", "/contabilidad/centros-costo", "/contabilidad/terceros", "/contabilidad/diarios", "/contabilidad/periodos", "/contabilidad/tipos-transaccion", "/contabilidad/reglas-integracion", "/contabilidad/polizas", "/contabilidad/partidas"],
+                    MatchPrefixes = ["/contabilidad/empresas", "/contabilidad/plan-cuentas", "/contabilidad/centros-costo", "/contabilidad/terceros", "/contabilidad/diarios", "/contabilidad/periodos", "/contabilidad/tipos-transaccion", "/contabilidad/polizas", "/contabilidad/partidas"],
                     Children =
                     [
                         new SidebarNavItem { Id = "cb-empresas", Text = "Empresas", NavigateUrl = "/contabilidad/empresas", MatchPrefixes = ["/contabilidad/empresas"], IconCssClass = "bi bi-buildings" },
@@ -213,7 +246,6 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "cb-diarios", Text = "Diarios contables", NavigateUrl = "/contabilidad/diarios", MatchPrefixes = ["/contabilidad/diarios"], IconCssClass = "bi bi-book" },
                         new SidebarNavItem { Id = "cb-periodos", Text = "Períodos contables", NavigateUrl = "/contabilidad/periodos", MatchPrefixes = ["/contabilidad/periodos"], IconCssClass = "bi bi-calendar" },
                         new SidebarNavItem { Id = "cb-tipos-comprobantes", Text = "Tipos de comprobantes", NavigateUrl = "/contabilidad/tipos-transaccion", MatchPrefixes = ["/contabilidad/tipos-transaccion"], IconCssClass = "bi bi-tags" },
-                        new SidebarNavItem { Id = "cb-reglas-integracion", Text = "Reglas legacy (lectura)", NavigateUrl = "/contabilidad/reglas-integracion", MatchPrefixes = ["/contabilidad/reglas-integracion"], IconCssClass = "bi bi-diagram-2" },
                         new SidebarNavItem { Id = "cb-polizas", Text = "Partidas", NavigateUrl = "/contabilidad/partidas", MatchPrefixes = ["/contabilidad/partidas", "/contabilidad/polizas"], IconCssClass = "bi bi-file-earmark-check" }
                     ]
                 }
@@ -261,15 +293,19 @@ public static class SidebarNavigationDefinition
             [
                 new SidebarNavItem
                 {
-                    Id = "app-settings",
-                    Text = "Mi App",
+                    Id = "app-usuarios",
+                    Text = "Usuarios App",
                     IconCssClass = "bi bi-phone",
-                    MatchPrefixes = ["/mi-app/usuarios", "/mi-app/configuracion"],
-                    Children =
-                    [
-                        new SidebarNavItem { Id = "app-usuarios", Text = "Usuarios App", NavigateUrl = "/mi-app/usuarios", MatchPrefixes = ["/mi-app/usuarios"], IconCssClass = "bi bi-person-badge" },
-                        new SidebarNavItem { Id = "app-config", Text = "Configuraciones App", NavigateUrl = "/mi-app/configuracion", MatchPrefixes = ["/mi-app/configuracion"], IconCssClass = "bi bi-sliders" }
-                    ]
+                    NavigateUrl = "/mi-app/usuarios",
+                    MatchPrefixes = ["/mi-app/usuarios"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "tipos-documento-fiscal",
+                    Text = "Tipos de documento (SAR)",
+                    IconCssClass = "bi bi-file-earmark-text",
+                    NavigateUrl = "/tipos-documento-fiscal",
+                    MatchPrefixes = ["/tipos-documento-fiscal"]
                 },
                 new SidebarNavItem
                 {

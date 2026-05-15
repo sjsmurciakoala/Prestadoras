@@ -7,6 +7,8 @@ public partial class historicomedicion
 {
     public int ide { get; set; }
 
+    public long company_id { get; set; }
+
     public decimal ano { get; set; }
 
     public decimal mes { get; set; }

@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.Medidores;
 using SIAD.Core.Entities;
+using SIAD.Core.Tenancy;
 using SIAD.Data;
 
 namespace SIAD.Services.Medidores;
@@ -12,8 +13,13 @@ namespace SIAD.Services.Medidores;
 public class MedidoresService : IMedidoresService
 {
     private readonly SiadDbContext _context;
+    private readonly ICurrentCompanyService _currentCompanyService;
 
-    public MedidoresService(SiadDbContext context) => _context = context;
+    public MedidoresService(SiadDbContext context, ICurrentCompanyService currentCompanyService)
+    {
+        _context = context;
+        _currentCompanyService = currentCompanyService;
+    }
 
     public async Task<IReadOnlyList<MedidorListDto>> SearchAsync(MedidorFilterDto filtro, CancellationToken ct = default)
     {
@@ -143,6 +149,7 @@ public class MedidoresService : IMedidoresService
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         var entity = new maestro_medidor
         {
+            company_id = _currentCompanyService.GetCompanyId(),
             maestro_medidor_numero = numero,
             maestro_medidor_marca = marca,
             maestro_medidor_fecha_instala = fechaInstalacion,
@@ -266,11 +273,9 @@ public class MedidoresService : IMedidoresService
         var cliente = medidor.Cliente;
         var historico = await GetHistorialAsync(id, 12, ct);
 
-        var configuraciones = await _context.configuracion_app_lectura_medidores
-            .AsNoTracking()
-            .OrderBy(c => c.ide)
-            .Select(c => c.descripcion ?? c.valor_letras ?? $"Config {c.ide}")
-            .ToListAsync(ct);
+        // [Sprint1/FaseC 2026-05-05] configuracion_app_lectura_medidores dropeada;
+        // lista vacia. La configuracion del app vive ahora en adm_* o snapshot V3.
+        var configuraciones = new List<string>();
 
         return new MedidorDetailDto(
             medidor.Medidor.maestro_medidor_id,

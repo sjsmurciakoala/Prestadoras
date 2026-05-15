@@ -9,7 +9,7 @@ Usa esta skill para cambios en reporteria web, datasets y persistencia de layout
 
 ## Workflow
 
-1. Consulta primero la documentacion oficial con `$hodsoft-devexpress-docs` o `dxdocs`.
+1. **Call `devexpress_docs_search`** con el nombre del componente o API de reporting afectado (e.g. `ReportStorageWebExtension`, `XtraReport`, `SqlDataSource`) y luego **call `devexpress_docs_get_content`** para leer el articulo relevante.
 2. Revisa el bootstrap de reporting en `apc/Program.cs`.
 3. Ubica el flujo afectado:
    - catalogo de reportes

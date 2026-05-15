@@ -114,17 +114,13 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<concepto_cobro_adicional> concepto_cobro_adicionals { get; set; }
 
-    public virtual DbSet<condicion_lectura> condicion_lecturas { get; set; }
-
-    public virtual DbSet<configuracion_app_lectura_medidore> configuracion_app_lectura_medidores { get; set; }
+    // [Sprint1/FaseC 2026-05-05] Removidos DbSets legacy:
+    //   condicion_lectura, configuracion_app_lectura_medidore,
+    //   configuracion_tasa, configuracion_tasas_detalle.
 
     public virtual DbSet<configuracion_cobros_adicionale> configuracion_cobros_adicionales { get; set; }
 
     public virtual DbSet<configuracion_cobros_adicionales_detalle> configuracion_cobros_adicionales_detalles { get; set; }
-
-    public virtual DbSet<configuracion_tasa> configuracion_tasas { get; set; }
-
-    public virtual DbSet<configuracion_tasas_detalle> configuracion_tasas_detalles { get; set; }
 
     public virtual DbSet<coordenadas_empleado> coordenadas_empleados { get; set; }
 
@@ -156,9 +152,7 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<identityusertoken_string_> identityusertoken_string_s { get; set; }
 
-    public virtual DbSet<informativo> informativos { get; set; }
-
-    public virtual DbSet<letra> letras { get; set; }
+    // [Sprint1/FaseC 2026-05-05] Removidos DbSets legacy: informativo, letra.
 
     public virtual DbSet<log_cliclo_descarga_app> log_cliclo_descarga_apps { get; set; }
 
@@ -216,13 +210,10 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<servicio> servicios { get; set; }
 
-    public virtual DbSet<servicios_roles_ws> servicios_roles_ws { get; set; }
+    // [Sprint1/FaseC 2026-05-05] Removidos DbSets legacy:
+    //   servicios_roles_ws, tarifa, tarifas_contador.
 
     public virtual DbSet<solicitud_servicio> solicitud_servicios { get; set; }
-
-    public virtual DbSet<tarifa> tarifas { get; set; }
-
-    public virtual DbSet<tarifas_contador> tarifas_contadors { get; set; }
 
     public virtual DbSet<tipo_d> tipo_ds { get; set; }
 
@@ -829,27 +820,7 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.concepto).HasColumnType("character varying");
         });
 
-        modelBuilder.Entity<condicion_lectura>(entity =>
-        {
-            entity.HasKey(e => e.codigo).HasName("condicion_lectura_pkey");
 
-            entity.ToTable("condicion_lectura");
-
-            entity.Property(e => e.codigo).HasColumnType("character varying");
-            entity.Property(e => e.descripcion).HasColumnType("character varying");
-            entity.Property(e => e.facturacion).HasColumnType("character varying");
-            entity.Property(e => e.tipo).HasColumnType("character varying");
-        });
-
-        modelBuilder.Entity<configuracion_app_lectura_medidore>(entity =>
-        {
-            entity.HasKey(e => e.ide).HasName("configuracion_app_lectura_medidores_pkey");
-
-            entity.Property(e => e.ide).UseIdentityAlwaysColumn();
-            entity.Property(e => e.descripcion).HasMaxLength(200);
-            entity.Property(e => e.valor_letras).HasMaxLength(100);
-            entity.Property(e => e.valor_numeros).HasPrecision(10, 2);
-        });
 
         modelBuilder.Entity<configuracion_cobros_adicionale>(entity =>
         {
@@ -875,44 +846,7 @@ public partial class SiadDbContext : DbContext
                 .HasConstraintName("configuracion_cobros_fkey");
         });
 
-        modelBuilder.Entity<configuracion_tasa>(entity =>
-        {
-            entity.HasKey(e => e.configuracion_tasas_id).HasName("configuracion_tasas_id_pkey");
 
-            entity.Property(e => e.configuracion_tasas_id)
-                .UseIdentityAlwaysColumn()
-                .HasIdentityOptions(38784L, null, null, null, null, null);
-            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.usuariocreacion).HasMaxLength(256);
-            entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
-
-            entity.HasOne(d => d.maestro_cliente).WithMany(p => p.configuracion_tasas)
-                .HasForeignKey(d => d.maestro_cliente_id)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("maestro_cliente_id_fkey");
-        });
-
-        modelBuilder.Entity<configuracion_tasas_detalle>(entity =>
-        {
-            entity.HasKey(e => e.configuracion_tasas_detalle_id).HasName("configuracion_tasas_detalle_id_pkey");
-
-            entity.ToTable("configuracion_tasas_detalle");
-
-            entity.Property(e => e.configuracion_tasas_detalle_id)
-                .UseIdentityAlwaysColumn()
-                .HasIdentityOptions(149941L, null, null, null, null, null);
-            entity.Property(e => e.configuracion_tasas_detalle_monto).HasPrecision(11, 4);
-            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.usuariocreacion).HasMaxLength(256);
-            entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
-
-            entity.HasOne(d => d.configuracion_tasas).WithMany(p => p.configuracion_tasas_detalles)
-                .HasForeignKey(d => d.configuracion_tasas_id)
-                .OnDelete(DeleteBehavior.ClientSetNull)
-                .HasConstraintName("configurcion_tasas_id_fkey");
-        });
 
         modelBuilder.Entity<coordenadas_empleado>(entity =>
         {
@@ -1359,34 +1293,7 @@ public partial class SiadDbContext : DbContext
                 .HasConstraintName("fk_user_tokens_asp_net_users_identity_user_id");
         });
 
-        modelBuilder.Entity<informativo>(entity =>
-        {
-            entity.HasKey(e => e.ide).HasName("informativo_pkey");
 
-            entity.ToTable("informativo");
-
-            entity.Property(e => e.ide).UseIdentityAlwaysColumn();
-            entity.Property(e => e.cod_condicion).HasColumnType("character varying");
-            entity.Property(e => e.codigo).HasColumnType("character varying");
-            entity.Property(e => e.descripcion).HasColumnType("character varying");
-        });
-
-        modelBuilder.Entity<letra>(entity =>
-        {
-            entity.HasKey(e => e.letras).HasName("letra_pkey");
-
-            entity.ToTable("letras");
-
-            entity.Property(e => e.letras)
-                .HasMaxLength(1)
-                .IsFixedLength()
-                .HasColumnType("character");
-            entity.Property(e => e.num).HasColumnType("numeric(1,0)");
-            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.usuariocreacion).HasMaxLength(256);
-            entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
-        });
 
         modelBuilder.Entity<log_cliclo_descarga_app>(entity =>
         {
@@ -1827,16 +1734,6 @@ public partial class SiadDbContext : DbContext
                 .HasConstraintName("servicios_cont_account_id_fkey");
         });
 
-        modelBuilder.Entity<servicios_roles_ws>(entity =>
-        {
-            entity.HasKey(e => new { e.rol, e.servicios_codigo }).HasName("servicios_roles_ws_pkey");
-
-            entity.ToTable("servicios_roles_ws");
-
-            entity.Property(e => e.rol).HasMaxLength(50);
-            entity.Property(e => e.servicios_codigo).HasMaxLength(50);
-            entity.Property(e => e.descripcion).HasColumnType("text");
-        });
 
         modelBuilder.Entity<solicitud_servicio>(entity =>
         {
@@ -1858,55 +1755,7 @@ public partial class SiadDbContext : DbContext
                 .HasConstraintName("solicitud_servicio_categoria_servicio_id_fkey");
         });
 
-        modelBuilder.Entity<tarifa>(entity =>
-        {
-            entity.HasKey(e => new { e.tipo, e.categoria_id, e.codigo }).HasName("tarifas_pkey");
 
-            entity.ToTable("tarifas");
-
-            entity.Property(e => e.codigo).HasColumnType("character varying");
-            entity.Property(e => e.descripcion).HasColumnType("character varying");
-            entity.Property(e => e.valor).HasPrecision(18, 2);
-
-            entity.HasIndex(e => e.categoria_id).HasDatabaseName("ix_tarifas_categoria_servicio");
-
-            entity.HasOne<categoria_servicio>()
-                .WithMany()
-                .HasForeignKey(e => e.categoria_id)
-                .HasConstraintName("fk_tarifas_categoria_servicio");
-        });
-
-        modelBuilder.Entity<tarifas_contador>(entity =>
-        {
-            entity.HasKey(e => e.ide).HasName("tarifas_contador_pkey");
-
-            entity.ToTable("tarifas_contador");
-
-            entity.Property(e => e.ide)
-                .UseIdentityAlwaysColumn()
-                .HasIdentityOptions(17L, null, null, null, null, null);
-            entity.Property(e => e.alquiler).HasPrecision(12, 2);
-            entity.Property(e => e.codigo).HasColumnType("character varying");
-            entity.Property(e => e.cuota).HasPrecision(12, 2);
-            entity.Property(e => e.descripcion).HasColumnType("character varying");
-            entity.Property(e => e.maximo).HasPrecision(12);
-            entity.Property(e => e.minimo).HasPrecision(12);
-            entity.Property(e => e.valor_base).HasPrecision(12, 2);
-
-            entity.HasIndex(e => e.categoria_id).HasDatabaseName("ix_tarifas_contador_categoria_servicio");
-            entity.HasIndex(e => new { e.tipo, e.categoria_id, e.codigo }).HasDatabaseName("ix_tarifas_contador_tarifa");
-
-            entity.HasOne<categoria_servicio>()
-                .WithMany()
-                .HasForeignKey(e => e.categoria_id)
-                .HasConstraintName("fk_tarifas_contador_categoria_servicio");
-
-            entity.HasOne<tarifa>()
-                .WithMany()
-                .HasForeignKey(e => new { e.tipo, e.categoria_id, e.codigo })
-                .HasPrincipalKey(e => new { e.tipo, e.categoria_id, e.codigo })
-                .HasConstraintName("fk_tarifas_contador_tarifa");
-        });
 
         modelBuilder.Entity<tipo_d>(entity =>
         {

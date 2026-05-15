@@ -1,6 +1,7 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.AppLectores
 @using SIAD.Core.DTOs.Rutas
+@using SIAD.Core.DTOs.Ciclos
 
 <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
     <DataAnnotationsValidator />
@@ -28,14 +29,28 @@
             <ValidationMessage For="() => Model.Clave" />
         </DxFormLayoutItem>
 
-        <DxFormLayoutItem Caption="Nombre *" ColSpanMd="8">
+        <DxFormLayoutItem Caption="Nombre *" ColSpanMd="6">
             <DxTextBox @bind-Text="Model.Nombre"
                        NullText="Nombre del lector"
                        MaxLength="50" />
             <ValidationMessage For="() => Model.Nombre" />
         </DxFormLayoutItem>
 
-        <DxFormLayoutItem Caption="Ruta" ColSpanMd="4">
+        <DxFormLayoutItem Caption="Ciclo" ColSpanMd="3">
+            <Template>
+                <DxComboBox TData="CicloListItemDto"
+                            TValue="int?"
+                            Data="@Ciclos"
+                            @bind-Value="Model.CodCiclo"
+                            ValueFieldName="@nameof(CicloListItemDto.Id)"
+                            TextFieldName="@nameof(CicloListItemDto.Codigo)"
+                            NullText="Ciclo"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.CodCiclo" />
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Ruta" ColSpanMd="3">
             <Template>
                 <DxComboBox TData="RutaListItemDto"
                             TValue="string"
@@ -81,6 +96,9 @@
 
     [Parameter]
     public IReadOnlyList<RutaListItemDto> Rutas { get; set; } = Array.Empty<RutaListItemDto>();
+
+    [Parameter]
+    public IReadOnlyList<CicloListItemDto> Ciclos { get; set; } = Array.Empty<CicloListItemDto>();
 
     [Parameter]
     public EventCallback OnValidSubmit { get; set; }

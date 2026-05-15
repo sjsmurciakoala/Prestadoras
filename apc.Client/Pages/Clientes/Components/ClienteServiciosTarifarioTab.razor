@@ -1,0 +1,388 @@
+@using SIAD.Core.DTOs.Tarifario
+@using SIAD.Core.DTOs.Common
+@using DevExpress.Blazor
+
+@inject apc.Client.Services.Tarifario.ClienteServicioTarifarioClient TarifarioClient
+@inject IToastNotificationService ToastService
+
+<div class="cliente-servicios-tarifario-container">
+    <DxToastProvider Name="ServiciosTarifarioToast" MaxToastCount="3" />
+
+    @if (isLoading)
+    {
+        <div class="text-center p-4">
+            <DxLoadingPanel Visible="true" Text="Cargando servicios..." />
+            <div style="height:90px"></div>
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(error))
+    {
+        <div class="p-3">
+            <div class="alert alert-danger">@error</div>
+        </div>
+    }
+    else
+    {
+        <div class="p-3">
+            <!-- GRILLA DE SERVICIOS ASIGNADOS -->
+            <div class="d-flex justify-content-between align-items-center mb-3">
+                <h6 class="mb-0">
+                    <i class="bi bi-list-check me-1"></i>
+                    Servicios asignados al cliente
+                </h6>
+                <DxButton Text="Agregar servicio"
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          RenderStyleMode="ButtonRenderStyleMode.Contained"
+                          Click="AbrirFormularioNuevo" />
+            </div>
+
+            @if (servicios.Count == 0)
+            {
+                <div class="alert alert-info">
+                    <i class="bi bi-info-circle me-1"></i>
+                    El cliente no tiene servicios asignados en el modelo tarifario.
+                </div>
+            }
+            else
+            {
+                <DxGrid Data="@servicios"
+                        ShowGroupPanel="false"
+                        ShowFilterRow="false"
+                        CssClass="grid-servicios-tarifario"
+                        PageSize="10">
+                    <Columns>
+                        <DxGridDataColumn FieldName="ServicioNombre" Caption="Servicio" Width="160px" />
+                        <DxGridDataColumn FieldName="CategoriaNombre" Caption="Categoría" Width="130px" />
+                        <DxGridDataColumn FieldName="CondicionNombre" Caption="Condición" Width="130px" />
+                        <DxGridDataColumn FieldName="SegmentoNombre" Caption="Segmento" Width="160px" />
+                        <DxGridDataColumn FieldName="CuadroCodigo" Caption="Cuadro tarifario" Width="200px">
+                            <CellDisplayTemplate Context="cell">
+                                @{
+                                    var item = (ClienteServicioItemDto)cell.DataItem;
+                                    if (!string.IsNullOrWhiteSpace(item.CuadroCodigo))
+                                    {
+                                        <span class="badge bg-success bg-opacity-10 text-success">@item.CuadroCodigo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-warning bg-opacity-10 text-warning">Sin cuadro</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="FechaAlta" Caption="Fecha alta" Width="110px" DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="StatusId" Caption="Estado" Width="90px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @{
+                                    var item = (ClienteServicioItemDto)cell.DataItem;
+                                    if (item.StatusId == 1)
+                                    {
+                                        <span class="badge bg-success">Activo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Inactivo</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @{
+                                    var item = (ClienteServicioItemDto)cell.DataItem;
+                                }
+                                <div class="d-flex justify-content-center gap-1">
+                                    @if (item.StatusId == 1)
+                                    {
+                                        <button type="button" class="btn btn-sm btn-outline-primary" title="Editar"
+                                                @onclick="() => AbrirFormularioEditar(item)">
+                                            <i class="bi bi-pencil"></i>
+                                        </button>
+                                        <button type="button" class="btn btn-sm btn-outline-danger" title="Desactivar"
+                                                @onclick="() => DesactivarAsync(item)">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    }
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            }
+
+            <!-- FORMULARIO DE ASIGNACIÓN (inline) -->
+            @if (mostrarFormulario)
+            {
+                <div class="card mt-3 border-primary">
+                    <div class="card-header bg-primary bg-opacity-10 text-primary fw-bold">
+                        <i class="bi bi-pencil-square me-1"></i>
+                        @(editandoId.HasValue ? "Editar servicio" : "Agregar servicio")
+                    </div>
+                    <div class="card-body">
+                        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                            <DxFormLayoutItem Caption="Servicio" ColSpanXs="12" ColSpanMd="6">
+                                <Template>
+                                    <DxComboBox Data="@catalogos?.Servicios"
+                                                TextFieldName="Nombre"
+                                                ValueFieldName="Id"
+                                                @bind-Value="formServicioId"
+                                                NullText="Seleccione un servicio..."
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                FilteringMode="DataGridFilteringMode.Contains" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Categoría regulatoria" ColSpanXs="12" ColSpanMd="6">
+                                <Template>
+                                    <DxComboBox Data="@catalogos?.Categorias"
+                                                TextFieldName="Nombre"
+                                                ValueFieldName="Id"
+                                                @bind-Value="formCategoriaId"
+                                                @bind-Value:after="OnCategoriaChanged"
+                                                NullText="Seleccione categoría..."
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Condición de medición" ColSpanXs="12" ColSpanMd="6">
+                                <Template>
+                                    <DxComboBox Data="@catalogos?.Condiciones"
+                                                TextFieldName="Nombre"
+                                                ValueFieldName="Id"
+                                                @bind-Value="formCondicionId"
+                                                NullText="Seleccione condición..."
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Segmento tarifario" ColSpanXs="12" ColSpanMd="6">
+                                <Template>
+                                    <DxComboBox Data="@segmentosFiltrados"
+                                                TextFieldName="Nombre"
+                                                ValueFieldName="Id"
+                                                @bind-Value="formSegmentoId"
+                                                NullText="@(formCategoriaId.HasValue ? "Seleccione segmento..." : "Seleccione categoría primero")"
+                                                Enabled="@formCategoriaId.HasValue"
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Fecha de alta" ColSpanXs="12" ColSpanMd="6">
+                                <Template>
+                                    <DxDateEdit @bind-Date="formFechaAlta" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem Caption="Cuadro tarifario (resuelto)" ColSpanXs="12" ColSpanMd="6">
+                                <Template>
+                                    <div class="form-control-plaintext text-muted fst-italic">
+                                        Se asigna automáticamente al guardar
+                                    </div>
+                                </Template>
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+
+                        <div class="d-flex justify-content-end gap-2 mt-3">
+                            <DxButton Text="Cancelar"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                      Click="CerrarFormulario" />
+                            <DxButton Text="@(editandoId.HasValue ? "Actualizar" : "Guardar")"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      RenderStyleMode="ButtonRenderStyleMode.Contained"
+                                      Enabled="@(!isSaving && formServicioId.HasValue)"
+                                      Click="GuardarAsync" />
+                        </div>
+                    </div>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    [EditorRequired]
+    public int ClienteId { get; set; }
+
+    [Parameter]
+    public EventCallback OnChanged { get; set; }
+
+    private List<ClienteServicioItemDto> servicios = new();
+    private ClienteServicioCatalogosDto? catalogos;
+    private bool isLoading = true;
+    private bool isSaving;
+    private string? error;
+
+    // Formulario
+    private bool mostrarFormulario;
+    private long? editandoId;
+    private long? formServicioId;
+    private long? formCategoriaId;
+    private long? formCondicionId;
+    private long? formSegmentoId;
+    private DateTime formFechaAlta = DateTime.Today;
+
+    private IEnumerable<SegmentoLookupDto> segmentosFiltrados =>
+        catalogos?.Segmentos?.Where(s =>
+            !formCategoriaId.HasValue || s.CategoriaRegulatoriaId == formCategoriaId.Value)
+        ?? Enumerable.Empty<SegmentoLookupDto>();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await LoadAsync();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            var serviciosTask = TarifarioClient.ObtenerServiciosAsync(ClienteId);
+            var catalogosTask = TarifarioClient.ObtenerCatalogosAsync(ClienteId);
+
+            await Task.WhenAll(serviciosTask, catalogosTask);
+
+            servicios = serviciosTask.Result.ToList();
+            catalogos = catalogosTask.Result;
+        }
+        catch (Exception ex)
+        {
+            error = $"Error al cargar: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AbrirFormularioNuevo()
+    {
+        editandoId = null;
+        formServicioId = null;
+        formCategoriaId = null;
+        formCondicionId = null;
+        formSegmentoId = null;
+        formFechaAlta = DateTime.Today;
+        mostrarFormulario = true;
+    }
+
+    private void AbrirFormularioEditar(ClienteServicioItemDto item)
+    {
+        editandoId = item.ClienteServicioId;
+        formServicioId = item.ServicioId;
+        formCategoriaId = item.CategoriaRegulatoriaId;
+        formCondicionId = item.CondicionMedicionId;
+        formSegmentoId = item.SegmentoTarifarioId;
+        formFechaAlta = item.FechaAlta ?? DateTime.Today;
+        mostrarFormulario = true;
+    }
+
+    private void CerrarFormulario()
+    {
+        mostrarFormulario = false;
+        editandoId = null;
+    }
+
+    private void OnCategoriaChanged()
+    {
+        // Al cambiar la categoría, limpiar el segmento si ya no aplica
+        if (formSegmentoId.HasValue && catalogos?.Segmentos != null)
+        {
+            var segActual = catalogos.Segmentos.FirstOrDefault(s => s.Id == formSegmentoId.Value);
+            if (segActual != null && segActual.CategoriaRegulatoriaId != formCategoriaId)
+            {
+                formSegmentoId = null;
+            }
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (!formServicioId.HasValue)
+        {
+            ShowToast("Atención", "Seleccione un servicio.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            var request = new ClienteServicioSaveRequest(
+                editandoId,
+                formServicioId.Value,
+                formCategoriaId,
+                formCondicionId,
+                formSegmentoId,
+                formFechaAlta);
+
+            var response = await TarifarioClient.GuardarAsync(ClienteId, request);
+
+            if (response?.Success == true)
+            {
+                ShowToast("Éxito", response.Message, ToastRenderStyle.Success);
+                CerrarFormulario();
+                await LoadAsync();
+                await NotifyChangedAsync();
+            }
+            else
+            {
+                ShowToast("Error", response?.Message ?? "No se pudo guardar.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"Error al guardar: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task DesactivarAsync(ClienteServicioItemDto item)
+    {
+        try
+        {
+            var request = new ClienteServicioDesactivarRequest(item.ClienteServicioId);
+            var response = await TarifarioClient.DesactivarAsync(ClienteId, request);
+
+            if (response?.Success == true)
+            {
+                ShowToast("Éxito", response.Message, ToastRenderStyle.Success);
+                await LoadAsync();
+                await NotifyChangedAsync();
+            }
+            else
+            {
+                ShowToast("Error", response?.Message ?? "No se pudo desactivar.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"Error: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = message,
+            RenderStyle = style,
+            ProviderName = "ServiciosTarifarioToast"
+        });
+    }
+
+    private async Task NotifyChangedAsync()
+    {
+        if (OnChanged.HasDelegate)
+        {
+            await OnChanged.InvokeAsync();
+        }
+    }
+}

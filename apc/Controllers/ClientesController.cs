@@ -49,91 +49,6 @@ public class ClientesController : ControllerBase
     }
 
 
-    [HttpGet("{id:int}/configuracion-tarifa/header")]
-
-    public async Task<IActionResult> GetConfiguracionTarifaHeader(int id, CancellationToken cancellationToken)
-
-    {
-
-        var usuario = User?.Identity?.Name ?? "system";
-
-        var header = await _clientesService.GetConfiguracionTarifaHeaderAsync(id, usuario, cancellationToken);
-
-        return header is null ? NotFound() : Ok(header);
-
-    }
-
-
-
-    [HttpGet("{id:int}/configuracion-tarifa/detalle")]
-
-    public async Task<IActionResult> GetConfiguracionTarifaDetalle(
-
-        int id,
-
-        [FromQuery] int? categoriaId,
-
-        CancellationToken cancellationToken)
-
-    {
-
-        var usuario = User?.Identity?.Name ?? "system";
-
-        var detalle = await _clientesService.GetConfiguracionTarifaDetalleAsync(id, categoriaId, usuario, cancellationToken);
-
-        return Ok(detalle);
-
-    }
-
-
-
-    [ModuleAuthorize(PermissionModules.Ventas, PermissionResources.Ventas.Clientes, PermissionAction.Edit)]
-
-    [HttpPost("{id:int}/configuracion-tarifa")]
-
-    public async Task<IActionResult> ActualizarConfiguracionTarifa(
-
-        int id,
-
-        [FromBody] ClienteConfiguracionTarifaUpdateRequest request,
-
-        CancellationToken cancellationToken)
-
-    {
-
-        var usuario = User?.Identity?.Name ?? "system";
-
-        var response = await _clientesService.ActualizarConfiguracionTarifaAsync(id, request, usuario, cancellationToken);
-
-        return Ok(response);
-
-    }
-
-
-
-    [ModuleAuthorize(PermissionModules.Ventas, PermissionResources.Ventas.Clientes, PermissionAction.Create)]
-    [HttpPost("{id:int}/configuracion-tarifa/agregar")]
-
-    public async Task<IActionResult> AgregarConfiguracionTarifa(
-
-        int id,
-
-        [FromBody] ClienteConfiguracionTarifaAddRequest request,
-
-        CancellationToken cancellationToken)
-
-    {
-
-        var usuario = User?.Identity?.Name ?? "system";
-
-        var response = await _clientesService.AgregarConfiguracionTarifaServicioAsync(id, request, usuario, cancellationToken);
-
-        return Ok(response);
-
-    }
-
-
-
     [HttpGet("{id:int}/foto-medidor/header")]
 
     public async Task<IActionResult> GetFotoMedidorHeader(int id, CancellationToken cancellationToken)
@@ -425,20 +340,6 @@ public class ClientesController : ControllerBase
 
 
 
-
-    [HttpPost("generar-codigo")]
-    public async Task<IActionResult> GenerarCodigo(CancellationToken cancellationToken)
-    {
-        try
-        {
-            var codigo = await _clientesService.GenerarCodigoClienteAsync(cancellationToken);
-            return Ok(new { codigo });
-        }
-        catch (Exception ex)
-        {
-            return BadRequest(new { message = ex.Message });
-        }
-    }
 
     [HttpPost]
 

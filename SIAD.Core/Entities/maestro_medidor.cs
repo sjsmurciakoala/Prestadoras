@@ -7,6 +7,8 @@ public partial class maestro_medidor
 {
     public int maestro_medidor_id { get; set; }
 
+    public long company_id { get; set; }
+
     public string maestro_medidor_numero { get; set; } = null!;
 
     public string? maestro_medidor_marca { get; set; }

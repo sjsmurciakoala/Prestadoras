@@ -16,4 +16,6 @@ public partial class usuarioapc
     public string? ruta { get; set; }
 
     public string? estado { get; set; }
+
+    public int? codciclo { get; set; }
 }

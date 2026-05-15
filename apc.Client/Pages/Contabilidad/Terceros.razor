@@ -2,80 +2,135 @@
 @attribute [Authorize]
 
 @using SIAD.Core.DTOs.Contabilidad
-@using DevExpress.Blazor
-@using System.Net.Http.Json
 
 @inject HttpClient Http
 
 <PageTitle>Terceros</PageTitle>
-<div class="contabilidad-page" id="terceros-view">
 
-    <DxMessageBox @bind-Visible="statusMessageVisible"
-                  Type="MessageBoxType.Alert"
-                  Title="@statusMessageTitle"
-                  Text="@statusMessageText"
-                  RenderStyle="@statusMessageRenderStyle"
-                  OkButtonText="Entendido"
-                  ShowCloseButton="false"
-                  CloseOnOutsideClick="false" />
+<DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall" @bind-IsActive="isXSmallScreen" />
 
-    <div class="cc-toolbar-container">
-        <DxStackLayout Orientation="Orientation.Horizontal" Wrap="true" Spacing="10px" Class="w-100 justify-content-between align-items-center">
-            <Items>
-                <DxStackLayoutItem>
-                    <Template>
-                        <h4 class="mb-0 fw-bold text-secondary"><i class="bi bi-people me-2 text-primary"></i>Terceros</h4>
-                    </Template>
-                </DxStackLayoutItem>
-                <DxStackLayoutItem>
-                    <Template>
-                        <div class="d-flex gap-2">
-                            <DxButton Text="Sincronizar Proveedores y Clientes"
-                                      RenderStyle="ButtonRenderStyle.Warning"
-                                      IconCssClass="bi bi-arrow-repeat"
-                                      Click="@OnSincronizarClick" />
-                            <DxButton Text="Actualizar"
-                                      RenderStyle="ButtonRenderStyle.Secondary"
-                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                      IconCssClass="bi bi-arrow-clockwise"
-                                      Click="@OnActualizarClick" />
-                            <DxButton Text="Nuevo"
-                                      RenderStyle="ButtonRenderStyle.Primary"
-                                      IconCssClass="bi bi-plus-lg"
-                                      Click="@OnNuevoClick" />
-                        </div>
-                    </Template>
-                </DxStackLayoutItem>
-            </Items>
-        </DxStackLayout>
+<DxMessageBox @bind-Visible="statusMessageVisible"
+              Type="MessageBoxType.Alert"
+              Title="@statusMessageTitle"
+              Text="@statusMessageText"
+              RenderStyle="@statusMessageRenderStyle"
+              OkButtonText="Entendido"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false" />
+
+<DxMessageBox @bind-Visible="deleteConfirmVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Eliminar tercero"
+              Text="@deleteConfirmText"
+              RenderStyle="MessageBoxRenderStyle.Danger"
+              OkButtonText="Si, eliminar"
+              CancelButtonText="Cancelar"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false"
+              Closed="OnDeleteConfirmClosed" />
+
+<div class="terceros-page" id="terceros-view">
+
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-people me-2 text-primary"></i>Terceros
+            </h4>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Sincronizar"
+                      RenderStyle="ButtonRenderStyle.Warning"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-repeat"
+                      Click="@OnSincronizarClick"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="@OnActualizarClick"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nuevo"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@OnNuevoClick"
+                      Enabled="@(!IsBusy)" />
+        </div>
     </div>
 
-    <div class="cc-grid-wrapper shadow-sm">
-        <DxGrid @ref="gridTerceros" Data="@terceros" KeyFieldName="@nameof(TerceroDto.ThirdPartyId)"
+    @* ── Indicadores rapidos ── *@
+    <div class="d-flex flex-wrap gap-2 mb-3">
+        <span class="terceros-stat-badge">
+            <i class="bi bi-people"></i> Total: <strong>@terceros.Count.ToString("N0")</strong>
+        </span>
+        <span class="terceros-stat-badge terceros-stat-badge--success">
+            <i class="bi bi-check2-circle"></i> Activos: <strong>@ActiveCount</strong>
+        </span>
+        <span class="terceros-stat-badge terceros-stat-badge--info">
+            <i class="bi bi-truck"></i> Proveedores: <strong>@SupplierCount</strong>
+        </span>
+        <span class="terceros-stat-badge terceros-stat-badge--secondary">
+            <i class="bi bi-person-check"></i> Clientes: <strong>@CustomerCount</strong>
+        </span>
+    </div>
+
+    @* ── Grid principal ── *@
+    <div class="terceros-grid-wrapper shadow-sm">
+        <DxGrid @ref="gridTerceros"
+                Data="@terceros"
+                KeyFieldName="@nameof(TerceroDto.ThirdPartyId)"
                 ShowFilterRow="true"
-                ShowPager="true" PageSize="20" PageSizeSelectorVisible="true"
+                ShowPager="true"
+                PageSize="20"
+                PageSizeSelectorVisible="true"
                 PageSizeSelectorItems="new int[] { 10, 20, 50, 100 }"
                 SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                DetailRowDisplayMode="@GetGridDetailRowDisplayMode()"
                 EditMode="GridEditMode.PopupEditForm"
                 PopupEditFormHeaderText="@popupHeaderText"
-                PopupEditFormCssClass="cc-popup-responsive"
+                PopupEditFormCssClass="terceros-popup-edit"
                 EditFormButtonsVisible="false"
                 CustomizeEditModel="OnCustomizeEditModel"
-                EditModelSaving="OnEditModelSaving">
-
+                EditModelSaving="OnEditModelSaving"
+                CssClass="border-0">
+            <ToolbarTemplate>
+                <DxToolbar ItemRenderStyleMode="ToolbarRenderStyleMode.Contained">
+                    <Items>
+                        <DxToolbarItem Text="Columnas"
+                                       Alignment="ToolbarItemAlignment.Right"
+                                       IconCssClass="bi bi-layout-three-columns"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       CssClass="terceros-column-chooser-button"
+                                       Click="MostrarColumnChooser" />
+                    </Items>
+                </DxToolbar>
+            </ToolbarTemplate>
             <Columns>
-                <DxGridCommandColumn Caption="Acciones" Width="140px" VisibleIndex="99">
+                <DxGridCommandColumn Caption="Acciones" Width="100px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false"
+                                     VisibleIndex="99">
                     <CellDisplayTemplate Context="cellContext">
-                        <div class="d-flex gap-1 justify-content-center">
-                            <DxButton RenderStyle="ButtonRenderStyle.Info" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small"
-                                      IconCssClass="bi bi-pencil-square fs-5"
-                                      Click="@((MouseEventArgs e) => OnEditarClick(cellContext.VisibleIndex))"
-                                      title="Editar" />
-                            <DxButton RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small"
-                                      IconCssClass="bi bi-trash fs-5"
-                                      Click="@((MouseEventArgs e) => OpenDeleteConfirm((TerceroDto)cellContext.DataItem))"
-                                      title="Eliminar" />
-                        </div>
+                        @if (cellContext.DataItem is TerceroDto item)
+                        {
+                            <div class="d-flex gap-1 justify-content-center">
+                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-pencil-square fs-5"
+                                          title="Editar"
+                                          Enabled="@(!IsBusy)"
+                                          Click="@((MouseEventArgs e) => OnEditarClick(cellContext.VisibleIndex))" />
+                                <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-trash fs-5"
+                                          title="Eliminar"
+                                          Enabled="@(!IsBusy)"
+                                          Click="@((MouseEventArgs e) => OpenDeleteConfirm(item))" />
+                            </div>
+                        }
                     </CellDisplayTemplate>
                 </DxGridCommandColumn>
 
@@ -88,33 +143,62 @@
                 <DxGridDataColumn FieldName="@nameof(TerceroDto.Name)" Caption="Nombre" MinWidth="200" />
                 <DxGridDataColumn FieldName="@nameof(TerceroDto.TaxId)" Caption="RTN" Width="160px" />
 
-                <DxGridDataColumn FieldName="@nameof(TerceroDto.Category)" Caption="Categoría" Width="120px">
+                <DxGridDataColumn FieldName="@nameof(TerceroDto.Category)" Caption="Categoría" Width="130px">
                     <CellDisplayTemplate Context="cell">
-                        @{ var cat = (string?)cell.Value; }
-                        <span class="badge @(cat == "SUPPLIER" ? "bg-info" : cat == "CUSTOMER" ? "bg-success" : "bg-secondary")">
-                            @(cat == "SUPPLIER" ? "Proveedor" : cat == "CUSTOMER" ? "Cliente" : cat == "BOTH" ? "Ambos" : cat)
+                        <span class="@GetCategoryBadgeCss((string?)cell.Value)">
+                            @GetCategoryLabel((string?)cell.Value)
                         </span>
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
                 <DxGridDataColumn FieldName="@nameof(TerceroDto.IsSupplier)" Caption="Proveedor" Width="100px" TextAlignment="GridTextAlignment.Center">
-                    <CellDisplayTemplate>
-                        @if ((bool)context.Value) { <i class="bi bi-check-circle-fill text-info"></i> } else { <span class="text-muted">-</span> }
+                    <CellDisplayTemplate Context="cell">
+                        @if ((bool)cell.Value) { <i class="bi bi-check-circle-fill text-info"></i> } else { <span class="text-muted">-</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
                 <DxGridDataColumn FieldName="@nameof(TerceroDto.IsCustomer)" Caption="Cliente" Width="100px" TextAlignment="GridTextAlignment.Center">
-                    <CellDisplayTemplate>
-                        @if ((bool)context.Value) { <i class="bi bi-check-circle-fill text-success"></i> } else { <span class="text-muted">-</span> }
+                    <CellDisplayTemplate Context="cell">
+                        @if ((bool)cell.Value) { <i class="bi bi-check-circle-fill text-success"></i> } else { <span class="text-muted">-</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
-                <DxGridDataColumn FieldName="@nameof(TerceroDto.Status)" Caption="Estado" Width="100px" TextAlignment="GridTextAlignment.Center">
+                <DxGridDataColumn FieldName="@nameof(TerceroDto.Status)" Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
                     <CellDisplayTemplate Context="cell">
-                        @if ((string?)cell.Value == "ACTIVE") { <span class="badge bg-success">Activo</span> } else { <span class="badge bg-secondary">Inactivo</span> }
+                        <span class="@GetStatusBadgeCss((string?)cell.Value)">
+                            @GetStatusLabel((string?)cell.Value)
+                        </span>
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
             </Columns>
+            <DetailRowTemplate Context="detail">
+                @if (detail.DataItem is TerceroDto item)
+                {
+                    <div class="p-3">
+                        <div class="row g-3">
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">RTN</small>
+                                <strong>@(string.IsNullOrWhiteSpace(item.TaxId) ? "—" : item.TaxId)</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Categoría</small>
+                                <strong>@GetCategoryLabel(item.Category)</strong>
+                            </div>
+                            <div class="col-sm-4">
+                                <small class="text-muted d-block">Estado</small>
+                                <strong>@GetStatusLabel(item.Status)</strong>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </DetailRowTemplate>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-people fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay terceros registrados</h5>
+                    <p class="mb-0">Crea el primer tercero o sincroniza desde Proveedores y Clientes.</p>
+                </div>
+            </EmptyDataAreaTemplate>
 
             <EditFormTemplate Context="ctx">
                 @{ var model = (TerceroEditModel)ctx.EditModel; }
@@ -129,7 +213,7 @@
                         </DxAlert>
                     }
 
-                    <div class="flex-grow-1 p-3 overflow-auto custom-scrollbar">
+                    <div class="flex-grow-1 p-3 overflow-auto">
                         <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical">
 
                             <DxFormLayoutGroup Caption="Información General" HeaderIconCssClass="bi bi-card-heading">
@@ -187,7 +271,7 @@
                         </DxFormLayout>
                     </div>
 
-                    <div class="modal-footer-custom d-flex justify-content-between align-items-center p-3 border-top bg-light">
+                    <div class="d-flex justify-content-between align-items-center p-3 border-top bg-light">
                         <div>
                             @if (model.ThirdPartyId.HasValue)
                             {
@@ -208,7 +292,7 @@
         </DxGrid>
     </div>
 
-    @* ── Popup de resultado de sincronización ── *@
+    @* ── Popup resultado de sincronización ── *@
     <DxPopup @bind-Visible="syncResultVisible"
              HeaderText="Resultado de sincronización"
              ShowFooter="false"
@@ -258,65 +342,22 @@
         </BodyTemplate>
     </DxPopup>
 
-    @* ── Popup de confirmación de eliminación ── *@
-    <DxPopup @bind-Visible="deleteConfirmVisible"
-             HeaderText=" "
-             ShowCloseButton="true"
-             CloseOnOutsideClick="true"
-             Width="min(450px, 90vw)"
-             ShowFooter="false"
-             CssClass="cc-confirm-popup">
-        <BodyTemplate>
-            <div class="cc-modal-wrapper">
-                <div class="cc-confirm-body">
-                    <div class="cc-icon-circle">
-                        <i class="bi bi-exclamation-triangle-fill"></i>
-                    </div>
-                    <div class="flex-grow-1">
-                        <div class="cc-confirm-title">¿Eliminar tercero?</div>
-                        <div class="cc-confirm-subtitle">
-                            Esta acción eliminará el tercero permanentemente. No se puede deshacer.
-                        </div>
-                        @if (deleteItem is not null)
-                        {
-                            <div class="cc-details-card">
-                                <div class="cc-detail-row">
-                                    <span class="cc-label">Código:</span>
-                                    <span class="cc-value">@deleteItem.Code</span>
-                                </div>
-                                <div class="cc-detail-row mb-0">
-                                    <span class="cc-label">Nombre:</span>
-                                    <span class="cc-value text-end">@deleteItem.Name</span>
-                                </div>
-                            </div>
-                        }
-                    </div>
-                </div>
-                <div class="cc-modal-footer">
-                    <DxButton Text="Cancelar"
-                              RenderStyle="ButtonRenderStyle.Secondary"
-                              RenderStyleMode="ButtonRenderStyleMode.Outline"
-                              Click="@(() => deleteConfirmVisible = false)"
-                              CssClass="cc-btn-cancel" />
-                    <DxButton Text="Sí, Eliminar"
-                              RenderStyle="ButtonRenderStyle.None"
-                              CssClass="dx-btn dx-btn-danger cc-btn-delete"
-                              IconCssClass="bi bi-trash3-fill"
-                              Click="@OnConfirmDeleteClick" />
-                </div>
-            </div>
-        </BodyTemplate>
-    </DxPopup>
+    @* ── Popup de confirmación de eliminación ── eliminado: reemplazado por DxMessageBox ── *@
 
-    <DxLoadingPanel Visible="@cargando" PositionTarget="#terceros-view"
-                    ApplyBackgroundShading="true" IsContentBlocked="true"
-                    Text="Cargando terceros..." IndicatorVisible="true" />
+    <DxLoadingPanel Visible="@(cargando || isSincronizando)"
+                    PositionTarget="#terceros-view"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="@GetLoadingText()" />
 
 </div>
 
 @code {
     private IList<TerceroDto> terceros = new List<TerceroDto>();
     private bool cargando;
+    private bool isSincronizando;
+    private bool isXSmallScreen;
 
     private DxGrid? gridTerceros;
     private string? formErrorMessage;
@@ -328,6 +369,7 @@
     private MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
 
     private bool deleteConfirmVisible;
+    private string deleteConfirmText = string.Empty;
     private TerceroDto? deleteItem;
     private long? deleteFromEditId;
 
@@ -343,6 +385,11 @@
     };
 
     private record CategoriaOption(string Value, string Label);
+
+    private bool IsBusy => cargando || isSincronizando;
+    private int ActiveCount   => terceros.Count(t => t.Status == "ACTIVE");
+    private int SupplierCount => terceros.Count(t => t.IsSupplier);
+    private int CustomerCount => terceros.Count(t => t.IsCustomer);
 
     protected override async Task OnInitializedAsync()
     {
@@ -454,7 +501,7 @@
     // ── Sincronizar ──
     private async Task OnSincronizarClick()
     {
-        cargando = true;
+        isSincronizando = true;
         try
         {
             var response = await Http.PostAsync("api/contabilidad/terceros/sincronizar", null);
@@ -474,7 +521,7 @@
         {
             ShowStatus("Error", $"Error de sincronización: {ex.Message}", MessageBoxRenderStyle.Danger);
         }
-        finally { cargando = false; }
+        finally { isSincronizando = false; }
     }
 
     // ── Eliminar ──
@@ -482,6 +529,7 @@
     {
         deleteItem = item;
         deleteFromEditId = null;
+        deleteConfirmText = $"Se eliminara '{item.Code} - {item.Name}' permanentemente. Esta accion no se puede deshacer.";
         deleteConfirmVisible = true;
     }
 
@@ -490,21 +538,29 @@
         if (!model.ThirdPartyId.HasValue) return;
         deleteItem = new TerceroDto(model.ThirdPartyId.Value, model.Code ?? "", model.Name ?? "", null, null, "", false, false, "", DateTime.MinValue, "");
         deleteFromEditId = model.ThirdPartyId;
+        deleteConfirmText = $"Se eliminara '{model.Code} - {model.Name}' permanentemente. Esta accion no se puede deshacer.";
         deleteConfirmVisible = true;
     }
 
-    private async Task OnConfirmDeleteClick()
+    private async Task OnDeleteConfirmClosed(bool confirmed)
     {
-        deleteConfirmVisible = false;
-        if (deleteItem == null) return;
+        if (!confirmed || deleteItem == null)
+        {
+            ClearPendingDelete();
+            return;
+        }
+
+        var item = deleteItem;
+        var fromEditId = deleteFromEditId;
+        ClearPendingDelete();
 
         try
         {
-            var response = await Http.DeleteAsync($"api/contabilidad/terceros/{deleteItem.ThirdPartyId}");
+            var response = await Http.DeleteAsync($"api/contabilidad/terceros/{item.ThirdPartyId}");
             if (response.IsSuccessStatusCode)
             {
-                ShowStatus("Eliminado", $"Tercero '{deleteItem.Code}' eliminado", MessageBoxRenderStyle.Success);
-                if (deleteFromEditId.HasValue)
+                ShowStatus("Eliminado", $"Tercero '{item.Code}' eliminado", MessageBoxRenderStyle.Success);
+                if (fromEditId.HasValue)
                     await gridTerceros!.CancelEditAsync();
                 await LoadTercerosAsync();
             }
@@ -518,8 +574,13 @@
         {
             ShowStatus("Error", ex.Message, MessageBoxRenderStyle.Danger);
         }
+    }
+
+    private void ClearPendingDelete()
+    {
         deleteItem = null;
         deleteFromEditId = null;
+        deleteConfirmText = string.Empty;
     }
 
     private void ShowStatus(string title, string text, MessageBoxRenderStyle style)
@@ -529,6 +590,43 @@
         statusMessageRenderStyle = style;
         statusMessageVisible = true;
     }
+
+    private void MostrarColumnChooser()
+    {
+        gridTerceros?.ShowColumnChooser(".terceros-column-chooser-button");
+    }
+
+    private GridDetailRowDisplayMode GetGridDetailRowDisplayMode()
+    {
+        return isXSmallScreen ? GridDetailRowDisplayMode.Always : GridDetailRowDisplayMode.Never;
+    }
+
+    private string GetLoadingText() => isSincronizando ? "Sincronizando..." : "Cargando terceros...";
+
+    private static string GetCategoryBadgeCss(string? category) => category switch
+    {
+        "SUPPLIER" => "terceros-badge terceros-badge--info",
+        "CUSTOMER" => "terceros-badge terceros-badge--success",
+        "BOTH"     => "terceros-badge terceros-badge--accent",
+        _          => "terceros-badge terceros-badge--neutral"
+    };
+
+    private static string GetCategoryLabel(string? category) => category switch
+    {
+        "SUPPLIER" => "Proveedor",
+        "CUSTOMER" => "Cliente",
+        "BOTH"     => "Ambos",
+        "OTHER"    => "Otro",
+        _          => category ?? "—"
+    };
+
+    private static string GetStatusBadgeCss(string? status) =>
+        status == "ACTIVE"
+            ? "terceros-badge terceros-badge--success"
+            : "terceros-badge terceros-badge--neutral";
+
+    private static string GetStatusLabel(string? status) =>
+        status == "ACTIVE" ? "Activo" : "Inactivo";
 
     // ── Edit model ──
     public class TerceroEditModel

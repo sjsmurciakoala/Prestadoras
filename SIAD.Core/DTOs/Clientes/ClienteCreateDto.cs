@@ -63,6 +63,7 @@ public sealed class ClienteCreateDto
 
     public int? CicloId { get; set; }
 
+    [RegularExpression("^[0-9]{1,5}$", ErrorMessage = "Acepta libreta de 1-3 digitos o ruta completa de 5 digitos. Una ruta valida es CC+LLL donde CC=ciclo (2d) y LLL=libreta (3d).")]
     public string? Libreta { get; set; }
 
     public string? Secuencia { get; set; }

@@ -72,6 +72,7 @@
                 <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="3">
                     <DxTextBox @bind-Text="@auxiliarFiltro.Ciclo"
                                NullText="Ej: 01"
+                               maxlength="2"
                                @onkeydown="OnCicloKeyDown" />
                 </DxFormLayoutItem>
 
@@ -223,6 +224,7 @@
                     <DxFormLayoutItem Caption="Ciclo *" ColSpanXs="12" ColSpanMd="4">
                         <DxTextBox @bind-Text="@generarPeriodoModel.Ciclo"
                                    NullText="Ej: 01"
+                                   maxlength="2"
                                    Enabled="!generarGuardando" />
                     </DxFormLayoutItem>
 
@@ -289,6 +291,7 @@
                     <DxFormLayoutItem Caption="Ciclo (Opcional)" ColSpanXs="12" ColSpanMd="4">
                         <DxTextBox @bind-Text="@cargaMasivaModel.Ciclo"
                                    NullText="Ej: 01"
+                                   maxlength="2"
                                    Enabled="!cargaMasivaGuardando" />
                     </DxFormLayoutItem>
 

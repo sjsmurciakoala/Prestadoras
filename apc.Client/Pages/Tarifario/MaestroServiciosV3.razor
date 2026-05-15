@@ -1,0 +1,510 @@
+@page "/tarifario/maestro-servicios-v3"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Tarifario
+@using apc.Client.Services.Tarifario
+
+@inject ServicioTarifarioV3Client Client
+@inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
+
+<div class="page-container maestro-servicios-v3-page">
+    <DxToastProvider Name="MaestroServiciosV3Toast" MaxToastCount="4" />
+
+    <div class="modern-card">
+        <div class="d-flex flex-column flex-lg-row justify-content-between align-items-start align-items-lg-center gap-3 mb-3">
+            <div>
+                <h2 class="page-title mb-1">Maestro de servicios</h2>
+                <p class="text-muted mb-0">Catálogo operativo real de <code>adm_servicio</code> para el motor tarifario.</p>
+            </div>
+            <div class="d-flex gap-2 flex-wrap">
+                <DxButton Text="Cliente servicio"
+                          IconCssClass="bi bi-diagram-3"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click='@(() => Navigation.NavigateTo("/tarifario/cliente-servicio-v3"))' />
+                <DxButton Text="Nuevo servicio"
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Click="AbrirNuevoAsync" />
+            </div>
+        </div>
+
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical" CssClass="maestro-servicios-v3-filters">
+            <DxFormLayoutItem Caption="Buscar" ColSpanXs="12" ColSpanMd="6" ColSpanLg="3">
+                <Template>
+                    <DxTextBox @bind-Text="searchText"
+                               NullText="Código, nombre o descripción"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tipo" ColSpanXs="12" ColSpanMd="3" ColSpanLg="3">
+                <Template>
+                    <DxComboBox Data="@tiposServicio"
+                                ValueFieldName="Id"
+                                TextFieldName="Nombre"
+                                @bind-Value="tipoServicioFiltro"
+                                NullText="Todos"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado" ColSpanXs="12" ColSpanMd="3" ColSpanLg="2">
+                <Template>
+                    <DxComboBox Data="@estadoOpciones"
+                                TextFieldName="Text"
+                                ValueFieldName="Value"
+                                @bind-Value="estadoFiltro"
+                                NullText="Todos" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Facturable app" ColSpanXs="12" ColSpanMd="3" ColSpanLg="2">
+                <Template>
+                    <DxComboBox Data="@estadoOpciones"
+                                TextFieldName="Text"
+                                ValueFieldName="Value"
+                                @bind-Value="facturableFiltro"
+                                NullText="Todos" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption=" " ColSpanXs="12" ColSpanMd="9" ColSpanLg="2" CssClass="align-self-end">
+                <Template>
+                    <div class="d-flex gap-2 flex-wrap">
+                        <DxButton Text="Aplicar"
+                                  IconCssClass="bi bi-funnel"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Click="LoadAsync"
+                                  Enabled="@(!isLoading)" />
+                        <DxButton Text="Limpiar"
+                                  IconCssClass="bi bi-x-circle"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                  Click="ClearFilters" />
+                    </div>
+                </Template>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+
+        @if (isLoading)
+        {
+            <DxLoadingPanel Visible="true" Text="Cargando servicios..." />
+            <div style="height:64px"></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(error))
+        {
+            <div class="alert alert-danger mt-3 mb-0">@error</div>
+        }
+        else
+        {
+            <div class="maestro-servicios-v3-stats mt-3">
+                <span class="badge bg-secondary">Total: @servicios.Count</span>
+                <span class="badge bg-success">Activos: @servicios.Count(s => s.StatusId == 1)</span>
+                <span class="badge bg-primary">Facturable app: @servicios.Count(s => s.FacturableApp)</span>
+                <span class="badge bg-info text-dark">Asignables: @servicios.Count(s => s.EsAsignableCliente)</span>
+            </div>
+
+            <DxGrid Data="@servicios"
+                    PageSize="12"
+                    ShowFilterRow="false"
+                    ShowGroupPanel="false"
+                    CssClass="mt-3">
+                <Columns>
+                    <DxGridDataColumn FieldName="Codigo" Caption="Código" Width="120px" />
+                    <DxGridDataColumn FieldName="Nombre" Caption="Nombre" Width="220px" />
+                    <DxGridDataColumn FieldName="TipoServicioNombre" Caption="Tipo" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var item = (ServicioTarifarioV3ListDto)cell.DataItem;
+                            }
+                            <span class="badge bg-light text-dark border">@item.TipoServicioCodigo</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="FacturableApp" Caption="App" Width="80px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if ((bool)cell.Value)
+                            {
+                                <span class="badge bg-primary">Sí</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-dark border">No</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="EsAsignableCliente" Caption="Asignable" Width="100px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if ((bool)cell.Value)
+                            {
+                                <span class="badge bg-success bg-opacity-10 text-success">Cliente</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-dark border">No</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="UsaCondicionMedicion" Caption="Usa medición" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if ((bool)cell.Value)
+                            {
+                                <span class="badge bg-info text-dark">Sí</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-light text-dark border">No</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="AppOrden" Caption="Orden app" Width="90px" TextAlignment="GridTextAlignment.Center" />
+                    <DxGridDataColumn FieldName="OrdenVisual" Caption="Orden visual" Width="100px" TextAlignment="GridTextAlignment.Center" />
+                    <DxGridDataColumn FieldName="CuentaContableCodigo" Caption="Cuenta" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var item = (ServicioTarifarioV3ListDto)cell.DataItem;
+                            }
+                            @if (string.IsNullOrWhiteSpace(item.CuentaContableCodigo))
+                            {
+                                <span class="badge bg-danger" title="El servicio no tiene cuenta contable regulatoria asignada (ERSAPS 5.1.x)">SIN CUENTA</span>
+                            }
+                            else
+                            {
+                                <span class="text-dark" title="@item.CuentaContableNombre">@item.CuentaContableCodigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Referencias" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var item = (ServicioTarifarioV3ListDto)cell.DataItem;
+                            }
+                            <div class="d-flex justify-content-center gap-1 flex-wrap small">
+                                <span class="badge bg-light text-dark border">C @item.TotalClientes</span>
+                                <span class="badge bg-light text-dark border">T @item.TotalCuadros</span>
+                                <span class="badge bg-light text-dark border">R @item.TotalReferencias</span>
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="StatusId" Caption="Estado" Width="100px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if ((int)cell.Value == 1)
+                            {
+                                <span class="badge bg-success">Activo</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Inactivo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var item = (ServicioTarifarioV3ListDto)cell.DataItem;
+                            }
+                            <div class="d-flex justify-content-center gap-1">
+                                <button type="button" class="btn btn-sm btn-outline-primary" title="Editar"
+                                        @onclick="() => AbrirEditarAsync(item.ServicioId)">
+                                    <i class="bi bi-pencil"></i>
+                                </button>
+                                @if (item.StatusId == 1)
+                                {
+                                    <button type="button" class="btn btn-sm btn-outline-danger" title="Desactivar"
+                                            @onclick="() => DesactivarAsync(item)">
+                                        <i class="bi bi-x-circle"></i>
+                                    </button>
+                                }
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        }
+    </div>
+</div>
+
+<DxPopup @bind-Visible="popupVisible"
+         Width="min(840px, 96vw)"
+         CloseOnOutsideClick="false"
+         ShowCloseButton="true"
+         HeaderText="@popupHeaderText">
+    <BodyContentTemplate Context="popupBody">
+        @if (popupLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando servicio..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (editModel is not null)
+        {
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical" CssClass="servicio-v3-form">
+                <DxFormLayoutItem Caption="Tipo de servicio" ColSpanMd="4">
+                    <Template Context="tipoTemplate">
+                        <DxComboBox Data="@tiposServicio"
+                                    ValueFieldName="Id"
+                                    TextFieldName="Nombre"
+                                    @bind-Value="editModel.TipoServicioId"
+                                    NullText="Seleccione tipo..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Código" ColSpanMd="4">
+                    <Template Context="codigoTemplate">
+                        <DxTextBox @bind-Text="editModel.Codigo" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Nombre" ColSpanMd="4">
+                    <Template Context="nombreTemplate">
+                        <DxTextBox @bind-Text="editModel.Nombre" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <Template Context="descripcionTemplate">
+                        <DxTextBox @bind-Text="editModel.Descripcion" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="6">
+                    <Template Context="cuentaTemplate">
+                        <DxComboBox Data="@cuentasContables"
+                                    ValueFieldName="AccountId"
+                                    TextFieldName="Display"
+                                    @bind-Value="editModel.CuentaContableId"
+                                    NullText="Seleccione cuenta..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Orden visual" ColSpanMd="3">
+                    <Template Context="ordenVisualTemplate">
+                        <DxSpinEdit @bind-Value="editModel.OrdenVisual" MinValue="0" MaxValue="9999" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Orden app" ColSpanMd="3">
+                    <Template Context="ordenAppTemplate">
+                        <DxSpinEdit @bind-Value="editModel.AppOrden" MinValue="0" MaxValue="9999" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Asignable al cliente" ColSpanMd="4">
+                    <Template Context="asignableTemplate">
+                        <DxCheckBox @bind-Checked="editModel.EsAsignableCliente"
+                                    CheckType="CheckType.Switch"
+                                    LabelText="Sí" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Usa condición de medición" ColSpanMd="4">
+                    <Template Context="medicionTemplate">
+                        <DxCheckBox @bind-Checked="editModel.UsaCondicionMedicion"
+                                    CheckType="CheckType.Switch"
+                                    LabelText="Sí" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Facturable en app" ColSpanMd="4">
+                    <Template Context="facturableTemplate">
+                        <DxCheckBox @bind-Checked="editModel.FacturableApp"
+                                    CheckType="CheckType.Switch"
+                                    LabelText="Sí" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Permite evento" ColSpanMd="4">
+                    <Template Context="eventoTemplate">
+                        <DxCheckBox @bind-Checked="editModel.PermiteEvento"
+                                    CheckType="CheckType.Switch"
+                                    LabelText="Sí" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Genera por regla" ColSpanMd="4">
+                    <Template Context="reglaTemplate">
+                        <DxCheckBox @bind-Checked="editModel.GeneraPorRegla"
+                                    CheckType="CheckType.Switch"
+                                    LabelText="Sí" />
+                    </Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Activo" ColSpanMd="4">
+                    <Template Context="activoTemplate">
+                        <DxCheckBox @bind-Checked="editModel.Activo"
+                                    CheckType="CheckType.Switch"
+                                    LabelText="Sí" />
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => popupVisible = false)" />
+                <DxButton Text="Guardar"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!popupSaving)"
+                          Click="GuardarAsync" />
+            </div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    private sealed record OpcionBool(string Text, bool? Value);
+
+    private readonly IReadOnlyList<OpcionBool> estadoOpciones =
+    [
+        new("Todos", null),
+        new("Sí", true),
+        new("No", false)
+    ];
+
+    private List<ServicioTarifarioV3ListDto> servicios = new();
+    private List<TipoServicioLookupDto> tiposServicio = new();
+    private List<SIAD.Core.DTOs.Contabilidad.CuentaContableLookupDto> cuentasContables = new();
+    private string? searchText;
+    private bool? estadoFiltro = true;
+    private bool? facturableFiltro;
+    private long? tipoServicioFiltro;
+    private bool isLoading;
+    private string? error;
+
+    private bool popupVisible;
+    private bool popupLoading;
+    private bool popupSaving;
+    private string popupHeaderText = "Servicio";
+    private ServicioTarifarioV3EditDto? editModel;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadCatalogosAsync();
+        await LoadAsync();
+    }
+
+    private async Task LoadCatalogosAsync()
+    {
+        var catalogos = await Client.ObtenerCatalogosAsync();
+        tiposServicio = catalogos?.TiposServicio?.ToList() ?? new();
+        cuentasContables = catalogos?.CuentasContables?.ToList() ?? new();
+    }
+
+    private async Task LoadAsync()
+    {
+        isLoading = true;
+        error = null;
+
+        try
+        {
+            servicios = (await Client.ObtenerAsync(searchText, estadoFiltro, facturableFiltro, tipoServicioFiltro)).ToList();
+        }
+        catch (Exception ex)
+        {
+            error = $"No fue posible cargar el maestro de servicios: {ex.Message}";
+            servicios = new();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task ClearFilters()
+    {
+        searchText = null;
+        estadoFiltro = true;
+        facturableFiltro = null;
+        tipoServicioFiltro = null;
+        await LoadAsync();
+    }
+
+    private async Task AbrirNuevoAsync()
+    {
+        popupHeaderText = "Nuevo servicio";
+        editModel = new ServicioTarifarioV3EditDto
+        {
+            Activo = true
+        };
+        popupVisible = true;
+        await Task.CompletedTask;
+    }
+
+    private async Task AbrirEditarAsync(long servicioId)
+    {
+        popupLoading = true;
+        popupVisible = true;
+        popupHeaderText = "Editar servicio";
+
+        try
+        {
+            editModel = await Client.ObtenerPorIdAsync(servicioId)
+                ?? new ServicioTarifarioV3EditDto { ServicioId = servicioId, Activo = true };
+        }
+        catch (Exception ex)
+        {
+            popupVisible = false;
+            ShowToast("Error", $"No fue posible cargar el servicio: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            popupLoading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (editModel is null)
+        {
+            return;
+        }
+
+        popupSaving = true;
+        try
+        {
+            var response = await Client.GuardarAsync(editModel);
+            if (response?.Success == true)
+            {
+                popupVisible = false;
+                ShowToast("Éxito", response.Message, ToastRenderStyle.Success);
+                await LoadAsync();
+            }
+            else
+            {
+                ShowToast("Atención", response?.Message ?? "No se pudo guardar el servicio.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No fue posible guardar: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            popupSaving = false;
+        }
+    }
+
+    private async Task DesactivarAsync(ServicioTarifarioV3ListDto item)
+    {
+        try
+        {
+            var response = await Client.DesactivarAsync(item.ServicioId);
+            if (response?.Success == true)
+            {
+                ShowToast("Éxito", response.Message, ToastRenderStyle.Success);
+                await LoadAsync();
+            }
+            else
+            {
+                ShowToast("Atención", response?.Message ?? "No se pudo desactivar el servicio.", ToastRenderStyle.Warning);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No fue posible desactivar: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "MaestroServiciosV3Toast",
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+    }
+}

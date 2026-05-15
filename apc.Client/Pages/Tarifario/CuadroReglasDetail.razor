@@ -1,0 +1,295 @@
+@using SIAD.Core.DTOs.Tarifario
+@using SIAD.Core.DTOs.Common
+@using apc.Client.Services.Tarifario
+
+@inject CuadroTarifarioClient Client
+
+<DxMessageBox @bind-Visible="reglaDeleteConfirmVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Eliminar regla"
+              Text="@reglaDeleteConfirmText"
+              RenderStyle="MessageBoxRenderStyle.Danger"
+              OkButtonText="Sí, eliminar"
+              CancelButtonText="Cancelar"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false"
+              Closed="OnReglaDeleteConfirmClosed" />
+
+<div class="p-2">
+    <div class="d-flex justify-content-between align-items-center mb-2">
+        <h6 class="mb-0 fw-bold text-primary">
+            <i class="bi bi-list-ol me-1"></i>Reglas de «@CuadroCodigo»
+        </h6>
+        <DxButton Text="Nueva regla"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  SizeMode="SizeMode.Small"
+                  IconCssClass="bi bi-plus-lg"
+                  Click="OnNuevaReglaClick" />
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="text-center py-3"><DxWaitIndicator Visible="true" /></div>
+    }
+    else
+    {
+        <DxGrid Data="@reglas"
+                KeyFieldName="@nameof(ReglaTarifariaListDto.ReglaTarifariaId)"
+                SizeMode="SizeMode.Small"
+                ShowPager="false"
+                CssClass="border-0">
+            <Columns>
+                <DxGridCommandColumn Caption="" Width="90px"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false">
+                    <CellDisplayTemplate Context="cellCtx">
+                        @if (cellCtx.DataItem is ReglaTarifariaListDto r)
+                        {
+                            <div class="d-flex gap-1 justify-content-center">
+                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-pencil-square"
+                                          title="Editar"
+                                          Click="@(() => OnEditarReglaClick(r))" />
+                                <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-trash"
+                                          title="Eliminar"
+                                          Click="@(() => OpenReglaDeleteConfirm(r))" />
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.Orden)" Caption="Orden" Width="60px" />
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.TipoReglaCodigo)" Caption="Tipo" Width="160px" />
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.ConsumoMinimo)" Caption="Consumo mín" Width="110px" DisplayFormat="N2" />
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.ConsumoMaximo)" Caption="Consumo máx" Width="110px" DisplayFormat="N2" />
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.MontoFijo)" Caption="Monto fijo" Width="110px" DisplayFormat="N4" />
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.MontoUnitario)" Caption="Monto unit." Width="110px" DisplayFormat="N4" />
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.Porcentaje)" Caption="%" Width="90px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cellPct">
+                        @{
+                            var pct = (decimal?)cellPct.Value;
+                        }
+                        @if (pct.HasValue)
+                        {
+                            @($"{pct.Value * 100m:N2}%")
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.ServicioReferenciaCodigo)" Caption="Servicio ref." Width="130px" />
+                <DxGridDataColumn FieldName="@nameof(ReglaTarifariaListDto.StatusId)" Caption="Estado" Width="80px">
+                    <CellDisplayTemplate Context="cellCtx">
+                        @{
+                            var st = (int)(cellCtx.Value ?? 0);
+                            <span class="badge @(st == 1 ? "bg-success" : "bg-secondary")">@(st == 1 ? "Activo" : "Inactivo")</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+        </DxGrid>
+    }
+</div>
+
+@* ── Popup edición regla ── *@
+<DxPopup @bind-Visible="popupReglaVisible"
+         HeaderText="@popupReglaHeaderText"
+         Width="600px"
+         CloseOnOutsideClick="false"
+         ShowCloseButton="true">
+    <BodyContentTemplate Context="popupCtx">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Tipo de regla" ColSpanMd="6">
+                <Template>
+                    <DxComboBox Data="@Catalogos?.TiposRegla"
+                                ValueFieldName="Id"
+                                TextFieldName="Nombre"
+                                @bind-Value="editRegla_TipoReglaId"
+                                NullText="Seleccione..." />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Orden" ColSpanMd="6">
+                <Template>
+                    <DxSpinEdit @bind-Value="editRegla_Orden" MinValue="1" MaxValue="999" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Consumo mínimo" ColSpanMd="6">
+                <Template>
+                    <DxSpinEdit @bind-Value="editRegla_ConsumoMinimo" MinValue="0" Increment="0.01m" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Consumo máximo" ColSpanMd="6">
+                <Template>
+                    <DxSpinEdit @bind-Value="editRegla_ConsumoMaximo" MinValue="0" Increment="0.01m" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Monto fijo" ColSpanMd="4">
+                <Template>
+                    <DxSpinEdit @bind-Value="editRegla_MontoFijo" MinValue="0" Increment="0.0001m" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Monto unitario" ColSpanMd="4">
+                <Template>
+                    <DxSpinEdit @bind-Value="editRegla_MontoUnitario" MinValue="0" Increment="0.0001m" />
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Porcentaje %" ColSpanMd="4">
+                <Template>
+                    <DxSpinEdit @bind-Value="editRegla_PorcentajeUI" MinValue="0" MaxValue="100" Increment="0.01m" />
+                    <small class="text-muted">Ingresar como porcentaje: 60 = 60% (se guarda 0.60)</small>
+                </Template>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Servicio referencia" ColSpanMd="12">
+                <Template>
+                    <DxComboBox Data="@Catalogos?.ServiciosReferencia"
+                                ValueFieldName="Id"
+                                TextFieldName="Codigo"
+                                @bind-Value="editRegla_ServicioReferenciaId"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="(ninguno)" />
+                </Template>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        <div class="d-flex justify-content-end gap-2 mt-3">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@(() => popupReglaVisible = false)" />
+            <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="OnGuardarReglaClick" />
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter, EditorRequired] public long CuadroTarifarioId { get; set; }
+    [Parameter] public string CuadroCodigo { get; set; } = "";
+    [Parameter] public CuadroTarifarioCatalogosDto? Catalogos { get; set; }
+    [Parameter] public EventCallback OnChanged { get; set; }
+
+    List<ReglaTarifariaListDto> reglas = new();
+    bool isLoading = true;
+
+    // Popup regla
+    bool popupReglaVisible;
+    string popupReglaHeaderText = "Nueva regla";
+    long? editRegla_Id;
+    long editRegla_TipoReglaId;
+    int editRegla_Orden = 1;
+    decimal? editRegla_ConsumoMinimo;
+    decimal? editRegla_ConsumoMaximo;
+    decimal? editRegla_MontoFijo;
+    decimal? editRegla_MontoUnitario;
+    decimal? editRegla_Porcentaje;   // valor guardado en BD: decimal 0..1 (ej. 0.60)
+    long? editRegla_ServicioReferenciaId;
+
+    // Convencion del proyecto (2026-05-14): porcentaje SIEMPRE se almacena en BD
+    // como decimal 0..1. Esta propiedad es solo para la UI — el admin ingresa
+    // 0..100 y la conversion ×100/÷100 ocurre aqui.
+    decimal? editRegla_PorcentajeUI
+    {
+        get => editRegla_Porcentaje.HasValue ? editRegla_Porcentaje * 100m : null;
+        set => editRegla_Porcentaje = value.HasValue ? value / 100m : null;
+    }
+
+    // Delete
+    bool reglaDeleteConfirmVisible;
+    string reglaDeleteConfirmText = "";
+    ReglaTarifariaListDto? reglaToDelete;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarReglas();
+    }
+
+    async Task CargarReglas()
+    {
+        isLoading = true;
+        try
+        {
+            reglas = (await Client.ObtenerReglasAsync(CuadroTarifarioId)).ToList();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    void OnNuevaReglaClick()
+    {
+        editRegla_Id = null;
+        editRegla_TipoReglaId = Catalogos?.TiposRegla?.FirstOrDefault()?.Id ?? 0;
+        editRegla_Orden = (reglas.Any() ? reglas.Max(r => r.Orden) + 1 : 1);
+        editRegla_ConsumoMinimo = null;
+        editRegla_ConsumoMaximo = null;
+        editRegla_MontoFijo = null;
+        editRegla_MontoUnitario = null;
+        editRegla_Porcentaje = null;
+        editRegla_ServicioReferenciaId = null;
+        popupReglaHeaderText = "Nueva regla";
+        popupReglaVisible = true;
+    }
+
+    void OnEditarReglaClick(ReglaTarifariaListDto item)
+    {
+        editRegla_Id = item.ReglaTarifariaId;
+        editRegla_TipoReglaId = item.TipoReglaTarifariaId;
+        editRegla_Orden = item.Orden;
+        editRegla_ConsumoMinimo = item.ConsumoMinimo;
+        editRegla_ConsumoMaximo = item.ConsumoMaximo;
+        editRegla_MontoFijo = item.MontoFijo;
+        editRegla_MontoUnitario = item.MontoUnitario;
+        editRegla_Porcentaje = item.Porcentaje;
+        editRegla_ServicioReferenciaId = item.ServicioReferenciaId;
+        popupReglaHeaderText = $"Editar regla #{item.Orden}";
+        popupReglaVisible = true;
+    }
+
+    async Task OnGuardarReglaClick()
+    {
+        try
+        {
+            var request = new ReglaTarifariaSaveRequest(
+                editRegla_Id,
+                CuadroTarifarioId,
+                editRegla_TipoReglaId,
+                editRegla_Orden,
+                editRegla_ConsumoMinimo,
+                editRegla_ConsumoMaximo,
+                editRegla_MontoFijo,
+                editRegla_MontoUnitario,
+                editRegla_Porcentaje,
+                editRegla_ServicioReferenciaId,
+                null);
+
+            var resp = await Client.GuardarReglaAsync(request);
+            if (resp?.Success == true)
+            {
+                popupReglaVisible = false;
+                await CargarReglas();
+                await OnChanged.InvokeAsync();
+            }
+        }
+        catch { }
+    }
+
+    void OpenReglaDeleteConfirm(ReglaTarifariaListDto item)
+    {
+        reglaToDelete = item;
+        reglaDeleteConfirmText = $"¿Eliminar la regla #{item.Orden} ({item.TipoReglaCodigo})?";
+        reglaDeleteConfirmVisible = true;
+    }
+
+    async Task OnReglaDeleteConfirmClosed(bool confirmed)
+    {
+        if (confirmed && reglaToDelete != null)
+        {
+            try
+            {
+                await Client.EliminarReglaAsync(reglaToDelete.ReglaTarifariaId);
+                await CargarReglas();
+                await OnChanged.InvokeAsync();
+            }
+            catch { }
+        }
+        reglaToDelete = null;
+    }
+}

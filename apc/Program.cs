@@ -25,8 +25,13 @@ using SIAD.Core.Constants;
 using SIAD.Data;
 using SIAD.Reports;
 using SIAD.Services;
+using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
+
+var hondurasCulture = new CultureInfo("es-HN");
+CultureInfo.DefaultThreadCurrentCulture = hondurasCulture;
+CultureInfo.DefaultThreadCurrentUICulture = hondurasCulture;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -181,6 +186,14 @@ else
     // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
+
+var supportedCultures = new[] { hondurasCulture };
+app.UseRequestLocalization(new RequestLocalizationOptions
+{
+    DefaultRequestCulture = new Microsoft.AspNetCore.Localization.RequestCulture(hondurasCulture),
+    SupportedCultures = supportedCultures,
+    SupportedUICultures = supportedCultures
+});
 
 // Habilitar WebSockets para Blazor Server (crítico para IIS)
 app.UseWebSockets();

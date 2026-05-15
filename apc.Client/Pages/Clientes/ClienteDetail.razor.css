@@ -105,6 +105,36 @@
     border-radius: 6px;
 }
 
+.detail-saldo {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-top: 0.65rem;
+    font-size: 1.35rem;
+    font-weight: 800;
+    padding: 0.55rem 1.15rem;
+    border-radius: 999px;
+    width: max-content;
+    letter-spacing: 0.3px;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+}
+
+.detail-saldo i {
+    font-size: 1.4rem;
+}
+
+.detail-saldo.saldo-debe {
+    color: #b02a37;
+    background: rgba(220, 53, 69, 0.12);
+    border: 1px solid rgba(220, 53, 69, 0.35);
+}
+
+.detail-saldo.saldo-al-dia {
+    color: #146c43;
+    background: rgba(25, 135, 84, 0.12);
+    border: 1px solid rgba(25, 135, 84, 0.35);
+}
+
 .detail-hero-right {
     display: flex;
     flex-direction: column;
@@ -520,3 +550,4 @@
     color: #2c3e50;
     font-weight: 500;
 }
+

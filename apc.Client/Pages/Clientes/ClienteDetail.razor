@@ -1,5 +1,6 @@
 @attribute [Authorize]
 
+@using Microsoft.AspNetCore.Components
 @using SIAD.Core.DTOs.Clientes
 @using apc.Client.Services.Clientes
 @using apc.Client.Pages.Clientes.Components
@@ -55,9 +56,22 @@
 
                             <div class="detail-sub">
                                 <span class="text-code">@cliente.Codigo</span>
-                                <span>•</span>
+                                <span>&bull;</span>
                                 <i class="bi bi-geo-alt"></i>
                                 @(cliente.BarrioNombre ?? cliente.BarrioCodigo ?? "Sin barrio")
+                            </div>
+
+                            @{
+                                var saldo = estadoCuenta?.SaldoActual ?? 0m;
+                                var saldoClass = saldo > 0m ? "saldo-debe" : "saldo-al-dia";
+                                var saldoTexto = saldo > 0m
+                                    ? $"Debe: {saldo.ToString("C2")}"
+                                    : saldo < 0m
+                                        ? $"A favor: {(-saldo).ToString("C2")}"
+                                        : "Sin saldo pendiente";
+                            }
+                            <div class="detail-saldo @saldoClass">
+                                <i class="bi bi-cash-coin me-1"></i>@saldoTexto
                             </div>
                         </div>
                     </div>
@@ -90,11 +104,17 @@
                 </div>
 
                 <div class="d-flex flex-wrap gap-2">
+                    <DxButton Text="Estado de cuenta" Click="AbrirEstadoCuenta"
+                        IconCssClass="bi bi-receipt" RenderStyle="ButtonRenderStyle.Primary"
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
                     <DxButton Text="Historial de consumo" Click="AbrirHistoricoConsumo"
                         IconCssClass="bi bi-bar-chart-line" RenderStyle="ButtonRenderStyle.Secondary"
                         RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
-                    <DxButton Text="Configurar tasas" Click="AbrirConfigTarifa"
-                        IconCssClass="bi bi-gear" RenderStyle="ButtonRenderStyle.Secondary"
+                    <DxButton Text="Configuración tarifaria" Click="AbrirServiciosTarifario"
+                        IconCssClass="bi bi-diagram-3" RenderStyle="ButtonRenderStyle.Primary"
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                    <DxButton Text="Prueba de cálculo" Click="AbrirPruebaCalculo"
+                        IconCssClass="bi bi-calculator" RenderStyle="ButtonRenderStyle.Primary"
                         RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
                     <DxButton Text="Foto medidor" Click="AbrirFotoMedidor"
                         IconCssClass="bi bi-camera" RenderStyle="ButtonRenderStyle.Secondary"
@@ -121,212 +141,165 @@
                     <h3>Información General</h3>
                 </div>
 
-                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
-                    <!-- DATOS PERSONALES Y DIRECCIÓN EN MISMA FILA -->
-                    <DxFormLayoutGroup Caption="Datos personales" HeaderIconCssClass="bi bi-person-lines-fill"
-                        ColSpanXs="12" ColSpanLg="6">
-                        <DxFormLayoutItem Caption="Clave" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarObj(cliente.Codigo)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Nombre" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.Nombre)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Apellidos" ColSpanXs="12" ColSpanMd="12">
-                            <div class="field-value">@MostrarTexto(cliente.Apellidos)</div>
-                        </DxFormLayoutItem>
-
-                        <DxFormLayoutItem Caption="DNI" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.Dni)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.Rtn)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Fecha nacimiento" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarFecha(cliente.FechaNacimiento)</div>
-                        </DxFormLayoutItem>
-
-                        <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.Telefono)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Teléfono móvil" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.TelefonoMovil)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="12">
-                            <div class="field-value">@MostrarTexto(cliente.Email)</div>
-                        </DxFormLayoutItem>
-                    </DxFormLayoutGroup>
-                    <!-- INFORMACIÓN ADICIONAL AL LADO DE DIRECCIÓN (EN OTRA FILA) -->
-                    <DxFormLayoutGroup Caption="Información adicional" HeaderIconCssClass="bi bi-info-circle" ColSpanXs="12"
-                        ColSpanLg="6" CssClass="mt-2">
-                        <DxFormLayoutItem Caption="Tercera edad" ColSpanXs="12" ColSpanMd="6">
-                            <div class="@GetBooleanClass(cliente.TerceraEdad)">@MostrarBooleano(cliente.TerceraEdad)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Bloqueado cobranza" ColSpanXs="12" ColSpanMd="6">
-                            <div class="@GetBooleanClass(cliente.BloqueadoCobranza)">
-                                @MostrarBooleano(cliente.BloqueadoCobranza)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" ColSpanMd="12">
-                            <div class="field-value">@MostrarAbogado(cliente)</div>
-                        </DxFormLayoutItem>
-                        @if (cliente.DescuentoTerceraEdad.HasValue && cliente.DescuentoTerceraEdad > 0)
-                        {
-                            <DxFormLayoutItem Caption="Descuento 3ra edad" ColSpanXs="12" ColSpanMd="6">
-                                <div class="field-value important">@cliente.DescuentoTerceraEdad.Value.ToString("N2")%</div>
-                            </DxFormLayoutItem>
-                        }
-                    </DxFormLayoutGroup>
-
-                    <!-- DIRECCIÓN AL LADO DE DATOS PERSONALES -->
-                    <DxFormLayoutGroup Caption="Dirección" HeaderIconCssClass="bi bi-geo-alt-fill" ColSpanXs="12"
-                        ColSpanLg="6">
-                        <DxFormLayoutItem Caption="Barrio" ColSpanXs="12" ColSpanMd="8">
-                            <div class="field-value">@MostrarTexto(cliente.BarrioNombre ?? cliente.BarrioCodigo)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Color casa" ColSpanXs="12" ColSpanMd="4">
-                            <div class="field-value">@MostrarTexto(cliente.ColorCasa)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Dirección" ColSpanXs="12" ColSpanMd="12">
-                            <div class="field-value">@MostrarTexto(cliente.Direccion)</div>
-                        </DxFormLayoutItem>
-                    </DxFormLayoutGroup>
-
-
-
-                    <!-- DATOS EMPRESA (SI EXISTEN) AL LADO DE INFORMACIÓN ADICIONAL -->
-                    @if (!string.IsNullOrWhiteSpace(cliente.EmpresaNombre) ||
-                                    !string.IsNullOrWhiteSpace(cliente.EmpresaRtn))
-                    {
-                        <DxFormLayoutGroup Caption="Datos empresa" HeaderIconCssClass="bi bi-building" ColSpanXs="12"
-                            ColSpanLg="6" CssClass="mt-2">
-                            @if (!string.IsNullOrWhiteSpace(cliente.EmpresaNombre))
-                            {
-                                <DxFormLayoutItem Caption="Empresa" ColSpanXs="12" ColSpanMd="12">
-                                    <div class="field-value">@cliente.EmpresaNombre</div>
+                <div class="row g-3">
+                    <!-- COLUMNA IZQUIERDA: DATOS PERSONALES -->
+                    <div class="col-12 col-lg-6">
+                        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                            <DxFormLayoutGroup Caption="Datos personales" HeaderIconCssClass="bi bi-person-lines-fill"
+                                ColSpanXs="12">
+                                <DxFormLayoutItem Caption="Clave" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="field-value">@MostrarObj(cliente.Codigo)</div>
                                 </DxFormLayoutItem>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(cliente.EmpresaRtn))
-                            {
-                                <DxFormLayoutItem Caption="RTN / RIF" ColSpanXs="12" ColSpanMd="6">
-                                    <div class="field-value">@cliente.EmpresaRtn</div>
+                                <DxFormLayoutItem Caption="Nombre" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="field-value">@MostrarTexto(cliente.Nombre)</div>
                                 </DxFormLayoutItem>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(cliente.EmpresaTelefono))
-                            {
+                                <DxFormLayoutItem Caption="Apellidos" ColSpanXs="12" ColSpanMd="12">
+                                    <div class="field-value">@MostrarTexto(cliente.Apellidos)</div>
+                                </DxFormLayoutItem>
+
+                                <DxFormLayoutItem Caption="DNI" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="field-value">@MostrarTexto(cliente.Dni)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="RTN" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="field-value">@MostrarTexto(cliente.Rtn)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Fecha nacimiento" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="field-value">@MostrarFecha(cliente.FechaNacimiento)</div>
+                                </DxFormLayoutItem>
+
                                 <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="6">
-                                    <div class="field-value">@cliente.EmpresaTelefono</div>
+                                    <div class="field-value">@MostrarTexto(cliente.Telefono)</div>
                                 </DxFormLayoutItem>
-                            }
-                            @if (!string.IsNullOrWhiteSpace(cliente.EmpresaDireccion))
-                            {
+                                <DxFormLayoutItem Caption="Teléfono móvil" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="field-value">@MostrarTexto(cliente.TelefonoMovil)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="12">
+                                    <div class="field-value">@MostrarTexto(cliente.Email)</div>
+                                </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+                        </DxFormLayout>
+                    </div>
+
+                    <!-- COLUMNA DERECHA: DIRECCIÓN + INFORMACIÓN ADICIONAL + DATOS EMPRESA -->
+                    <div class="col-12 col-lg-6">
+                        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                            <DxFormLayoutGroup Caption="Dirección" HeaderIconCssClass="bi bi-geo-alt-fill"
+                                ColSpanXs="12">
+                                <DxFormLayoutItem Caption="Barrio" ColSpanXs="12" ColSpanMd="8">
+                                    <div class="field-value">@MostrarTexto(cliente.BarrioNombre ?? cliente.BarrioCodigo)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Color casa" ColSpanXs="12" ColSpanMd="4">
+                                    <div class="field-value">@MostrarTexto(cliente.ColorCasa)</div>
+                                </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Dirección" ColSpanXs="12" ColSpanMd="12">
-                                    <div class="field-value">@cliente.EmpresaDireccion</div>
+                                    <div class="field-value">@MostrarTexto(cliente.Direccion)</div>
                                 </DxFormLayoutItem>
+                            </DxFormLayoutGroup>
+
+                            <DxFormLayoutGroup Caption="Información adicional" HeaderIconCssClass="bi bi-info-circle"
+                                ColSpanXs="12" CssClass="mt-3">
+                                <DxFormLayoutItem Caption="Tercera edad" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="@GetBooleanClass(cliente.TerceraEdad)">@MostrarBooleano(cliente.TerceraEdad)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Bloqueado cobranza" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="@GetBooleanClass(cliente.BloqueadoCobranza)">
+                                        @MostrarBooleano(cliente.BloqueadoCobranza)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" ColSpanMd="12">
+                                    <div class="field-value">@MostrarAbogado(cliente)</div>
+                                </DxFormLayoutItem>
+                                @if (cliente.DescuentoTerceraEdad.HasValue && cliente.DescuentoTerceraEdad > 0)
+                                {
+                                    <DxFormLayoutItem Caption="Descuento 3ra edad" ColSpanXs="12" ColSpanMd="6">
+                                        <div class="field-value important">@cliente.DescuentoTerceraEdad.Value.ToString("N2")%</div>
+                                    </DxFormLayoutItem>
+                                }
+                            </DxFormLayoutGroup>
+
+                            @if (!string.IsNullOrWhiteSpace(cliente.EmpresaNombre) ||
+                                            !string.IsNullOrWhiteSpace(cliente.EmpresaRtn))
+                            {
+                                <DxFormLayoutGroup Caption="Datos empresa" HeaderIconCssClass="bi bi-building"
+                                    ColSpanXs="12" CssClass="mt-3">
+                                    @if (!string.IsNullOrWhiteSpace(cliente.EmpresaNombre))
+                                    {
+                                        <DxFormLayoutItem Caption="Empresa" ColSpanXs="12" ColSpanMd="12">
+                                            <div class="field-value">@cliente.EmpresaNombre</div>
+                                        </DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(cliente.EmpresaRtn))
+                                    {
+                                        <DxFormLayoutItem Caption="RTN / RIF" ColSpanXs="12" ColSpanMd="6">
+                                            <div class="field-value">@cliente.EmpresaRtn</div>
+                                        </DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(cliente.EmpresaTelefono))
+                                    {
+                                        <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="6">
+                                            <div class="field-value">@cliente.EmpresaTelefono</div>
+                                        </DxFormLayoutItem>
+                                    }
+                                    @if (!string.IsNullOrWhiteSpace(cliente.EmpresaDireccion))
+                                    {
+                                        <DxFormLayoutItem Caption="Dirección" ColSpanXs="12" ColSpanMd="12">
+                                            <div class="field-value">@cliente.EmpresaDireccion</div>
+                                        </DxFormLayoutItem>
+                                    }
+                                </DxFormLayoutGroup>
                             }
-                        </DxFormLayoutGroup>
-                    }
-                </DxFormLayout>
+                        </DxFormLayout>
+                    </div>
+                </div>
             </div>
 
-            <!-- DATOS DE SERVICIOS -->
+            <!-- CONFIGURACIÓN DE LECTURA (solo lectura) -->
             <div class="modern-card">
                 <div class="section-header">
-                    <i class="bi bi-gear"></i>
-                    <h3>Datos de Servicios</h3>
+                    <i class="bi bi-rulers"></i>
+                    <h3>Configuración de lectura</h3>
                 </div>
 
                 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
-                    <!-- INFORMACIÓN BÁSICA DEL SERVICIO -->
-                    <DxFormLayoutGroup Caption="Información básica" HeaderIconCssClass="bi bi-info-circle" ColSpanXs="12"
-                        ColSpanLg="6">
-                        <DxFormLayoutItem Caption="Servicio" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.ServicioNombre ?? cliente.ServicioId?.ToString())
-                            </div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Categoría" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.CategoriaServicioNombre ??
-                                                            cliente.CategoriaServicioId?.ToString())</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Tipo uso" ColSpanXs="12" ColSpanMd="4">
-                            <div class="field-value">@MostrarTexto(cliente.TipoUsoCodigo)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="8">
-                            <div class="field-value">@MostrarTexto(cliente.CicloDescripcion ?? cliente.CicloId?.ToString())
-                            </div>
-                        </DxFormLayoutItem>
-                    </DxFormLayoutGroup>
+                    <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.CicloDescripcion)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.LetraCodigo)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Indicativo ruta" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.IndicativoRuta)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Libreta" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.Libreta)</div>
+                    </DxFormLayoutItem>
 
-                    <!-- CONFIGURACIÓN TÉCNICA -->
-                    <DxFormLayoutGroup Caption="Configuración técnica" HeaderIconCssClass="bi bi-tools" ColSpanXs="12"
-                        ColSpanLg="6">
-                        <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="4">
-                            <div class="field-value">@MostrarTexto(cliente.LetraCodigo)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Libreta" ColSpanXs="12" ColSpanMd="4">
-                            <div class="field-value">@MostrarTexto(cliente.Libreta)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Secuencia" ColSpanXs="12" ColSpanMd="4">
-                            <div class="field-value">@MostrarTexto(cliente.Secuencia)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Indicativo ruta" ColSpanXs="12" ColSpanMd="12">
-                            <div class="field-value">@MostrarTexto(cliente.IndicativoRuta)</div>
-                        </DxFormLayoutItem>
-                    </DxFormLayoutGroup>
+                    <DxFormLayoutItem Caption="Secuencia" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.Secuencia)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Tipo de uso" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.TipoUsoCodigo)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Servicio" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.ServicioNombre)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Categoría" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.CategoriaServicioNombre)</div>
+                    </DxFormLayoutItem>
 
-                    <!-- MEDIDORES Y CONTRATOS -->
-                    <DxFormLayoutGroup Caption="Medidores y contratos" HeaderIconCssClass="bi bi-speedometer2"
-                        ColSpanXs="12" ColSpanLg="6" CssClass="mt-2">
-                        <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.ClaveCatastral)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Clave SURE" ColSpanXs="12" ColSpanMd="6">
-                            <div class="field-value">@MostrarTexto(cliente.ClaveSure)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Contador" ColSpanXs="12" ColSpanMd="4">
-                            <div class="field-value">@MostrarTexto(cliente.Contador)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Tiene medidor" ColSpanXs="12" ColSpanMd="4">
-                            <div class="@GetBooleanClass(cliente.TieneMedidor)">@MostrarBooleano(cliente.TieneMedidor)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Medidor" ColSpanXs="12" ColSpanMd="4">
-                            <div class="field-value">@MostrarTexto(cliente.MedidorNumero ?? cliente.MedidorId?.ToString())
-                            </div>
-                        </DxFormLayoutItem>
-                    </DxFormLayoutGroup>
-
-                    <!-- CONVENIOS Y CONTRATOS -->
-                    <DxFormLayoutGroup Caption="Convenios y contratos" HeaderIconCssClass="bi bi-file-earmark-text"
-                        ColSpanXs="12" ColSpanLg="6" CssClass="mt-2">
-                        <DxFormLayoutItem Caption="Tiene convenio" ColSpanXs="12" ColSpanMd="4">
-                            <div class="@GetBooleanClass(cliente.TieneConvenio)">@MostrarBooleano(cliente.TieneConvenio)
-                            </div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Número convenio" ColSpanXs="12" ColSpanMd="8">
-                            <div class="field-value">@MostrarTexto(cliente.NumeroConvenio)</div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Tiene contrato" ColSpanXs="12" ColSpanMd="4">
-                            <div class="@GetBooleanClass(cliente.TieneContrato)">@MostrarBooleano(cliente.TieneContrato)
-                            </div>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Número contrato" ColSpanXs="12" ColSpanMd="8">
-                            <div class="field-value">@MostrarTexto(cliente.NumeroContrato)</div>
-                        </DxFormLayoutItem>
-                    </DxFormLayoutGroup>
-
-                    <!-- OBSERVACIONES -->
-                    <DxFormLayoutGroup Caption="Observaciones" HeaderIconCssClass="bi bi-chat-text" ColSpanXs="12"
-                        CssClass="mt-2">
-                        <DxFormLayoutItem Caption="" ColSpanXs="12">
-                            <div class="field-value"
-                                style="white-space: pre-line; padding: 1rem; background: #f8f9fa; border-radius: 8px;">
-                                @(string.IsNullOrWhiteSpace(cliente.Observaciones) ? "Sin observaciones" :
-                                                            cliente.Observaciones)
-                            </div>
-                        </DxFormLayoutItem>
-                    </DxFormLayoutGroup>
+                    <DxFormLayoutItem Caption="Tiene medidor" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="@GetBooleanClass(cliente.TieneMedidor)">@MostrarBooleano(cliente.TieneMedidor)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="N° medidor" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.MedidorNumero)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Contador" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.Contador)</div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.ClaveCatastral)</div>
+                    </DxFormLayoutItem>
                 </DxFormLayout>
             </div>
-
-            <!-- AUDITORÍA COMPACTA -->
             <div class="modern-card" style="padding: 1rem;">
                 <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
                     <div class="d-flex align-items-center gap-2">
@@ -370,21 +343,6 @@
     </BodyTemplate>
 </DxPopup>
 
-<!-- Popup configuración de tarifas -->
-<DxPopup Visible="@mostrarConfigTarifaModal"
-         VisibleChanged="@(v => { mostrarConfigTarifaModal = v; })"
-         Width="min(1000px, 95vw)"
-         MaxHeight="90vh"
-         Scrollable="true"
-         HeaderText="Configuración de tarifas"
-         CssClass="historico-consumo-popup">
-    <BodyTemplate>
-        <div class="p-2 historico-consumo-body">
-            <ClienteConfiguracionTarifaTab ClienteId="@Id" @key="(mostrarConfigTarifaModal, Id)" />
-        </div>
-    </BodyTemplate>
-</DxPopup>
-
 <!-- Popup foto medidor -->
 <DxPopup Visible="@mostrarFotoMedidorModal"
          VisibleChanged="@(v => { mostrarFotoMedidorModal = v; })"
@@ -400,47 +358,110 @@
     </BodyTemplate>
 </DxPopup>
 
+
+<!-- Popup prueba de cálculo -->
+<DxPopup Visible="@mostrarPruebaCalculoModal"
+         VisibleChanged="@(v => { mostrarPruebaCalculoModal = v; })"
+         Width="min(1240px, 96vw)"
+         MaxHeight="92vh"
+         Scrollable="true"
+         HeaderText="Prueba de cálculo"
+         ContentLoadMode="PopupContentLoadMode.OnFirstShow"
+         CssClass="historico-consumo-popup">
+    <BodyTemplate>
+        <div class="p-2 historico-consumo-body">
+            <ClientePruebaCalculoTab ClienteId="@Id" @key="(mostrarPruebaCalculoModal, Id)" />
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<!-- Popup estado de cuenta -->
+<DxPopup Visible="@mostrarEstadoCuentaModal"
+         VisibleChanged="@(v => { mostrarEstadoCuentaModal = v; })"
+         Width="min(900px, 95vw)"
+         MaxHeight="90vh"
+         Scrollable="true"
+         HeaderText="Estado de cuenta"
+         CssClass="historico-consumo-popup">
+    <BodyTemplate>
+        <div class="p-2 historico-consumo-body">
+            <ClienteEstadoCuentaTab ClienteId="@Id" @key="(mostrarEstadoCuentaModal, Id)" />
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
 @code {
     [Parameter] public int Id { get; set; }
     [Parameter] public bool MostrarEncabezado { get; set; } = true;
+    [Parameter]
+    [SupplyParameterFromQuery(Name = "abrirPruebaCalculoV3")]
+    public bool AbrirPruebaCalculoV3DesdeQuery { get; set; }
 
     ClienteDetailDto? cliente;
     bool isLoading = true;
     bool mostrarHistoricoConsumoModal = false;
-    bool mostrarConfigTarifaModal = false;
     bool mostrarFotoMedidorModal = false;
+    bool mostrarPruebaCalculoModal = false;
+    bool mostrarEstadoCuentaModal = false;
+    ClienteEstadoCuentaDto? estadoCuenta;
 
     protected override async Task OnParametersSetAsync()
     {
         isLoading = true;
-        cliente = await ClientesClient.ObtenerPorIdAsync(Id);
-        isLoading = false;
+        try
+        {
+            cliente = await ClientesClient.ObtenerPorIdAsync(Id);
+            await LoadSaldoAsync();
+            if (AbrirPruebaCalculoV3DesdeQuery)
+            {
+                mostrarPruebaCalculoModal = true;
+            }
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadSaldoAsync()
+    {
+        try
+        {
+            estadoCuenta = await ClientesClient.ObtenerEstadoCuentaAsync(Id);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No fue posible obtener el estado de cuenta del cliente {ClienteId}.", Id);
+            estadoCuenta = null;
+        }
     }
 
     void BackToList() => Navigation.NavigateTo("/clientes");
     void AbrirHistoricoConsumo() => mostrarHistoricoConsumoModal = true;
-    void AbrirConfigTarifa() => mostrarConfigTarifaModal = true;
+    void AbrirServiciosTarifario() => Navigation.NavigateTo($"/tarifario/cliente-servicio-v3?clienteId={Id}");
+    void AbrirPruebaCalculo() => mostrarPruebaCalculoModal = true;
     void AbrirFotoMedidor() => mostrarFotoMedidorModal = true;
+    void AbrirEstadoCuenta() => mostrarEstadoCuentaModal = true;
 
     string GetInitials(string? name)
     => string.IsNullOrWhiteSpace(name) ? "C" : name.Substring(0, 1).ToUpper();
 
     private static string MostrarTexto(string? valor)
-    => string.IsNullOrWhiteSpace(valor) ? "—" : valor;
+    => string.IsNullOrWhiteSpace(valor) ? "-" : valor;
 
     private static string MostrarFecha(DateTime? fecha)
-    => fecha.HasValue ? fecha.Value.ToString("d") : "—";
+    => fecha.HasValue ? fecha.Value.ToString("d") : "-";
 
     private static string MostrarBooleano(bool? valor)
-    => valor.HasValue ? (valor.Value ? "Sí" : "No") : "—";
+    => valor.HasValue ? (valor.Value ? "Sí" : "No") : "-";
 
     private static string MostrarAbogado(ClienteDetailDto cliente)
     => !string.IsNullOrWhiteSpace(cliente.AbogadoNombre)
     ? cliente.AbogadoNombre!
-    : (cliente.AbogadoId?.ToString() ?? "—");
+    : (cliente.AbogadoId?.ToString() ?? "-");
 
     private static string MostrarObj(object? valor)
-    => valor is null ? "—" : (valor.ToString() ?? "—");
+    => valor is null ? "-" : (valor.ToString() ?? "-");
 
     private string GetBooleanClass(bool? valor)
     {

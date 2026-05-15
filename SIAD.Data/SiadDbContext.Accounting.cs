@@ -1011,6 +1011,9 @@ public partial class SiadDbContext
                 .HasForeignKey(e => e.poliza_id)
                 .OnDelete(DeleteBehavior.SetNull);
         });
+
+        // SAR-Compliance: configuración de entidades nuevas (2026-05-07)
+        ConfigureSarComplianceModel(modelBuilder);
     }
 }
 

@@ -1,16 +1,23 @@
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.AuxiliarLectura;
 using SIAD.Core.Entities;
+using SIAD.Core.Tenancy;
 using SIAD.Data;
 using System.Linq;
+using System.Text.RegularExpressions;
 
 namespace SIAD.Services.AuxiliarLectura;
 
 public class AuxiliarLecturaService : IAuxiliarLecturaService
 {
     private readonly SiadDbContext _context;
+    private readonly ICurrentCompanyService _currentCompanyService;
 
-    public AuxiliarLecturaService(SiadDbContext context) => _context = context;
+    public AuxiliarLecturaService(SiadDbContext context, ICurrentCompanyService currentCompanyService)
+    {
+        _context = context;
+        _currentCompanyService = currentCompanyService;
+    }
 
     public async Task<AuxiliarLecturaPeriodoDto?> GetPeriodoActualAsync(CancellationToken ct = default)
     {
@@ -285,8 +292,12 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
         // obtener lecturas del mes anterior
         var (anioPrev, mesPrev) = mes == 1 ? (anio - 1, 12) : (anio, mes - 1);
 
+        var cicloAnteriorAlterno = cicloNormalizado.TrimStart('0');
         var lecturasPrevias = await _context.historicomedicions
-            .Where(h => h.ano == anioPrev && h.mes == mesPrev)
+            .Where(h => h.ano == anioPrev
+                && h.mes == mesPrev
+                && (h.ciclo == cicloNormalizado
+                    || (!string.IsNullOrWhiteSpace(cicloAnteriorAlterno) && h.ciclo == cicloAnteriorAlterno)))
             .ToListAsync(ct);
 
         if (lecturasPrevias.Count > 0)
@@ -295,10 +306,11 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
             {
                 var clone = new historicomedicion
                 {
+                    company_id = _currentCompanyService.GetCompanyId(),
                     ano = anio,
                     mes = mes,
                     contador = lectura.contador,
-                    ciclo = lectura.ciclo,
+                    ciclo = cicloNormalizado,
                     ruta = lectura.ruta,
                     secuencia = lectura.secuencia,
                     clave = lectura.clave,
@@ -376,6 +388,7 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
 
                 var registro = new historicomedicion
                 {
+                    company_id = _currentCompanyService.GetCompanyId(),
                     ano = anio,
                     mes = mes,
                     contador = contador,
@@ -414,7 +427,14 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
         if (int.TryParse(trimmed, out var numeric))
             return numeric.ToString("D2");
 
-        return trimmed;
+        if (trimmed.Length <= 2)
+            return trimmed;
+
+        var numericMatch = Regex.Match(trimmed, @"(\d{1,2})$");
+        if (numericMatch.Success && int.TryParse(numericMatch.Groups[1].Value, out numeric))
+            return numeric.ToString("D2");
+
+        throw new ArgumentException("El ciclo debe enviarse como código corto. Ejemplos válidos: 01, 1 o Ciclo1.");
     }
 
     private static string? ExtraerRuta(string? indicativoRuta)

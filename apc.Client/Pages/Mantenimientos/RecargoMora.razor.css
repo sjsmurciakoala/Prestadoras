@@ -1,0 +1,42 @@
+.mant-page {
+    padding: 1rem;
+    background-color: #f8f9fa;
+}
+
+.mant-card {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    padding: 1.25rem;
+    max-width: 760px;
+}
+
+.mant-status-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.6rem 0.85rem;
+    border-radius: 8px;
+    background: #f8fafc;
+    border: 1px solid #e2e8f0;
+    margin-bottom: 1rem;
+}
+
+.cai-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.cai-badge--vigente  { background: #dcfce7; color: #166534; }
+.cai-badge--inactivo { background: #f1f5f9; color: #475569; }
+
+@media (max-width: 768px) {
+    .mant-page { padding: 0.5rem; }
+    .mant-card { padding: 0.9rem; }
+}

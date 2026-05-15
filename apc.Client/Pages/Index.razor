@@ -13,62 +13,239 @@
             </div>
         </div>
 
+        @* --- Fila 1: Barras + Línea --- *@
         <div class="row">
             <div class="col-lg-6">
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h5>Dashboard en construcción</h5>
-                    </div>
+                    <div class="card-header"><h5>Facturación Mensual (L.)</h5></div>
                     <div class="card-body">
-                        <p>Las gráficas de DevExpress están siendo optimizadas para mejor rendimiento.</p>
-                        <p>Sistema operativo y funcional. Datos disponibles para consultas.</p>
+                        <DxChart Data="@FacturacionMensual" Width="100%" Height="300px">
+                            <DxChartBarSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                              ValueField="@((ChartDataItem v) => v.Valor1)"
+                                              Name="Facturado">
+                                <DxChartSeriesLabel Visible="true"
+                                                    ValueFormat='ChartElementFormat.FromLdmlString("#,##0")' />
+                            </DxChartBarSeries>
+                            <DxChartBarSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                              ValueField="@((ChartDataItem v) => v.Valor2)"
+                                              Name="Cobrado" />
+                            <DxChartLegend Orientation="Orientation.Horizontal"
+                                           HorizontalAlignment="HorizontalAlignment.Center"
+                                           Position="RelativePosition.Outside" />
+                            <DxChartTitle Text="Facturación vs Cobranza" />
+                            <DxChartTooltip Enabled="true" />
+                        </DxChart>
                     </div>
                 </div>
             </div>
 
             <div class="col-lg-6">
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h5>Métricas Principales</h5>
-                    </div>
+                    <div class="card-header"><h5>Consumo Promedio por Mes (m³)</h5></div>
                     <div class="card-body">
-                        <div class="metric-item">
-                            <strong>Plantas Activas:</strong> 4
-                        </div>
-                        <div class="metric-item">
-                            <strong>Clientes:</strong> 1,250
-                        </div>
-                        <div class="metric-item">
-                            <strong>Órdenes Pendientes:</strong> 42
-                        </div>
+                        <DxChart Data="@ConsumoMensual" Width="100%" Height="300px">
+                            <DxChartLineSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                               ValueField="@((ChartDataItem v) => v.Valor1)"
+                                               Name="Consumo Promedio">
+                                <DxChartSeriesLabel Visible="true"
+                                                    ValueFormat='ChartElementFormat.FromLdmlString("#,##0.0")' />
+                            </DxChartLineSeries>
+                            <DxChartLineSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                               ValueField="@((ChartDataItem v) => v.Valor2)"
+                                               Name="Meta" />
+                            <DxChartLegend Orientation="Orientation.Horizontal"
+                                           HorizontalAlignment="HorizontalAlignment.Center"
+                                           Position="RelativePosition.Outside" />
+                            <DxChartTitle Text="Tendencia de Consumo" />
+                            <DxChartTooltip Enabled="true" />
+                        </DxChart>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="row mt-4">
-            <div class="col-12">
+        @* --- Fila 2: Pie + Donut --- *@
+        <div class="row">
+            <div class="col-lg-6">
                 <div class="card chart-card">
-                    <div class="card-header">
-                        <h5>Opciones del Sistema</h5>
-                    </div>
+                    <div class="card-header"><h5>Distribución de Clientes por Planta</h5></div>
                     <div class="card-body">
-                        <p>Accede a los diferentes módulos del sistema usando el menú de navegación superior:</p>
-                        <ul>
-                            <li>Clientes - Gestión de información de clientes</li>
-                            <li>Proveedores - Gestión de información de proveedores</li>
-                            <li>Medidores - Control de lecturas y mediciones</li>
-                            <li>Solicitudes - Tramitación de servicios solicitados</li>
-                            <li>Órdenes - Administración de órdenes de trabajo</li>
-                            <li>Facturación - Procesamiento de facturación y cobranza</li>
-                            <li>Reportes - Consulta de reportes disponibles</li>
-                        </ul>
+                        <DxPieChart Data="@ClientesPorPlanta" Width="100%" Height="300px">
+                            <DxPieChartSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                              ValueField="@((ChartDataItem v) => v.Valor1)"
+                                              Name="Clientes">
+                                <DxChartSeriesLabel Visible="true"
+                                                    Position="RelativePosition.Outside"
+                                                    FormatPattern="{argumentText}: {valueText}" />
+                            </DxPieChartSeries>
+                            <DxChartLegend Orientation="Orientation.Vertical"
+                                           HorizontalAlignment="HorizontalAlignment.Right"
+                                           Position="RelativePosition.Outside" />
+                            <DxChartTitle Text="Clientes por Planta" />
+                            <DxChartTooltip Enabled="true" />
+                        </DxPieChart>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card chart-card">
+                    <div class="card-header"><h5>Estado de Órdenes de Trabajo</h5></div>
+                    <div class="card-body">
+                        <DxPieChart Data="@EstadoOrdenes" Width="100%" Height="300px" InnerDiameter="0.5">
+                            <DxPieChartSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                              ValueField="@((ChartDataItem v) => v.Valor1)"
+                                              Name="Órdenes">
+                                <DxChartSeriesLabel Visible="true"
+                                                    FormatPattern="{argumentText}: {percentText}" />
+                            </DxPieChartSeries>
+                            <DxChartLegend Orientation="Orientation.Vertical"
+                                           HorizontalAlignment="HorizontalAlignment.Right"
+                                           Position="RelativePosition.Outside" />
+                            <DxChartTitle Text="Órdenes de Trabajo" />
+                            <DxChartTooltip Enabled="true" />
+                        </DxPieChart>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @* --- Fila 3: Área + Stacked Bar --- *@
+        <div class="row">
+            <div class="col-lg-6">
+                <div class="card chart-card">
+                    <div class="card-header"><h5>Lecturas Realizadas por Mes</h5></div>
+                    <div class="card-body">
+                        <DxChart Data="@LecturasMensuales" Width="100%" Height="300px">
+                            <DxChartAreaSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                               ValueField="@((ChartDataItem v) => v.Valor1)"
+                                               Name="Lecturas Tomadas"
+                                               Opacity="0.6">
+                                <DxChartSeriesLabel Visible="false" />
+                            </DxChartAreaSeries>
+                            <DxChartAreaSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                               ValueField="@((ChartDataItem v) => v.Valor2)"
+                                               Name="Lecturas Esperadas"
+                                               Opacity="0.3" />
+                            <DxChartLegend Orientation="Orientation.Horizontal"
+                                           HorizontalAlignment="HorizontalAlignment.Center"
+                                           Position="RelativePosition.Outside" />
+                            <DxChartTitle Text="Cobertura de Lecturas" />
+                            <DxChartTooltip Enabled="true" />
+                        </DxChart>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-lg-6">
+                <div class="card chart-card">
+                    <div class="card-header"><h5>Solicitudes por Tipo</h5></div>
+                    <div class="card-body">
+                        <DxChart Data="@SolicitudesPorTipo" Width="100%" Height="300px">
+                            <DxChartStackedBarSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                                     ValueField="@((ChartDataItem v) => v.Valor1)"
+                                                     Name="Nuevas Conexiones" />
+                            <DxChartStackedBarSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                                     ValueField="@((ChartDataItem v) => v.Valor2)"
+                                                     Name="Reparaciones" />
+                            <DxChartStackedBarSeries ArgumentField="@((ChartDataItem v) => v.Categoria)"
+                                                     ValueField="@((ChartDataItem v) => v.Valor3)"
+                                                     Name="Reclamos" />
+                            <DxChartLegend Orientation="Orientation.Horizontal"
+                                           HorizontalAlignment="HorizontalAlignment.Center"
+                                           Position="RelativePosition.Outside" />
+                            <DxChartTitle Text="Solicitudes por Categoría" />
+                            <DxChartTooltip Enabled="true" />
+                        </DxChart>
                     </div>
                 </div>
             </div>
         </div>
     </div>
 </div>
+
+@code {
+    // Modelo genérico para las gráficas
+    public class ChartDataItem
+    {
+        public string Categoria { get; set; } = "";
+        public double Valor1 { get; set; }
+        public double Valor2 { get; set; }
+        public double Valor3 { get; set; }
+    }
+
+    // 1. Facturación mensual (barras agrupadas)
+    private List<ChartDataItem> FacturacionMensual { get; set; } = new();
+    // 2. Consumo promedio (líneas)
+    private List<ChartDataItem> ConsumoMensual { get; set; } = new();
+    // 3. Clientes por planta (pie)
+    private List<ChartDataItem> ClientesPorPlanta { get; set; } = new();
+    // 4. Estado de órdenes (donut)
+    private List<ChartDataItem> EstadoOrdenes { get; set; } = new();
+    // 5. Lecturas mensuales (área)
+    private List<ChartDataItem> LecturasMensuales { get; set; } = new();
+    // 6. Solicitudes por tipo (stacked bar)
+    private List<ChartDataItem> SolicitudesPorTipo { get; set; } = new();
+
+    protected override void OnInitialized()
+    {
+        FacturacionMensual = new List<ChartDataItem>
+        {
+            new() { Categoria = "Ene", Valor1 = 185000, Valor2 = 162000 },
+            new() { Categoria = "Feb", Valor1 = 192000, Valor2 = 178000 },
+            new() { Categoria = "Mar", Valor1 = 205000, Valor2 = 195000 },
+            new() { Categoria = "Abr", Valor1 = 198000, Valor2 = 183000 },
+            new() { Categoria = "May", Valor1 = 215000, Valor2 = 201000 },
+            new() { Categoria = "Jun", Valor1 = 220000, Valor2 = 210000 },
+        };
+
+        ConsumoMensual = new List<ChartDataItem>
+        {
+            new() { Categoria = "Ene", Valor1 = 18.5, Valor2 = 20.0 },
+            new() { Categoria = "Feb", Valor1 = 19.2, Valor2 = 20.0 },
+            new() { Categoria = "Mar", Valor1 = 22.1, Valor2 = 20.0 },
+            new() { Categoria = "Abr", Valor1 = 21.3, Valor2 = 20.0 },
+            new() { Categoria = "May", Valor1 = 24.8, Valor2 = 20.0 },
+            new() { Categoria = "Jun", Valor1 = 26.5, Valor2 = 20.0 },
+        };
+
+        ClientesPorPlanta = new List<ChartDataItem>
+        {
+            new() { Categoria = "Planta Norte", Valor1 = 420 },
+            new() { Categoria = "Planta Sur",   Valor1 = 350 },
+            new() { Categoria = "Planta Este",  Valor1 = 280 },
+            new() { Categoria = "Planta Oeste", Valor1 = 200 },
+        };
+
+        EstadoOrdenes = new List<ChartDataItem>
+        {
+            new() { Categoria = "Pendientes",  Valor1 = 42 },
+            new() { Categoria = "En Proceso",  Valor1 = 28 },
+            new() { Categoria = "Completadas", Valor1 = 156 },
+            new() { Categoria = "Canceladas",  Valor1 = 8 },
+        };
+
+        LecturasMensuales = new List<ChartDataItem>
+        {
+            new() { Categoria = "Ene", Valor1 = 1180, Valor2 = 1250 },
+            new() { Categoria = "Feb", Valor1 = 1210, Valor2 = 1250 },
+            new() { Categoria = "Mar", Valor1 = 1245, Valor2 = 1250 },
+            new() { Categoria = "Abr", Valor1 = 1190, Valor2 = 1250 },
+            new() { Categoria = "May", Valor1 = 1230, Valor2 = 1250 },
+            new() { Categoria = "Jun", Valor1 = 1248, Valor2 = 1250 },
+        };
+
+        SolicitudesPorTipo = new List<ChartDataItem>
+        {
+            new() { Categoria = "Ene", Valor1 = 12, Valor2 = 8,  Valor3 = 5 },
+            new() { Categoria = "Feb", Valor1 = 15, Valor2 = 10, Valor3 = 3 },
+            new() { Categoria = "Mar", Valor1 = 10, Valor2 = 14, Valor3 = 7 },
+            new() { Categoria = "Abr", Valor1 = 18, Valor2 = 6,  Valor3 = 4 },
+            new() { Categoria = "May", Valor1 = 14, Valor2 = 12, Valor3 = 9 },
+            new() { Categoria = "Jun", Valor1 = 20, Valor2 = 9,  Valor3 = 6 },
+        };
+    }
+}
 
 <style>
     .dashboard-content {
@@ -112,15 +289,6 @@
     .card-body {
         padding: 20px;
         background-color: white;
-    }
-
-    .metric-item {
-        padding: 10px 0;
-        border-bottom: 1px solid #eee;
-    }
-
-    .metric-item:last-child {
-        border-bottom: none;
     }
 
     .row {

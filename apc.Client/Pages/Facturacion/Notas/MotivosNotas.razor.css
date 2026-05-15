@@ -1,0 +1,71 @@
+/* ── Layout (replica el estilo de /tarifario/cai-offline) ── */
+.notas-page {
+    padding: 1rem;
+    background-color: #f8f9fa;
+}
+
+.notas-grid-wrapper {
+    background: #fff;
+    border-radius: 8px;
+    border: 1px solid rgba(0, 0, 0, 0.04);
+    overflow-x: auto;
+}
+
+/* ── Stat badges (button = selector de catálogo) ── */
+.cai-stat-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.35rem 0.7rem;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    background: #f1f5f9;
+    color: #475569;
+    border: 1px solid #e2e8f0;
+    white-space: nowrap;
+    cursor: pointer;
+    transition: transform 0.08s ease, box-shadow 0.08s ease;
+}
+
+.cai-stat-badge:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+}
+
+.cai-stat-badge--active {
+    outline: 2px solid #1d4ed8;
+    outline-offset: 1px;
+}
+
+.cai-stat-badge--success { background: #dcfce7; color: #166534; border-color: #bbf7d0; }
+.cai-stat-badge--warning { background: #fef3c7; color: #92400e; border-color: #fde68a; }
+
+/* ── Badges de estado en grid ── */
+.cai-badge {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    white-space: nowrap;
+}
+
+.cai-badge--vigente  { background: #dcfce7; color: #166534; }
+.cai-badge--inactivo { background: #f1f5f9; color: #475569; }
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .notas-page     { padding: 0.5rem; }
+    .cai-stat-badge { font-size: 0.78rem; padding: 0.3rem 0.55rem; }
+
+    .notas-grid-wrapper ::deep .dxbs-grid td,
+    .notas-grid-wrapper ::deep .dxbs-grid th {
+        padding-left: 0.4rem !important;
+        padding-right: 0.4rem !important;
+        font-size: 0.8rem;
+    }
+
+    .cai-badge { font-size: 0.68rem; padding: 0.18rem 0.4rem; }
+}

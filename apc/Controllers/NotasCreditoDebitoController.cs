@@ -1,5 +1,5 @@
-using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.NotasCreditoDebito;
 using SIAD.Services.NotasCreditoDebito;
 using apc.Security;
@@ -19,51 +19,91 @@ public class NotasCreditoDebitoController : ControllerBase
         _service = service;
     }
 
+    private string UsuarioActual => User?.Identity?.Name ?? "system";
+
     [HttpGet("clientes")]
     public async Task<IActionResult> BuscarClientes([FromQuery] string? query, CancellationToken ct)
+        => Ok(await _service.BuscarClientesAsync(query, ct));
+
+    [HttpGet("clientes/{clave}/facturas")]
+    public async Task<IActionResult> BuscarFacturasCliente(string clave, CancellationToken ct)
+        => Ok(await _service.BuscarFacturasClienteAsync(clave, ct));
+
+    [HttpGet("motivos/anulacion")]
+    public async Task<IActionResult> ListarMotivosAnulacion(CancellationToken ct)
+        => Ok(await _service.ListarMotivosAnulacionAsync(ct));
+
+    [HttpGet("motivos/aumento")]
+    public async Task<IActionResult> ListarMotivosAumento(CancellationToken ct)
+        => Ok(await _service.ListarMotivosAumentoAsync(ct));
+
+    [HttpGet("cais")]
+    public async Task<IActionResult> ListarCais([FromQuery] short tipoDocumentoFiscalId, CancellationToken ct)
+        => Ok(await _service.ListarCaisNotaAsync(tipoDocumentoFiscalId, ct));
+
+    [HttpPost("credito")]
+    public async Task<IActionResult> EmitirNotaCredito([FromBody] EmitirNotaCreditoRequestDto dto, CancellationToken ct)
     {
-        var clientes = await _service.BuscarClientesAsync(query, ct);
-        return Ok(clientes);
+        dto.Usuario = UsuarioActual;
+        var resp = await _service.EmitirNotaCreditoAsync(dto, ct);
+        return resp.Success ? Ok(resp) : BadRequest(resp);
     }
 
-    [HttpGet("clientes/{clave}")]
-    public async Task<IActionResult> ObtenerCliente(string clave, CancellationToken ct)
+    [HttpPost("debito")]
+    public async Task<IActionResult> EmitirNotaDebito([FromBody] EmitirNotaDebitoRequestDto dto, CancellationToken ct)
     {
-        var cliente = await _service.ObtenerClienteAsync(clave, ct);
-        return cliente is null ? NotFound() : Ok(cliente);
+        dto.Usuario = UsuarioActual;
+        var resp = await _service.EmitirNotaDebitoAsync(dto, ct);
+        return resp.Success ? Ok(resp) : BadRequest(resp);
     }
 
-    [HttpGet("clientes/{clave}/configuracion")]
-    public async Task<IActionResult> ObtenerConfiguracion(string clave, CancellationToken ct)
+    [HttpGet("emitidas")]
+    public async Task<IActionResult> ListarEmitidas(
+        [FromQuery] string? search,
+        [FromQuery] string? tipoNota,
+        [FromQuery] short? estadoId,
+        [FromQuery] DateTime? fechaDesde,
+        [FromQuery] DateTime? fechaHasta,
+        [FromQuery] int skip,
+        [FromQuery] int take,
+        [FromQuery] string? sortField,
+        [FromQuery] bool sortDesc,
+        CancellationToken ct)
     {
-        var configuracion = await _service.ObtenerConfiguracionClienteAsync(clave, ct);
-        return configuracion is null ? NotFound() : Ok(configuracion);
-    }
-
-    [HttpGet("motivos")]
-    public async Task<IActionResult> ListarMotivos(CancellationToken ct)
-    {
-        var motivos = await _service.ListarMotivosAsync(ct);
-        return Ok(motivos);
-    }
-
-    [HttpGet("motivos/{id:int}")]
-    public async Task<IActionResult> ObtenerMotivo(int id, CancellationToken ct)
-    {
-        var motivo = await _service.ObtenerMotivoAsync(id, ct);
-        return motivo is null ? NotFound() : Ok(motivo);
-    }
-
-    [HttpPost]
-    public async Task<IActionResult> RegistrarNota([FromBody] NotaCrearRequestDto dto, CancellationToken ct)
-    {
-        var respuesta = await _service.RegistrarNotaAsync(dto, ct);
-        if (!respuesta.Success)
+        var filtro = new NotaEmitidaFilterDto
         {
-            return BadRequest(respuesta);
-        }
+            Search = search,
+            TipoNota = tipoNota,
+            EstadoId = estadoId,
+            FechaDesde = fechaDesde,
+            FechaHasta = fechaHasta
+        };
 
-        return Ok(respuesta);
+        var result = await _service.ListarNotasEmitidasPagedAsync(filtro, skip, take, sortField, sortDesc, ct);
+        return Ok(result);
+    }
+
+    // ── Mantenimiento de catálogos de motivos ──
+
+    [HttpGet("motivos/anulacion/crud")]
+    public async Task<IActionResult> ListarMotivosAnulacionCrud(CancellationToken ct)
+        => Ok(await _service.ListarMotivosAnulacionCrudAsync(ct));
+
+    [HttpGet("motivos/aumento/crud")]
+    public async Task<IActionResult> ListarMotivosAumentoCrud(CancellationToken ct)
+        => Ok(await _service.ListarMotivosAumentoCrudAsync(ct));
+
+    [HttpPost("motivos/anulacion")]
+    public async Task<IActionResult> GuardarMotivoAnulacion([FromBody] MotivoSaveRequestDto dto, CancellationToken ct)
+    {
+        var resp = await _service.GuardarMotivoAnulacionAsync(dto, ct);
+        return resp.Success ? Ok(resp) : BadRequest(resp);
+    }
+
+    [HttpPost("motivos/aumento")]
+    public async Task<IActionResult> GuardarMotivoAumento([FromBody] MotivoSaveRequestDto dto, CancellationToken ct)
+    {
+        var resp = await _service.GuardarMotivoAumentoAsync(dto, ct);
+        return resp.Success ? Ok(resp) : BadRequest(resp);
     }
 }
-
