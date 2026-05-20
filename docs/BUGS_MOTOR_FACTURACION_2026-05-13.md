@@ -425,3 +425,84 @@ La app Android (`AppLectoresAPC/`, Java) se va a **migrar completa** post-25. Po
 - Cualquier otro pulido de UX de la app entra en la migración, no antes.
 
 **Pendiente operativo del 25 que sí depende de la app actual** (no de la migración): clear data + reinstalar el APK vigente para validar bug #6 (saldo previo) — ver GUIA_PRUEBAS_AZURE.
+
+---
+
+## Hallazgos 2026-05-20 — flujo de descarga de ruta del app (lector)
+
+Síntoma reportado por el equipo: al descargar la ruta `01002` el app muestra
+*"la descarga finalizó sin medidores disponibles. Detalle: no se encontró un
+ciclo abierto para la ruta 01002. Solicite la liberación del ciclo antes de
+descargar."*
+
+### Bug #9 — `sp_informacion_ciclo` no normaliza el padding de la ruta
+
+**Archivo**: [Database/2026-02-14_fix_sp_informacion_ciclo.sql](../Database/2026-02-14_fix_sp_informacion_ciclo.sql)
+
+`sp_informacion_ciclo(p_ruta)` resuelve el ciclo con `WHERE r.codruta = p_ruta`
+— comparación **exacta**, sin `lpad`. Si el app envía la ruta sin el cero a la
+izquierda (`1002` en lugar de `01002`) no encuentra la fila en `rutas`,
+`v_ciclo` queda NULL y el SP retorna vacío → el WS responde *"no se encontró un
+ciclo abierto"* aunque el período sí esté abierto.
+
+Inconsistencia: `sp_medidores_por_ruta_ws` (el siguiente paso del mismo flujo)
+**sí** normaliza con `lpad(v_ruta, 5, '0')`. Los dos SPs del mismo flujo deben
+tratar la ruta igual.
+
+**Fix sugerido**: aplicar la misma normalización en `sp_informacion_ciclo`:
+```sql
+v_ruta_norm := CASE
+    WHEN btrim(p_ruta) ~ '^[0-9]+$' AND length(btrim(p_ruta)) <= 5
+    THEN lpad(btrim(p_ruta), 5, '0')
+    ELSE btrim(p_ruta)
+END;
+-- ... WHERE r.codruta = v_ruta_norm
+```
+Severidad: media. No bloquea si el app siempre manda 5 dígitos, pero es una
+trampa latente. Anotado, fix recomendado pre-25.
+
+### Bug #10 — `GenerarPeriodoAsync` cierra el período abierto sin filtrar por ciclo
+
+**Archivo**: [SIAD.Services/AuxiliarLectura/AuxiliarLecturaService.cs:254](../SIAD.Services/AuxiliarLectura/AuxiliarLecturaService.cs#L254)
+
+```csharp
+var abierto = await _context.historialmes
+    .Where(p => p.cerrarperiodo == 'P')   // ← sin filtrar por ciclo
+    .FirstOrDefaultAsync(ct);
+if (abierto is not null) { abierto.cerrarperiodo = 'C'; ... }
+```
+
+Al generar el período de un ciclo, cierra **cualquier** período abierto del
+sistema, sea del ciclo que sea. Consecuencia: sólo puede existir **un período
+abierto a la vez en toda la empresa**. Con 21 ciclos creados en PROD, si se
+quiere facturar varios ciclos en paralelo (caso normal de operación), abrir el
+ciclo 2 cierra el ciclo 1 y el app deja de poder descargar el 1.
+
+**Fix sugerido**: filtrar el cierre por ciclo —
+`.Where(p => p.cerrarperiodo == 'P' && p.ciclo == cicloNormalizado)`.
+Severidad: alta para operación multi-ciclo. Confirmar la regla de negocio
+esperada con el cliente (¿un período abierto por ciclo, o uno global?).
+
+### Hallazgo de entorno — múltiples bases SIAD en el servidor APC con connection strings desalineadas
+
+El servidor APC (`172.16.0.9`) tiene **6 bases SIAD** + la legacy `bdnes`:
+
+| Base | Clientes | Ruta `01002` | Período abierto | Notas |
+|---|---|---|---|---|
+| `siad_v3` | 0 | existe | ninguno | sólo catálogos, sin datos operativos |
+| `siad_v3_demo_20260518` | 25 | existe | 2026/2 (ciclo 1) | descarga `01002` → 5 medidores ✅ |
+| `siad_v3_old` | 511 | **no existe** | 2026/2 (ciclo 3) | datos reales; rutas en formato `001..005` |
+| `siad_v3old` | 4 | no existe | sí | — |
+| `siad_v2` | 1 | — | no | versión 2 |
+| `bdnes_restore` | 47 492 | — | no | BD legacy `bdnes` restaurada (1.2 GB) |
+
+El error *"no se encontró un ciclo abierto para la ruta 01002"* aparece cuando
+el **WS que sirve al app** apunta a una base donde la ruta `01002` no resuelve
+ciclo abierto (`siad_v3` vacía, o `siad_v3_old` que usa rutas `001..005`). La
+descarga de `01002` **sólo funciona contra `siad_v3_demo_20260518`**.
+
+**Acción**: alinear la connection string del **WS** (`Web.config`) y del
+**portal** (`appsettings.json` desplegado en IIS) para que ambos apunten a la
+**misma** base. Decidir cuál es la base de producción real — hay un conflicto
+de formato de rutas (`001..005` en los datos reales vs `01001..01005` en el
+demo) que debe resolverse antes de la entrega.
