@@ -1,4 +1,4 @@
--- ============================================================
+﻿-- ============================================================
 -- Procedimientos: Comprobantes automaticos (Cobranza/Facturacion)
 -- Motor: PostgreSQL
 -- Fecha: 2026-01-22
@@ -362,15 +362,22 @@ BEGIN
         RAISE EXCEPTION 'No hay periodo abierto (estado 0) para la fecha %', p_poliza_date;
     END IF;
 
-    -- Numero de poliza (simple: empresa-anio-secuencia).
-    SELECT COUNT(*) + 1
-      INTO v_seq
-      FROM public.con_partida_hdr
-     WHERE company_id = p_company_id;
+    -- Numero de partida: empresa-anio-mes-correlativo mensual.
+    v_poliza_number := p_company_id::text || '-' || to_char(p_poliza_date, 'YYYY-MM') || '-';
 
-    v_poliza_number := p_company_id::text || '-' ||
-                       EXTRACT(YEAR FROM p_poliza_date)::text || '-' ||
-                       lpad(v_seq::text, 6, '0');
+    PERFORM pg_advisory_xact_lock(
+        ((p_company_id::bigint << 32) #
+         ((EXTRACT(YEAR FROM p_poliza_date)::int * 100 + EXTRACT(MONTH FROM p_poliza_date)::int)::bigint))
+    );
+
+    SELECT COALESCE(MAX(substring(h.poliza_number from length(v_poliza_number) + 1)::bigint), 0) + 1
+      INTO v_seq
+      FROM public.con_partida_hdr h
+     WHERE h.company_id = p_company_id
+       AND h.poliza_number LIKE v_poliza_number || '%'
+       AND substring(h.poliza_number from length(v_poliza_number) + 1) ~ '^[0-9]+$';
+
+    v_poliza_number := v_poliza_number || lpad(v_seq::text, 6, '0');
 
     -- Insertar encabezado.
     INSERT INTO public.con_partida_hdr (

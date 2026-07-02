@@ -51,7 +51,7 @@ Write-Host ""
 $pgHost = "172.16.0.9"
 $pgPort = "5432"
 $pgUser = "postgres"
-$pgDatabase = "siad"
+$pgDatabase = "siad_v3"
 $pgMaintenanceDb = "postgres"
 
 Write-Host "Modo de restauracion:" -ForegroundColor Yellow
