@@ -9,7 +9,9 @@ ehthumbs.db
 
 # --- Editores / IDEs ---
 .vs/
-.vscode/
+.vscode/*
+!.vscode/launch.json
+!.vscode/tasks.json
 .idea/
 *.iml
 *.sublime-workspace
@@ -96,3 +98,22 @@ Database/Backups/*.sql
 
 # --- Archivos de carga con potencial PII ---
 Carga_*.xlsx
+# --- Config local con credenciales reales (NO commitear) ---
+appsettings.Local.json
+**/appsettings.Local.json
+apc/DataProtectionKeys/
+
+# --- Cache local de Live Share / VS Code ---
+*.lscache
+
+# --- Scratch local / agentes IA ---
+.claude/
+.codex/
+.codex-tmp/
+tools/
+apc.Client.Tests/
+apc/.build/
+*.razor.backup
+
+# --- Config VS Code que SÍ se trackea ---
+!.vscode/mcp.json

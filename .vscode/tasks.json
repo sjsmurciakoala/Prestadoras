@@ -1,0 +1,41 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "dotnet-build-solution",
+			"type": "shell",
+			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "dotnet-build-solution",
+			"type": "shell",
+			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "dotnet-build-solution",
+			"type": "shell",
+			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		},
+		{
+			"label": "dotnet-build-solution",
+			"type": "shell",
+			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
+			"problemMatcher": [
+				"$msCompile"
+			],
+			"group": "build"
+		}
+	]
+}
