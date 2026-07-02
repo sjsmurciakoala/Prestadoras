@@ -1,4 +1,4 @@
-@page "/tarifario/conflictos-v3"
+﻿@page "/tarifario/conflictos-v3"
 @attribute [Authorize]
 
 @using DevExpress.Blazor
@@ -9,6 +9,8 @@
 @inject TarifarioConflictoClient Client
 @inject NavigationManager Navigation
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Conflictos Tarifarios</PageTitle>
 
 <div class="page-container conflictos-v3-page">
     <DxToastProvider Name="ConflictosV3Toast" MaxToastCount="4" />

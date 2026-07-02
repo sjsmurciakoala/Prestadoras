@@ -1,7 +1,7 @@
 using System.Collections.Generic;
 
 using Microsoft.AspNetCore.Authorization;
-
+using Microsoft.AspNetCore.Identity;
 using Microsoft.AspNetCore.Mvc;
 
 using SIAD.Core.DTOs.Clientes;
@@ -12,6 +12,7 @@ using SIAD.Core.Tenancy;
 
 using SIAD.Services.Clientes;
 
+using apc.Data;
 using apc.Security;
 
 
@@ -32,20 +33,18 @@ public class ClientesController : ControllerBase
 
     private readonly IClientesService _clientesService;
 
-
-
     private readonly ICurrentCompanyService _currentCompanyService;
 
+    private readonly UserManager<ApplicationUser> _userManager;
 
-
-    public ClientesController(IClientesService clientesService, ICurrentCompanyService currentCompanyService)
-
+    public ClientesController(
+        IClientesService clientesService,
+        ICurrentCompanyService currentCompanyService,
+        UserManager<ApplicationUser> userManager)
     {
-
         _clientesService = clientesService;
-
         _currentCompanyService = currentCompanyService;
-
+        _userManager = userManager;
     }
 
 
@@ -161,29 +160,43 @@ public class ClientesController : ControllerBase
 
     {
 
-        if (take <= 0)
+        try
 
         {
 
-            take = 50;
+            if (take <= 0)
+
+            {
+
+                take = 50;
+
+            }
+
+
+
+            if (take > 500)
+
+            {
+
+                take = 500;
+
+            }
+
+
+
+            var result = await _clientesService.GetMovimientosPagedAsync(id, skip, take, sortField, sortDesc, cancellationToken);
+
+            return Ok(result);
 
         }
 
-
-
-        if (take > 500)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 
         {
 
-            take = 500;
+            return StatusCode(499);
 
         }
-
-
-
-        var result = await _clientesService.GetMovimientosPagedAsync(id, skip, take, sortField, sortDesc, cancellationToken);
-
-        return Ok(result);
 
     }
 
@@ -311,29 +324,43 @@ public class ClientesController : ControllerBase
 
     {
 
-        if (take <= 0)
+        try
 
         {
 
-            take = 50;
+            if (take <= 0)
+
+            {
+
+                take = 50;
+
+            }
+
+
+
+            if (take > 500)
+
+            {
+
+                take = 500;
+
+            }
+
+
+
+            var result = await _clientesService.SearchClientesPagedAsync(search, soloActivos, skip, take, sortField, sortDesc, cancellationToken);
+
+            return Ok(result);
 
         }
 
-
-
-        if (take > 500)
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 
         {
 
-            take = 500;
+            return StatusCode(499);
 
         }
-
-
-
-        var result = await _clientesService.SearchClientesPagedAsync(search, soloActivos, skip, take, sortField, sortDesc, cancellationToken);
-
-        return Ok(result);
 
     }
 
@@ -497,7 +524,46 @@ public class ClientesController : ControllerBase
 
     }
 
+    [HttpGet("{id:int}/estado-log")]
+    public async Task<IActionResult> GetEstadoLog(int id, CancellationToken ct)
+    {
+        var clave = await _clientesService.GetClienteAsync(id, ct);
+        if (clave is null)
+            return NotFound();
 
+        var log = await _clientesService.GetEstadoLogAsync(clave.Codigo, ct);
+        return Ok(log);
+    }
+
+    [HttpPost("{clave}/no-cortable")]
+    [Authorize(Policy = PermissionNames.Ventas.Clientes.EditarNoCortable)]
+    public async Task<IActionResult> SetNoCortable(string clave, [FromBody] SetNoCortableRequest request, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "La contraseña es obligatoria." });
+
+        var username = User.Identity?.Name;
+        if (string.IsNullOrWhiteSpace(username))
+            return Unauthorized();
+
+        var user = await _userManager.FindByNameAsync(username);
+        if (user is null)
+            return Unauthorized();
+
+        var passwordValida = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!passwordValida)
+            return BadRequest(new { message = "Contraseña incorrecta." });
+
+        try
+        {
+            await _clientesService.SetNoCortableAsync(clave, request.NoCortable, username, request.Motivo, ct);
+            return Ok(new { success = true, noCortable = request.NoCortable });
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+    }
 
 }
 

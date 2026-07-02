@@ -5,6 +5,8 @@
 @inject IToastNotificationService ToastService
 @using DevExpress.Blazor
 
+<PageTitle>SIAD - Órdenes de Trabajo</PageTitle>
+
 <DxScrollView Height="100%">
     <DxToastProvider Name="OrdenesToast" MaxToastCount="4" />
 
@@ -46,10 +48,37 @@
             </DxTabs>
 
             <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
-                <DxFormLayoutItem Caption="Búsqueda">
-                    <DxTextBox @bind-Text="filtro.Busqueda" NullText="Clave, concepto, usuario o empleado" />
+                <DxFormLayoutItem Caption="Búsqueda" ColSpanMd="12">
+                    <DxTextBox @bind-Text="filtro.Busqueda" NullText="Concepto, usuario o empleado" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Estado">
+                <DxFormLayoutItem Caption="Cliente" ColSpanMd="6">
+                    <DxComboBox TData="OrdenTrabajoPropietarioDto"
+                                TValue="string"
+                                Data="@propietarios"
+                                ValueFieldName="@nameof(OrdenTrabajoPropietarioDto.Clave)"
+                                TextFieldName="@nameof(OrdenTrabajoPropietarioDto.Nombre)"
+                                DropDownStyle="DropDownStyle.DropDown"
+                                AllowUserInput="true"
+                                @bind-Value="filtro.ClienteClave"
+                                Text="@clienteFiltroTexto"
+                                TextChanged="OnClienteFiltroTextChanged"
+                                NullText="Escribe el nombre…"
+                                FilterCondition="DataEditorFilterCondition.Contains"
+                                FilterMinLength="0"
+                                FilterDelay="250"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
+                        <ItemTemplate Context="propietario">
+                            <div class="combo-item">
+                                <span class="combo-item-text">@propietario.Nombre</span>
+                                <small class="combo-item-hint">@propietario.Clave</small>
+                            </div>
+                        </ItemTemplate>
+                    </DxComboBox>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Clave" ColSpanMd="6">
+                    <DxTextBox @bind-Text="filtro.Clave" NullText="Clave del cliente" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Estado" ColSpanMd="6">
                     <DxComboBox TData="OrdenTrabajoEstadoDto"
                                 TValue="string"
                                 Data="@estados"
@@ -66,7 +95,7 @@
                                 FilterDelay="250"
                                 ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Tipo">
+                <DxFormLayoutItem Caption="Tipo" ColSpanMd="6">
                     <DxComboBox TData="OrdenTrabajoTipoDto"
                                 TValue="string"
                                 Data="@tipos"
@@ -90,35 +119,11 @@
                         </ItemTemplate>
                     </DxComboBox>
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Fecha desde">
+                <DxFormLayoutItem Caption="Fecha desde" ColSpanMd="6">
                     <DxDateEdit @bind-Date="filtro.FechaDesde" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Fecha hasta">
+                <DxFormLayoutItem Caption="Fecha hasta" ColSpanMd="6">
                     <DxDateEdit @bind-Date="filtro.FechaHasta" />
-                </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Cliente (clave)">
-                    <DxComboBox TData="OrdenTrabajoPropietarioDto"
-                                TValue="string"
-                                Data="@propietarios"
-                                ValueFieldName="@nameof(OrdenTrabajoPropietarioDto.Clave)"
-                                TextFieldName="@nameof(OrdenTrabajoPropietarioDto.Nombre)"
-                                DropDownStyle="DropDownStyle.DropDown"
-                                AllowUserInput="true"
-                                @bind-Value="filtro.ClienteClave"
-                                Text="@clienteFiltroTexto"
-                                TextChanged="OnClienteFiltroTextChanged"
-                                NullText="Escribe para buscar"
-                                FilterCondition="DataEditorFilterCondition.Contains"
-                                FilterMinLength="0"
-                                FilterDelay="250"
-                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto">
-                        <ItemTemplate Context="propietario">
-                            <div class="combo-item">
-                                <span class="combo-item-text">@propietario.Nombre</span>
-                                <small class="combo-item-hint">@propietario.Clave</small>
-                            </div>
-                        </ItemTemplate>
-                    </DxComboBox>
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Acciones" ColSpanMd="12">
                     <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
@@ -452,6 +457,8 @@
         filtro.FechaDesde = null;
         filtro.FechaHasta = null;
         filtro.ClienteClave = null;
+        filtro.Clave = null;
+        filtro.ClienteNombre = null;
         tipoFiltroTexto = string.Empty;
         clienteFiltroTexto = string.Empty;
         estadoFiltroTexto = string.Empty;
@@ -771,12 +778,6 @@
             if (!token.IsCancellationRequested)
             {
                 propietarios = catalogo;
-                if (!string.IsNullOrWhiteSpace(filtro.ClienteClave) && propietarios.All(p => p.Clave != filtro.ClienteClave))
-                {
-                    filtro.ClienteClave = null;
-                    clienteFiltroTexto = string.Empty;
-                }
-
                 if (!string.IsNullOrWhiteSpace(nuevo.ClienteClave) && propietarios.All(p => p.Clave != nuevo.ClienteClave))
                 {
                     nuevo.ClienteClave = null;

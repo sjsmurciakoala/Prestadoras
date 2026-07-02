@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
@@ -143,6 +144,7 @@ public sealed class BancoConfiguracionTransaccionesService : IBancoConfiguracion
         };
 
         MapToEntity(entity, dto);
+        await ValidarTipoPartidaAsync(dto.TipoPartidaTypeId, companyId, ct);
         await ValidarCentroCostoAsync(dto.UsaCentroCosto, entity.cod_centrocosto, ct);
         EnsureEstado(entity);
 
@@ -178,6 +180,7 @@ public sealed class BancoConfiguracionTransaccionesService : IBancoConfiguracion
             ?? throw new KeyNotFoundException("No se encontro la configuracion solicitada.");
 
         MapToEntity(entity, dto);
+        await ValidarTipoPartidaAsync(dto.TipoPartidaTypeId, companyId, ct);
         entity.updated_at = DateTime.UtcNow;
         entity.updated_by = NormalizeUser(user);
 
@@ -231,13 +234,30 @@ public sealed class BancoConfiguracionTransaccionesService : IBancoConfiguracion
         }
     }
 
+    private async Task ValidarTipoPartidaAsync(long? tipoPartidaTypeId, long companyId, CancellationToken ct)
+    {
+        if (!tipoPartidaTypeId.HasValue || tipoPartidaTypeId.Value <= 0)
+        {
+            throw new ArgumentException("Seleccione un tipo de partida valido.", nameof(tipoPartidaTypeId));
+        }
+
+        var exists = await context.con_tipo_transacciones
+            .AsNoTracking()
+            .AnyAsync(t => t.company_id == companyId && t.type_id == tipoPartidaTypeId.Value, ct);
+
+        if (!exists)
+        {
+            throw new ArgumentException("El tipo de partida seleccionado no existe.", nameof(tipoPartidaTypeId));
+        }
+    }
+
     private static BancoConfiguracionTransaccionEditDto MapToEditDto(ban_tipos_transacciones entity)
     {
         return new BancoConfiguracionTransaccionEditDto
         {
             TipoTransaccionId = NormalizeText(entity.tipo_transaccion),
             DescripcionTransaccion = NormalizeText(entity.nombre),
-            TipoPartida = NormalizeOptional(entity.cod_tipopartida) ?? string.Empty,
+            TipoPartidaTypeId = ParseTipoPartidaTypeId(entity.cod_tipopartida),
             UsaCentroCosto = entity.cod_centrocosto.HasValue && entity.cod_centrocosto.Value > 0,
             CentroCostoId = entity.cod_centrocosto,
             Correlativo = NormalizeText(entity.correlativo),
@@ -258,7 +278,7 @@ public sealed class BancoConfiguracionTransaccionesService : IBancoConfiguracion
     {
         entity.tipo_transaccion = NormalizeRequired(dto.TipoTransaccionId, 3, nameof(dto.TipoTransaccionId));
         entity.nombre = NormalizeRequired(dto.DescripcionTransaccion, 40, nameof(dto.DescripcionTransaccion));
-        entity.cod_tipopartida = NormalizeRequired(dto.TipoPartida, 3, nameof(dto.TipoPartida));
+        entity.cod_tipopartida = FormatTipoPartidaTypeId(dto.TipoPartidaTypeId);
         entity.cod_centrocosto = dto.UsaCentroCosto ? dto.CentroCostoId : null;
         entity.correlativo = NormalizeRequired(dto.Correlativo, 6, nameof(dto.Correlativo));
         entity.cuenta_contable = NormalizeOptional(dto.CuentaContable, 13, nameof(dto.CuentaContable));
@@ -348,6 +368,28 @@ public sealed class BancoConfiguracionTransaccionesService : IBancoConfiguracion
     private static string? NormalizeOptional(string? value)
     {
         return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+    }
+
+    private static long? ParseTipoPartidaTypeId(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        return long.TryParse(value.Trim(), NumberStyles.Integer, CultureInfo.InvariantCulture, out var parsed)
+            ? parsed
+            : null;
+    }
+
+    private static string FormatTipoPartidaTypeId(long? value)
+    {
+        if (!value.HasValue || value.Value <= 0)
+        {
+            throw new ArgumentException("El campo TipoPartidaTypeId es obligatorio.", nameof(value));
+        }
+
+        return value.Value.ToString(CultureInfo.InvariantCulture);
     }
 
     private static void EnsureEstado(ban_tipos_transacciones entity)

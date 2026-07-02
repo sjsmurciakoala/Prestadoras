@@ -258,6 +258,13 @@ public static class PermissionEndpointCatalog
             Route: "api/Clientes/{id:int}/tarifas"),
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.Clientes,
+            Resource: "clientes__clientes_clave_no_cortable",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/Clientes/{clave}/no-cortable"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.Cobranza,
             Resource: "cobranza__cobranza_clientes_clave_bloqueo",
             Action: PermissionAction.View,

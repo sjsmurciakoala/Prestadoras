@@ -1,7 +1,9 @@
-﻿@page "/ordenes/{Id:int}"
+@page "/ordenes/{Id:int}"
 @attribute [Authorize]
 @inject apc.Client.Services.Ordenes.OrdenesClient OrdenesClient
 @inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Orden de Trabajo</PageTitle>
 
 <DxScrollView Height="100%">
     <div class="page-container">
@@ -127,7 +129,11 @@
                 <div class="grid-wrapper">
                     <DxGrid Data="@detalle.Materiales" PageSize="10" CssClass="grid-modern">
                         <Columns>
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CuentaContable)" Caption="Cuenta" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CuentaContable)" Caption="Cuenta">
+                                <CellDisplayTemplate Context="cell">
+                                    @AccountCodeFormatter.Format(((OrdenTrabajoMaterialDto)cell.DataItem).CuentaContable)
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
                             <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.CodigoProducto)" Caption="Código" />
                             <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Descripcion)" Caption="Descripción" />
                             <DxGridDataColumn FieldName="@nameof(OrdenTrabajoMaterialDto.Cantidad)" Caption="Cantidad" />

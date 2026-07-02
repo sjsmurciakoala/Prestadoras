@@ -11,4 +11,5 @@ public record MedidorListDto(
     string? Acueducto,
     bool Estado,
     string? ClienteClave,
-    string? ClienteNombre);
+    string? ClienteNombre,
+    string? ClaseMedidorCodigo);

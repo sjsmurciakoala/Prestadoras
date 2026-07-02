@@ -25,5 +25,8 @@ public sealed class MedidorEditDto
     [StringLength(20, ErrorMessage = "El acueducto no puede superar los 20 caracteres.")]
     public string? Acueducto { get; set; }
 
+    [StringLength(1, ErrorMessage = "El código de clase no puede superar 1 carácter.")]
+    public string? ClaseMedidorCodigo { get; set; }
+
     public bool Activo { get; set; } = true;
 }

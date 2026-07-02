@@ -5,8 +5,11 @@
 @inject IToastNotificationService ToastService
 @inject AuthenticationStateProvider AuthenticationStateProvider
 
+<PageTitle>SIAD - Reverso de Pagos</PageTitle>
+
 <DxScrollView Height="100%">
     <DxToastProvider Name="@ToastName" MaxToastCount="3" />
+    <ErrorNotice @ref="errorNotice" />
 
     @if (!string.IsNullOrWhiteSpace(error))
     {
@@ -104,6 +107,7 @@
     private List<ClienteComboDto> clientes = new();
     private string? clienteMiscelaneo;
     private string? error;
+    private ErrorNotice errorNotice = default!;
     private bool procesando;
 
     protected override async Task OnInitializedAsync()
@@ -134,8 +138,7 @@
         }
         catch (Exception ex)
         {
-            error = $"No se pudo consultar el pago: {ex.Message}";
-            MostrarToast("Reverso", error, ToastRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo consultar el pago.", ex);
         }
     }
 
@@ -174,8 +177,7 @@
         }
         catch (Exception ex)
         {
-            error = $"No se pudo reversar el pago: {ex.Message}";
-            MostrarToast("Reverso", error, ToastRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo reversar el pago.", ex);
         }
         finally
         {
@@ -191,7 +193,7 @@
         }
         catch (Exception ex)
         {
-            error = $"No se pudo cargar el listado de miscelaneos: {ex.Message}";
+            error = "No se pudo cargar el listado de misceláneos.";
             MostrarToast("Reverso", error, ToastRenderStyle.Danger);
         }
     }

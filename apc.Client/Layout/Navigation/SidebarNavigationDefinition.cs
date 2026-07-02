@@ -142,12 +142,36 @@ public static class SidebarNavigationDefinition
                     Id = "fact-servicios",
                     Text = "Servicios públicos",
                     IconCssClass = "bi bi-lightning-charge",
-                    MatchPrefixes = ["/facturacion/captacion/caja", "/facturacion/miscelaneos", "/facturacion/miscelaneos/catalogo"],
+                    MatchPrefixes = ["/facturacion/captacion/caja", "/facturacion/miscelaneos", "/facturacion/miscelaneos/catalogo", "/facturacion/miscelaneos/consulta"],
                     Children =
                     [
                         new SidebarNavItem { Id = "fact-captacion", Text = "Captación de Pagos", NavigateUrl = "/facturacion/captacion/caja", MatchPrefixes = ["/facturacion/captacion/caja"], IconCssClass = "bi bi-bag-check" },
-                        new SidebarNavItem { Id = "fact-miscelaneos", Text = "Facturación Misceláneos", NavigateUrl = "/facturacion/miscelaneos", MatchPrefixes = ["/facturacion/miscelaneos"], IconCssClass = "bi bi-receipt" },
-                        new SidebarNavItem { Id = "fact-catalogo-misc", Text = "Catálogo Misceláneos", NavigateUrl = "/facturacion/miscelaneos/catalogo", MatchPrefixes = ["/facturacion/miscelaneos/catalogo"], IconCssClass = "bi bi-journal-bookmark" }
+                        new SidebarNavItem
+                        {
+                            Id = "fact-miscelaneos-group",
+                            Text = "Misceláneos",
+                            IconCssClass = "bi bi-receipt",
+                            MatchPrefixes = ["/facturacion/miscelaneos"],
+                            Children =
+                            [
+                                new SidebarNavItem {
+                                    Id = "fact-miscelaneos",
+                                    Text = "Facturación",
+                                    NavigateUrl = "/facturacion/miscelaneos",
+                                    MatchPrefixes = ["/facturacion/miscelaneos"],
+                                    MatchExact = true,
+                                    IconCssClass = "bi bi-receipt"
+                                },
+                                new SidebarNavItem {
+                                    Id = "fact-consulta-misc",
+                                    Text = "Consulta",
+                                    NavigateUrl = "/facturacion/miscelaneos/consulta",
+                                    MatchPrefixes = ["/facturacion/miscelaneos/consulta"],
+                                    IconCssClass = "bi bi-search"
+                                },
+                                new SidebarNavItem { Id = "fact-catalogo-misc", Text = "Catálogo Misceláneos", NavigateUrl = "/facturacion/miscelaneos/catalogo", MatchPrefixes = ["/facturacion/miscelaneos/catalogo"], IconCssClass = "bi bi-journal-bookmark" }
+                            ]
+                        }
                     ]
                 },
                 new SidebarNavItem
@@ -163,8 +187,60 @@ public static class SidebarNavigationDefinition
                     Id = "fact-cobranza",
                     Text = "Cobranza",
                     IconCssClass = "bi bi-collection",
-                    NavigateUrl = "/facturacion/cobranza",
-                    MatchPrefixes = ["/facturacion/cobranza"]
+                    MatchPrefixes = ["/facturacion/cobranza"],
+                    Children =
+                    [
+                        new SidebarNavItem {
+                            Id = "fact-cobranza-main",
+                            Text = "Gestión de cobranza",
+                            NavigateUrl = "/facturacion/cobranza",
+                            MatchPrefixes = ["/facturacion/cobranza"],
+                            MatchExact = true,
+                            IconCssClass = "bi bi-collection"
+                        },
+                        new SidebarNavItem {
+                            Id = "fact-cortes-masivos",
+                            Text = "Cortes masivos",
+                            NavigateUrl = "/facturacion/cobranza/cortes-masivos",
+                            MatchPrefixes = ["/facturacion/cobranza/cortes-masivos"],
+                            IconCssClass = "bi bi-scissors"
+                        },
+                        new SidebarNavItem {
+                            Id = "fact-acciones-cobranza",
+                            Text = "Acciones de cobranza",
+                            NavigateUrl = "/facturacion/cobranza/acciones-cobranza",
+                            MatchPrefixes = ["/facturacion/cobranza/acciones-cobranza"],
+                            IconCssClass = "bi bi-journal-text"
+                        },
+                        new SidebarNavItem {
+                            Id = "fact-historial-bitacora",
+                            Text = "Historial de bitácora",
+                            NavigateUrl = "/facturacion/cobranza/historial-acciones",
+                            MatchPrefixes = ["/facturacion/cobranza/historial-acciones"],
+                            IconCssClass = "bi bi-clock-history"
+                        },
+                        new SidebarNavItem {
+                            Id = "fact-bloqueo-clientes",
+                            Text = "Bloqueo de clientes",
+                            NavigateUrl = "/facturacion/cobranza/bloqueo-clientes",
+                            MatchPrefixes = ["/facturacion/cobranza/bloqueo-clientes"],
+                            IconCssClass = "bi bi-lock"
+                        },
+                        new SidebarNavItem {
+                            Id = "fact-clientes-cobros",
+                            Text = "Clientes para cobros",
+                            NavigateUrl = "/facturacion/cobranza/clientes-cobros",
+                            MatchPrefixes = ["/facturacion/cobranza/clientes-cobros"],
+                            IconCssClass = "bi bi-people"
+                        },
+                        new SidebarNavItem {
+                            Id = "fact-cartera-vencida",
+                            Text = "Cartera vencida",
+                            NavigateUrl = "/facturacion/cobranza/cartera-vencida",
+                            MatchPrefixes = ["/facturacion/cobranza/cartera-vencida"],
+                            IconCssClass = "bi bi-calendar-x"
+                        }
+                    ]
                 },
                 new SidebarNavItem
                 {
@@ -173,7 +249,9 @@ public static class SidebarNavigationDefinition
                     IconCssClass = "bi bi-arrow-counterclockwise",
                     NavigateUrl = "/facturacion/captacion/reverso",
                     MatchPrefixes = ["/facturacion/captacion/reverso"]
-                }
+                },
+                // Gestión de Caja desvinculada — módulo no utilizado (2026-06-04)
+                // new SidebarNavItem { Id = "fact-caja", Text = "Gestión de Caja", ... }
             ]
         },
 
@@ -206,6 +284,38 @@ public static class SidebarNavigationDefinition
                     IconCssClass = "bi bi-tags",
                     NavigateUrl = "/facturacion/notas/motivos",
                     MatchPrefixes = ["/facturacion/notas/motivos"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "mant-barrios",
+                    Text = "Barrios",
+                    NavigateUrl = "/mantenimientos/barrios",
+                    MatchPrefixes = ["/mantenimientos/barrios"],
+                    IconCssClass = "bi bi-map-fill"
+                },
+                new SidebarNavItem
+                {
+                    Id = "mant-clases-medidor",
+                    Text = "Clases de medidor",
+                    NavigateUrl = "/mantenimientos/clases-medidor",
+                    MatchPrefixes = ["/mantenimientos/clases-medidor"],
+                    IconCssClass = "bi bi-speedometer"
+                },
+                new SidebarNavItem
+                {
+                    Id = "mant-acciones-cobranza",
+                    Text = "Acciones de cobranza",
+                    IconCssClass = "bi bi-journal-check",
+                    NavigateUrl = "/mantenimientos/acciones-cobranza",
+                    MatchPrefixes = ["/mantenimientos/acciones-cobranza"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "mant-observaciones-cobranza",
+                    Text = "Observaciones cobranza",
+                    IconCssClass = "bi bi-chat-square-text",
+                    NavigateUrl = "/mantenimientos/observaciones-cobranza",
+                    MatchPrefixes = ["/mantenimientos/observaciones-cobranza"]
                 }
             ]
         },
@@ -252,6 +362,16 @@ public static class SidebarNavigationDefinition
             ]
         },
 
+        // ===== PRESUPUESTO =====
+        new SidebarNavSection
+        {
+            Label = "Presupuesto",
+            Items =
+            [
+                new SidebarNavItem { Id = "presupuesto", Text = "Presupuesto", NavigateUrl = "/presupuesto/configuraciones", MatchPrefixes = ["/presupuesto/configuraciones"], IconCssClass = "bi bi-cash-stack" }
+            ]
+        },
+
         // ===== INFORMES =====
         new SidebarNavSection
         {
@@ -260,27 +380,18 @@ public static class SidebarNavigationDefinition
             [
                 new SidebarNavItem
                 {
-                    Id = "informes-catalogo",
-                    Text = "Catálogo",
+                    Id = "informes",
+                    Text = "Informes",
                     IconCssClass = "bi bi-bar-chart-line",
-                    NavigateUrl = "/informes",
-                    MatchPrefixes = ["/informes"]
-                },
-                new SidebarNavItem
-                {
-                    Id = "informes-reportes",
-                    Text = "Diseño Web",
-                    IconCssClass = "bi bi-layout-text-window-reverse",
-                    NavigateUrl = "/informes/reportes",
-                    MatchPrefixes = ["/informes/reportes"]
-                },
-                new SidebarNavItem
-                {
-                    Id = "informes-datasets",
-                    Text = "Datasets Web",
-                    IconCssClass = "bi bi-database",
-                    NavigateUrl = "/informes/reportes/datasets",
-                    MatchPrefixes = ["/informes/reportes/datasets"]
+                    MatchPrefixes = ["/informes"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "informes-panel", Text = "Panel de informes", NavigateUrl = "/informes", MatchExact = true, IconCssClass = "bi bi-grid-3x3-gap" },
+                        new SidebarNavItem { Id = "informes-catalogo", Text = "Catálogo", NavigateUrl = "/informes/catalogo", MatchPrefixes = ["/informes/catalogo"], IconCssClass = "bi bi-collection" },
+                        new SidebarNavItem { Id = "informes-partidas", Text = "Partidas contables", NavigateUrl = "/informes/partidas-contabilidad", MatchPrefixes = ["/informes/partidas-contabilidad"], IconCssClass = "bi bi-journal-check" },
+                        new SidebarNavItem { Id = "informes-reportes", Text = "Diseño Web", NavigateUrl = "/informes/reportes", MatchPrefixes = ["/informes/reportes"], IconCssClass = "bi bi-layout-text-window-reverse" },
+                        new SidebarNavItem { Id = "informes-datasets", Text = "Datasets Web", NavigateUrl = "/informes/datasets", MatchPrefixes = ["/informes/datasets"], IconCssClass = "bi bi-database" }
+                    ]
                 }
             ]
         },

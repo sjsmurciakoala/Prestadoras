@@ -1,0 +1,78 @@
+@page "/facturacion/captacion/abono-especial/{ClienteId:int}"
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Clientes
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Clientes
+@using apc.Client.Services.CaptacionPagos
+@using apc.Client.Services.Tenant
+@using Microsoft.AspNetCore.Components.Authorization
+
+@inject ClientesClient ClientesClient
+@inject CaptacionPagosClient CaptacionClient
+@inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Navigation
+@inject TenantState TenantState
+
+<PageTitle>SIAD - Generar Recibo de Abono</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Generar Recibo de Abono</h2>
+            @if (_cliente is not null)
+            {
+                <p class="page-subtitle">
+                    @($"{_cliente.Nombre} {_cliente.Apellidos}".Trim())
+                    &nbsp;&mdash;&nbsp;<span class="text-code">@_cliente.Codigo</span>
+                </p>
+            }
+        </div>
+        <div class="header-actions">
+            <DxButton Text="Volver" Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-content-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else if (_cliente is not null)
+    {
+        <GenerarReciboAbono ClienteClave="@_cliente.Codigo"
+                            UsuarioActual="@_usuario" />
+    }
+    else
+    {
+        <DxAlert AlertType="AlertType.Danger">No se encontró el cliente solicitado.</DxAlert>
+    }
+</div>
+
+@code {
+    [Parameter] public int ClienteId { get; set; }
+
+    private bool _cargando = true;
+    private ClienteDetailDto? _cliente;
+    private string _usuario = "sistema";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TenantState.EnsureCompanyAsync();
+
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _usuario = authState.User.Identity?.Name ?? "sistema";
+
+        _cliente = await ClientesClient.ObtenerPorIdAsync(ClienteId);
+        _cargando = false;
+    }
+
+    private void Volver() => Navigation.NavigateTo($"/clientes/{ClienteId}");
+}

@@ -20,6 +20,4 @@ public partial class cfg_tipo_documento_fiscal
     public bool activo { get; set; }
 
     public virtual ICollection<adm_cai_facturacion> adm_cai_facturacions { get; set; } = new List<adm_cai_facturacion>();
-
-    public virtual ICollection<factura> facturas { get; set; } = new List<factura>();
 }

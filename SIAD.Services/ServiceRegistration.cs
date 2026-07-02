@@ -21,9 +21,11 @@ using SIAD.Services.Tenancy;
 using SIAD.Services.Catalogos;
 using SIAD.Services.Abogados;
 using SIAD.Services.Ciclos;
+using SIAD.Services.Caja;
 // [Sprint1/FaseC 2026-05-05] Removidos namespaces Letras, TarifasBase, TarifasContador (legacy).
 using SIAD.Services.AppLectores;
 using SIAD.Services.Tarifario;
+using SIAD.Services.Presupuesto;
 
 namespace SIAD.Services;
 
@@ -60,6 +62,10 @@ public static class ServiceRegistration
         // captación de pagos
         services.AddScoped<ICaptacionPagosService, CaptacionPagosService>();
         
+        // gestión de caja
+        services.AddScoped<ICajaService, CajaService>();
+        services.AddScoped<IAbonoService, AbonoService>();
+        
         // facturación misceláneos
         services.AddScoped<IFacturacionMiscelaneosService, FacturacionMiscelaneosService>();
         
@@ -71,6 +77,7 @@ public static class ServiceRegistration
 
         // cobranza
         services.AddScoped<ICobranzaService, CobranzaService>();
+        services.AddScoped<ICorteMasivoService, CorteMasivoService>();
         
         // contabilidad - registrar servicios de saldos PRIMERO (dependencia de pólizas)
         services.AddScoped<IContabilidadCatalogosService, ContabilidadCatalogosService>();
@@ -93,7 +100,11 @@ public static class ServiceRegistration
         
         // ciclos
         services.AddScoped<ICiclosService, CiclosService>();
-        
+
+        // presupuesto (de Combinacio_E_J_1.0; mantengo legacy retirado de Letras/Tarifas)
+        services.AddScoped<IConfiguracionPresupuestoService, ConfiguracionPresupuestoService>();
+        services.AddScoped<IOrdenesPagoDirectoService, OrdenesPagoDirectoService>();
+
         // app lectores
         services.AddScoped<IUsuariosAppService, UsuariosAppService>();
 

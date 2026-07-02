@@ -90,6 +90,213 @@ public sealed class ReportesDatasetService : IReportesDatasetService
                 new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
                 new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
                 new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetTransaccionesPeriodo,
+            "Dataset transacciones por periodo",
+            "Fuente resumida para el total control de transacciones por periodo.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetTransaccionesPeriodo,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSaldoClientesCategoria,
+            "Dataset saldo de clientes por categoria",
+            "Fuente de saldos por categoria de servicio y condicion de medicion a fecha de corte.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSaldoClientesCategoria,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaCorte", "p_fecha_corte", "Fecha de corte", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("CategoriaServicioId", "p_categoria_servicio_id", "Categoria", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 20),
+                new DatasetParameterSeed("EstadoCliente", "p_estado_cliente", "Estado del cliente", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetDesgloseFacturacion,
+            "Dataset desglose de facturacion",
+            "Fuente resumida por ciclos para el reporte de desglose de facturacion.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetDesgloseFacturacion,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetMovimientoPeriodo,
+            "Dataset movimiento por periodo",
+            "Fuente de movimientos del periodo con saldo anterior y saldo acumulado.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetMovimientoPeriodo,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetAuxiliarLectura,
+            "Dataset auxiliar de lectura",
+            "Fuente detallada del auxiliar de lectura por periodo, ciclo y estado pendiente.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetAuxiliarLectura,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("Anio", "p_anio", "Año", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("Mes", "p_mes", "Mes", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20),
+                new DatasetParameterSeed("CicloId", "p_ciclo_id", "Ciclo", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 30),
+                new DatasetParameterSeed("SoloPendientes", "p_solo_pendientes", "Solo pendientes", ReportesWebConstants.DatasetParameterDataType.Boolean, ReportesWebConstants.DatasetParameterValueSource.Report, "false", true, false, false, 40)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSaldoClientesAntiguedad,
+            "Dataset saldo de clientes segun antigüedad",
+            "Fuente de clientes con saldo vencido segun antiguedad, agrupados por ciclo.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSaldoClientesAntiguedad,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaCorte", "p_fecha_corte", "Fecha de corte", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("DiasMinimos", "p_dias_minimos", "Dias minimos", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "60", true, false, true, 20),
+                new DatasetParameterSeed("EstadoCliente", "p_estado_cliente", "Estado del cliente", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 30),
+                new DatasetParameterSeed("CicloId", "p_ciclo_id", "Ciclo", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 40)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetHistorialRecibosEmitidos,
+            "Dataset historial de recibos emitidos",
+            "Fuente de recibos emitidos por rango de fechas y usuario o cajero.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetHistorialRecibosEmitidos,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20),
+                new DatasetParameterSeed("Usuario", "p_usuario", "Usuario", ReportesWebConstants.DatasetParameterDataType.Text, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, true, false, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetAnalisisAntiguedadCobros,
+            "Dataset analisis de antigüedad de cobros",
+            "Fuente de saldos por tramos de antigüedad de cobro, filtrable por retroceso en meses o años.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetAnalisisAntiguedadCobros,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaBase", "p_fecha_base", "Fecha base", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("RetrocesoValor", "p_retroceso_valor", "Retroceso", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "12", true, false, true, 20),
+                new DatasetParameterSeed("UnidadTiempo", "p_unidad_tiempo", "Unidad de tiempo", ReportesWebConstants.DatasetParameterDataType.Text, ReportesWebConstants.DatasetParameterValueSource.Report, "MESES", true, false, true, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSaldoClientesCiclo,
+            "Dataset saldo de clientes por ciclo",
+            "Fuente de saldos por ciclo con movimientos de periodo y conteos de clientes.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSaldoClientesCiclo,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20),
+                new DatasetParameterSeed("CicloId", "p_ciclo_id", "Ciclo", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSaldoClientesCategoriaCobranza,
+            "Dataset saldo de clientes por categoria",
+            "Fuente resumida por categoria con saldo anterior, movimientos del periodo y desglose de medidores.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSaldoClientesCategoriaCobranza,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20),
+                new DatasetParameterSeed("CategoriaServicioId", "p_categoria_servicio_id", "Categoria", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetRecaudacion,
+            "Dataset de recaudacion",
+            "Fuente de ingresos y recuperaciones por medio de pago.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetRecaudacion,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20),
+                new DatasetParameterSeed("MedioPagoCodigo", "p_medio_pago_codigo", "Medio de Pago", ReportesWebConstants.DatasetParameterDataType.Text, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, true, false, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSaldoClientesCategoriaDetalle,
+            "Dataset saldo de clientes detallado por categoria",
+            "Fuente detallada por categoria con saldo anterior, movimientos del periodo y desglose por cliente.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSaldoClientesCategoriaDetalle,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20),
+                new DatasetParameterSeed("CategoriaServicioId", "p_categoria_servicio_id", "Categoria", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSaldosAguaPotableCiclo,
+            "Dataset saldos de agua potable por ciclo",
+            "Fuente de saldos de agua potable agrupados por ciclo con movimientos del periodo y conteos de usuarios.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSaldosAguaPotableCiclo,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20),
+                new DatasetParameterSeed("CicloId", "p_ciclo_id", "Ciclo", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.Report, "0", true, false, false, 30)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSumarialTarifarioMedicion,
+            "Dataset sumarial tarifario medicion por periodo",
+            "Fuente de conexiones, consumos y valor de agua agrupados por categoria y rango de tarifas.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSumarialTarifarioMedicion,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20)
+            ]),
+        new(
+            ReportesWebConstants.CodigoDatasetSumarialTarifasNoMedido,
+            "Dataset sumarial de tarifas no medido por periodo",
+            "Fuente de conexiones y valor de agua agrupados por categoria y tarifa para clientes sin medidor.",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetSumarialTarifasNoMedido,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            [
+                new DatasetParameterSeed("CompanyId", "p_company_id", "Empresa actual", ReportesWebConstants.DatasetParameterDataType.Int64, ReportesWebConstants.DatasetParameterValueSource.CurrentCompany, null, false, false, true, 0),
+                new DatasetParameterSeed("FechaDesde", "p_fecha_desde", "Fecha desde", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 10),
+                new DatasetParameterSeed("FechaHasta", "p_fecha_hasta", "Fecha hasta", ReportesWebConstants.DatasetParameterDataType.Date, ReportesWebConstants.DatasetParameterValueSource.Report, null, true, false, true, 20)
             ])
     ];
 

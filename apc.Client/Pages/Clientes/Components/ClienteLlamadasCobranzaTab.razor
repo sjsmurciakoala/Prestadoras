@@ -1,0 +1,169 @@
+@using SIAD.Core.DTOs.Cobranza
+@using apc.Client.Services.Facturacion
+@inject CobranzaClient CobranzaClient
+
+<div class="llamadas-cobranza-container">
+
+    <div class="section-header mb-3">
+        <i class="bi bi-telephone-outbound"></i>
+        <h4 class="m-0">Llamadas de cobranza</h4>
+    </div>
+
+    <div class="d-flex gap-2 mb-3">
+        <DxButton Text="Registrar llamada"
+                  IconCssClass="bi bi-telephone-plus"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Click="AbrirFormulario" />
+        <DxButton Text="Recargar"
+                  IconCssClass="bi bi-arrow-clockwise"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="CargarLlamadas" />
+    </div>
+
+    @if (isLoading)
+    {
+        <DxLoadingPanel Visible="true" Text="Cargando llamadas..." />
+        <div style="height:60px"></div>
+    }
+    else if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+    }
+    else
+    {
+        <DxGrid Data="llamadas" ShowFilterRow="false" PageSize="20">
+            <Columns>
+                <DxGridDataColumn FieldName="Fecha" Caption="Fecha" Width="150px" DisplayFormat="g" />
+                <DxGridDataColumn FieldName="NumeroLlamado" Caption="Número" Width="130px" />
+                <DxGridDataColumn FieldName="Resultado" Caption="Resultado" Width="150px" />
+                <DxGridDataColumn FieldName="Observacion" Caption="Observación" />
+                <DxGridDataColumn FieldName="Usuario" Caption="Usuario" Width="120px" />
+            </Columns>
+        </DxGrid>
+
+        @if (llamadas.Count == 0)
+        {
+            <div class="text-center p-4 text-muted">
+                <i class="bi bi-inbox" style="font-size:2rem;opacity:.5"></i>
+                <p class="mt-2">Sin llamadas registradas.</p>
+            </div>
+        }
+    }
+</div>
+
+<!-- Popup registrar llamada -->
+<DxPopup @bind-Visible="mostrarFormulario"
+         HeaderText="Registrar llamada de cobranza"
+         Width="min(480px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Número marcado" ColSpanXs="12" Context="fl1">
+                <DxTextBox @bind-Text="nuevoNumero" CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Resultado" ColSpanXs="12" Context="fl2">
+                <DxComboBox Data="resultados"
+                            @bind-Value="nuevoResultado"
+                            NullText="— Seleccione —"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Observación" ColSpanXs="12" Context="fl3">
+                <DxMemo @bind-Text="nuevaObservacion" Rows="3" CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(guardarError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@guardarError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarFormulario = false" />
+            <DxButton Text="Guardar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="GuardarLlamada"
+                      Enabled="@(!isSaving)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    [Parameter, EditorRequired] public string ClienteClave { get; set; } = default!;
+
+    private static readonly IReadOnlyList<string> resultados =
+    [
+        "CONTESTÓ", "NO CONTESTÓ", "BUZÓN DE VOZ",
+        "NÚMERO EQUIVOCADO", "OCUPADO", "COMPROMETIÓ PAGO"
+    ];
+
+    private List<LlamadaCobranzaDto> llamadas = [];
+    private bool isLoading = true;
+    private string? errorMsg;
+
+    private bool mostrarFormulario = false;
+    private string? nuevoNumero;
+    private string? nuevoResultado;
+    private string? nuevaObservacion;
+    private bool isSaving = false;
+    private string? guardarError;
+
+    protected override async Task OnParametersSetAsync()
+        => await CargarLlamadas();
+
+    private async Task CargarLlamadas()
+    {
+        isLoading = true;
+        errorMsg = null;
+        try
+        {
+            var result = await CobranzaClient.GetLlamadasAsync(ClienteClave);
+            llamadas = result?.ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMsg = $"Error al cargar: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AbrirFormulario()
+    {
+        nuevoNumero = null;
+        nuevoResultado = null;
+        nuevaObservacion = null;
+        guardarError = null;
+        mostrarFormulario = true;
+    }
+
+    private async Task GuardarLlamada()
+    {
+        if (string.IsNullOrWhiteSpace(nuevoResultado))
+        {
+            guardarError = "Seleccione el resultado de la llamada.";
+            return;
+        }
+        guardarError = null;
+        isSaving = true;
+        try
+        {
+            await CobranzaClient.RegistrarLlamadaAsync(
+                new RegistrarLlamadaRequest(ClienteClave, nuevoNumero, nuevoResultado, nuevaObservacion));
+            mostrarFormulario = false;
+            await CargarLlamadas();
+        }
+        catch (Exception ex)
+        {
+            guardarError = $"Error al guardar: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

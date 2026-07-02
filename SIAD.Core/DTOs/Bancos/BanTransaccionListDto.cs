@@ -26,6 +26,8 @@ public class BanTransaccionListDto
 
     public string? ReferenciaAnulacion { get; set; }
 
+    public string? EstadoConciliacion { get; set; }
+
     public decimal Monto { get; set; }
 
     public decimal SaldoResultante { get; set; }

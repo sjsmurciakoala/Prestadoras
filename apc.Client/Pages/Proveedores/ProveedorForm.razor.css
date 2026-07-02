@@ -1,0 +1,54 @@
+/* Toggle estilo interruptor para el control "Activo" */
+.toggle-switch {
+    position: relative;
+    display: inline-block;
+    width: 52px;
+    height: 28px;
+    cursor: pointer;
+    margin: 0;
+}
+
+.toggle-switch input {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    inset: 0;
+    background-color: #8a8a8a;
+    border-radius: 999px;
+    transition: background-color .2s ease;
+}
+
+.toggle-slider::before {
+    content: "";
+    position: absolute;
+    height: 22px;
+    width: 22px;
+    left: 3px;
+    top: 3px;
+    background-color: #fff;
+    border-radius: 50%;
+    box-shadow: 0 1px 2px rgba(0, 0, 0, .25);
+    transition: transform .2s ease;
+}
+
+.toggle-switch input:checked + .toggle-slider {
+    background-color: #1aaa55;
+}
+
+.toggle-switch input:checked + .toggle-slider::before {
+    transform: translateX(24px);
+}
+
+.toggle-switch input:focus-visible + .toggle-slider {
+    box-shadow: 0 0 0 3px rgba(26, 170, 85, .35);
+}
+
+.toggle-switch input:disabled + .toggle-slider {
+    opacity: .6;
+    cursor: not-allowed;
+}

@@ -5,12 +5,14 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 
+<PageTitle>SIAD - Caja</PageTitle>
+
 <div class="page-container">
     <DxToastProvider Name="@ToastName" MaxToastCount="4" />
 
     <div class="header-section">
         <div>
-            <h2 class="page-title">Captación en Caja</h2>
+            <h2 class="page-title">CaptaciÃ³n en Caja</h2>
             <p class="page-subtitle">Registro y consulta de pagos</p>
         </div>
     </div>
@@ -36,19 +38,28 @@
         </HeaderTemplate>
         <BodyTemplate>
             <DxTabs @bind-ActiveTabIndex="tabActual" RenderStyle="TabsRenderStyle.Default">
-                <DxTabPage Text="?? Lectoras">
+                <DxTabPage Text="Lectoras">
                     <div class="p-3">
                         <PosteoLectoras Cajas="@cajas" Bancos="@bancos" UsuarioActual="@usuarioActual" />
                     </div>
                 </DxTabPage>
-                <DxTabPage Text="??? Misceláneos">
+                <DxTabPage Text="MiscelÃ¡neos">
                     <div class="p-3">
                         <PosteoMiscelaneos Bancos="@bancos" Clientes="@clientes" UsuarioActual="@usuarioActual" />
                     </div>
                 </DxTabPage>
-                <DxTabPage Text="? Manual">
+                <DxTabPage Text="Manual">
                     <div class="p-3">
                         <PosteoManual Bancos="@bancos" Clientes="@clientes" UsuarioActual="@usuarioActual" PeriodoActual="@periodoActual" />
+                    </div>
+                </DxTabPage>
+                <DxTabPage Text="Abonos Especiales">
+                    <div class="p-3">
+                        <PosteoAbonos Bancos="@bancos"
+                                      Clientes="@clientes"
+                                      UsuarioActual="@usuarioActual"
+                                      PuedePagarEnBanco="@puedePagarEnBanco"
+                                      PeriodoActual="@periodoActual" />
                     </div>
                 </DxTabPage>
             </DxTabs>
@@ -126,6 +137,7 @@
                                 {
                                     "C" => "badge bg-success",
                                     "P" => "badge bg-success",
+                                    "B" => "badge bg-info",
                                     "A" => "badge bg-warning text-dark",
                                     _ => "badge bg-secondary"
                                 };
@@ -133,6 +145,7 @@
                                 {
                                     "C" => "Cobrado",
                                     "P" => "Pagado",
+                                    "B" => "Parcial",
                                     "A" => "Abierto",
                                     _ => string.IsNullOrWhiteSpace(estado) ? "N/D" : estado
                                 };
@@ -170,6 +183,7 @@
     private string? error;
     private string? info;
     private string? usuarioActual;
+    private bool puedePagarEnBanco;
     private bool buscandoArqueos;
     private int tabActual = 2; // Inicia en tab Manual
 
@@ -200,6 +214,7 @@
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         usuarioActual = authState.User?.Identity?.Name ?? "sistema";
+        puedePagarEnBanco = authState.User?.HasClaim("permission", PermissionNames.Ventas.Caja.AbonoBanco) ?? false;
     }
 
     private async Task CargarCajasAsync()
@@ -214,7 +229,7 @@
         }
         catch (Exception ex)
         {
-            error = $"Error cargando cajas: {ex.Message}";
+            error = "No se pudieron cargar las cajas.";
             MostrarToast("Error", error, ToastRenderStyle.Danger);
         }
     }
@@ -227,7 +242,7 @@
         }
         catch (Exception ex)
         {
-            error = $"Error cargando bancos: {ex.Message}";
+            error = "No se pudieron cargar los bancos.";
         }
     }
 
@@ -239,7 +254,7 @@
         }
         catch (Exception ex)
         {
-            error = $"Error cargando clientes: {ex.Message}";
+            error = "No se pudieron cargar los clientes.";
         }
     }
 
@@ -251,7 +266,7 @@
         }
         catch (Exception ex)
         {
-            error = $"Error cargando periodo: {ex.Message}";
+            error = "No se pudo cargar el periodo.";
         }
     }
 

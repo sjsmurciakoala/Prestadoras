@@ -1,4 +1,4 @@
-@page "/mapa"
+﻿@page "/mapa"
 @attribute [Authorize]
 
 @using System.Globalization
@@ -8,6 +8,8 @@
 
 @inject MapClient MapClient
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Mapa</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="@ToastProviderName" MaxToastCount="4" />

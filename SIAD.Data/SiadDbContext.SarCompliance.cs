@@ -76,5 +76,8 @@ public partial class SiadDbContext
 
         // Mantenimientos (Sprint 3, 2026-05-14): recargo mora + ajustes tarifarios.
         ConfigureMantenimientosModel(modelBuilder);
+
+        // Cobranza (2026-06-01): llamadas telefónicas y futuras entidades de cobranza.
+        ConfigureCobranzaModel(modelBuilder);
     }
 }

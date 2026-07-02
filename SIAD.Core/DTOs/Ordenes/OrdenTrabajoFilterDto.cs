@@ -8,6 +8,8 @@ public sealed class OrdenTrabajoFilterDto
     public string? Estado { get; set; }
     public string? Tipo { get; set; }
     public string? ClienteClave { get; set; }
+    public string? Clave { get; set; }
+    public string? ClienteNombre { get; set; }
     public DateTime? FechaDesde { get; set; }
     public DateTime? FechaHasta { get; set; }
     public int? Anio { get; set; }

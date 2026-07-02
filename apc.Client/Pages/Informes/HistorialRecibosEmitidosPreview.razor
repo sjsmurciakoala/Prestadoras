@@ -1,0 +1,146 @@
+﻿@page "/informes/medicion/historial-recibos-emitidos"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Globalization
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Informes
+@using apc.Client.Services.Informes
+@inject InformesClient InformesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Historial de recibos emitidos</PageTitle>
+
+<div class="page-container reporte-historial-recibos">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Historial de recibos emitidos</h2>
+            <p class="page-subtitle">Seleccione el rango de fechas y el usuario para generar el PDF del historial de recibos emitidos.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/medicion"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Limpiar"
+                      Click="LimpiarFiltros"
+                      IconCssClass="bi bi-eraser"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Generar PDF"
+                      Click="GenerarPdf"
+                      IconCssClass="bi bi-file-earmark-pdf"
+                      RenderStyle="ButtonRenderStyle.Primary" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        <DxFormLayout ColCountMd="12">
+            <DxFormLayoutItem Caption="Fecha desde" ColSpanMd="3">
+                <DxDateEdit @bind-Date="fechaDesde" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha hasta" ColSpanMd="3">
+                <DxDateEdit @bind-Date="fechaHasta" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Usuario / cajero" ColSpanMd="3">
+                <DxComboBox Data="@usuarios"
+                            @bind-Value="usuario"
+                            ValueFieldName="@nameof(UsuarioInformeLookupDto.Codigo)"
+                            TextFieldName="@nameof(UsuarioInformeLookupDto.Descripcion)"
+                            NullText="Todos"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            DropDownStyleMode="DropDownStyleMode.DropDownList" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Reporte" ColSpanMd="3">
+                <DxTextBox Text="Historial de recibos emitidos"
+                           ReadOnly="true"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card p-3 viewer-shell">
+        @if (string.IsNullOrWhiteSpace(pdfUrl))
+        {
+            <div class="empty-preview">
+                <div class="empty-preview__icon">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                </div>
+                <h3 class="empty-preview__title">PDF no generado</h3>
+                <p class="empty-preview__description">
+                    Defina el rango de fechas y pulse Generar PDF para previsualizar el informe.
+                </p>
+            </div>
+        }
+        else
+        {
+            <iframe class="pdf-frame"
+                    src="@pdfUrl"
+                    title="Historial de recibos emitidos"></iframe>
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime fechaDesde = DateTime.Today;
+    private DateTime fechaHasta = DateTime.Today;
+    private string usuario = string.Empty;
+    private string? errorMessage;
+    private string? pdfUrl;
+    private List<UsuarioInformeLookupDto> usuarios = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var items = await InformesClient.GetUsuariosRecibosAsync();
+            usuarios =
+            [
+                new UsuarioInformeLookupDto(string.Empty, "Todos"),
+                .. items
+            ];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No fue posible cargar los usuarios: {ex.Message}";
+            usuarios = [new UsuarioInformeLookupDto(string.Empty, "Todos")];
+        }
+    }
+
+    private void GenerarPdf()
+    {
+        if (fechaDesde.Date > fechaHasta.Date)
+        {
+            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            pdfUrl = null;
+            return;
+        }
+
+        errorMessage = null;
+
+        var query = new List<string>
+        {
+            $"fechaDesde={Uri.EscapeDataString(DateOnly.FromDateTime(fechaDesde.Date).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}",
+            $"fechaHasta={Uri.EscapeDataString(DateOnly.FromDateTime(fechaHasta.Date).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(usuario))
+        {
+            query.Add($"usuario={Uri.EscapeDataString(usuario)}");
+        }
+
+        pdfUrl = $"api/informes/reportes/{ReportesWebConstants.CodigoReporteHistorialRecibosEmitidos}/pdf?{string.Join("&", query)}";
+    }
+
+    private void LimpiarFiltros()
+    {
+        fechaDesde = DateTime.Today;
+        fechaHasta = DateTime.Today;
+        usuario = string.Empty;
+        errorMessage = null;
+        pdfUrl = null;
+    }
+}

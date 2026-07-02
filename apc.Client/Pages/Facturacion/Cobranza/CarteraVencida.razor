@@ -1,0 +1,346 @@
+@page "/facturacion/cobranza/cartera-vencida"
+@attribute [Authorize]
+@using System.Linq
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Cobranza
+@using SIAD.Core.DTOs.Rutas
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Cobranza
+@using apc.Client.Services.Facturacion
+@using apc.Client.Services.Informes
+@using apc.Client.Services.CaptacionPagos
+@inject ClientesCobroClient ClientesCobroClient
+@inject CobranzaClient CobranzaClient
+@inject InformesClient InformesClient
+@inject CaptacionPagosClient CaptacionClient
+@inject IJSRuntime JS
+@inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Cartera vencida</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CarteraVencidaToast" MaxToastCount="4" />
+    <ErrorNotice @ref="errorNotice" />
+
+    <div class="header-section mb-3">
+        <div>
+            <h2 class="page-title">Cartera vencida</h2>
+            <p class="page-subtitle">Antigüedad de facturas vencidas por cliente</p>
+        </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="modern-card mb-4">
+        <div class="section-header mb-3">
+            <i class="bi bi-funnel"></i>
+            <h5 class="m-0">Filtros</h5>
+        </div>
+
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Fecha de corte" ColSpanXs="12" ColSpanMd="3" Context="f1">
+                <DxDateEdit @bind-Date="fechaCorte" CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Clave o nombre" ColSpanXs="12" ColSpanMd="3" Context="f2">
+                <DxComboBox Data="@clientesCombo"
+                            ValueFieldName="@nameof(ClienteComboDto.Clave)"
+                            TextFieldName="@nameof(ClienteComboDto.NombreCompleto)"
+                            @bind-Value="busqueda"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Clave o nombre..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tramo de antigüedad" ColSpanXs="12" ColSpanMd="3" Context="f3">
+                <DxComboBox Data="tramos"
+                            @bind-Value="tramo"
+                            ValueFieldName="Id"
+                            TextFieldName="Texto"
+                            NullText="— Todos —"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="3" Context="f4">
+                <DxComboBox Data="ciclos"
+                            @bind-Value="cicloId"
+                            ValueFieldName="Id"
+                            TextFieldName="Descripcion"
+                            NullText="— Todos —"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanXs="12" ColSpanMd="3" CssClass="align-self-end" Context="f5">
+                <DxButton Text="Buscar"
+                          IconCssClass="bi bi-search"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Click="BuscarAsync"
+                          Enabled="@(!isLoading)" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMsg))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMsg</DxAlert>
+    }
+
+    <!-- RESULTADOS + ACCIONES MASIVAS -->
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando cartera..." />
+
+        <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+            <DxButton Text="Exportar selección"
+                      IconCssClass="bi bi-file-earmark-excel"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="ExportarSeleccionAsync"
+                      Enabled="@(SeleccionadosClaves.Count > 0)" />
+            <DxButton Text="Registrar acción en lote"
+                      IconCssClass="bi bi-journal-plus"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="AbrirAccionLote"
+                      Enabled="@(SeleccionadosClaves.Count > 0)" />
+            <DxButton Text="Generar cartas"
+                      IconCssClass="bi bi-envelope-paper"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="GenerarCartasAsync"
+                      Enabled="@(SeleccionadosClaves.Count > 0 && !isGenerandoCartas)" />
+
+            <div class="ms-auto text-muted small">
+                Seleccionados: <span class="fw-bold">@SeleccionadosClaves.Count.ToString("N0")</span>
+                <span class="mx-2">·</span>
+                Total: <span class="fw-bold">@clientes.Count.ToString("N0")</span>
+            </div>
+        </div>
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid"
+                    Data="@clientes"
+                    KeyFieldName="@nameof(CarteraVencidaClienteDto.Clave)"
+                    @bind-SelectedDataItems="seleccionados"
+                    SelectionMode="GridSelectionMode.Multiple"
+                    PageSize="20"
+                    CssClass="grid-modern">
+                <Columns>
+                    <DxGridSelectionColumn Width="45px" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.Clave)" Caption="Clave" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.Nombre)" Caption="Cliente" MinWidth="200" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.CicloId)" Caption="Ciclo" Width="80px" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.Ruta)" Caption="Ruta" Width="100px" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.B0_30)" Caption="0–30"
+                                      Width="100px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.B31_60)" Caption="31–60"
+                                      Width="100px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.B61_120)" Caption="61–120"
+                                      Width="100px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.BMas120)" Caption="+120"
+                                      Width="100px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(CarteraVencidaClienteDto.TotalVencido)" Caption="Total vencido"
+                                      Width="130px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                </Columns>
+                <TotalSummary>
+                    <DxGridSummaryItem FieldName="@nameof(CarteraVencidaClienteDto.B0_30)" SummaryType="GridSummaryItemType.Sum" ValueDisplayFormat="N2" />
+                    <DxGridSummaryItem FieldName="@nameof(CarteraVencidaClienteDto.B31_60)" SummaryType="GridSummaryItemType.Sum" ValueDisplayFormat="N2" />
+                    <DxGridSummaryItem FieldName="@nameof(CarteraVencidaClienteDto.B61_120)" SummaryType="GridSummaryItemType.Sum" ValueDisplayFormat="N2" />
+                    <DxGridSummaryItem FieldName="@nameof(CarteraVencidaClienteDto.BMas120)" SummaryType="GridSummaryItemType.Sum" ValueDisplayFormat="N2" />
+                    <DxGridSummaryItem FieldName="@nameof(CarteraVencidaClienteDto.TotalVencido)" SummaryType="GridSummaryItemType.Sum" ValueDisplayFormat="N2" />
+                </TotalSummary>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        <i class="bi bi-inbox" style="font-size:2rem;opacity:.5"></i>
+                        <p class="mt-2">No hay cartera vencida para mostrar. Ajuste los filtros y presione Buscar.</p>
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<!-- POPUP: Registrar acción en lote (idéntico a ClientesParaCobros) -->
+<DxPopup @bind-Visible="mostrarAccionLote"
+         HeaderText="Registrar acción en lote"
+         Width="min(520px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <p class="text-muted small mb-3">
+            Se registrará la acción para <strong>@SeleccionadosClaves.Count</strong> cliente(s) seleccionado(s).
+        </p>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Tipo de acción" ColSpanXs="12" Context="a1">
+                <DxComboBox Data="catalogoAcciones" @bind-Value="accionId"
+                            ValueFieldName="CodAccion" TextFieldName="Nombre"
+                            NullText="— Seleccione —" CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Resultado" ColSpanXs="12" Context="a2">
+                <DxComboBox Data="catalogoObservaciones" @bind-Value="observacionId"
+                            ValueFieldName="Id" TextFieldName="Observacion"
+                            NullText="— Seleccione resultado —"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Observación" ColSpanXs="12" Context="a3">
+                <DxMemo @bind-Text="observacion" Rows="3" CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(accionLoteError))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@accionLoteError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="() => mostrarAccionLote = false" />
+            <DxButton Text="Aplicar" RenderStyle="ButtonRenderStyle.Primary" Click="AplicarAccionLoteAsync" Enabled="@(!isAplicando)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+
+    private List<CicloLookupDto> ciclos = [];
+    private List<ClienteComboDto> clientesCombo = [];
+    private List<AccionCobranzaCatalogoDto> catalogoAcciones = [];
+    private List<ObservacionCobranzaCatalogoDto> catalogoObservaciones = [];
+
+    private readonly List<TramoOption> tramos =
+    [
+        new(1, "0–30 días"), new(2, "31–60 días"), new(3, "61–120 días"), new(4, "Más de 120 días")
+    ];
+
+    // Filtros
+    private DateTime? fechaCorte = DateTime.Today;
+    private string? busqueda;
+    private int? tramo;
+    private int? cicloId;
+
+    // Datos
+    private IReadOnlyList<CarteraVencidaClienteDto> clientes = Array.Empty<CarteraVencidaClienteDto>();
+    private IReadOnlyList<object> seleccionados = Array.Empty<object>();
+
+    private bool isLoading;
+    private bool isGenerandoCartas;
+    private string? errorMsg;
+    private ErrorNotice errorNotice = default!;
+
+    // Popup acción en lote
+    private bool mostrarAccionLote;
+    private int? accionId;
+    private int? observacionId;
+    private string? observacion;
+    private bool isAplicando;
+    private string? accionLoteError;
+
+    private List<string> SeleccionadosClaves =>
+        seleccionados.OfType<CarteraVencidaClienteDto>().Select(c => c.Clave).ToList();
+
+    protected override async Task OnInitializedAsync() => await CargarCatalogosAsync();
+
+    private async Task CargarCatalogosAsync()
+    {
+        try
+        {
+            var tCiclos = InformesClient.GetCiclosAsync();
+            var tClientes = CaptacionClient.GetClientesAsync(take: 100000);
+            var tAcciones = CobranzaClient.GetCatalogoAccionesAsync();
+            var tObs = CobranzaClient.GetCatalogoObservacionesAsync();
+            await Task.WhenAll(tCiclos, tClientes, tAcciones, tObs);
+            ciclos = tCiclos.Result?.ToList() ?? [];
+            clientesCombo = tClientes.Result?.ToList() ?? [];
+            catalogoAcciones = tAcciones.Result?.ToList() ?? [];
+            catalogoObservaciones = tObs.Result?.ToList() ?? [];
+        }
+        catch { /* catálogos opcionales */ }
+    }
+
+    private CarteraVencidaFiltroDto BuildFiltro() => new()
+    {
+        FechaCorte = fechaCorte.HasValue ? DateOnly.FromDateTime(fechaCorte.Value) : null,
+        Busqueda = string.IsNullOrWhiteSpace(busqueda) ? null : busqueda,
+        Tramo = tramo,
+        CicloId = cicloId
+    };
+
+    private async Task BuscarAsync()
+    {
+        isLoading = true;
+        errorMsg = null;
+        try
+        {
+            var result = await ClientesCobroClient.ListarCarteraVencidaAsync(BuildFiltro());
+            clientes = result ?? Array.Empty<CarteraVencidaClienteDto>();
+            seleccionados = Array.Empty<object>();
+        }
+        catch (Exception ex)
+        {
+            errorMsg = "No se pudo cargar la cartera.";
+            clientes = Array.Empty<CarteraVencidaClienteDto>();
+        }
+        finally { isLoading = false; }
+    }
+
+    private async Task ExportarSeleccionAsync()
+    {
+        if (grid is null || SeleccionadosClaves.Count == 0) return;
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"cartera_vencida_{stamp}.xlsx",
+            new GridXlExportOptions { ExportSelectedRowsOnly = true });
+    }
+
+    private void AbrirAccionLote()
+    {
+        accionId = null; observacionId = null; observacion = null; accionLoteError = null;
+        mostrarAccionLote = true;
+    }
+
+    private async Task AplicarAccionLoteAsync()
+    {
+        if (accionId is null) { accionLoteError = "Seleccione un tipo de acción."; return; }
+        var claves = SeleccionadosClaves;
+        if (claves.Count == 0) { accionLoteError = "No hay clientes seleccionados."; return; }
+
+        accionLoteError = null;
+        isAplicando = true;
+        try
+        {
+            var req = new RegistrarAccionLoteRequest(
+                claves, accionId.Value, observacionId, null,
+                string.IsNullOrWhiteSpace(observacion) ? null : observacion, null);
+            var n = await ClientesCobroClient.RegistrarAccionLoteAsync(req);
+            mostrarAccionLote = false;
+            ShowToast("Acción registrada", $"Se registraron {n} acción(es) de cobranza.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex) { errorNotice.ShowError("No se pudo registrar la acción.", ex); }
+        finally { isAplicando = false; }
+    }
+
+    private async Task GenerarCartasAsync()
+    {
+        var claves = SeleccionadosClaves;
+        if (claves.Count == 0) return;
+
+        isGenerandoCartas = true;
+        try
+        {
+            var hdr = await ClientesCobroClient.GenerarCartasAsync(new GenerarCartasCobroRequest(claves));
+            if (hdr is null)
+            {
+                ShowToast("Generar cartas", "No se recibió el lote de cartas generado.", ToastRenderStyle.Warning);
+                return;
+            }
+            ShowToast("Cartas generadas", $"Lote {hdr.Correlativo} con {hdr.TotalClientes} carta(s).", ToastRenderStyle.Success);
+            var pdfUrl = Navigation.ToAbsoluteUri(ClientesCobroClient.GetCartasPdfUrl(hdr.Id)).ToString();
+            var fileName = $"cartas-cobro-{hdr.Correlativo}.pdf";
+            await JS.InvokeVoidAsync("siad.downloadFromUrl", pdfUrl, fileName);
+        }
+        catch (Exception ex) { errorNotice.ShowError("No se pudieron generar las cartas.", ex); }
+        finally { isGenerandoCartas = false; }
+    }
+
+    private void ShowToast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title, Text = text, RenderStyle = style, ProviderName = "CarteraVencidaToast"
+        });
+
+    private record TramoOption(int Id, string Texto);
+}

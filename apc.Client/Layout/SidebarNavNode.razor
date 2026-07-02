@@ -66,7 +66,7 @@ else
     }
 
     private bool IsLeafActive() =>
-        IsPathMatch(CurrentPath, Item.NavigateUrl, Item.MatchPrefixes);
+        IsPathMatch(CurrentPath, Item.NavigateUrl, Item.MatchPrefixes, Item.MatchExact);
 
     private bool IsGroupActive() =>
         HasActiveDescendant(Item);
@@ -75,7 +75,7 @@ else
     {
         foreach (var child in item.Children)
         {
-            if (IsPathMatch(CurrentPath, child.NavigateUrl, child.MatchPrefixes))
+            if (IsPathMatch(CurrentPath, child.NavigateUrl, child.MatchPrefixes, child.MatchExact))
             {
                 return true;
             }
@@ -89,16 +89,16 @@ else
         return false;
     }
 
-    private static bool IsPathMatch(string currentPath, string? navigateUrl, IReadOnlyList<string> prefixes)
+    private static bool IsPathMatch(string currentPath, string? navigateUrl, IReadOnlyList<string> prefixes, bool matchExact)
     {
-        if (!string.IsNullOrWhiteSpace(navigateUrl) && IsExactOrChild(currentPath, navigateUrl))
+        if (!string.IsNullOrWhiteSpace(navigateUrl) && IsMatch(currentPath, navigateUrl, matchExact))
         {
             return true;
         }
 
         foreach (var prefix in prefixes)
         {
-            if (IsExactOrChild(currentPath, prefix))
+            if (IsMatch(currentPath, prefix, matchExact))
             {
                 return true;
             }
@@ -106,6 +106,12 @@ else
 
         return false;
     }
+
+    private static bool IsMatch(string currentPath, string target, bool matchExact) =>
+        matchExact ? IsExact(currentPath, target) : IsExactOrChild(currentPath, target);
+
+    private static bool IsExact(string currentPath, string target) =>
+        NormalizePath(currentPath).Equals(NormalizePath(target), StringComparison.OrdinalIgnoreCase);
 
     private static bool IsExactOrChild(string currentPath, string target)
     {

@@ -1,0 +1,263 @@
+﻿@page "/mantenimientos/barrios"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Catalogos
+@using apc.Client.Services.Catalogos
+@using DevExpress.Blazor
+@inject CatalogosClient CatalogosClient
+
+<PageTitle>SIAD - Barrios</PageTitle>
+
+<div class="page-container">
+    <div class="header-section mb-3">
+        <div>
+            <h2 class="page-title">Mantenimiento de barrios</h2>
+            <p class="page-subtitle">Administración del catálogo de barrios</p>
+        </div>
+        <div class="header-actions">
+            <DxButton Text="Nuevo barrio"
+                      IconCssClass="bi bi-plus-circle"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="AbrirFormNuevo" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <DxAlert AlertType="AlertType.Error" CssClass="mb-3" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+    }
+    @if (!string.IsNullOrEmpty(successMsg))
+    {
+        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMsg</DxAlert>
+    }
+
+    <div class="modern-card">
+        @if (isLoading)
+        {
+            <DxLoadingPanel Visible="true" Text="Cargando barrios..." />
+            <div style="height:60px"></div>
+        }
+        else
+        {
+            <DxGrid Data="barrios" ShowFilterRow="true" PageSize="20">
+                <Columns>
+                    <DxGridDataColumn FieldName="Codigo" Caption="Código" Width="120px" />
+                    <DxGridDataColumn FieldName="Descripcion" Caption="Descripción" />
+                    <DxGridDataColumn FieldName="Estado" Caption="Activo" Width="80px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var b = (BarrioDto)cell.DataItem;
+                            }
+                            @if (b.Estado)
+                            {
+                                <span class="badge bg-success">Sí</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">No</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="" Width="90px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var b = (BarrioDto)cell.DataItem;
+                            }
+                            <div class="d-flex gap-1">
+                                <DxButton IconCssClass="bi bi-pencil"
+                                          title="Editar"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                          Click="@(_ => AbrirFormEditar(b))" />
+                                <DxButton IconCssClass="bi bi-trash"
+                                          title="Eliminar"
+                                          RenderStyle="ButtonRenderStyle.Danger"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                          Click="@(_ => ConfirmarEliminar(b))" />
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        }
+    </div>
+</div>
+
+<!-- Popup crear/editar -->
+<DxPopup @bind-Visible="mostrarForm"
+         HeaderText="@(editando ? $"Editar barrio {formCodigo}" : "Nuevo barrio")"
+         Width="min(440px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            @if (!editando)
+            {
+                <DxFormLayoutItem Caption="Código" ColSpanXs="12" Context="bc1">
+                    <DxTextBox @bind-Text="formCodigo" CssClass="w-100"
+                               Placeholder="Ej: B001" />
+                </DxFormLayoutItem>
+            }
+            <DxFormLayoutItem Caption="Descripción" ColSpanXs="12" Context="bc2">
+                <DxTextBox @bind-Text="formDescripcion" CssClass="w-100" />
+            </DxFormLayoutItem>
+            @if (editando)
+            {
+                <DxFormLayoutItem Caption="Activo" ColSpanXs="12" Context="bc3">
+                    <DxCheckBox @bind-Checked="formEstado" />
+                </DxFormLayoutItem>
+            }
+        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(formError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@formError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarForm = false" />
+            <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary"
+                      Click="GuardarAsync" Enabled="@(!isSaving)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+<!-- Popup confirmar eliminar -->
+<DxPopup @bind-Visible="mostrarConfirmEliminar"
+         HeaderText="Confirmar eliminación"
+         Width="min(400px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <p>¿Eliminar el barrio <strong>@barrioAEliminar?.Codigo — @barrioAEliminar?.Descripcion</strong>?</p>
+        <p class="text-muted small">No se puede eliminar si tiene clientes asociados.</p>
+        @if (!string.IsNullOrEmpty(eliminarError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@eliminarError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarConfirmEliminar = false" />
+            <DxButton Text="Eliminar" RenderStyle="ButtonRenderStyle.Danger"
+                      Click="EjecutarEliminarAsync" Enabled="@(!isSaving)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private List<BarrioDto> barrios = [];
+    private bool isLoading = true;
+    private string? errorMsg;
+    private string? successMsg;
+
+    // Form
+    private bool mostrarForm = false;
+    private bool editando = false;
+    private string formCodigo = string.Empty;
+    private string formDescripcion = string.Empty;
+    private bool formEstado = true;
+    private string? formError;
+    private bool isSaving = false;
+
+    // Eliminar
+    private bool mostrarConfirmEliminar = false;
+    private BarrioDto? barrioAEliminar;
+    private string? eliminarError;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        errorMsg = null;
+        try
+        {
+            barrios = ((await CatalogosClient.GetBarriosCrudAsync()) ?? []).ToList();
+        }
+        catch (Exception ex) { errorMsg = $"Error al cargar: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private void AbrirFormNuevo()
+    {
+        editando = false;
+        formCodigo = string.Empty;
+        formDescripcion = string.Empty;
+        formEstado = true;
+        formError = null;
+        mostrarForm = true;
+    }
+
+    private void AbrirFormEditar(BarrioDto b)
+    {
+        editando = true;
+        formCodigo = b.Codigo;
+        formDescripcion = b.Descripcion;
+        formEstado = b.Estado;
+        formError = null;
+        mostrarForm = true;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(formDescripcion))
+        {
+            formError = "La descripción es obligatoria.";
+            return;
+        }
+        if (!editando && string.IsNullOrWhiteSpace(formCodigo))
+        {
+            formError = "El código es obligatorio.";
+            return;
+        }
+
+        formError = null;
+        isSaving = true;
+        try
+        {
+            if (editando)
+                await CatalogosClient.ActualizarBarrioAsync(formCodigo, new BarrioUpdateDto(formDescripcion, formEstado));
+            else
+                await CatalogosClient.CrearBarrioAsync(new BarrioCreateDto(formCodigo, formDescripcion));
+
+            mostrarForm = false;
+            successMsg = editando ? "Barrio actualizado correctamente." : "Barrio creado correctamente.";
+            await CargarAsync();
+        }
+        catch (Exception ex) { formError = $"Error: {ex.Message}"; }
+        finally { isSaving = false; }
+    }
+
+    private void ConfirmarEliminar(BarrioDto b)
+    {
+        barrioAEliminar = b;
+        eliminarError = null;
+        mostrarConfirmEliminar = true;
+    }
+
+    private async Task EjecutarEliminarAsync()
+    {
+        if (barrioAEliminar is null) return;
+        isSaving = true;
+        eliminarError = null;
+        try
+        {
+            var ok = await CatalogosClient.EliminarBarrioAsync(barrioAEliminar.Codigo);
+            if (ok)
+            {
+                mostrarConfirmEliminar = false;
+                successMsg = $"Barrio {barrioAEliminar.Codigo} eliminado.";
+                await CargarAsync();
+            }
+            else
+            {
+                eliminarError = "No se pudo eliminar el barrio.";
+            }
+        }
+        catch (Exception ex) { eliminarError = $"Error: {ex.Message}"; }
+        finally { isSaving = false; }
+    }
+}

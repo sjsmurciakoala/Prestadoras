@@ -1,15 +1,18 @@
-@page "/bancos/configuracion"
+锘緻page "/bancos/configuracion"
 @attribute [Authorize(Policy = PermissionNames.Bancos.View)]
 
 @using apc.Client.Services.Bancos
 @using apc.Client.Services.Tenant
 @using SIAD.Core.DTOs.Bancos
+@using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Tenant
 @using DevExpress.Blazor
 
 @inject BancoConfiguracionClient ConfiguracionClient
 @inject TenantCompaniesClient TenantCompaniesClient
 @inject TenantState TenantState
+
+<PageTitle>SIAD - Configuraci贸n de Bancos</PageTitle>
 
 <div class="contabilidad-page contabilidad-content h-100">
     <DxCard CssClass="shadow-sm border-0 rounded w-100 h-100">
@@ -28,6 +31,8 @@
         </HeaderContent>
         <ChildContent>
             <div class="p-4">
+                <ErrorNotice @ref="errorNotice" />
+
                 @if (!string.IsNullOrWhiteSpace(alerta))
                 {
                     <DxAlert AlertType="@alertaTipo" Visible="true" CssClass="mb-3">
@@ -84,22 +89,24 @@
                             <DxTabs CssClass="modern-tabs">
                                 <DxTabPage Text="General" CssClass="p-3">
                                     <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@cargando">
-                                        <DxFormLayoutItem Caption="M醲imo cheque" ColSpanMd="4" ColSpanSm="12">
+                                        <DxFormLayoutItem Caption="M谩ximo cheque" ColSpanMd="4" ColSpanSm="12">
                                             <ChildContent Context="itemCtx">
                                                 <DxSpinEdit TValue="decimal"
                                                             @bind-Value="modelo.MaxCheque"
                                                             Min="0" Max="9999999999m"
                                                             Increment="1m"
-                                                            DisplayFormatString="N2" />
+                                                            Decimals="2"
+                                                            DisplayFormat="N2" />
                                             </ChildContent>
                                         </DxFormLayoutItem>
-                                        <DxFormLayoutItem Caption="D閎ito banco" ColSpanMd="4" ColSpanSm="12">
+                                        <DxFormLayoutItem Caption="D茅bito banco" ColSpanMd="4" ColSpanSm="12">
                                             <ChildContent Context="itemCtx">
                                                 <DxSpinEdit TValue="decimal"
                                                             @bind-Value="modelo.PDebBan"
                                                             Min="0" Max="9999999999m"
                                                             Increment="0.01m"
-                                                            DisplayFormatString="N2" />
+                                                            Decimals="2"
+                                                            DisplayFormat="N2" />
                                             </ChildContent>
                                         </DxFormLayoutItem>
                                         <DxFormLayoutItem Caption="Meses historial" ColSpanMd="4" ColSpanSm="12">
@@ -112,7 +119,7 @@
                                                 <DxCheckBox @bind-Checked="modelo.AlertarNd" CheckType="CheckType.Switch" />
                                             </ChildContent>
                                         </DxFormLayoutItem>
-                                        <DxFormLayoutItem Caption="M醲 operaciones conc." ColSpanMd="4" ColSpanSm="12">
+                                        <DxFormLayoutItem Caption="M谩x operaciones conc." ColSpanMd="4" ColSpanSm="12">
                                             <ChildContent Context="itemCtx">
                                                 <DxSpinEdit TValue="int" @bind-Value="modelo.MOpeConc" Min="0" Max="99999" />
                                             </ChildContent>
@@ -124,7 +131,16 @@
                                         </DxFormLayoutItem>
                                         <DxFormLayoutItem Caption="Cuenta mayor" ColSpanMd="4" ColSpanSm="12">
                                             <ChildContent Context="itemCtx">
-                                                <DxTextBox @bind-Text="modelo.CuentaMayor" MaxLength="30" NullText="Ej: 110102" />
+                                                <DxComboBox Data="@cuentasMayores"
+                                                            TData="CuentaContableLookupDto"
+                                                            TValue="string"
+                                                            @bind-Value="modelo.CuentaMayor"
+                                                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                            NullText="Seleccione cuenta mayor"
+                                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                            FilteringMode="DataGridFilteringMode.Contains"
+                                                            Enabled="@(!cargando)" />
                                             </ChildContent>
                                         </DxFormLayoutItem>
                                         <DxFormLayoutGroup Caption="Dias de deposito" ColSpanMd="12">
@@ -166,11 +182,13 @@
 
 @code {
     private IReadOnlyList<TenantCompanyDto> empresas = Array.Empty<TenantCompanyDto>();
+    private IReadOnlyList<CuentaContableLookupDto> cuentasMayores = Array.Empty<CuentaContableLookupDto>();
     private long empresaSeleccionadaId;
     private BancoConfiguracionDto modelo = new();
     private EditContext? editContext;
     private string? alerta;
     private AlertType alertaTipo = AlertType.Info;
+    private ErrorNotice errorNotice = default!;
     private bool cargando;
 
     protected override async Task OnInitializedAsync()
@@ -198,9 +216,9 @@
             }
             empresaSeleccionadaId = fallbackCompanyId;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            alerta = $"Error al cargar empresas: {ex.Message}";
+            alerta = "No se pudieron cargar las empresas.";
             alertaTipo = AlertType.Danger;
         }
     }
@@ -211,6 +229,7 @@
         {
             modelo = new BancoConfiguracionDto();
             editContext = new EditContext(modelo);
+            cuentasMayores = Array.Empty<CuentaContableLookupDto>();
             return;
         }
 
@@ -218,6 +237,7 @@
         try
         {
             alerta = null;
+            cuentasMayores = await ConfiguracionClient.ListarCuentasMayoresAsync(empresaSeleccionadaId);
             modelo = await ConfiguracionClient.ObtenerAsync(empresaSeleccionadaId);
             editContext = new EditContext(modelo);
             if (modelo.ConfigId == 0)
@@ -226,14 +246,14 @@
                 alertaTipo = AlertType.Info;
             }
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            alerta = ex.Message;
+            alerta = "La sesi贸n expir贸. Vuelve a iniciar sesi贸n.";
             alertaTipo = AlertType.Danger;
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            alerta = $"Error al cargar configuracion: {ex.Message}";
+            alerta = "No se pudo cargar la configuraci贸n.";
             alertaTipo = AlertType.Danger;
             modelo = new BancoConfiguracionDto();
             editContext = new EditContext(modelo);
@@ -289,20 +309,9 @@
             alerta = "Configuracion guardada correctamente.";
             alertaTipo = AlertType.Success;
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            alerta = ex.Message;
-            alertaTipo = AlertType.Danger;
-        }
-        catch (HttpRequestException ex)
-        {
-            alerta = ex.Message;
-            alertaTipo = AlertType.Danger;
-        }
         catch (Exception ex)
         {
-            alerta = $"Error al guardar: {ex.Message}";
-            alertaTipo = AlertType.Danger;
+            errorNotice.ShowError("No se pudo guardar la configuraci贸n.", ex);
         }
         finally
         {

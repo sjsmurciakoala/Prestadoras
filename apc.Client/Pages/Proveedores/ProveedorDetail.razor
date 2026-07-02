@@ -1,11 +1,14 @@
 ﻿@page "/proveedores/{codigo}"
 @attribute [Authorize]
 @using SIAD.Core.DTOs.Proveedores
+@using SIAD.Core.Constants
 @using apc.Client.Services.Proveedores
 @using apc.Client.Pages.Proveedores.Components
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject ILogger<ProveedorDetail> Logger
+
+<PageTitle>SIAD - Proveedor</PageTitle>
 
 <ErrorBoundary>
     <ErrorContent Context="ex">
@@ -21,6 +24,12 @@
                                    Click="BackToList" />
                     <DxToolbarItem CssClass="m-2" Text="Editar" IconCssClass="oi oi-pencil"
                                    Click="EditProveedor" />
+                    <AuthorizeView Policy="@AuthorizationPolicies.Contabilidad">
+                        <Authorized>
+                            <DxToolbarItem CssClass="m-2" Text="Compromisos de proveedor" IconCssClass="bi bi-cash-coin"
+                                           Click="AbrirCompromisosProveedor" />
+                        </Authorized>
+                    </AuthorizeView>
                 </Items>
             </DxToolbar>
 
@@ -88,7 +97,7 @@
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            error = "No se pudo cargar el proveedor.";
             Logger.LogError(ex, "Error al cargar proveedor {ProveedorCodigo}", Codigo);
         }
         finally
@@ -103,5 +112,23 @@
     {
         var safeCodigo = Uri.EscapeDataString(Codigo);
         Navigation.NavigateTo($"/proveedores/{safeCodigo}/editar");
+    }
+
+    private void AbrirCompromisosProveedor()
+    {
+        var safeCodigo = Uri.EscapeDataString(Codigo);
+        var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
+        Navigation.NavigateTo($"/proveedores/compromisos-proveedor?proveedor={safeCodigo}&originUrl={originUrl}");
+    }
+
+    private string GetCurrentRelativeUrl()
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            return "/proveedores";
+        }
+
+        return relative.StartsWith("/", StringComparison.Ordinal) ? relative : $"/{relative}";
     }
 }

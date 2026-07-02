@@ -23,4 +23,7 @@ public interface IFacturacionMiscelaneosService
     Task<MiscelaneoCatalogoEditDto> ActualizarCatalogoItemAsync(int id, MiscelaneoCatalogoEditDto dto, string user, CancellationToken ct = default);
 
     Task<bool> EliminarCatalogoItemAsync(int id, CancellationToken ct = default);
+
+    Task<IReadOnlyList<MiscelaneoConsultaDto>> ConsultarRecibosAsync(
+        MiscelaneosConsultaFiltroDto filtro, CancellationToken ct = default);
 }

@@ -1,23 +1,23 @@
-@page "/facturacion/captacion"
+ï»¿@page "/facturacion/captacion"
 @attribute [Authorize]
 @using apc.Client.Services.CaptacionPagos
 @using SIAD.Core.DTOs.CaptacionPagos
 @inject CaptacionPagosClient Client
 @attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 
-<PageTitle>Captación de Pagos</PageTitle>
+<PageTitle>SIAD - CaptaciÃ³n de Pagos</PageTitle>
 
 <div class="container-fluid">
     <div class="row mb-3">
         <div class="col">
-            <h3>Captación de Pagos</h3>
+            <h3>CaptaciÃ³n de Pagos</h3>
         </div>
     </div>
 
     @if (!string.IsNullOrEmpty(periodoInfo))
     {
         <div class="alert alert-info mb-3">
-            <strong>Período Actual:</strong> @periodoInfo
+            <strong>PerÃ­odo Actual:</strong> @periodoInfo
         </div>
     }
 
@@ -40,7 +40,7 @@
                 <PosteoManualTab />
             </DxTabPage>
 
-            <DxTabPage Text="Posteo Misceláneos">
+            <DxTabPage Text="Posteo MiscelÃ¡neos">
                 <PosteoMiscelaneosTab />
             </DxTabPage>
         </DxTabs>
@@ -59,12 +59,12 @@
             var periodo = await Client.GetPeriodoActualAsync();
             if (periodo is not null && !string.IsNullOrWhiteSpace(periodo.Periodo))
             {
-                periodoInfo = $"{periodo.Periodo} (Año: {periodo.Anio}, Mes: {periodo.Mes})";
+                periodoInfo = $"{periodo.Periodo} (AÃ±o: {periodo.Anio}, Mes: {periodo.Mes})";
             }
         }
         catch (Exception)
         {
-            periodoInfo = "No se pudo cargar el período actual.";
+            periodoInfo = "No se pudo cargar el perÃ­odo actual.";
         }
         finally
         {

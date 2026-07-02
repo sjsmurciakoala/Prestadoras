@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text.Json;
 using Microsoft.AspNetCore.Components.Forms;
 using apc.Client.Services;
 using SIAD.Core.DTOs.Bancos;
@@ -83,6 +84,27 @@ public sealed class CuentasBancosClient
 
         var result = await response.ReadFromJsonAsyncWithAuthCheck<List<BancoCuentaConciliacionDto>>(ct);
         return result ?? new List<BancoCuentaConciliacionDto>();
+    }
+
+    public async Task<DateTime> GetServerDateTimeAsync(CancellationToken ct = default)
+    {
+        var response = await httpClient.GetAsync("api/bancos/cuentas/server-datetime", ct);
+        var payload = await response.ReadFromJsonAsyncWithAuthCheck<JsonElement>(ct);
+
+        if (payload.ValueKind == JsonValueKind.Object &&
+            (payload.TryGetProperty("serverDateTime", out var serverDateTimeElement) ||
+             payload.TryGetProperty("ServerDateTime", out serverDateTimeElement)) &&
+            TryParseDateTime(serverDateTimeElement, out var serverDateTime))
+        {
+            return serverDateTime;
+        }
+
+        if (TryParseDateTime(payload, out serverDateTime))
+        {
+            return serverDateTime;
+        }
+
+        throw new InvalidOperationException("No se pudo obtener la fecha y hora actual del servidor.");
     }
 
     public async Task<IReadOnlyList<CuentaContableLookupDto>> ListarCuentasContablesAsync(long companyId, CancellationToken ct = default)
@@ -211,6 +233,20 @@ public sealed class CuentasBancosClient
 
         if (response.Content?.Headers?.ContentType?.MediaType?.Contains("html", StringComparison.OrdinalIgnoreCase) == true)
         {
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool TryParseDateTime(JsonElement element, out DateTime value)
+    {
+        value = default;
+
+        if (element.ValueKind == JsonValueKind.String &&
+            DateTime.TryParse(element.GetString(), out var parsed))
+        {
+            value = parsed;
             return true;
         }
 

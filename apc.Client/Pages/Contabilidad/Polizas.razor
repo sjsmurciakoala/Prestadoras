@@ -1,4 +1,4 @@
-@page "/contabilidad/partidas"
+﻿@page "/contabilidad/partidas"
 @page "/contabilidad/polizas"
 @attribute [Authorize]
 @using DevExpress.Blazor
@@ -12,7 +12,7 @@
 @inject apc.Client.Services.Contabilidad.PeriodosContablesClient PeriodosClient
 @inject TenantState TenantState
 
-<PageTitle>Partidas manuales</PageTitle>
+<PageTitle>SIAD - Partidas manuales</PageTitle>
 
 <DxLoadingPanel @bind-Visible="IsSaving"
                 IndicatorAnimationType="WaitIndicatorAnimationType.Spin"

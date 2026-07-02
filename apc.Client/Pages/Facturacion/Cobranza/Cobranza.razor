@@ -1,14 +1,20 @@
-@page "/facturacion/cobranza"
+﻿@page "/facturacion/cobranza"
 @attribute [Authorize]
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.CaptacionPagos
 @inject CobranzaClient CobranzaClient
 @inject NotasCreditoDebitoClient NotasClient
+@inject CaptacionPagosClient CaptacionClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 
+<PageTitle>SIAD - Cobranza</PageTitle>
+
 <div class="page-container">
     <DxToastProvider Name="@ToastName" MaxToastCount="4" />
+    <ErrorNotice @ref="errorNotice" />
 
     <div class="header-section">
         <div>
@@ -40,30 +46,14 @@
                     </div>
 
                     <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
-                        <DxFormLayoutItem Caption="Buscar cliente" ColSpanXs="12" ColSpanMd="6">
+                        <DxFormLayoutItem Caption="Cliente" ColSpanXs="12" ColSpanMd="12">
                             <Template>
-                                <div class="d-flex flex-wrap gap-2 align-items-end">
-                                    <DxTextBox Text="@criterioBusqueda"
-                                               TextChanged="OnCriterioChanged"
-                                               TextExpression="@(() => criterioBusqueda)"
-                                               InputDelay="450"
-                                               Placeholder="Clave, nombre o RTN"
-                                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                               ReadOnly="@buscandoClientes" />
-                                    <DxButton Text="Buscar"
-                                              IconCssClass="bi bi-search"
-                                              RenderStyle="ButtonRenderStyle.Primary"
-                                              Enabled="@(!buscandoClientes && !string.IsNullOrWhiteSpace(criterioBusqueda))"
-                                              Click="BuscarClientesAsync" />
-                                    <DxButton Text="Limpiar"
-                                              RenderStyle="ButtonRenderStyle.Secondary"
-                                              Click="_ => LimpiarPlan()" />
-                                </div>
-                            </Template>
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Cliente seleccionado" ColSpanXs="12" ColSpanMd="6">
-                            <Template>
-                                <DxTextBox Text="@clienteSeleccionado?.Nombre" ReadOnly="true" NullText="Sin seleccionar" />
+                                <ClienteLookup Items="@clientesCombo"
+                                               Value="@clienteSeleccionadoClave"
+                                               ValueChanged="@OnClienteSeleccionadoAsync"
+                                               NullText="Escriba clave o nombre del cliente..."
+                                               MinSearchLength="2"
+                                               SearchDelay="400" />
                             </Template>
                         </DxFormLayoutItem>
                         <DxFormLayoutItem Caption="Clave" ColSpanXs="12" ColSpanMd="3">
@@ -285,48 +275,6 @@
     </DxTabs>
 </div>
 
-<DxPopup @bind-Visible="mostrandoPopupClientes"
-         Width="min(900px, 95vw)"
-         Height="auto"
-         MaxHeight="85vh"
-         Scrollable="true"
-         CssClass="custom-popup">
-    <HeaderContentTemplate>
-        <div class="d-flex align-items-center gap-2">
-            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center" style="width: 38px; height: 38px;">
-                <i class="bi bi-search"></i>
-            </div>
-            <div>
-                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Resultados de búsqueda</div>
-                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Seleccione un cliente para continuar</div>
-            </div>
-        </div>
-    </HeaderContentTemplate>
-    <BodyContentTemplate>
-        <div class="p-3">
-            <DxGrid Data="@clientes"
-                    PageSize="10"
-                    ShowFilterRow="false"
-                    ShowGroupPanel="false"
-                    CssClass="grid-solicitudes">
-                <Columns>
-                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Clave)" Caption="Clave" Width="120px" />
-                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Nombre)" Caption="Nombre" />
-                    <DxGridDataColumn FieldName="@nameof(NotaClienteLookupDto.Rtn)" Caption="RTN" Width="150px" />
-                    <DxGridDataColumn Caption="Acciones" Width="140px">
-                        <CellDisplayTemplate Context="ctx">
-                            <DxButton Text="Seleccionar"
-                                      ButtonType="ButtonType.Normal"
-                                      SizeMode="SizeMode.Small"
-                                      Click="@(
-                                          async () => await SeleccionarCliente((NotaClienteLookupDto)ctx.DataItem))" />
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-                </Columns>
-            </DxGrid>
-        </div>
-    </BodyContentTemplate>
-</DxPopup>
 
 <DxPopup @bind-Visible="mostrandoPreview"
          Width="min(860px, 95vw)"
@@ -464,10 +412,8 @@
     private int tabActivo;
     private string? usuarioActual;
 
-    private string? criterioBusqueda;
-    private bool buscandoClientes;
-    private bool mostrandoPopupClientes;
-    private List<NotaClienteLookupDto> clientes = new();
+    private List<ClienteComboDto> clientesCombo = new();
+    private string? clienteSeleccionadoClave;
     private NotaClienteLookupDto? clienteSeleccionado;
 
     private IReadOnlyList<CobranzaSaldoDetalleDto> saldos = Array.Empty<CobranzaSaldoDetalleDto>();
@@ -524,6 +470,7 @@
     private bool guardandoPlan;
     private bool mostrandoPreview;
     private string? errorCobranza;
+    private ErrorNotice errorNotice = default!;
 
     private List<CobranzaPlanResumenDto> planes = new();
     private string planesBusqueda = string.Empty;
@@ -536,6 +483,8 @@
     {
         var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         usuarioActual = auth.User.Identity?.Name ?? "system";
+        var iniciales = await CaptacionClient.GetClientesAsync(null);
+        clientesCombo = iniciales.ToList();
         await CargarPlanesAsync();
     }
 
@@ -567,56 +516,33 @@
         }
     }
 
-    private async Task OnCriterioChanged(string value)
+    private async Task OnClienteSeleccionadoAsync(string? clave)
     {
-        criterioBusqueda = value;
-        if (string.IsNullOrWhiteSpace(value) || value.Length < 3)
+        clienteSeleccionadoClave = clave;
+        if (string.IsNullOrWhiteSpace(clave))
         {
+            LimpiarPlan();
             return;
         }
 
-        await BuscarClientesAsync();
+        // Construir clienteSeleccionado desde el combo item
+        var item = clientesCombo.FirstOrDefault(c =>
+            string.Equals(c.Clave, clave, StringComparison.OrdinalIgnoreCase));
+
+        clienteSeleccionado = new NotaClienteLookupDto
+        {
+            Clave     = clave,
+            Nombre    = item?.Nombre ?? clave,
+            Direccion = item?.Direccion
+        };
+
+        await CargarSaldosAsync();
     }
 
     private Task OnPlanesBusquedaChanged(string value)
     {
         planesBusqueda = value;
         return Task.CompletedTask;
-    }
-
-    private async Task BuscarClientesAsync()
-    {
-        if (string.IsNullOrWhiteSpace(criterioBusqueda))
-        {
-            return;
-        }
-
-        buscandoClientes = true;
-        try
-        {
-            clientes = (await NotasClient.BuscarClientesAsync(criterioBusqueda)).ToList();
-            mostrandoPopupClientes = clientes.Count > 0;
-            if (clientes.Count == 0)
-            {
-                MostrarToast("Cobranza", "No se encontraron clientes.", ToastRenderStyle.Info);
-            }
-        }
-        catch (Exception ex)
-        {
-            errorCobranza = $"No se pudo buscar clientes: {ex.Message}";
-            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
-        }
-        finally
-        {
-            buscandoClientes = false;
-        }
-    }
-
-    private async Task SeleccionarCliente(NotaClienteLookupDto cliente)
-    {
-        clienteSeleccionado = cliente;
-        mostrandoPopupClientes = false;
-        await CargarSaldosAsync();
     }
 
     private async Task CargarSaldosAsync()
@@ -639,8 +565,7 @@
         }
         catch (Exception ex)
         {
-            errorCobranza = $"No se pudo obtener los saldos: {ex.Message}";
-            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+            errorNotice.ShowError("No se pudieron obtener los saldos.", ex);
         }
     }
 
@@ -693,8 +618,7 @@
         }
         catch (Exception ex)
         {
-            errorCobranza = $"No se pudo calcular el plan: {ex.Message}";
-            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo calcular el plan.", ex);
         }
         finally
         {
@@ -756,8 +680,7 @@
         }
         catch (Exception ex)
         {
-            errorCobranza = $"Ocurrió un problema al guardar el plan: {ex.Message}";
-            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo guardar el plan.", ex);
         }
         finally
         {
@@ -775,7 +698,7 @@
         }
         catch (Exception ex)
         {
-            errorCobranza = $"No se pudo cargar el listado de planes: {ex.Message}";
+            errorCobranza = "No se pudo cargar el listado de planes.";
             MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
         }
         finally
@@ -793,8 +716,7 @@
         }
         catch (Exception ex)
         {
-            errorCobranza = $"No se pudo obtener el detalle del plan: {ex.Message}";
-            MostrarToast("Cobranza", errorCobranza, ToastRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo obtener el detalle del plan.", ex);
         }
     }
 
@@ -810,7 +732,7 @@
 
     private void LimpiarPlan()
     {
-        criterioBusqueda = string.Empty;
+        clienteSeleccionadoClave = null;
         clienteSeleccionado = null;
         saldos = Array.Empty<CobranzaSaldoDetalleDto>();
         totalSaldo = 0;
@@ -831,8 +753,6 @@
         mostrandoPreview = false;
         fechaPlan = DateTime.Today;
         fechaPrimerPago = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1).AddMonths(1);
-        clientes.Clear();
-        mostrandoPopupClientes = false;
     }
 
     private string EstadoBadge(string? estado)

@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="utf-8"?>
+<root>
+  <xsd:schema id="root" xmlns="" xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:msdata="urn:schemas-microsoft-com:xml-msdata">
+    <xsd:import namespace="http://www.w3.org/XML/1998/namespace" />
+    <xsd:element name="root" msdata:IsDataSet="true">
+      <xsd:complexType>
+        <xsd:choice maxOccurs="unbounded">
+          <xsd:element name="metadata">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" />
+              </xsd:sequence>
+              <xsd:attribute name="name" use="required" type="xsd:string" />
+              <xsd:attribute name="type" type="xsd:string" />
+              <xsd:attribute name="mimetype" type="xsd:string" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="assembly">
+            <xsd:complexType>
+              <xsd:attribute name="alias" type="xsd:string" />
+              <xsd:attribute name="name" type="xsd:string" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="data">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+                <xsd:element name="comment" type="xsd:string" minOccurs="0" msdata:Ordinal="2" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" msdata:Ordinal="1" />
+              <xsd:attribute name="type" type="xsd:string" msdata:Ordinal="3" />
+              <xsd:attribute name="mimetype" type="xsd:string" msdata:Ordinal="4" />
+              <xsd:attribute ref="xml:space" />
+            </xsd:complexType>
+          </xsd:element>
+          <xsd:element name="resheader">
+            <xsd:complexType>
+              <xsd:sequence>
+                <xsd:element name="value" type="xsd:string" minOccurs="0" msdata:Ordinal="1" />
+              </xsd:sequence>
+              <xsd:attribute name="name" type="xsd:string" use="required" />
+            </xsd:complexType>
+          </xsd:element>
+        </xsd:choice>
+      </xsd:complexType>
+    </xsd:element>
+  </xsd:schema>
+  <resheader name="resmimetype">
+    <value>text/microsoft-resx</value>
+  </resheader>
+  <resheader name="version">
+    <value>2.0</value>
+  </resheader>
+  <resheader name="reader">
+    <value>System.Resources.ResXResourceReader, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <resheader name="writer">
+    <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
+  </resheader>
+  <data name="customSqlQuery1.Sql" xml:space="preserve">
+    <value>SELECT *
+FROM public.rep_transacciones_periodo(@CompaniaID, @FechaInicio::date, @FechaFin::date)
+ORDER BY fila_orden;</value>
+  </data>
+  <data name="sqlDataSource1.ResultSchemaSerializable" xml:space="preserve">
+    <value>PFhSVHlwZUluZm8+CiAgPERhdGFTZXQgTmFtZT0ic3FsRGF0YVNvdXJjZTEiPgogICAgPFZpZXcgTmFtZT0iUXVlcnkiPgogICAgICA8RmllbGQgTmFtZT0iZmlsYV9vcmRlbiIgVHlwZT0iSW50NjQiIC8+CiAgICAgIDxGaWVsZCBOYW1lPSJjb25jZXB0byIgVHlwZT0iU3RyaW5nIiAvPgogICAgICA8RmllbGQgTmFtZT0iYWd1YV9wb3RhYmxlIiBUeXBlPSJEZWNpbWFsIiAvPgogICAgICA8RmllbGQgTmFtZT0iYWxjYW50YXJpbGxhZG9fc2FuaXRhcmlvIiBUeXBlPSJEZWNpbWFsIiAvPgogICAgICA8RmllbGQgTmFtZT0iYW1iaWVudGFsIiBUeXBlPSJEZWNpbWFsIiAvPgogICAgICA8RmllbGQgTmFtZT0idGFzYV9lcnNhcCIgVHlwZT0iRGVjaW1hbCIgLz4KICAgICAgPEZpZWxkIE5hbWU9ImNvbnZlbmlvIiBUeXBlPSJEZWNpbWFsIiAvPgogICAgICA8RmllbGQgTmFtZT0iZ2VzdGlvbl9sZWdhbCIgVHlwZT0iRGVjaW1hbCIgLz4KICAgICAgPEZpZWxkIE5hbWU9Im90cm9zX2NhcmdvcyIgVHlwZT0iRGVjaW1hbCIgLz4KICAgICAgPEZpZWxkIE5hbWU9InRvdGFsIiBUeXBlPSJEZWNpbWFsIiAvPgogICAgICA8RmllbGQgTmFtZT0iZXNfdG90YWwiIFR5cGU9IkJvb2xlYW4iIC8+CiAgICAgIDxGaWVsZCBOYW1lPSJlbXByZXNhX25vbWJyZSIgVHlwZT0iU3RyaW5nIiAvPgogICAgICA8RmllbGQgTmFtZT0icGVyaW9kb190aXR1bG8iIFR5cGU9IlN0cmluZyIgLz4KICAgICAgPEZpZWxkIE5hbWU9ImZlY2hhX2Rlc2RlIiBUeXBlPSJEYXRlVGltZSIgLz4KICAgICAgPEZpZWxkIE5hbWU9ImZlY2hhX2hhc3RhIiBUeXBlPSJEYXRlVGltZSIgLz4KICAgICAgPEZpZWxkIE5hbWU9ImZlY2hhX3JlcG9ydGUiIFR5cGU9IkRhdGVUaW1lIiAvPgogICAgICA8RmllbGQgTmFtZT0iZmVjaGFfcmVwb3J0ZV90ZXh0byIgVHlwZT0iU3RyaW5nIiAvPgogICAgPC9WaWV3PgogIDwvRGF0YVNldD4KPC9YUlR5cGVJbmZvPg==</value>
+  </data>
+</root>

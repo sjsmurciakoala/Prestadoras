@@ -1,4 +1,4 @@
-@page "/tipos-documento-fiscal"
+﻿@page "/tipos-documento-fiscal"
 @attribute [Authorize]
 
 @using DevExpress.Blazor
@@ -7,6 +7,8 @@
 
 @inject TiposDocumentoFiscalClient Client
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Tipos de Documento Fiscal</PageTitle>
 
 <div class="page-container tipos-documento-page">
     <DxToastProvider Name="TiposDocToast" MaxToastCount="3" />

@@ -82,3 +82,18 @@ public class FacturaMiscelaneoResponseDto
     public decimal Total { get; set; }
     public IReadOnlyList<MiscelaneoDetalleDto> Detalles { get; set; } = Array.Empty<MiscelaneoDetalleDto>();
 }
+
+public record MiscelaneoConsultaDto(
+    int NumRecibo,
+    string NumFactura,
+    DateTime FechaEmision,
+    string ClienteClave,
+    decimal Total,
+    string Estado);
+
+public class MiscelaneosConsultaFiltroDto
+{
+    public DateOnly? FechaDesde { get; set; }
+    public DateOnly? FechaHasta { get; set; }
+    public string? ClienteClave { get; set; }
+}

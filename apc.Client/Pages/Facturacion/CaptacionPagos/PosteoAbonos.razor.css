@@ -1,0 +1,519 @@
+/* ============================================================
+   Abonos Especiales — flujo guiado de una columna
+   ============================================================ */
+
+.posteo-abonos {
+    max-width: 820px;
+    margin: 0 auto;
+}
+
+/* ── Barra superior: pasos + período ── */
+.ab-topbar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    flex-wrap: wrap;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.ab-stepper {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.ab-step {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    color: #9aa3ad;
+    font-size: 0.95rem;
+    white-space: nowrap;
+}
+
+.ab-step-badge {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #e9ecef;
+    color: #8a929b;
+    font-size: 0.82rem;
+    font-weight: 700;
+    flex-shrink: 0;
+}
+
+.ab-step.is-active {
+    color: #1c63b8;
+    font-weight: 600;
+}
+
+.ab-step.is-active .ab-step-badge {
+    background: #e3effb;
+    color: #1c63b8;
+}
+
+.ab-step.is-done {
+    color: #2c8a5f;
+}
+
+.ab-step.is-done .ab-step-badge {
+    background: #d8f0e2;
+    color: #1f8a55;
+}
+
+.ab-step-line {
+    width: 28px;
+    height: 2px;
+    background: #e0e4e8;
+    flex-shrink: 0;
+}
+
+.ab-periodo-pill {
+    display: inline-flex;
+    align-items: center;
+    padding: 0.35rem 0.85rem;
+    border: 1px solid #e1e5ea;
+    border-radius: 999px;
+    background: #fff;
+    color: #5a6571;
+    font-size: 0.85rem;
+    font-weight: 500;
+}
+
+/* ── Búsqueda ── */
+.ab-search {
+    margin-bottom: 1.25rem;
+}
+
+.ab-search-row {
+    display: flex;
+    gap: 0.5rem;
+    align-items: stretch;
+}
+
+.ab-search-input {
+    flex: 1 1 auto;
+}
+
+.ab-search-btn {
+    flex: 0 0 auto;
+}
+
+.ab-search-filter {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-top: 0.75rem;
+    flex-wrap: wrap;
+}
+
+.ab-search-filter-label {
+    color: #8a929b;
+    font-size: 0.85rem;
+}
+
+.ab-loading {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem 0;
+}
+
+/* ── Resultados de búsqueda ── */
+.ab-result-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    max-height: 380px;
+    overflow-y: auto;
+}
+
+.ab-result-item {
+    text-align: left;
+    background: #fff;
+    border: 1px solid #e6e9ed;
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    cursor: pointer;
+    transition: border-color 0.15s, box-shadow 0.15s;
+}
+
+.ab-result-item:hover {
+    border-color: #9cc2ef;
+    box-shadow: 0 2px 10px rgba(28, 99, 184, 0.08);
+}
+
+.ab-result-main {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.5rem;
+}
+
+.ab-result-num {
+    font-weight: 700;
+    color: #1c63b8;
+}
+
+.ab-result-sub {
+    color: #6b747e;
+    font-size: 0.85rem;
+    margin-top: 0.15rem;
+}
+
+.ab-result-amounts {
+    display: flex;
+    justify-content: space-between;
+    margin-top: 0.4rem;
+    font-size: 0.88rem;
+}
+
+.ab-result-pend {
+    font-weight: 700;
+    color: #1f8a55;
+}
+
+/* ── Estado vacío ── */
+.ab-empty {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 2.5rem 1rem;
+    color: #9aa3ad;
+}
+
+.ab-empty i {
+    font-size: 1.75rem;
+}
+
+/* ── Tarjeta de factura seleccionada ── */
+.ab-invoice-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    background: #eef4fd;
+    border: 1px solid #c6dcf6;
+    border-left: 4px solid #1c63b8;
+    border-radius: 12px;
+    padding: 1rem 1.25rem;
+    margin-bottom: 1.5rem;
+}
+
+.ab-invoice-info {
+    flex: 1 1 auto;
+    min-width: 0;
+}
+
+.ab-invoice-num {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    font-size: 1.2rem;
+    font-weight: 700;
+    color: #16447f;
+}
+
+.ab-invoice-cli {
+    color: #5a6571;
+    font-size: 0.88rem;
+    margin-top: 0.2rem;
+}
+
+.ab-invoice-saldo {
+    text-align: right;
+    flex-shrink: 0;
+}
+
+.ab-invoice-saldo-label {
+    display: block;
+    color: #1c63b8;
+    font-size: 0.78rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+}
+
+.ab-invoice-saldo-val {
+    display: block;
+    font-size: 1.7rem;
+    font-weight: 800;
+    color: #1f8a55;
+    line-height: 1.1;
+}
+
+.ab-invoice-change {
+    flex-shrink: 0;
+    background: transparent;
+    border: 1px solid #c6dcf6;
+    border-radius: 8px;
+    color: #1c63b8;
+    font-size: 0.82rem;
+    padding: 0.35rem 0.7rem;
+    cursor: pointer;
+    transition: background 0.15s;
+}
+
+.ab-invoice-change:hover {
+    background: #dceafb;
+}
+
+/* ── Opciones de pago ── */
+.ab-options-lead {
+    color: #5a6571;
+    margin-bottom: 1rem;
+}
+
+.ab-option {
+    background: #fff;
+    border: 1px solid #e6e9ed;
+    border-radius: 12px;
+    padding: 1.25rem;
+    transition: opacity 0.15s;
+}
+
+.ab-option.is-disabled {
+    opacity: 0.55;
+    pointer-events: none;
+}
+
+.ab-option-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 1rem;
+}
+
+.ab-option-tag {
+    background: #e3effb;
+    color: #1c63b8;
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    padding: 0.2rem 0.55rem;
+    border-radius: 6px;
+}
+
+.ab-option-title {
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.ab-option-empty {
+    color: #8a929b;
+    font-size: 0.88rem;
+    margin: 0;
+}
+
+/* ── Recibo pendiente (fila Opción A) ── */
+.ab-receipt {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+    padding: 0.75rem 0;
+    border-top: 1px solid #f0f2f5;
+}
+
+.ab-receipt:first-of-type {
+    border-top: none;
+}
+
+.ab-receipt.is-staged {
+    background: #f3faf6;
+    border-radius: 8px;
+    padding: 0.75rem;
+    border-top: none;
+}
+
+.ab-receipt-info {
+    display: flex;
+    align-items: baseline;
+    gap: 0.75rem;
+}
+
+.ab-receipt-amount {
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.ab-receipt-meta {
+    color: #8a929b;
+    font-size: 0.82rem;
+}
+
+.ab-receipt-actions,
+.ab-receipt-confirm {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex-wrap: wrap;
+}
+
+.ab-pay-combo {
+    min-width: 140px;
+}
+
+.ab-receipt-sum {
+    margin-top: 0.5rem;
+    padding-top: 0.6rem;
+    border-top: 1px dashed #e6e9ed;
+    color: #8a929b;
+    font-size: 0.82rem;
+    text-align: right;
+}
+
+.ab-sum-ok {
+    color: #1f8a55;
+    font-weight: 600;
+}
+
+.ab-sum-warn {
+    color: #8a6100;
+    font-weight: 600;
+}
+
+/* ── Separador "o" ── */
+.ab-or {
+    display: flex;
+    align-items: center;
+    text-align: center;
+    color: #b3bac2;
+    margin: 1rem 0;
+}
+
+.ab-or::before,
+.ab-or::after {
+    content: "";
+    flex: 1;
+    height: 1px;
+    background: #e6e9ed;
+}
+
+.ab-or span {
+    padding: 0 0.9rem;
+    font-size: 0.85rem;
+    font-style: italic;
+}
+
+/* ── Campos Opción B ── */
+.ab-field-label {
+    display: block;
+    color: #6b747e;
+    font-size: 0.85rem;
+    margin-bottom: 0.35rem;
+    margin-top: 0.5rem;
+}
+
+.ab-monto {
+    width: 100%;
+    margin-bottom: 0.85rem;
+}
+
+.ab-confirm-btn {
+    width: 100%;
+    margin-top: 0.25rem;
+}
+
+::deep .ab-confirm-btn {
+    background-color: #15795f;
+    border-color: #15795f;
+    color: #fff;
+    font-weight: 600;
+    padding-top: 0.6rem;
+    padding-bottom: 0.6rem;
+    border-radius: 10px;
+}
+
+::deep .ab-confirm-btn:hover:not([disabled]) {
+    background-color: #0f5e49;
+    border-color: #0f5e49;
+}
+
+/* ── Abonos aplicados ── */
+.ab-applied {
+    margin-top: 1.75rem;
+}
+
+.ab-applied-title {
+    font-weight: 700;
+    color: #5a6571;
+    margin-bottom: 0.85rem;
+}
+
+.ab-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.ab-table thead th {
+    text-align: left;
+    color: #8a929b;
+    font-weight: 600;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    padding: 0.5rem 0.75rem;
+    border-bottom: 1px solid #e6e9ed;
+}
+
+.ab-table tbody td {
+    padding: 0.7rem 0.75rem;
+    border-bottom: 1px solid #f0f2f5;
+    color: #3c4651;
+    font-size: 0.9rem;
+}
+
+.ab-table tbody tr:last-child td {
+    border-bottom: none;
+}
+
+/* ── Badges de estado ── */
+.ab-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.74rem;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.ab-badge-partial {
+    background: #fdf0d5;
+    color: #8a6100;
+}
+
+.ab-badge-open {
+    background: #e3effb;
+    color: #1c63b8;
+}
+
+.ab-badge-done {
+    background: #d8f0e2;
+    color: #1f8a55;
+}
+
+/* ── Responsivo ── */
+@media (max-width: 640px) {
+    .ab-step-label {
+        display: none;
+    }
+
+    .ab-invoice-card {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .ab-invoice-saldo {
+        text-align: left;
+    }
+}

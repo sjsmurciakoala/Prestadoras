@@ -43,7 +43,8 @@ public class MedidoresService : IMedidoresService
                 x.Medidor.maestro_medidor_acueducto,
                 x.Medidor.estado,
                 x.Cliente != null ? x.Cliente.maestro_cliente_clave : null,
-                x.Cliente != null ? x.Cliente.maestro_cliente_nombre : null))
+                x.Cliente != null ? x.Cliente.maestro_cliente_nombre : null,
+                x.Medidor.medidor_clase_codigo))
             .ToListAsync(ct);
     }
 
@@ -121,7 +122,8 @@ public class MedidoresService : IMedidoresService
                 Diametro = m.maestro_medidor_diametro,
                 Empleado = m.maestro_medidor_empleado,
                 Acueducto = m.maestro_medidor_acueducto,
-                Activo = m.estado
+                Activo = m.estado,
+                ClaseMedidorCodigo = m.medidor_clase_codigo
             })
             .FirstOrDefaultAsync(ct);
     }
@@ -157,6 +159,9 @@ public class MedidoresService : IMedidoresService
             maestro_medidor_empleado = empleado,
             maestro_medidor_acueducto = acueducto,
             estado = dto.Activo,
+            medidor_clase_codigo = string.IsNullOrWhiteSpace(dto.ClaseMedidorCodigo)
+                ? null
+                : dto.ClaseMedidorCodigo.Trim().ToUpperInvariant(),
             usuariocreacion = NormalizeUser(user),
             fechacreacion = now
         };
@@ -171,6 +176,7 @@ public class MedidoresService : IMedidoresService
         dto.Diametro = diametro;
         dto.Empleado = empleado;
         dto.Acueducto = acueducto;
+        dto.ClaseMedidorCodigo = entity.medidor_clase_codigo;
         return dto;
     }
 
@@ -211,6 +217,9 @@ public class MedidoresService : IMedidoresService
         entity.maestro_medidor_diametro = diametro;
         entity.maestro_medidor_empleado = empleado;
         entity.maestro_medidor_acueducto = acueducto;
+        entity.medidor_clase_codigo = string.IsNullOrWhiteSpace(dto.ClaseMedidorCodigo)
+            ? null
+            : dto.ClaseMedidorCodigo.Trim().ToUpperInvariant();
         entity.estado = dto.Activo;
         entity.usuariomodificacion = NormalizeUser(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -224,6 +233,7 @@ public class MedidoresService : IMedidoresService
         dto.Diametro = diametro;
         dto.Empleado = empleado;
         dto.Acueducto = acueducto;
+        dto.ClaseMedidorCodigo = entity.medidor_clase_codigo;
         return dto;
     }
 

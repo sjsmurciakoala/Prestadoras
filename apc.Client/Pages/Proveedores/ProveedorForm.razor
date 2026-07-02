@@ -2,7 +2,7 @@
 @using SIAD.Core.DTOs.Contabilidad
 @using DevExpress.Blazor
 
-<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" OnInvalidSubmit="HandleInvalidSubmit" Context="editContext">
     <DataAnnotationsValidator />
 
     <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
@@ -39,8 +39,14 @@
                 <DxTextBox @bind-Text="Model.Rtn" MaxLength="20" />
             </DxFormLayoutItem>
             <DxFormLayoutItem Caption="Direccion *" ColSpanXs="12">
-                <DxMemo @bind-Text="Model.Direccion" Rows="2" ResizeMode="MemoResizeMode.Vertical" />
+                <DxMemo @bind-Text="Model.Direccion" Rows="2" MaxLength="1000" ResizeMode="MemoResizeMode.Vertical" />
                 <ValidationMessage For="() => Model.Direccion" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Activo" ColSpanXs="12" ColSpanMd="4">
+                <label class="toggle-switch">
+                    <input type="checkbox" @bind="Model.Activo" disabled="@IsBusy" />
+                    <span class="toggle-slider"></span>
+                </label>
             </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
@@ -75,23 +81,74 @@
                             Enabled="@(CuentasContables.Count > 0)" />
                 <ValidationMessage For="() => Model.CuentaContable" />
             </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Cuenta bancaria *" ColSpanXs="12" ColSpanMd="4">
-                <DxTextBox @bind-Text="Model.CuentaBancaria" MaxLength="50" />
-                <ValidationMessage For="() => Model.CuentaBancaria" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Banco 1" ColSpanXs="12" ColSpanMd="4">
-                <DxTextBox @bind-Text="Model.Banco1" MaxLength="80" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Banco 2" ColSpanXs="12" ColSpanMd="4">
-                <DxTextBox @bind-Text="Model.Banco2" MaxLength="80" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Activo" ColSpanXs="12" ColSpanMd="4">
-                <DxCheckBox @bind-Checked="Model.Activo" />
+        </DxFormLayoutGroup>
+
+        <DxFormLayoutGroup Caption="Cuentas bancarias" ColSpanXs="12">
+            <DxFormLayoutItem ColSpanXs="12">
+                <DxGrid @key="@Model.CuentasBancarias.Count"
+                        Data="@Model.CuentasBancarias"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false"
+                        PageSize="10"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorCuentaBancariaDto.Banco)" Caption="Banco">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorCuentaBancariaDto item)
+                                {
+                                    <DxComboBox Data="@Bancos"
+                                                TData="ProveedorBancoLookupDto"
+                                                TValue="string"
+                                                @bind-Value="item.Banco"
+                                                ValueFieldName="@nameof(ProveedorBancoLookupDto.Nombre)"
+                                                TextFieldName="@nameof(ProveedorBancoLookupDto.Nombre)"
+                                                NullText="Seleccione o escriba banco"
+                                                AllowUserInput="true"
+                                                DropDownStyle="DropDownStyle.DropDown"
+                                                DropDownTriggerMode="DropDownTriggerMode.Input"
+                                                SearchMode="ListSearchMode.AutoSearch"
+                                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                SearchDelay="200"
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorCuentaBancariaDto.CuentaBancaria)" Caption="Cuenta bancaria">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorCuentaBancariaDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.CuentaBancaria"
+                                               MaxLength="50"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="" Width="80px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorCuentaBancariaDto item)
+                                {
+                                    <button class="btn-icon btn-delete"
+                                            title="Quitar"
+                                            @onclick="() => RemoveCuenta(Model.CuentasBancarias.IndexOf(item))"
+                                            disabled="@IsBusy">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+
+                <div class="mt-2">
+                    <DxButton Text="Agregar cuenta"
+                              IconCssClass="bi bi-plus-lg"
+                              Enabled="@(!IsBusy)"
+                              Click="AddCuenta" />
+                </div>
             </DxFormLayoutItem>
         </DxFormLayoutGroup>
     </DxFormLayout>
-
-    <DxValidationSummary CssClass="mb-3" />
 
     <div class="d-flex justify-content-end">
         <DxButton SubmitFormOnClick="true"
@@ -114,10 +171,16 @@
     public IEnumerable<ProveedorTipoLookupDto> Tipos { get; set; } = Array.Empty<ProveedorTipoLookupDto>();
 
     [Parameter]
+    public IReadOnlyList<ProveedorBancoLookupDto> Bancos { get; set; } = Array.Empty<ProveedorBancoLookupDto>();
+
+    [Parameter]
     public IReadOnlyList<CuentaContableLookupDto> CuentasContables { get; set; } = Array.Empty<CuentaContableLookupDto>();
 
     [Parameter]
     public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback<IReadOnlyList<string>> OnInvalidSubmit { get; set; }
 
     [Parameter]
     public EventCallback OnCancel { get; set; }
@@ -133,6 +196,14 @@
             .Concat(Tipos.Where(t => t.Id > 0))
             .ToList();
 
+    protected override void OnParametersSet()
+    {
+        if (Model.CuentasBancarias.Count == 0)
+        {
+            AddCuenta();
+        }
+    }
+
     private async Task HandleValidSubmit()
     {
         if (OnValidSubmit.HasDelegate)
@@ -141,11 +212,45 @@
         }
     }
 
+    private async Task HandleInvalidSubmit(EditContext context)
+    {
+        if (OnInvalidSubmit.HasDelegate)
+        {
+            var mensajes = context.GetValidationMessages()
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            await OnInvalidSubmit.InvokeAsync(mensajes);
+        }
+    }
+
     private async Task Cancel()
     {
         if (OnCancel.HasDelegate)
         {
             await OnCancel.InvokeAsync();
+        }
+    }
+
+    private void AddCuenta()
+    {
+        Model.CuentasBancarias.Add(new ProveedorCuentaBancariaDto
+        {
+            Orden = Model.CuentasBancarias.Count + 1
+        });
+    }
+
+    private void RemoveCuenta(int index)
+    {
+        if (index < 0 || index >= Model.CuentasBancarias.Count)
+        {
+            return;
+        }
+
+        Model.CuentasBancarias.RemoveAt(index);
+
+        for (var i = 0; i < Model.CuentasBancarias.Count; i++)
+        {
+            Model.CuentasBancarias[i].Orden = i + 1;
         }
     }
 }

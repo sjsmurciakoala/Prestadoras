@@ -172,7 +172,9 @@ public sealed class ConfiguracionSistemaService : IConfiguracionSistemaService
 
         try
         {
-            var fechaInicio = dto.Principal?.FechaInicioEjercicio;
+            var principal = dto.Principal
+                ?? throw new InvalidOperationException("La configuracion principal es obligatoria.");
+            var fechaInicio = principal.FechaInicioEjercicio;
             var periodoActivo = await _periodoService.ObtenerOCrearPeriodoInicialAsync(companyId, fechaInicio, ct);
 
             var config = await configuracionQuery
@@ -194,16 +196,16 @@ public sealed class ConfiguracionSistemaService : IConfiguracionSistemaService
                 config.updated_by = usuario;
             }
 
-            config.fecha_inicio_ejercicio = dto.Principal.FechaInicioEjercicio;
-            config.fecha_fin_ejercicio = dto.Principal.FechaFinEjercicio;
-            config.meses_calculados = dto.Principal.MesesCalculados;
-            config.separador_codigo = dto.Principal.SeparadorCodigo;
-            config.formato_cuentas = dto.Principal.FormatoCuentas;
-            config.formato_centros = dto.Principal.FormatoCentros;
-            config.symbol_saldo_acreedor = dto.Principal.SymbolSaldoAcreedor;
-            config.monto_maximo = dto.Principal.MontoMaximo;
-            config.frecuencia_depreciacion = dto.Principal.FrecuenciaDepreciacion;
-            config.ultima_depreciacion = dto.Principal.UltimaDepreciacion;
+            config.fecha_inicio_ejercicio = principal.FechaInicioEjercicio;
+            config.fecha_fin_ejercicio = principal.FechaFinEjercicio;
+            config.meses_calculados = principal.MesesCalculados;
+            config.separador_codigo = principal.SeparadorCodigo;
+            config.formato_cuentas = principal.FormatoCuentas;
+            config.formato_centros = principal.FormatoCentros;
+            config.symbol_saldo_acreedor = principal.SymbolSaldoAcreedor;
+            config.monto_maximo = principal.MontoMaximo;
+            config.frecuencia_depreciacion = principal.FrecuenciaDepreciacion;
+            config.ultima_depreciacion = principal.UltimaDepreciacion;
 
             config.codigo_cuenta_util_acumulada_historica = dto.CuentasUtilidad.CodigoCuentaUtilAcumuladaHistorica;
             config.codigo_cuenta_util_acumulada_inflacion = dto.CuentasUtilidad.CodigoCuentaUtilAcumuladaInflacion;

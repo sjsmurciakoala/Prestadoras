@@ -5,9 +5,14 @@
 @using SIAD.Core.DTOs.Common
 @using SIAD.Core.DTOs.FacturacionMiscelaneos
 @using apc.Client.Services.Facturacion
+@using apc.Client.Services.Caja
+@using SIAD.Core.DTOs.Caja
 @inject FacturacionMiscelaneosClient FacturacionClient
+@inject CajaClient CajaHttp
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Facturación de Misceláneos</PageTitle>
 
 <DxScrollView Height="100%">
     <div class="page-container">
@@ -19,6 +24,15 @@
                 <p class="page-subtitle">Generación de recibos por conceptos misceláneos</p>
             </div>
         </div>
+
+        @if (_sesionActiva is null)
+        {
+            <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                <strong>Caja no abierta.</strong>
+                No tiene una sesión de caja activa. Abra la caja desde
+                <a href="/facturacion/caja">Gestión de Caja</a> antes de facturar.
+            </DxAlert>
+        }
 
         @if (!string.IsNullOrWhiteSpace(error))
         {
@@ -324,6 +338,7 @@
     private bool catalogoVisible;
     private bool generandoRecibo;
     private string usuarioActual = "sistema";
+    private SesionCajaDto? _sesionActiva;
     private DateTime fechaEmision = DateTime.Today;
 
     private ClienteMiscelaneoDto? clienteSeleccionado;
@@ -336,7 +351,7 @@
 
     private bool PuedeAgregarConceptos => clienteSeleccionado is not null && catalogo.Count > 0 && !generandoRecibo;
 
-    private bool PuedeGenerarRecibo => !generandoRecibo && clienteSeleccionado is not null && detalles.Count > 0;
+    private bool PuedeGenerarRecibo => !generandoRecibo && clienteSeleccionado is not null && detalles.Count > 0 && _sesionActiva is not null;
 
     private bool PuedeEditarDetalles => !generandoRecibo;
 
@@ -344,6 +359,7 @@
     {
         await CargarCatalogoAsync();
         await CargarUsuarioAsync();
+        _sesionActiva = await CajaHttp.GetSesionActivaAsync(usuarioActual);
     }
 
     private async Task CargarUsuarioAsync()

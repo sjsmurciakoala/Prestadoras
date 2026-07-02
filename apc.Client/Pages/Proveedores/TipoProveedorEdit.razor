@@ -1,4 +1,4 @@
-@page "/proveedores/tipos/nuevo"
+﻿@page "/proveedores/tipos/nuevo"
 @page "/proveedores/tipos/{id:int}/editar"
 @attribute [Authorize]
 @inject ProveedoresClient ProveedoresClient
@@ -8,7 +8,11 @@
 @using Microsoft.AspNetCore.Authorization
 @using SIAD.Core.DTOs.Proveedores
 
+<PageTitle>SIAD - Tipo de Proveedor</PageTitle>
+
 <div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
         <div>
             <h2 class="page-title">@TituloPagina</h2>
@@ -52,6 +56,7 @@
     private bool isLoading = true;
     private bool isSaving;
     private string? errorMessage;
+    private ErrorNotice errorNotice = default!;
 
     private bool IsEdit => Id.HasValue && Id.Value > 0;
     private string SubtituloPagina => IsEdit
@@ -112,7 +117,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo cargar la pantalla: {ex.Message}";
+            errorMessage = "No se pudo cargar la pantalla.";
             Logger.LogError(ex, "Error al cargar pantalla de tipo de proveedor.");
         }
         finally
@@ -141,7 +146,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo guardar el tipo: {ex.Message}";
+            errorNotice.ShowError("No se pudo guardar el tipo.", ex);
             Logger.LogError(ex, "Error al guardar tipo de proveedor {TipoId}", Id);
         }
         finally

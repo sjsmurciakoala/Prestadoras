@@ -1,0 +1,237 @@
+@using SIAD.Core.DTOs.Cobranza
+@using apc.Client.Services.Facturacion
+@inject CobranzaClient CobranzaClient
+
+<div class="notas-cobro-container">
+
+    <div class="section-header mb-3">
+        <i class="bi bi-file-earmark-text"></i>
+        <h4 class="m-0">Notas de cobro</h4>
+    </div>
+
+    <div class="d-flex gap-2 mb-3">
+        <DxButton Text="Nueva nota"
+                  IconCssClass="bi bi-plus-circle"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Click="AbrirFormulario" />
+        <DxButton Text="Recargar"
+                  IconCssClass="bi bi-arrow-clockwise"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="CargarNotas" />
+    </div>
+
+    @if (isLoading)
+    {
+        <DxLoadingPanel Visible="true" Text="Cargando notas..." />
+        <div style="height:60px"></div>
+    }
+    else if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+    }
+    else
+    {
+        <DxGrid Data="notas" ShowFilterRow="false" PageSize="20">
+            <Columns>
+                <DxGridDataColumn FieldName="Correlativo" Caption="N° Nota" Width="110px" />
+                <DxGridDataColumn FieldName="Fecha" Caption="Fecha" Width="120px" DisplayFormat="d" />
+                <DxGridDataColumn FieldName="Monto" Caption="Monto" Width="120px"
+                                  TextAlignment="GridTextAlignment.Right" DisplayFormat="C2" />
+                <DxGridDataColumn FieldName="Descripcion" Caption="Descripción" />
+                <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="100px" />
+                <DxGridDataColumn FieldName="Usuario" Caption="Usuario" Width="110px" />
+                <DxGridDataColumn Caption="" Width="80px">
+                    <CellDisplayTemplate Context="cell">
+                        @{
+                            var nota = (NotaCobroDto)cell.DataItem;
+                            if (nota.Estado == "EMITIDA")
+                            {
+                                <DxButton Text="Anular" IconCssClass="bi bi-x-circle"
+                                          RenderStyle="ButtonRenderStyle.Danger"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                          Click="() => ConfirmarAnular(nota)" />
+                            }
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+        </DxGrid>
+
+        @if (notas.Count == 0)
+        {
+            <div class="text-center p-4 text-muted">
+                <i class="bi bi-inbox" style="font-size:2rem;opacity:.5"></i>
+                <p class="mt-2">Sin notas de cobro registradas.</p>
+            </div>
+        }
+    }
+</div>
+
+<!-- Popup emitir nota -->
+<DxPopup @bind-Visible="mostrarFormulario"
+         HeaderText="Emitir nota de cobro"
+         Width="min(460px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Monto" ColSpanXs="12" Context="nc1">
+                <DxSpinEdit @bind-Value="nuevoMonto" MinValue="0" Increment="1"
+                            DisplayFormat="N2" CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Descripción" ColSpanXs="12" Context="nc2">
+                <DxMemo @bind-Text="nuevaDescripcion" Rows="3" CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(emitirError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@emitirError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarFormulario = false" />
+            <DxButton Text="Emitir" RenderStyle="ButtonRenderStyle.Primary"
+                      Click="EmitirNota" Enabled="@(!isSaving)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+<!-- Popup confirmar anulación -->
+<DxPopup @bind-Visible="mostrarConfirmAnular"
+         HeaderText="Anular nota de cobro"
+         Width="min(420px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <p>¿Confirma la anulación de la nota <strong>@notaAAnular?.Correlativo</strong> por <strong>@notaAAnular?.Monto.ToString("C2")</strong>?</p>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Motivo de anulación" ColSpanXs="12" Context="an1">
+                <DxTextBox @bind-Text="motivoAnulacion" CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(anularError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@anularError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarConfirmAnular = false" />
+            <DxButton Text="Anular" RenderStyle="ButtonRenderStyle.Danger"
+                      Click="EjecutarAnulacion" Enabled="@(!isSaving)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    [Parameter, EditorRequired] public string ClienteClave { get; set; } = default!;
+
+    private List<NotaCobroDto> notas = [];
+    private bool isLoading = true;
+    private string? errorMsg;
+
+    private bool mostrarFormulario = false;
+    private decimal nuevoMonto = 0m;
+    private string? nuevaDescripcion;
+    private bool isSaving = false;
+    private string? emitirError;
+
+    private bool mostrarConfirmAnular = false;
+    private NotaCobroDto? notaAAnular;
+    private string? motivoAnulacion;
+    private string? anularError;
+
+    protected override async Task OnParametersSetAsync()
+        => await CargarNotas();
+
+    private async Task CargarNotas()
+    {
+        isLoading = true;
+        errorMsg = null;
+        try
+        {
+            var result = await CobranzaClient.GetNotasCobroAsync(ClienteClave);
+            notas = result?.ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMsg = $"Error al cargar: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AbrirFormulario()
+    {
+        nuevoMonto = 0m;
+        nuevaDescripcion = null;
+        emitirError = null;
+        mostrarFormulario = true;
+    }
+
+    private async Task EmitirNota()
+    {
+        if (nuevoMonto <= 0)
+        {
+            emitirError = "El monto debe ser mayor a cero.";
+            return;
+        }
+        emitirError = null;
+        isSaving = true;
+        try
+        {
+            await CobranzaClient.EmitirNotaCobroAsync(
+                new EmitirNotaCobroRequest(ClienteClave, nuevoMonto, nuevaDescripcion));
+            mostrarFormulario = false;
+            await CargarNotas();
+        }
+        catch (Exception ex)
+        {
+            emitirError = $"Error al emitir: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarAnular(NotaCobroDto nota)
+    {
+        notaAAnular = nota;
+        motivoAnulacion = null;
+        anularError = null;
+        mostrarConfirmAnular = true;
+    }
+
+    private async Task EjecutarAnulacion()
+    {
+        if (string.IsNullOrWhiteSpace(motivoAnulacion))
+        {
+            anularError = "Ingrese el motivo de anulación.";
+            return;
+        }
+        anularError = null;
+        isSaving = true;
+        try
+        {
+            await CobranzaClient.AnularNotaCobroAsync(
+                notaAAnular!.Id, new AnularNotaCobroRequest(motivoAnulacion));
+            mostrarConfirmAnular = false;
+            await CargarNotas();
+        }
+        catch (Exception ex)
+        {
+            anularError = $"Error al anular: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+}

@@ -1,0 +1,330 @@
+@using SIAD.Core.DTOs.Cobranza
+@using apc.Client.Services.Facturacion
+@inject CobranzaClient CobranzaClient
+
+<div class="acciones-cobranza-container">
+
+    <div class="section-header mb-3">
+        <i class="bi bi-journal-text"></i>
+        <h4 class="m-0">Bitácora de acciones de cobranza</h4>
+    </div>
+
+    <div class="d-flex gap-2 mb-3">
+        <DxButton Text="Nueva acción"
+                  IconCssClass="bi bi-plus-circle"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Click="AbrirFormulario" />
+        <DxButton Text="Recargar"
+                  IconCssClass="bi bi-arrow-clockwise"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="CargarAcciones" />
+    </div>
+
+    @if (isLoading)
+    {
+        <DxLoadingPanel Visible="true" Text="Cargando acciones..." />
+        <div style="height:60px"></div>
+    }
+    else if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+    }
+    else
+    {
+        <div style="width:100%;overflow-x:auto;">
+            <DxGrid Data="acciones" ShowFilterRow="true" PageSize="20" CssClass="w-100">
+                <Columns>
+                    <DxGridDataColumn FieldName="Fecha" Caption="Fecha" Width="140px" DisplayFormat="g" />
+                    <DxGridDataColumn FieldName="Accion" Caption="Tipo de acción" Width="200px" />
+                    <DxGridDataColumn FieldName="NombreObservacion" Caption="Resultado" Width="160px" />
+                    <DxGridDataColumn FieldName="Observacion" Caption="Obs. adicional" />
+                    <DxGridDataColumn FieldName="EjecutadoPor" Caption="Ejecutado por" Width="130px" />
+                    <DxGridDataColumn Caption="" Width="50px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var reg = (AccionCobranzaDto)cell.DataItem;
+                            }
+                            <DxButton IconCssClass="bi bi-eye"
+                                      title="Ver detalle"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                      Click="@(_ => VerRegistro(reg))" />
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="text-center p-4 text-muted">
+                        <i class="bi bi-inbox" style="font-size:2rem;opacity:.5"></i>
+                        <p class="mt-2">Sin acciones registradas.</p>
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    }
+</div>
+
+<!-- Popup ver detalle del registro -->
+<DxPopup @bind-Visible="mostrarDetalle"
+         Width="min(480px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="true">
+    <HeaderTemplate>
+        <div class="accion-popup-header">
+            <div class="accion-popup-icon @GetAccionIconBg(registroDetalle?.Accion)">
+                <i class="bi @GetAccionIcon(registroDetalle?.Accion)"></i>
+            </div>
+            <div>
+                <div class="accion-popup-title">Detalle del registro</div>
+                <div class="accion-popup-subtitle">@(registroDetalle?.Accion ?? "—")</div>
+            </div>
+        </div>
+    </HeaderTemplate>
+    <BodyTemplate>
+        @if (registroDetalle is not null)
+        {
+            <div class="accion-detail-body">
+                <div class="accion-detail-grid">
+                    <div class="accion-field">
+                        <span class="accion-field-label">Fecha</span>
+                        <span class="accion-field-value">@registroDetalle.Fecha.ToString("dd/MM/yyyy HH:mm")</span>
+                    </div>
+                    <div class="accion-field">
+                        <span class="accion-field-label">Ejecutado por</span>
+                        <div class="accion-avatar-row">
+                            <div class="accion-avatar">@GetInitials(registroDetalle.EjecutadoPor)</div>
+                            <span class="accion-field-value">@(registroDetalle.EjecutadoPor ?? "—")</span>
+                        </div>
+                    </div>
+                    <div class="accion-field">
+                        <span class="accion-field-label">Resultado</span>
+                        <span class="accion-badge @GetResultadoBadgeClass(registroDetalle.NombreObservacion)">
+                            @(registroDetalle.NombreObservacion ?? "—")
+                        </span>
+                    </div>
+                    <div class="accion-field">
+                        <span class="accion-field-label">Tipo de acción</span>
+                        <span class="accion-badge accion-badge-action">@registroDetalle.Accion</span>
+                    </div>
+                    <div class="accion-field">
+                        <span class="accion-field-label">Abogado</span>
+                        <span class="accion-field-value">@GetAbogadoNombre(registroDetalle.AbogadoId)</span>
+                    </div>
+                </div>
+                <div class="accion-field">
+                    <span class="accion-field-label">Obs. adicional</span>
+                    @if (!string.IsNullOrWhiteSpace(registroDetalle.Observacion))
+                    {
+                        <div class="accion-obs-box">@registroDetalle.Observacion</div>
+                    }
+                    else
+                    {
+                        <span class="accion-field-value text-muted">—</span>
+                    }
+                </div>
+            </div>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex justify-content-end">
+            <DxButton Text="Cerrar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarDetalle = false" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+<!-- Popup nueva acción -->
+<DxPopup @bind-Visible="mostrarFormulario"
+         HeaderText="Registrar acción de cobranza"
+         Width="min(500px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Tipo de acción" ColSpanXs="12" Context="fi1">
+                <DxComboBox Data="catalogo"
+                            @bind-Value="nuevaAccionId"
+                            ValueFieldName="CodAccion"
+                            TextFieldName="Nombre"
+                            NullText="— Seleccione —"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Resultado" ColSpanXs="12" Context="fi4">
+                <DxComboBox Data="catalogoObservaciones"
+                            @bind-Value="nuevaObservacionId"
+                            ValueFieldName="Id"
+                            TextFieldName="Observacion"
+                            NullText="— Seleccione resultado —"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" Context="fi5">
+                <DxComboBox Data="catalogoAbogados"
+                            @bind-Value="nuevaAbogadoId"
+                            ValueFieldName="AbogadoId"
+                            TextFieldName="Nombre"
+                            NullText="— Sin abogado asignado —"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Ejecutado por" ColSpanXs="12" Context="fi3">
+                <DxTextBox @bind-Text="nuevaEjecutadoPor"
+                           Placeholder="Nombre del ejecutor (gestor, abogado, etc.)"
+                           CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Observación" ColSpanXs="12" Context="fi2">
+                <DxMemo @bind-Text="nuevaObservacion" Rows="3" CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+
+        @if (!string.IsNullOrEmpty(guardarError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@guardarError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarFormulario = false" />
+            <DxButton Text="Guardar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="GuardarAccion"
+                      Enabled="@(!isSaving)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    [Parameter, EditorRequired] public string ClienteClave { get; set; } = default!;
+
+    private List<AccionCobranzaDto> acciones = [];
+    private List<AccionCobranzaCatalogoDto> catalogo = [];
+    private List<ObservacionCobranzaCatalogoDto> catalogoObservaciones = [];
+    private List<AbogadoCobranzaLookupDto> catalogoAbogados = [];
+    private bool isLoading = true;
+    private string? errorMsg;
+
+    // Ver detalle
+    private bool mostrarDetalle = false;
+    private AccionCobranzaDto? registroDetalle;
+
+    // Nueva acción
+    private bool mostrarFormulario = false;
+    private int? nuevaAccionId;
+    private int? nuevaObservacionId;
+    private int? nuevaAbogadoId;
+    private string? nuevaEjecutadoPor;
+    private string? nuevaObservacion;
+    private bool isSaving = false;
+    private string? guardarError;
+
+    protected override async Task OnParametersSetAsync()
+        => await CargarAcciones();
+
+    private async Task CargarAcciones()
+    {
+        isLoading = true;
+        errorMsg = null;
+        try
+        {
+            var tareaAcciones = CobranzaClient.GetAccionesAsync(ClienteClave);
+            var tareaCatalogo = CobranzaClient.GetCatalogoAccionesAsync();
+            var tareaObs = CobranzaClient.GetCatalogoObservacionesAsync();
+            var tareaAbogados = CobranzaClient.GetAbogadosCobranzaAsync();
+            await Task.WhenAll(tareaAcciones, tareaCatalogo, tareaObs, tareaAbogados);
+            acciones = tareaAcciones.Result?.ToList() ?? [];
+            catalogo = tareaCatalogo.Result?.ToList() ?? [];
+            catalogoObservaciones = tareaObs.Result?.ToList() ?? [];
+            catalogoAbogados = tareaAbogados.Result?.ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMsg = $"Error al cargar: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void VerRegistro(AccionCobranzaDto registro)
+    {
+        registroDetalle = registro;
+        mostrarDetalle = true;
+    }
+
+    private static string GetInitials(string? name)
+    {
+        if (string.IsNullOrWhiteSpace(name)) return "?";
+        var parts = name.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        return parts.Length >= 2
+            ? $"{parts[0][0]}{parts[1][0]}".ToUpper()
+            : name[0].ToString().ToUpper();
+    }
+
+    private static string GetAccionIcon(string? accion) => accion?.ToLowerInvariant() switch
+    {
+        { } a when a.Contains("llam") => "bi-telephone-fill",
+        { } a when a.Contains("visit") => "bi-geo-alt-fill",
+        { } a when a.Contains("nota") => "bi-sticky-fill",
+        { } a when a.Contains("carta") || a.Contains("email") || a.Contains("correo") => "bi-envelope-fill",
+        _ => "bi-calendar-check-fill"
+    };
+
+    private static string GetAccionIconBg(string? accion) => accion?.ToLowerInvariant() switch
+    {
+        { } a when a.Contains("llam") => "icon-bg-blue",
+        { } a when a.Contains("visit") => "icon-bg-purple",
+        { } a when a.Contains("nota") => "icon-bg-amber",
+        { } a when a.Contains("carta") || a.Contains("email") || a.Contains("correo") => "icon-bg-teal",
+        _ => "icon-bg-blue"
+    };
+
+    private string GetAbogadoNombre(int? abogadoId) =>
+        abogadoId is null ? "—" :
+        (catalogoAbogados.FirstOrDefault(a => a.AbogadoId == abogadoId)?.Nombre ?? $"#{abogadoId}");
+
+    private static string GetResultadoBadgeClass(string? resultado) =>
+        resultado?.ToLowerInvariant() switch
+        {
+            { } r when r.Contains("efectiva") && !r.Contains("no ") => "accion-badge-success",
+            { } r when r.Contains("promesa") => "accion-badge-warning",
+            null or "" => "accion-badge-neutral",
+            _ => "accion-badge-danger"
+        };
+
+    private void AbrirFormulario()
+    {
+        nuevaAccionId = null;
+        nuevaObservacionId = null;
+        nuevaAbogadoId = null;
+        nuevaEjecutadoPor = null;
+        nuevaObservacion = null;
+        guardarError = null;
+        mostrarFormulario = true;
+    }
+
+    private async Task GuardarAccion()
+    {
+        if (nuevaAccionId is null)
+        {
+            guardarError = "Seleccione un tipo de acción.";
+            return;
+        }
+        guardarError = null;
+        isSaving = true;
+        try
+        {
+            await CobranzaClient.RegistrarAccionAsync(
+                new RegistrarAccionCobranzaRequest(ClienteClave, nuevaAccionId.Value, nuevaObservacionId, nuevaAbogadoId, nuevaObservacion, nuevaEjecutadoPor));
+            mostrarFormulario = false;
+            await CargarAcciones();
+        }
+        catch (Exception ex)
+        {
+            guardarError = $"Error al guardar: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+}

@@ -47,4 +47,7 @@ public interface IContabilidadCatalogosService
     Task<long> SaveTipoTransaccionRuleAsync(TipoTransaccionRuleUpsertDto request, CancellationToken cancellationToken = default);
     Task<bool> DeleteTipoTransaccionRuleAsync(long ruleId, CancellationToken cancellationToken = default);
 
+    Task<IReadOnlyList<ReglaIntegracionListDto>> GetReglasIntegracionAbonosAsync(CancellationToken cancellationToken = default);
+    Task<long> SaveReglaIntegracionAbonosAsync(ReglaIntegracionUpsertDto request, CancellationToken cancellationToken = default);
+    Task<bool> DeleteReglaIntegracionAbonosAsync(long reglaId, CancellationToken cancellationToken = default);
 }

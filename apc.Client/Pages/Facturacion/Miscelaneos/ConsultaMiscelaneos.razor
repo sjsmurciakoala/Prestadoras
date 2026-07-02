@@ -1,0 +1,183 @@
+﻿@page "/facturacion/miscelaneos/consulta"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.FacturacionMiscelaneos
+@using apc.Client.Services.Facturacion
+@using DevExpress.Blazor
+@inject FacturacionMiscelaneosClient Client
+
+<PageTitle>SIAD - Consulta de Misceláneos</PageTitle>
+
+<div class="page-container">
+    <div class="header-section mb-3">
+        <div>
+            <h2 class="page-title">Consulta de misceláneos</h2>
+            <p class="page-subtitle">Historial de recibos misceláneos emitidos</p>
+        </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="modern-card mb-3">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Fecha desde" ColSpanXs="12" ColSpanMd="3" Context="f1">
+                <DxDateEdit @bind-Date="fechaDesde" NullText="Sin límite" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha hasta" ColSpanXs="12" ColSpanMd="3" Context="f2">
+                <DxDateEdit @bind-Date="fechaHasta" NullText="Sin límite" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Clave cliente" ColSpanXs="12" ColSpanMd="3" Context="f3">
+                <DxTextBox @bind-Text="clienteClave" NullText="Todas" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanXs="12" ColSpanMd="3" CssClass="d-flex align-items-end" Context="f4">
+                <DxButton Text="Buscar"
+                          IconCssClass="bi bi-search"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Click="BuscarAsync"
+                          Enabled="@(!isLoading)" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <!-- RESULTADOS -->
+    <div class="modern-card">
+        @if (isLoading)
+        {
+            <DxLoadingPanel Visible="true" Text="Buscando..." />
+            <div style="height:60px"></div>
+        }
+        else if (!string.IsNullOrEmpty(errorMsg))
+        {
+            <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+        }
+        else
+        {
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <span class="text-muted small">Total: <strong>@recibos.Count.ToString("N0")</strong> registros</span>
+            </div>
+
+            <div style="width:100%;overflow-x:auto;">
+                <DxGrid Data="recibos" ShowFilterRow="true" PageSize="20" CssClass="w-100">
+                    <Columns>
+                        <DxGridDataColumn FieldName="NumRecibo" Caption="N° Recibo" Width="110px"
+                                          TextAlignment="GridTextAlignment.Right" />
+                        <DxGridDataColumn FieldName="NumFactura" Caption="N° Factura" Width="150px" />
+                        <DxGridDataColumn FieldName="FechaEmision" Caption="Fecha" Width="110px" DisplayFormat="d" />
+                        <DxGridDataColumn FieldName="ClienteClave" Caption="Cliente" Width="120px" />
+                        <DxGridDataColumn FieldName="Total" Caption="Total" Width="130px"
+                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="C2" />
+                        <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="90px" />
+                        <DxGridDataColumn Caption="" Width="90px">
+                            <CellDisplayTemplate Context="cell">
+                                @{
+                                    var r = (MiscelaneoConsultaDto)cell.DataItem;
+                                }
+                                <DxButton IconCssClass="bi bi-eye"
+                                          title="Ver detalle"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                          Click="@(async _ => await VerDetalleAsync(r.NumRecibo))" />
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <TotalSummary>
+                        <DxGridSummaryItem FieldName="Total" SummaryType="GridSummaryItemType.Sum" />
+                    </TotalSummary>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Popup detalle del recibo -->
+<DxPopup @bind-Visible="mostrarDetalle"
+         HeaderText="@($"Recibo N° {detalleActual?.NumeroRecibo}")"
+         Width="min(700px, 95vw)"
+         MaxHeight="85vh"
+         Scrollable="true">
+    <BodyTemplate>
+        @if (isLoadingDetalle)
+        {
+            <DxLoadingPanel Visible="true" Text="Cargando..." />
+            <div style="height:60px"></div>
+        }
+        else if (detalleActual is not null)
+        {
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical" CssClass="mb-3">
+                <DxFormLayoutItem Caption="Cliente" ColSpanXs="12" ColSpanMd="6" Context="d1">
+                    <span>@detalleActual.ClienteClave</span>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Fecha emisión" ColSpanXs="12" ColSpanMd="3" Context="d2">
+                    <span>@detalleActual.FechaEmision.ToString("d")</span>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Total" ColSpanXs="12" ColSpanMd="3" Context="d3">
+                    <span class="fw-bold">@detalleActual.Total.ToString("C2")</span>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <DxGrid Data="detalleActual.Detalles" ShowFilterRow="false" PagerVisible="false">
+                <Columns>
+                    <DxGridDataColumn FieldName="Codigo" Caption="Código" Width="100px" />
+                    <DxGridDataColumn FieldName="Nombre" Caption="Descripción" />
+                    <DxGridDataColumn FieldName="Unidad" Caption="Cant." Width="70px"
+                                      TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+                    <DxGridDataColumn FieldName="ValorUnitario" Caption="Valor unit." Width="110px"
+                                      TextAlignment="GridTextAlignment.Right" DisplayFormat="C2" />
+                    <DxGridDataColumn FieldName="ValorTotal" Caption="Total" Width="110px"
+                                      TextAlignment="GridTextAlignment.Right" DisplayFormat="C2" />
+                </Columns>
+                <TotalSummary>
+                    <DxGridSummaryItem FieldName="ValorTotal" SummaryType="GridSummaryItemType.Sum" />
+                </TotalSummary>
+            </DxGrid>
+        }
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private List<MiscelaneoConsultaDto> recibos = [];
+    private bool isLoading = false;
+    private string? errorMsg;
+
+    private DateTime? fechaDesde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? fechaHasta = DateTime.Today;
+    private string? clienteClave;
+
+    private bool mostrarDetalle = false;
+    private bool isLoadingDetalle = false;
+    private FacturaMiscelaneoResponseDto? detalleActual;
+
+    protected override async Task OnInitializedAsync()
+        => await BuscarAsync();
+
+    private async Task BuscarAsync()
+    {
+        isLoading = true;
+        errorMsg = null;
+        try
+        {
+            var desde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : (DateOnly?)null;
+            var hasta  = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value)  : (DateOnly?)null;
+            recibos = (await Client.ConsultarAsync(desde, hasta, clienteClave)).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMsg = $"Error al buscar: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task VerDetalleAsync(int numRecibo)
+    {
+        mostrarDetalle = true;
+        isLoadingDetalle = true;
+        detalleActual = null;
+        try
+        {
+            detalleActual = await Client.GetReciboAsync(numRecibo);
+        }
+        catch { detalleActual = null; }
+        finally { isLoadingDetalle = false; }
+    }
+}

@@ -1,7 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
-
-namespace SIAD.Core.Entities;
+﻿namespace SIAD.Core.Entities;
 
 public partial class cfg_motivo_anulacion
 {
@@ -16,6 +13,4 @@ public partial class cfg_motivo_anulacion
     public bool aplica_recibo { get; set; }
 
     public bool activo { get; set; }
-
-    public virtual ICollection<factura> facturas { get; set; } = new List<factura>();
 }

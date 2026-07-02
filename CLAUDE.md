@@ -13,23 +13,29 @@ The current code and `HODSOFT_DEVEXPRESS.sln` are authoritative. `readme.md` and
 - On-prem publish: `./publish-onprem.ps1` (defaults to publishing the portal; `-Solo portal|ws|todos`, `-Output <path>`). Targets `win-x64`, framework-dependent, ReadyToRun.
 - Connection string lives in `apc/appsettings.json` under `ConnectionStrings:DefaultConnection` (Npgsql/Azure Postgres). Identity migrations write to schema `identity` (`__IdentityMigrationsHistory`). The SIAD functional DB does **not** use EF migrations — see Database section.
 - Default culture is forced to `es-HN` in `apc/Program.cs`; preserve it.
+- Run tests: `$env:SIAD_TEST_DB = '<connection string>'; dotnet test SIAD.Tests/SIAD.Tests.csproj` (without `SIAD_TEST_DB` the integration tests are `Skipped`). Optional `$env:SIAD_TEST_COMPANY_ID` (default `2`). Each test wraps its work in `BEGIN ... ROLLBACK` so the target DB stays clean.
+- Run a single test class/method: append `--filter "FullyQualifiedName~NotaCreditoTests"` (or `~NotaCreditoTests.SP_emitir_nota_credito_rechaza_factura_inexistente`).
+- Point `SIAD_TEST_DB` at a **test** database (a `siad_v3` DB with `Database/ddl_v3/*` applied) — never prod. See [SIAD.Tests/README.md](SIAD.Tests/README.md) for coverage and caveats (e.g., rollback would not cover SPs using dblink/autonomous transactions).
 
-There is no test project in this solution and no lint config beyond default .NET analyzers.
+Tests: see `SIAD.Tests/` (xUnit integration tests against a real Postgres). No lint config beyond default .NET analyzers.
 
 ## Solution layout
 
-Six projects, all .NET 9:
+Seven projects, all .NET 9:
 
 | Project        | Role                                                                            |
 |----------------|---------------------------------------------------------------------------------|
 | `apc`          | ASP.NET Core host. Identity, controllers, DevExpress Reporting, PDF Viewer. Razor Components with **InteractiveServer** render mode and the WASM client mounted as `AdditionalAssemblies`. |
 | `apc.Client`   | Blazor WebAssembly. `DevExpress.Blazor`, PDF viewer, Skia PDF renderer. Pages and HTTP clients live here. |
 | `SIAD.Core`    | Entities (scaffolded from Postgres), DTOs, constants (`PermissionNames`, `RoleNames`, `PermissionEndpointCatalog`), tenancy contracts. |
-| `SIAD.Data`    | `SiadDbContext` (partial across `SiadDbContext.cs`, `*.Tenancy.cs`, `*.Accounting.cs`, `*.Mantenimientos.cs`, `*.NotasCreditoDebito.cs`, `*.SarCompliance.cs`), Npgsql config. |
+| `SIAD.Data`    | `SiadDbContext` (partial across `SiadDbContext.cs`, `*.Tenancy.cs`, `*.Accounting.cs`, `*.Cobranza.cs`, `*.Mantenimientos.cs`, `*.NotasCreditoDebito.cs`, `*.SarCompliance.cs`), Npgsql config. |
 | `SIAD.Services`| Per-module domain services (Clientes, Cobranza, Contabilidad, Bancos, Tarifario, etc.), AutoMapper profiles (assembly-scanned), DI in `ServiceRegistration.cs`. |
 | `SIAD.Reports` | DevExpress Reporting bootstrap, per-company `ReportStorageWebExtension`, SQL validation, templates. |
+| `SIAD.Tests`   | xUnit integration tests using Npgsql + Dapper. Each test runs inside `BEGIN ... ROLLBACK` so the DB stays clean. Requires the `SIAD_TEST_DB` env var with a Postgres connection string; without it the tests are marked `Skipped`. Covers idempotency (UUID), double emission, NC/ND V3, mora, tercera edad with monthly cap, CAI correlative advancement, validation, SAR catalogs. |
 
 The Identity DbContext is `apc.Data.ApplicationDbContext` and is separate from `SiadDbContext`. Identity migrations are in `apc/Migrations/`; **do not put functional DB changes there**.
+
+Other directories in this folder (`apc.MobileApi/`, `apc.Client.Tests/`, `VerificadorUsuarios/`, `tools/`, `temp_excel_*`, `publish_*`, `artifacts/`, `*.log`) are untracked scratch/publish leftovers — they are **not** part of the solution; do not edit or reference them.
 
 ## Architecture: a slice through the stack
 
@@ -39,6 +45,8 @@ Wiring is centralized:
 
 - Domain services: register in [SIAD.Services/ServiceRegistration.cs](SIAD.Services/ServiceRegistration.cs) (`AddSiadServices`), called from `apc/Program.cs`.
 - Client HTTP services: register in [apc.Client/CommonServices.cs](apc.Client/CommonServices.cs), called from both `apc/Program.cs` (server-interactive) and `apc.Client/Program.cs` (WASM).
+
+Keep the async patterns of the module you touch — if its services already accept `CancellationToken`, thread it through new methods too.
 
 Because `CommonServices.Configure` runs in both hosts, anything added there must be safe in both. The server-side `HttpClient` named `"ServerAPI"` is custom-built in `apc/Program.cs` and forwards the request `Cookie` so server-rendered components can call the local API; the WASM `Program.cs` registers a plain `HttpClient` against `HostEnvironment.BaseAddress`.
 

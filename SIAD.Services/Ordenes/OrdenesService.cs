@@ -83,6 +83,23 @@ public class OrdenesService : IOrdenesService
             query = query.Where(o => o.maestro_cliente_clave == filtro.ClienteClave);
         }
 
+        if (!string.IsNullOrWhiteSpace(filtro.Clave))
+        {
+            var clavePattern = $"%{filtro.Clave.Trim()}%";
+            query = query.Where(o => EF.Functions.ILike(o.maestro_cliente_clave, clavePattern));
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.ClienteNombre))
+        {
+            // Filtra por nombre del cliente. orden_trabajo solo guarda la clave, así que se
+            // correlaciona con cliente_maestro (tenant-scoped: el filtro global de company
+            // limita a clientes de la empresa actual).
+            var nombrePattern = $"%{filtro.ClienteNombre.Trim()}%";
+            query = query.Where(o => _context.cliente_maestros
+                .Any(c => c.maestro_cliente_clave == o.maestro_cliente_clave
+                          && EF.Functions.ILike(c.maestro_cliente_nombre, nombrePattern)));
+        }
+
         if (!string.IsNullOrWhiteSpace(filtro.Busqueda))
         {
             var pattern = $"%{filtro.Busqueda.Trim()}%";

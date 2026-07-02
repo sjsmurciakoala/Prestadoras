@@ -1,5 +1,6 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Medidores
+@using SIAD.Core.DTOs.Catalogos
 
 <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
     <DataAnnotationsValidator />
@@ -52,6 +53,16 @@
             <ValidationMessage For="() => Model.Acueducto" />
         </DxFormLayoutItem>
 
+        <DxFormLayoutItem Caption="Clase de medidor" ColSpanMd="4">
+            <DxComboBox Data="@ClasesMedidor"
+                        @bind-Value="Model.ClaseMedidorCodigo"
+                        ValueFieldName="@nameof(ClaseMedidorLookupDto.Codigo)"
+                        TextFieldName="@nameof(ClaseMedidorLookupDto.Descripcion)"
+                        NullText="Sin clasificar"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            <ValidationMessage For="() => Model.ClaseMedidorCodigo" />
+        </DxFormLayoutItem>
+
         <DxFormLayoutItem Caption="Empleado instalador" ColSpanMd="6">
             <DxTextBox @bind-Text="Model.Empleado"
                        NullText="Nombre del instalador"
@@ -97,6 +108,9 @@
 
     [Parameter]
     public bool IsBusy { get; set; }
+
+    [Parameter]
+    public IReadOnlyList<ClaseMedidorLookupDto> ClasesMedidor { get; set; } = [];
 
     private async Task HandleValidSubmit()
     {

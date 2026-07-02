@@ -1,4 +1,4 @@
-@page "/informes/reportes/{Codigo}/viewer"
+﻿@page "/informes/reportes/{Codigo}/viewer"
 @attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
 @using apc.Client.Services.Informes
 @using SIAD.Core.Constants
@@ -6,7 +6,7 @@
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
 
-<PageTitle>Visor de Reporte</PageTitle>
+<PageTitle>SIAD - Visor de Reporte</PageTitle>
 
 <div class="page-container">
     @if (!isLoading && detalle is not null)

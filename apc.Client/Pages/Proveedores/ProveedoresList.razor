@@ -1,4 +1,4 @@
-@page "/proveedores"
+﻿@page "/proveedores"
 @attribute [Authorize]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
@@ -6,11 +6,16 @@
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
+@using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Proveedores
 @using apc.Client.Services.Proveedores
 
+<PageTitle>SIAD - Proveedores</PageTitle>
+
 <DxScrollView Height="100%">
     <div class="page-container">
+        <ErrorNotice @ref="errorNotice" />
+
         <div class="d-flex justify-content-between align-items-center mb-4 header-section">
             <div>
                 <h2 class="page-title">Proveedores</h2>
@@ -22,6 +27,18 @@
                           IconCssClass="bi bi-plus-lg"
                           RenderStyle="ButtonRenderStyle.Primary"
                           CssClass="btn-modern shadow-sm" />
+                <AuthorizeView Policy="@AuthorizationPolicies.Contabilidad">
+                    <Authorized>
+                        <DxButton Text="Compromisos de proveedor"
+                                  Click="AbrirCompromisosProveedor"
+                                  IconCssClass="bi bi-cash-coin"
+                                  RenderStyle="ButtonRenderStyle.Secondary" />
+                    </Authorized>
+                </AuthorizeView>
+                <DxButton Text="Bancos proveedor"
+                          Click="AbrirBancosProveedor"
+                          IconCssClass="bi bi-bank"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
                 <DxButton Text="Tipos de proveedor"
                           Click="AbrirTipos"
                           IconCssClass="bi bi-tags"
@@ -86,11 +103,18 @@
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
-                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                        <DxGridDataColumn Caption="Acciones" Width="210px">
                             <CellDisplayTemplate Context="cellContext">
                                 @if (cellContext.DataItem is ProveedorListItemDto item)
                                 {
                                     <div class="d-flex flex-wrap gap-2">
+                                        <AuthorizeView Policy="@AuthorizationPolicies.Contabilidad">
+                                            <Authorized>
+                                                <button class="btn-icon btn-edit" title="Compromisos de proveedor" @onclick="@(() => AbrirCompromisosProveedorPorCodigo(item.Codigo))">
+                                                    <i class="bi bi-cash-coin"></i>
+                                                </button>
+                                            </Authorized>
+                                        </AuthorizeView>
                                         <button class="btn-icon btn-edit" title="Editar" @onclick="@(() => EditarProveedor(item.Codigo))">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
@@ -113,6 +137,7 @@
     private ProveedorFilterDto filtro = new();
     private bool isLoading;
     private string? errorMessage;
+    private ErrorNotice errorNotice = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -132,7 +157,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo cargar el catalogo de proveedores: {ex.Message}";
+            errorMessage = "No se pudo cargar el catálogo de proveedores.";
         }
         finally
         {
@@ -159,6 +184,21 @@
 
     private void AbrirTipos() => Navigation.NavigateTo("/proveedores/tipos");
 
+    private void AbrirBancosProveedor() => Navigation.NavigateTo("/proveedores/bancos");
+
+    private void AbrirCompromisosProveedor()
+    {
+        var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
+        Navigation.NavigateTo($"/proveedores/compromisos-proveedor?originUrl={originUrl}");
+    }
+
+    private void AbrirCompromisosProveedorPorCodigo(string codigo)
+    {
+        var safeCodigo = Uri.EscapeDataString(codigo);
+        var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
+        Navigation.NavigateTo($"/proveedores/compromisos-proveedor?proveedor={safeCodigo}&originUrl={originUrl}");
+    }
+
     private async Task EliminarAsync(ProveedorListItemDto item)
     {
         var confirmado = await JS.InvokeAsync<bool>("confirm",
@@ -176,7 +216,18 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo eliminar el proveedor: {ex.Message}";
+            errorNotice.ShowError("No se pudo eliminar el proveedor.", ex);
         }
+    }
+
+    private string GetCurrentRelativeUrl()
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            return "/proveedores";
+        }
+
+        return relative.StartsWith("/", StringComparison.Ordinal) ? relative : $"/{relative}";
     }
 }

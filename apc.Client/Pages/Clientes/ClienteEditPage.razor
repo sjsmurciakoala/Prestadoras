@@ -1,0 +1,203 @@
+@page "/clientes/{Id:int}/editar"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@using apc.Client.Services.Tenant
+@using apc.Client.Pages.Clientes.Components
+
+@inject ClientesClient ClientesClient
+@inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
+@inject TenantState TenantState
+
+<PageTitle>SIAD - Editar Cliente</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="EditClienteToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Editar Cliente</h2>
+            @if (_modelo is not null)
+            {
+                <p class="page-subtitle">@($"{_modelo.Nombre} {_modelo.Apellidos}".Trim())</p>
+            }
+        </div>
+        <div class="header-actions">
+            <DxButton Text="Cancelar" Click="Cancelar"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="d-flex justify-content-center my-5">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Cargando...</span>
+            </div>
+        </div>
+    }
+    else if (_error is not null)
+    {
+        <DxAlert AlertType="AlertType.Danger">@_error</DxAlert>
+    }
+    else if (_modelo is not null)
+    {
+        <ClienteForm Modelo="@_modelo"
+                     OnGuardar="GuardarAsync"
+                     OnCancelar="Cancelar"
+                     IsSaving="@_saving"
+                     IsEditMode="true" />
+    }
+</div>
+
+@code {
+    [Parameter] public int Id { get; set; }
+
+    private bool _loading = true;
+    private bool _saving;
+    private string? _error;
+    private ClienteCreateDto? _modelo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TenantState.EnsureCompanyAsync();
+        await CargarClienteAsync();
+    }
+
+    private async Task CargarClienteAsync()
+    {
+        try
+        {
+            var detalle = await ClientesClient.ObtenerPorIdAsync(Id);
+            if (detalle is null)
+            {
+                _error = "No se encontró el cliente.";
+                return;
+            }
+            _modelo = MapearDetalleAEdicion(detalle);
+        }
+        catch (Exception ex)
+        {
+            _error = $"Error al cargar el cliente: {ex.Message}";
+        }
+        finally
+        {
+            _loading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (_modelo is null) return;
+        _saving = true;
+        try
+        {
+            var dto = MapearEdicionAUpdate(_modelo);
+            _ = await ClientesClient.ActualizarAsync(Id, dto);
+            Navigation.NavigateTo($"/clientes/{Id}");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "EditClienteToast"
+            });
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancelar() => Navigation.NavigateTo($"/clientes/{Id}");
+
+    private static ClienteCreateDto MapearDetalleAEdicion(ClienteDetailDto detalle) => new()
+    {
+        Clave = detalle.Codigo,
+        Nombre = detalle.Nombre,
+        Apellidos = detalle.Apellidos,
+        Dni = detalle.Dni ?? string.Empty,
+        Rtn = detalle.Rtn,
+        FechaNacimiento = detalle.FechaNacimiento,
+        BarrioCodigo = detalle.BarrioCodigo,
+        TerceraEdad = detalle.TerceraEdad,
+        BloqueadoCobranza = detalle.BloqueadoCobranza,
+        NoCortable = detalle.NoCortable,
+        AbogadoId = detalle.AbogadoId,
+        Telefono = detalle.Telefono,
+        TelefonoMovil = detalle.TelefonoMovil,
+        Email = detalle.Email,
+        Direccion = detalle.Direccion,
+        ColorCasa = detalle.ColorCasa,
+        ClaveCatastral = detalle.ClaveCatastral,
+        TieneMedidor = detalle.TieneMedidor,
+        MedidorId = detalle.MedidorId,
+        EmpresaNombre = detalle.EmpresaNombre,
+        EmpresaRtn = detalle.EmpresaRtn,
+        EmpresaTelefono = detalle.EmpresaTelefono,
+        EmpresaDireccion = detalle.EmpresaDireccion,
+        TipoUsoCodigo = detalle.TipoUsoCodigo,
+        CategoriaServicioId = detalle.CategoriaServicioId,
+        ServicioId = detalle.ServicioId,
+        LetraCodigo = detalle.LetraCodigo,
+        CicloId = detalle.CicloId,
+        Libreta = detalle.Libreta,
+        Secuencia = detalle.Secuencia,
+        Contador = detalle.Contador,
+        ClaveSure = detalle.ClaveSure,
+        TieneConvenio = detalle.TieneConvenio,
+        NumeroConvenio = detalle.NumeroConvenio,
+        TieneContrato = detalle.TieneContrato,
+        NumeroContrato = detalle.NumeroContrato,
+        Observaciones = detalle.Observaciones,
+        Activo = detalle.Activo
+    };
+
+    private static ClienteUpdateDto MapearEdicionAUpdate(ClienteCreateDto modelo) => new()
+    {
+        Clave = modelo.Clave,
+        Nombre = modelo.Nombre,
+        Apellidos = modelo.Apellidos,
+        Dni = modelo.Dni,
+        Rtn = modelo.Rtn,
+        FechaNacimiento = modelo.FechaNacimiento,
+        BarrioCodigo = modelo.BarrioCodigo,
+        TerceraEdad = modelo.TerceraEdad,
+        BloqueadoCobranza = modelo.BloqueadoCobranza,
+        AbogadoId = modelo.AbogadoId,
+        Telefono = modelo.Telefono,
+        TelefonoMovil = modelo.TelefonoMovil,
+        Email = modelo.Email,
+        Direccion = modelo.Direccion,
+        ColorCasa = modelo.ColorCasa,
+        ClaveCatastral = modelo.ClaveCatastral,
+        TieneMedidor = modelo.TieneMedidor,
+        MedidorId = modelo.MedidorId,
+        EmpresaNombre = modelo.EmpresaNombre,
+        EmpresaRtn = modelo.EmpresaRtn,
+        EmpresaTelefono = modelo.EmpresaTelefono,
+        EmpresaDireccion = modelo.EmpresaDireccion,
+        TipoUsoCodigo = modelo.TipoUsoCodigo,
+        CategoriaServicioId = modelo.CategoriaServicioId,
+        ServicioId = modelo.ServicioId,
+        LetraCodigo = modelo.LetraCodigo,
+        CicloId = modelo.CicloId,
+        Libreta = modelo.Libreta,
+        Secuencia = modelo.Secuencia,
+        Contador = modelo.Contador,
+        ClaveSure = modelo.ClaveSure,
+        TieneConvenio = modelo.TieneConvenio,
+        NumeroConvenio = modelo.NumeroConvenio,
+        TieneContrato = modelo.TieneContrato,
+        NumeroContrato = modelo.NumeroContrato,
+        Observaciones = modelo.Observaciones,
+        Activo = modelo.Activo
+    };
+}

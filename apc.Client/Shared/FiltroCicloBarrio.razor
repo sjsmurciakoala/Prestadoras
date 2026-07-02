@@ -1,0 +1,109 @@
+@using SIAD.Core.DTOs.Rutas
+@using SIAD.Core.DTOs.Catalogos
+@using DevExpress.Blazor
+
+@*
+    Filtro combinado Ciclo / Barrio.
+    Un único combobox cuyo contenido alterna mediante el toggle interno:
+      - "Ciclos"  -> lista los ciclos  (valor int en CicloId)
+      - "Barrios" -> lista los barrios (valor string en BarrioCodigo)
+    Al cambiar de modo se limpia el filtro del modo anterior, de modo que
+    ciclo y barrio nunca coexisten.
+*@
+
+<div class="filtro-ciclo-barrio">
+    <div class="filtro-toggle" role="group">
+        <DxButton Text="Ciclos"
+                  IconCssClass="bi bi-arrow-repeat"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  RenderStyleMode="@(modo == ModoFiltro.Ciclo ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
+                  SizeMode="SizeMode.Small"
+                  Click="@(() => CambiarModo(ModoFiltro.Ciclo))" />
+        <DxButton Text="Barrios"
+                  IconCssClass="bi bi-geo-alt"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  RenderStyleMode="@(modo == ModoFiltro.Barrio ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline)"
+                  SizeMode="SizeMode.Small"
+                  Click="@(() => CambiarModo(ModoFiltro.Barrio))" />
+    </div>
+
+    @if (modo == ModoFiltro.Ciclo)
+    {
+        <DxComboBox Data="Ciclos"
+                    Value="CicloId"
+                    ValueChanged="@((int? v) => OnCicloChanged(v))"
+                    ValueFieldName="@nameof(CicloLookupDto.Id)"
+                    TextFieldName="@nameof(CicloLookupDto.Descripcion)"
+                    NullText="— Todos los ciclos —"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                    CssClass="w-100" />
+    }
+    else
+    {
+        <DxComboBox Data="Barrios"
+                    Value="BarrioCodigo"
+                    ValueChanged="@((string? v) => OnBarrioChanged(v))"
+                    ValueFieldName="@nameof(BarrioLookupDto.Codigo)"
+                    TextFieldName="@nameof(BarrioLookupDto.Nombre)"
+                    NullText="— Todos los barrios —"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                    CssClass="w-100" />
+    }
+</div>
+
+@code {
+    private enum ModoFiltro { Ciclo, Barrio }
+
+    [Parameter] public IReadOnlyList<CicloLookupDto> Ciclos { get; set; } = Array.Empty<CicloLookupDto>();
+    [Parameter] public IReadOnlyList<BarrioLookupDto> Barrios { get; set; } = Array.Empty<BarrioLookupDto>();
+
+    [Parameter] public int? CicloId { get; set; }
+    [Parameter] public EventCallback<int?> CicloIdChanged { get; set; }
+
+    [Parameter] public string? BarrioCodigo { get; set; }
+    [Parameter] public EventCallback<string?> BarrioCodigoChanged { get; set; }
+
+    private ModoFiltro modo = ModoFiltro.Ciclo;
+    private bool modoInicializado;
+
+    protected override void OnParametersSet()
+    {
+        // Determina el modo inicial según el valor que llegue seteado (solo una vez).
+        if (!modoInicializado)
+        {
+            if (!string.IsNullOrWhiteSpace(BarrioCodigo))
+                modo = ModoFiltro.Barrio;
+            modoInicializado = true;
+        }
+    }
+
+    private async Task CambiarModo(ModoFiltro nuevo)
+    {
+        if (modo == nuevo) return;
+        modo = nuevo;
+
+        // Limpiar el filtro del modo que se abandona para que no coexistan.
+        if (nuevo == ModoFiltro.Ciclo && !string.IsNullOrWhiteSpace(BarrioCodigo))
+        {
+            BarrioCodigo = null;
+            await BarrioCodigoChanged.InvokeAsync(null);
+        }
+        else if (nuevo == ModoFiltro.Barrio && CicloId.HasValue)
+        {
+            CicloId = null;
+            await CicloIdChanged.InvokeAsync(null);
+        }
+    }
+
+    private async Task OnCicloChanged(int? value)
+    {
+        CicloId = value;
+        await CicloIdChanged.InvokeAsync(value);
+    }
+
+    private async Task OnBarrioChanged(string? value)
+    {
+        BarrioCodigo = value;
+        await BarrioCodigoChanged.InvokeAsync(value);
+    }
+}

@@ -7,7 +7,9 @@ using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.FacturacionMiscelaneos;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Core.Utilities;
 using SIAD.Data;
+// using SIAD.Services.Caja; — desvinculado de caja (2026-06-04)
 
 namespace SIAD.Services.FacturacionMiscelaneos;
 
@@ -19,8 +21,11 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
 
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _currentCompanyService;
+    // ICajaService removido — Gestión de Caja desvinculada (2026-06-04)
 
-    public FacturacionMiscelaneosService(SiadDbContext context, ICurrentCompanyService currentCompanyService)
+    public FacturacionMiscelaneosService(
+        SiadDbContext context,
+        ICurrentCompanyService currentCompanyService)
     {
         _context = context;
         _currentCompanyService = currentCompanyService;
@@ -94,7 +99,7 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
                 ValorUnitario = c.valor ?? 0m,
                 ContAccountId = c.cont_account_id,
                 CuentaContableDisplay = c.cont_account != null
-                    ? c.cont_account.code + " - " + c.cont_account.name
+                    ? AccountCodeFormatter.FormatDisplay(c.cont_account.code, c.cont_account.name)
                     : null
             })
             .ToListAsync(ct);
@@ -265,6 +270,9 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
             : await ObtenerPeriodoActualAsync(ct);
 
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
+
+        // Verificación de sesión de caja removida — módulo desvinculado (2026-06-04)
+
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow);
         var total = detallesValidos.Sum(d => d.ValorTotal);
 
@@ -316,6 +324,7 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
             transacciones.Add(new transaccion_abonado
             {
                 company_id = companyId,
+                caja_id = null, // caja desvinculada (2026-06-04)
                 cliente_clave = cliente.Clave,
                 recibo = factura.numrecibo,
                 tipotransaccion = detalle.Codigo,
@@ -464,6 +473,37 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
         recibo.Detalles = detalles;
 
         return recibo;
+    }
+
+    public async Task<IReadOnlyList<MiscelaneoConsultaDto>> ConsultarRecibosAsync(
+        MiscelaneosConsultaFiltroDto filtro, CancellationToken ct = default)
+    {
+        var query = _context.facturas
+            .AsNoTracking()
+            .Where(f => f.tipofactura == "R" && f.estado == "A");
+
+        if (filtro.FechaDesde.HasValue)
+            query = query.Where(f => f.fechaemision >= filtro.FechaDesde.Value);
+
+        if (filtro.FechaHasta.HasValue)
+            query = query.Where(f => f.fechaemision <= filtro.FechaHasta.Value);
+
+        if (!string.IsNullOrWhiteSpace(filtro.ClienteClave))
+            query = query.Where(f => f.clientecodigo == filtro.ClienteClave.Trim());
+
+        return await query
+            .OrderByDescending(f => f.fechaemision)
+            .ThenByDescending(f => f.id)
+            .Select(f => new MiscelaneoConsultaDto(
+                f.numrecibo,
+                f.numfactura ?? string.Empty,
+                f.fechaemision.HasValue
+                    ? f.fechaemision.Value.ToDateTime(TimeOnly.MinValue)
+                    : DateTime.MinValue,
+                f.clientecodigo ?? string.Empty,
+                f.saldototal ?? 0m,
+                f.estado ?? string.Empty))
+            .ToListAsync(ct);
     }
 
     private async Task<string> ObtenerPeriodoActualAsync(CancellationToken ct)

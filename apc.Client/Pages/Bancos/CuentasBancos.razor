@@ -17,7 +17,11 @@
 
 @implements IDisposable
 
+<PageTitle>SIAD - Cuentas Bancarias</PageTitle>
+
 <div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
         <div>
             <h2 class="page-title">Cuentas bancarias</h2>
@@ -118,7 +122,7 @@
                     <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.Moneda)" Caption="Moneda" Width="120px" />
                     <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.SaldoActual)"
                                       Caption="Saldo actual"
-                                      DisplayFormat="c2"
+                                      DisplayFormat="N2"
                                       Width="150px" />
                     <DxGridDataColumn FieldName="@nameof(BancoCuentaListDto.Titular)" Caption="Titular" Width="200px" />
                     <DxGridDataColumn Caption="Cuenta contable" Width="220px">
@@ -196,8 +200,8 @@
                     <i class="bi bi-exclamation-triangle-fill"></i>
                 </span>
                 <div>
-                    <p class="fw-semibold mb-2">縀liminar esta cuenta?</p>
-                    <p class="text-muted mb-0">Confirma la eliminaci髇 del registro seleccionado.</p>
+                    <p class="fw-semibold mb-2">驴Eliminar esta cuenta?</p>
+                    <p class="text-muted mb-0">Confirma la eliminaci贸n del registro seleccionado.</p>
                 </div>
             </div>
         </div>
@@ -209,10 +213,10 @@
         {
             <div class="small mb-2 text-secondary">
                 <div><strong>Banco:</strong> @GetBancoNombre(cuentaAEliminar)</div>
-                <div><strong>N鷐ero:</strong> @cuentaAEliminar.NumeroCuenta</div>
+                <div><strong>N煤mero:</strong> @cuentaAEliminar.NumeroCuenta</div>
                 <div><strong>Tipo:</strong> @cuentaAEliminar.TipoCuenta</div>
             </div>
-            <p class="text-danger small mb-0">Esta acci髇 no se puede deshacer.</p>
+            <p class="text-danger small mb-0">Esta acci贸n no se puede deshacer.</p>
         }
 
         <div class="mt-3 border-top border-light-subtle"></div>
@@ -263,6 +267,7 @@
     private bool showNoBancosAlert;
     private bool consolidado;
     private string? alerta;
+    private ErrorNotice errorNotice = default!;
     private string searchText = string.Empty;
     private long companyId;
     private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
@@ -371,13 +376,13 @@
             hasBancos = bancos.Count > 0;
             showNoBancosAlert = !hasBancos;
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+            SetAlert("La sesi贸n expir贸. Vuelve a iniciar sesi贸n.", MessageBoxRenderStyle.Danger);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            SetAlert($"Error al cargar bancos: {ex.Message}", MessageBoxRenderStyle.Danger);
+            SetAlert("No se pudieron cargar los bancos.", MessageBoxRenderStyle.Danger);
         }
     }
 
@@ -419,13 +424,13 @@
         catch (OperationCanceledException)
         {
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+            SetAlert("La sesi贸n expir贸. Vuelve a iniciar sesi贸n.", MessageBoxRenderStyle.Danger);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            SetAlert($"Error al cargar cuentas: {ex.Message}", MessageBoxRenderStyle.Danger);
+            SetAlert("No se pudieron cargar las cuentas.", MessageBoxRenderStyle.Danger);
         }
         finally
         {
@@ -455,7 +460,7 @@
         catch (Exception ex)
         {
             consolidado = false;
-            SetAlert($"Error al cargar configuracion de bancos: {ex.Message}", MessageBoxRenderStyle.Warning);
+            SetAlert("No se pudo cargar la configuraci贸n de bancos.", MessageBoxRenderStyle.Warning);
         }
     }
 
@@ -635,17 +640,9 @@
             cuentaAEliminar = null;
             await LoadCuentasAsync();
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
-        }
-        catch (HttpRequestException ex)
-        {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
-        }
         catch (Exception ex)
         {
-            SetAlert($"No se pudo eliminar la cuenta: {ex.Message}", MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo eliminar la cuenta.", ex);
         }
         finally
         {
@@ -712,12 +709,12 @@
         var nombre = cuenta.CuentaContableNombre?.Trim();
         if (!string.IsNullOrWhiteSpace(codigo) && !string.IsNullOrWhiteSpace(nombre))
         {
-            return $"{codigo} - {nombre}";
+            return AccountCodeFormatter.FormatDisplay(codigo, nombre);
         }
 
         if (!string.IsNullOrWhiteSpace(codigo))
         {
-            return codigo;
+            return AccountCodeFormatter.Format(codigo);
         }
 
         if (!string.IsNullOrWhiteSpace(nombre))
@@ -727,7 +724,7 @@
 
         if (!string.IsNullOrWhiteSpace(cuenta.CtaConc) && cuenta.CtaConc != "0")
         {
-            return cuenta.CtaConc;
+            return AccountCodeFormatter.Format(cuenta.CtaConc);
         }
 
         return "--";
@@ -818,7 +815,7 @@
         catch (Exception ex)
         {
             monedas = new List<BanMonedaLookupDto>();
-            SetAlert($"Error al cargar monedas: {ex.Message}", MessageBoxRenderStyle.Warning);
+            SetAlert("No se pudieron cargar las monedas.", MessageBoxRenderStyle.Warning);
         }
     }
 
@@ -843,7 +840,7 @@
         catch (Exception ex)
         {
             cuentasContables = new List<CuentaContableLookupDto>();
-            SetAlert($"Error al cargar cuentas contables: {ex.Message}", MessageBoxRenderStyle.Warning);
+            SetAlert("No se pudieron cargar las cuentas contables.", MessageBoxRenderStyle.Warning);
         }
     }
 }

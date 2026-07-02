@@ -1,0 +1,224 @@
+@page "/facturacion/cobranza/historial-acciones"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Cobranza
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Facturacion
+@using apc.Client.Services.CaptacionPagos
+@using DevExpress.Blazor
+@inject CobranzaClient CobranzaClient
+@inject CaptacionPagosClient CaptacionClient
+
+<PageTitle>SIAD - Historial de Bitácora de Cobranza</PageTitle>
+
+<div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
+    <div class="header-section mb-3">
+        <div>
+            <h2 class="page-title">Historial de bitácora de cobranza</h2>
+            <p class="page-subtitle">Acciones de cobranza de todos los clientes</p>
+        </div>
+    </div>
+
+    <!-- FILTROS -->
+    <div class="modern-card mb-4">
+        <div class="section-header mb-3">
+            <i class="bi bi-funnel"></i>
+            <h5 class="m-0">Filtros</h5>
+        </div>
+
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Desde" ColSpanXs="6" ColSpanMd="2" Context="f1">
+                <DxDateEdit @bind-Date="desde" CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Hasta" ColSpanXs="6" ColSpanMd="2" Context="f2">
+                <DxDateEdit @bind-Date="hasta" CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Tipo de acción" ColSpanXs="12" ColSpanMd="3" Context="f3">
+                <DxComboBox Data="catalogoAcciones"
+                            @bind-Value="filtroCodAccion"
+                            ValueFieldName="CodAccion"
+                            TextFieldName="Nombre"
+                            NullText="— Todas —"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Cliente (opcional)" ColSpanXs="12" ColSpanMd="3" Context="f4">
+                <ClienteLookup Items="@clientesCombo"
+                               Value="@filtroClienteClave"
+                               ValueChanged="@OnClienteFiltroChanged"
+                               NullText="Todos los clientes"
+                               MinSearchLength="2"
+                               SearchDelay="400" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Ejecutado por" ColSpanXs="12" ColSpanMd="2" Context="f5">
+                <DxTextBox @bind-Text="filtroEjecutadoPor"
+                           NullText="Nombre parcial..."
+                           CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+
+        <div class="d-flex gap-2 justify-content-end mt-3">
+            <DxButton Text="Buscar"
+                      IconCssClass="bi bi-search"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="BuscarAsync"
+                      Enabled="@(!isLoading)" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <DxAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle" CssClass="mb-3">
+            @errorMsg
+        </DxAlert>
+    }
+
+    <!-- RESULTADOS -->
+    <div class="modern-card">
+        <div class="section-header mb-3">
+            <i class="bi bi-clock-history"></i>
+            <h5 class="m-0">Resultados@(busquedaRealizada ? $" ({resultados.Count})" : string.Empty)</h5>
+            <div class="ms-auto d-flex gap-2">
+                <DxButton Text="Excel"
+                          IconCssClass="bi bi-file-earmark-excel"
+                          RenderStyle="ButtonRenderStyle.Success"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="ExportExcelAsync"
+                          Enabled="@(resultados.Count > 0)" />
+                <DxButton Text="PDF"
+                          IconCssClass="bi bi-file-earmark-pdf"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="ExportPdfAsync"
+                          Enabled="@(resultados.Count > 0)" />
+            </div>
+        </div>
+
+        @if (resultadoTruncado)
+        {
+            <DxAlert AlertType="AlertType.Warning" IconCssClass="bi bi-exclamation-circle" CssClass="mb-3">
+                Se alcanzó el límite de @CobranzaHistorialConstantes.MaxFilas registros.
+                Acote el rango de fechas para ver el detalle completo.
+            </DxAlert>
+        }
+
+        @if (isLoading)
+        {
+            <DxLoadingPanel Visible="true" Text="Cargando historial..." />
+            <div style="height:60px"></div>
+        }
+        else
+        {
+            <div style="width:100%;overflow-x:auto;">
+                <DxGrid @ref="grid" Data="resultados" ShowFilterRow="true" PageSize="25" CssClass="w-100">
+                    <Columns>
+                        <DxGridDataColumn FieldName="Fecha" Caption="Fecha" Width="140px" DisplayFormat="g" />
+                        <DxGridDataColumn FieldName="ClienteClave" Caption="Cliente" Width="110px" />
+                        <DxGridDataColumn FieldName="ClienteNombre" Caption="Nombre" Width="200px" />
+                        <DxGridDataColumn FieldName="Accion" Caption="Tipo de acción" Width="170px" />
+                        <DxGridDataColumn FieldName="NombreObservacion" Caption="Resultado" Width="150px" />
+                        <DxGridDataColumn FieldName="Observacion" Caption="Obs. adicional" />
+                        <DxGridDataColumn FieldName="Abogado" Caption="Abogado" Width="140px" />
+                        <DxGridDataColumn FieldName="EjecutadoPor" Caption="Ejecutado por" Width="130px" />
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="text-center p-4 text-muted">
+                            <i class="bi bi-inbox" style="font-size:2rem;opacity:.5"></i>
+                            <p class="mt-2">
+                                @(busquedaRealizada
+                                    ? "Sin acciones en el rango seleccionado."
+                                    : "Defina los filtros y presione Buscar.")
+                            </p>
+                        </div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    private List<ClienteComboDto> clientesCombo = [];
+    private List<AccionCobranzaCatalogoDto> catalogoAcciones = [];
+    private List<AccionCobranzaHistorialDto> resultados = [];
+
+    private DateTime desde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime hasta = DateTime.Today;
+    private int? filtroCodAccion;
+    private string? filtroClienteClave;
+    private string? filtroEjecutadoPor;
+
+    private IGrid? grid;
+    private bool isLoading;
+    private bool busquedaRealizada;
+    private bool resultadoTruncado;
+    private string? errorMsg;
+    private ErrorNotice errorNotice = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var tareaClientes = CaptacionClient.GetClientesAsync(null);
+            var tareaCatalogo = CobranzaClient.GetCatalogoAccionesAsync();
+            await Task.WhenAll(tareaClientes, tareaCatalogo);
+            clientesCombo = tareaClientes.Result.ToList();
+            catalogoAcciones = tareaCatalogo.Result?.ToList() ?? [];
+        }
+        catch (Exception ex)
+        {
+            errorMsg = "No se pudieron cargar los catálogos.";
+        }
+    }
+
+    private Task OnClienteFiltroChanged(string? clave)
+    {
+        filtroClienteClave = clave;
+        return Task.CompletedTask;
+    }
+
+    private async Task BuscarAsync()
+    {
+        if (desde.Date > hasta.Date)
+        {
+            errorMsg = "Rango de fechas inválido: 'Desde' debe ser menor o igual a 'Hasta'.";
+            return;
+        }
+
+        isLoading = true;
+        errorMsg = null;
+        resultadoTruncado = false;
+        try
+        {
+            var datos = await CobranzaClient.GetHistorialAccionesAsync(
+                desde, hasta, filtroCodAccion, filtroClienteClave, filtroEjecutadoPor);
+            resultados = datos.ToList();
+            resultadoTruncado = resultados.Count >= CobranzaHistorialConstantes.MaxFilas;
+            busquedaRealizada = true;
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo consultar el historial.", ex);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string BuildExportFileName(string extension)
+        => $"historial-bitacora-cobranza_{DateTime.Now:yyyyMMdd_HHmm}.{extension}";
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null) return;
+        await grid.ExportToXlsxAsync(BuildExportFileName("xlsx"), new GridXlExportOptions());
+    }
+
+    private async Task ExportPdfAsync()
+    {
+        if (grid is null) return;
+        await grid.ExportToPdfAsync(BuildExportFileName("pdf"), new GridPdfExportOptions());
+    }
+}

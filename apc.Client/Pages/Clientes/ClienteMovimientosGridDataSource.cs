@@ -59,7 +59,8 @@ public sealed class ClienteMovimientosGridDataSource : GridCustomDataSource
         }
         catch (Exception ex)
         {
-            SetState(0, $"Error al cargar movimientos: {ex.Message}");
+            Console.WriteLine($"[ClienteMovimientosGridDataSource] Error in GetItemCountAsync: {ex}");
+            SetState(0, "Error al cargar movimientos.");
             return 0;
         }
     }
@@ -84,14 +85,15 @@ public sealed class ClienteMovimientosGridDataSource : GridCustomDataSource
                 ct: cancellationToken);
 
             SetState(result.TotalCount, null);
-            return new List<ClienteMovimientoDto>(result.Items);
+            return new List<ClienteMovimientoDto>(result.Items ?? Array.Empty<ClienteMovimientoDto>());
         }
         catch (OperationCanceledException)
         {
             return new List<ClienteMovimientoDto>();
         }
-        catch
+        catch (Exception ex)
         {
+            Console.WriteLine($"[ClienteMovimientosGridDataSource] Error in GetItemsAsync: {ex}");
             SetState(0, "Error al cargar movimientos.");
             return new List<ClienteMovimientoDto>();
         }

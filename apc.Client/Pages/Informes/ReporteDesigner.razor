@@ -1,4 +1,4 @@
-@page "/informes/reportes/{Codigo}/designer"
+﻿@page "/informes/reportes/{Codigo}/designer"
 @attribute [Authorize(Policy = PermissionNames.Reporteria.Edit)]
 @using apc.Client.Services.Informes
 @using SIAD.Core.Constants
@@ -6,7 +6,7 @@
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
 
-<PageTitle>Diseñador de Reporte</PageTitle>
+<PageTitle>SIAD - Diseñador de Reporte</PageTitle>
 
 <div class="page-container">
     @if (!isLoading && detalle is not null)

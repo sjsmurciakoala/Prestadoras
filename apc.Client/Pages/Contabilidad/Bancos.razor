@@ -15,7 +15,11 @@
 
 @implements IDisposable
 
+<PageTitle>SIAD - Bancos</PageTitle>
+
 <div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
         <div>
             <h2 class="page-title">Bancos</h2>
@@ -68,7 +72,7 @@
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
-                    <!-- Opci�n 1: Aumentar ancho de la columna de acciones -->
+                    <!-- Opción 1: Aumentar ancho de la columna de acciones -->
                     <DxGridCommandColumn Caption="Acciones"
                                          Width="220px"
                                          NewButtonVisible="false">
@@ -129,8 +133,8 @@
                     <i class="bi bi-exclamation-triangle-fill"></i>
                 </span>
                 <div>
-                    <p class="fw-semibold mb-2">�Eliminar este banco?</p>
-                    <p class="text-muted mb-0">Confirma la eliminaci�n del registro seleccionado.</p>
+                    <p class="fw-semibold mb-2">¿Eliminar este banco?</p>
+                    <p class="text-muted mb-0">Confirma la eliminación del registro seleccionado.</p>
                 </div>
             </div>
         </div>
@@ -144,7 +148,7 @@
                 <div><strong>ID:</strong> @bancoAEliminar.BancoId</div>
                 <div><strong>Nombre:</strong> @bancoAEliminar.Nombre</div>
             </div>
-            <p class="text-danger small mb-0">Esta acci�n no se puede deshacer.</p>
+            <p class="text-danger small mb-0">Esta acción no se puede deshacer.</p>
         }
     </BodyTemplate>
     <FooterTemplate>
@@ -179,7 +183,7 @@
 <DxPopup @bind-Visible="mostrarFormulario" 
          Width="min(1300px, 98vw)"
          Height="min(850px, 92vh)"
-         HeaderText="Nueva Transacci�n Bancaria"
+         HeaderText="Nueva Transacción Bancaria"
          ShowCloseButton="true">
     <TransaccionBancariaModal CuentasBancarias="@cuentasBancarias" 
                               BancoId="@transaccionesBancoId"
@@ -202,13 +206,14 @@
     private long? transaccionesBancoId;
     private string? alerta;
     private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private ErrorNotice errorNotice = default!;
     private BancoListDto? bancoAEliminar;
     private CancellationTokenSource? loadCts;
 
-    // Aseg�rate de declarar e inicializar la variable cuentasBancarias
+    // Asegúrate de declarar e inicializar la variable cuentasBancarias
     private List<BancoCuentaListDto> cuentasBancarias = new();
 
-    // Declarar la variable mostrarFormulario en el bloque de c�digo del componente
+    // Declarar la variable mostrarFormulario en el bloque de código del componente
     private bool mostrarFormulario = false;
 
     private string Title => editModel.BancoId > 0 ? "Editar banco" : "Nuevo banco";
@@ -248,13 +253,13 @@
         {
             
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+            SetAlert("La sesión expiró. Vuelve a iniciar sesión.", MessageBoxRenderStyle.Danger);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            SetAlert($"Error al cargar bancos: {ex.Message}", MessageBoxRenderStyle.Danger);
+            SetAlert("No se pudieron cargar los bancos.", MessageBoxRenderStyle.Danger);
         }
         finally
         {
@@ -297,7 +302,7 @@
         }
         catch (Exception ex)
         {
-            SetAlert($"No se pudo cargar el banco: {ex.Message}", MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo cargar el banco.", ex);
         }
     }
 
@@ -338,13 +343,13 @@
             formVisible = false;
             await LoadBancosAsync();
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("La sesión expiró. Vuelve a iniciar sesión.", titulo: "Sesión expirada");
         }
         catch (Exception ex)
         {
-            SetAlert($"No se pudo guardar el banco: {ex.Message}", MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo guardar el banco.", ex);
         }
         finally
         {
@@ -438,13 +443,13 @@
             transaccionesBancoId = banco.BancoId;
             NavigationManager.NavigateTo($"/contabilidad/transacciones-bancarias?bancoId={banco.BancoId}");
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("La sesión expiró. Vuelve a iniciar sesión.", titulo: "Sesión expirada");
         }
         catch (Exception ex)
         {
-            SetAlert($"No se pudo validar las cuentas bancarias: {ex.Message}", MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo validar las cuentas bancarias.", ex);
         }
     }
 
@@ -482,17 +487,13 @@
             bancoAEliminar = null;
             await LoadBancosAsync();
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
-        }
-        catch (HttpRequestException ex)
-        {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("La sesión expiró. Vuelve a iniciar sesión.", titulo: "Sesión expirada");
         }
         catch (Exception ex)
         {
-            SetAlert($"No se pudo eliminar el banco: {ex.Message}", MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo eliminar el banco.", ex);
         }
         finally
         {

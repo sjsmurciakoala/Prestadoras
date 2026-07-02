@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Net.Http.Json;
 using apc.Client.Services;
 using SIAD.Core.DTOs.Informes;
+using SIAD.Core.DTOs.Rutas;
 
 namespace apc.Client.Services.Informes;
 
@@ -17,6 +18,24 @@ public sealed class InformesClient
     public async Task<IReadOnlyList<InformeCatalogoItemDto>> GetCatalogoAsync(CancellationToken ct = default)
     {
         return await _http.GetFromJsonAsync<List<InformeCatalogoItemDto>>("api/informes/catalogo", ct)
+            ?? [];
+    }
+
+    public async Task<IReadOnlyList<ServicioCategoriaLookupDto>> GetCategoriasServicioAsync(CancellationToken ct = default)
+    {
+        return await _http.GetFromJsonAsync<List<ServicioCategoriaLookupDto>>("api/informes/catalogos/categorias-servicio", ct)
+            ?? [];
+    }
+
+    public async Task<IReadOnlyList<CicloLookupDto>> GetCiclosAsync(CancellationToken ct = default)
+    {
+        return await _http.GetFromJsonAsync<List<CicloLookupDto>>("api/informes/catalogos/ciclos", ct)
+            ?? [];
+    }
+
+    public async Task<IReadOnlyList<UsuarioInformeLookupDto>> GetUsuariosRecibosAsync(CancellationToken ct = default)
+    {
+        return await _http.GetFromJsonAsync<List<UsuarioInformeLookupDto>>("api/informes/catalogos/usuarios-recibos", ct)
             ?? [];
     }
 

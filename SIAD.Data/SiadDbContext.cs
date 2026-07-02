@@ -28,6 +28,9 @@ public partial class SiadDbContext : DbContext
     public virtual DbSet<axl_observacion_cobranza> axl_observacion_cobranzas { get; set; }
 
     public virtual DbSet<barrio> barrios { get; set; }
+
+    public virtual DbSet<medidor_clase> medidor_clases { get; set; }
+
     public virtual DbSet<ban_banco> ban_banco { get; set; }
 
     public virtual DbSet<ban_config> ban_config { get; set;}
@@ -75,6 +78,8 @@ public partial class SiadDbContext : DbContext
     public virtual DbSet<cliente_maestro> cliente_maestros { get; set; }
 
     public virtual DbSet<cln_accion_cobranza> cln_accion_cobranzas { get; set; }
+
+    public virtual DbSet<cln_accion_cobranza_documento> cln_accion_cobranza_documentos { get; set; }
 
     public virtual DbSet<cln_plan_pago_dtl> cln_plan_pago_dtls { get; set; }
 
@@ -188,7 +193,15 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<presupuesto_fondo> presupuesto_fondos { get; set; }
 
-    public virtual DbSet<proyecto> proyectos { get; set; }
+    public virtual DbSet<pst_config_presupuesto_dtl> pst_config_presupuesto_dtls { get; set; }
+
+    public virtual DbSet<pst_config_presupuesto_hdr> pst_config_presupuesto_hdrs { get; set; }
+
+    public virtual DbSet<pst_actividad_presupuesto> pst_actividad_presupuestos { get; set; }
+
+    public virtual DbSet<pst_solicitud_actividad_presupuesto> pst_solicitud_actividad_presupuestos { get; set; }
+
+    public virtual DbSet<Proyecto> proyectos { get; set; }
 
     public virtual DbSet<pruebainsert> pruebainserts { get; set; }
 
@@ -196,7 +209,11 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<prv_compromiso_hdr> prv_compromiso_hdrs { get; set; }
 
+    public virtual DbSet<prv_banco> prv_bancos { get; set; }
+
     public virtual DbSet<prv_kardex> prv_kardices { get; set; }
+
+    public virtual DbSet<prv_proveedor_cuenta_bancaria> prv_proveedor_cuentas_bancarias { get; set; }
 
     public virtual DbSet<prv_proveedore> prv_proveedores { get; set; }
 
@@ -222,6 +239,8 @@ public partial class SiadDbContext : DbContext
     public virtual DbSet<tipo_uso_servicio> tipo_uso_servicios { get; set; }
 
     public virtual DbSet<transaccion_abonado> transaccion_abonados { get; set; }
+
+    public virtual DbSet<sesion_caja> sesion_cajas { get; set; }
 
     public virtual DbSet<transaccion_presupuesto> transaccion_presupuestos { get; set; }
 
@@ -298,6 +317,9 @@ public partial class SiadDbContext : DbContext
             entity.ToTable("axl_accion_cobranza");
 
             entity.Property(e => e.nombre).HasMaxLength(150);
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.genera_documento).HasDefaultValue(false);
+            entity.Property(e => e.documento_codigo).HasMaxLength(50);
         });
 
         modelBuilder.Entity<axl_observacion_cobranza>(entity =>
@@ -308,6 +330,7 @@ public partial class SiadDbContext : DbContext
 
             entity.Property(e => e.observacion).HasMaxLength(50);
             entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.activo).HasDefaultValue(true);
         });
 
         modelBuilder.Entity<barrio>(entity =>
@@ -317,6 +340,20 @@ public partial class SiadDbContext : DbContext
             entity.ToTable("barrio");
 
             entity.Property(e => e.barrio_codigo).HasMaxLength(7);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(256);
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
+        });
+
+        modelBuilder.Entity<medidor_clase>(entity =>
+        {
+            entity.HasKey(e => e.medidor_clase_codigo).HasName("pk_medidor_clase");
+
+            entity.ToTable("medidor_clase");
+
+            entity.Property(e => e.medidor_clase_codigo).HasMaxLength(1);
+            entity.Property(e => e.descripcion).HasMaxLength(200);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.usuariocreacion).HasMaxLength(256);
@@ -504,11 +541,15 @@ public partial class SiadDbContext : DbContext
 
             entity.HasIndex(e => e.maestro_cliente_clave, "cliente_maestro_unique").IsUnique();
 
+            entity.HasIndex(e => new { e.company_id, e.estado, e.maestro_cliente_nombre, e.maestro_cliente_id }, "ix_cliente_maestro_company_estado_nombre_id");
+
             entity.Property(e => e.maestro_cliente_id)
                 .UseIdentityAlwaysColumn()
                 .HasIdentityOptions(102789L, null, null, null, null, null);
             entity.Property(e => e.barrio_codigo).HasMaxLength(7);
             entity.Property(e => e.bloqueado_cobranza).HasDefaultValue(false);
+            entity.Property(e => e.maestro_cliente_estudio_socioeconomico);
+            entity.Property(e => e.no_cortable);
             entity.Property(e => e.clave_sure).HasMaxLength(40);
             entity.Property(e => e.cliente_fecha_nac).HasColumnType("timestamp without time zone");
             entity.Property(e => e.contador).HasMaxLength(50);
@@ -549,8 +590,28 @@ public partial class SiadDbContext : DbContext
 
             entity.Property(e => e.accion).HasMaxLength(200);
             entity.Property(e => e.codigocliente).HasMaxLength(20);
+            entity.Property(e => e.company_id);
             entity.Property(e => e.fecha).HasColumnType("timestamp without time zone");
             entity.Property(e => e.observacion).HasMaxLength(200);
+            entity.Property(e => e.cod_accion);
+            entity.Property(e => e.cod_observacion);
+            entity.Property(e => e.abogado_id);
+            entity.Property(e => e.ejecutado_por).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<cln_accion_cobranza_documento>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("cln_accion_cobranza_documento_pkey");
+
+            entity.ToTable("cln_accion_cobranza_documento");
+
+            entity.Property(e => e.documento_codigo).HasMaxLength(50);
+            entity.Property(e => e.nombre_archivo).HasMaxLength(200);
+            entity.Property(e => e.content_type).HasMaxLength(100).HasDefaultValue("application/pdf");
+            entity.Property(e => e.generado_en).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.generado_por).HasMaxLength(100);
+
+            entity.HasIndex(e => e.accion_id, "ix_cln_accion_cobranza_documento_accion_id");
         });
 
         modelBuilder.Entity<cln_plan_pago_dtl>(entity =>
@@ -866,6 +927,8 @@ public partial class SiadDbContext : DbContext
             entity.HasKey(e => e.id).HasName("factura_pkey");
 
             entity.ToTable("factura");
+
+            entity.HasIndex(e => new { e.clientecodigo, e.numrecibo }, "ix_factura_clientecodigo_numrecibo");
 
             entity.Property(e => e.id).UseIdentityAlwaysColumn();
             entity.Property(e => e.ano).HasColumnType("character varying");
@@ -1327,6 +1390,13 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.maestro_medidor_numero).HasMaxLength(50);
             entity.Property(e => e.usuariocreacion).HasMaxLength(256);
             entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
+
+            entity.Property(e => e.medidor_clase_codigo).HasMaxLength(1);
+
+            entity.HasOne(d => d.medidor_clase).WithMany(p => p.maestro_medidors)
+                .HasForeignKey(d => d.medidor_clase_codigo)
+                .HasConstraintName("fk_maestro_medidor_clase")
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<materialesapp>(entity =>
@@ -1507,7 +1577,122 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.fondo_descripcion).HasColumnType("character varying");
         });
 
-        modelBuilder.Entity<proyecto>(entity =>
+        modelBuilder.Entity<pst_config_presupuesto_dtl>(entity =>
+        {
+            entity.HasKey(e => new { e.id_presupuesto, e.con_cuenta_code }).HasName("pk_pst_config_presupuesto_dtl");
+
+            entity.ToTable("pst_config_presupuesto_dtl");
+
+            entity.HasIndex(e => e.con_cuenta_code).HasDatabaseName("ix_pst_config_presupuesto_dtl_con_cuenta_code");
+            entity.HasIndex(e => e.id_presupuesto).HasDatabaseName("ix_pst_config_presupuesto_dtl_id_presupuesto");
+            entity.HasIndex(e => new { e.id_presupuesto, e.id_presupuesto_dtl })
+                .IsUnique()
+                .HasDatabaseName("ux_pst_config_presupuesto_dtl_id_presupuesto_dtl");
+
+            entity.Property(e => e.id_presupuesto).HasMaxLength(10);
+            entity.Property(e => e.id_presupuesto_dtl);
+            entity.Property(e => e.con_cuenta_code).HasMaxLength(20);
+            entity.Property(e => e.valor_proyeccion)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+            entity.Property(e => e.valor_real)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+            entity.Property(e => e.valor_disponible)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+
+            entity.HasOne<pst_config_presupuesto_hdr>()
+                .WithMany()
+                .HasForeignKey(e => e.id_presupuesto)
+                .OnDelete(DeleteBehavior.Cascade)
+                .HasConstraintName("fk_pst_config_presupuesto_dtl_hdr");
+        });
+
+        modelBuilder.Entity<pst_config_presupuesto_hdr>(entity =>
+        {
+            entity.HasKey(e => e.id_presupuesto).HasName("pk_pst_config_presupuesto_hdr");
+
+            entity.ToTable("pst_config_presupuesto_hdr");
+
+            entity.HasCheckConstraint("ck_pst_config_presupuesto_hdr_rango_periodo", "rango_periodo > 0");
+            entity.HasCheckConstraint("ck_pst_config_presupuesto_hdr_fechas", "fecha_finaliza >= fecha_inicia");
+
+            entity.Property(e => e.id_presupuesto).HasMaxLength(10);
+            entity.Property(e => e.valor_global)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+            entity.Property(e => e.valor_disponible)
+                .HasPrecision(18, 4)
+                .HasDefaultValue(0m);
+            entity.Property(e => e.fecha_inicia).HasColumnType("date");
+            entity.Property(e => e.fecha_finaliza).HasColumnType("date");
+            entity.Property(e => e.estado_aprobado).HasDefaultValue(false);
+        });
+
+        modelBuilder.Entity<pst_actividad_presupuesto>(entity =>
+        {
+            entity.HasKey(e => e.actividad_id).HasName("pst_actividad_presupuesto_pkey");
+
+            entity.ToTable("pst_actividad_presupuesto");
+
+            entity.HasIndex(e => new { e.company_id, e.id_presupuesto, e.fecha_actividad }, "ix_pst_act_presupuesto_fecha");
+            entity.HasIndex(e => new { e.company_id, e.estado }, "ix_pst_act_estado");
+            entity.HasIndex(e => new { e.id_presupuesto, e.cuenta_origen_code, e.cuenta_destino_code }, "ix_pst_act_cuentas");
+
+            entity.Property(e => e.actividad_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.id_presupuesto).HasMaxLength(10);
+            entity.Property(e => e.tipo_actividad).HasMaxLength(20);
+            entity.Property(e => e.estado).HasMaxLength(20);
+            entity.Property(e => e.fecha_actividad).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.cuenta_origen_code).HasMaxLength(20);
+            entity.Property(e => e.cuenta_destino_code).HasMaxLength(20);
+            entity.Property(e => e.monto).HasPrecision(18, 4);
+            entity.Property(e => e.motivo).HasMaxLength(500);
+            entity.Property(e => e.referencia).HasMaxLength(100);
+            entity.Property(e => e.created_at)
+                .HasColumnType("timestamp without time zone")
+                .HasDefaultValueSql("now()");
+            entity.Property(e => e.created_by)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.approved_at).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.approved_by).HasMaxLength(100);
+            entity.Property(e => e.applied_at).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.applied_by).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<pst_solicitud_actividad_presupuesto>(entity =>
+        {
+            entity.HasKey(e => e.solicitud_id).HasName("pst_solicitud_actividad_presupuesto_pkey");
+
+            entity.ToTable("pst_solicitud_actividad_presupuesto");
+
+            entity.HasIndex(e => new { e.company_id, e.estado, e.solicitado_en }, "ix_pst_sol_estado_fecha");
+            entity.HasIndex(e => new { e.company_id, e.id_presupuesto }, "ix_pst_sol_presupuesto");
+            entity.HasIndex(e => e.actividad_id, "ix_pst_sol_actividad");
+
+            entity.Property(e => e.solicitud_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.id_presupuesto).HasMaxLength(10);
+            entity.Property(e => e.tipo_actividad).HasMaxLength(20);
+            entity.Property(e => e.cuenta_origen_code).HasMaxLength(20);
+            entity.Property(e => e.cuenta_destino_code).HasMaxLength(20);
+            entity.Property(e => e.monto).HasPrecision(18, 4);
+            entity.Property(e => e.justificacion).HasMaxLength(1000);
+            entity.Property(e => e.estado).HasMaxLength(20);
+            entity.Property(e => e.fecha_necesaria).HasColumnType("date");
+            entity.Property(e => e.solicitado_por)
+                .HasMaxLength(100)
+                .HasDefaultValueSql("CURRENT_USER");
+            entity.Property(e => e.solicitado_en)
+                .HasColumnType("timestamp without time zone")
+                .HasDefaultValueSql("now()");
+            entity.Property(e => e.revisado_por).HasMaxLength(100);
+            entity.Property(e => e.revisado_en).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.comentario_revision).HasMaxLength(500);
+        });
+
+        modelBuilder.Entity<Proyecto>(entity =>
         {
             entity.HasKey(e => e.ide).HasName("proyectos_pkey");
 
@@ -1564,11 +1749,13 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.cod_proveedor).HasMaxLength(7);
             entity.Property(e => e.cod_proyecto).HasMaxLength(20);
             entity.Property(e => e.concepto).HasMaxLength(150);
+            entity.Property(e => e.correlativo_proveedor);
             entity.Property(e => e.cuenta_contable).HasMaxLength(20);
             entity.Property(e => e.fecha).HasColumnType("timestamp without time zone");
             entity.Property(e => e.monto).HasPrecision(18, 2);
             entity.Property(e => e.pagar_a).HasMaxLength(100);
             entity.Property(e => e.rtn).HasMaxLength(20);
+            entity.Property(e => e.nombre_proveedor).HasMaxLength(150);
         });
 
         modelBuilder.Entity<prv_kardex>(entity =>
@@ -1604,22 +1791,62 @@ public partial class SiadDbContext : DbContext
             entity.HasNoKey();
 
             entity.Property(e => e.cod_proveedor).HasMaxLength(20);
-            entity.Property(e => e.cuenta_bancaria).HasMaxLength(50);
             entity.Property(e => e.cuenta_contable).HasMaxLength(20);
-            entity.Property(e => e.direccion).HasMaxLength(100);
+            entity.Property(e => e.direccion).HasMaxLength(1000);
             entity.Property(e => e.email).HasMaxLength(150);
             entity.Property(e => e.fax).HasMaxLength(50);
             entity.Property(e => e.fecha_creacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.nombre).HasMaxLength(150);
-            entity.Property(e => e.nombrebanco1).HasMaxLength(80);
-            entity.Property(e => e.nombrebanco2).HasMaxLength(80);
             entity.Property(e => e.nombre_contacto).HasMaxLength(150);
             entity.Property(e => e.pagina_web).HasMaxLength(150);
             entity.Property(e => e.razon_social).HasMaxLength(150);
             entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.rtn).HasMaxLength(20);
             entity.Property(e => e.telefono).HasMaxLength(20);
+            entity.Property(e => e.ultimo_correlativo_compromiso).HasDefaultValue(0);
+            entity.Property(e => e.usuario_creo).HasMaxLength(100);
+            entity.Property(e => e.usuario_modifica).HasMaxLength(100);
+            entity.Property(e => e.company_id);
+        });
+
+        modelBuilder.Entity<prv_banco>(entity =>
+        {
+            entity.HasKey(e => e.prv_banco_id);
+
+            entity.ToTable("prv_bancos");
+
+            entity.Property(e => e.prv_banco_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.fecha_creacion)
+                .HasDefaultValueSql("now()")
+                .HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.nombre).HasMaxLength(80);
+            entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.usuario_creo).HasMaxLength(100);
+            entity.Property(e => e.usuario_modifica).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<prv_proveedor_cuenta_bancaria>(entity =>
+        {
+            entity.HasKey(e => e.proveedor_cuenta_bancaria_id);
+
+            entity.ToTable("prv_proveedor_cuenta_bancaria");
+
+            entity.HasIndex(e => e.cod_proveedor).HasDatabaseName("ix_prv_proveedor_cuenta_bancaria_cod_proveedor");
+            entity.HasIndex(e => new { e.cod_proveedor, e.orden }).HasDatabaseName("ix_prv_proveedor_cuenta_bancaria_orden");
+
+            entity.Property(e => e.proveedor_cuenta_bancaria_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.banco).HasMaxLength(80);
+            entity.Property(e => e.cod_proveedor).HasMaxLength(20);
+            entity.Property(e => e.cuenta_bancaria).HasMaxLength(50);
+            entity.Property(e => e.fecha_creacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.orden).HasDefaultValue(1);
+            entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.usuario_creo).HasMaxLength(100);
+            entity.Property(e => e.usuario_modifica).HasMaxLength(100);
         });
 
         modelBuilder.Entity<prv_tipoproveedor>(entity =>
@@ -1808,6 +2035,8 @@ public partial class SiadDbContext : DbContext
 
             entity.ToTable("transaccion_abonado");
 
+            entity.HasIndex(e => new { e.cliente_clave, e.fecha_docu, e.ide }, "ix_transaccion_abonado_cliente_fecha_ide");
+
             entity.Property(e => e.ide)
                 .UseIdentityAlwaysColumn()
                 .HasIdentityOptions(3075446L, null, null, null, null, null);
@@ -1834,6 +2063,7 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.tipotransaccion).HasColumnType("character varying");
             entity.Property(e => e.trans_aplicar).HasColumnType("character varying");
             entity.Property(e => e.usuario).HasColumnType("character varying");
+            entity.Property(e => e.caja_id).IsRequired(false);
         });
 
         modelBuilder.Entity<transaccion_presupuesto>(entity =>
@@ -2602,6 +2832,28 @@ public partial class SiadDbContext : DbContext
                 .HasForeignKey(d => d.recibo)
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("pagos_miscelaneos_dtl_recibo_fkey");
+        });
+
+        modelBuilder.Entity<sesion_caja>(entity =>
+        {
+            entity.HasKey(e => e.id);
+            entity.ToTable("sesion_caja");
+
+            entity.Property(e => e.estado)
+                  .HasMaxLength(20)
+                  .HasDefaultValue("ABIERTA");
+
+            entity.Property(e => e.usuario_apertura).HasMaxLength(100);
+            entity.Property(e => e.usuario_cierre).HasMaxLength(100);
+            entity.Property(e => e.observacion).HasMaxLength(500);
+
+            entity.Property(e => e.fecha_apertura)
+                  .HasDefaultValueSql("NOW()");
+
+            entity.Property(e => e.total_cobrado)
+                  .HasColumnType("numeric(18,2)");
+
+            entity.HasIndex(e => e.company_id);
         });
 
         OnModelCreatingPartial(modelBuilder);

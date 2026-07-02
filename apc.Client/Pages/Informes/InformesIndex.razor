@@ -1,4 +1,4 @@
-@page "/informes"
+﻿@page "/informes/catalogo"
 @attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
 @using apc.Client.Services.Informes
 @using SIAD.Core.DTOs.Informes
@@ -6,7 +6,7 @@
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
 
-<PageTitle>Informes</PageTitle>
+<PageTitle>SIAD - Informes</PageTitle>
 
 <div class="page-container">
     <div class="header-section">
@@ -43,8 +43,31 @@
         }
         else
         {
+            <!-- Buscador Premium -->
+            <div class="modern-card p-3 mb-3 search-container bg-light-subtle border-0">
+                <div class="d-flex flex-wrap align-items-center gap-2">
+                    <div class="position-relative flex-grow-1" style="max-width: 480px;">
+                        <span class="position-absolute top-50 start-0 translate-middle-y ps-3 text-muted">
+                            <i class="bi bi-search"></i>
+                        </span>
+                        <input type="text" 
+                               class="form-control ps-5 py-2 rounded-3 border-secondary-subtle search-input" 
+                               placeholder="Buscar informe por nombre o código/número..." 
+                               @bind="searchQuery" 
+                               @bind:event="oninput" />
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(searchQuery))
+                    {
+                        <DxButton Text="Limpiar" 
+                                  Click="@(() => searchQuery = string.Empty)" 
+                                  IconCssClass="bi bi-eraser"
+                                  RenderStyle="ButtonRenderStyle.Secondary" />
+                    }
+                </div>
+            </div>
+
             <div class="row g-3">
-                @foreach (var item in items)
+                @foreach (var item in FilteredItems)
                 {
                     <div class="col-12 col-lg-6">
                         <div class="border rounded-3 p-4 h-100 bg-white shadow-sm">
@@ -94,6 +117,17 @@
                     </div>
                 }
             </div>
+
+            @if (!FilteredItems.Any())
+            {
+                <div class="empty-search text-center py-5">
+                    <div class="empty-search__icon mb-3">
+                        <i class="bi bi-search-heart text-muted fs-1"></i>
+                    </div>
+                    <h4 class="text-muted">No se encontraron informes</h4>
+                    <p class="text-muted small">Intenta buscar con otros términos.</p>
+                </div>
+            }
         }
     </div>
 </div>
@@ -102,6 +136,7 @@
     private List<InformeCatalogoItemDto> items = [];
     private bool isLoading;
     private string? errorMessage;
+    private string searchQuery = string.Empty;
 
     protected override async Task OnInitializedAsync()
     {
@@ -124,6 +159,25 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private IEnumerable<InformeCatalogoItemDto> FilteredItems
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(searchQuery))
+            {
+                return items;
+            }
+
+            var query = searchQuery.Trim();
+            return items.Where(x => 
+                x.Nombre.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                (x.Descripcion != null && x.Descripcion.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                x.Codigo.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                x.Orden.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)
+            );
         }
     }
 

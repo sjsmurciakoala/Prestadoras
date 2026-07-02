@@ -7,6 +7,8 @@ public partial class prv_compromiso_hdr
 {
     public int numero_orden { get; set; }
 
+    public int? correlativo_proveedor { get; set; }
+
     public DateTime fecha { get; set; }
 
     public decimal monto { get; set; }
@@ -26,4 +28,8 @@ public partial class prv_compromiso_hdr
     public string? pagar_a { get; set; }
 
     public bool? status_transacc { get; set; }
+
+    public string? nombre_proveedor { get; set; }
+
+    public bool anulado { get; set; }
 }

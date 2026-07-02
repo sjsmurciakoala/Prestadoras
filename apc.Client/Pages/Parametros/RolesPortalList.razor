@@ -1,4 +1,4 @@
-@page "/parametros/roles"
+﻿@page "/parametros/roles"
 @attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
 
 @using System.Globalization
@@ -7,6 +7,8 @@
 @using apc.Client.Services.Parametros
 @inject RolesPortalClient RolesClient
 @inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Roles</PageTitle>
 
 <h3>Roles y permisos</h3>
 <p class="text-muted">Configura los roles del sistema y sus permisos por módulo.</p>

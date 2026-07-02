@@ -1,0 +1,56 @@
+.page-header {
+    border-bottom: 1px solid #dee2e6;
+    padding-bottom: 1rem;
+}
+
+.observacion-input {
+    width: 250px;
+}
+
+.btn-action {
+    min-width: 120px;
+}
+
+.bg-light-success {
+    background-color: #e8f5e9;
+    border-color: #c8e6c9 !important;
+}
+
+.bg-light-primary {
+    background-color: #e3f2fd;
+    border-color: #bbdefb !important;
+}
+
+.bg-light-warning {
+    background-color: #fffde7;
+    border-color: #fff9c4 !important;
+}
+
+.metric-icon {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 48px;
+    height: 48px;
+}
+
+.bg-success-subtle {
+    background-color: rgba(40, 167, 69, 0.2);
+}
+
+.bg-primary-subtle {
+    background-color: rgba(0, 123, 255, 0.2);
+}
+
+.bg-warning-subtle {
+    background-color: rgba(255, 193, 7, 0.2);
+}
+
+.modern-tabs {
+    border: none !important;
+}
+
+.grid-custom {
+    background: white;
+    border-radius: 4px;
+}

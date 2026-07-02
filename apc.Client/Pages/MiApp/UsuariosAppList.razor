@@ -1,4 +1,4 @@
-@page "/mi-app/usuarios"
+﻿@page "/mi-app/usuarios"
 @attribute [Authorize]
 
 @using DevExpress.Blazor
@@ -14,6 +14,8 @@
 @inject RutasClient RutasClient
 @inject CiclosClient CiclosClient
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Usuarios App</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="UsuariosAppToast" MaxToastCount="4" />

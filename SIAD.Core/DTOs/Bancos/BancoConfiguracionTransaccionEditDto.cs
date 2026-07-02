@@ -13,8 +13,8 @@ public class BancoConfiguracionTransaccionEditDto
     public string DescripcionTransaccion { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El tipo de partida es obligatorio.")]
-    [StringLength(3, ErrorMessage = "El tipo de partida no puede superar 3 caracteres.")]
-    public string TipoPartida { get; set; } = string.Empty;
+    [Range(typeof(long), "1", "9223372036854775807", ErrorMessage = "Seleccione un tipo de partida valido.")]
+    public long? TipoPartidaTypeId { get; set; }
 
     public bool UsaCentroCosto { get; set; }
 

@@ -1,4 +1,4 @@
-﻿using apc.Client.Services;
+using apc.Client.Services;
 using apc.Client.Services.Ordenes;
 using apc.Client.Services.Parametros;
 using apc.Client.Services.Rutas;
@@ -19,9 +19,12 @@ using apc.Client.Services.Abogados;
 using apc.Client.Services.Ciclos;
 using apc.Client.Services.AppLectores;
 using apc.Client.Services.Tarifario;
+using apc.Client.Services.Presupuesto;
 using apc.Client.Services.Layout;
 using apc.Client.Services.Maps;
 using apc.Client.Services.Informes;
+using apc.Client.Services.Caja;
+using apc.Client.Services.Cobranza;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -43,10 +46,14 @@ namespace apc.Client
             services.AddScoped<OrdenesClient>();
             services.AddScoped<RutasClient>();
             services.AddScoped<CaptacionPagosClient>();
+            services.AddScoped<CajaClient>();
+            services.AddScoped<AbonoClient>();
             services.AddScoped<FacturacionMiscelaneosClient>();
             services.AddScoped<NotasCreditoDebitoClient>();
             services.AddScoped<MantenimientosClient>();
             services.AddScoped<CobranzaClient>();
+            services.AddScoped<CorteMasivoClient>();
+            services.AddScoped<ClientesCobroClient>();
             services.AddScoped<EmpresasContabilidadClient>();
             services.AddScoped<ConfiguracionSistemaClient>();
             services.AddScoped<PeriodosContablesClient>();
@@ -69,6 +76,9 @@ namespace apc.Client
             services.AddScoped<AbogadosClient>();
             services.AddScoped<CiclosClient>();
             services.AddScoped<InformesClient>();
+            // presupuesto (de Combinacio_E_J_1.0; TarifasBase/TarifasContador retirados como legacy)
+            services.AddScoped<ConfiguracionPresupuestoClient>();
+            services.AddScoped<OrdenesPagoDirectoClient>();
             services.AddScoped<UsuariosAppClient>();
             services.AddScoped<ClienteServicioTarifarioClient>();
             services.AddScoped<PruebaCalculoClient>();

@@ -1,4 +1,4 @@
-@page "/bancos/cuentas/gestion"
+﻿@page "/bancos/cuentas/gestion"
 @attribute [Authorize(Policy = PermissionNames.Bancos.View)]
 
 @using apc.Client.Services.Bancos
@@ -16,7 +16,11 @@
 @inject TenantState TenantState
 @inject NavigationManager NavigationManager
 
+<PageTitle>SIAD - Gestión de Cuenta Bancaria</PageTitle>
+
 <div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
         <div>
             <h2 class="page-title">@PageTitle</h2>
@@ -86,6 +90,7 @@
     private long companyId;
     private string? alerta;
     private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private ErrorNotice errorNotice = default!;
     private long? handledCuentaId;
     private long? handledBancoId;
 
@@ -144,7 +149,7 @@
         }
         catch (Exception ex)
         {
-            SetAlert($"Error al cargar la cuenta: {ex.Message}", MessageBoxRenderStyle.Danger);
+            SetAlert("No se pudo cargar la cuenta.", MessageBoxRenderStyle.Danger);
         }
         finally
         {
@@ -249,17 +254,9 @@
 
             Volver();
         }
-        catch (UnauthorizedAccessException ex)
-        {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
-        }
-        catch (HttpRequestException ex)
-        {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
-        }
         catch (Exception ex)
         {
-            SetAlert($"No se pudo guardar la cuenta: {ex.Message}", MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("No se pudo guardar la cuenta.", ex);
         }
         finally
         {
@@ -306,13 +303,13 @@
             bancos.Clear();
             bancos.AddRange(data);
         }
-        catch (UnauthorizedAccessException ex)
+        catch (UnauthorizedAccessException)
         {
-            SetAlert(ex.Message, MessageBoxRenderStyle.Danger);
+            SetAlert("La sesión expiró. Vuelve a iniciar sesión.", MessageBoxRenderStyle.Danger);
         }
-        catch (Exception ex)
+        catch (Exception)
         {
-            SetAlert($"Error al cargar bancos: {ex.Message}", MessageBoxRenderStyle.Danger);
+            SetAlert("No se pudieron cargar los bancos.", MessageBoxRenderStyle.Danger);
         }
     }
 
@@ -335,7 +332,7 @@
         catch (Exception ex)
         {
             consolidado = false;
-            SetAlert($"Error al cargar configuracion de bancos: {ex.Message}", MessageBoxRenderStyle.Warning);
+            SetAlert("No se pudo cargar la configuración de bancos.", MessageBoxRenderStyle.Warning);
         }
     }
 
@@ -360,7 +357,7 @@
         catch (Exception ex)
         {
             monedas = new List<BanMonedaLookupDto>();
-            SetAlert($"Error al cargar monedas: {ex.Message}", MessageBoxRenderStyle.Warning);
+            SetAlert("No se pudieron cargar las monedas.", MessageBoxRenderStyle.Warning);
         }
     }
 
@@ -385,7 +382,7 @@
         catch (Exception ex)
         {
             cuentasContables = new List<CuentaContableLookupDto>();
-            SetAlert($"Error al cargar cuentas contables: {ex.Message}", MessageBoxRenderStyle.Warning);
+            SetAlert("No se pudieron cargar las cuentas contables.", MessageBoxRenderStyle.Warning);
         }
     }
 

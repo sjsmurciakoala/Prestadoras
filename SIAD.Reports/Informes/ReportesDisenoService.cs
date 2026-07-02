@@ -42,7 +42,39 @@ public sealed class ReportesDisenoService : IReportesDisenoService
             "Contabilidad",
             "bi bi-graph-up-arrow",
             50,
-            ReportesWebConstants.CodigoDatasetEstadoResultados)
+            ReportesWebConstants.CodigoDatasetEstadoResultados),
+        new(
+            ReportesWebConstants.CodigoReporteTransaccionesPeriodo,
+            "Transacciones por periodo",
+            "Plantilla base del total control de transacciones por periodo.",
+            "Facturacion",
+            "bi bi-file-earmark-spreadsheet",
+            60,
+            ReportesWebConstants.CodigoDatasetTransaccionesPeriodo),
+        new(
+            ReportesWebConstants.CodigoReporteSaldosAguaPotableCiclo,
+            "Saldos de agua potable por ciclo",
+            "Plantilla base de saldos de agua potable agrupados por ciclo.",
+            "Medicion",
+            "bi bi-droplet-half",
+            97,
+            ReportesWebConstants.CodigoDatasetSaldosAguaPotableCiclo),
+        new(
+            ReportesWebConstants.CodigoReporteSumarialTarifarioMedicion,
+            "Sumarial tarifario Medicion por periodo",
+            "Plantilla base de resumen sumarial de conexiones, consumos y valor de agua por rangos de tarifas.",
+            "Medicion",
+            "bi bi-file-earmark-bar-graph",
+            160,
+            ReportesWebConstants.CodigoDatasetSumarialTarifarioMedicion),
+        new(
+            ReportesWebConstants.CodigoReporteSumarialTarifasNoMedido,
+            "Sumarial de tarifas clientes no medido por periodo",
+            "Plantilla base de resumen sumarial de tarifas para clientes sin medidor del periodo.",
+            "Medicion",
+            "bi bi-file-earmark-bar-graph-fill",
+            161,
+            ReportesWebConstants.CodigoDatasetSumarialTarifasNoMedido)
     ];
 
     private readonly SiadDbContext _context;
@@ -131,6 +163,11 @@ public sealed class ReportesDisenoService : IReportesDisenoService
             }
 
             var summary = await LoadLayoutSummaryAsync(companyId, catalogo.informe_id, ct);
+            if (summary is null || !summary.DraftVersion.HasValue)
+            {
+                await _draftRegeneration.EnsureDraftLayoutAsync(companyId, normalizedCode, "reporteria-bootstrap", ct);
+                summary = await LoadLayoutSummaryAsync(companyId, catalogo.informe_id, ct);
+            }
             var currentLayout = await LoadCurrentDesignerLayoutInfoAsync(companyId, catalogo.informe_id, ct);
             var datasetStatus = await LoadDatasetStatusAsync(companyId, catalogo.consulta_clave, ct);
             return BuildDetailItem(catalogo, summary, BuildRegenerationStatus(catalogo.consulta_clave, currentLayout, datasetStatus));
@@ -253,11 +290,21 @@ public sealed class ReportesDisenoService : IReportesDisenoService
 
             await using var transaction = await _context.Database.BeginTransactionAsync(ct);
 
-            foreach (var published in layouts.Where(x => x.estado == ReportesWebConstants.LayoutStatus.Published))
+            var publishedLayouts = layouts
+                .Where(x => x.estado == ReportesWebConstants.LayoutStatus.Published)
+                .ToList();
+
+            foreach (var published in publishedLayouts)
             {
                 published.estado = ReportesWebConstants.LayoutStatus.Archived;
                 published.updated_at = now;
                 published.updated_by = actor;
+            }
+
+            if (publishedLayouts.Count > 0)
+            {
+                // Libera la restriccion unica parcial antes de promover el borrador.
+                await _context.SaveChangesAsync(ct);
             }
 
             draft.estado = ReportesWebConstants.LayoutStatus.Published;

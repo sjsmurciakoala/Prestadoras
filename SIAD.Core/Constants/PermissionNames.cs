@@ -8,6 +8,7 @@ public static class PermissionModules
     public const string Ventas = "ventas";
     public const string Bancos = "bancos";
     public const string Compras = "compras";
+    public const string Proveedores = "proveedores";
     public const string Inventario = "inventario";
     public const string Contabilidad = "contabilidad";
     public const string Reporteria = "reporteria";
@@ -18,6 +19,7 @@ public static class PermissionModules
         Ventas,
         Bancos,
         Compras,
+        Proveedores,
         Inventario,
         Contabilidad,
         Reporteria,
@@ -34,6 +36,7 @@ public static class PermissionResources
         public const string Cobranza = "cobranza";
         public const string FacturacionMiscelaneos = "facturacion_miscelaneos";
         public const string NotasCreditoDebito = "notas_credito_debito";
+        public const string Caja = "caja";
     }
 }
 
@@ -52,6 +55,7 @@ public static class PermissionNames
             public const string Create = "module.ventas.clientes.create";
             public const string Edit = "module.ventas.clientes.edit";
             public const string Delete = "module.ventas.clientes.delete";
+            public const string EditarNoCortable = "module.ventas.clientes.no_cortable.edit";
         }
 
         public static class CaptacionPagos
@@ -85,6 +89,15 @@ public static class PermissionNames
             public const string Edit = "module.ventas.notas_credito_debito.edit";
             public const string Delete = "module.ventas.notas_credito_debito.delete";
         }
+
+        public static class Caja
+        {
+            public const string View = "module.ventas.caja.view";
+            public const string Create = "module.ventas.caja.create";
+            public const string Edit = "module.ventas.caja.edit";
+            public const string Delete = "module.ventas.caja.delete";
+            public const string AbonoBanco = "module.ventas.caja.abono.banco";
+        }
     }
 
     public static class Bancos
@@ -101,6 +114,14 @@ public static class PermissionNames
         public const string Create = "module.compras.create";
         public const string Edit = "module.compras.edit";
         public const string Delete = "module.compras.delete";
+    }
+
+    public static class Proveedores
+    {
+        public const string View = "module.proveedores.view";
+        public const string Create = "module.proveedores.create";
+        public const string Edit = "module.proveedores.edit";
+        public const string Delete = "module.proveedores.delete";
     }
 
     public static class Inventario
@@ -140,6 +161,7 @@ public static class PermissionNames
         public const string Ventas = "module.ventas";
         public const string Bancos = "module.bancos";
         public const string Compras = "module.compras";
+        public const string Proveedores = "module.proveedores";
         public const string Inventario = "module.inventario";
         public const string Contabilidad = "module.contabilidad";
         public const string Reporteria = "module.reporteria";
@@ -164,6 +186,10 @@ public static class PermissionNames
             Compras.Create,
             Compras.Edit,
             Compras.Delete,
+            Proveedores.View,
+            Proveedores.Create,
+            Proveedores.Edit,
+            Proveedores.Delete,
             Inventario.View,
             Inventario.Create,
             Inventario.Edit,
@@ -185,6 +211,7 @@ public static class PermissionNames
             Ventas.Clientes.Create,
             Ventas.Clientes.Edit,
             Ventas.Clientes.Delete,
+            Ventas.Clientes.EditarNoCortable,
             Ventas.CaptacionPagos.View,
             Ventas.CaptacionPagos.Create,
             Ventas.CaptacionPagos.Edit,
@@ -200,7 +227,12 @@ public static class PermissionNames
             Ventas.NotasCreditoDebito.View,
             Ventas.NotasCreditoDebito.Create,
             Ventas.NotasCreditoDebito.Edit,
-            Ventas.NotasCreditoDebito.Delete
+            Ventas.NotasCreditoDebito.Delete,
+            Ventas.Caja.View,
+            Ventas.Caja.Create,
+            Ventas.Caja.Edit,
+            Ventas.Caja.Delete,
+            Ventas.Caja.AbonoBanco
         };
 
         list.AddRange(PermissionEndpointCatalog.All.Select(e => e.Permission));
@@ -228,6 +260,10 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Compras.Create, [Compras.Create]),
         new PermissionPolicyDefinition(Compras.Edit, [Compras.Edit]),
         new PermissionPolicyDefinition(Compras.Delete, [Compras.Delete]),
+        new PermissionPolicyDefinition(Proveedores.View, [Proveedores.View, Legacy.Proveedores]),
+        new PermissionPolicyDefinition(Proveedores.Create, [Proveedores.Create]),
+        new PermissionPolicyDefinition(Proveedores.Edit, [Proveedores.Edit]),
+        new PermissionPolicyDefinition(Proveedores.Delete, [Proveedores.Delete]),
         new PermissionPolicyDefinition(Inventario.View, [Inventario.View, Legacy.Inventario]),
         new PermissionPolicyDefinition(Inventario.Create, [Inventario.Create]),
         new PermissionPolicyDefinition(Inventario.Edit, [Inventario.Edit]),
@@ -249,6 +285,7 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Ventas.Clientes.Create, [Ventas.Clientes.Create, Ventas.Create]),
         new PermissionPolicyDefinition(Ventas.Clientes.Edit, [Ventas.Clientes.Edit, Ventas.Edit]),
         new PermissionPolicyDefinition(Ventas.Clientes.Delete, [Ventas.Clientes.Delete, Ventas.Delete]),
+        new PermissionPolicyDefinition(Ventas.Clientes.EditarNoCortable, [Ventas.Clientes.EditarNoCortable]),
         new PermissionPolicyDefinition(Ventas.CaptacionPagos.View, [Ventas.CaptacionPagos.View, Ventas.View, Legacy.Ventas]),
         new PermissionPolicyDefinition(Ventas.CaptacionPagos.Create, [Ventas.CaptacionPagos.Create, Ventas.Create]),
         new PermissionPolicyDefinition(Ventas.CaptacionPagos.Edit, [Ventas.CaptacionPagos.Edit, Ventas.Edit]),
@@ -264,7 +301,12 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Ventas.NotasCreditoDebito.View, [Ventas.NotasCreditoDebito.View, Ventas.View, Legacy.Ventas]),
         new PermissionPolicyDefinition(Ventas.NotasCreditoDebito.Create, [Ventas.NotasCreditoDebito.Create, Ventas.Create]),
         new PermissionPolicyDefinition(Ventas.NotasCreditoDebito.Edit, [Ventas.NotasCreditoDebito.Edit, Ventas.Edit]),
-        new PermissionPolicyDefinition(Ventas.NotasCreditoDebito.Delete, [Ventas.NotasCreditoDebito.Delete, Ventas.Delete])
+        new PermissionPolicyDefinition(Ventas.NotasCreditoDebito.Delete, [Ventas.NotasCreditoDebito.Delete, Ventas.Delete]),
+        new PermissionPolicyDefinition(Ventas.Caja.View, [Ventas.Caja.View, Ventas.View, Legacy.Ventas]),
+        new PermissionPolicyDefinition(Ventas.Caja.Create, [Ventas.Caja.Create, Ventas.Create]),
+        new PermissionPolicyDefinition(Ventas.Caja.Edit, [Ventas.Caja.Edit, Ventas.Edit]),
+        new PermissionPolicyDefinition(Ventas.Caja.Delete, [Ventas.Caja.Delete, Ventas.Delete]),
+        new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create])
         };
 
         foreach (var endpoint in PermissionEndpointCatalog.All)

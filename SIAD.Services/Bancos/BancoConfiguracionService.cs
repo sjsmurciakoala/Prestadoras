@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Bancos;
+using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 using SIAD.Data;
 
@@ -42,6 +43,21 @@ public sealed class BancoConfiguracionService : IBancoConfiguracionService
         MapToEntity(entity, dto, user);
         await dbContext.SaveChangesAsync(ct);
         return MapToDto(entity);
+    }
+
+    public async Task<IReadOnlyList<CuentaContableLookupDto>> ListarCuentasMayoresAsync(long companyId, CancellationToken ct = default)
+    {
+        return await dbContext.con_plan_cuentas
+            .AsNoTracking()
+            .Where(c => c.company_id == companyId && !c.allows_posting)
+            .OrderBy(c => c.code)
+            .Select(c => new CuentaContableLookupDto
+            {
+                AccountId = c.account_id,
+                Code = c.code,
+                Description = c.name
+            })
+            .ToListAsync(ct);
     }
 
     private static BancoConfiguracionDto MapToDto(ban_config entity)

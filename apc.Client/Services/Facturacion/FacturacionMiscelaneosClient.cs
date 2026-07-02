@@ -105,6 +105,26 @@ public class FacturacionMiscelaneosClient
             .ToList();
     }
 
+    public async Task<IReadOnlyList<MiscelaneoConsultaDto>> ConsultarAsync(
+        DateOnly? fechaDesde, DateOnly? fechaHasta, string? clienteClave,
+        CancellationToken ct = default)
+    {
+        var qs = new List<string>();
+        if (fechaDesde.HasValue)
+            qs.Add($"FechaDesde={fechaDesde.Value:yyyy-MM-dd}");
+        if (fechaHasta.HasValue)
+            qs.Add($"FechaHasta={fechaHasta.Value:yyyy-MM-dd}");
+        if (!string.IsNullOrWhiteSpace(clienteClave))
+            qs.Add($"ClienteClave={Uri.EscapeDataString(clienteClave.Trim())}");
+
+        var url = qs.Count > 0
+            ? $"api/facturacion/miscelaneos/consulta?{string.Join("&", qs)}"
+            : "api/facturacion/miscelaneos/consulta";
+
+        var result = await _http.GetFromJsonAsync<List<MiscelaneoConsultaDto>>(url, ct);
+        return result ?? new List<MiscelaneoConsultaDto>();
+    }
+
     private static async Task<ResponseModelDto> ReadResponseAsync(HttpResponseMessage response, CancellationToken ct)
     {
         ResponseModelDto? payload = null;

@@ -1,0 +1,180 @@
+.page-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-title {
+    font-weight: 800;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+.modern-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.02);
+    padding: 1.5rem;
+}
+
+.btn-modern {
+    font-weight: 600;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+}
+
+.context-grid {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+}
+
+.context-item {
+    border: 1px solid #e9ecef;
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    background-color: #fff;
+}
+
+.context-label {
+    font-size: 0.8rem;
+    color: #6c757d;
+    margin-bottom: 0.3rem;
+}
+
+.context-value {
+    font-weight: 700;
+    color: #2c3e50;
+}
+
+.activity-options {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 0.9rem;
+}
+
+.activity-option {
+    border: 1px solid #d9dee4;
+    border-radius: 10px;
+    padding: 0.9rem 1rem;
+    text-align: left;
+    background-color: #ffffff;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.activity-option:hover {
+    border-color: #2f80ed;
+    box-shadow: 0 3px 14px rgba(47, 128, 237, 0.16);
+}
+
+.activity-option.selected {
+    border-color: #2f80ed;
+    background-color: #f4f9ff;
+}
+
+.activity-title {
+    font-weight: 700;
+    color: #1f2d3a;
+    margin-bottom: 0.2rem;
+}
+
+.activity-subtitle {
+    font-size: 0.86rem;
+    color: #5b6b7a;
+}
+
+.badge-status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 92px;
+    padding: 0.28rem 0.55rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+}
+
+.badge-status.pending {
+    color: #7a5b00;
+    background-color: #fff4cc;
+    border-color: #ffe08a;
+}
+
+.badge-status.active {
+    color: #0f5132;
+    background-color: #d1f2de;
+    border-color: #a6dfbf;
+}
+
+.badge-status.inactive {
+    color: #721c24;
+    background-color: #f8d7da;
+    border-color: #f1aeb5;
+}
+
+::deep .grid-solicitudes {
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+::deep .grid-solicitudes .dxg-headerrow,
+::deep .grid-solicitudes .dxbs-grid-header-row {
+    background: #f2f4f7;
+}
+
+::deep .grid-solicitudes th,
+::deep .grid-solicitudes .dxg-headerrow td {
+    font-weight: 700;
+    color: #3c4a5a;
+    border-bottom: 1px solid #e3e8ef;
+}
+
+::deep .grid-solicitudes td {
+    border-bottom: 1px solid #eef2f6;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .header-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .modern-card {
+        padding: 1rem;
+    }
+
+    .context-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .activity-options {
+        grid-template-columns: 1fr;
+    }
+}

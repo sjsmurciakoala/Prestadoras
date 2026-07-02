@@ -27,6 +27,10 @@ public class CatalogosController : ControllerBase
     public async Task<IActionResult> GetBarrios(CancellationToken ct)
         => Ok(await _catalogosService.GetBarriosAsync(ct));
 
+    [HttpGet("clases-medidor")]
+    public async Task<IActionResult> GetClasesMedidor(CancellationToken ct)
+        => Ok(await _catalogosService.GetClasesMedidorAsync(ct));
+
     [HttpGet("servicios")]
     public async Task<IActionResult> GetServicios(CancellationToken ct)
         => Ok(await _catalogosService.GetServiciosAsync(ct));

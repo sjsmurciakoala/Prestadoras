@@ -1,0 +1,125 @@
+.page-container {
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.25rem;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 1rem;
+    flex-wrap: wrap;
+}
+
+.page-title {
+    margin: 0;
+    font-size: 1.9rem;
+    font-weight: 700;
+    color: #17324d;
+}
+
+.page-subtitle {
+    margin: 0.35rem 0 0;
+    color: #5f6f82;
+}
+
+.informes-options-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(260px, 420px));
+    gap: 1rem;
+}
+
+.informe-option-card {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    padding: 1.25rem;
+    border: 1px solid rgba(23, 50, 77, 0.1);
+    border-radius: 8px;
+    background: #fff;
+    box-shadow: 0 14px 30px rgba(23, 50, 77, 0.08);
+    min-height: 220px;
+    text-decoration: none;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.informe-option-card:hover,
+.informe-option-card:focus-visible {
+    transform: translateY(-2px);
+    box-shadow: 0 18px 36px rgba(23, 50, 77, 0.12);
+    border-color: rgba(16, 97, 140, 0.35);
+}
+
+.informe-option-card__header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.75rem;
+}
+
+.informe-option-card__icon {
+    width: 44px;
+    height: 44px;
+    border-radius: 8px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    background: #e9f4f8;
+    color: #10618c;
+    font-size: 1.35rem;
+}
+
+.informe-option-card__status {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-height: 28px;
+    padding: 0 0.75rem;
+    border-radius: 999px;
+    background: rgba(16, 97, 140, 0.1);
+    color: #10618c;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+}
+
+.informe-option-card__title {
+    margin: 0;
+    color: #17324d;
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+.informe-option-card__description {
+    margin: 0.6rem 0 0;
+    color: #5f6f82;
+    line-height: 1.45;
+}
+
+@media (max-width: 768px) {
+    .page-container {
+        padding: 1rem;
+    }
+
+    .page-title {
+        font-size: 1.5rem;
+    }
+
+    .informes-options-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.category-header {
+    font-size: 1.25rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    display: flex;
+    align-items: center;
+    border-bottom: 2px solid rgba(23, 50, 77, 0.08);
+    padding-bottom: 0.5rem;
+    color: #17324d !important;
+}

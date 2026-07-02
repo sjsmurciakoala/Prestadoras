@@ -117,7 +117,35 @@
   <resheader name="writer">
     <value>System.Resources.ResXResourceWriter, System.Windows.Forms, Version=4.0.0.0, Culture=neutral, PublicKeyToken=b77a5c561934e089</value>
   </resheader>
+  <data name="customSqlQuery4.Sql" xml:space="preserve">
+    <value>SELECT ban_kardex_id
+     , CONCAT(ban.nombre, ' - ', bc.numero_cuenta) AS Cuenta
+     , btt.nombre AS Tipo_Transaccion
+     , bm.descripcion 
+     , fecha_movimiento
+     , ban_kdx.descripcion AS Descripcion_Transaccion
+     , referencia
+     , monto
+     , tasa_cambio
+     , CONCAT(cpt.code, ' ',cpt.description) AS Ctda_Con
+     , cpt.code
+     , cpt.description
+     , ptda_dtl.description descripcion_Cuenta_Contable
+     , ptda_dtl.source_document 
+     , ptda_dtl.debit_amount
+     , ptda_dtl.credit_amount
+FROM public.ban_kardex ban_kdx
+     INNER JOIN public.con_partida_hdr ptda_hdr ON ptda_hdr.poliza_id = ban_kdx.partida_cuenta_id 
+     INNER JOIN public.con_partida_dtl ptda_dtl ON ptda_dtl.poliza_id = ptda_hdr.poliza_id
+     INNER JOIN public.con_plan_cuentas cpt ON cpt.account_id = ptda_dtl.account_id 
+     INNER JOIN public.ban_tipos_transacciones btt ON btt.ban_tipo_transaccion_id = ban_kdx.id_tipo_transaccion
+     INNER JOIN public.ban_banco ban ON ban.ban_banco_id = ban_kdx.ban_banco_id
+     INNER JOIN public.ban_cuenta bc ON bc.banco_cuenta_id = ban_kdx.banco_cuenta_id 
+     INNER JOIN public.ban_moneda bm ON bm.ban_moneda_id = ban_kdx.ban_moneda_id
+WHERE ban_kdx.company_id = @CompaniaID
+  AND ban_kardex_id = @KdxId;</value>
+  </data>
   <data name="sqlDataSource1.ResultSchemaSerializable" xml:space="preserve">
-    <value>PERhdGFTZXQgTmFtZT0ic3FsRGF0YVNvdXJjZTEiPjxWaWV3IE5hbWU9IlF1ZXJ5Ij48RmllbGQgTmFtZT0iYmFuX2thcmRleF9pZCIgVHlwZT0iSW50NjQiIC8+PEZpZWxkIE5hbWU9ImNvbXBhbnlfaWQiIFR5cGU9IkludDY0IiAvPjxGaWVsZCBOYW1lPSJjb3JyZWxhdGl2b190X3RyYW5zYWNjIiBUeXBlPSJTdHJpbmciIC8+PEZpZWxkIE5hbWU9ImJhbmNvX2N1ZW50YV9pZCIgVHlwZT0iSW50NjQiIC8+PEZpZWxkIE5hbWU9ImJhbl9iYW5jb19pZCIgVHlwZT0iSW50NjQiIC8+PEZpZWxkIE5hbWU9ImJhbl9tb25lZGFfaWQiIFR5cGU9IkludDY0IiAvPjxGaWVsZCBOYW1lPSJpZF90aXBvX3RyYW5zYWNjaW9uIiBUeXBlPSJJbnQ2NCIgLz48RmllbGQgTmFtZT0iZmVjaGFfbW92aW1pZW50byIgVHlwZT0iRGF0ZVRpbWUiIC8+PEZpZWxkIE5hbWU9ImZlY2hhX3JlZ2lzdHJvIiBUeXBlPSJEYXRlVGltZSIgLz48RmllbGQgTmFtZT0iZmVjaGFfY29uY2lsaWFjaW9uIiBUeXBlPSJEYXRlVGltZSIgLz48RmllbGQgTmFtZT0idXN1YXJpb19jb25jaWxpYWNpb24iIFR5cGU9IlN0cmluZyIgLz48RmllbGQgTmFtZT0iZXN0YWRvX2NvbmNpbGlhY2lvbiIgVHlwZT0iU3RyaW5nIiAvPjxGaWVsZCBOYW1lPSJkZXNjcmlwY2lvbiIgVHlwZT0iU3RyaW5nIiAvPjxGaWVsZCBOYW1lPSJyZWZlcmVuY2lhIiBUeXBlPSJTdHJpbmciIC8+PEZpZWxkIE5hbWU9Im1vbnRvIiBUeXBlPSJEZWNpbWFsIiAvPjxGaWVsZCBOYW1lPSJzYWxkbyIgVHlwZT0iRGVjaW1hbCIgLz48RmllbGQgTmFtZT0iZXN0YWRvIiBUeXBlPSJJbnQzMiIgLz48RmllbGQgTmFtZT0idGFzYV9jYW1iaW8iIFR5cGU9IkRlY2ltYWwiIC8+PEZpZWxkIE5hbWU9InBhcnRpZGFfY3VlbnRhX2lkIiBUeXBlPSJJbnQ2NCIgLz48RmllbGQgTmFtZT0iY3JlYXRlZF9hdCIgVHlwZT0iRGF0ZVRpbWUiIC8+PEZpZWxkIE5hbWU9ImNyZWF0ZWRfYnkiIFR5cGU9IlN0cmluZyIgLz48RmllbGQgTmFtZT0idXBkYXRlZF9hdCIgVHlwZT0iRGF0ZVRpbWUiIC8+PEZpZWxkIE5hbWU9InVwZGF0ZWRfYnkiIFR5cGU9IlN0cmluZyIgLz48L1ZpZXc+PC9EYXRhU2V0Pg==</value>
+    <value>PERhdGFTZXQgTmFtZT0ic3FsRGF0YVNvdXJjZTEiPjxWaWV3IE5hbWU9IlF1ZXJ5Ij48RmllbGQgTmFtZT0iYmFuX2thcmRleF9pZCIgVHlwZT0iSW50NjQiIC8+PEZpZWxkIE5hbWU9ImN1ZW50YSIgVHlwZT0iU3RyaW5nIiAvPjxGaWVsZCBOYW1lPSJ0aXBvX3RyYW5zYWNjaW9uIiBUeXBlPSJTdHJpbmciIC8+PEZpZWxkIE5hbWU9ImRlc2NyaXBjaW9uIiBUeXBlPSJTdHJpbmciIC8+PEZpZWxkIE5hbWU9ImZlY2hhX21vdmltaWVudG8iIFR5cGU9IkRhdGVUaW1lIiAvPjxGaWVsZCBOYW1lPSJkZXNjcmlwY2lvbl90cmFuc2FjY2lvbiIgVHlwZT0iU3RyaW5nIiAvPjxGaWVsZCBOYW1lPSJyZWZlcmVuY2lhIiBUeXBlPSJTdHJpbmciIC8+PEZpZWxkIE5hbWU9Im1vbnRvIiBUeXBlPSJEZWNpbWFsIiAvPjxGaWVsZCBOYW1lPSJ0YXNhX2NhbWJpbyIgVHlwZT0iRGVjaW1hbCIgLz48RmllbGQgTmFtZT0iY3RkYV9jb24iIFR5cGU9IlN0cmluZyIgLz48RmllbGQgTmFtZT0iY29kZSIgVHlwZT0iU3RyaW5nIiAvPjxGaWVsZCBOYW1lPSJkZXNjcmlwdGlvbiIgVHlwZT0iU3RyaW5nIiAvPjxGaWVsZCBOYW1lPSJkZXNjcmlwY2lvbl9jdWVudGFfY29udGFibGUiIFR5cGU9IlN0cmluZyIgLz48RmllbGQgTmFtZT0ic291cmNlX2RvY3VtZW50IiBUeXBlPSJTdHJpbmciIC8+PEZpZWxkIE5hbWU9ImRlYml0X2Ftb3VudCIgVHlwZT0iRGVjaW1hbCIgLz48RmllbGQgTmFtZT0iY3JlZGl0X2Ftb3VudCIgVHlwZT0iRGVjaW1hbCIgLz48L1ZpZXc+PC9EYXRhU2V0Pg==</value>
   </data>
 </root>

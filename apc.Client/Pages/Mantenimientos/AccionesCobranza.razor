@@ -1,0 +1,237 @@
+@page "/mantenimientos/acciones-cobranza"
+@attribute [Authorize]
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Cobranza
+@using apc.Client.Services.Facturacion
+
+@inject CobranzaClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Acciones de Cobranza</PageTitle>
+
+<DxToastProvider Name="AccionesToast" MaxToastCount="4" />
+
+<div class="page-container">
+    <div class="header-section mb-3">
+        <div>
+            <h2 class="page-title">Acciones de cobranza</h2>
+            <p class="page-subtitle">Catálogo de tipos de acción para el módulo de cobranza.</p>
+        </div>
+        <div class="header-actions">
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="CargarAsync"
+                      Enabled="@(!isSaving)" />
+            <DxButton Text="Nueva acción"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="AbrirNuevo" />
+        </div>
+    </div>
+
+    @if (isLoading)
+    {
+        <DxLoadingPanel Visible="true" Text="Cargando..." />
+        <div style="height:60px"></div>
+    }
+    else
+    {
+        <div class="modern-card">
+            <DxGrid Data="@items"
+                    KeyFieldName="@nameof(AccionCobranzaCrudDto.CodAccion)"
+                    ShowFilterRow="true"
+                    PageSize="20"
+                    SizeMode="SizeMode.Small"
+                    CssClass="border-0">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(AccionCobranzaCrudDto.CodAccion)" Caption="Código" Width="90px"
+                                      TextAlignment="GridTextAlignment.Center" />
+                    <DxGridDataColumn FieldName="@nameof(AccionCobranzaCrudDto.Nombre)" Caption="Nombre" MinWidth="200" />
+                    <DxGridDataColumn FieldName="@nameof(AccionCobranzaCrudDto.Activo)" Caption="Estado" Width="110px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AccionCobranzaCrudDto a)
+                            {
+                                <span class="cai-badge @(a.Activo ? "cai-badge--vigente" : "cai-badge--inactivo")">
+                                    @(a.Activo ? "Activo" : "Inactivo")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(AccionCobranzaCrudDto.GeneraDocumento)" Caption="Documento" Width="200px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AccionCobranzaCrudDto a && a.GeneraDocumento)
+                            {
+                                <span class="cai-badge cai-badge--vigente">
+                                    <i class="bi bi-file-earmark-text me-1"></i>@NombreDocumento(a.DocumentoCodigo)
+                                </span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="" Width="80px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AccionCobranzaCrudDto a)
+                            {
+                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-pencil-square fs-5"
+                                          Tooltip="Editar"
+                                          Click="@(() => AbrirEditar(a))" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="text-center p-5 text-muted">
+                        <i class="bi bi-journal-check fs-1 d-block mb-2"></i>
+                        <h5 class="fw-bold text-dark">No hay acciones registradas</h5>
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    }
+</div>
+
+<DxPopup HeaderText="@popupHeader"
+         @bind-Visible="popupVisible"
+         Width="min(480px, 96vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Nombre" ColSpanMd="12" Context="fi_nombre">
+                <DxTextBox @bind-Text="formNombre"
+                           NullText="Descripción de la acción"
+                           MaxLength="150" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado" ColSpanMd="12" Context="fi_activo">
+                <DxCheckBox @bind-Checked="formActivo">Activo</DxCheckBox>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Documento" ColSpanMd="12" Context="fi_gendoc">
+                <DxCheckBox @bind-Checked="formGeneraDocumento">Genera documento al registrarse</DxCheckBox>
+            </DxFormLayoutItem>
+            @if (formGeneraDocumento)
+            {
+                <DxFormLayoutItem Caption="Documento a generar" ColSpanMd="12" Context="fi_doccod">
+                    <DxComboBox Data="documentosDisponibles"
+                                @bind-Value="formDocumentoCodigo"
+                                ValueFieldName="Codigo"
+                                TextFieldName="Nombre"
+                                NullText="— Seleccione documento —"
+                                CssClass="w-100" />
+                </DxFormLayoutItem>
+            }
+        </DxFormLayout>
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => popupVisible = false)" />
+            <DxButton Text="Guardar"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(PuedeGuardar && !isSaving)"
+                      Click="GuardarAsync" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private List<AccionCobranzaCrudDto> items = [];
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool popupVisible;
+    private string popupHeader = "Nueva acción";
+
+    // Form fields
+    private int? formCodAccion;
+    private string formNombre = string.Empty;
+    private bool formActivo = true;
+    private bool formGeneraDocumento;
+    private string? formDocumentoCodigo;
+
+    private static readonly IReadOnlyList<DocumentoCobranzaOpcionDto> documentosDisponibles =
+        DocumentosCobranzaCodigos.Disponibles;
+
+    private bool PuedeGuardar =>
+        !string.IsNullOrWhiteSpace(formNombre) &&
+        (!formGeneraDocumento || !string.IsNullOrWhiteSpace(formDocumentoCodigo));
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        try
+        {
+            items = ((await Client.ListarAccionesCrudAsync()) ?? []).ToList();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No se pudieron cargar las acciones: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally { isLoading = false; }
+    }
+
+    private void AbrirNuevo()
+    {
+        popupHeader = "Nueva acción de cobranza";
+        formCodAccion = null;
+        formNombre = string.Empty;
+        formActivo = true;
+        formGeneraDocumento = false;
+        formDocumentoCodigo = null;
+        popupVisible = true;
+    }
+
+    private void AbrirEditar(AccionCobranzaCrudDto a)
+    {
+        popupHeader = $"Editar acción — {a.Nombre}";
+        formCodAccion = a.CodAccion;
+        formNombre = a.Nombre;
+        formActivo = a.Activo;
+        formGeneraDocumento = a.GeneraDocumento;
+        formDocumentoCodigo = a.DocumentoCodigo;
+        popupVisible = true;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (!PuedeGuardar) return;
+        isSaving = true;
+        try
+        {
+            await Client.GuardarAccionCrudAsync(new AccionCobranzaSaveDto(
+                formCodAccion, formNombre, formActivo, formGeneraDocumento, formDocumentoCodigo));
+            popupVisible = false;
+            ShowToast("Éxito", "Acción guardada correctamente.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally { isSaving = false; }
+    }
+
+    private static string NombreDocumento(string? codigo) =>
+        documentosDisponibles.FirstOrDefault(d => d.Codigo == codigo)?.Nombre ?? (codigo ?? "Documento");
+
+    private void ShowToast(string title, string message, ToastRenderStyle style) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "AccionesToast",
+            Title = title,
+            Text = message,
+            RenderStyle = style
+        });
+}

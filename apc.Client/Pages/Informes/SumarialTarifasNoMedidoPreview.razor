@@ -1,0 +1,180 @@
+﻿@page "/informes/medicion/sumarial-tarifas-no-medido"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Globalization
+@using DevExpress.Blazor.Reporting
+@using SIAD.Core.Constants
+@using apc.Client.Services.Informes
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Sumarial de tarifas clientes no medido por periodo</PageTitle>
+
+<div class="page-container reporte-sumarial-tarifas-no-medido">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Sumarial de tarifas clientes no medido por periodo</h2>
+            <p class="page-subtitle">Configure el rango de fechas y genere el reporte sumarial de tarifas para clientes sin medidor.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/medicion"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <AuthorizeView Policy="@PermissionNames.Reporteria.Edit">
+                <Authorized>
+                    <DxButton Text="Diseñar"
+                              Click="@(() => NavigationManager.NavigateTo(ReportesWebConstants.BuildDesignerRoute(ReportesWebConstants.CodigoReporteSumarialTarifasNoMedido)))"
+                              IconCssClass="bi bi-pencil-square"
+                              RenderStyle="ButtonRenderStyle.Secondary" />
+                </Authorized>
+            </AuthorizeView>
+            <DxButton Text="Limpiar"
+                      Click="LimpiarFiltros"
+                      IconCssClass="bi bi-eraser"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Enabled="@(!isLoading)" />
+            <DxButton Text="Generar reporte"
+                      Click="GenerarReporte"
+                      IconCssClass="bi bi-file-earmark-play"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Enabled="@(!isLoading)" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        <DxFormLayout ColCountMd="12">
+            <DxFormLayoutItem Caption="Fecha desde" ColSpanMd="4">
+                <DxDateEdit @bind-Date="filtro.FechaDesde"
+                             NullText="Seleccione fecha"
+                             DisplayFormat="dd/MM/yyyy" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha hasta" ColSpanMd="4">
+                <DxDateEdit @bind-Date="filtro.FechaHasta"
+                             NullText="Seleccione fecha"
+                             DisplayFormat="dd/MM/yyyy" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Reporte" ColSpanMd="4">
+                <DxTextBox Text="Sumarial de tarifas clientes no medido por periodo"
+                           ReadOnly="true"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card p-3 viewer-shell">
+        @if (isLoading)
+        {
+            <div class="d-flex justify-content-center py-5">
+                <DxWaitIndicator Visible="true" />
+            </div>
+        }
+        else if (string.IsNullOrWhiteSpace(reportName))
+        {
+            <div class="empty-preview">
+                <div class="empty-preview__icon">
+                    <i class="bi bi-file-earmark-bar-graph-fill"></i>
+                </div>
+                <h3 class="empty-preview__title">Reporte no generado</h3>
+                <p class="empty-preview__description">Defina los filtros y pulse Generar reporte para abrir el layout DevExpress publicado.</p>
+            </div>
+        }
+        else
+        {
+            <DxDocumentViewer ReportName="@reportName"
+                               Height="calc(100vh - 320px)"
+                               Width="100%" />
+        }
+    </div>
+</div>
+
+@code {
+    private FiltroSumarialTarifasNoMedido filtro = BuildDefaultFilter();
+    private bool isLoading;
+    private string? errorMessage;
+    private string? reportName;
+
+    private void GenerarReporte()
+    {
+        if (!ValidarFiltros())
+        {
+            reportName = null;
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            reportName = BuildReportName();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void LimpiarFiltros()
+    {
+        filtro = BuildDefaultFilter();
+        errorMessage = null;
+        reportName = null;
+    }
+
+    private bool ValidarFiltros()
+    {
+        if (!filtro.FechaDesde.HasValue)
+        {
+            errorMessage = "La fecha desde es obligatoria.";
+            return false;
+        }
+
+        if (!filtro.FechaHasta.HasValue)
+        {
+            errorMessage = "La fecha hasta es obligatoria.";
+            return false;
+        }
+
+        if (filtro.FechaDesde.Value.Date > filtro.FechaHasta.Value.Date)
+        {
+            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            return false;
+        }
+
+        errorMessage = null;
+        return true;
+    }
+
+    private string BuildReportName()
+    {
+        var fechaDesde = filtro.FechaDesde!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        var fechaHasta = filtro.FechaHasta!.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+
+        return $"{ReportesWebConstants.CodigoReporteSumarialTarifasNoMedido}" +
+               $"?mode={Uri.EscapeDataString(ReportesWebConstants.LayoutMode.Published)}" +
+               $"&FechaDesde={Uri.EscapeDataString(fechaDesde)}" +
+               $"&FechaHasta={Uri.EscapeDataString(fechaHasta)}";
+    }
+
+    private static FiltroSumarialTarifasNoMedido BuildDefaultFilter()
+    {
+        var today = DateTime.Today;
+        return new FiltroSumarialTarifasNoMedido
+        {
+            FechaDesde = new DateTime(today.Year, today.Month, 1),
+            FechaHasta = today
+        };
+    }
+
+    private sealed class FiltroSumarialTarifasNoMedido
+    {
+        public DateTime? FechaDesde { get; set; }
+
+        public DateTime? FechaHasta { get; set; }
+    }
+}

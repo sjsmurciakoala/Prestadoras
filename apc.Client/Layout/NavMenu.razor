@@ -43,6 +43,10 @@
                         CssClass="@GroupClass("/proveedores")"
                         Attributes="@ItemAttrs("Proveedores")">
                 <Items>
+                    <DxMenuItem NavigateUrl="/proveedores" Text="Catalogo proveedores" title="Catalogo proveedores" />
+                    <DxMenuItem NavigateUrl="/proveedores/compromisos-proveedor" Text="Compromisos de proveedor" title="Compromisos de proveedor" />
+                    <DxMenuItem NavigateUrl="/proveedores/bancos" Text="Bancos de proveedor" title="Bancos de proveedor" />
+                    <DxMenuItem NavigateUrl="/proveedores/tipos" Text="Tipos de proveedor" title="Tipos de proveedor" />
                     <DxMenuItem NavigateUrl="/proveedores"
                                 Text="Catalogo proveedores"
                                 CssClass="@ActiveClass("/proveedores")"
@@ -162,6 +166,11 @@
                         IconCssClass="bi bi-collection"
                         CssClass="@ActiveClass("/facturacion/cobranza")"
                         Attributes="@ItemAttrs("Cobranza")" />
+            <DxMenuItem NavigateUrl="/facturacion/cobranza/clientes-cobros"
+                        Text="Clientes para cobros"
+                        IconCssClass="bi bi-people"
+                        CssClass="@ActiveClass("/facturacion/cobranza/clientes-cobros")"
+                        Attributes="@ItemAttrs("Clientes para cobros")" />
             <DxMenuItem NavigateUrl="/facturacion/captacion/reverso"
                         Text="Reversos"
                         IconCssClass="bi bi-arrow-counterclockwise"
@@ -244,6 +253,32 @@
                                 Attributes="@ItemAttrs("Partidas")" />
                 </Items>
             </DxMenuItem>
+            <AuthorizeView Policy="@AuthorizationPolicies.Contabilidad">
+                <Authorized>
+                    <DxMenuItem NavigateUrl="/presupuesto/configuraciones" Text="Presupuesto" IconCssClass="bi bi-cash-stack" title="Presupuesto" />
+                </Authorized>
+            </AuthorizeView>
+        </Items>
+    </DxMenu>
+
+    <div class="menu-section-label">CONFIGURACIÓN</div>
+    <DxMenu Orientation="Orientation.Vertical"
+            DisplayMode="MenuDisplayMode.Desktop"
+            DropDownActionMode="MenuDropDownActionMode.Click"
+            CollapseItemToIconMode="MenuCollapseItemToIconMode.None"
+            CollapseItemsToHamburgerMenu="false"
+            CssClass="custom-dx-menu">
+        <Items>
+            <DxMenuItem NavigateUrl="/mantenimientos/barrios"
+                        Text="Barrios"
+                        IconCssClass="bi bi-map"
+                        CssClass="@ActiveClass("/mantenimientos/barrios")"
+                        Attributes="@ItemAttrs("Barrios")" />
+            <DxMenuItem NavigateUrl="/mantenimientos/clases-medidor"
+                        Text="Clases de medidor"
+                        IconCssClass="bi bi-speedometer"
+                        CssClass="@ActiveClass("/mantenimientos/clases-medidor")"
+                        Attributes="@ItemAttrs("Clases de medidor")" />
         </Items>
     </DxMenu>
 

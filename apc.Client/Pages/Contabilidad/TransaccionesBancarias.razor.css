@@ -88,6 +88,31 @@
     flex: 0 0 auto;
 }
 
+.conciliacion-pill {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 112px;
+    padding: 0.3rem 0.65rem;
+    border-radius: 999px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    line-height: 1.1;
+    border: 1px solid transparent;
+}
+
+.conciliacion-pill--ok {
+    color: #166534;
+    background: rgba(34, 197, 94, 0.14);
+    border-color: rgba(34, 197, 94, 0.28);
+}
+
+.conciliacion-pill--pendiente {
+    color: #9a3412;
+    background: rgba(249, 115, 22, 0.14);
+    border-color: rgba(249, 115, 22, 0.3);
+}
+
 .btn-icon {
     border: none;
     background: transparent;

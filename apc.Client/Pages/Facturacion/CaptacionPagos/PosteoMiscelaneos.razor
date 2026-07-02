@@ -5,6 +5,7 @@
 @inject IToastNotificationService ToastService
 
 <div class="tab-content-section">
+    <ErrorNotice @ref="errorNotice" />
     <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
         <DxFormLayoutGroup ColSpanXs="12" ColSpanMd="12">
             <DxFormLayoutItem Caption="Cliente" ColSpanXs="12" ColSpanMd="6">
@@ -178,6 +179,7 @@
     private bool registrando;
     private bool reversando;
     private string? error;
+    private ErrorNotice errorNotice = default!;
     private string? info;
     private bool UsaCatalogoBancoCuenta => Bancos.Any(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
     private IEnumerable<BancoDto> BancosConCuenta => Bancos.Where(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
@@ -214,7 +216,7 @@
         }
         catch (Exception ex)
         {
-            error = $"Error al buscar recibos: {ex.Message}";
+            errorNotice.ShowError("No se pudieron buscar los recibos.", ex);
         }
         finally
         {
@@ -236,7 +238,7 @@
             }
             catch (Exception ex)
             {
-                error = $"Error al cargar detalle: {ex.Message}";
+                error = "No se pudo cargar el detalle.";
             }
         }
     }
@@ -286,7 +288,7 @@
         }
         catch (Exception ex)
         {
-            error = $"Error: {ex.Message}";
+            errorNotice.ShowError("No se pudo registrar el pago.", ex);
         }
         finally
         {
@@ -329,7 +331,7 @@
         }
         catch (Exception ex)
         {
-            error = $"Error: {ex.Message}";
+            errorNotice.ShowError("No se pudo reversar el pago.", ex);
         }
         finally
         {

@@ -1,4 +1,4 @@
-@page "/bancos/cuentas/transacciones-conciliadas"
+﻿@page "/bancos/cuentas/transacciones-conciliadas"
 @attribute [Authorize(Policy = PermissionNames.Bancos.View)]
 
 @using apc.Client.Services.Bancos
@@ -13,7 +13,11 @@
 
 @implements IDisposable
 
+<PageTitle>SIAD - Transacciones Conciliadas</PageTitle>
+
 <div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
         <div>
             <h2 class="page-title">Transacciones conciliadas</h2>
@@ -26,6 +30,12 @@
                       CssClass="btn-modern shadow-sm"
                       Enabled="@(!isLoading && cuenta is not null)"
                       Click="BuscarAsync" />
+            <DxButton Text="Exportar Excel"
+                      IconCssClass="bi bi-file-earmark-excel"
+                      RenderStyle="ButtonRenderStyle.Success"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading && transaccionesConciliadas.Count > 0)"
+                      Click="ExportarExcelAsync" />
             <DxButton Text="Volver"
                       IconCssClass="bi bi-arrow-left"
                       RenderStyle="ButtonRenderStyle.Secondary"
@@ -64,10 +74,12 @@
                     <DxTextBox Text="@(cuenta.Moneda ?? string.Empty)" ReadOnly="true" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Fecha desde" ColSpanLg="4">
-                    <DxDateEdit @bind-Date="fechaDesde" />
+                    <DxDateEdit @bind-Date="fechaDesde"
+                                @bind-Date:after="OnFiltrosChangedAsync" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Fecha hasta" ColSpanLg="4">
-                    <DxDateEdit @bind-Date="fechaHasta" />
+                    <DxDateEdit @bind-Date="fechaHasta"
+                                @bind-Date:after="OnFiltrosChangedAsync" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Cantidad" ColSpanLg="2">
                     <DxTextBox Text="@transaccionesConciliadas.Count.ToString()" ReadOnly="true" />
@@ -88,7 +100,8 @@
             else
             {
                 <div class="grid-wrapper">
-                    <DxGrid Data="@transaccionesConciliadas"
+                    <DxGrid @ref="transaccionesGrid"
+                            Data="@transaccionesConciliadas"
                             PageSize="20"
                             SizeMode="SizeMode.Large"
                             CssClass="grid-modern">
@@ -124,9 +137,7 @@
                                 <CellDisplayTemplate Context="cell">
                                     @if (cell.DataItem is BancoCuentaConciliacionDto item)
                                     {
-                                        var estado = string.Equals(item.EstadoConciliacion, "CON", StringComparison.OrdinalIgnoreCase)
-                                            ? "Conciliada"
-                                            : (string.IsNullOrWhiteSpace(item.EstadoConciliacion) ? "-" : item.EstadoConciliacion);
+                                        var estado = ObtenerEstadoConciliacionTexto(item.EstadoConciliacion);
                                         <span class="badge-status active">@estado</span>
                                     }
                                 </CellDisplayTemplate>
@@ -160,7 +171,10 @@
     private bool isLoading;
     private string? alerta;
     private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
+    private ErrorNotice errorNotice = default!;
     private CancellationTokenSource? loadCts;
+    private CancellationTokenSource? filtrosCts;
+    private DxGrid? transaccionesGrid;
 
     [SupplyParameterFromQuery(Name = "cuentaId")]
     public long? CuentaId { get; set; }
@@ -213,7 +227,7 @@
         }
         catch (Exception ex)
         {
-            SetAlert($"No fue posible cargar la vista: {ex.Message}", MessageBoxRenderStyle.Danger);
+            SetAlert("No fue posible cargar la vista.", MessageBoxRenderStyle.Danger);
         }
         finally
         {
@@ -240,6 +254,66 @@
     private async Task BuscarAsync()
     {
         await CargarTransaccionesConciliadasAsync(true, CancellationToken.None);
+    }
+
+    private async Task OnFiltrosChangedAsync()
+    {
+        if (cuenta is null)
+        {
+            return;
+        }
+
+        filtrosCts?.Cancel();
+        filtrosCts?.Dispose();
+        filtrosCts = new CancellationTokenSource();
+
+        try
+        {
+            // Small debounce so rapid edits trigger only the latest request.
+            await Task.Delay(200, filtrosCts.Token);
+            await CargarTransaccionesConciliadasAsync(true, filtrosCts.Token);
+        }
+        catch (OperationCanceledException)
+        {
+        }
+    }
+
+    private async Task ExportarExcelAsync()
+    {
+        if (transaccionesGrid is null || transaccionesConciliadas.Count == 0)
+        {
+            SetAlert("No hay datos para exportar.", MessageBoxRenderStyle.Info);
+            return;
+        }
+
+        try
+        {
+            var serverDateTime = await CuentasClient.GetServerDateTimeAsync();
+            var fileName = $"Conciliacion-{serverDateTime:yyyyMMdd-HHmm}.xlsx";
+            await transaccionesGrid.ExportToXlsxAsync(fileName, new GridXlExportOptions
+            {
+                CustomizeCell = e =>
+                {
+                    if (!string.Equals(
+                        e.ColumnFieldName,
+                        nameof(BancoCuentaConciliacionDto.EstadoConciliacion),
+                        StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    if (e.DataItem is BancoCuentaConciliacionDto item)
+                    {
+                        e.Value = ObtenerEstadoConciliacionTexto(item.EstadoConciliacion);
+                        e.Handled = true;
+                    }
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo exportar a Excel.", ex);
+        }
     }
 
     private async Task CargarTransaccionesConciliadasAsync(bool controlLoading, CancellationToken ct)
@@ -303,7 +377,7 @@
         }
         catch (Exception ex)
         {
-            SetAlert($"No fue posible cargar las transacciones: {ex.Message}", MessageBoxRenderStyle.Danger);
+            errorNotice.ShowError("No fue posible cargar las transacciones.", ex);
         }
         finally
         {
@@ -332,6 +406,16 @@
         alertaEstilo = style;
     }
 
+    private static string ObtenerEstadoConciliacionTexto(string? estadoConciliacion)
+    {
+        if (string.Equals(estadoConciliacion, "CON", StringComparison.OrdinalIgnoreCase))
+        {
+            return "Conciliada";
+        }
+
+        return string.IsNullOrWhiteSpace(estadoConciliacion) ? "-" : estadoConciliacion;
+    }
+
     private void Volver()
     {
         NavigationManager.NavigateTo(GetReturnUrl());
@@ -349,6 +433,8 @@
 
     public void Dispose()
     {
+        filtrosCts?.Cancel();
+        filtrosCts?.Dispose();
         loadCts?.Cancel();
         loadCts?.Dispose();
     }

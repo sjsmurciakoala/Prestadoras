@@ -1,0 +1,127 @@
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+@* Componente reutilizable de avisos. Muestra un toast corto y, si hay detalle tecnico,
+   el toast queda clicable y abre un dialogo con el detalle copiable para Soporte. *@
+
+<DxToastProvider Name="@_providerName" MaxToastCount="4" />
+
+<DxPopup Visible="@_detalleVisible"
+         VisibleChanged="OnDetalleVisibleChanged"
+         Width="560px"
+         CloseOnOutsideClick="true"
+         ShowCloseButton="true"
+         ShowFooter="false"
+         BodyCssClass="p-0">
+    <BodyTemplate Context="ctx">
+        <div class="card border-0 mb-0" style="max-height:80vh;">
+            <div class="card-header bg-white border-bottom py-3">
+                <h6 class="mb-1 text-primary fw-bold">
+                    <i class="bi bi-bug me-2"></i>Detalle tecnico del error
+                </h6>
+                <small class="text-muted">Referencia @_referencia &middot; @_fecha.ToString("yyyy-MM-dd HH:mm:ss")</small>
+            </div>
+
+            <div class="card-body p-3" style="overflow:auto;">
+                <p class="text-muted small mb-2">Copia este texto o toma una captura y compartelo con Soporte.</p>
+                <pre class="mb-0 bg-light border rounded p-2"
+                     style="max-height:240px; overflow:auto; white-space:pre-wrap; word-break:break-all; font-size:12px;">@_detalle</pre>
+            </div>
+
+            <div class="card-footer bg-white border-top p-2 d-flex align-items-center">
+                @if (_copiado)
+                {
+                    <span class="text-success small me-2"><i class="bi bi-check2 me-1"></i>Copiado</span>
+                }
+                <DxButton Text="Copiar"
+                          IconCssClass="bi bi-clipboard"
+                          CssClass="ms-auto me-2"
+                          Click="CopiarAsync" />
+                <DxButton Text="Cerrar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="CerrarDetalle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private readonly string _providerName = "ErrorNotice_" + Guid.NewGuid().ToString("N");
+    private bool _detalleVisible;
+    private bool _copiado;
+    private string _detalle = string.Empty;
+    private string _referencia = string.Empty;
+    private DateTime _fecha;
+
+    /// <summary>Muestra un toast. Si <paramref name="detalle"/> tiene contenido, el toast queda
+    /// clicable y abre el dialogo de detalle tecnico.</summary>
+    public void Show(string titulo, string mensaje, ToastRenderStyle estilo, string? detalle = null)
+    {
+        var tieneDetalle = !string.IsNullOrWhiteSpace(detalle);
+
+        var opciones = new ToastOptions
+        {
+            ProviderName = _providerName,
+            Title = titulo,
+            Text = tieneDetalle ? $"{mensaje}  -  Toca para ver detalles" : mensaje,
+            RenderStyle = estilo,
+            ShowCloseButton = true
+        };
+
+        if (tieneDetalle)
+        {
+            var d = detalle!;
+            opciones.FreezeOnClick = true;
+            opciones.Click = _ => AbrirDetalle(d);
+        }
+
+        ToastService.ShowToast(opciones);
+    }
+
+    /// <summary>Muestra un error con mensaje amigable y adjunta el detalle tecnico de la excepcion.
+    /// Si la excepcion es de sesion (401), muestra un aviso de sesion expirada sin detalle.</summary>
+    public void ShowError(string mensajeAmigable, Exception? ex = null, string titulo = "Error")
+    {
+        if (ex is UnauthorizedAccessException)
+        {
+            Show("Sesión expirada", "La sesión expiró. Vuelve a iniciar sesión.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        Show(titulo, mensajeAmigable, ToastRenderStyle.Danger, ex?.ToString());
+    }
+
+    private void AbrirDetalle(string detalle) => _ = InvokeAsync(() =>
+    {
+        _referencia = Guid.NewGuid().ToString("N")[..6].ToUpperInvariant();
+        _fecha = DateTime.Now;
+        _detalle = $"Referencia: {_referencia}\nFecha: {_fecha:yyyy-MM-dd HH:mm:ss}\n----------\n{detalle}";
+        _copiado = false;
+        _detalleVisible = true;
+        StateHasChanged();
+    });
+
+    private void CerrarDetalle() => _detalleVisible = false;
+
+    private void OnDetalleVisibleChanged(bool value)
+    {
+        _detalleVisible = value;
+        if (!value)
+        {
+            _copiado = false;
+        }
+    }
+
+    private async Task CopiarAsync()
+    {
+        try
+        {
+            await JS.InvokeVoidAsync("navigator.clipboard.writeText", _detalle);
+            _copiado = true;
+        }
+        catch
+        {
+            _copiado = false;
+        }
+    }
+}

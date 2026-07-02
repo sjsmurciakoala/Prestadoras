@@ -1,4 +1,4 @@
-﻿@using Microsoft.AspNetCore.Mvc.ViewFeatures
+@using Microsoft.AspNetCore.Mvc.ViewFeatures
 @using apc.Services
 @inject IFileVersionProvider FileVersionProvider
 @inject DxThemesService ThemesService
@@ -10,7 +10,8 @@
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <base href="/" />
-    <link rel="icon" type="image/png" href=@AppendVersion("images/favicon.png") />
+    <link rel="icon" type="image/x-icon" href=@AppendVersion("favicon.ico") />
+    <link rel="icon" type="image/png" sizes="32x32" href=@AppendVersion("images/favicon.png") />
     <link rel="apple-touch-icon" href=@AppendVersion("images/favicon.png") />
     @DxResourceManager.RegisterTheme(ThemesService.ActiveTheme)
     @DxResourceManager.RegisterScripts()
@@ -28,11 +29,13 @@
         <link href=@AppendVersion("_content/DevExpress.Blazor.Viewer/css/dx-blazor-viewer-components.bs5.css")
             rel="stylesheet" />
     }
+    <title>SIAD</title>
     <HeadOutlet @rendermode="PageRenderMode" />
 </head>
 
 <body>
     <Routes @rendermode="PageRenderMode" />
+    <script src=@AppendVersion("js/download.js")></script>
     <script src="_framework/blazor.web.js"></script>
 </body>
 

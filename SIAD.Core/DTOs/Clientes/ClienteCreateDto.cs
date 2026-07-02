@@ -26,6 +26,8 @@ public sealed class ClienteCreateDto
 
     public bool? BloqueadoCobranza { get; set; }
 
+    public bool? NoCortable { get; set; }
+
     public int? AbogadoId { get; set; }
 
     public string? Telefono { get; set; }

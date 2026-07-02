@@ -1,4 +1,4 @@
-@page "/rutas"
+﻿@page "/rutas"
 @attribute [Authorize]
 
 @using DevExpress.Blazor
@@ -6,6 +6,8 @@
 @using apc.Client.Pages.Rutas
 @inject apc.Client.Services.Rutas.RutasClient Client
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Rutas</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="RutasToast" MaxToastCount="4" />

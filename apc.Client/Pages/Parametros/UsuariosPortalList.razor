@@ -1,4 +1,4 @@
-@page "/parametros/usuarios"
+ï»¿@page "/parametros/usuarios"
 @attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
 
 @using DevExpress.Blazor
@@ -6,6 +6,8 @@
 @using apc.Client.Services.Parametros
 @inject UsuariosPortalClient UsuariosClient
 @inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Usuarios</PageTitle>
 
 <h3>Usuarios del Portal</h3>
 <p class="text-muted">Administra los usuarios, roles y permisos del sistema.</p>
@@ -55,7 +57,7 @@ else
                         var confirmado = (bool)context.Value;
                     }
                     <span class="badge @(confirmado ? "bg-success" : "bg-warning text-dark")">
-                        @(confirmado ? "Sí" : "No")
+                        @(confirmado ? "SÃ­" : "No")
                     </span>
                 </CellDisplayTemplate>
             </DxGridDataColumn>
@@ -65,7 +67,7 @@ else
                         var bloqueado = (bool)context.Value;
                     }
                     <span class="badge @(bloqueado ? "bg-danger" : "bg-success")">
-                        @(bloqueado ? "Sí" : "No")
+                        @(bloqueado ? "SÃ­" : "No")
                     </span>
                 </CellDisplayTemplate>
             </DxGridDataColumn>

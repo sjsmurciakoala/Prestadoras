@@ -1,0 +1,162 @@
+﻿@page "/proveedores/bancos/nuevo"
+@page "/proveedores/bancos/{id:long}/editar"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject ILogger<BancoProveedorEdit> Logger
+@using apc.Client.Services.Proveedores
+@using Microsoft.AspNetCore.Authorization
+@using SIAD.Core.DTOs.Proveedores
+
+<PageTitle>SIAD - Banco del Proveedor</PageTitle>
+
+<div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">@TituloPagina</h2>
+            <p class="page-subtitle">@SubtituloPagina</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card">
+        @if (isLoading)
+        {
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+        }
+        else
+        {
+            <BancoProveedorForm Model="model"
+                                OnValidSubmit="GuardarAsync"
+                                OnCancel="Volver"
+                                IsBusy="isSaving" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public long? Id { get; set; }
+
+    private ProveedorBancoUpsertDto model = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private string? errorMessage;
+    private ErrorNotice errorNotice = default!;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+    private string SubtituloPagina => IsEdit
+        ? "Actualice la informacion del banco disponible para proveedores."
+        : "Registre un nuevo banco para proveedores.";
+    private string TituloPagina
+    {
+        get
+        {
+            if (!IsEdit)
+            {
+                return "Nuevo banco de proveedor";
+            }
+
+            var nombreMostrar = model.Nombre?.Trim();
+            if (string.IsNullOrWhiteSpace(nombreMostrar))
+            {
+                return $"Editar banco de proveedor {Id}";
+            }
+
+            return $"Editar banco de proveedor {Id} - {nombreMostrar}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            if (IsEdit)
+            {
+                var detail = await ProveedoresClient.ObtenerBancoAsync(Id!.Value);
+                if (detail is null)
+                {
+                    errorMessage = $"No se encontro el banco de proveedor {Id}.";
+                    model = new ProveedorBancoUpsertDto();
+                }
+                else
+                {
+                    model = new ProveedorBancoUpsertDto
+                    {
+                        Nombre = detail.Nombre,
+                        Activo = detail.Activo
+                    };
+                }
+            }
+            else
+            {
+                model = new ProveedorBancoUpsertDto
+                {
+                    Activo = true
+                };
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "No se pudo cargar la pantalla.";
+            Logger.LogError(ex, "Error al cargar pantalla de banco de proveedor.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            isSaving = true;
+            errorMessage = null;
+
+            if (IsEdit)
+            {
+                await ProveedoresClient.ActualizarBancoAsync(Id!.Value, model);
+            }
+            else
+            {
+                await ProveedoresClient.CrearBancoAsync(model);
+            }
+
+            Navigation.NavigateTo("/proveedores/bancos");
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo guardar el banco.", ex);
+            Logger.LogError(ex, "Error al guardar banco de proveedor {BancoId}", Id);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/proveedores/bancos");
+}

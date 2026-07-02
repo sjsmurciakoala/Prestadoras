@@ -1,0 +1,116 @@
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@inject ClientesClient ClientesClient
+
+<div class="estado-log-container">
+
+    <div class="section-header mb-3">
+        <i class="bi bi-clock-history"></i>
+        <h4 class="m-0">Bitácora de Estado y Clasificación</h4>
+    </div>
+
+    <div class="d-flex gap-2 mb-3">
+        <DxButton Text="Recargar"
+                  IconCssClass="bi bi-arrow-clockwise"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="CargarLog" />
+    </div>
+
+    @if (isLoading)
+    {
+        <DxLoadingPanel Visible="true" Text="Cargando bitácora..." />
+        <div style="height:60px"></div>
+    }
+    else if (!string.IsNullOrEmpty(errorMsg))
+    {
+        <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+    }
+    else if (!items.Any())
+    {
+        <div class="text-muted text-center py-4">
+            <i class="bi bi-journal-x" style="font-size:2rem;"></i>
+            <p class="mt-2">Sin registros de cambios para este cliente.</p>
+        </div>
+    }
+    else
+    {
+        <div style="width:100%;overflow-x:auto;">
+            <DxGrid Data="items" ShowFilterRow="false" PageSize="25" CssClass="w-100">
+                <Columns>
+                    <DxGridDataColumn FieldName="Fecha" Caption="Fecha y hora" Width="160px" DisplayFormat="dd/MM/yyyy HH:mm" />
+                    <DxGridDataColumn FieldName="Tipo" Caption="Control" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var row = (ClienteEstadoLogItemDto)cell.DataItem;
+                                var (icon, label, css) = TipoDisplay(row.Tipo);
+                            }
+                            <span class="badge @css" style="font-size:0.78rem;">
+                                <i class="@icon me-1"></i>@label
+                            </span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="ValorAnterior" Caption="Antes" Width="80px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var row = (ClienteEstadoLogItemDto)cell.DataItem;
+                            }
+                            <span class="@BoolClass(row.ValorAnterior)">@BoolTexto(row.ValorAnterior)</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="ValorNuevo" Caption="Después" Width="85px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var row = (ClienteEstadoLogItemDto)cell.DataItem;
+                            }
+                            <span class="@BoolClass(row.ValorNuevo)">@BoolTexto(row.ValorNuevo)</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="Motivo" Caption="Motivo" />
+                    <DxGridDataColumn FieldName="Usuario" Caption="Usuario" Width="160px" />
+                </Columns>
+            </DxGrid>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int ClienteId { get; set; }
+
+    private List<ClienteEstadoLogItemDto> items = new();
+    private bool isLoading = true;
+    private string? errorMsg;
+
+    protected override async Task OnInitializedAsync()
+        => await CargarLog();
+
+    private async Task CargarLog()
+    {
+        isLoading = true;
+        errorMsg = null;
+        try
+        {
+            items = await ClientesClient.ObtenerEstadoLogAsync(ClienteId);
+        }
+        catch (Exception ex)
+        {
+            errorMsg = $"No fue posible cargar la bitácora: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static (string icon, string label, string css) TipoDisplay(string tipo) => tipo switch
+    {
+        "NO_CORTABLE"   => ("bi bi-shield-check",  "No Cortable",    "bg-warning text-dark"),
+        "BLOQUEO_COBRO" => ("bi bi-slash-circle",   "Bloqueo Cobro",  "bg-danger text-white"),
+        _               => ("bi bi-tag",            tipo,             "bg-secondary text-white")
+    };
+
+    private static string BoolTexto(bool? v) => v.HasValue ? (v.Value ? "Sí" : "No") : "—";
+
+    private static string BoolClass(bool? v) =>
+        v.HasValue ? (v.Value ? "text-success fw-bold" : "text-secondary") : "text-muted";
+}

@@ -31,4 +31,6 @@ public interface IClientesService
         CancellationToken ct = default);
     Task<byte[]?> GetFotoMedidorImagenAsync(int ide, CancellationToken ct = default);
 
+    Task SetNoCortableAsync(string clave, bool valor, string usuario, string? motivo = null, CancellationToken ct = default);
+    Task<IReadOnlyList<ClienteEstadoLogItemDto>> GetEstadoLogAsync(string clave, CancellationToken ct = default);
 }

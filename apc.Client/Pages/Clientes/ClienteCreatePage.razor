@@ -1,0 +1,81 @@
+@page "/clientes/nuevo"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@using apc.Client.Services.Tenant
+@using apc.Client.Pages.Clientes.Components
+
+@inject ClientesClient ClientesClient
+@inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
+@inject TenantState TenantState
+
+<PageTitle>SIAD - Nuevo Cliente</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CreateClienteToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Nuevo Cliente</h2>
+            <p class="page-subtitle">Complete el formulario de registro</p>
+        </div>
+        <div class="header-actions">
+            <DxButton Text="Cancelar" Click="Cancelar"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    <ClienteForm Modelo="@_modelo"
+                 OnGuardar="GuardarAsync"
+                 OnCancelar="Cancelar"
+                 IsSaving="@_saving"
+                 IsEditMode="false" />
+</div>
+
+@code {
+    private ClienteCreateDto _modelo = new();
+    private bool _saving;
+
+    protected override void OnInitialized()
+    {
+        _modelo = new ClienteCreateDto
+        {
+            Activo = true,
+            FechaNacimiento = DateTime.Now.AddYears(-18),
+            TieneMedidor = false,
+            TieneContrato = false,
+            TieneConvenio = false,
+            ColorCasa = "Blanco"
+        };
+    }
+
+    private async Task GuardarAsync()
+    {
+        _saving = true;
+        try
+        {
+            var response = await ClientesClient.CrearAsync(_modelo);
+            Navigation.NavigateTo($"/clientes/{response.Id}");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "CreateClienteToast"
+            });
+        }
+        finally
+        {
+            _saving = false;
+        }
+    }
+
+    private void Cancelar() => Navigation.NavigateTo("/clientes");
+}

@@ -11,6 +11,7 @@ using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
 using SIAD.Services.Bancos;
+using SIAD.Services.Cobranza;
 
 namespace SIAD.Services.CaptacionPagos;
 
@@ -19,6 +20,7 @@ public class CaptacionPagosService : ICaptacionPagosService
     private readonly SiadDbContext _context;
     private readonly IBanTransaccionesService _banTransaccionesService;
     private readonly ICurrentCompanyService _currentCompanyService;
+    private readonly ICorteMasivoService _corteMasivoService;
     private const string ContabilidadModuloVentas = "VENTAS";
     private const string ContabilidadDocumentoRecibo = "REC";
     private const string ContabilidadDocumentoFactura = "FAC";
@@ -30,11 +32,13 @@ public class CaptacionPagosService : ICaptacionPagosService
     public CaptacionPagosService(
         SiadDbContext context,
         IBanTransaccionesService banTransaccionesService,
-        ICurrentCompanyService currentCompanyService)
+        ICurrentCompanyService currentCompanyService,
+        ICorteMasivoService corteMasivoService)
     {
         _context = context;
         _banTransaccionesService = banTransaccionesService;
         _currentCompanyService = currentCompanyService;
+        _corteMasivoService = corteMasivoService;
     }
 
     public async Task<IReadOnlyList<CajaDto>> ListarCatalogoCajasAsync(CancellationToken ct = default)
@@ -151,7 +155,8 @@ public class CaptacionPagosService : ICaptacionPagosService
     {
         var pagos = _context.transaccion_abonados
             .AsNoTracking()
-            .Where(t => t.tipotransaccion == "201"
+            .Where(t => (t.tipotransaccion == "201" || t.tipotransaccion == "202")
+                        && t.estado != "P"
                         && (t.fecha_docu != null || t.fecha_registro != null));
 
         if (filtro?.FechaInicio is DateTime inicio)
@@ -421,9 +426,15 @@ public class CaptacionPagosService : ICaptacionPagosService
                 .FirstOrDefaultAsync(ct);
 
             var saldoActualCliente = await ObtenerSaldoClienteAsync(clienteClave, ct);
+            var sesionCajaId = await _context.sesion_cajas
+                .Where(s => s.usuario_apertura == usuario && s.estado == "ABIERTA")
+                .Select(s => (int?)s.id)
+                .FirstOrDefaultAsync(ct);
+
             var transaccion = new transaccion_abonado
             {
                 company_id = _currentCompanyService.GetCompanyId(),
+                caja_id = sesionCajaId,
                 cliente_clave = clienteClave,
                 recibo = factura.numrecibo,
                 tipotransaccion = "201",
@@ -477,6 +488,13 @@ public class CaptacionPagosService : ICaptacionPagosService
 
                 polizaStatus = 1;
                 polizaEstado = "POSTED";
+            }
+
+            // Si el cliente queda sin saldo tras el pago, cancela las OT de corte (33)
+            // pendientes y las saca de la reimpresión del corte.
+            if (saldoActualCliente - total <= 0m)
+            {
+                await _corteMasivoService.CancelarOrdenesCorteClienteAsync(clienteClave, usuario, ct);
             }
 
             await tx.CommitAsync(ct);
@@ -1084,9 +1102,15 @@ public class CaptacionPagosService : ICaptacionPagosService
 
             var saldoActualCliente = await ObtenerSaldoClienteAsync(clienteClave, ct);
             var descripcion = $"Pago comprobante de banco # {bancoCodigo} :Recibo # :{dto.NumRecibo}";
+            var sesionCajaId = await _context.sesion_cajas
+                .Where(s => s.usuario_apertura == usuario && s.estado == "ABIERTA")
+                .Select(s => (int?)s.id)
+                .FirstOrDefaultAsync(ct);
+
             var transaccion = new transaccion_abonado
             {
                 company_id = _currentCompanyService.GetCompanyId(),
+                caja_id = sesionCajaId,
                 cliente_clave = clienteClave,
                 recibo = dto.NumRecibo,
                 tipotransaccion = "201",
@@ -1139,6 +1163,13 @@ public class CaptacionPagosService : ICaptacionPagosService
 
                 polizaStatus = 1;
                 polizaEstado = "POSTED";
+            }
+
+            // Si el cliente queda sin saldo tras el posteo, cancela las OT de corte (33)
+            // pendientes y las saca de la reimpresión del corte.
+            if (saldoActualCliente - dto.Valor <= 0m)
+            {
+                await _corteMasivoService.CancelarOrdenesCorteClienteAsync(clienteClave, usuario, ct);
             }
 
             await transaction.CommitAsync(ct);
@@ -1552,9 +1583,15 @@ public class CaptacionPagosService : ICaptacionPagosService
             factura.usuario = usuario;
 
             var saldoActual = await ObtenerSaldoClienteAsync(clienteClave, ct);
+            var sesionCajaId = await _context.sesion_cajas
+                .Where(s => s.usuario_apertura == usuario && s.estado == "ABIERTA")
+                .Select(s => (int?)s.id)
+                .FirstOrDefaultAsync(ct);
+
             var transaccion = new transaccion_abonado
             {
                 company_id = _currentCompanyService.GetCompanyId(),
+                caja_id = sesionCajaId,
                 cliente_clave = clienteClave,
                 recibo = factura.numrecibo,
                 tipotransaccion = "201",
@@ -1779,7 +1816,7 @@ public class CaptacionPagosService : ICaptacionPagosService
     }
 
     // ==================== COMBOS Y AUXILIARES ====================
-    public async Task<IReadOnlyList<ClienteComboDto>> ListarClientesAsync(string? query = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ClienteComboDto>> ListarClientesAsync(string? query = null, int? maxResults = null, CancellationToken ct = default)
     {
         var clientes = _context.cliente_maestros
             .AsNoTracking()
@@ -1794,8 +1831,10 @@ public class CaptacionPagosService : ICaptacionPagosService
                 || EF.Functions.ILike(c.maestro_cliente_nombre, term));
         }
 
+        var take = maxResults ?? (string.IsNullOrWhiteSpace(query) ? 10 : 100);
         return await clientes
             .OrderBy(c => c.maestro_cliente_nombre)
+            .Take(take)
             .Select(c => new ClienteComboDto
             {
                 Clave = c.maestro_cliente_clave,
@@ -1805,7 +1844,6 @@ public class CaptacionPagosService : ICaptacionPagosService
                     .Select(d => d.detalle_cliente_direccion)
                     .FirstOrDefault()
             })
-            .Take(1000)
             .ToListAsync(ct);
     }
 

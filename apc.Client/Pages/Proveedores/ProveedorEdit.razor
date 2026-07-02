@@ -1,4 +1,4 @@
-@page "/proveedores/nuevo"
+﻿@page "/proveedores/nuevo"
 @page "/proveedores/{codigo}/editar"
 @attribute [Authorize]
 @inject ProveedoresClient ProveedoresClient
@@ -9,7 +9,11 @@
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Proveedores
 
+<PageTitle>SIAD - Editar Proveedor</PageTitle>
+
 <div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
         <div>
             <h2 class="page-title">@TituloPagina</h2>
@@ -40,9 +44,11 @@
         {
             <ProveedorForm Model="model"
                            Tipos="tipos"
+                           Bancos="bancos"
                            CuentasContables="cuentasContables"
                            IsEdit="IsEdit"
                            OnValidSubmit="GuardarAsync"
+                           OnInvalidSubmit="MostrarErroresValidacion"
                            OnCancel="Volver"
                            IsBusy="isSaving" />
         }
@@ -50,10 +56,13 @@
 </div>
 
 @code {
+    private ErrorNotice errorNotice = default!;
+
     [Parameter]
     public string? Codigo { get; set; }
 
     private readonly List<ProveedorTipoLookupDto> tipos = new();
+    private readonly List<ProveedorBancoLookupDto> bancos = new();
     private readonly List<CuentaContableLookupDto> cuentasContables = new();
     private ProveedorUpsertDto model = new();
     private bool isLoading = true;
@@ -101,6 +110,7 @@
         {
             await Task.WhenAll(
                 CargarTiposAsync(),
+                CargarBancosAsync(),
                 CargarCuentasContablesAsync());
             if (IsEdit)
             {
@@ -111,7 +121,11 @@
                 model = new ProveedorUpsertDto
                 {
                     Activo = true,
-                    CodTipoProveedor = 0
+                    CodTipoProveedor = 0,
+                    CuentasBancarias = new List<ProveedorCuentaBancariaDto>
+                    {
+                        CreateEmptyCuenta(1)
+                    }
                 };
             }
         }
@@ -138,6 +152,19 @@
         var data = await ProveedoresClient.ObtenerCuentasContablesAsync();
         cuentasContables.Clear();
         cuentasContables.AddRange(data ?? Array.Empty<CuentaContableLookupDto>());
+    }
+
+    private async Task CargarBancosAsync()
+    {
+        var data = await ProveedoresClient.ObtenerBancosAsync();
+        bancos.Clear();
+        bancos.AddRange((data ?? Array.Empty<ProveedorBancoLookupDto>())
+            .Where(x => !string.IsNullOrWhiteSpace(x.Nombre))
+            .OrderBy(x => x.Nombre, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new ProveedorBancoLookupDto
+            {
+                Nombre = x.Nombre.Trim()
+            }));
     }
 
     private async Task CargarProveedorAsync()
@@ -168,15 +195,31 @@
             Telefono = detail.Telefono,
             Email = detail.Email,
             CuentaContable = detail.CuentaContable ?? string.Empty,
-            CuentaBancaria = detail.CuentaBancaria ?? string.Empty,
-            Banco1 = detail.Banco1,
-            Banco2 = detail.Banco2,
+            CuentasBancarias = detail.CuentasBancarias.Count > 0
+                ? detail.CuentasBancarias
+                    .OrderBy(x => x.Orden)
+                    .Select((x, index) => new ProveedorCuentaBancariaDto
+                    {
+                        ProveedorCuentaBancariaId = x.ProveedorCuentaBancariaId,
+                        Banco = x.Banco,
+                        CuentaBancaria = x.CuentaBancaria,
+                        Orden = index + 1
+                    })
+                    .ToList()
+                : new List<ProveedorCuentaBancariaDto> { CreateEmptyCuenta(1) },
             Activo = detail.Activo
         };
     }
 
     private async Task GuardarAsync()
     {
+        var validationError = NormalizeCuentaBancarias();
+        if (!string.IsNullOrWhiteSpace(validationError))
+        {
+            errorNotice.Show("Validación", validationError, ToastRenderStyle.Warning);
+            return;
+        }
+
         try
         {
             isSaving = true;
@@ -193,9 +236,15 @@
 
             Navigation.NavigateTo("/proveedores");
         }
+        catch (UnauthorizedAccessException)
+        {
+            errorNotice.ShowError(
+                "La sesión expiró. Vuelve a iniciar sesión e inténtalo de nuevo.",
+                titulo: "Sesión expirada");
+        }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo guardar el proveedor: {ex.Message}";
+            errorNotice.ShowError("No se pudo guardar el proveedor.", ex);
             Logger.LogError(ex, "Error al guardar proveedor {ProveedorCodigo}", model.Codigo);
         }
         finally
@@ -204,5 +253,55 @@
         }
     }
 
+    private void MostrarErroresValidacion(IReadOnlyList<string> mensajes)
+    {
+        var texto = mensajes is { Count: > 0 }
+            ? string.Join(Environment.NewLine, mensajes)
+            : "Revise los campos obligatorios del formulario.";
+
+        errorNotice.Show("Validación", texto, ToastRenderStyle.Warning);
+    }
+
     private void Volver() => Navigation.NavigateTo("/proveedores");
+
+    private string? NormalizeCuentaBancarias()
+    {
+        var cuentas = new List<ProveedorCuentaBancariaDto>();
+        var source = model.CuentasBancarias ?? new List<ProveedorCuentaBancariaDto>();
+
+        for (var i = 0; i < source.Count; i++)
+        {
+            var banco = source[i].Banco?.Trim();
+            var cuenta = source[i].CuentaBancaria?.Trim();
+
+            if (string.IsNullOrWhiteSpace(banco) && string.IsNullOrWhiteSpace(cuenta))
+            {
+                continue;
+            }
+
+            if (string.IsNullOrWhiteSpace(banco) || string.IsNullOrWhiteSpace(cuenta))
+            {
+                return $"Complete banco y cuenta bancaria en la fila {i + 1}.";
+            }
+
+            cuentas.Add(new ProveedorCuentaBancariaDto
+            {
+                ProveedorCuentaBancariaId = source[i].ProveedorCuentaBancariaId,
+                Banco = banco,
+                CuentaBancaria = cuenta,
+                Orden = cuentas.Count + 1
+            });
+        }
+
+        model.CuentasBancarias = cuentas;
+        return null;
+    }
+
+    private static ProveedorCuentaBancariaDto CreateEmptyCuenta(int orden)
+    {
+        return new ProveedorCuentaBancariaDto
+        {
+            Orden = orden
+        };
+    }
 }

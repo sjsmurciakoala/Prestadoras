@@ -1,4 +1,4 @@
-﻿@using SIAD.Core.DTOs.Proveedores
+@using SIAD.Core.DTOs.Proveedores
 
 <DxFormLayout>
     <DxFormLayoutGroup Caption="Datos generales" ColSpanMd="12">
@@ -13,14 +13,42 @@
         <DxFormLayoutItem Caption="Email">@Proveedor.Email</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Pagina web">@Proveedor.PaginaWeb</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Tipo proveedor">@Proveedor.TipoProveedor</DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Cuenta contable">@Proveedor.CuentaContable</DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Cuenta bancaria">@Proveedor.CuentaBancaria</DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Banco 1">@Proveedor.Banco1</DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Banco 2">@Proveedor.Banco2</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Cuenta contable">@AccountCodeFormatter.Format(Proveedor.CuentaContable)</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Fecha creacion">@Proveedor.FechaCreacion.ToString("dd/MM/yyyy")</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Fecha modificacion">@(Proveedor.FechaModificacion?.ToString("dd/MM/yyyy") ?? "-")</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Activo">
             <span>@(Proveedor.Activo ? "Si" : "No")</span>
+        </DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
+    <DxFormLayoutGroup Caption="Cuentas bancarias" ColSpanMd="12">
+        <DxFormLayoutItem ColSpanMd="12">
+            @if (Proveedor.CuentasBancarias.Count == 0)
+            {
+                <span class="text-muted">No hay cuentas bancarias registradas.</span>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Banco</th>
+                                <th>Cuenta bancaria</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var cuenta in Proveedor.CuentasBancarias.OrderBy(x => x.Orden))
+                            {
+                                <tr>
+                                    <td>@(string.IsNullOrWhiteSpace(cuenta.Banco) ? "-" : cuenta.Banco)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(cuenta.CuentaBancaria) ? "-" : cuenta.CuentaBancaria)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
         </DxFormLayoutItem>
     </DxFormLayoutGroup>
 

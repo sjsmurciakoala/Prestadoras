@@ -3,7 +3,7 @@ using System.Collections.Generic;
 
 namespace SIAD.Core.Entities;
 
-public partial class proyecto
+public partial class Proyecto
 {
     public int ide { get; set; }
 

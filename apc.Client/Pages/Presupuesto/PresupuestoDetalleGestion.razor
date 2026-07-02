@@ -1,0 +1,1006 @@
+@page "/presupuesto/configuraciones/{IdPresupuesto}/detalles/{CuentaContable}/gestion"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+
+@using DevExpress.Blazor
+@using System.ComponentModel.DataAnnotations
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services.Presupuesto
+
+@inject NavigationManager Navigation
+@inject ConfiguracionPresupuestoClient ConfiguracionPresupuestoClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Detalle de Presupuesto</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="PresupuestoGestionToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Gestión de actividad presupuestaria</h2>
+            <p class="page-subtitle">Ampliaciones y traslados para un detalle específico de presupuesto.</p>
+        </div>
+        <DxButton Text="Volver"
+                  IconCssClass="bi bi-arrow-left"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  CssClass="btn-modern"
+                  Click="VolverALista" />
+    </div>
+
+    <div class="modern-card mb-3">
+        <div class="context-grid">
+            <div class="context-item">
+                <div class="context-label">Número de cuenta</div>
+                <div class="context-value">@CuentaNumeroDisplay</div>
+            </div>
+            <div class="context-item">
+                <div class="context-label">Descripción de cuenta</div>
+                <div class="context-value">@CuentaDescripcionDisplay</div>
+            </div>
+        </div>
+    </div>
+
+    @if (gestionBloqueadaPorRango && !string.IsNullOrWhiteSpace(bloqueoRangoMessage))
+    {
+        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">@bloqueoRangoMessage</DxAlert>
+    }
+
+    <div class="modern-card">
+        <h5 class="mb-3">Nueva solicitud</h5>
+        <div class="activity-options mb-4">
+            <button type="button"
+                    class="activity-option @(TipoSeleccionado == TipoGestion.Ampliacion ? "selected" : string.Empty)"
+                    disabled="@gestionBloqueadaPorRango"
+                    @onclick="SeleccionarAmpliacion">
+                <div class="activity-title">Ampliación</div>
+                <div class="activity-subtitle">Incrementa el presupuesto de la cuenta del detalle.</div>
+            </button>
+
+            <button type="button"
+                    class="activity-option @(TipoSeleccionado == TipoGestion.Traslado ? "selected" : string.Empty)"
+                    disabled="@gestionBloqueadaPorRango"
+                    @onclick="SeleccionarTraslado">
+                <div class="activity-title">Traslado</div>
+                <div class="activity-subtitle">Mueve monto desde una cuenta origen hacia esta cuenta.</div>
+            </button>
+        </div>
+
+        @if (TipoSeleccionado == TipoGestion.Ampliacion)
+        {
+            <EditForm Model="formAmpliacion" OnValidSubmit="RegistrarAmpliacionAsync" Context="ampliacionFormContext">
+                <DataAnnotationsValidator />
+
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Cuenta destino" ColSpanMd="12">
+                        <DxTextBox Text="@CuentaCompletaDisplay" ReadOnly="true" ValidationEnabled="false" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Monto ampliación *" ColSpanMd="6">
+                        <DxSpinEdit TValue="decimal"
+                                    @bind-Value="formAmpliacion.Monto"
+                                    Min="0.01m"
+                                    Increment="0.01m"
+                                    Decimals="2"
+                                    DisplayFormat="n2"
+                                    Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                        <ValidationMessage For="() => formAmpliacion.Monto" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Motivo" ColSpanMd="12">
+                        <DxMemo @bind-Text="formAmpliacion.Motivo"
+                                MaxLength="500"
+                                NullText="Motivo o referencia de ampliación"
+                                Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                        <ValidationMessage For="() => formAmpliacion.Motivo" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                <ValidationSummary class="text-danger mb-2" />
+
+                <div class="d-flex justify-content-end mt-2">
+                    <DxButton ButtonType="ButtonType.Submit"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              Text="Registrar ampliación"
+                              SubmitFormOnClick="true"
+                              Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                </div>
+            </EditForm>
+        }
+        else
+        {
+            <EditForm Model="formTraslado" OnValidSubmit="RegistrarTrasladoAsync" Context="trasladoFormContext">
+                <DataAnnotationsValidator />
+
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Cuenta destino" ColSpanMd="12">
+                        <DxTextBox Text="@CuentaCompletaDisplay" ReadOnly="true" ValidationEnabled="false" />
+
+                        @if (isLoadingSaldosPresupuesto)
+                        {
+                            <div class="small text-muted mt-1">Cargando saldo de cuenta destino...</div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(saldosPresupuestoErrorMessage))
+                        {
+                            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@saldosPresupuestoErrorMessage</DxAlert>
+                        }
+                        else
+                        {
+                            <div class="small text-muted mt-1">
+                                Saldo presupuesto destino: <strong>@FormatSaldoPresupuesto(SaldoPresupuestoDestino)</strong>
+                            </div>
+                        }
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Cuenta origen *" ColSpanMd="6">
+                        <DxComboBox Data="@cuentasOrigenTraslado"
+                                    TData="CuentaContableLookupDto"
+                                    TValue="string"
+                                    @bind-Value="formTraslado.CuentaOrigen"
+                                    ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                    NullText="Seleccione cuenta origen"
+                                    DropDownStyle="DropDownStyle.DropDownList"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    SearchDelay="200"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Enabled="@(!isSubmitting && !gestionBloqueadaPorRango && !isLoadingCuentasOrigen && cuentasOrigenTraslado.Count > 0)" />
+                        <ValidationMessage For="() => formTraslado.CuentaOrigen" />
+
+                        @if (isLoadingCuentasOrigen)
+                        {
+                            <div class="small text-muted mt-1">Cargando cuentas origen...</div>
+                        }
+                        else if (!string.IsNullOrWhiteSpace(cuentasOrigenErrorMessage))
+                        {
+                            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@cuentasOrigenErrorMessage</DxAlert>
+                        }
+                        else if (cuentasOrigenTraslado.Count == 0)
+                        {
+                            <div class="small text-muted mt-1">
+                                No hay cuentas origen habilitadas para traslado en el presupuesto activo.
+                            </div>
+                        }
+
+                        @if (isLoadingSaldosPresupuesto)
+                        {
+                            <div class="small text-muted mt-1">Cargando saldo de cuenta origen...</div>
+                        }
+                        else if (string.IsNullOrWhiteSpace(saldosPresupuestoErrorMessage))
+                        {
+                            <div class="small text-muted mt-1">
+                                Saldo presupuesto origen: <strong>@FormatSaldoPresupuesto(SaldoPresupuestoOrigen)</strong>
+                            </div>
+                        }
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Monto traslado *" ColSpanMd="6">
+                        <DxSpinEdit TValue="decimal"
+                                    @bind-Value="formTraslado.Monto"
+                                    Min="0.01m"
+                                    Increment="0.01m"
+                                    Decimals="2"
+                                    DisplayFormat="n2"
+                                    Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                        <ValidationMessage For="() => formTraslado.Monto" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Motivo" ColSpanMd="12">
+                        <DxMemo @bind-Text="formTraslado.Motivo"
+                                MaxLength="500"
+                                NullText="Motivo o referencia del traslado"
+                                Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                        <ValidationMessage For="() => formTraslado.Motivo" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                <ValidationSummary class="text-danger mb-2" />
+
+                <div class="d-flex justify-content-end mt-2">
+                    <DxButton ButtonType="ButtonType.Submit"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              Text="Registrar traslado"
+                              SubmitFormOnClick="true"
+                              Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                </div>
+            </EditForm>
+        }
+    </div>
+
+    <div class="modern-card mt-3">
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <h5 class="mb-0">Solicitudes de actividad</h5>
+            <DxButton Text="Recargar"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="RecargarSolicitudesAsync"
+                      Enabled="@(!isLoadingSolicitudes && !isSubmitting && !gestionBloqueadaPorRango)" />
+        </div>
+
+        @if (isLoadingSolicitudes)
+        {
+            <div class="small text-muted">Cargando solicitudes...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(solicitudesErrorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger">@solicitudesErrorMessage</DxAlert>
+        }
+        else
+        {
+            <DxGrid Data="@solicitudes"
+                    TData="PresupuestoActividadSolicitudListItemDto"
+                    KeyFieldName="@nameof(PresupuestoActividadSolicitudListItemDto.SolicitudId)"
+                    PageSize="5"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ShowFilterRow="false"
+                    ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false"
+                    CssClass="grid-solicitudes">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.SolicitudId)" Caption="Solicitud" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.TipoActividad)" Caption="Tipo" Width="130px" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.Estado)" Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoActividadSolicitudListItemDto item)
+                            {
+                                <span class="badge-status @GetEstadoCss(item.Estado)">@item.Estado</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.CuentaOrigenCode)" Caption="Origen" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.CuentaDestinoCode)" Caption="Destino" Width="140px" />
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.Monto)" Caption="Monto" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoActividadSolicitudListItemDto item)
+                            {
+                                <span>@item.Monto.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.SolicitadoPor)" Caption="Solicitado por" Width="160px" />
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.SolicitadoEn)" Caption="Fecha" Width="150px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoActividadSolicitudListItemDto item)
+                            {
+                                <span>@item.SolicitadoEn.ToString("yyyy-MM-dd HH:mm")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.Justificacion)" Caption="Justificación" MinWidth="220" />
+
+                    <DxGridDataColumn Caption="Acciones" Width="180px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoActividadSolicitudListItemDto item && item.EsPendiente)
+                            {
+                                <div class="d-flex justify-content-center gap-1">
+                                    <DxButton Text="Aprobar"
+                                              RenderStyle="ButtonRenderStyle.Success"
+                                              Click="@(() => AprobarSolicitudAsync(item))"
+                                              Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                                    <DxButton Text="Rechazar"
+                                              RenderStyle="ButtonRenderStyle.Danger"
+                                              Click="@(() => RechazarSolicitudAsync(item))"
+                                              Enabled="@(!isSubmitting && !gestionBloqueadaPorRango)" />
+                                </div>
+                            }
+                            else
+                            {
+                                <span class="text-muted">-</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay solicitudes para esta cuenta.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public string? IdPresupuesto { get; set; }
+
+    [Parameter]
+    public string? CuentaContable { get; set; }
+
+    private TipoGestion TipoSeleccionado { get; set; } = TipoGestion.Ampliacion;
+    private FormAmpliacion formAmpliacion { get; set; } = new();
+    private FormTraslado formTraslado { get; set; } = new();
+    private bool isSubmitting;
+    private bool isLoadingSolicitudes;
+    private bool isLoadingCuentasOrigen;
+    private bool isLoadingSaldosPresupuesto;
+    private string? solicitudesErrorMessage;
+    private string? cuentasOrigenErrorMessage;
+    private string? saldosPresupuestoErrorMessage;
+    private string? cuentaContableDisplay;
+    private List<CuentaContableLookupDto> cuentasOrigenTraslado = new();
+    private List<PresupuestoActividadSolicitudListItemDto> solicitudes = new();
+    private Dictionary<string, decimal> saldosPresupuestoPorCuenta = new(StringComparer.OrdinalIgnoreCase);
+    private bool gestionBloqueadaPorRango;
+    private string? bloqueoRangoMessage;
+    private decimal presupuestoHdr;
+    private DateOnly currentServerDate = DateOnly.FromDateTime(DateTime.Today);
+
+    private string PresupuestoDisplay => string.IsNullOrWhiteSpace(IdPresupuesto)
+        ? "-"
+        : IdPresupuesto.Trim();
+
+    private string CuentaCodigo => string.IsNullOrWhiteSpace(CuentaContable)
+        ? "-"
+        : CuentaContable.Trim();
+
+    private string CuentaNumeroDisplay => CuentaCodigo == "-"
+        ? "-"
+        : AccountCodeFormatter.Format(CuentaCodigo);
+
+    private string CuentaDisplay => CuentaCodigo;
+
+    private string CuentaCompletaDisplay => string.IsNullOrWhiteSpace(cuentaContableDisplay)
+        ? CuentaNumeroDisplay
+        : cuentaContableDisplay;
+
+    private string CuentaDescripcionDisplay => ExtractCuentaDescripcion(CuentaCompletaDisplay, CuentaDisplay);
+
+    private decimal? SaldoPresupuestoDestino => ObtenerSaldoPresupuesto(CuentaDisplay);
+    private decimal? SaldoPresupuestoOrigen => ObtenerSaldoPresupuesto(formTraslado.CuentaOrigen);
+    private decimal TotalPresupuestoProyectado => saldosPresupuestoPorCuenta.Values.Sum();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        cuentaContableDisplay = null;
+        await CargarCuentaDestinoDisplayAsync();
+        await EvaluarBloqueoPorRangoAsync();
+        if (!PuedeGestionarPorRango(showToast: false))
+        {
+            solicitudes = new List<PresupuestoActividadSolicitudListItemDto>();
+            cuentasOrigenTraslado = new List<CuentaContableLookupDto>();
+            saldosPresupuestoPorCuenta = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            solicitudesErrorMessage = null;
+            cuentasOrigenErrorMessage = null;
+            saldosPresupuestoErrorMessage = null;
+            isLoadingSolicitudes = false;
+            isLoadingCuentasOrigen = false;
+            isLoadingSaldosPresupuesto = false;
+            return;
+        }
+
+        await Task.WhenAll(
+            CargarCuentasOrigenTrasladoAsync(),
+            CargarSaldosPresupuestoAsync(),
+            CargarSolicitudesAsync());
+    }
+
+    private void SeleccionarAmpliacion()
+    {
+        TipoSeleccionado = TipoGestion.Ampliacion;
+    }
+
+    private void SeleccionarTraslado()
+    {
+        TipoSeleccionado = TipoGestion.Traslado;
+    }
+
+    private async Task RegistrarAmpliacionAsync()
+    {
+        if (!TieneContextoValido())
+        {
+            return;
+        }
+
+        if (!PuedeGestionarPorRango())
+        {
+            return;
+        }
+
+        try
+        {
+            isSubmitting = true;
+            solicitudesErrorMessage = null;
+
+            if (isLoadingSaldosPresupuesto)
+            {
+                ShowToast("Info", "Espere a que carguen los saldos de presupuesto.", ToastRenderStyle.Warning);
+                return;
+            }
+
+            var saldoDestino = SaldoPresupuestoDestino;
+            if (!saldoDestino.HasValue)
+            {
+                ShowToast("Error", "No se pudo determinar el saldo de presupuesto de la cuenta destino.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            if (saldoDestino.Value + formAmpliacion.Monto > presupuestoHdr)
+            {
+                ShowToast("Error", "La ampliación no puede dejar el detalle mayor al presupuesto del encabezado.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            if (TotalPresupuestoProyectado + formAmpliacion.Monto > presupuestoHdr)
+            {
+                ShowToast("Error", "La ampliación no puede dejar el total proyectado mayor al presupuesto del encabezado.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            var request = new PresupuestoActividadSolicitudCreateDto
+            {
+                TipoActividad = "AMPLIACION",
+                Monto = formAmpliacion.Monto,
+                Justificacion = formAmpliacion.Motivo ?? string.Empty,
+                Prioridad = 2
+            };
+
+            await ConfiguracionPresupuestoClient.CreateSolicitudAsync(PresupuestoDisplay, CuentaDisplay, request);
+            formAmpliacion = new FormAmpliacion();
+            ShowToast("Éxito", "Solicitud de ampliación registrada.", ToastRenderStyle.Success);
+            await CargarSolicitudesAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task RegistrarTrasladoAsync()
+    {
+        if (!TieneContextoValido())
+        {
+            return;
+        }
+
+        if (!PuedeGestionarPorRango())
+        {
+            return;
+        }
+
+        var origen = formTraslado.CuentaOrigen?.Trim() ?? string.Empty;
+        if (string.IsNullOrWhiteSpace(origen))
+        {
+            ShowToast("Error", "Debe seleccionar una cuenta origen.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (isLoadingCuentasOrigen)
+        {
+            ShowToast("Info", "Espere a que carguen las cuentas origen.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        if (cuentasOrigenTraslado.Count == 0)
+        {
+            ShowToast("Error", "No hay cuentas origen disponibles para traslado.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var origenValido = cuentasOrigenTraslado.Any(c =>
+            string.Equals(c.Code, origen, StringComparison.OrdinalIgnoreCase));
+
+        if (!origenValido)
+        {
+            ShowToast("Error", "La cuenta origen seleccionada no es válida para traslado.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (string.Equals(origen, CuentaDisplay, StringComparison.OrdinalIgnoreCase))
+        {
+            ShowToast("Error", "La cuenta origen debe ser diferente a la cuenta destino.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (isLoadingSaldosPresupuesto)
+        {
+            ShowToast("Info", "Espere a que carguen los saldos de presupuesto.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        var saldoOrigen = SaldoPresupuestoOrigen;
+        if (!saldoOrigen.HasValue)
+        {
+            ShowToast("Error", "No se pudo determinar el saldo de presupuesto de la cuenta origen.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (formTraslado.Monto > saldoOrigen.Value)
+        {
+            ShowToast("Error", "El monto a trasladar no puede superar el presupuesto disponible de la cuenta origen.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var saldoDestino = SaldoPresupuestoDestino;
+        if (!saldoDestino.HasValue)
+        {
+            ShowToast("Error", "No se pudo determinar el saldo de presupuesto de la cuenta destino.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (saldoDestino.Value + formTraslado.Monto > presupuestoHdr)
+        {
+            ShowToast("Error", "El traslado no puede dejar el detalle destino mayor al presupuesto del encabezado.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        try
+        {
+            isSubmitting = true;
+            solicitudesErrorMessage = null;
+
+            var request = new PresupuestoActividadSolicitudCreateDto
+            {
+                TipoActividad = "TRASLADO",
+                CuentaDestinoCode = CuentaDisplay,
+                Monto = formTraslado.Monto,
+                Justificacion = formTraslado.Motivo ?? string.Empty,
+                Prioridad = 2
+            };
+
+            await ConfiguracionPresupuestoClient.CreateSolicitudAsync(PresupuestoDisplay, origen, request);
+            formTraslado = new FormTraslado();
+            ShowToast("Éxito", "Solicitud de traslado registrada.", ToastRenderStyle.Success);
+            await CargarSolicitudesAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task AprobarSolicitudAsync(PresupuestoActividadSolicitudListItemDto solicitud)
+    {
+        if (!TieneContextoValido())
+        {
+            return;
+        }
+
+        if (!PuedeGestionarPorRango())
+        {
+            return;
+        }
+
+        try
+        {
+            isSubmitting = true;
+            await ConfiguracionPresupuestoClient.ApproveSolicitudAsync(
+                PresupuestoDisplay,
+                CuentaDisplay,
+                solicitud.SolicitudId);
+
+            ShowToast("Éxito", $"Solicitud #{solicitud.SolicitudId} aprobada y aplicada.", ToastRenderStyle.Success);
+            await Task.WhenAll(
+                CargarSolicitudesAsync(),
+                CargarSaldosPresupuestoAsync());
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task RechazarSolicitudAsync(PresupuestoActividadSolicitudListItemDto solicitud)
+    {
+        if (!TieneContextoValido())
+        {
+            return;
+        }
+
+        if (!PuedeGestionarPorRango())
+        {
+            return;
+        }
+
+        try
+        {
+            isSubmitting = true;
+            await ConfiguracionPresupuestoClient.RejectSolicitudAsync(
+                PresupuestoDisplay,
+                CuentaDisplay,
+                solicitud.SolicitudId);
+
+            ShowToast("Éxito", $"Solicitud #{solicitud.SolicitudId} rechazada.", ToastRenderStyle.Success);
+            await CargarSolicitudesAsync();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSubmitting = false;
+        }
+    }
+
+    private async Task RecargarSolicitudesAsync()
+    {
+        if (!PuedeGestionarPorRango())
+        {
+            return;
+        }
+
+        await Task.WhenAll(
+            CargarSolicitudesAsync(),
+            CargarSaldosPresupuestoAsync());
+    }
+
+    private async Task CargarCuentaDestinoDisplayAsync()
+    {
+        if (!TieneContextoValidoSinToast())
+        {
+            return;
+        }
+
+        try
+        {
+            var detalle = await ConfiguracionPresupuestoClient.GetDetailByIdAsync(
+                PresupuestoDisplay,
+                CuentaDisplay);
+
+            if (!string.IsNullOrWhiteSpace(detalle?.CuentaContable))
+            {
+                cuentaContableDisplay = FormatCuentaContableDisplay(detalle.CuentaContable);
+            }
+        }
+        catch
+        {
+            cuentaContableDisplay = null;
+        }
+    }
+
+    private async Task CargarSolicitudesAsync()
+    {
+        if (!PuedeGestionarPorRango(showToast: false))
+        {
+            solicitudes = new List<PresupuestoActividadSolicitudListItemDto>();
+            return;
+        }
+
+        if (!TieneContextoValido())
+        {
+            solicitudes = new List<PresupuestoActividadSolicitudListItemDto>();
+            return;
+        }
+
+        try
+        {
+            isLoadingSolicitudes = true;
+            solicitudesErrorMessage = null;
+
+            solicitudes = await ConfiguracionPresupuestoClient.GetSolicitudesByDetalleAsync(
+                PresupuestoDisplay,
+                CuentaDisplay);
+        }
+        catch (Exception ex)
+        {
+            solicitudes = new List<PresupuestoActividadSolicitudListItemDto>();
+            solicitudesErrorMessage = $"No se pudieron cargar las solicitudes: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingSolicitudes = false;
+        }
+    }
+
+    private async Task CargarCuentasOrigenTrasladoAsync()
+    {
+        if (!PuedeGestionarPorRango(showToast: false))
+        {
+            cuentasOrigenTraslado = new List<CuentaContableLookupDto>();
+            return;
+        }
+
+        if (!TieneContextoValidoSinToast())
+        {
+            cuentasOrigenTraslado = new List<CuentaContableLookupDto>();
+            return;
+        }
+
+        try
+        {
+            isLoadingCuentasOrigen = true;
+            cuentasOrigenErrorMessage = null;
+
+            cuentasOrigenTraslado = await ConfiguracionPresupuestoClient.GetCuentasDestinoTrasladoAsync(
+                PresupuestoDisplay,
+                CuentaDisplay);
+
+            if (!string.IsNullOrWhiteSpace(formTraslado.CuentaOrigen))
+            {
+                var selectedIsValid = cuentasOrigenTraslado.Any(c =>
+                    string.Equals(c.Code, formTraslado.CuentaOrigen, StringComparison.OrdinalIgnoreCase));
+
+                if (!selectedIsValid)
+                {
+                    formTraslado.CuentaOrigen = null;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            cuentasOrigenTraslado = new List<CuentaContableLookupDto>();
+            cuentasOrigenErrorMessage = $"No se pudieron cargar las cuentas origen: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingCuentasOrigen = false;
+        }
+    }
+
+    private async Task CargarSaldosPresupuestoAsync()
+    {
+        if (!PuedeGestionarPorRango(showToast: false))
+        {
+            saldosPresupuestoPorCuenta = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
+
+        if (!TieneContextoValidoSinToast())
+        {
+            saldosPresupuestoPorCuenta = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            return;
+        }
+
+        try
+        {
+            isLoadingSaldosPresupuesto = true;
+            saldosPresupuestoErrorMessage = null;
+
+            var detalles = await ConfiguracionPresupuestoClient.GetDetailsByPresupuestoAsync(PresupuestoDisplay);
+
+            if (string.IsNullOrWhiteSpace(cuentaContableDisplay))
+            {
+                var detalleDestino = detalles.LastOrDefault(d =>
+                    string.Equals(d.CuentaContableCodigo?.Trim(), CuentaDisplay, StringComparison.OrdinalIgnoreCase));
+
+                if (!string.IsNullOrWhiteSpace(detalleDestino?.CuentaContable))
+                {
+                    cuentaContableDisplay = FormatCuentaContableDisplay(detalleDestino.CuentaContable);
+                }
+            }
+
+            saldosPresupuestoPorCuenta = detalles
+                .Where(d => !string.IsNullOrWhiteSpace(d.CuentaContableCodigo))
+                .GroupBy(d => d.CuentaContableCodigo.Trim(), StringComparer.OrdinalIgnoreCase)
+                .ToDictionary(g => g.Key, g => g.Last().ValorProyeccion, StringComparer.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            saldosPresupuestoPorCuenta = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+            saldosPresupuestoErrorMessage = $"No se pudieron cargar los saldos de presupuesto: {ex.Message}";
+        }
+        finally
+        {
+            isLoadingSaldosPresupuesto = false;
+        }
+    }
+
+    private async Task EvaluarBloqueoPorRangoAsync()
+    {
+        gestionBloqueadaPorRango = false;
+        bloqueoRangoMessage = null;
+        presupuestoHdr = 0m;
+
+        if (!TieneContextoValidoSinToast())
+        {
+            return;
+        }
+
+        try
+        {
+            var header = await ConfiguracionPresupuestoClient.GetByIdAsync(PresupuestoDisplay);
+            presupuestoHdr = header?.ValorGlobal ?? 0m;
+            if (header is null)
+            {
+                gestionBloqueadaPorRango = true;
+                bloqueoRangoMessage = "No se encontró el encabezado del presupuesto para validar vigencia.";
+                return;
+            }
+
+            try
+            {
+                currentServerDate = await ConfiguracionPresupuestoClient.GetServerDateAsync();
+            }
+            catch
+            {
+                currentServerDate = DateOnly.FromDateTime(DateTime.Today);
+            }
+
+            if (header.FechaInicia <= currentServerDate && header.FechaFinaliza >= currentServerDate)
+            {
+                return;
+            }
+
+            gestionBloqueadaPorRango = true;
+            bloqueoRangoMessage =
+                $"La gestión de detalles está bloqueada porque el presupuesto está fuera del rango de fechas ({header.FechaInicia:yyyy-MM-dd} al {header.FechaFinaliza:yyyy-MM-dd}). Fecha actual: {currentServerDate:yyyy-MM-dd}.";
+        }
+        catch
+        {
+            gestionBloqueadaPorRango = false;
+            bloqueoRangoMessage = null;
+        }
+    }
+
+    private bool PuedeGestionarPorRango(bool showToast = true)
+    {
+        if (!gestionBloqueadaPorRango)
+        {
+            return true;
+        }
+
+        if (showToast)
+        {
+            ShowToast(
+                "Validación",
+                bloqueoRangoMessage ?? "La gestión de detalles está bloqueada fuera del rango de fechas.",
+                ToastRenderStyle.Warning);
+        }
+
+        return false;
+    }
+
+    private bool TieneContextoValido()
+    {
+        if (!string.IsNullOrWhiteSpace(PresupuestoDisplay) &&
+            !string.IsNullOrWhiteSpace(CuentaDisplay) &&
+            PresupuestoDisplay != "-" &&
+            CuentaDisplay != "-")
+        {
+            return true;
+        }
+
+        ShowToast("Error", "Faltan datos de presupuesto/cuenta para operar.", ToastRenderStyle.Danger);
+        return false;
+    }
+
+    private bool TieneContextoValidoSinToast()
+    {
+        return !string.IsNullOrWhiteSpace(PresupuestoDisplay) &&
+               !string.IsNullOrWhiteSpace(CuentaDisplay) &&
+               PresupuestoDisplay != "-" &&
+               CuentaDisplay != "-";
+    }
+
+    private static string FormatCuentaContableDisplay(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return string.Empty;
+        }
+
+        var parts = value.Split(" - ", 2, StringSplitOptions.TrimEntries);
+        return parts.Length == 2
+            ? AccountCodeFormatter.FormatDisplay(parts[0], parts[1])
+            : AccountCodeFormatter.Format(value);
+    }
+
+    private decimal? ObtenerSaldoPresupuesto(string? cuentaCode)
+    {
+        if (string.IsNullOrWhiteSpace(cuentaCode))
+        {
+            return null;
+        }
+
+        return saldosPresupuestoPorCuenta.TryGetValue(cuentaCode.Trim(), out var saldo)
+            ? saldo
+            : null;
+    }
+
+    private static string ExtractCuentaDescripcion(string? cuentaDisplay, string? cuentaCodigo)
+    {
+        var display = cuentaDisplay?.Trim() ?? string.Empty;
+        var code = cuentaCodigo?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(display))
+        {
+            return "-";
+        }
+
+        if (!string.IsNullOrWhiteSpace(code))
+        {
+            var prefix = $"{code} - ";
+            if (display.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+            {
+                var descripcion = display[prefix.Length..].Trim();
+                return string.IsNullOrWhiteSpace(descripcion) ? "-" : descripcion;
+            }
+
+            if (string.Equals(display, code, StringComparison.OrdinalIgnoreCase))
+            {
+                return "-";
+            }
+        }
+
+        var separatorIndex = display.IndexOf(" - ", StringComparison.Ordinal);
+        if (separatorIndex >= 0 && separatorIndex + 3 < display.Length)
+        {
+            var descripcion = display[(separatorIndex + 3)..].Trim();
+            return string.IsNullOrWhiteSpace(descripcion) ? "-" : descripcion;
+        }
+
+        return "-";
+    }
+
+    private static string FormatSaldoPresupuesto(decimal? saldo)
+    {
+        return saldo.HasValue ? saldo.Value.ToString("N2") : "-";
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = message,
+            RenderStyle = style,
+            ProviderName = "PresupuestoGestionToast"
+        });
+    }
+
+    private static string GetEstadoCss(string? estado)
+    {
+        if (string.IsNullOrWhiteSpace(estado))
+        {
+            return "inactive";
+        }
+
+        return estado.Trim().ToUpperInvariant() switch
+        {
+            "PENDIENTE" => "pending",
+            "ATENDIDA" => "active",
+            "APROBADA" => "active",
+            "RECHAZADA" => "inactive",
+            _ => "inactive"
+        };
+    }
+
+    private void VolverALista() => Navigation.NavigateTo("/presupuesto/configuraciones");
+
+    private enum TipoGestion
+    {
+        Ampliacion,
+        Traslado
+    }
+
+    private sealed class FormAmpliacion
+    {
+        [Range(typeof(decimal), "0.01", "99999999999999.9999", ErrorMessage = "El monto debe ser mayor a cero.")]
+        public decimal Monto { get; set; }
+
+        [StringLength(500, ErrorMessage = "El motivo no puede exceder 500 caracteres.")]
+        public string? Motivo { get; set; }
+    }
+
+    private sealed class FormTraslado
+    {
+        [Required(ErrorMessage = "La cuenta origen es obligatoria.")]
+        [StringLength(20, ErrorMessage = "La cuenta origen no puede exceder 20 caracteres.")]
+        public string? CuentaOrigen { get; set; }
+
+        [Range(typeof(decimal), "0.01", "99999999999999.9999", ErrorMessage = "El monto debe ser mayor a cero.")]
+        public decimal Monto { get; set; }
+
+        [StringLength(500, ErrorMessage = "El motivo no puede exceder 500 caracteres.")]
+        public string? Motivo { get; set; }
+    }
+}

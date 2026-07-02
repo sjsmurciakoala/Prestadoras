@@ -1,8 +1,10 @@
 using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
+using System.Globalization;
 using DevExpress.DataAccess.Sql;
 using DevExpress.XtraReports;
+using DevExpress.XtraReports.Parameters;
 using DevExpress.XtraReports.UI;
 using DevExpress.XtraReports.Web.Extensions;
 using Microsoft.AspNetCore.Http;
@@ -71,10 +73,64 @@ public sealed class CompanyReportStorageWebExtension : ReportStorageWebExtension
         try
         {
             var layout = ResolveLayout(companyId, catalogo.informe_id, request.Mode);
+            
+            if (layout is null && request.Mode == ReportesWebConstants.LayoutMode.Published)
+            {
+                layout = ResolveLayout(companyId, catalogo.informe_id, ReportesWebConstants.LayoutMode.Draft);
+            }
+
+            if (layout is null)
+            {
+                var defaultLayoutBytes = _templateFactory.CreateLayoutBytes(
+                    catalogo.codigo,
+                    catalogo.nombre,
+                    catalogo.descripcion,
+                    catalogo.consulta_clave);
+                
+                if (defaultLayoutBytes.Length > 0)
+                {
+                    var defaultXml = Encoding.UTF8.GetString(defaultLayoutBytes);
+                    var now = DateTime.UtcNow;
+                    var actor = ResolveActor();
+
+                    var nextVersion = (_context.rep_reporte_layouts
+                        .Where(x => x.company_id == companyId && x.informe_id == catalogo.informe_id)
+                        .Select(x => (int?)x.version_num)
+                        .Max() ?? 0) + 1;
+
+                    var draft = new rep_reporte_layout
+                    {
+                        company_id = companyId,
+                        informe_id = catalogo.informe_id,
+                        version_num = nextVersion,
+                        estado = ReportesWebConstants.LayoutStatus.Draft,
+                        layout_xml = defaultXml,
+                        created_at = now,
+                        created_by = actor
+                    };
+                    _context.rep_reporte_layouts.Add(draft);
+
+                    var published = new rep_reporte_layout
+                    {
+                        company_id = companyId,
+                        informe_id = catalogo.informe_id,
+                        version_num = nextVersion + 1,
+                        estado = ReportesWebConstants.LayoutStatus.Published,
+                        layout_xml = defaultXml,
+                        created_at = now,
+                        created_by = actor
+                    };
+                    _context.rep_reporte_layouts.Add(published);
+                    _context.SaveChanges();
+
+                    layout = request.Mode == ReportesWebConstants.LayoutMode.Draft ? draft : published;
+                }
+            }
+
             if (layout is not null && !string.IsNullOrWhiteSpace(layout.layout_xml))
             {
                 var layoutXml = EnsureCompatibleLayoutXml(catalogo, layout);
-                return Encoding.UTF8.GetBytes(layoutXml);
+                return PrepareLayoutData(companyId, layoutXml, request.Parameters);
             }
         }
         catch (Exception ex) when (IsLayoutTableMissing(ex))
@@ -110,6 +166,7 @@ public sealed class CompanyReportStorageWebExtension : ReportStorageWebExtension
         var actor = ResolveActor();
         var catalogo = FindOrCreateCatalog(companyId, request.Codigo, actor);
         var now = DateTime.UtcNow;
+        ReportCompanyHeaderParameters.Apply(report, ResolveHeaderCompany(companyId));
         var layoutXml = SerializeLayout(report);
 
         try
@@ -191,6 +248,30 @@ public sealed class CompanyReportStorageWebExtension : ReportStorageWebExtension
             { Length: > 0 } name => name,
             _ => "report-designer"
         };
+
+    private cfg_company? ResolveHeaderCompany(long companyId)
+        => companyId > 0
+            ? _context.cfg_companies.FirstOrDefault(x => x.company_id == companyId)
+            : null;
+
+    private byte[] PrepareLayoutData(
+        long companyId,
+        string layoutXml,
+        IReadOnlyDictionary<string, string?> requestParameters)
+    {
+        using var input = new MemoryStream(Encoding.UTF8.GetBytes(layoutXml));
+        using var report = XtraReport.FromXmlStream(input, true);
+
+        ReportCompanyHeaderParameters.Apply(report, ResolveHeaderCompany(companyId));
+
+        using var refreshed = new MemoryStream();
+        report.SaveLayoutToXml(refreshed);
+        var refreshedXml = Encoding.UTF8.GetString(refreshed.ToArray());
+
+        return requestParameters.Count > 0
+            ? ApplyRequestParameters(refreshedXml, requestParameters)
+            : Encoding.UTF8.GetBytes(refreshedXml);
+    }
 
     private rep_catalogo_informe FindOrCreateCatalog(long companyId, string codigo, string actor)
     {
@@ -317,21 +398,106 @@ public sealed class CompanyReportStorageWebExtension : ReportStorageWebExtension
         var parts = raw.Split('?', 2, StringSplitOptions.TrimEntries);
         var codigo = ReportesWebConstants.NormalizeCode(parts[0]);
         var mode = ReportesWebConstants.LayoutMode.Published;
+        var parameters = new Dictionary<string, string?>(StringComparer.OrdinalIgnoreCase);
 
         if (parts.Length > 1)
         {
             var query = QueryHelpers.ParseQuery(parts[1]);
-            if (query.TryGetValue("mode", out var modeValues))
+            foreach (var entry in query)
             {
-                var candidate = modeValues.ToString();
-                if (string.Equals(candidate, ReportesWebConstants.LayoutMode.Draft, StringComparison.OrdinalIgnoreCase))
+                if (string.Equals(entry.Key, "mode", StringComparison.OrdinalIgnoreCase))
                 {
-                    mode = ReportesWebConstants.LayoutMode.Draft;
+                    var candidate = entry.Value.ToString();
+                    if (string.Equals(candidate, ReportesWebConstants.LayoutMode.Draft, StringComparison.OrdinalIgnoreCase))
+                    {
+                        mode = ReportesWebConstants.LayoutMode.Draft;
+                    }
+
+                    continue;
                 }
+
+                parameters[entry.Key] = entry.Value.ToString();
             }
         }
 
-        return new ReportRequest(codigo, mode);
+        return new ReportRequest(codigo, mode, parameters);
+    }
+
+    private static byte[] ApplyRequestParameters(string layoutXml, IReadOnlyDictionary<string, string?> requestParameters)
+    {
+        using var input = new MemoryStream(Encoding.UTF8.GetBytes(layoutXml));
+        using var report = XtraReport.FromXmlStream(input, true);
+
+        foreach (Parameter parameter in report.Parameters)
+        {
+            parameter.Visible = false;
+
+            if (!requestParameters.TryGetValue(parameter.Name, out var rawValue))
+            {
+                continue;
+            }
+
+            parameter.Value = ConvertParameterValue(rawValue, parameter.Type);
+        }
+
+        report.RequestParameters = false;
+
+        using var output = new MemoryStream();
+        report.SaveLayoutToXml(output);
+        return output.ToArray();
+    }
+
+    private static object? ConvertParameterValue(string? rawValue, Type parameterType)
+    {
+        if (string.IsNullOrWhiteSpace(rawValue))
+        {
+            return null;
+        }
+
+        var targetType = Nullable.GetUnderlyingType(parameterType) ?? parameterType;
+
+        if (targetType == typeof(string))
+        {
+            return rawValue;
+        }
+
+        if (targetType == typeof(DateTime))
+        {
+            return DateTime.Parse(rawValue, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(bool))
+        {
+            return string.Equals(rawValue, "1", StringComparison.OrdinalIgnoreCase)
+                || bool.Parse(rawValue);
+        }
+
+        if (targetType == typeof(long))
+        {
+            return long.Parse(rawValue, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(int))
+        {
+            return int.Parse(rawValue, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(decimal))
+        {
+            return decimal.Parse(rawValue, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType == typeof(double))
+        {
+            return double.Parse(rawValue, CultureInfo.InvariantCulture);
+        }
+
+        if (targetType.IsEnum)
+        {
+            return Enum.Parse(targetType, rawValue, ignoreCase: true);
+        }
+
+        return Convert.ChangeType(rawValue, targetType, CultureInfo.InvariantCulture);
     }
 
     private static bool IsLayoutTableMissing(Exception ex)
@@ -535,5 +701,5 @@ public sealed class CompanyReportStorageWebExtension : ReportStorageWebExtension
         string RoutineName,
         IReadOnlyList<ReportingStoredFunctionSqlHelper.StoredFunctionArgument> Arguments);
 
-    private sealed record ReportRequest(string Codigo, string Mode);
+    private sealed record ReportRequest(string Codigo, string Mode, IReadOnlyDictionary<string, string?> Parameters);
 }

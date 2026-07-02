@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Informes;
+using SIAD.Core.DTOs.Rutas;
 using SIAD.Data;
 
 namespace SIAD.Reports;
@@ -134,5 +135,46 @@ public sealed class InformesConsultaService : IInformesConsultaService
             totalCount,
             summaryRows.Sum(x => x.TotalDebit),
             summaryRows.Sum(x => x.TotalCredit));
+    }
+
+    public async Task<IReadOnlyList<ServicioCategoriaLookupDto>> ListarCategoriasServicioAsync(CancellationToken ct = default)
+    {
+        return await _context.categoria_servicios
+            .AsNoTracking()
+            .Where(x => x.estado)
+            .OrderBy(x => x.descripcion)
+            .Select(x => new ServicioCategoriaLookupDto(
+                x.categoria_servicio_id,
+                x.descripcion))
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<CicloLookupDto>> ListarCiclosAsync(CancellationToken ct = default)
+    {
+        return await _context.ciclos
+            .AsNoTracking()
+            .Where(x => x.estado)
+            .OrderBy(x => x.ciclos_descripcioncorta)
+            .ThenBy(x => x.ciclos_codigo)
+            .Select(x => new CicloLookupDto(
+                x.ciclos_id,
+                string.IsNullOrWhiteSpace(x.ciclos_descripcioncorta)
+                    ? x.ciclos_codigo
+                    : x.ciclos_descripcioncorta))
+            .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<UsuarioInformeLookupDto>> ListarUsuariosRecibosAsync(CancellationToken ct = default)
+    {
+        return await _context.pagovariostemps
+            .AsNoTracking()
+            .Select(x => string.IsNullOrWhiteSpace(x.cajero)
+                ? (string.IsNullOrWhiteSpace(x.usuario) ? null : x.usuario.Trim())
+                : x.cajero.Trim())
+            .Where(x => x != null && x != string.Empty)
+            .Distinct()
+            .OrderBy(x => x)
+            .Select(x => new UsuarioInformeLookupDto(x!, x!))
+            .ToListAsync(ct);
     }
 }

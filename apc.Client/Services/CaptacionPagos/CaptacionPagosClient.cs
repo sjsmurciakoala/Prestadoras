@@ -168,11 +168,18 @@ public class CaptacionPagosClient
 
     // ==================== COMBOS Y AUXILIARES ====================
 
-    public async Task<IReadOnlyList<ClienteComboDto>> GetClientesAsync(string? query = null, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ClienteComboDto>> GetClientesAsync(string? query = null, CancellationToken ct = default, int? take = null)
     {
-        var url = string.IsNullOrWhiteSpace(query)
-            ? "api/captacionpagos/clientes"
-            : $"api/captacionpagos/clientes?query={Uri.EscapeDataString(query)}";
+        var parts = new List<string>();
+        if (!string.IsNullOrWhiteSpace(query))
+            parts.Add($"query={Uri.EscapeDataString(query)}");
+        if (take is not null)
+            parts.Add($"take={take.Value}");
+
+        var url = "api/captacionpagos/clientes";
+        if (parts.Count > 0)
+            url += "?" + string.Join("&", parts);
+
         var result = await _http.GetFromJsonAsync<List<ClienteComboDto>>(url, ct);
         return result ?? new List<ClienteComboDto>();
     }

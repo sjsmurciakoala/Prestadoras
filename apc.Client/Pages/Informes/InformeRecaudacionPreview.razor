@@ -1,0 +1,151 @@
+﻿@page "/informes/cobranzas/recaudacion"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Globalization
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Informes
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.CaptacionPagos
+@inject CaptacionPagosClient CaptacionClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Informe de recaudación</PageTitle>
+
+<div class="page-container reporte-recaudacion">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Informe de recaudación</h2>
+            <p class="page-subtitle">Seleccione el rango de fechas y el medio de pago para generar el PDF del informe de recaudación.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/cobranzas"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Limpiar"
+                      Click="LimpiarFiltros"
+                      IconCssClass="bi bi-eraser"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Generar PDF"
+                      Click="GenerarPdf"
+                      IconCssClass="bi bi-file-earmark-pdf"
+                      RenderStyle="ButtonRenderStyle.Primary" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        <DxFormLayout ColCountMd="12">
+            <DxFormLayoutItem Caption="Fecha desde" ColSpanMd="3">
+                <DxDateEdit @bind-Date="fechaDesde" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha hasta" ColSpanMd="3">
+                <DxDateEdit @bind-Date="fechaHasta" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Medio de pago" ColSpanMd="3">
+                <DxComboBox Data="@mediosPago"
+                             @bind-Value="medioPago"
+                             ValueFieldName="@nameof(BancoDto.Codigo)"
+                             TextFieldName="@nameof(BancoDto.Nombre)"
+                             NullText="Todos"
+                             FilteringMode="DataGridFilteringMode.Contains"
+                             DropDownStyleMode="DropDownStyleMode.DropDownList" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Reporte" ColSpanMd="3">
+                <DxTextBox Text="Informe de recaudación"
+                            ReadOnly="true"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card p-3 viewer-shell">
+        @if (string.IsNullOrWhiteSpace(pdfUrl))
+        {
+            <div class="empty-preview">
+                <div class="empty-preview__icon">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                </div>
+                <h3 class="empty-preview__title">PDF no generado</h3>
+                <p class="empty-preview__description">
+                    Defina los filtros y pulse Generar PDF para previsualizar el informe de recaudación.
+                </p>
+            </div>
+        }
+        else
+        {
+            <iframe class="pdf-frame"
+                    src="@pdfUrl"
+                    title="Informe de recaudación"></iframe>
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime fechaDesde;
+    private DateTime fechaHasta = DateTime.Today;
+    private BancoDto? medioPago;
+    private string? errorMessage;
+    private string? pdfUrl;
+    private List<BancoDto> mediosPago = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        var hoy = DateTime.Today;
+        fechaDesde = new DateTime(hoy.Year, hoy.Month, 1);
+
+        try
+        {
+            var items = await CaptacionClient.GetBancosAsync();
+            mediosPago =
+            [
+                new BancoDto { Codigo = string.Empty, Nombre = "Todos" },
+                .. items
+            ];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No fue posible cargar los medios de pago: {ex.Message}";
+            mediosPago = [new BancoDto { Codigo = string.Empty, Nombre = "Todos" }];
+        }
+    }
+
+    private void GenerarPdf()
+    {
+        if (fechaDesde.Date > fechaHasta.Date)
+        {
+            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            pdfUrl = null;
+            return;
+        }
+
+        errorMessage = null;
+
+        var query = new List<string>
+        {
+            $"fechaDesde={Uri.EscapeDataString(DateOnly.FromDateTime(fechaDesde.Date).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}",
+            $"fechaHasta={Uri.EscapeDataString(DateOnly.FromDateTime(fechaHasta.Date).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}"
+        };
+
+        if (medioPago is not null && !string.IsNullOrWhiteSpace(medioPago.Codigo))
+        {
+            query.Add($"medioPagoCodigo={Uri.EscapeDataString(medioPago.Codigo.Trim())}");
+        }
+
+        pdfUrl = $"api/informes/reportes/{ReportesWebConstants.CodigoReporteRecaudacion}/pdf?{string.Join("&", query)}";
+    }
+
+    private void LimpiarFiltros()
+    {
+        var hoy = DateTime.Today;
+        fechaDesde = new DateTime(hoy.Year, hoy.Month, 1);
+        fechaHasta = DateTime.Today;
+        medioPago = null;
+        errorMessage = null;
+        pdfUrl = null;
+    }
+}

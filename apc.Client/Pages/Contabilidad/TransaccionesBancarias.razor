@@ -15,6 +15,8 @@
 @inject TenantState TenantState
 @inject NavigationManager NavigationManager
 
+<PageTitle>SIAD - Transacciones Bancarias</PageTitle>
+
 <div class="page-container">
     <div class="d-flex justify-content-between align-items-center mb-4 header-section">
         <div>
@@ -40,6 +42,24 @@
                       RenderStyle="ButtonRenderStyle.Success"
                       CssClass="btn-modern shadow-sm"
                       Enabled="@(!isLoading && transaccionesFiltradas.Count > 0)" />
+            @if (!isLoading && transaccionesFiltradas.Count > 0)
+            {
+                <a class="btn btn-secondary btn-modern shadow-sm d-inline-flex align-items-center gap-2"
+                   href="@GetReporteListaUrl()"
+                   target="_blank"
+                   rel="noopener">
+                    <i class="bi bi-printer"></i>
+                    <span>Imprimir Reporte</span>
+                </a>
+            }
+            else
+            {
+                <DxButton Text="Imprimir Reporte"
+                          IconCssClass="bi bi-printer"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="btn-modern shadow-sm"
+                          Enabled="false" />
+            }
             <DxButton Text="@VolverTexto"
                       Click="VolverABancos"
                       IconCssClass="bi bi-arrow-left"
@@ -178,6 +198,19 @@
                                             <span class="anulacion-dot" title="Anulada"></span>
                                         }
                                         <span>@referencia</span>
+                                    </span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(BanTransaccionListDto.EstadoConciliacion)"
+                                          Caption="Conciliacion"
+                                          Width="150px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is BanTransaccionListDto itemConciliacion)
+                                {
+                                    var conciliada = EstaConciliada(itemConciliacion);
+                                    <span class="conciliacion-pill @(conciliada ? "conciliacion-pill--ok" : "conciliacion-pill--pendiente")">
+                                        @(conciliada ? "Conciliada" : "No conciliada")
                                     </span>
                                 }
                             </CellDisplayTemplate>
@@ -673,6 +706,19 @@
                     {
                         e.Column.IsHidden = false;
                     }
+                },
+                CustomizeCell = e =>
+                {
+                    if (!string.Equals(e.ColumnFieldName, nameof(BanTransaccionListDto.EstadoConciliacion), StringComparison.Ordinal))
+                    {
+                        return;
+                    }
+
+                    if (e.DataItem is BanTransaccionListDto item)
+                    {
+                        e.Value = ObtenerEstadoConciliacionTexto(item.EstadoConciliacion);
+                        e.Handled = true;
+                    }
                 }
             });
         }
@@ -855,6 +901,28 @@
         return uri.ToString();
     }
 
+    private string GetReporteListaUrl()
+    {
+        var query = new List<string>();
+        if (filtroFechaDesde.HasValue)
+        {
+            query.Add($"fechaDesde={filtroFechaDesde.Value:yyyy-MM-dd}");
+        }
+
+        if (filtroFechaHasta.HasValue)
+        {
+            query.Add($"fechaHasta={filtroFechaHasta.Value:yyyy-MM-dd}");
+        }
+
+        var relativeUrl = "api/bancos/transacciones/reporte/lista";
+        if (query.Count > 0)
+        {
+            relativeUrl += "?" + string.Join("&", query);
+        }
+
+        return NavigationManager.ToAbsoluteUri(relativeUrl).ToString();
+    }
+
     private sealed class AnulacionFormModel
     {
         [Required(ErrorMessage = "El motivo es obligatorio.")]
@@ -956,6 +1024,14 @@
     private static bool EsAnulada(BanTransaccionListDto transaccion)
         => string.Equals(transaccion.Estado, "ANULADA", StringComparison.OrdinalIgnoreCase);
 
+    private static bool EstaConciliada(BanTransaccionListDto? transaccion)
+        => string.Equals(transaccion?.EstadoConciliacion, "CON", StringComparison.OrdinalIgnoreCase);
+
+    private static string ObtenerEstadoConciliacionTexto(string? estadoConciliacion)
+        => string.Equals(estadoConciliacion, "CON", StringComparison.OrdinalIgnoreCase)
+            ? "Conciliada"
+            : "No conciliada";
+
     private static BanTransaccionDetalleDto MapDetalleFallback(BanTransaccionListDto transaccion)
     {
         return new BanTransaccionDetalleDto
@@ -981,7 +1057,8 @@
 
         var estado = transaccion.Estado ?? string.Empty;
         return !string.Equals(estado, "ANULADA", StringComparison.OrdinalIgnoreCase)
-               && !string.Equals(estado, "ANULACION", StringComparison.OrdinalIgnoreCase);
+               && !string.Equals(estado, "ANULACION", StringComparison.OrdinalIgnoreCase)
+               && !EstaConciliada(transaccion);
     }
 }
 

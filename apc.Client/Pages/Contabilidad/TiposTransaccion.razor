@@ -11,7 +11,7 @@
 @inject HttpClient Http
 @inject TenantState TenantState
 
-<PageTitle>Tipos de transacción</PageTitle>
+<PageTitle>SIAD - Tipos de transacción</PageTitle>
 
 @* ═══════════════════════════════════════════════════════════════════════════
    LOADING PANEL GLOBAL
@@ -222,8 +222,16 @@
                                                   TextAlignment="GridTextAlignment.Center"
                                                   SortIndex="0"
                                                   SortOrder="GridColumnSortOrder.Ascending" />
-                                <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.AccountCodeFrom)" Caption="Cta. Desde" />
-                                <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.AccountCodeTo)" Caption="Cta. Hasta" />
+                                <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.AccountCodeFrom)" Caption="Cta. Desde">
+                                    <CellDisplayTemplate Context="cell">
+                                        @AccountCodeFormatter.Format(((TipoTransaccionRuleDto)cell.DataItem).AccountCodeFrom)
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn FieldName="@nameof(TipoTransaccionRuleDto.AccountCodeTo)" Caption="Cta. Hasta">
+                                    <CellDisplayTemplate Context="cell">
+                                        @AccountCodeFormatter.Format(((TipoTransaccionRuleDto)cell.DataItem).AccountCodeTo)
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
                                 <DxGridDataColumn Caption="Act" Width="55px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
                                     <CellDisplayTemplate Context="cell">
                                         @if (((TipoTransaccionRuleDto)cell.DataItem).IsActive)
@@ -665,8 +673,8 @@
                 {
                     Code = c.Code!,
                     Display = string.IsNullOrWhiteSpace(c.Description)
-                        ? c.Code!
-                        : $"{c.Code} - {c.Description}"
+                        ? AccountCodeFormatter.Format(c.Code!)
+                        : AccountCodeFormatter.FormatDisplay(c.Code, c.Description)
                 })
                 .OrderBy(x => x.Code, StringComparer.OrdinalIgnoreCase)
                 .ToList();

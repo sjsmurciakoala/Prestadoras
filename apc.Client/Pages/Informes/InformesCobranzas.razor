@@ -1,0 +1,146 @@
+﻿@page "/informes/cobranzas"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using SIAD.Core.Constants
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Informes de cobranzas</PageTitle>
+
+<div class="page-container informes-cobranzas">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Informes de cobranzas</h2>
+            <p class="page-subtitle">Saldos vencidos, antigüedad de deuda y control operativo de cobranza.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+        </div>
+    </div>
+
+    <!-- Buscador Premium -->
+    <div class="modern-card p-3 mb-2 search-container">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="position-relative flex-grow-1" style="max-width: 480px;">
+                <span class="position-absolute top-50 start-0 translate-middle-y ps-3 text-muted">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text" 
+                       class="form-control ps-5 py-2 rounded-3 border-secondary-subtle search-input" 
+                       placeholder="Buscar informe por nombre o número..." 
+                       @bind="searchQuery" 
+                       @bind:event="oninput" />
+            </div>
+            @if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                <DxButton Text="Limpiar" 
+                          Click="@(() => searchQuery = string.Empty)" 
+                          IconCssClass="bi bi-eraser"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+            }
+        </div>
+    </div>
+
+    <!-- Grupos de Categorías Filtradas -->
+    @foreach (var group in FilteredItems.GroupBy(x => x.CategoriaInterna))
+    {
+        <h3 class="category-header mt-4 mb-3 text-secondary">
+            <i class="@(group.Key == "Saldo de clientes" ? "bi bi-person-badge-fill text-primary" : "bi bi-collection-play-fill text-success") me-2"></i>
+            @group.Key
+        </h3>
+        <div class="informes-options-grid mt-2">
+            @foreach (var item in group)
+            {
+                <a class="informe-option-card" href="@item.Route">
+                    <div class="informe-option-card__header">
+                        <div class="informe-option-card__icon">
+                            <i class="@item.Icon"></i>
+                        </div>
+                        <div class="d-flex align-items-center gap-2">
+                            <span class="badge bg-light text-dark border"># @item.Numero</span>
+                            <span class="informe-option-card__status">@item.Status</span>
+                        </div>
+                    </div>
+
+                    <div>
+                        <h3 class="informe-option-card__title">@item.Title</h3>
+                        <p class="informe-option-card__description">
+                            @item.Description
+                        </p>
+                    </div>
+                </a>
+            }
+        </div>
+    }
+
+    @if (!FilteredItems.Any())
+    {
+        <div class="empty-search text-center py-5">
+            <div class="empty-search__icon mb-3">
+                <i class="bi bi-search-heart text-muted fs-1"></i>
+            </div>
+            <h4 class="text-muted">No se encontraron informes</h4>
+            <p class="text-muted small">Intenta buscar con otros términos o números.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private string searchQuery = string.Empty;
+
+    private List<InformeCardItem> informes = [];
+
+    protected override void OnInitialized()
+    {
+        informes = [
+            new InformeCardItem(1, "Saldo de clientes segun antigüedad", "Clientes con saldo vencido según días de antigüedad, agrupados por ciclo y filtrables por estado.", ReportesWebConstants.BuildSaldoClientesAntiguedadPreviewRoute(), "bi bi-hourglass-split", "Saldo de clientes"),
+            new InformeCardItem(2, "Analisis de antigüedad de cobros", "Análisis por tramos de antigüedad de cobro, filtrable desde la fecha base hacia atrás en meses o años.", ReportesWebConstants.BuildAnalisisAntiguedadCobrosPreviewRoute(), "bi bi-bar-chart-steps", "Análisis y Recaudación"),
+            new InformeCardItem(3, "Saldo de clientes por ciclo", "Resumen totalizado por ciclo con saldo anterior, débitos, créditos, saldo actual y conteos de clientes.", ReportesWebConstants.BuildSaldoClientesCicloPreviewRoute(), "bi bi-diagram-3", "Saldo de clientes"),
+            new InformeCardItem(4, "Saldos de Clientes por Categoria Servicio de Agua Potable Activo", "Saldos de clientes agrupados por categoría con desglose detallado para clientes con y sin medidor.", ReportesWebConstants.BuildSaldoClientesCategoriaCobranzaPreviewRoute(), "bi bi-tags", "Saldo de clientes"),
+            new InformeCardItem(5, "Informe de recaudación", "Resumen detallado de recaudaciones agrupado por medio de pago con distribución de recuperación e ingresos del mes.", ReportesWebConstants.BuildRecaudacionPreviewRoute(), "bi bi-cash-coin", "Análisis y Recaudación"),
+            new InformeCardItem(6, "Detalle de saldos de clientes por categoría", "Saldo de clientes detallado por categoría y ciclo, con saldo anterior, débitos, créditos y saldo actual.", ReportesWebConstants.BuildSaldoClientesCategoriaDetallePreviewRoute(), "bi bi-card-list", "Saldo de clientes")
+        ];
+    }
+
+    private IEnumerable<InformeCardItem> FilteredItems
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(searchQuery))
+            {
+                return informes;
+            }
+
+            var query = searchQuery.Trim();
+            return informes.Where(x => 
+                x.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                x.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                x.Numero.ToString().Equals(query, StringComparison.OrdinalIgnoreCase) ||
+                x.Numero.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)
+            );
+        }
+    }
+
+    private sealed class InformeCardItem
+    {
+        public int Numero { get; }
+        public string Title { get; }
+        public string Description { get; }
+        public string Route { get; }
+        public string Icon { get; }
+        public string CategoriaInterna { get; }
+        public string Status { get; } = "Informe";
+
+        public InformeCardItem(int numero, string title, string description, string route, string icon, string categoriaInterna)
+        {
+            Numero = numero;
+            Title = title;
+            Description = description;
+            Route = route;
+            Icon = icon;
+            CategoriaInterna = categoriaInterna;
+        }
+    }
+}

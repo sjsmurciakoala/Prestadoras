@@ -1,0 +1,496 @@
+@page "/contabilidad/cuentas-abonos"
+@attribute [Authorize]
+@inject HttpClient Http
+@inject apc.Client.Services.Caja.AbonoClient AbonoClient
+
+<PageTitle>SIAD - Configuración de Cuentas - Abonos</PageTitle>
+
+<DxMessageBox @bind-Visible="statusMessageVisible"
+              Type="MessageBoxType.Alert"
+              Title="@statusMessageTitle"
+              Text="@statusMessageText"
+              RenderStyle="@statusMessageRenderStyle"
+              OkButtonText="Entendido"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false" />
+
+<div class="cuentas-abonos-page" id="cuentas-abonos-shell">
+
+    @* ── Encabezado ── *@
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-gear-fill me-2 text-primary"></i>Configuración de Cuentas — Abonos
+            </h4>
+            <p class="text-muted mb-0">Configura las reglas contables de débito y crédito para cada escenario de abono en caja.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Actualizar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="LoadReglasAsync"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nueva regla"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@(() => OpenForm(null))"
+                      Enabled="@(!IsBusy)" />
+        </div>
+    </div>
+
+    @* ── Grid principal ── *@
+    <div class="cuentas-abonos-grid-wrapper shadow-sm">
+        <DxGrid @ref="reglasGrid"
+                Data="@reglas"
+                KeyFieldName="@nameof(ReglaIntegracionListDto.ReglaId)"
+                ShowFilterRow="true"
+                ShowPager="true"
+                PageSize="10"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                CssClass="border-0">
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="100px" NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false">
+                    <CellDisplayTemplate Context="cellContext">
+                        @if (cellContext.DataItem is ReglaIntegracionListDto item)
+                        {
+                            <div class="d-flex gap-1 justify-content-center">
+                                <DxButton RenderStyle="ButtonRenderStyle.Info"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-pencil-square fs-5"
+                                          title="Editar"
+                                          Enabled="@(!IsBusy)"
+                                          Click="@(() => OpenForm(item))" />
+                                <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                          RenderStyleMode="ButtonRenderStyleMode.Text"
+                                          SizeMode="SizeMode.Small"
+                                          IconCssClass="bi bi-trash fs-5"
+                                          title="Eliminar"
+                                          Enabled="@(!IsBusy)"
+                                          Click="@(() => ConfirmDeleteRegla(item))" />
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ReglaIntegracionListDto.ScenarioCode)" Caption="Escenario" Width="150px">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@((cell.DataItem as ReglaIntegracionListDto)?.ScenarioCode)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ReglaIntegracionListDto.Description)" Caption="Descripción" />
+
+                <DxGridDataColumn FieldName="@nameof(ReglaIntegracionListDto.DebitAccountCode)" Caption="Cuenta Débito" Width="200px">
+                    <CellDisplayTemplate Context="cell">
+                        @{
+                            var r = cell.DataItem as ReglaIntegracionListDto;
+                            if (r != null)
+                            {
+                                <span>@AccountCodeFormatter.FormatDisplay(r.DebitAccountCode, r.DebitAccountName)</span>
+                            }
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ReglaIntegracionListDto.CreditAccountCode)" Caption="Cuenta Crédito" Width="200px">
+                    <CellDisplayTemplate Context="cell">
+                        @{
+                            var r = cell.DataItem as ReglaIntegracionListDto;
+                            if (r != null)
+                            {
+                                <span>@AccountCodeFormatter.FormatDisplay(r.CreditAccountCode, r.CreditAccountName)</span>
+                            }
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(ReglaIntegracionListDto.IsActive)" Caption="Estado" Width="100px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ReglaIntegracionListDto rule)
+                        {
+                            <span class="badge @(rule.IsActive ? "bg-success" : "bg-secondary")">
+                                @(rule.IsActive ? "Activo" : "Inactivo")
+                            </span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-gear-fill fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay reglas de abono configuradas</h5>
+                    <p class="mb-0">Registra escenarios contables (ej. ABONO_EFECTIVO) para habilitar abonos.</p>
+                </div>
+            </EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
+
+    <DxLoadingPanel Visible="@isLoading"
+                    PositionTarget="#cuentas-abonos-shell"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="Cargando reglas..." />
+</div>
+
+@* ── Popup de formulario ── *@
+<DxPopup @bind-Visible="isFormVisible"
+         Width="650px"
+         MaxWidth="95vw"
+         ShowFooter="true"
+         ShowCloseButton="true"
+         CloseOnOutsideClick="false"
+         HeaderText="@popupTitle">
+    <BodyContentTemplate Context="popupBody">
+        @if (!string.IsNullOrWhiteSpace(formErrorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">
+                @formErrorMessage
+            </DxAlert>
+        }
+
+        <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical" CssClass="w-100">
+            <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12">
+                <CaptionTemplate><span class="fw-semibold">Código del Escenario</span></CaptionTemplate>
+                <Template>
+                    <DxComboBox Data="@escenariosDisponibles"
+                                @bind-Value="formModel.ScenarioCode"
+                                Enabled="@(!formModel.ReglaId.HasValue)"
+                                NullText="Selecciona un escenario" />
+                </Template>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12">
+                <CaptionTemplate><span class="fw-semibold">Descripción</span></CaptionTemplate>
+                <Template>
+                    <DxTextBox @bind-Text="formModel.Description" NullText="Descripción legible del escenario" />
+                </Template>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="12" ColSpanXs="12">
+                <CaptionTemplate><span class="fw-semibold">Cuenta Débito</span></CaptionTemplate>
+                <Template>
+                    <DxComboBox Data="@cuentasPlan"
+                                @bind-Value="selectedDebitAccount"
+                                TextFieldName="Display"
+                                SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                NullText="Buscar cuenta de débito (ej. Caja o Banco)..." />
+                </Template>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="12" ColSpanXs="12">
+                <CaptionTemplate><span class="fw-semibold">Cuenta Crédito</span></CaptionTemplate>
+                <Template>
+                    <DxComboBox Data="@cuentasPlan"
+                                @bind-Value="selectedCreditAccount"
+                                TextFieldName="Display"
+                                SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                NullText="Buscar cuenta de crédito (ej. CxC Clientes)..." />
+                </Template>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="12" ColSpanXs="12">
+                <CaptionTemplate><span class="fw-semibold">Centro de Costo (Opcional)</span></CaptionTemplate>
+                <Template>
+                    <DxComboBox Data="@centrosCosto"
+                                @bind-Value="selectedCentroCosto"
+                                TextFieldName="Display"
+                                SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                NullText="Seleccionar centro de costo..." />
+                </Template>
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12">
+                <CaptionTemplate><span class="fw-semibold">Activa</span></CaptionTemplate>
+                <Template>
+                    <DxCheckBox @bind-Checked="formModel.IsActive">Regla habilitada para operaciones</DxCheckBox>
+                </Template>
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </BodyContentTemplate>
+    <FooterContentTemplate Context="popupFooter">
+        <div class="d-flex justify-content-end gap-2 w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="CloseForm"
+                      Enabled="@(!isSaving)" />
+            <DxButton Text="@(isSaving ? "Guardando..." : "Guardar regla")"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-check-lg"
+                      Click="SaveReglaAsync"
+                      Enabled="@(!isSaving)" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@* ── Popup de confirmación de eliminación ── *@
+<DxPopup @bind-Visible="isDeletePopupVisible"
+         Width="400px"
+         HeaderText="Confirmar eliminación">
+    <BodyContentTemplate Context="delBody">
+        <p class="mb-0">¿Estás seguro de que deseas eliminar esta regla de integración contable? Esta acción no se puede deshacer.</p>
+    </BodyContentTemplate>
+    <FooterContentTemplate Context="delFooter">
+        <div class="d-flex justify-content-end gap-2 w-100">
+            <DxButton Text="Cancelar" Click="@(() => isDeletePopupVisible = false)" RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Eliminar" Click="DeleteReglaConfirmedAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-trash" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private ReglaIntegracionListDto[] reglas = Array.Empty<ReglaIntegracionListDto>();
+    private IGrid? reglasGrid;
+    private List<PlanCuentaItemViewModel> cuentasPlan = new();
+    private List<CentroCostoItemViewModel> centrosCosto = new();
+    private List<string> escenariosDisponibles = new() { "ABONO_EFECTIVO", "ABONO_BANCO", "COMISION_BANCARIA", "REDONDEO" };
+
+    private PlanCuentaItemViewModel? selectedDebitAccount;
+    private PlanCuentaItemViewModel? selectedCreditAccount;
+    private CentroCostoItemViewModel? selectedCentroCosto;
+
+    private RuleFormModel formModel = new();
+    private ReglaIntegracionListDto? ruleToDelete;
+
+    private bool isFormVisible;
+    private bool isDeletePopupVisible;
+    private bool isSaving;
+    private bool isLoading;
+    private string popupTitle = "Nueva regla de abono";
+    private string? formErrorMessage;
+    private bool statusMessageVisible;
+    private string statusMessageTitle = string.Empty;
+    private string statusMessageText = string.Empty;
+    private MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
+
+    private bool IsBusy => isLoading || isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadReglasAsync();
+        await LoadCatalogoPlanCuentasAsync();
+        await LoadCentrosCostoAsync();
+    }
+
+    private async Task LoadReglasAsync()
+    {
+        try
+        {
+            isLoading = true;
+            var response = await Http.GetFromJsonAsync<ReglaIntegracionListDto[]>("api/contabilidad/catalogos/reglas-abonos");
+            reglas = response ?? Array.Empty<ReglaIntegracionListDto>();
+        }
+        catch (Exception ex)
+        {
+            reglas = Array.Empty<ReglaIntegracionListDto>();
+            ShowStatusMessage("Error", $"No se pudieron cargar las reglas contables: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LoadCatalogoPlanCuentasAsync()
+    {
+        try
+        {
+            var cuentas = await Http.GetFromJsonAsync<PlanCuentaDto[]>("api/contabilidad/catalogos/plan-cuentas");
+            if (cuentas != null)
+            {
+                cuentasPlan = cuentas
+                    .Where(c => c.AllowsPosting && c.Status == "ACTIVE")
+                    .Select(c => new PlanCuentaItemViewModel { AccountId = c.AccountId, Code = c.Code, Name = c.Name, Display = AccountCodeFormatter.FormatDisplay(c.Code, c.Name) })
+                    .OrderBy(c => c.Code)
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // Fail silent or default
+        }
+    }
+
+    private async Task LoadCentrosCostoAsync()
+    {
+        try
+        {
+            var centros = await Http.GetFromJsonAsync<CentroCostoDto[]>("api/contabilidad/catalogos/centros-costo");
+            if (centros != null)
+            {
+                centrosCosto = centros
+                    .Where(c => c.AllowsMovement && c.Status == "ACTIVE")
+                    .Select(c => new CentroCostoItemViewModel { CostCenterId = c.CostCenterId, Code = c.Code, Name = c.Name, Display = $"{c.Code} - {c.Name}" })
+                    .OrderBy(c => c.Code)
+                    .ToList();
+            }
+        }
+        catch
+        {
+            // Fail silent
+        }
+    }
+
+    private void OpenForm(ReglaIntegracionListDto? rule)
+    {
+        formErrorMessage = null;
+        if (rule is null)
+        {
+            formModel = new RuleFormModel { IsActive = true };
+            selectedDebitAccount = null;
+            selectedCreditAccount = null;
+            selectedCentroCosto = null;
+            popupTitle = "Nueva regla de abono";
+        }
+        else
+        {
+            formModel = new RuleFormModel
+            {
+                ReglaId = rule.ReglaId,
+                ScenarioCode = rule.ScenarioCode,
+                Description = rule.Description,
+                DebitAccountId = rule.DebitAccountId,
+                CreditAccountId = rule.CreditAccountId,
+                CostCenterId = rule.CostCenterId,
+                IsActive = rule.IsActive
+            };
+            selectedDebitAccount = cuentasPlan.FirstOrDefault(c => c.AccountId == rule.DebitAccountId);
+            selectedCreditAccount = cuentasPlan.FirstOrDefault(c => c.AccountId == rule.CreditAccountId);
+            selectedCentroCosto = rule.CostCenterId.HasValue ? centrosCosto.FirstOrDefault(c => c.CostCenterId == rule.CostCenterId.Value) : null;
+            popupTitle = $"Editar regla {rule.ScenarioCode}";
+        }
+        isFormVisible = true;
+    }
+
+    private void CloseForm()
+    {
+        isFormVisible = false;
+    }
+
+    private async Task SaveReglaAsync()
+    {
+        if (string.IsNullOrWhiteSpace(formModel.ScenarioCode))
+        {
+            formErrorMessage = "El código de escenario es obligatorio.";
+            return;
+        }
+
+        if (selectedDebitAccount is null || selectedCreditAccount is null)
+        {
+            formErrorMessage = "Las cuentas de débito y crédito son obligatorias.";
+            return;
+        }
+
+        var request = new ReglaIntegracionUpsertDto(
+            ReglaId: formModel.ReglaId,
+            ScenarioCode: formModel.ScenarioCode,
+            Description: string.IsNullOrWhiteSpace(formModel.Description) ? formModel.ScenarioCode : formModel.Description.Trim(),
+            DebitAccountId: selectedDebitAccount.AccountId,
+            CreditAccountId: selectedCreditAccount.AccountId,
+            CostCenterId: selectedCentroCosto?.CostCenterId,
+            IsActive: formModel.IsActive,
+            User: string.Empty
+        );
+
+        try
+        {
+            isSaving = true;
+            formErrorMessage = null;
+            var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/reglas-abonos", request);
+            if (!response.IsSuccessStatusCode)
+            {
+                var error = await response.Content.ReadAsStringAsync();
+                formErrorMessage = string.IsNullOrWhiteSpace(error) ? "Error al guardar la regla." : error;
+                return;
+            }
+
+            isFormVisible = false;
+            await LoadReglasAsync();
+            ShowStatusMessage("Éxito", "Regla contable guardada correctamente.", MessageBoxRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            formErrorMessage = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmDeleteRegla(ReglaIntegracionListDto rule)
+    {
+        ruleToDelete = rule;
+        isDeletePopupVisible = true;
+    }
+
+    private async Task DeleteReglaConfirmedAsync()
+    {
+        if (ruleToDelete is null) return;
+        try
+        {
+            isDeletePopupVisible = false;
+            isLoading = true;
+            var response = await Http.DeleteAsync($"api/contabilidad/catalogos/reglas-abonos/{ruleToDelete.ReglaId}");
+            if (response.IsSuccessStatusCode)
+            {
+                await LoadReglasAsync();
+                ShowStatusMessage("Éxito", "Regla eliminada correctamente.", MessageBoxRenderStyle.Success);
+            }
+            else
+            {
+                ShowStatusMessage("Error", "No se pudo eliminar la regla.", MessageBoxRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            ShowStatusMessage("Error", ex.Message, MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+            ruleToDelete = null;
+        }
+    }
+
+    private void ShowStatusMessage(string title, string message, MessageBoxRenderStyle renderStyle = MessageBoxRenderStyle.Info)
+    {
+        statusMessageTitle = title;
+        statusMessageText = message;
+        statusMessageRenderStyle = renderStyle;
+        statusMessageVisible = true;
+    }
+
+    private class PlanCuentaItemViewModel
+    {
+        public long AccountId { get; set; }
+        public string Code { get; set; } = null!;
+        public string Name { get; set; } = null!;
+        public string Display { get; set; } = null!;
+    }
+
+    private class CentroCostoItemViewModel
+    {
+        public long CostCenterId { get; set; }
+        public string Code { get; set; } = null!;
+        public string Name { get; set; } = null!;
+        public string Display { get; set; } = null!;
+    }
+
+    private class RuleFormModel
+    {
+        public long? ReglaId { get; set; }
+        public string? ScenarioCode { get; set; }
+        public string? Description { get; set; }
+        public long DebitAccountId { get; set; }
+        public long CreditAccountId { get; set; }
+        public long? CostCenterId { get; set; }
+        public bool IsActive { get; set; }
+    }
+}

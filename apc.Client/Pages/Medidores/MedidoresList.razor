@@ -1,4 +1,4 @@
-@page "/medidores"
+﻿@page "/medidores"
 @attribute [Authorize]
 
 @using DevExpress.Blazor
@@ -7,7 +7,12 @@
 @using apc.Client.Services.Medidores
 
 @inject MedidoresClient MedidoresClient
+@using SIAD.Core.DTOs.Catalogos
+@using apc.Client.Services.Catalogos
+@inject CatalogosClient CatalogosClient
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Medidores</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="MedidoresToast" MaxToastCount="4" />
@@ -291,7 +296,8 @@
             <MedidorForm Model="formModel"
                          OnValidSubmit="GuardarAsync"
                          OnCancel="CerrarForm"
-                         IsBusy="isSaving" />
+                         IsBusy="isSaving"
+                         ClasesMedidor="clasesMedidor" />
         }
     </BodyContentTemplate>
 </DxPopup>
@@ -338,6 +344,7 @@
     private bool isSaving;
     private string? formError;
     private MedidorEditDto formModel = new();
+    private IReadOnlyList<ClaseMedidorLookupDto> clasesMedidor = [];
 
     private bool confirmVisible;
     private MedidorListItemDto? medidorParaDesactivar;
@@ -358,10 +365,12 @@
         ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
         : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         dataSource = new MedidoresGridDataSource(MedidoresClient, OnGridStateChanged);
         ApplyFilters();
+        try { clasesMedidor = await CatalogosClient.ObtenerClasesMedidorAsync(); }
+        catch { /* non-fatal — form still works without the lookup */ }
     }
 
     private void OnGridStateChanged()

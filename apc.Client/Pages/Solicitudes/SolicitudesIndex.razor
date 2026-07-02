@@ -1,10 +1,12 @@
-@page "/solicitudes"
+﻿@page "/solicitudes"
 @attribute [Authorize]
 @using SIAD.Core.DTOs.Solicitudes
 @using apc.Client.Services.Solicitudes
 @inject SolicitudesClient SolicitudesClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Solicitudes</PageTitle>
 
 <div class="page-container">
     

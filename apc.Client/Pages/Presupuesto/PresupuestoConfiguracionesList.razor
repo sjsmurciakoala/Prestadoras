@@ -1,0 +1,1023 @@
+@page "/presupuesto/configuraciones"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Pages.Presupuesto
+@using apc.Client.Services.Presupuesto
+
+@inject ConfiguracionPresupuestoClient ConfiguracionPresupuestoClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IAuthorizationService AuthorizationService
+
+<PageTitle>SIAD - Presupuesto</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="PresupuestoToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Presupuesto</h2>
+            <p class="page-subtitle">CRUD de configuración presupuestaria (encabezado/detalle)</p>
+        </div>
+
+        <DxButton Text="Nueva configuración"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="AbrirNuevoAsync"
+                  Enabled="@(!validandoNuevaConfiguracion)" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card position-relative">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" TData="ConfiguracionPresupuestoListItemDto"
+                    KeyFieldName="@nameof(ConfiguracionPresupuestoListItemDto.IdPresupuesto)" PageSize="5"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    SelectionMode="GridSelectionMode.Single" AllowSelectRowByClick="true"
+                    SelectedDataItem="@selectedHeader"
+                    SelectedDataItemChanged="@(item => OnSelectedHeaderChangedAsync((ConfiguracionPresupuestoListItemDto?)item))"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   Placeholder="Buscar configuración..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalRegistros.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoListItemDto.AnioPresupuesto)" Caption="Año" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                <span>@GetAnioPresupuestoTexto(item)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoListItemDto.RangoPeriodo)" Caption="Rango de período" Width="120px" TextAlignment="GridTextAlignment.Center" />
+
+                    <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoListItemDto.FechaInicia)" Caption="Fecha inicial" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                <span>@item.FechaInicia.ToString("yyyy-MM-dd")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoListItemDto.FechaFinaliza)" Caption="Fecha final" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                <span>@item.FechaFinaliza.ToString("yyyy-MM-dd")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoListItemDto.ValorGlobal)" Caption="Presupuesto" Width="170px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                <span>@item.ValorGlobal.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoListItemDto.ValorDisponible)" Caption="Disponible" Width="170px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                <span>@item.ValorDisponible.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoListItemDto.ValorProyeccion)" Caption="Total proyeccion" Width="170px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                <span>@item.ValorProyeccion.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+
+                    <DxGridDataColumn Caption="Aprobación" Width="150px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                <span>@GetEstadoAprobacionTexto(item.EstadoAprobado)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="180px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ConfiguracionPresupuestoListItemDto item)
+                            {
+                                if (item.EstadoAprobado)
+                                {
+                                    <span class="text-muted small">-</span>
+                                }
+                                else if (!puedeAprobarPresupuesto)
+                                {
+                                    <span class="text-muted small">Sin permiso</span>
+                                }
+                                else
+                                {
+                                    <DxButton Text="Aprobar"
+                                              IconCssClass="bi bi-check2-circle"
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              Enabled="@(!IsAprobandoPresupuesto(item))"
+                                              Click="@(() => AprobarPresupuestoAsync(item))" />
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay configuraciones de presupuesto para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+
+    </div>
+
+    <div class="modern-card position-relative mt-4">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <h5 class="mb-0">Detalle del presupuesto</h5>
+                @if (selectedHeader is null)
+                {
+                    <small class="text-muted">Seleccione un encabezado para visualizar su detalle.</small>
+                }
+            </div>
+            @if (selectedHeader is not null)
+            {
+                <span class="badge bg-light text-dark border">Registros: @selectedDetalles.Count</span>
+            }
+        </div>
+
+        @if (selectedHeader is null)
+        {
+            <DxAlert AlertType="AlertType.Info">Seleccione un encabezado en el grid superior.</DxAlert>
+        }
+        else if (isLoadingDetalles)
+        {
+            <div class="small text-muted">Cargando detalle...</div>
+        }
+        else if (!string.IsNullOrWhiteSpace(detalleErrorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger">@detalleErrorMessage</DxAlert>
+        }
+        else
+        {
+            @if (!IsPresupuestoVigente())
+            {
+                <DxAlert AlertType="AlertType.Warning" CssClass="mb-2">
+                    @GetMensajeBloqueoPorRango("operar detalles")
+                </DxAlert>
+            }
+
+            <div class="grid-wrapper">
+                <DxGrid Data="@selectedDetalles" TData="ConfiguracionPresupuestoDetalleListItemDto"
+                        KeyFieldName="@nameof(ConfiguracionPresupuestoDetalleListItemDto.DetalleId)"
+                        PageSize="5" PagerPosition="GridPagerPosition.Bottom"
+                        ShowFilterRow="false" ShowSearchBox="false"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <DxButton Text="Agregar detalle"
+                                      IconCssClass="bi bi-plus-lg"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Click="AbrirNuevoDetalleAsync"
+                                      Enabled="@(!detalleSaving && !IsPresupuestoAprobado() && IsPresupuestoVigente())" />
+                            <div class="ms-auto text-muted small">
+                                Registros: <span class="fw-bold">@selectedDetalles.Count.ToString("N0")</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
+
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoDetalleListItemDto.CuentaContable)" Caption="Cuenta Contable" MinWidth="240">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ConfiguracionPresupuestoDetalleListItemDto item)
+                                {
+                                    <span>@FormatCuentaContableDisplay(item.CuentaContable)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoDetalleListItemDto.ValorProyeccion)" Caption="Valor proyección" Width="160px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ConfiguracionPresupuestoDetalleListItemDto item)
+                                {
+                                    <span>@item.ValorProyeccion.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoDetalleListItemDto.ValorReal)" Caption="Valor Real" Width="160px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ConfiguracionPresupuestoDetalleListItemDto item)
+                                {
+                                    <span>@item.ValorReal.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(ConfiguracionPresupuestoDetalleListItemDto.ValorDisponible)" Caption="Disponible" Width="160px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ConfiguracionPresupuestoDetalleListItemDto item)
+                                {
+                                    <span>@item.ValorDisponible.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ConfiguracionPresupuestoDetalleListItemDto item)
+                                {
+                                    if (IsPresupuestoAprobado())
+                                    {
+                                        <DxButton Text="Gestionar"
+                                                  IconCssClass="bi bi-arrow-right-circle"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@IsPresupuestoVigente()"
+                                                  Click="@(() => AbrirGestionDetalle(item))" />
+                                    }
+                                    else
+                                    {
+                                        <DxButton Text="Editar"
+                                                  IconCssClass="bi bi-pencil-square"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@IsPresupuestoVigente()"
+                                                  Click="@(() => AbrirEditarDetalle(item))" />
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">Este presupuesto aún no tiene líneas de detalle.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<DxPopup @bind-Visible="detalleFormVisible"
+         Width="min(640px, 95vw)"
+         Height="auto"
+         MaxHeight="90vh"
+         Scrollable="true"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-plus-lg"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Agregar detalle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate Context="detallePopupContext">
+        @if (detalleFormLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando cuentas contables..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(detalleFormError))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@detalleFormError</DxAlert>
+            }
+
+            @if (cuentasDisponiblesDetalle.Count == 0)
+            {
+                <DxAlert AlertType="AlertType.Warning">
+                    No hay cuentas contables disponibles para agregar en este presupuesto.
+                </DxAlert>
+                <div class="d-flex justify-content-end mt-3">
+                    <DxButton Text="Cerrar"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="CerrarDetalleForm" />
+                </div>
+            }
+            else
+            {
+                <EditForm Model="detalleForm" OnValidSubmit="GuardarDetalleAsync" Context="detalleFormContext">
+                    <DataAnnotationsValidator />
+
+                    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                        <DxFormLayoutItem Caption="Cuenta Contable *" ColSpanMd="12">
+                            <DxComboBox Data="@cuentasDisponiblesDetalle"
+                                        TData="CuentaContableLookupDto"
+                                        TValue="string"
+                                        @bind-Value="detalleForm.CuentaContable"
+                                        ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                        NullText="Seleccione cuenta contable"
+                                        AllowUserInput="false"
+                                        DropDownStyle="DropDownStyle.DropDownList"
+                                        SearchMode="ListSearchMode.AutoSearch"
+                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                        SearchDelay="200"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        Enabled="@(!detalleSaving)" />
+                            <ValidationMessage For="() => detalleForm.CuentaContable" />
+                        </DxFormLayoutItem>
+
+                        <DxFormLayoutItem Caption="Valor proyección" ColSpanMd="12">
+                            <DxSpinEdit TValue="decimal"
+                                        @bind-Value="detalleForm.ValorProyeccion"
+                                        InputCssClass="text-start"
+                                        Min="0"
+                                        Increment="0.01m"
+                                        Decimals="2"
+                                        DisplayFormat="n2"
+                                        Enabled="@(!detalleSaving)" />
+                            <ValidationMessage For="() => detalleForm.ValorProyeccion" />
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+
+                    <ValidationSummary class="text-danger mb-3" />
+
+                    <div class="d-flex justify-content-end gap-2 mt-3">
+                        <DxButton ButtonType="ButtonType.Submit"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Text="Guardar detalle"
+                                  SubmitFormOnClick="true"
+                                  Enabled="@(!detalleSaving)" />
+                        <DxButton ButtonType="ButtonType.Normal"
+                                  Text="Cancelar"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  Enabled="@(!detalleSaving)"
+                                  Click="CerrarDetalleForm" />
+                    </div>
+                </EditForm>
+            }
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmarAprobacionVisible"
+         Width="min(460px, 92vw)"
+         ShowFooter="false"
+         CloseOnOutsideClick="false"
+         HeaderText="Confirmar aprobacion">
+    <BodyContentTemplate Context="confirmacionContext">
+        <div class="d-flex flex-column gap-3">
+            <p class="mb-0">
+                Se encontraron @GetTextoDetallesConProyeccionCero() con valor de proyeccion en cero.
+            </p>
+            <p class="mb-0 text-muted">
+                Desea continuar con la aprobacion del presupuesto?
+            </p>
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton Text="Cancelar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(!IsConfirmandoAprobacion())"
+                          Click="CancelarConfirmacionAprobacion" />
+                <DxButton Text="Continuar"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!IsConfirmandoAprobacion())"
+                          Click="ConfirmarAprobacionConProyeccionesCeroAsync" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    private static string FormatCuentaContableDisplay(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return "-";
+        }
+
+        var parts = value.Split(" - ", 2, StringSplitOptions.TrimEntries);
+        return parts.Length == 2
+            ? AccountCodeFormatter.FormatDisplay(parts[0], parts[1])
+            : AccountCodeFormatter.Format(value);
+    }
+
+    private DxGrid? grid;
+    private PresupuestoConfiguracionesGridDataSource dataSource = default!;
+
+    private string filtroBusqueda = string.Empty;
+
+    private string? errorMessage;
+    private int totalRegistros;
+    private ConfiguracionPresupuestoListItemDto? selectedHeader;
+    private List<ConfiguracionPresupuestoDetalleListItemDto> selectedDetalles = new();
+    private bool isLoadingDetalles;
+    private string? detalleErrorMessage;
+    private bool detalleFormVisible;
+    private bool detalleFormLoading;
+    private bool detalleSaving;
+    private bool validandoNuevaConfiguracion;
+    private bool puedeAprobarPresupuesto;
+    private string? aprobandoPresupuestoId;
+    private string? validandoAprobacionPresupuestoId;
+    private string? detalleFormError;
+    private ConfiguracionPresupuestoDetalleEditDto detalleForm = new();
+    private IReadOnlyList<CuentaContableLookupDto> cuentasDetalle = Array.Empty<CuentaContableLookupDto>();
+    private IReadOnlyList<CuentaContableLookupDto> cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
+    private DateOnly currentServerDate = DateOnly.FromDateTime(DateTime.Today);
+    private bool confirmarAprobacionVisible;
+    private ConfiguracionPresupuestoListItemDto? presupuestoPendienteAprobacion;
+    private int detallesConProyeccionCero;
+
+    protected override void OnInitialized()
+    {
+        dataSource = new PresupuestoConfiguracionesGridDataSource(ConfiguracionPresupuestoClient, OnGridStateChanged);
+        ApplyFilters();
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await Task.WhenAll(
+            EvaluarPermisosAprobacionAsync(),
+            CargarFechaServidorActualAsync());
+    }
+
+    private void OnGridStateChanged()
+    {
+        errorMessage = dataSource.LastError;
+        totalRegistros = dataSource.LastTotalCount;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void ApplyFilters()
+    {
+        dataSource.SearchText = filtroBusqueda;
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await BuscarAsync();
+    }
+
+    private Task BuscarAsync()
+    {
+        ApplyFilters();
+        ClearDetalleSelection();
+        dataSource.Invalidate();
+        grid?.Reload();
+        return Task.CompletedTask;
+    }
+
+    private void RecargarGrid()
+    {
+        ClearDetalleSelection();
+        dataSource.Invalidate();
+        grid?.Reload();
+    }
+
+    private async Task OnSelectedHeaderChangedAsync(ConfiguracionPresupuestoListItemDto? item)
+    {
+        selectedHeader = item;
+        selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
+        detalleErrorMessage = null;
+        detalleFormVisible = false;
+        detalleFormError = null;
+        cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
+
+        if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
+        {
+            return;
+        }
+
+        await CargarFechaServidorActualAsync();
+        await CargarDetallesAsync(selectedHeader.IdPresupuesto);
+        RecalcularCuentasDisponiblesDetalle();
+    }
+
+    private void ClearDetalleSelection()
+    {
+        selectedHeader = null;
+        selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
+        isLoadingDetalles = false;
+        detalleErrorMessage = null;
+        detalleFormVisible = false;
+        detalleFormLoading = false;
+        detalleSaving = false;
+        detalleFormError = null;
+        detalleForm = new ConfiguracionPresupuestoDetalleEditDto();
+        cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
+    }
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private async Task AbrirNuevoAsync()
+    {
+        try
+        {
+            validandoNuevaConfiguracion = true;
+            var serverDate = await ConfiguracionPresupuestoClient.GetServerDateAsync();
+            var configuraciones = await ConfiguracionPresupuestoClient.GetAsync(new ConfiguracionPresupuestoFilterDto());
+
+            var presupuestoVigente = configuraciones
+                .Where(x => x.EstadoAprobado)
+                .Where(x => x.FechaInicia <= serverDate && x.FechaFinaliza >= serverDate)
+                .OrderByDescending(x => x.FechaInicia)
+                .FirstOrDefault();
+
+            if (presupuestoVigente is not null)
+            {
+                ShowToast(
+                    "Validación",
+                    $"No se puede crear una nueva configuración. Ya existe un presupuesto aprobado y vigente para la fecha {serverDate:yyyy-MM-dd} ({presupuestoVigente.FechaInicia:yyyy-MM-dd} al {presupuestoVigente.FechaFinaliza:yyyy-MM-dd}).",
+                    ToastRenderStyle.Warning);
+                return;
+            }
+
+            Navigation.NavigateTo("/presupuesto/configuraciones/nuevo");
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No se pudo validar la vigencia del presupuesto: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            validandoNuevaConfiguracion = false;
+        }
+    }
+
+    private async Task AprobarPresupuestoAsync(ConfiguracionPresupuestoListItemDto item)
+    {
+        if (!puedeAprobarPresupuesto)
+        {
+            ShowToast("Acceso denegado", "No tiene permisos para aprobar presupuestos.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        if (item.EstadoAprobado)
+        {
+            ShowToast("Validación", "El presupuesto ya está aprobado.", ToastRenderStyle.Info);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.IdPresupuesto))
+        {
+            ShowToast("Error", "El presupuesto seleccionado no tiene ID válido.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        try
+        {
+            validandoAprobacionPresupuestoId = item.IdPresupuesto.Trim();
+
+            var detalles = await ObtenerDetallesParaAprobacionAsync(item.IdPresupuesto);
+            var tieneProyeccionPositiva = detalles.Any(x => x.ValorProyeccion > 0m);
+
+            if (!tieneProyeccionPositiva)
+            {
+                ShowToast(
+                    "Validación",
+                    "No se puede aprobar el presupuesto: debe existir al menos un detalle con valor de proyección mayor a cero.",
+                    ToastRenderStyle.Warning);
+                return;
+            }
+
+            var totalConProyeccionCero = detalles.Count(x => x.ValorProyeccion == 0m);
+            if (totalConProyeccionCero > 0)
+            {
+                detallesConProyeccionCero = totalConProyeccionCero;
+                presupuestoPendienteAprobacion = item;
+                confirmarAprobacionVisible = true;
+                return;
+            }
+
+            await EjecutarAprobacionPresupuestoAsync(item);
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            validandoAprobacionPresupuestoId = null;
+        }
+    }
+
+    private async Task<List<ConfiguracionPresupuestoDetalleListItemDto>> ObtenerDetallesParaAprobacionAsync(string idPresupuesto)
+    {
+        if (selectedHeader is not null &&
+            string.Equals(selectedHeader.IdPresupuesto, idPresupuesto, StringComparison.OrdinalIgnoreCase) &&
+            selectedDetalles.Count > 0)
+        {
+            return selectedDetalles;
+        }
+
+        return await ConfiguracionPresupuestoClient.GetDetailsByPresupuestoAsync(idPresupuesto);
+    }
+
+    private async Task EjecutarAprobacionPresupuestoAsync(ConfiguracionPresupuestoListItemDto item)
+    {
+        aprobandoPresupuestoId = item.IdPresupuesto.Trim();
+
+        try
+        {
+            var actualizado = await ConfiguracionPresupuestoClient.ApprovePresupuestoAsync(item.IdPresupuesto);
+            item.EstadoAprobado = actualizado.EstadoAprobado;
+            item.ValorDisponible = actualizado.ValorDisponible;
+
+            if (selectedHeader is not null &&
+                string.Equals(selectedHeader.IdPresupuesto, item.IdPresupuesto, StringComparison.OrdinalIgnoreCase))
+            {
+                selectedHeader.EstadoAprobado = actualizado.EstadoAprobado;
+                selectedHeader.ValorDisponible = actualizado.ValorDisponible;
+            }
+
+            ShowToast("Éxito", "Presupuesto aprobado correctamente.", ToastRenderStyle.Success);
+            dataSource.Invalidate();
+            grid?.Reload();
+        }
+        finally
+        {
+            aprobandoPresupuestoId = null;
+        }
+    }
+
+    private async Task ConfirmarAprobacionConProyeccionesCeroAsync()
+    {
+        if (presupuestoPendienteAprobacion is null || string.IsNullOrWhiteSpace(presupuestoPendienteAprobacion.IdPresupuesto))
+        {
+            CancelarConfirmacionAprobacion();
+            return;
+        }
+
+        var item = presupuestoPendienteAprobacion;
+        confirmarAprobacionVisible = false;
+
+        try
+        {
+            await EjecutarAprobacionPresupuestoAsync(item);
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            presupuestoPendienteAprobacion = null;
+            detallesConProyeccionCero = 0;
+        }
+    }
+
+    private void CancelarConfirmacionAprobacion()
+    {
+        confirmarAprobacionVisible = false;
+        presupuestoPendienteAprobacion = null;
+        detallesConProyeccionCero = 0;
+    }
+
+    private void AbrirGestionDetalle(ConfiguracionPresupuestoDetalleListItemDto item)
+    {
+        if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
+        {
+            ShowToast("Error", "No hay presupuesto seleccionado.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (!IsPresupuestoVigente())
+        {
+            ShowToast("Validación", GetMensajeBloqueoPorRango("gestionar detalles"), ToastRenderStyle.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.CuentaContableCodigo))
+        {
+            ShowToast("Error", "El detalle no tiene cuenta contable válida.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var id = Uri.EscapeDataString(selectedHeader.IdPresupuesto.Trim());
+        var cuenta = Uri.EscapeDataString(item.CuentaContableCodigo.Trim());
+        Navigation.NavigateTo($"/presupuesto/configuraciones/{id}/detalles/{cuenta}/gestion");
+    }
+
+    private void AbrirEditarDetalle(ConfiguracionPresupuestoDetalleListItemDto item)
+    {
+        if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
+        {
+            ShowToast("Error", "No hay presupuesto seleccionado.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (!IsPresupuestoVigente())
+        {
+            ShowToast("Validación", GetMensajeBloqueoPorRango("editar detalles"), ToastRenderStyle.Warning);
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(item.CuentaContableCodigo))
+        {
+            ShowToast("Error", "El registro no tiene una llave válida (presupuesto/cuenta).", ToastRenderStyle.Danger);
+            return;
+        }
+
+        var safeId = Uri.EscapeDataString(selectedHeader.IdPresupuesto.Trim());
+        var safeCuenta = Uri.EscapeDataString(item.CuentaContableCodigo.Trim());
+        Navigation.NavigateTo($"/presupuesto/configuraciones/{safeId}/detalles/{safeCuenta}/editar");
+    }
+
+    private async Task EliminarAsync(ConfiguracionPresupuestoListItemDto item)
+    {
+        if (string.IsNullOrWhiteSpace(item.IdPresupuesto) || string.IsNullOrWhiteSpace(item.CuentaContableCodigo))
+        {
+            ShowToast("Error", "El registro no tiene una llave válida (presupuesto/cuenta).", ToastRenderStyle.Danger);
+            return;
+        }
+
+        try
+        {
+            var ok = await ConfiguracionPresupuestoClient.DeleteAsync(item.IdPresupuesto, item.CuentaContableCodigo);
+            if (!ok)
+            {
+                ShowToast("Error", "No se pudo eliminar la configuración.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            ShowToast("Éxito", "Configuración eliminada correctamente.", ToastRenderStyle.Success);
+            dataSource.Invalidate();
+            grid?.Reload();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = message,
+            RenderStyle = style,
+            ProviderName = "PresupuestoToast"
+        });
+    }
+
+    private async Task AbrirNuevoDetalleAsync()
+    {
+        if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
+        {
+            ShowToast("Error", "Seleccione un encabezado de presupuesto.", ToastRenderStyle.Danger);
+            return;
+        }
+
+        if (!IsPresupuestoVigente())
+        {
+            ShowToast("Validación", GetMensajeBloqueoPorRango("agregar detalle"), ToastRenderStyle.Warning);
+            return;
+        }
+
+        if (IsPresupuestoAprobado())
+        {
+            ShowToast("Validación", "El presupuesto está aprobado y no permite agregar detalle.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        detalleFormError = null;
+        detalleForm = new ConfiguracionPresupuestoDetalleEditDto();
+
+        try
+        {
+            detalleFormLoading = true;
+            if (cuentasDetalle.Count == 0)
+            {
+                cuentasDetalle = await ConfiguracionPresupuestoClient.ObtenerCuentasContablesAsync();
+            }
+
+            RecalcularCuentasDisponiblesDetalle();
+            if (cuentasDisponiblesDetalle.Count > 0)
+            {
+                detalleForm.CuentaContable = cuentasDisponiblesDetalle[0].Code;
+            }
+        }
+        catch (Exception ex)
+        {
+            detalleFormError = $"No se pudieron cargar las cuentas contables: {ex.Message}";
+        }
+        finally
+        {
+            detalleFormLoading = false;
+        }
+
+        detalleFormVisible = true;
+    }
+
+    private async Task GuardarDetalleAsync()
+    {
+        if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
+        {
+            detalleFormError = "Seleccione un encabezado de presupuesto válido.";
+            return;
+        }
+
+        if (!IsPresupuestoVigente())
+        {
+            detalleFormError = GetMensajeBloqueoPorRango("guardar detalle");
+            return;
+        }
+
+        if (IsPresupuestoAprobado())
+        {
+            detalleFormError = "El presupuesto está aprobado y no permite agregar detalle.";
+            return;
+        }
+
+        try
+        {
+            detalleSaving = true;
+            detalleFormError = null;
+
+            await ConfiguracionPresupuestoClient.AddDetailAsync(selectedHeader.IdPresupuesto, detalleForm);
+            await CargarDetallesAsync(selectedHeader.IdPresupuesto);
+            RecalcularCuentasDisponiblesDetalle();
+            detalleFormVisible = false;
+            ShowToast("Éxito", "Detalle agregado correctamente.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            detalleFormError = $"No se pudo guardar el detalle: {ex.Message}";
+        }
+        finally
+        {
+            detalleSaving = false;
+        }
+    }
+
+    private void CerrarDetalleForm()
+    {
+        detalleFormVisible = false;
+        detalleFormError = null;
+        detalleForm = new ConfiguracionPresupuestoDetalleEditDto();
+    }
+
+    private async Task CargarDetallesAsync(string idPresupuesto)
+    {
+        try
+        {
+            isLoadingDetalles = true;
+            detalleErrorMessage = null;
+            selectedDetalles = await ConfiguracionPresupuestoClient.GetDetailsByPresupuestoAsync(idPresupuesto);
+        }
+        catch (Exception ex)
+        {
+            detalleErrorMessage = $"No se pudo cargar el detalle: {ex.Message}";
+            selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
+        }
+        finally
+        {
+            isLoadingDetalles = false;
+        }
+    }
+
+    private void RecalcularCuentasDisponiblesDetalle()
+    {
+        if (cuentasDetalle.Count == 0)
+        {
+            cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
+            return;
+        }
+
+        var cuentasRegistradas = selectedDetalles
+            .Select(x => x.CuentaContableCodigo?.Trim())
+            .Where(x => !string.IsNullOrWhiteSpace(x))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        cuentasDisponiblesDetalle = cuentasDetalle
+            .Where(c => !cuentasRegistradas.Contains(c.Code?.Trim() ?? string.Empty))
+            .ToArray();
+    }
+
+    private static string GetAnioPresupuestoTexto(ConfiguracionPresupuestoListItemDto item)
+    {
+        var anioInicio = item.FechaInicia.Year;
+        var anioFin = item.FechaFinaliza.Year;
+
+        return anioInicio == anioFin
+            ? anioInicio.ToString()
+            : $"{anioInicio} al {anioFin}";
+    }
+    private static string GetEstadoAprobacionTexto(bool estadoAprobado)
+    {
+        return estadoAprobado ? "aprobado" : "pendiente";
+    }
+
+    private bool IsAprobandoPresupuesto(ConfiguracionPresupuestoListItemDto item)
+    {
+        var id = item.IdPresupuesto?.Trim();
+        return (!string.IsNullOrWhiteSpace(aprobandoPresupuestoId) &&
+                string.Equals(aprobandoPresupuestoId, id, StringComparison.OrdinalIgnoreCase)) ||
+               (!string.IsNullOrWhiteSpace(validandoAprobacionPresupuestoId) &&
+                string.Equals(validandoAprobacionPresupuestoId, id, StringComparison.OrdinalIgnoreCase));
+    }
+
+    private bool IsConfirmandoAprobacion()
+    {
+        return !string.IsNullOrWhiteSpace(aprobandoPresupuestoId);
+    }
+
+    private string GetTextoDetallesConProyeccionCero()
+    {
+        return detallesConProyeccionCero == 1
+            ? "1 detalle"
+            : $"{detallesConProyeccionCero} detalles";
+    }
+
+    private async Task EvaluarPermisosAprobacionAsync()
+    {
+        try
+        {
+            var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+            var result = await AuthorizationService.AuthorizeAsync(
+                authState.User,
+                AuthorizationPolicies.PresupuestoAprobacion);
+
+            puedeAprobarPresupuesto = result.Succeeded;
+        }
+        catch
+        {
+            puedeAprobarPresupuesto = false;
+        }
+    }
+
+    private async Task CargarFechaServidorActualAsync()
+    {
+        try
+        {
+            currentServerDate = await ConfiguracionPresupuestoClient.GetServerDateAsync();
+        }
+        catch
+        {
+            currentServerDate = DateOnly.FromDateTime(DateTime.Today);
+        }
+    }
+
+    private bool IsPresupuestoVigente()
+    {
+        return selectedHeader is not null &&
+               selectedHeader.FechaInicia <= currentServerDate &&
+               selectedHeader.FechaFinaliza >= currentServerDate;
+    }
+
+    private string GetMensajeBloqueoPorRango(string accion)
+    {
+        if (selectedHeader is null)
+        {
+            return $"No se puede {accion} porque no hay un presupuesto seleccionado.";
+        }
+
+        return
+            $"No se puede {accion} porque el presupuesto está fuera del rango de fechas ({selectedHeader.FechaInicia:yyyy-MM-dd} al {selectedHeader.FechaFinaliza:yyyy-MM-dd}). Fecha actual: {currentServerDate:yyyy-MM-dd}.";
+    }
+
+    private bool IsPresupuestoAprobado()
+    {
+        return selectedHeader?.EstadoAprobado == true;
+    }
+}
+

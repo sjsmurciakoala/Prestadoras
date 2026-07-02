@@ -5,13 +5,16 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <UserSecretsId>aspnet-apc-30987f5c-af7c-444f-b186-dc47e7101675</UserSecretsId>
     <DefaultItemExcludes>$(DefaultItemExcludes);Data\genhash\**</DefaultItemExcludes>
+    <!-- Declarar RIDs soportados aqui hace que el restore genere targets net9.0/win-x64
+         en project.assets.json. Sin esto, publish -r win-x64 falla NETSDK1047. -->
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="DevExpress.Blazor" Version="25.1.7" />
-    <PackageReference Include="DevExpress.Blazor.PdfViewer" Version="25.1.7" />
-    <PackageReference Include="DevExpress.AspNetCore.Reporting" Version="25.1.7" />
-    <PackageReference Include="DevExpress.Reporting.Core" Version="25.1.7" />
+    <PackageReference Include="DevExpress.Blazor" Version="25.2.4" />
+    <PackageReference Include="DevExpress.Blazor.PdfViewer" Version="25.2.4" />
+    <PackageReference Include="DevExpress.AspNetCore.Reporting" Version="25.2.4" />
+    <PackageReference Include="DevExpress.Reporting.Core" Version="25.2.4" />
     <PackageReference Include="ClosedXML" Version="0.104.1" />
     
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="9.0.0" />
@@ -19,10 +22,12 @@
     <PackageReference Include="Microsoft.AspNetCore.Identity.EntityFrameworkCore" Version="9.0.0" />
     <PackageReference Include="Microsoft.EntityFrameworkCore.Tools" Version="9.0.0" />
     <PackageReference Include="Npgsql.EntityFrameworkCore.PostgreSQL" Version="9.0.4" />
+    <PackageReference Include="SQLitePCLRaw.bundle_e_sqlite3" Version="3.0.2" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\apc.Client\apc.Client.csproj" />
+    <ProjectReference Include="..\SIAD.Reports\SIAD.Reports.csproj" />
     <ProjectReference Include="..\SIAD.Services\SIAD.Services.csproj" />
     <ProjectReference Include="..\SIAD.Data\SIAD.Data.csproj" />
     <ProjectReference Include="..\SIAD.Core\SIAD.Core.csproj" />
@@ -30,7 +35,17 @@
   </ItemGroup>
 
   <ItemGroup>
-    <Folder Include="Reportes\" />
+    <!-- appsettings.Local.json es por dev/server: cada entorno mantiene el suyo, NO va al publish -->
+    <None Update="appsettings.Local.json" CopyToPublishDirectory="Never" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Remove="Reportes\Rpt_DE_Transacciones_Bancarias.cs" />
+    <Compile Remove="Reportes\Rpt_DE_Transacciones_Bancarias.Designer.cs" />
+    <EmbeddedResource Remove="Reportes\Rpt_DE_Transacciones_Bancarias.resx" />
+    <Compile Remove="Reportes\Rpt_Dev_Lista_Transacciones_Bancarias.cs" />
+    <Compile Remove="Reportes\Rpt_Dev_Lista_Transacciones_Bancarias.Designer.cs" />
+    <EmbeddedResource Remove="Reportes\Rpt_Dev_Lista_Transacciones_Bancarias.resx" />
   </ItemGroup>
 
 </Project>

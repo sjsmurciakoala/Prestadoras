@@ -1,0 +1,61 @@
+@using SIAD.Core.DTOs.Proveedores
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+
+    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+        <DxFormLayoutGroup Caption="Datos del banco" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Nombre *" ColSpanXs="12">
+                <DxTextBox @bind-Text="Model.Nombre" MaxLength="80" />
+                <ValidationMessage For="() => Model.Nombre" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Activo" ColSpanXs="12" ColSpanMd="4">
+                <DxCheckBox @bind-Checked="Model.Activo" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+    </DxFormLayout>
+
+    <DxValidationSummary CssClass="mb-3" />
+
+    <div class="d-flex justify-content-end">
+        <DxButton SubmitFormOnClick="true"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar"
+                  Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal"
+                  CssClass="ms-2"
+                  Text="Cancelar"
+                  Enabled="@(!IsBusy)"
+                  Click="CancelarAsync" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public ProveedorBancoUpsertDto Model { get; set; } = default!;
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task CancelarAsync()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}

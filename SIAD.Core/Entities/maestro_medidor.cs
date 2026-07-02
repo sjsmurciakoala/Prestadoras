@@ -21,6 +21,10 @@ public partial class maestro_medidor
 
     public string? maestro_medidor_acueducto { get; set; }
 
+    public string? medidor_clase_codigo { get; set; }
+
+    public virtual medidor_clase? medidor_clase { get; set; }
+
     public bool estado { get; set; }
 
     public string? usuariocreacion { get; set; }

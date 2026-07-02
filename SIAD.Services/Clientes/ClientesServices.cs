@@ -399,6 +399,8 @@ public class ClientesService : IClientesService
                 c.usuariocreacion,
                 c.fechacreacion,
                 c.descuento_tercera_edad,
+                c.maestro_cliente_estudio_socioeconomico,
+                c.no_cortable,
                 Detalle = c.cliente_detalles
                     .OrderByDescending(d => d.fechamodificacion ?? d.fechacreacion)
                     .Select(d => new
@@ -479,6 +481,8 @@ public class ClientesService : IClientesService
             UsuarioCreacion = raw.usuariocreacion,
             FechaCreacion = raw.fechacreacion,
             DescuentoTerceraEdad = raw.descuento_tercera_edad,
+            EstudioSocioeconomico = raw.maestro_cliente_estudio_socioeconomico,
+            NoCortable = raw.no_cortable,
             Activo = raw.estado
         };
     }
@@ -498,7 +502,7 @@ public class ClientesService : IClientesService
 
         if (string.IsNullOrWhiteSpace(clave))
         {
-            return new ClienteEstadoCuentaDto(null, null, null, null, null);
+            return new ClienteEstadoCuentaDto(null, null, null, null, null, Array.Empty<SaldoServicioDto>());
         }
 
         // Saldo total acumulado: SP es la unica fuente de verdad (ORDER BY ide DESC
@@ -542,12 +546,52 @@ public class ClientesService : IClientesService
 
         decimal? consumoPromedio = consumos.Length > 0 ? consumos.Average() : 0m;
 
+        // Desglose por servicio usando saldo_detalle del movimiento más reciente por tipo_servicio.
+        // JOIN con adm_servicio para obtener el nombre amigable y el orden visual del catálogo.
+        const string sqlDesglose =
+            "SELECT " +
+            "  COALESCE(s.nombre, sub.tipo_servicio, 'Sin servicio') AS servicio, " +
+            "  COALESCE(sub.saldo_detalle, 0)                        AS saldo, " +
+            "  0                                                      AS meses_pendientes " +
+            "FROM ( " +
+            "  SELECT DISTINCT ON (ta.tipo_servicio) " +
+            "    ta.tipo_servicio, ta.saldo_detalle " +
+            "  FROM transaccion_abonado ta " +
+            "  WHERE ta.company_id  = @CompanyId " +
+            "    AND ta.cliente_clave = @Clave " +
+            "    AND ta.tipo_servicio IS NOT NULL " +
+            "    AND ta.estado = 'A' " +
+            "  ORDER BY ta.tipo_servicio, ta.ide DESC " +
+            ") sub " +
+            "LEFT JOIN adm_servicio s " +
+            "       ON s.codigo      = sub.tipo_servicio " +
+            "      AND s.company_id  = @CompanyId " +
+            "ORDER BY COALESCE(s.orden_visual, 999), servicio";
+
+        var desgloseRows = await connection.QueryAsync<SaldoServicioRow>(
+            new CommandDefinition(sqlDesglose,
+                new { CompanyId = companyId, Clave = clave },
+                cancellationToken: ct));
+
+        var saldoPorServicio = desgloseRows
+            .Select(r => new SaldoServicioDto(r.Servicio, r.Saldo, (int)r.MesesPendientes))
+            .ToList()
+            .AsReadOnly();
+
         return new ClienteEstadoCuentaDto(
             saldoActual,
             fechaPago,
             montoPago,
             consumoPromedio,
-            null);
+            null,
+            saldoPorServicio);
+    }
+
+    private sealed class SaldoServicioRow
+    {
+        public string Servicio { get; init; } = string.Empty;
+        public decimal Saldo { get; init; }
+        public long MesesPendientes { get; init; }
     }
 
     public async Task<IReadOnlyList<ClienteMovimientoDto>> GetMovimientosAsync(int clienteId, CancellationToken ct = default)
@@ -630,7 +674,7 @@ public class ClientesService : IClientesService
                 t.saldo ?? 0,
                 t.recibo,
                 _context.facturas
-                    .Where(f => f.numrecibo == t.recibo && f.clientecodigo == t.cliente_clave)
+                    .Where(f => (decimal?)f.numrecibo == t.recibo && f.clientecodigo == t.cliente_clave)
                     .Select(f => f.numfactura)
                     .FirstOrDefault()))
             .ToListAsync(ct);
@@ -973,6 +1017,57 @@ public class ClientesService : IClientesService
             .FirstOrDefaultAsync(ct);
 
         return imagen;
+    }
+
+    public async Task SetNoCortableAsync(string clave, bool valor, string usuario, string? motivo = null, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(clave))
+            throw new ArgumentException("La clave del cliente es obligatoria.", nameof(clave));
+
+        var entity = await _context.cliente_maestros
+            .FirstOrDefaultAsync(c => c.maestro_cliente_clave == clave, ct)
+            ?? throw new KeyNotFoundException($"El cliente '{clave}' no existe.");
+
+        var valorAnterior = entity.no_cortable;
+
+        entity.no_cortable = valor;
+        entity.usuariomodificacion = usuario;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        var companyId = _currentCompanyService.GetCompanyId();
+        _context.cln_cliente_estado_logs.Add(new SIAD.Core.Entities.cln_cliente_estado_log
+        {
+            company_id     = companyId,
+            codigocliente  = clave,
+            tipo           = "NO_CORTABLE",
+            valor_anterior = valorAnterior,
+            valor_nuevo    = valor,
+            motivo         = motivo,
+            usuario        = usuario,
+            fecha          = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
+        });
+
+        await _context.SaveChangesAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ClienteEstadoLogItemDto>> GetEstadoLogAsync(string clave, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(clave))
+            return Array.Empty<ClienteEstadoLogItemDto>();
+
+        return await _context.cln_cliente_estado_logs
+            .AsNoTracking()
+            .Where(l => l.codigocliente == clave)
+            .OrderByDescending(l => l.fecha)
+            .Select(l => new ClienteEstadoLogItemDto(
+                l.id,
+                l.tipo,
+                l.valor_anterior,
+                l.valor_nuevo,
+                l.motivo,
+                l.usuario,
+                l.fecha))
+            .ToListAsync(ct);
     }
 
     private static string BuildPeriodo(int? ano, int? mes)

@@ -50,6 +50,26 @@ public sealed class BancoConfiguracionController : ControllerBase
         }
     }
 
+    [HttpGet("configuracion/{companyId:long}/cuentas-mayores")]
+    public async Task<IActionResult> ListarCuentasMayores(long companyId, CancellationToken ct)
+    {
+        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var cuentas = await configuracionService.ListarCuentasMayoresAsync(companyId, ct);
+            return Ok(cuentas);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { detail = $"Error al obtener las cuentas mayores: {ex.Message}" });
+        }
+    }
+
     [HttpPost("configuracion/{companyId:long}")]
     public async Task<IActionResult> Guardar(long companyId, [FromBody] BancoConfiguracionDto dto, CancellationToken ct)
     {

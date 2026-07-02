@@ -55,5 +55,8 @@ public sealed record ClienteDetailDto
     public DateTime? FechaCreacion { get; init; }
     public double? DescuentoTerceraEdad { get; init; }
 
+    public bool? EstudioSocioeconomico { get; init; }
+    public bool? NoCortable { get; init; }
+
     public bool Activo { get; init; }
 }

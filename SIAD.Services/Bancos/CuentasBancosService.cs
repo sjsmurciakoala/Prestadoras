@@ -8,6 +8,7 @@ using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Core.Utilities;
 using SIAD.Data;
 
 namespace SIAD.Services.Bancos;
@@ -31,7 +32,7 @@ public sealed class CuentasBancosService : ICuentasBancosService
         var currentCompanyId = EnsureCompanyId();
         if (companyId <= 0 || companyId != currentCompanyId)
         {
-            throw new InvalidOperationException("La empresa solicitada no es válida para el usuario actual.");
+            throw new InvalidOperationException("La empresa solicitada no es vï¿½lida para el usuario actual.");
         }
 
         var planQuery = context.con_plan_cuentas
@@ -361,12 +362,30 @@ CALL public.sp_ban_kardex_conciliar(
             return Array.Empty<CuentaContableLookupDto>();
         }
 
-        var pattern = $"%{cuentaMayor}%";
+        // Subarbol del mayor de bancos: ancla por code exacto y baja por parent_account_id
+        // a cualquier profundidad (submayores). Sin LIKE. NO se filtra allows_posting aqui
+        // para no podar la recursion en submayores no posteables.
+        var sql = @"
+WITH RECURSIVE arbol AS (
+    SELECT account_id
+    FROM public.con_plan_cuentas
+    WHERE company_id = {0} AND code = {1}
+
+    UNION ALL
+
+    SELECT h.account_id
+    FROM public.con_plan_cuentas h
+    JOIN arbol a ON h.parent_account_id = a.account_id
+    WHERE h.company_id = {0}
+)
+SELECT cpc.*
+FROM public.con_plan_cuentas cpc
+WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
+
         return await context.con_plan_cuentas
+            .FromSqlRaw(sql, companyId, cuentaMayor)
             .AsNoTracking()
-            .Where(c => c.company_id == companyId
-                        && c.allows_posting
-                        && EF.Functions.Like(c.code, pattern))
+            .Where(c => c.allows_posting)
             .OrderBy(c => c.code)
             .Select(c => new CuentaContableLookupDto
             {
@@ -446,7 +465,7 @@ CALL public.sp_ban_kardex_conciliar(
 
         if (cuentaId <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es válida.");
+            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es vï¿½lida.");
         }
 
         var companyId = EnsureCompanyId();
@@ -491,7 +510,7 @@ CALL public.sp_ban_kardex_conciliar(
     {
         if (cuentaId <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es válida.");
+            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es vï¿½lida.");
         }
 
         var companyId = EnsureCompanyId();
@@ -515,7 +534,7 @@ CALL public.sp_ban_kardex_conciliar(
 
         if (tieneTransitos)
         {
-            throw new InvalidOperationException("La cuenta tiene movimientos en tránsito y no puede eliminarse.");
+            throw new InvalidOperationException("La cuenta tiene movimientos en trï¿½nsito y no puede eliminarse.");
         }
 
         context.ban_cuenta.Remove(entity);
@@ -630,9 +649,7 @@ CALL public.sp_ban_kardex_conciliar(
             throw new ArgumentException("La cuenta contable seleccionada no pertenece a la empresa actual.", nameof(cuentaContableId));
         }
 
-        return string.IsNullOrWhiteSpace(cuenta.name)
-            ? cuenta.code
-            : $"{cuenta.code} - {cuenta.name}";
+        return AccountCodeFormatter.FormatDisplay(cuenta.code, cuenta.name);
     }
 
     private static string? NormalizeCuentaConcManual(string? value)
@@ -670,7 +687,7 @@ CALL public.sp_ban_kardex_conciliar(
 
         if (existe)
         {
-            throw new InvalidOperationException("Ya existe una cuenta con el mismo número.");
+            throw new InvalidOperationException("Ya existe una cuenta con el mismo nï¿½mero.");
         }
     }
 

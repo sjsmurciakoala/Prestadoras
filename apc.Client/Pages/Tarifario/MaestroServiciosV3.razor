@@ -9,6 +9,8 @@
 @inject NavigationManager Navigation
 @inject IToastNotificationService ToastService
 
+<PageTitle>SIAD - Maestro de Servicios</PageTitle>
+
 <div class="page-container maestro-servicios-v3-page">
     <DxToastProvider Name="MaestroServiciosV3Toast" MaxToastCount="4" />
 
@@ -168,7 +170,7 @@
                             }
                             else
                             {
-                                <span class="text-dark" title="@item.CuentaContableNombre">@item.CuentaContableCodigo</span>
+                                <span class="text-dark" title="@item.CuentaContableNombre">@AccountCodeFormatter.Format(item.CuentaContableCodigo)</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>

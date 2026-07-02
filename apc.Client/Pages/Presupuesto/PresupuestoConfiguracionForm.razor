@@ -1,0 +1,174 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Presupuesto
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="editContext">
+    <DataAnnotationsValidator />
+
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Rango de período *" ColSpanMd="4">
+            <DxComboBox Data="@RangosPeriodo"
+                        TData="RangoPeriodoOption"
+                        TValue="int"
+                        @bind-Value="RangoPeriodoValue"
+                        ValueFieldName="@nameof(RangoPeriodoOption.Valor)"
+                        TextFieldName="@nameof(RangoPeriodoOption.Texto)"
+                        NullText="Seleccione rango"
+                        DropDownStyle="DropDownStyle.DropDownList"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                        Enabled="false" />
+            <ValidationMessage For="() => Model.RangoPeriodo" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Fecha inicial" ColSpanMd="6">
+            <DxDateEdit @bind-Date="FechaIniciaValue"
+                        MinDate="@MinFechaIniciaDateTime" />
+            <ValidationMessage For="() => Model.FechaInicia" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Fecha final" ColSpanMd="6">
+            <DxDateEdit @bind-Date="FechaFinalizaValue" Enabled="false" />
+            <ValidationMessage For="() => Model.FechaFinaliza" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Presupuesto" ColSpanMd="6">
+            <DxSpinEdit TValue="decimal"
+                        @bind-Value="Model.ValorGlobal"
+                        InputCssClass="text-end"
+                        MinValue="0m"
+                        Increment="100m"
+                        Decimals="2"
+                        DisplayFormat="N2" />
+            <ValidationMessage For="() => Model.ValorGlobal" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Disponible" ColSpanMd="6">
+            <DxSpinEdit TValue="decimal"
+                        Value="ValorDisponibleVista"
+                        ValidationEnabled="false"
+                        InputCssClass="text-end"
+                        ReadOnly="true"
+                        Enabled="false"
+                        Decimals="2"
+                        DisplayFormat="N2" />
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <ValidationSummary class="text-danger mb-2" />
+
+    <div class="d-flex justify-content-end mt-2 gap-2">
+        <DxButton ButtonType="ButtonType.Submit"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar"
+                  SubmitFormOnClick="true"
+                  Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal"
+                  Text="Cancelar"
+                  Enabled="@(!IsBusy)"
+                  Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public ConfiguracionPresupuestoEditDto Model { get; set; } = default!;
+
+    [Parameter]
+    public bool IsCreateMode { get; set; }
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    [Parameter]
+    public DateOnly MinFechaInicia { get; set; } = DateOnly.FromDateTime(DateTime.Today);
+
+    private DateTime MinFechaIniciaDateTime => MinFechaInicia.ToDateTime(TimeOnly.MinValue);
+
+    private static readonly IReadOnlyList<RangoPeriodoOption> RangosPeriodo = new[]
+    {
+        new RangoPeriodoOption(12, "Anual (12)"),
+        new RangoPeriodoOption(6, "Semestre (6)"),
+        new RangoPeriodoOption(3, "Trimestre (3)"),
+        new RangoPeriodoOption(1, "Mensual (1)")
+    };
+
+    protected override void OnParametersSet()
+    {
+        if (IsCreateMode)
+        {
+            Model.EstadoAprobado = false;
+            Model.RangoPeriodo = 12;
+        }
+
+        RecalcularFechaFinaliza();
+    }
+
+    private int RangoPeriodoValue
+    {
+        get => Model.RangoPeriodo;
+        set
+        {
+            if (Model.RangoPeriodo == value)
+            {
+                return;
+            }
+
+            Model.RangoPeriodo = value;
+            RecalcularFechaFinaliza();
+        }
+    }
+
+    private DateOnly FechaIniciaValue
+    {
+        get => Model.FechaInicia;
+        set
+        {
+            if (Model.FechaInicia == value)
+            {
+                return;
+            }
+
+            Model.FechaInicia = value;
+            RecalcularFechaFinaliza();
+        }
+    }
+
+    private DateOnly FechaFinalizaValue
+    {
+        get => Model.FechaFinaliza;
+        set => Model.FechaFinaliza = value;
+    }
+
+    private decimal ValorDisponibleVista => IsCreateMode
+        ? Model.ValorGlobal
+        : Model.ValorDisponible;
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+
+    private void RecalcularFechaFinaliza()
+    {
+        var meses = Model.RangoPeriodo > 0 ? Model.RangoPeriodo : 1;
+        Model.FechaFinaliza = Model.FechaInicia.AddMonths(meses);
+    }
+
+    private sealed record RangoPeriodoOption(int Valor, string Texto);
+}

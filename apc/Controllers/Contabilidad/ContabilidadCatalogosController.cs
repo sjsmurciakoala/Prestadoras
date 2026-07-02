@@ -326,6 +326,45 @@ public async Task<IActionResult> SaveTipoTransaccionRule(long typeId, [FromBody]
       });
   }
 
+    [HttpGet("reglas-abonos")]
+    public async Task<IActionResult> GetReglasAbonos(CancellationToken cancellationToken)
+    {
+        return await ExecuteCatalogActionAsync(async () =>
+        {
+            var reglas = await _catalogosService.GetReglasIntegracionAbonosAsync(cancellationToken);
+            return Ok(reglas);
+        });
+    }
+
+    [HttpPost("reglas-abonos")]
+    public async Task<IActionResult> SaveReglaAbono([FromBody] ReglaIntegracionUpsertDto request, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var userName = User?.Identity?.Name ?? "system";
+            var id = await _catalogosService.SaveReglaIntegracionAbonosAsync(request with { User = userName }, cancellationToken);
+            return Ok(new { id });
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(ex.Message);
+        }
+    }
+
+    [HttpDelete("reglas-abonos/{reglaId:long}")]
+    public async Task<IActionResult> DeleteReglaAbono(long reglaId, CancellationToken cancellationToken)
+    {
+        return await ExecuteCatalogActionAsync(async () =>
+        {
+            var deleted = await _catalogosService.DeleteReglaIntegracionAbonosAsync(reglaId, cancellationToken);
+            return deleted ? Ok() : NotFound();
+        });
+    }
+
     private static async Task<IActionResult> ExecuteCatalogActionAsync(Func<Task<IActionResult>> action)
     {
         try

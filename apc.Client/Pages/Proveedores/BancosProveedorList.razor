@@ -1,0 +1,153 @@
+﻿@page "/proveedores/bancos"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.JSInterop
+@using apc.Client.Services.Proveedores
+@using SIAD.Core.DTOs.Proveedores
+
+<PageTitle>SIAD - Bancos del Proveedor</PageTitle>
+
+<DxScrollView Height="100%">
+    <div class="page-container">
+        <ErrorNotice @ref="errorNotice" />
+
+        <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+            <div>
+                <h2 class="page-title">Bancos de proveedor</h2>
+                <p class="page-subtitle">Mantenimiento del catalogo de bancos disponibles para proveedores.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <DxButton Text="Nuevo banco"
+                          Click="NuevoBanco"
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          CssClass="btn-modern shadow-sm" />
+                <DxButton Text="Volver a proveedores"
+                          Click="VolverAProveedores"
+                          IconCssClass="oi oi-arrow-left"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Actualizar"
+                          Click="LoadBancosAsync"
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(!isLoading)" />
+            </div>
+        </div>
+
+        @if (!string.IsNullOrWhiteSpace(errorMessage))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        }
+
+        <div class="modern-card position-relative" style="min-height: 300px;">
+            @if (isLoading)
+            {
+                <p>Cargando bancos de proveedor...</p>
+            }
+
+            <div class="grid-wrapper">
+                <DxGrid Data="@bancos"
+                        KeyFieldName="@nameof(ProveedorBancoListItemDto.Id)"
+                        PageSize="12"
+                        SizeMode="SizeMode.Large"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorBancoListItemDto.Id)" Caption="Codigo" Width="120px" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorBancoListItemDto.Nombre)" Caption="Nombre" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorBancoListItemDto.ProveedoresAsignados)" Caption="Proveedores" Width="140px" />
+                        <DxGridDataColumn Caption="Estado" Width="120px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is ProveedorBancoListItemDto item)
+                                {
+                                    <span class="badge-status @(item.Activo ? "active" : "inactive")">
+                                        @(item.Activo ? "Activo" : "Inactivo")
+                                    </span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is ProveedorBancoListItemDto item)
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn-icon btn-edit" title="Editar" @onclick="@(() => EditarBanco(item.Id))">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button class="btn-icon btn-delete" title="Eliminar" @onclick="@(() => EliminarAsync(item))">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        </div>
+    </div>
+</DxScrollView>
+
+@code {
+    private readonly List<ProveedorBancoListItemDto> bancos = new();
+    private bool isLoading;
+    private string? errorMessage;
+    private ErrorNotice errorNotice = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadBancosAsync();
+    }
+
+    private async Task LoadBancosAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            var data = await ProveedoresClient.ObtenerBancosCatalogoAsync();
+            bancos.Clear();
+            bancos.AddRange(data ?? Array.Empty<ProveedorBancoListItemDto>());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "No se pudo cargar el catálogo de bancos.";
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NuevoBanco() => Navigation.NavigateTo("/proveedores/bancos/nuevo");
+
+    private void EditarBanco(long id) => Navigation.NavigateTo($"/proveedores/bancos/{id}/editar");
+
+    private void VolverAProveedores() => Navigation.NavigateTo("/proveedores");
+
+    private async Task EliminarAsync(ProveedorBancoListItemDto item)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar el banco {item.Nombre}?");
+
+        if (!confirmado)
+        {
+            return;
+        }
+
+        try
+        {
+            await ProveedoresClient.EliminarBancoAsync(item.Id);
+            await LoadBancosAsync();
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo eliminar el banco.", ex);
+        }
+    }
+}

@@ -1,0 +1,826 @@
+@using System.Globalization
+@using System.Text.Json
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Caja
+@using SIAD.Core.DTOs.Common
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Caja
+@inject AbonoClient AbonoClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<div class="posteo-abonos">
+    <DxToastProvider Name="@ToastProviderName" MaxToastCount="4" />
+    <ErrorNotice @ref="errorNotice" />
+
+    @* ── Barra superior: pasos + período ── *@
+    <div class="ab-topbar">
+        <ol class="ab-stepper">
+            <li class="ab-step @PasoBuscarClass">
+                <span class="ab-step-badge">@(PasoBuscarCompleto ? "✓" : "1")</span>
+                <span class="ab-step-label">Buscar factura</span>
+            </li>
+            <li class="ab-step-line"></li>
+            <li class="ab-step @PasoSeleccionarClass">
+                <span class="ab-step-badge">@(PasoSeleccionarCompleto ? "✓" : "2")</span>
+                <span class="ab-step-label">Seleccionar</span>
+            </li>
+            <li class="ab-step-line"></li>
+            <li class="ab-step @PasoProcesarClass">
+                <span class="ab-step-badge">3</span>
+                <span class="ab-step-label">Procesar pago</span>
+            </li>
+        </ol>
+
+        @if (!string.IsNullOrWhiteSpace(PeriodoTexto))
+        {
+            <span class="ab-periodo-pill">
+                <i class="bi bi-calendar3 me-2"></i>Periodo · @PeriodoTexto
+            </span>
+        }
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(error))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+    }
+
+    @* ── Búsqueda ── *@
+    <div class="ab-search">
+        <div class="ab-search-row">
+            <DxTextBox @bind-Text="searchTerm"
+                       NullText="Clave, nombre o N° de factura…"
+                       CssClass="ab-search-input"
+                       InputId="abono-search-term" />
+            <DxButton Text="Buscar" Click="BuscarFacturas"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      IconCssClass="bi bi-search"
+                      Enabled="@(!isLoading)"
+                      CssClass="ab-search-btn" />
+        </div>
+
+        @if (!ClienteBloqueado)
+        {
+            <div class="ab-search-filter">
+                <span class="ab-search-filter-label">o filtra por cliente:</span>
+                <ClienteLookup Items="@Clientes"
+                               Value="@selectedClienteClave"
+                               ValueChanged="OnClienteSeleccionado"
+                               NullText="Selecciona un cliente…" />
+            </div>
+        }
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="ab-loading">
+            <DxWaitIndicator Visible="true" />
+            <span class="ms-2 text-muted">Buscando…</span>
+        </div>
+    }
+    else if (selectedFactura is null)
+    {
+        @* ── Resultados de búsqueda ── *@
+        @if (facturas.Count > 0)
+        {
+            <div class="ab-result-list">
+                @foreach (var fact in facturas)
+                {
+                    <button class="ab-result-item" @onclick="@(() => SeleccionarFactura(fact))">
+                        <div class="ab-result-main">
+                            <span class="ab-result-num">@fact.NumFactura</span>
+                            <span class="ab-badge @(fact.Estado == "B" ? "ab-badge-partial" : "ab-badge-open")">
+                                @(fact.Estado == "B" ? "Parcial" : "Abierta")
+                            </span>
+                        </div>
+                        <div class="ab-result-sub">@fact.ClienteClave — @fact.ClienteNombre</div>
+                        <div class="ab-result-amounts">
+                            <span class="text-muted">Total @fact.SaldoTotal.ToString("C2")</span>
+                            <span class="ab-result-pend">Pendiente @fact.SaldoPendiente.ToString("C2")</span>
+                        </div>
+                    </button>
+                }
+            </div>
+        }
+        else if (hasSearched)
+        {
+            <div class="ab-empty">
+                <i class="bi bi-inbox"></i>
+                <span>No se encontraron facturas con saldo pendiente.</span>
+            </div>
+        }
+        else
+        {
+            <div class="ab-empty">
+                <i class="bi bi-search"></i>
+                <span>Busca un cliente o una factura para comenzar.</span>
+            </div>
+        }
+    }
+    else
+    {
+        @* ── Factura seleccionada ── *@
+        <div class="ab-invoice-card">
+            <div class="ab-invoice-info">
+                <div class="ab-invoice-num">
+                    @selectedFactura.NumFactura
+                    <span class="ab-badge @(selectedFactura.Estado == "B" ? "ab-badge-partial" : "ab-badge-open")">
+                        @(selectedFactura.Estado == "B" ? "Parcial" : "Abierta")
+                    </span>
+                </div>
+                <div class="ab-invoice-cli">@selectedFactura.ClienteClave — @selectedFactura.ClienteNombre</div>
+            </div>
+            <div class="ab-invoice-saldo">
+                <span class="ab-invoice-saldo-label">Saldo pendiente</span>
+                <span class="ab-invoice-saldo-val">@SaldoPendienteVista.ToString("C2")</span>
+            </div>
+            <button class="ab-invoice-change" @onclick="DeseleccionarFactura" title="Elegir otra factura">
+                <i class="bi bi-arrow-left-right me-1"></i>Cambiar
+            </button>
+        </div>
+
+        <p class="ab-options-lead">Elige <strong>una</strong> forma de aplicar el pago:</p>
+
+        @* ── Opción A: procesar recibos ya generados ── *@
+        <div class="ab-option">
+            <div class="ab-option-head">
+                <span class="ab-option-tag">Opción A</span>
+                <span class="ab-option-title">Procesar recibos ya generados</span>
+            </div>
+
+            @if (isLoadingPendientes)
+            {
+                <DxWaitIndicator Visible="true" />
+            }
+            else if (recibosPendientes.Count > 0)
+            {
+                @foreach (var rp in recibosPendientes)
+                {
+                    var staged = reciboPendienteSeleccionado?.TransaccionId == rp.TransaccionId;
+                    <div class="ab-receipt @(staged ? "is-staged" : "")">
+                        <div class="ab-receipt-info">
+                            <span class="ab-receipt-amount">@rp.Monto.ToString("C2")</span>
+                            <span class="ab-receipt-meta">@rp.FechaGenerado · @rp.Operador</span>
+                        </div>
+
+                        @if (staged)
+                        {
+                            <div class="ab-receipt-confirm">
+                                @if (PuedePagarEnBanco)
+                                {
+                                    <DxComboBox TData="string" TValue="string"
+                                                Data="@formasPago"
+                                                @bind-Value="formaPago"
+                                                AllowUserInput="false"
+                                                CssClass="ab-pay-combo" />
+                                    @if (formaPago == "BANCO" && Bancos.Count > 0)
+                                    {
+                                        <DxComboBox TData="BancoDto" TValue="long?"
+                                                    Data="@Bancos"
+                                                    ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
+                                                    TextFieldName="@nameof(BancoDto.Nombre)"
+                                                    @bind-Value="bancoCuentaIdSeleccionado"
+                                                    NullText="Cuenta bancaria…"
+                                                    AllowUserInput="false"
+                                                    CssClass="ab-pay-combo" />
+                                    }
+                                }
+                                <DxButton Text="@(isSaving ? "Procesando…" : "Confirmar pago")"
+                                          Click="ProcesarAbono"
+                                          RenderStyle="ButtonRenderStyle.Success"
+                                          IconCssClass="bi bi-check-circle-fill"
+                                          Enabled="@(!isSaving && FormaPagoValida())"
+                                          SizeMode="SizeMode.Small" />
+                                <DxButton Text="Cancelar"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                          Enabled="@(!isSaving)"
+                                          Click="@(() => reciboPendienteSeleccionado = null)"
+                                          SizeMode="SizeMode.Small" />
+                            </div>
+                        }
+                        else
+                        {
+                            <div class="ab-receipt-actions">
+                                <DxButton Text="Procesar"
+                                          RenderStyle="ButtonRenderStyle.Success"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                          IconCssClass="bi bi-cash-coin"
+                                          Enabled="@(!isSaving)"
+                                          Click="@(() => PrepararProcesarPendiente(rp))"
+                                          SizeMode="SizeMode.Small" />
+                                <DxButton Text="Anular"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                          IconCssClass="bi bi-x-circle"
+                                          Enabled="@(!isSaving)"
+                                          Click="@(() => ConfirmarAnularPendiente(rp))"
+                                          SizeMode="SizeMode.Small" />
+                            </div>
+                        }
+                    </div>
+                }
+
+                <div class="ab-receipt-sum">
+                    <i class="bi bi-calculator me-1"></i>@TotalRecibosPendientes.ToString("C2") en recibos pendientes
+                    <span class="@(RecibosCuadran ? "ab-sum-ok" : "ab-sum-warn")">
+                        @(RecibosCuadran
+                            ? "· cuadra con el saldo"
+                            : $"· saldo pendiente {SaldoPendienteVista.ToString("C2")}")
+                    </span>
+                </div>
+            }
+            else
+            {
+                <p class="ab-option-empty">
+                    <i class="bi bi-info-circle me-1"></i>
+                    No hay recibos generados para esta factura. Usa la Opción B.
+                </p>
+            }
+        </div>
+
+        <div class="ab-or"><span>o</span></div>
+
+        @* ── Opción B: abono directo ── *@
+        <div class="ab-option @(reciboPendienteSeleccionado != null ? "is-disabled" : "")">
+            <div class="ab-option-head">
+                <span class="ab-option-tag">Opción B</span>
+                <span class="ab-option-title">Registrar abono directo</span>
+            </div>
+
+            @if (PuedePagarEnBanco)
+            {
+                <label class="ab-field-label">Forma de pago</label>
+                <DxComboBox TData="string" TValue="string"
+                            Data="@formasPago"
+                            @bind-Value="formaPago"
+                            AllowUserInput="false"
+                            CssClass="ab-monto" />
+
+                @if (formaPago == "BANCO" && Bancos.Count > 0)
+                {
+                    <label class="ab-field-label">Cuenta bancaria</label>
+                    <DxComboBox TData="BancoDto" TValue="long?"
+                                Data="@Bancos"
+                                ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
+                                TextFieldName="@nameof(BancoDto.Nombre)"
+                                @bind-Value="bancoCuentaIdSeleccionado"
+                                NullText="Selecciona la cuenta bancaria…"
+                                AllowUserInput="false"
+                                CssClass="ab-monto" />
+                }
+            }
+
+            <label class="ab-field-label">Monto a abonar</label>
+            <DxSpinEdit T="decimal"
+                        @bind-Value="montoAbonar"
+                        MinValue="0.01m"
+                        MaxValue="@SaldoPendienteVista"
+                        DisplayFormat="C2"
+                        CssClass="ab-monto"
+                        InputId="abono-monto" />
+
+            <DxButton Text="@(isSaving && reciboPendienteSeleccionado is null ? "Procesando…" : "Confirmar abono")"
+                      Click="ProcesarAbono"
+                      RenderStyle="ButtonRenderStyle.Success"
+                      IconCssClass="bi bi-check-circle-fill"
+                      Enabled="@(!isSaving && reciboPendienteSeleccionado is null && montoAbonar > 0 && FormaPagoValida())"
+                      CssClass="ab-confirm-btn" />
+        </div>
+
+        @* ── Abonos ya aplicados a esta factura ── *@
+        <div class="ab-applied">
+            <h6 class="ab-applied-title">
+                <i class="bi bi-clock-history me-2"></i>Abonos aplicados a esta factura
+            </h6>
+
+            @if (isLoadingHistorialFactura)
+            {
+                <DxWaitIndicator Visible="true" />
+            }
+            else if (historialFactura.Count > 0)
+            {
+                <table class="ab-table">
+                    <thead>
+                        <tr>
+                            <th>Fecha</th>
+                            <th>Monto</th>
+                            <th>Saldo rest.</th>
+                            <th>Estado</th>
+                            <th class="text-end">Recibo</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var fila in HistorialVista())
+                        {
+                            <tr>
+                                <td>@fila.Item.FechaPago</td>
+                                <td class="fw-bold">@fila.Item.MontoAbonado.ToString("C2")</td>
+                                <td>@fila.SaldoRest.ToString("C2")</td>
+                                <td><span class="ab-badge @EstadoBadgeClass(fila.Estado)">@fila.Estado</span></td>
+                                <td class="text-end">
+                                    <DxButton Text="PDF"
+                                              SizeMode="SizeMode.Small"
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              IconCssClass="bi bi-printer"
+                                              Click="@(() => ImprimirReciboHistorial(fila.Item.TransaccionId))" />
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            }
+            else
+            {
+                <p class="ab-option-empty">
+                    <i class="bi bi-info-circle me-1"></i>
+                    No se han registrado abonos para esta factura.
+                </p>
+            }
+        </div>
+    }
+
+    @* ── Popup de confirmación de abono ── *@
+    @if (ultimoAbono != null)
+    {
+        <DxPopup Visible="true"
+                 Width="450px"
+                 HeaderText="Abono Registrado"
+                 CloseOnOutsideClick="false"
+                 ShowCloseButton="true"
+                 OnHiding="@(() => ultimoAbono = null)"
+                 CssClass="recibo-popup">
+            <BodyContentTemplate Context="popBody">
+                <div class="text-center p-3">
+                    <i class="bi bi-check-circle-fill text-success fs-1 mb-2"></i>
+                    <h4 class="fw-bold mb-3">¡Abono Registrado!</h4>
+
+                    <div class="border border-light p-3 bg-light rounded text-start fs-sm mb-3">
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Nº Factura:</span>
+                            <strong>@ultimoAbono.NumFactura</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Monto Abonado:</span>
+                            <strong class="text-success">@ultimoAbono.MontoAbonado.ToString("C2")</strong>
+                        </div>
+                        <div class="d-flex justify-content-between mb-1">
+                            <span class="text-muted">Nuevo Saldo:</span>
+                            <strong>@ultimoAbono.NuevoSaldo.ToString("C2")</strong>
+                        </div>
+                        @if (ultimoAbono.PolizaId.HasValue)
+                        {
+                            <div class="d-flex justify-content-between">
+                                <span class="text-muted">Referencia Póliza:</span>
+                                <strong>@ultimoAbono.PolizaId.Value</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </BodyContentTemplate>
+            <FooterContentTemplate Context="popFooter">
+                <div class="d-flex justify-content-end gap-2 w-100">
+                    <DxButton Text="Imprimir Recibo"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              IconCssClass="bi bi-printer"
+                              Click="ImprimirRecibo" />
+                    <DxButton Text="Entendido"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              Click="@(() => ultimoAbono = null)" />
+                </div>
+            </FooterContentTemplate>
+        </DxPopup>
+    }
+
+    @* ── Popup confirmación anulación ── *@
+    @if (reciboPendienteAAnular != null)
+    {
+        <DxPopup Visible="true"
+                 Width="400px"
+                 HeaderText="Anular Recibo Pendiente"
+                 CloseOnOutsideClick="false"
+                 ShowCloseButton="true"
+                 OnHiding="@(() => reciboPendienteAAnular = null)">
+            <BodyContentTemplate Context="popAnular">
+                <div class="p-3">
+                    <p>¿Confirmas anular el recibo pendiente de
+                       <strong>@reciboPendienteAAnular.Monto.ToString("C2")</strong>
+                       generado el @reciboPendienteAAnular.FechaGenerado?</p>
+                    <DxFormLayout>
+                        <DxFormLayoutItem ColSpanXs="12" Caption="Motivo">
+                            <Template>
+                                <DxTextBox @bind-Text="motivoAnulacion" NullText="Motivo de anulación…" />
+                            </Template>
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+                </div>
+            </BodyContentTemplate>
+            <FooterContentTemplate Context="popAnular">
+                <div class="d-flex justify-content-end gap-2 w-100">
+                    <DxButton Text="Cancelar"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="@(() => reciboPendienteAAnular = null)" />
+                    <DxButton Text="Anular Recibo"
+                              RenderStyle="ButtonRenderStyle.Danger"
+                              Enabled="@(!isAnulando)"
+                              Click="EjecutarAnulacion" />
+                </div>
+            </FooterContentTemplate>
+        </DxPopup>
+    }
+</div>
+
+@code {
+    [Parameter] public List<BancoDto> Bancos { get; set; } = new();
+    [Parameter] public List<ClienteComboDto> Clientes { get; set; } = new();
+    [Parameter] public string UsuarioActual { get; set; } = "system";
+    [Parameter] public string? ClienteClaveInicial { get; set; }
+    [Parameter] public bool ClienteBloqueado { get; set; }
+    [Parameter] public bool PuedePagarEnBanco { get; set; }
+    [Parameter] public PeriodoActualDto? PeriodoActual { get; set; }
+
+    private const string ToastProviderName = "AbonosToast";
+
+    private readonly List<string> formasPago = ["EFECTIVO", "BANCO"];
+
+    private string searchTerm = string.Empty;
+    private string? selectedClienteClave;
+    private List<FacturaConSaldoDto> facturas = new();
+    private FacturaConSaldoDto? selectedFactura;
+    private AbonoResponseDto? ultimoAbono;
+    private decimal montoAbonar;
+    private string formaPago = "EFECTIVO";
+    private long? bancoCuentaIdSeleccionado;
+
+    private bool isLoading;
+    private bool isSaving;
+    private bool hasSearched;
+    private string? error;
+    private ErrorNotice errorNotice = default!;
+
+    private List<ReciboPendienteDto> recibosPendientes = new();
+    private bool isLoadingPendientes;
+    private ReciboPendienteDto? reciboPendienteSeleccionado;
+
+    private List<AbonoHistorialItemDto> historialFactura = new();
+    private bool isLoadingHistorialFactura;
+
+    private ReciboPendienteDto? reciboPendienteAAnular;
+    private string motivoAnulacion = string.Empty;
+    private bool isAnulando;
+
+    private bool _initialLoadDone;
+
+    // ── Estado de los pasos (stepper) ──
+    private bool PasoBuscarCompleto => selectedFactura != null || facturas.Count > 0;
+    private bool PasoSeleccionarCompleto => selectedFactura != null;
+
+    private string PasoBuscarClass => PasoBuscarCompleto ? "is-done" : "is-active";
+    private string PasoSeleccionarClass =>
+        PasoSeleccionarCompleto ? "is-done" : (facturas.Count > 0 ? "is-active" : "");
+    private string PasoProcesarClass => selectedFactura != null ? "is-active" : "";
+
+    // ── Saldo derivado SOLO en la vista (sin tocar backend ni datos) ──
+    // El saldo "vivo" (montovalor_saldo) puede no haberse rebajado al abonar. Si el
+    // saldo pendiente llega igual al total habiendo abonos aplicados, lo derivamos
+    // como total − abonado.
+    private decimal TotalAbonado => historialFactura.Sum(h => h.MontoAbonado);
+
+    private decimal SaldoPendienteVista
+    {
+        get
+        {
+            if (selectedFactura is null) return 0m;
+            var saldo = selectedFactura.SaldoPendiente;
+            if (TotalAbonado > 0m && saldo >= selectedFactura.SaldoTotal)
+                saldo = selectedFactura.SaldoTotal - TotalAbonado;
+            return saldo < 0m ? 0m : saldo;
+        }
+    }
+
+    // Saldo restante por abono reconstruido en la vista, del más reciente al más
+    // antiguo, partiendo del saldo pendiente real.
+    private List<(AbonoHistorialItemDto Item, decimal SaldoRest, string Estado)> HistorialVista()
+    {
+        var filas = new List<(AbonoHistorialItemDto, decimal, string)>(historialFactura.Count);
+        var saldoCorrido = SaldoPendienteVista;
+        foreach (var item in historialFactura)
+        {
+            var estado = saldoCorrido <= 0.005m ? "Cobrada" : "Parcial";
+            filas.Add((item, saldoCorrido, estado));
+            saldoCorrido += item.MontoAbonado;
+        }
+        return filas;
+    }
+
+    // ── Consistencia en pantalla: ¿los recibos pendientes suman el saldo? ──
+    private decimal TotalRecibosPendientes => recibosPendientes.Sum(r => r.Monto);
+    private bool RecibosCuadran =>
+        selectedFactura != null &&
+        Math.Abs(TotalRecibosPendientes - SaldoPendienteVista) < 0.01m;
+
+    private string PeriodoTexto => FormatPeriodo(PeriodoActual);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!_initialLoadDone && !string.IsNullOrWhiteSpace(ClienteClaveInicial))
+        {
+            _initialLoadDone = true;
+            await OnClienteSeleccionado(ClienteClaveInicial);
+        }
+    }
+
+    private async Task BuscarFacturas()
+    {
+        if (string.IsNullOrWhiteSpace(searchTerm))
+        {
+            MostrarToast("Búsqueda", "Escribe un término para buscar.", ToastRenderStyle.Warning);
+            return;
+        }
+        error = null;
+        isLoading = true;
+        hasSearched = true;
+        selectedFactura = null;
+        LimpiarPanelFactura();
+
+        try
+        {
+            var res = await AbonoClient.BuscarFacturasConSaldoAsync(searchTerm);
+            facturas = res?.ToList() ?? new();
+            if (facturas.Count == 0)
+                MostrarToast("Sin resultados", "No se encontraron facturas con saldo pendiente.", ToastRenderStyle.Warning);
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo buscar.", ex);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnClienteSeleccionado(string? clave)
+    {
+        selectedClienteClave = clave;
+        if (string.IsNullOrWhiteSpace(clave)) return;
+
+        error = null;
+        isLoading = true;
+        hasSearched = true;
+        selectedFactura = null;
+        searchTerm = string.Empty;
+        LimpiarPanelFactura();
+
+        try
+        {
+            var res = await AbonoClient.ListarFacturasPendientesPorClienteAsync(clave);
+            facturas = res?.ToList() ?? new();
+        }
+        catch (Exception ex)
+        {
+            error = "No se pudieron cargar las facturas.";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task SeleccionarFactura(FacturaConSaldoDto fact)
+    {
+        selectedFactura = fact;
+        montoAbonar = fact.SaldoPendiente;
+        formaPago = "EFECTIVO";
+        bancoCuentaIdSeleccionado = null;
+        reciboPendienteSeleccionado = null;
+        error = null;
+
+        await Task.WhenAll(
+            CargarRecibosPendientesAsync(fact.NumFactura),
+            CargarHistorialFacturaAsync(fact.NumFactura));
+
+        // Con el historial cargado ya podemos usar el saldo derivado en la vista.
+        montoAbonar = SaldoPendienteVista;
+    }
+
+    private void DeseleccionarFactura()
+    {
+        selectedFactura = null;
+        LimpiarPanelFactura();
+    }
+
+    private async Task CargarRecibosPendientesAsync(string numFactura)
+    {
+        isLoadingPendientes = true;
+        try
+        {
+            var res = await AbonoClient.ListarRecibosPendientesAsync(numFactura);
+            recibosPendientes = res?.ToList() ?? new();
+        }
+        catch
+        {
+            recibosPendientes = new();
+        }
+        finally
+        {
+            isLoadingPendientes = false;
+        }
+    }
+
+    private async Task CargarHistorialFacturaAsync(string numFactura)
+    {
+        isLoadingHistorialFactura = true;
+        try
+        {
+            var res = await AbonoClient.ListarHistorialPorFacturaAsync(numFactura);
+            historialFactura = res?.ToList() ?? new();
+        }
+        catch
+        {
+            historialFactura = new();
+        }
+        finally
+        {
+            isLoadingHistorialFactura = false;
+        }
+    }
+
+    private void PrepararProcesarPendiente(ReciboPendienteDto rp)
+    {
+        // El recibo pendiente ya tiene un monto fijo; se procesa por ese valor exacto.
+        reciboPendienteSeleccionado = rp;
+        formaPago = "EFECTIVO";
+        bancoCuentaIdSeleccionado = null;
+    }
+
+    private void ConfirmarAnularPendiente(ReciboPendienteDto rp)
+    {
+        reciboPendienteAAnular = rp;
+        motivoAnulacion = string.Empty;
+    }
+
+    private async Task EjecutarAnulacion()
+    {
+        if (reciboPendienteAAnular is null) return;
+        isAnulando = true;
+
+        try
+        {
+            var dto = new AnularReciboPendienteDto
+            {
+                TransaccionId = reciboPendienteAAnular.TransaccionId,
+                Usuario = UsuarioActual,
+                Motivo = motivoAnulacion
+            };
+
+            var response = await AbonoClient.AnularReciboPendienteAsync(dto);
+            if (response?.Success == true)
+            {
+                MostrarToast("Anulado", "Recibo pendiente anulado.", ToastRenderStyle.Info);
+                reciboPendienteAAnular = null;
+
+                if (selectedFactura != null)
+                    await CargarRecibosPendientesAsync(selectedFactura.NumFactura);
+            }
+            else
+            {
+                error = response?.Message ?? "No se pudo anular el recibo.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo anular el recibo pendiente.", ex);
+        }
+        finally
+        {
+            isAnulando = false;
+        }
+    }
+
+    private async Task ProcesarAbono()
+    {
+        if (selectedFactura is null) return;
+
+        // Opción A procesa el recibo pendiente por su monto fijo; Opción B usa el monto capturado.
+        var monto = reciboPendienteSeleccionado?.Monto ?? montoAbonar;
+        if (monto <= 0) return;
+
+        if (formaPago == "BANCO" && (bancoCuentaIdSeleccionado is null || bancoCuentaIdSeleccionado <= 0))
+        {
+            MostrarToast("Validación", "Selecciona la cuenta bancaria.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        error = null;
+        isSaving = true;
+
+        var bancoCuenta = Bancos.FirstOrDefault(b => b.BancoCuentaId == bancoCuentaIdSeleccionado);
+
+        var request = new AbonoCrearDto
+        {
+            NumFactura = selectedFactura.NumFactura,
+            ClienteClave = selectedFactura.ClienteClave,
+            Monto = monto,
+            FormaPago = formaPago,
+            BancoCuentaId = formaPago == "BANCO" ? bancoCuentaIdSeleccionado : null,
+            Banco = formaPago == "BANCO" ? bancoCuenta?.Codigo : null,
+            Usuario = UsuarioActual,
+            ReciboPendienteId = reciboPendienteSeleccionado?.TransaccionId
+        };
+
+        try
+        {
+            var response = await AbonoClient.RegistrarAbonoAsync(request);
+            if (response?.Success == true)
+            {
+                var dataStr = response.Data?.ToString();
+                if (dataStr != null)
+                {
+                    ultimoAbono = JsonSerializer.Deserialize<AbonoResponseDto>(
+                        dataStr, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+                }
+
+                MostrarToast("Abono Registrado", "Abono aplicado correctamente.", ToastRenderStyle.Success);
+                reciboPendienteSeleccionado = null;
+                selectedFactura = null;
+                facturas.Clear();
+                searchTerm = string.Empty;
+                hasSearched = false;
+                LimpiarPanelFactura();
+            }
+            else
+            {
+                error = response?.Message ?? "No se pudo registrar el abono.";
+                MostrarToast("Error", error, ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo registrar el abono.", ex);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private bool FormaPagoValida()
+    {
+        if (formaPago == "BANCO")
+            return bancoCuentaIdSeleccionado.HasValue && bancoCuentaIdSeleccionado > 0;
+        return true;
+    }
+
+    private void LimpiarPanelFactura()
+    {
+        recibosPendientes = new();
+        historialFactura = new();
+        reciboPendienteSeleccionado = null;
+        formaPago = "EFECTIVO";
+        bancoCuentaIdSeleccionado = null;
+    }
+
+    private static string EstadoBadgeClass(string estado) => estado switch
+    {
+        "Cobrada" => "ab-badge-done",
+        "Parcial" => "ab-badge-partial",
+        _ => "ab-badge-open"
+    };
+
+    private static string FormatPeriodo(PeriodoActualDto? p)
+    {
+        if (p is null) return string.Empty;
+
+        if (int.TryParse(p.Anio, out var anio) &&
+            int.TryParse(p.Mes, out var mes) && mes is >= 1 and <= 12)
+        {
+            var cultura = CultureInfo.GetCultureInfo("es-HN");
+            var nombre = cultura.DateTimeFormat.GetMonthName(mes);
+            if (!string.IsNullOrEmpty(nombre))
+                nombre = char.ToUpper(nombre[0], cultura) + nombre[1..];
+            return $"{nombre} {anio}";
+        }
+
+        return p.Periodo ?? string.Empty;
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastProviderName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+
+    private async Task ImprimirRecibo()
+    {
+        if (ultimoAbono is null) return;
+        await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{ultimoAbono.TransaccionId}", "_blank");
+    }
+
+    private async Task ImprimirReciboHistorial(int transaccionId)
+        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{transaccionId}", "_blank");
+}

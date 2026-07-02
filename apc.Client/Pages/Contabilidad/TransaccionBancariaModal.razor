@@ -64,7 +64,7 @@
 
                     <div class="form-group mb-3">
                         <label class="form-label">Descripción: <span class="text-danger">*</span></label>
-                        <InputTextArea @bind-Value="NuevaTransaccion.Descripcion"
+                        <InputTextArea @bind-Value="DescripcionTransaccion"
                                        class="form-control"
                                        rows="3"
                                        placeholder="Describa el movimiento..."
@@ -310,6 +310,15 @@
 
             <div class="col-12">
                 <div class="d-flex gap-2 justify-content-end mt-2">
+                    @if (!string.IsNullOrWhiteSpace(ReporteUrl))
+                    {
+                        <a class="btn btn-primary"
+                           href="@ReporteUrl"
+                           target="_blank"
+                           rel="noopener">
+                            <i class="bi bi-printer me-1"></i>Imprimir
+                        </a>
+                    }
                     <button type="button" class="btn btn-secondary" @onclick="CancelarAsync">@((ReadOnly ? "Cerrar" : "Cancelar"))</button>
                     @if (!ReadOnly)
                     {
@@ -319,7 +328,7 @@
 
                 @if (!string.IsNullOrWhiteSpace(MensajeError))
                 {
-                    <div class="alert alert-danger mt-3">
+                    <div class="@MensajeAlertClass">
                         @MensajeError
                     </div>
                 }

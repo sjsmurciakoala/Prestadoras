@@ -90,9 +90,16 @@ public class CaptacionPagosController : ControllerBase
 
         filtro ??= new CaptacionArqueoFilterDto();
 
-        var arqueos = await _service.ListarArqueosPagedAsync(filtro, skip, take, sortField, sortDesc, ct);
-
-        return Ok(arqueos);
+        try
+        {
+            var arqueos = await _service.ListarArqueosPagedAsync(filtro, skip, take, sortField, sortDesc, ct);
+            return Ok(arqueos);
+        }
+        catch (OperationCanceledException) when (ct.IsCancellationRequested)
+        {
+            // El cliente canceló la petición (p. ej. el grid se recargó al buscar). No es un error.
+            return StatusCode(499);
+        }
 
     }
 
@@ -314,7 +321,7 @@ public class CaptacionPagosController : ControllerBase
 
 
 
-    // ==================== POSTEO MISCEL�NEOS ====================
+    // ==================== POSTEO MISCEL�NEOS ====================
 
 
 
@@ -388,11 +395,11 @@ public class CaptacionPagosController : ControllerBase
 
     [HttpGet("clientes")]
 
-    public async Task<IActionResult> GetClientes([FromQuery] string? query, CancellationToken ct)
+    public async Task<IActionResult> GetClientes([FromQuery] string? query, [FromQuery] int? take, CancellationToken ct)
 
     {
 
-        var clientes = await _service.ListarClientesAsync(query, ct);
+        var clientes = await _service.ListarClientesAsync(query, take, ct);
 
         return Ok(clientes);
 

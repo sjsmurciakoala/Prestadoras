@@ -1,0 +1,155 @@
+﻿@page "/informes/cobranzas/saldo-clientes-ciclo"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Globalization
+@using SIAD.Core.DTOs.Rutas
+@using apc.Client.Services.Informes
+@inject InformesClient InformesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Saldo de clientes por ciclo</PageTitle>
+
+<div class="page-container reporte-saldo-clientes-ciclo">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Saldo de clientes por ciclo</h2>
+            <p class="page-subtitle">Seleccione el rango de fechas, ciclo y genere el PDF del resumen totalizado por ciclos.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/cobranzas"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Limpiar"
+                      Click="LimpiarFiltros"
+                      IconCssClass="bi bi-eraser"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Generar PDF"
+                      Click="GenerarPdf"
+                      IconCssClass="bi bi-file-earmark-pdf"
+                      RenderStyle="ButtonRenderStyle.Primary" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        <DxFormLayout ColCountMd="12">
+            <DxFormLayoutItem Caption="Fecha desde" ColSpanMd="3">
+                <DxDateEdit @bind-Date="fechaDesde"
+                            NullText="Seleccione fecha"
+                            DisplayFormat="dd/MM/yyyy" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha hasta" ColSpanMd="3">
+                <DxDateEdit @bind-Date="fechaHasta"
+                            NullText="Seleccione fecha"
+                            DisplayFormat="dd/MM/yyyy" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Ciclo" ColSpanMd="3">
+                <DxComboBox Data="@ciclos"
+                            @bind-Value="cicloId"
+                            ValueFieldName="@nameof(CicloLookupDto.Id)"
+                            TextFieldName="@nameof(CicloLookupDto.Descripcion)"
+                            NullText="Todos"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            DropDownStyleMode="DropDownStyleMode.DropDownList" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Reporte" ColSpanMd="3">
+                <DxTextBox Text="Saldo de clientes por ciclo"
+                           ReadOnly="true"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card p-3 viewer-shell">
+        @if (string.IsNullOrWhiteSpace(pdfUrl))
+        {
+            <div class="empty-preview">
+                <div class="empty-preview__icon">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                </div>
+                <h3 class="empty-preview__title">PDF no generado</h3>
+                <p class="empty-preview__description">
+                    Defina los filtros y pulse Generar PDF para previsualizar el informe.
+                </p>
+            </div>
+        }
+        else
+        {
+            <iframe class="pdf-frame"
+                    src="@pdfUrl"
+                    title="Saldo de clientes por ciclo"></iframe>
+        }
+    </div>
+</div>
+
+@code {
+    private DateTime? fechaDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? fechaHasta = DateTime.Today;
+    private int cicloId;
+    private string? errorMessage;
+    private string? pdfUrl;
+    private List<CicloLookupDto> ciclos = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var items = await InformesClient.GetCiclosAsync();
+            ciclos =
+            [
+                new CicloLookupDto(0, "Todos"),
+                .. items
+            ];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No fue posible cargar los ciclos: {ex.Message}";
+            ciclos = [new CicloLookupDto(0, "Todos")];
+        }
+    }
+
+    private void GenerarPdf()
+    {
+        if (!fechaDesde.HasValue)
+        {
+            errorMessage = "La fecha desde es obligatoria.";
+            pdfUrl = null;
+            return;
+        }
+
+        if (!fechaHasta.HasValue)
+        {
+            errorMessage = "La fecha hasta es obligatoria.";
+            pdfUrl = null;
+            return;
+        }
+
+        if (fechaDesde.Value.Date > fechaHasta.Value.Date)
+        {
+            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            pdfUrl = null;
+            return;
+        }
+
+        errorMessage = null;
+        pdfUrl =
+            $"api/informes/reportes/{SIAD.Core.Constants.ReportesWebConstants.CodigoReporteSaldoClientesCiclo}/pdf" +
+            $"?fechaDesde={Uri.EscapeDataString(fechaDesde.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
+            $"&fechaHasta={Uri.EscapeDataString(fechaHasta.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
+            $"&cicloId={cicloId.ToString(CultureInfo.InvariantCulture)}";
+    }
+
+    private void LimpiarFiltros()
+    {
+        fechaDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
+        fechaHasta = DateTime.Today;
+        cicloId = 0;
+        errorMessage = null;
+        pdfUrl = null;
+    }
+}

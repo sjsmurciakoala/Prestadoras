@@ -1,4 +1,4 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using SIAD.Core.Tenancy;
 
@@ -61,6 +61,10 @@ public partial class cliente_maestro : ICompanyScopedEntity
     public double? descuento_tercera_edad { get; set; }
 
     public bool? bloqueado_cobranza { get; set; }
+
+    public bool? maestro_cliente_estudio_socioeconomico { get; set; }
+
+    public bool? no_cortable { get; set; }
 
     public int? abogado { get; set; }
 

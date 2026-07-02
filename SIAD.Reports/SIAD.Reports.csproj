@@ -1,9 +1,9 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
-    <PackageReference Include="Dapper" Version="2.1.35" />
-    <PackageReference Include="DevExpress.AspNetCore.Reporting" Version="25.1.7" />
-    <PackageReference Include="DevExpress.Reporting.Core" Version="25.1.7" />
+    <PackageReference Include="DevExpress.AspNetCore.Reporting" Version="25.2.4" />
+    <PackageReference Include="DevExpress.Blazor.PdfViewer" Version="25.2.4" />
+    <PackageReference Include="DevExpress.Reporting.Core" Version="25.2.4" />
   </ItemGroup>
 
   <ItemGroup>
@@ -14,6 +14,72 @@
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Compile Update="Templates\Rpt_DE_Transacciones_Bancarias.Designer.cs">
+      <DependentUpon>Rpt_DE_Transacciones_Bancarias.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_DE_Transacciones_Bancarias.resx">
+      <DependentUpon>Rpt_DE_Transacciones_Bancarias.cs</DependentUpon>
+      <LogicalName>SIAD.Reports.Rpt_DE_Transacciones_Bancarias.resources</LogicalName>
+    </EmbeddedResource>
+
+    <Compile Update="Templates\Rpt_Dev_Lista_Transacciones_Bancarias.Designer.cs">
+      <DependentUpon>Rpt_Dev_Lista_Transacciones_Bancarias.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_Dev_Lista_Transacciones_Bancarias.resx">
+      <DependentUpon>Rpt_Dev_Lista_Transacciones_Bancarias.cs</DependentUpon>
+      <LogicalName>apc.Reportes.Rpt_Dev_Lista_Transacciones_Bancarias.resources</LogicalName>
+    </EmbeddedResource>
+
+    <Compile Update="Templates\Rpt_Dev_Transacciones_Periodo.Designer.cs">
+      <DependentUpon>Rpt_Dev_Transacciones_Periodo.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_Dev_Transacciones_Periodo.resx">
+      <DependentUpon>Rpt_Dev_Transacciones_Periodo.cs</DependentUpon>
+      <LogicalName>SIAD.Reports.Rpt_Dev_Transacciones_Periodo.resources</LogicalName>
+    </EmbeddedResource>
+
+    <Compile Update="Templates\Rpt_Dev_Saldo_Clientes_Categoria.Designer.cs">
+      <DependentUpon>Rpt_Dev_Saldo_Clientes_Categoria.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_Dev_Saldo_Clientes_Categoria.resx">
+      <DependentUpon>Rpt_Dev_Saldo_Clientes_Categoria.cs</DependentUpon>
+      <LogicalName>SIAD.Reports.Rpt_Dev_Saldo_Clientes_Categoria.resources</LogicalName>
+    </EmbeddedResource>
+
+    <Compile Update="Templates\Rpt_Dev_Desglose_Facturacion.Designer.cs">
+      <DependentUpon>Rpt_Dev_Desglose_Facturacion.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_Dev_Desglose_Facturacion.resx">
+      <DependentUpon>Rpt_Dev_Desglose_Facturacion.cs</DependentUpon>
+      <LogicalName>SIAD.Reports.Rpt_Dev_Desglose_Facturacion.resources</LogicalName>
+    </EmbeddedResource>
+
+    <Compile Update="Templates\Rpt_Dev_Movimiento_Periodo.Designer.cs">
+      <DependentUpon>Rpt_Dev_Movimiento_Periodo.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_Dev_Movimiento_Periodo.resx">
+      <DependentUpon>Rpt_Dev_Movimiento_Periodo.cs</DependentUpon>
+      <LogicalName>SIAD.Reports.Rpt_Dev_Movimiento_Periodo.resources</LogicalName>
+    </EmbeddedResource>
+
+    <Compile Update="Templates\Rpt_Dev_Auxiliar_Lectura.Designer.cs">
+      <DependentUpon>Rpt_Dev_Auxiliar_Lectura.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_Dev_Auxiliar_Lectura.resx">
+      <DependentUpon>Rpt_Dev_Auxiliar_Lectura.cs</DependentUpon>
+      <LogicalName>SIAD.Reports.Rpt_Dev_Auxiliar_Lectura.resources</LogicalName>
+    </EmbeddedResource>
+
+    <Compile Update="Templates\Rpt_Dev_Saldo_Clientes_Antiguedad.Designer.cs">
+      <DependentUpon>Rpt_Dev_Saldo_Clientes_Antiguedad.cs</DependentUpon>
+    </Compile>
+    <EmbeddedResource Update="Templates\Rpt_Dev_Saldo_Clientes_Antiguedad.resx">
+      <DependentUpon>Rpt_Dev_Saldo_Clientes_Antiguedad.cs</DependentUpon>
+      <LogicalName>SIAD.Reports.Rpt_Dev_Saldo_Clientes_Antiguedad.resources</LogicalName>
+    </EmbeddedResource>
   </ItemGroup>
 
   <PropertyGroup>

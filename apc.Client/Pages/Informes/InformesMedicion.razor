@@ -1,0 +1,140 @@
+﻿@page "/informes/medicion"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using SIAD.Core.Constants
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Informes de medición</PageTitle>
+
+<div class="page-container informes-medicion">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Informes de medición</h2>
+            <p class="page-subtitle">Lecturas, consumos y control operativo de medición.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+        </div>
+    </div>
+
+    <!-- Buscador Premium -->
+    <div class="modern-card p-3 mb-2 search-container">
+        <div class="d-flex flex-wrap align-items-center gap-2">
+            <div class="position-relative flex-grow-1" style="max-width: 480px;">
+                <span class="position-absolute top-50 start-0 translate-middle-y ps-3 text-muted">
+                    <i class="bi bi-search"></i>
+                </span>
+                <input type="text" 
+                       class="form-control ps-5 py-2 rounded-3 border-secondary-subtle search-input" 
+                       placeholder="Buscar informe por nombre o número..." 
+                       @bind="searchQuery" 
+                       @bind:event="oninput" />
+            </div>
+            @if (!string.IsNullOrWhiteSpace(searchQuery))
+            {
+                <DxButton Text="Limpiar" 
+                          Click="@(() => searchQuery = string.Empty)" 
+                          IconCssClass="bi bi-eraser"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+            }
+        </div>
+    </div>
+
+    <div class="informes-options-grid mt-2">
+        @foreach (var item in FilteredItems)
+        {
+            <a class="informe-option-card" href="@item.Route">
+                <div class="informe-option-card__header">
+                    <div class="informe-option-card__icon">
+                        <i class="@item.Icon"></i>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-light text-dark border"># @item.Numero</span>
+                        <span class="informe-option-card__status">@item.Status</span>
+                    </div>
+                </div>
+
+                <div>
+                    <h3 class="informe-option-card__title">@item.Title</h3>
+                    <p class="informe-option-card__description">
+                        @item.Description
+                    </p>
+                </div>
+            </a>
+        }
+    </div>
+
+    @if (!FilteredItems.Any())
+    {
+        <div class="empty-search text-center py-5">
+            <div class="empty-search__icon mb-3">
+                <i class="bi bi-search-heart text-muted fs-1"></i>
+            </div>
+            <h4 class="text-muted">No se encontraron informes</h4>
+            <p class="text-muted small">Intenta buscar con otros términos o números.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private string searchQuery = string.Empty;
+
+    private List<InformeCardItem> informes = [];
+
+    protected override void OnInitialized()
+    {
+        informes = [
+            new InformeCardItem(1, "Transacciones por periodo", "Total control de transacciones por periodo, con columnas por rubro y movimiento del periodo.", ReportesWebConstants.BuildTransaccionesPeriodoPreviewRoute(), "bi bi-file-earmark-bar-graph"),
+            new InformeCardItem(2, "Saldo de clientes por categoria", "Saldos agrupados por categoria, con desglose de servicios para clientes con y sin medidor.", ReportesWebConstants.BuildSaldoClientesCategoriaPreviewRoute(), "bi bi-people"),
+            new InformeCardItem(3, "Desglose de Facturacion", "Facturacion por ciclos con debitos, creditos, descuento de adulto mayor y pagos registrados.", ReportesWebConstants.BuildDesgloseFacturacionPreviewRoute(), "bi bi-receipt"),
+            new InformeCardItem(4, "Movimiento por periodo", "Registro cronologico de movimientos con saldo anterior, debitos, creditos y saldo acumulado.", ReportesWebConstants.BuildMovimientoPeriodoPreviewRoute(), "bi bi-list-columns-reverse"),
+            new InformeCardItem(5, "Auxiliar de Lectura", "Listado PDF de lecturas por periodo y ciclo, con contador, lecturas, consumo y estado operativo.", ReportesWebConstants.BuildAuxiliarLecturaPreviewRoute(), "bi bi-speedometer2"),
+            new InformeCardItem(6, "Historial de recibos emitidos", "Historial PDF de recibos emitidos en un rango de fechas, filtrable por usuario o cajero.", ReportesWebConstants.BuildHistorialRecibosEmitidosPreviewRoute(), "bi bi-journal-medical"),
+            new InformeCardItem(7, "Saldos de agua potable por ciclo", "Saldos agrupados por ciclo con saldo anterior, débitos, créditos, saldo actual y conteos de usuarios activos e inactivos.", ReportesWebConstants.BuildSaldosAguaPotableCicloPreviewRoute(), "bi bi-droplet-half"),
+            new InformeCardItem(8, "Saldos de Alcantarillado Sanitario por Ciclos", "Saldos de alcantarillado sanitario agrupados por ciclo con saldo anterior, débitos, créditos, saldo actual y conteos de usuarios activos e inactivos.", ReportesWebConstants.BuildSaldosAlcantarilladoSanitarioCicloPreviewRoute(), "bi bi-recycle"),
+            new InformeCardItem(9, "Sumarial tarifario Medicion por periodo", "Resumen sumarial de conexiones, consumos y valor de agua por rangos de tarifas.", ReportesWebConstants.BuildSumarialTarifarioMedicionPreviewRoute(), "bi bi-file-earmark-bar-graph"),
+            new InformeCardItem(10, "Sumarial de tarifas clientes no medido por periodo", "Resumen sumarial de conexiones, rubros y valor de agua para clientes sin medidor en el periodo.", ReportesWebConstants.BuildSumarialTarifasNoMedidoPreviewRoute(), "bi bi-file-earmark-bar-graph")
+        ];
+    }
+
+    private IEnumerable<InformeCardItem> FilteredItems
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(searchQuery))
+            {
+                return informes;
+            }
+
+            var query = searchQuery.Trim();
+            return informes.Where(x => 
+                x.Title.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                x.Description.Contains(query, StringComparison.OrdinalIgnoreCase) ||
+                x.Numero.ToString().Equals(query, StringComparison.OrdinalIgnoreCase) ||
+                x.Numero.ToString().Contains(query, StringComparison.OrdinalIgnoreCase)
+            );
+        }
+    }
+
+    private sealed class InformeCardItem
+    {
+        public int Numero { get; }
+        public string Title { get; }
+        public string Description { get; }
+        public string Route { get; }
+        public string Icon { get; }
+        public string Status { get; } = "Informe";
+
+        public InformeCardItem(int numero, string title, string description, string route, string icon)
+        {
+            Numero = numero;
+            Title = title;
+            Description = description;
+            Route = route;
+            Icon = icon;
+        }
+    }
+}

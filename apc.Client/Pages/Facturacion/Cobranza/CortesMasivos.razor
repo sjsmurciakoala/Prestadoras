@@ -1,0 +1,217 @@
+@page "/facturacion/cobranza/cortes-masivos"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Cobranza
+@using apc.Client.Services.Cobranza
+@using apc.Client.Services.Catalogos
+@using DevExpress.Blazor
+@inject CorteMasivoClient CorteMasivoClient
+@inject CatalogosClient CatalogosClient
+@inject IJSRuntime JS
+@inherits CortesMasivosBase
+
+<PageTitle>SIAD - Cortes Masivos</PageTitle>
+
+<div class="page-container">
+    <div class="header-section mb-3">
+        <div>
+            <h2 class="page-title">Cortes masivos</h2>
+            <p class="page-subtitle">Generación de órdenes de corte por período</p>
+        </div>
+    </div>
+
+    <!-- PANEL DE GENERACIÓN -->
+    <div class="modern-card mb-4">
+        <div class="section-header mb-3">
+            <i class="bi bi-scissors"></i>
+            <h3>Generar lote de cortes</h3>
+        </div>
+
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+
+            <!-- Fila 1: Período -->
+            <DxFormLayoutItem Caption="Año" ColSpanXs="6" ColSpanMd="2" Context="f1">
+                <DxSpinEdit @bind-Value="periodoAnio"
+                            MinValue="2020" MaxValue="2099"
+                            Increment="1" CssClass="w-100" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Mes" ColSpanXs="6" ColSpanMd="3" Context="f2">
+                <DxComboBox Data="meses"
+                            @bind-Value="periodoMes"
+                            ValueFieldName="Numero"
+                            TextFieldName="Nombre"
+                            NullText="— Seleccione mes —"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+
+            <!-- Fila 2: Filtro Ciclo/Barrio (excluyentes) + Valor mínimo + Días corte -->
+            <DxFormLayoutItem Caption="Filtrar por ciclo o barrio (opcional)" ColSpanXs="12" ColSpanMd="6" Context="f3">
+                <FiltroCicloBarrio Ciclos="ciclos"
+                                   Barrios="barrios"
+                                   @bind-CicloId="cicloSeleccionado"
+                                   @bind-BarrioCodigo="barrioSeleccionado" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Valor mínimo adeudado" ColSpanXs="6" ColSpanMd="2" Context="f4">
+                <DxSpinEdit @bind-Value="valorMinimo"
+                            MinValue="0" Increment="100"
+                            DisplayFormat="N2"
+                            NullText="Sin mínimo"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Días para fecha de corte" ColSpanXs="6" ColSpanMd="2" Context="f5">
+                <DxSpinEdit @bind-Value="diasCorte"
+                            MinValue="0" Increment="1"
+                            NullText="Hoy"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+
+        </DxFormLayout>
+
+        <div class="mt-3 d-flex gap-2 align-items-center">
+            <DxButton Text="Generar lote"
+                      IconCssClass="bi bi-scissors"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      Click="GenerarLote"
+                      Enabled="@(!isGenerando && periodoAnio >= 2020 && periodoMes >= 1)" />
+            @if (isGenerando)
+            {
+                <span class="text-muted ms-2"><i class="bi bi-hourglass-split"></i> Generando...</span>
+            }
+        </div>
+
+        @if (!string.IsNullOrEmpty(generarError))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@generarError</DxAlert>
+        }
+        @if (ultimoLoteGenerado is not null)
+        {
+            <DxAlert AlertType="AlertType.Success" CssClass="mt-2">
+                Lote <strong>@ultimoLoteGenerado.Correlativo</strong> generado con
+                <strong>@ultimoLoteGenerado.TotalClientes</strong> clientes —
+                Período <strong>@($"{ultimoLoteGenerado.PeriodoMes:D2}/{ultimoLoteGenerado.PeriodoAnio}")</strong>.
+            </DxAlert>
+        }
+    </div>
+
+    <!-- HISTORIAL DE LOTES -->
+    <div class="modern-card">
+        <div class="section-header mb-3">
+            <i class="bi bi-clock-history"></i>
+            <h3>Historial de lotes</h3>
+        </div>
+
+        <div class="mb-2">
+            <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="CargarHistorial" />
+        </div>
+
+        @if (isLoadingHistorial)
+        {
+            <DxLoadingPanel Visible="true" Text="Cargando historial..." />
+            <div style="height:60px"></div>
+        }
+        else
+        {
+            <div style="width:100%; overflow-x:auto;">
+                <DxGrid Data="lotes" ShowFilterRow="false" PageSize="15"
+                        CssClass="w-100" style="min-width:780px;">
+                    <Columns>
+                        <DxGridDataColumn FieldName="Correlativo" Caption="Correlativo" Width="110px" />
+                        <DxGridDataColumn FieldName="FechaGeneracion" Caption="Fecha" Width="100px" DisplayFormat="d" />
+                        <DxGridDataColumn Caption="Período" Width="90px">
+                            <CellDisplayTemplate Context="cell">
+                                @{
+                                    var h = (CorteMasivoHdrDto)cell.DataItem;
+                                }
+                                @if (h.PeriodoAnio.HasValue && h.PeriodoMes.HasValue)
+                                {
+                                    <span>@($"{h.PeriodoMes:D2}/{h.PeriodoAnio}")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="Criterio" Caption="Filtros" />
+                        <DxGridDataColumn FieldName="TotalClientes" Caption="Clientes" Width="90px"
+                                          TextAlignment="GridTextAlignment.Right" />
+                        <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="100px" />
+                        <DxGridDataColumn Caption="Acciones" Width="170px">
+                            <CellDisplayTemplate Context="cell">
+                                @{
+                                    var lote = (CorteMasivoHdrDto)cell.DataItem;
+                                }
+                                <div class="d-flex gap-1 align-items-center" style="flex-wrap:nowrap;">
+                                    <DxButton IconCssClass="bi bi-list-ul"
+                                              title="Detalle"
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              Click="@(async _ => await AbrirDetalle(lote, false))" />
+                                    <DxButton IconCssClass="bi bi-printer"
+                                              title="Imprimir completo"
+                                              RenderStyle="ButtonRenderStyle.Primary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              Click="@(async _ => await ImprimirLote(lote.Id, false))" />
+                                    <DxButton IconCssClass="bi bi-printer-fill"
+                                              title="Imprimir sin pago"
+                                              RenderStyle="ButtonRenderStyle.Warning"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              Click="@(async _ => await ImprimirLote(lote.Id, true))" />
+                                    <DxButton IconCssClass="bi bi-file-earmark-excel"
+                                              title="Exportar Excel"
+                                              RenderStyle="ButtonRenderStyle.Success"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              Click="@(async _ => await DescargarExcel(lote.Id, false))" />
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+<!-- Popup detalle del lote -->
+<DxPopup @bind-Visible="mostrarDetalle"
+         HeaderText="@tituloPopupDetalle"
+         Width="min(1000px, 96vw)"
+         MaxHeight="90vh"
+         Scrollable="true">
+    <BodyTemplate>
+        @if (isLoadingDetalle)
+        {
+            <DxLoadingPanel Visible="true" Text="Cargando..." />
+            <div style="height:60px"></div>
+        }
+        else if (detalleActual is not null)
+        {
+            <div class="mb-2 text-muted small">
+                Período: <strong>@($"{detalleActual.Encabezado.PeriodoMes:D2}/{detalleActual.Encabezado.PeriodoAnio}")</strong> —
+                Filtros: <strong>@detalleActual.Encabezado.Criterio</strong> —
+                Fecha: <strong>@detalleActual.Encabezado.FechaGeneracion.ToString("d")</strong> —
+                Total: <strong>@detalleActual.Encabezado.TotalClientes</strong> clientes
+            </div>
+            <DxGrid Data="detalleActual.Clientes" ShowFilterRow="true" PageSize="20">
+                <Columns>
+                    <DxGridDataColumn FieldName="ClienteClave" Caption="Clave" Width="100px" />
+                    <DxGridDataColumn FieldName="NombreCliente" Caption="Nombre" />
+                    <DxGridDataColumn FieldName="SaldoAdeudado" Caption="Saldo" Width="120px"
+                                      TextAlignment="GridTextAlignment.Right" DisplayFormat="C2" />
+                    <DxGridDataColumn FieldName="OrdenNumero" Caption="N° OT" Width="90px"
+                                      TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="DiasSinPago" Caption="Días sin pago" Width="120px"
+                                      TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="dc">
+                            @{
+                                var dias = ((CorteMasivoDtlDto)dc.DataItem).DiasSinPago;
+                            }
+                            @(dias.HasValue ? dias.Value.ToString() : "—")
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="Pagado" Caption="Pagado" Width="80px" />
+                </Columns>
+            </DxGrid>
+        }
+    </BodyTemplate>
+</DxPopup>

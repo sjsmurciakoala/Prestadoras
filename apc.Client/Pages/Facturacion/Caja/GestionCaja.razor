@@ -1,0 +1,260 @@
+﻿@page "/facturacion/caja"
+@using SIAD.Core.DTOs.Caja
+@using apc.Client.Services.Caja
+@using apc.Client.Services.Tenant
+@using Microsoft.AspNetCore.Components.Authorization
+@inject CajaClient CajaHttp
+@inject IToastNotificationService ToastService
+@inject AuthenticationStateProvider AuthStateProvider
+@inject TenantState TenantState
+
+<PageTitle>SIAD - Gestión de Caja</PageTitle>
+
+<div class="page-header mb-4">
+    <div class="d-flex justify-content-between align-items-center">
+        <div>
+            <h4 class="mb-0 text-primary fw-bold">Gestión de Caja</h4>
+            <small class="text-muted">Apertura, cierre y control diario de transacciones de caja.</small>
+        </div>
+        <div>
+            <span class="text-muted small">Usuario activo: <strong class="text-dark">@_usuario</strong></span>
+        </div>
+    </div>
+</div>
+
+@if (_cargando)
+{
+    <div class="d-flex justify-content-center my-5">
+        <div class="spinner-border text-primary" role="status">
+            <span class="visually-hidden">Cargando...</span>
+        </div>
+    </div>
+}
+else
+{
+    <!-- Card de Estado Actual -->
+    <DxCard CssClass="mb-4 shadow-sm border-0 bg-white">
+        <div class="p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
+            <div class="d-flex align-items-center gap-3">
+                <div class="status-indicator">
+                    @if (_sesionActiva is not null)
+                    {
+                        <span class="badge bg-success px-3 py-2 fs-6 shadow-sm">ABIERTA</span>
+                    }
+                    else
+                    {
+                        <span class="badge bg-danger px-3 py-2 fs-6 shadow-sm">CERRADA</span>
+                    }
+                </div>
+                <div>
+                    @if (_sesionActiva is not null)
+                    {
+                        <h5 class="mb-1 fw-bold text-dark">Sesión de Caja #@_sesionActiva.Id</h5>
+                        <p class="mb-0 text-muted small">
+                            Abierta por: <strong class="text-secondary">@_sesionActiva.UsuarioApertura</strong> el @_sesionActiva.FechaApertura.ToString("dd/MM/yyyy HH:mm")
+                        </p>
+                    }
+                    else
+                    {
+                        <h5 class="mb-1 fw-bold text-dark">No hay ninguna sesión activa</h5>
+                        <p class="mb-0 text-muted small">Debe abrir una sesión para comenzar a registrar transacciones de pago.</p>
+                    }
+                </div>
+            </div>
+            
+            <div class="action-buttons">
+                @if (_sesionActiva is not null)
+                {
+                    <div class="d-flex align-items-center gap-2">
+                        <DxTextBox @bind-Text="@_observacionCierre" NullText="Observaciones de cierre..." CssClass="observacion-input" />
+                        <DxButton Text="Cerrar Caja" 
+                                  RenderStyle="ButtonRenderStyle.Danger" 
+                                  IconCssClass="bi bi-lock-fill"
+                                  Click="OnCerrarCaja"
+                                  CssClass="shadow-sm btn-action" />
+                    </div>
+                }
+                else
+                {
+                    <DxButton Text="Abrir Caja" 
+                              RenderStyle="ButtonRenderStyle.Success" 
+                              IconCssClass="bi bi-unlock-fill"
+                              Click="OnAbrirCaja"
+                              CssClass="shadow-sm btn-action" />
+                }
+            </div>
+        </div>
+    </DxCard>
+
+    <DxTabs CssClass="modern-tabs shadow-sm rounded bg-white">
+        <DxTabPage Text="Resumen del Día">
+            <div class="p-4">
+                @if (_sesionActiva is not null && _resumen is not null)
+                {
+                    <div class="row g-4 mb-4">
+                        <div class="col-md-6 col-lg-4">
+                            <div class="summary-metric-card p-3 border rounded bg-light-success d-flex align-items-center justify-content-between">
+                                <div>
+                                    <small class="text-muted d-block text-uppercase fw-bold">Total Cobrado</small>
+                                    <span class="fs-2 fw-bold text-success">
+                                        @_resumen.TotalCreditos.ToString("C", new System.Globalization.CultureInfo("es-HN"))
+                                    </span>
+                                </div>
+                                <div class="metric-icon bg-success-subtle text-success p-3 rounded-circle">
+                                    <i class="bi bi-cash-coin fs-3"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="summary-metric-card p-3 border rounded bg-light-primary d-flex align-items-center justify-content-between">
+                                <div>
+                                    <small class="text-muted d-block text-uppercase fw-bold">Transacciones</small>
+                                    <span class="fs-2 fw-bold text-primary">
+                                        @_resumen.CantidadTransacciones
+                                    </span>
+                                </div>
+                                <div class="metric-icon bg-primary-subtle text-primary p-3 rounded-circle">
+                                    <i class="bi bi-receipt-cutoff fs-3"></i>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6 col-lg-4">
+                            <div class="summary-metric-card p-3 border rounded bg-light-warning d-flex align-items-center justify-content-between">
+                                <div>
+                                    <small class="text-muted d-block text-uppercase fw-bold">Total Débitos</small>
+                                    <span class="fs-2 fw-bold text-warning">
+                                        @_resumen.TotalDebitos.ToString("C", new System.Globalization.CultureInfo("es-HN"))
+                                    </span>
+                                </div>
+                                <div class="metric-icon bg-warning-subtle text-warning p-3 rounded-circle">
+                                    <i class="bi bi-wallet2 fs-3"></i>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <h6 class="fw-bold text-dark mb-3">Detalle de Recaudación por Tipo de Transacción</h6>
+                    <DxGrid Data="_resumen.PorTipo" ShowGroupPanel="false" CssClass="grid-custom border">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Tipo)" Caption="Tipo de Transacción" />
+                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Cantidad)" Caption="Cantidad" Width="120px" TextAlignment="GridTextAlignment.Center" />
+                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Debitos)" Caption="Total Débitos" DisplayFormat="{0:C}" Width="180px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Creditos)" Caption="Total Créditos (Cobrado)" DisplayFormat="{0:C}" Width="180px" TextAlignment="GridTextAlignment.Right" />
+                        </Columns>
+                    </DxGrid>
+                }
+                else
+                {
+                    <div class="text-center py-5 text-muted">
+                        <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                        <p class="mb-0">Abra la sesión de caja para visualizar el resumen de cobros del día en tiempo real.</p>
+                    </div>
+                }
+            </div>
+        </DxTabPage>
+
+        <DxTabPage Text="Historial de Cierres">
+            <div class="p-4">
+                <DxGrid Data="_historial" ShowGroupPanel="false" PageSize="10" CssClass="grid-custom border">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.SesionId)" Caption="Sesión ID" Width="100px" TextAlignment="GridTextAlignment.Center" />
+                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaApertura)" Caption="Apertura" DisplayFormat="dd/MM/yyyy HH:mm" Width="180px" />
+                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaCierre)" Caption="Cierre" DisplayFormat="dd/MM/yyyy HH:mm" Width="180px" />
+                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.UsuarioApertura)" Caption="Usuario Apertura" />
+                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.UsuarioCierre)" Caption="Usuario Cierre" />
+                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.TotalCobrado)" Caption="Total Cobrado" DisplayFormat="{0:C}" Width="160px" TextAlignment="GridTextAlignment.Right" />
+                    </Columns>
+                </DxGrid>
+            </div>
+        </DxTabPage>
+    </DxTabs>
+}
+
+@code {
+    private bool _cargando = true;
+    private string _usuario = "sistema";
+    private string? _observacionCierre;
+    private SesionCajaDto? _sesionActiva;
+    private ResumenCajaDto? _resumen;
+    private IReadOnlyList<HistorialCierreDto> _historial = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TenantState.EnsureCompanyAsync();
+        
+        var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+        _usuario = authState.User.Identity?.Name ?? "sistema";
+
+        await CargarEstadoAsync();
+        _cargando = false;
+    }
+
+    private async Task CargarEstadoAsync()
+    {
+        _sesionActiva = await CajaHttp.GetSesionActivaAsync(_usuario);
+
+        if (_sesionActiva is not null)
+            _resumen = await CajaHttp.GetResumenAsync(_sesionActiva.Id);
+
+        _historial = await CajaHttp.GetHistorialAsync(_usuario) ?? [];
+    }
+
+    private async Task OnAbrirCaja()
+    {
+        var result = await CajaHttp.AbrirAsync(new AbrirCajaRequestDto(_usuario));
+
+        if (result?.Success == true)
+        {
+            ToastService.ShowToast(new ToastOptions 
+            { 
+                Title = "Éxito", 
+                Text = "Caja abierta correctamente.", 
+                RenderStyle = ToastRenderStyle.Success, 
+                ProviderName = "GlobalToast" 
+            });
+            await CargarEstadoAsync();
+        }
+        else
+        {
+            ToastService.ShowToast(new ToastOptions 
+            { 
+                Title = "Error", 
+                Text = result?.Message ?? "Error al abrir caja.", 
+                RenderStyle = ToastRenderStyle.Danger, 
+                ProviderName = "GlobalToast" 
+            });
+        }
+    }
+
+    private async Task OnCerrarCaja()
+    {
+        if (_sesionActiva is null) return;
+
+        var result = await CajaHttp.CerrarAsync(
+            new CerrarCajaRequestDto(_sesionActiva.Id, _usuario, _observacionCierre));
+
+        if (result?.Success == true)
+        {
+            ToastService.ShowToast(new ToastOptions 
+            { 
+                Title = "Éxito", 
+                Text = "Caja cerrada correctamente.", 
+                RenderStyle = ToastRenderStyle.Success, 
+                ProviderName = "GlobalToast" 
+            });
+            _resumen = null;
+            _observacionCierre = null;
+            await CargarEstadoAsync();
+        }
+        else
+        {
+            ToastService.ShowToast(new ToastOptions 
+            { 
+                Title = "Error", 
+                Text = result?.Message ?? "Error al cerrar caja.", 
+                RenderStyle = ToastRenderStyle.Danger, 
+                ProviderName = "GlobalToast" 
+            });
+        }
+    }
+}

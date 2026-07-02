@@ -256,6 +256,14 @@
   color: red;
 }
 
+.validation-message {
+  display: block;
+  margin-top: 4px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #d92d20;
+}
+
 /* Responsive */
 @media (max-width: 640px) {
   .login-card {

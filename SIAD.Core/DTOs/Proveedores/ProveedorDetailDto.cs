@@ -1,4 +1,5 @@
-﻿using System;
+using System;
+using System.Collections.Generic;
 
 namespace SIAD.Core.DTOs.Proveedores;
 
@@ -14,9 +15,7 @@ public record ProveedorDetailDto(
     string? Email,
     string? PaginaWeb,
     string? CuentaContable,
-    string? CuentaBancaria,
-    string? Banco1,
-    string? Banco2,
+    IReadOnlyList<ProveedorCuentaBancariaDto> CuentasBancarias,
     int CodTipoProveedor,
     string? TipoProveedor,
     double? ComprasAcum,

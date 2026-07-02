@@ -6,7 +6,12 @@
 @using apc.Client.Services.Medidores
 @using apc.Client.Services.Rutas
 @using apc.Client.Services.Solicitudes
+@using apc.Client.Services.Clientes
+@using SIAD.Core.DTOs.Cobranza
+@using apc.Client.Services.Facturacion
 @inject CatalogosClient CatalogosClient
+@inject ClientesClient ClientesClient
+@inject CobranzaClient CobranzaClient
 @inject MedidoresClient MedidoresClient
 @inject RutasClient RutasClient
 @inject SolicitudesClient SolicitudesClient
@@ -110,8 +115,16 @@
                                                 <span><i class="bi bi-person-wheelchair me-1"></i>Tercera Edad</span>
                                             </DxCheckBox>
 
-                                            <DxCheckBox @bind-Checked="Modelo.BloqueadoCobranza">
+                                            <DxCheckBox Checked="@(Modelo.BloqueadoCobranza ?? false)"
+                                                        CheckedChanged="@((bool val) => OnBloqueadoChangedAsync(val))"
+                                                        ValidationEnabled="false">
                                                 <span class="text-danger fw-bold"><i class="bi bi-slash-circle me-1"></i>Bloqueo de Cobro</span>
+                                            </DxCheckBox>
+
+                                            <DxCheckBox Checked="@(Modelo.NoCortable ?? false)"
+                                                        CheckedChanged="@((bool val) => OnNoCortableChanged(val))"
+                                                        ValidationEnabled="false">
+                                                <span class="text-warning fw-bold"><i class="bi bi-shield-check me-1"></i>No Cortable</span>
                                             </DxCheckBox>
                                         </div>
                                     </Template>
@@ -355,6 +368,99 @@
 
 </EditForm>
 
+<!-- Popup confirmación No Cortable -->
+<DxPopup @bind-Visible="_mostrarConfirmNoCortable"
+         HeaderText="@(_nuevoEstadoNoCortable ? "Marcar como No Cortable" : "Quitar No Cortable")"
+         Width="min(420px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <p>
+            @if (_nuevoEstadoNoCortable)
+            {
+                <span>¿Confirma marcar al cliente como <strong>NO CORTABLE</strong>? No se incluirá en cortes masivos.</span>
+            }
+            else
+            {
+                <span>¿Confirma <strong>quitar</strong> la protección de No Cortable al cliente?</span>
+            }
+        </p>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Motivo *" ColSpanXs="12" Context="nc0">
+                <DxTextBox @bind-Text="_motivoNoCortable"
+                           NullText="Ingrese el motivo del cambio"
+                           CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Contraseña (usuario actual) *" ColSpanXs="12" Context="nc1">
+                <DxTextBox @bind-Text="_passwordNoCortable"
+                           Password="true"
+                           NullText="Ingrese su contraseña"
+                           CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(_noCortableError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@_noCortableError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="CancelarNoCortable" />
+            <DxButton Text="Confirmar"
+                      RenderStyle="@(_nuevoEstadoNoCortable ? ButtonRenderStyle.Warning : ButtonRenderStyle.Secondary)"
+                      Click="ConfirmarNoCortableAsync"
+                      Enabled="@(!_ejecutandoNoCortable)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+<!-- Popup confirmación de bloqueo/desbloqueo -->
+<DxPopup @bind-Visible="_mostrarConfirmBloqueo"
+         HeaderText="@(_nuevoEstadoBloqueo ? "Confirmar bloqueo" : "Confirmar desbloqueo")"
+         Width="min(440px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <p>
+            @if (_nuevoEstadoBloqueo)
+            {
+                <span>¿Confirma <strong>BLOQUEAR</strong> al cliente para cobranzas y facturación?</span>
+            }
+            else
+            {
+                <span>¿Confirma <strong>DESBLOQUEAR</strong> al cliente?</span>
+            }
+        </p>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Motivo *" ColSpanXs="12" Context="bp1">
+                <DxMemo @bind-Text="_motivoBloqueo" Rows="2" CssClass="w-100"
+                        NullText="Ingrese el motivo..." />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Contraseña (usuario actual) *" ColSpanXs="12" Context="bp2">
+                <DxTextBox @bind-Text="_passwordBloqueo"
+                           Password="true"
+                           NullText="Ingrese su contraseña"
+                           CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+        @if (!string.IsNullOrEmpty(_bloqueoError))
+        {
+            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@_bloqueoError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="CancelarBloqueo" />
+            <DxButton Text="Confirmar"
+                      RenderStyle="@(_nuevoEstadoBloqueo ? ButtonRenderStyle.Danger : ButtonRenderStyle.Success)"
+                      Click="ConfirmarBloqueo"
+                      Enabled="@(!_ejecutandoBloqueo)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
 @code {
     [Parameter, EditorRequired] public ClienteCreateDto Modelo { get; set; } = default!;
     [Parameter] public bool IsSaving { get; set; }
@@ -362,7 +468,7 @@
     [Parameter] public EventCallback OnGuardar { get; set; }
     [Parameter] public EventCallback OnCancelar { get; set; }
 
-    private List<string> ColorOptions = new() { "Blanco", "Negro", "Gris", "Rojo", "Verde", "Azul", "Amarillo", "Naranja", "CafÃƒÂ©", "Beige" };
+    private List<string> ColorOptions = new() { "Blanco", "Negro", "Gris", "Rojo", "Verde", "Azul", "Amarillo", "Naranja", "Café", "Beige" };
     private List<SolicitudCategoriaDto> categorias = new();
     private List<SolicitudCategoriaDto> categoriasTodas = new();
     private List<CicloLookupDto> ciclos = new();
@@ -393,6 +499,13 @@
         Modelo.TieneConvenio ??= false;
         Modelo.TerceraEdad ??= false;
         Modelo.BloqueadoCobranza ??= false;
+        Modelo.NoCortable ??= false;
+
+        // Capturar el valor de bloqueo tal como llegó del servidor (solo la primera vez).
+        // OnBloqueadoChangedAsync lo usa para distinguir un cambio real del usuario
+        // frente a un disparo de CheckedChanged durante la inicialización del componente.
+        _bloqueadoCargado ??= Modelo.BloqueadoCobranza;
+        _noCortableCargado ??= Modelo.NoCortable;
 
         if (Modelo.MedidorId != medidorIdCargado)
         {
@@ -470,7 +583,8 @@
                 detalle.Acueducto,
                 detalle.Estado,
                 detalle.ClienteClave,
-                detalle.ClienteNombre));
+                detalle.ClienteNombre,
+                null));
         }
         catch
         {
@@ -645,6 +759,148 @@
     }
 
     private sealed record RutaOption(string Codigo, string Display);
+
+    // ── No Cortable con confirmación y contraseña ─────────────────────────────
+
+    private bool _mostrarConfirmNoCortable = false;
+    private bool _nuevoEstadoNoCortable = false;
+    private string? _passwordNoCortable;
+    private string? _motivoNoCortable;
+    private string? _noCortableError;
+    private bool _ejecutandoNoCortable = false;
+    private bool? _noCortableCargado;
+
+    private void OnNoCortableChanged(bool nuevoValor)
+    {
+        // Sin confirmación al crear cliente nuevo
+        if (!IsEditMode || string.IsNullOrWhiteSpace(Modelo.Clave))
+        {
+            Modelo.NoCortable = nuevoValor;
+            return;
+        }
+        // Solo abrir confirmación si el valor cambia respecto al cargado
+        if (nuevoValor == (_noCortableCargado ?? false))
+        {
+            Modelo.NoCortable = nuevoValor;
+            return;
+        }
+        _nuevoEstadoNoCortable = nuevoValor;
+        _passwordNoCortable = null;
+        _motivoNoCortable = null;
+        _noCortableError = null;
+        _mostrarConfirmNoCortable = true;
+    }
+
+    private void CancelarNoCortable()
+    {
+        _mostrarConfirmNoCortable = false;
+    }
+
+    private async Task ConfirmarNoCortableAsync()
+    {
+        if (string.IsNullOrWhiteSpace(_motivoNoCortable))
+        {
+            _noCortableError = "Ingrese el motivo del cambio.";
+            return;
+        }
+
+        if (string.IsNullOrWhiteSpace(_passwordNoCortable))
+        {
+            _noCortableError = "Ingrese su contraseña para confirmar.";
+            return;
+        }
+
+        _noCortableError = null;
+        _ejecutandoNoCortable = true;
+        try
+        {
+            await ClientesClient.SetNoCortableAsync(Modelo.Clave, _nuevoEstadoNoCortable, _passwordNoCortable, _motivoNoCortable);
+            Modelo.NoCortable = _nuevoEstadoNoCortable;
+            _noCortableCargado = _nuevoEstadoNoCortable;
+            _mostrarConfirmNoCortable = false;
+        }
+        catch (Exception ex)
+        {
+            _noCortableError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _ejecutandoNoCortable = false;
+        }
+    }
+
+    // ── Bloqueo / Desbloqueo con confirmación ─────────────────────────────────
+
+    private bool _mostrarConfirmBloqueo = false;
+    private bool _nuevoEstadoBloqueo = false;
+    private string? _motivoBloqueo;
+    private string? _passwordBloqueo;
+    private string? _bloqueoError;
+    private bool _ejecutandoBloqueo = false;
+    // Valor de bloqueo tal como llegó del servidor — para detectar cambios reales del usuario.
+    private bool? _bloqueadoCargado;
+
+    private void OnBloqueadoChangedAsync(bool nuevoValor)
+    {
+        // Sin confirmación al crear cliente nuevo
+        if (!IsEditMode || string.IsNullOrWhiteSpace(Modelo.Clave))
+        {
+            Modelo.BloqueadoCobranza = nuevoValor;
+            return;
+        }
+        // Solo abrir confirmación cuando el usuario CAMBIA el valor respecto al que se cargó.
+        // Esto evita que DxCheckBox dispare CheckedChanged durante la sincronización inicial
+        // del componente (comportamiento observado en DevExpress 25.x con Checked != false).
+        if (nuevoValor == (_bloqueadoCargado ?? false))
+        {
+            Modelo.BloqueadoCobranza = nuevoValor;
+            return;
+        }
+        // En edición y valor realmente modificado: pedir confirmación
+        _nuevoEstadoBloqueo = nuevoValor;
+        _motivoBloqueo = null;
+        _passwordBloqueo = null;
+        _bloqueoError = null;
+        _mostrarConfirmBloqueo = true;
+    }
+
+    private void CancelarBloqueo()
+    {
+        // Revertir — el checkbox vuelve al estado anterior sin cambiar el modelo
+        _mostrarConfirmBloqueo = false;
+    }
+
+    private async Task ConfirmarBloqueo()
+    {
+        if (string.IsNullOrWhiteSpace(_motivoBloqueo))
+        {
+            _bloqueoError = "Ingrese el motivo del bloqueo/desbloqueo.";
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(_passwordBloqueo))
+        {
+            _bloqueoError = "Ingrese su contraseña para confirmar.";
+            return;
+        }
+
+        _bloqueoError = null;
+        _ejecutandoBloqueo = true;
+        try
+        {
+            await CobranzaClient.BloquearDesbloquearAsync(
+                new BloquearClienteRequest(Modelo.Clave, _nuevoEstadoBloqueo, _motivoBloqueo, _passwordBloqueo));
+            Modelo.BloqueadoCobranza = _nuevoEstadoBloqueo;
+            _mostrarConfirmBloqueo = false;
+        }
+        catch (Exception ex)
+        {
+            _bloqueoError = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            _ejecutandoBloqueo = false;
+        }
+    }
 }
 
 

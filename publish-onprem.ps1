@@ -35,12 +35,24 @@ if (-not (Test-Path $Output)) {
 if ($Solo -in @("portal", "todos")) {
     Write-Host "==> Publicando Portal apc.csproj (.NET 9 Release)..." -ForegroundColor Cyan
     $portalOut = Join-Path $Output "portal"
+
+    # Restore primero sin RID: -r win-x64 se propaga a apc.Client (WASM browser-wasm)
+    # y rompe el restore. Restore aqui sin RID, publish despues con --no-restore.
+    Write-Host "    Restoring (sin RID)..." -ForegroundColor DarkGray
+    & dotnet restore "$PSScriptRoot\apc\apc.csproj"
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Falla en restore del Portal."
+        exit 1
+    }
+
+    # UseAppHost: NO pasar como -p (se propaga a apc.Client WASM y rompe NETSDK1084).
+    # apc.csproj (SDK web) genera apc.exe por default; WASM ya tiene UseAppHost=false.
     & dotnet publish "$PSScriptRoot\apc\apc.csproj" `
         -c Release `
         -r win-x64 `
         --self-contained false `
+        --no-restore `
         -p:PublishReadyToRun=true `
-        -p:UseAppHost=true `
         -o $portalOut
 
     if ($LASTEXITCODE -ne 0) {
@@ -62,20 +74,29 @@ if ($Solo -in @("ws", "todos")) {
         exit 1
     }
 
-    # MSBuild path (Visual Studio 2022 Community / Pro / BuildTools)
-    $msbuildCandidates = @(
-        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
-        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
-        "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
-        "${env:ProgramFiles}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
-        "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
-    )
-    $msbuild = $msbuildCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    # MSBuild discovery: primero via vswhere (cualquier VS 2022+), luego paths conocidos.
+    $msbuild = $null
+    $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+    if (Test-Path $vswhere) {
+        $msbuild = & $vswhere -latest -prerelease -requires Microsoft.Component.MSBuild `
+                       -find "MSBuild\**\Bin\MSBuild.exe" 2>$null | Select-Object -First 1
+    }
+    if (-not $msbuild -or -not (Test-Path $msbuild)) {
+        $msbuildCandidates = @(
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\Community\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\Professional\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\Enterprise\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe",
+            "${env:ProgramFiles(x86)}\Microsoft Visual Studio\2022\BuildTools\MSBuild\Current\Bin\MSBuild.exe"
+        )
+        $msbuild = $msbuildCandidates | Where-Object { Test-Path $_ } | Select-Object -First 1
+    }
 
     if (-not $msbuild) {
-        Write-Error "MSBuild 2022 no encontrado. Instala Visual Studio 2022 Build Tools."
+        Write-Error "MSBuild no encontrado. Instala Visual Studio 2022+ con Microsoft.Component.MSBuild."
         exit 1
     }
+    Write-Host "    MSBuild: $msbuild" -ForegroundColor DarkGray
 
     & $msbuild $wsCsproj `
         /p:Configuration=Release `

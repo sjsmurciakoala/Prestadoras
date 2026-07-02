@@ -219,6 +219,17 @@ public sealed class ClientesClient
         return await response.ReadFromJsonAsyncWithAuthCheck<ClienteDetailDto>(ct);
     }
 
+    public async Task SetNoCortableAsync(string clave, bool noCortable, string password, string? motivo = null, CancellationToken ct = default)
+    {
+        var request = new SetNoCortableRequest(clave, noCortable, password, motivo);
+        var response = await http.PostAsJsonAsync($"api/clientes/{Uri.EscapeDataString(clave)}/no-cortable", request, ct);
+        await response.ReadFromJsonAsyncWithAuthCheck<object>(ct);
+    }
+
+    public async Task<List<ClienteEstadoLogItemDto>> ObtenerEstadoLogAsync(int clienteId, CancellationToken ct = default)
+        => await http.GetFromJsonAsync<List<ClienteEstadoLogItemDto>>($"api/clientes/{clienteId}/estado-log", ct)
+           ?? new List<ClienteEstadoLogItemDto>();
+
     private sealed record ClienteCreadoDto(int Id);
 
     private static string BuildSearchUrl(ClienteFilterDto filtro)

@@ -141,6 +141,16 @@ public class OrdenesClient
             parameters.Add($"clienteClave={Uri.EscapeDataString(filtro.ClienteClave)}");
         }
 
+        if (!string.IsNullOrWhiteSpace(filtro.Clave))
+        {
+            parameters.Add($"clave={Uri.EscapeDataString(filtro.Clave)}");
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.ClienteNombre))
+        {
+            parameters.Add($"clienteNombre={Uri.EscapeDataString(filtro.ClienteNombre)}");
+        }
+
         if (!string.IsNullOrWhiteSpace(filtro.Busqueda))
         {
             parameters.Add($"busqueda={Uri.EscapeDataString(filtro.Busqueda)}");

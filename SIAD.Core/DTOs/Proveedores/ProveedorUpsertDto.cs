@@ -21,7 +21,7 @@ public class ProveedorUpsertDto
     public string? Rtn { get; set; }
 
     [Required]
-    [StringLength(100)]
+    [StringLength(1000)]
     public string Direccion { get; set; } = string.Empty;
 
     [StringLength(150)]
@@ -37,15 +37,7 @@ public class ProveedorUpsertDto
     [StringLength(20)]
     public string CuentaContable { get; set; } = string.Empty;
 
-    [Required]
-    [StringLength(50)]
-    public string CuentaBancaria { get; set; } = string.Empty;
-
-    [StringLength(80)]
-    public string? Banco1 { get; set; }
-
-    [StringLength(80)]
-    public string? Banco2 { get; set; }
+    public List<ProveedorCuentaBancariaDto> CuentasBancarias { get; set; } = new();
 
     public bool Activo { get; set; } = true;
 }

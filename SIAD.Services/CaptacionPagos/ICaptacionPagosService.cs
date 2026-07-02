@@ -58,7 +58,7 @@ public interface ICaptacionPagosService
     Task<ResponseModelDto> ReversarPagoMiscelaneoAsync(ReversoMiscelaneoRequestDto dto, CancellationToken ct = default);
 
     // ==================== COMBOS Y AUXILIARES ====================
-    Task<IReadOnlyList<ClienteComboDto>> ListarClientesAsync(string? query = null, CancellationToken ct = default);
+    Task<IReadOnlyList<ClienteComboDto>> ListarClientesAsync(string? query = null, int? maxResults = null, CancellationToken ct = default);
 
     Task<IReadOnlyList<BancoDto>> ListarBancosAsync(CancellationToken ct = default);
 

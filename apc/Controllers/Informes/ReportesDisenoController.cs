@@ -16,15 +16,18 @@ public sealed class ReportesDisenoController : ControllerBase
     private readonly IReportesDisenoService _service;
     private readonly ICurrentCompanyService _currentCompany;
     private readonly ReportDraftRegenerationService _draftRegeneration;
+    private readonly ILogger<ReportesDisenoController> _logger;
 
     public ReportesDisenoController(
         IReportesDisenoService service,
         ICurrentCompanyService currentCompany,
-        ReportDraftRegenerationService draftRegeneration)
+        ReportDraftRegenerationService draftRegeneration,
+        ILogger<ReportesDisenoController> logger)
     {
         _service = service;
         _currentCompany = currentCompany;
         _draftRegeneration = draftRegeneration;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -85,6 +88,15 @@ public sealed class ReportesDisenoController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return BadRequest(CrearProblem("No fue posible publicar el reporte", ex.Message));
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error inesperado al publicar el reporte {Codigo}.", codigo);
+            return StatusCode(
+                StatusCodes.Status500InternalServerError,
+                CrearProblem(
+                    "No fue posible publicar el reporte",
+                    $"Ocurrio un error inesperado al publicar el borrador de '{codigo}'. Revise los datos del reporte o intente nuevamente. Detalle tecnico: {ex.GetBaseException().Message}"));
         }
     }
 

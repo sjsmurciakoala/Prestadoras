@@ -2,7 +2,7 @@
 @attribute [Authorize]
 @inject HttpClient Http
 
-<PageTitle>Diarios contables</PageTitle>
+<PageTitle>SIAD - Diarios contables</PageTitle>
 
 <DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall" @bind-IsActive="isXSmallScreen" />
 
@@ -14,6 +14,8 @@
               OkButtonText="Entendido"
               ShowCloseButton="false"
               CloseOnOutsideClick="false" />
+
+<ErrorNotice @ref="errorNotice" />
 
 <div class="diarios-page" id="diarios-grid-shell">
 
@@ -322,6 +324,7 @@
     private bool isXSmallScreen;
     private string popupTitle = "Nuevo diario";
     private string? formErrorMessage;
+    private ErrorNotice errorNotice = default!;
     private bool statusMessageVisible;
     private string statusMessageTitle = string.Empty;
     private string statusMessageText = string.Empty;
@@ -347,7 +350,7 @@
         catch (Exception ex)
         {
             diarios = Array.Empty<DiarioDto>();
-            ShowStatusMessage("Error", $"No se pudieron cargar los diarios: {ex.Message}", MessageBoxRenderStyle.Danger);
+            ShowStatusMessage("Error", "No se pudieron cargar los diarios.", MessageBoxRenderStyle.Danger);
         }
         finally
         {
@@ -440,7 +443,7 @@
         }
         catch (Exception ex)
         {
-            formErrorMessage = ex.Message;
+            errorNotice.ShowError("No se pudo guardar el diario.", ex);
         }
         finally
         {

@@ -1,0 +1,47 @@
+﻿@page "/informes"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+
+<PageTitle>SIAD - Informes</PageTitle>
+
+<div class="page-container informes-home">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Informes</h2>
+            <p class="page-subtitle">Centro de consultas, reportes y fuentes de datos disponibles.</p>
+        </div>
+    </div>
+
+    <div class="informes-options-grid">
+        <a class="informe-option-card" href="/informes/medicion">
+            <div class="informe-option-card__header">
+                <div class="informe-option-card__icon">
+                    <i class="bi bi-speedometer2"></i>
+                </div>
+                <span class="informe-option-card__status">Grupo</span>
+            </div>
+
+            <div>
+                <h3 class="informe-option-card__title">Informes de medición</h3>
+                <p class="informe-option-card__description">
+                    Lecturas, consumos y control operativo de medición.
+                </p>
+            </div>
+        </a>
+
+        <a class="informe-option-card" href="@SIAD.Core.Constants.ReportesWebConstants.BuildInformesCobranzasRoute()">
+            <div class="informe-option-card__header">
+                <div class="informe-option-card__icon">
+                    <i class="bi bi-cash-coin"></i>
+                </div>
+                <span class="informe-option-card__status">Grupo</span>
+            </div>
+
+            <div>
+                <h3 class="informe-option-card__title">Informes de cobranzas</h3>
+                <p class="informe-option-card__description">
+                    Saldos vencidos, antiguedad de deuda y control de recuperacion por clientes y ciclos.
+                </p>
+            </div>
+        </a>
+    </div>
+</div>

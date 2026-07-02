@@ -1,0 +1,38 @@
+.reporte-historial-recibos .viewer-shell {
+    min-height: 72vh;
+}
+
+.reporte-historial-recibos .pdf-frame {
+    width: 100%;
+    min-height: 70vh;
+    border: 0;
+    border-radius: 8px;
+    background: #f4f6f9;
+}
+
+.reporte-historial-recibos .empty-preview {
+    min-height: 46vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    color: #6b7280;
+    gap: 0.75rem;
+}
+
+.reporte-historial-recibos .empty-preview__icon {
+    font-size: 2.25rem;
+    color: #dc2626;
+}
+
+.reporte-historial-recibos .empty-preview__title {
+    margin: 0;
+    font-size: 1.125rem;
+    color: #111827;
+}
+
+.reporte-historial-recibos .empty-preview__description {
+    margin: 0;
+    max-width: 38rem;
+}

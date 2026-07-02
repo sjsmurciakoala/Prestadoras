@@ -1,0 +1,211 @@
+@page "/facturacion/cobranza/bloqueo-clientes"
+@attribute [Authorize]
+@using SIAD.Core.DTOs.Cobranza
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Facturacion
+@using apc.Client.Services.CaptacionPagos
+@using DevExpress.Blazor
+@inject CobranzaClient CobranzaClient
+@inject CaptacionPagosClient CaptacionClient
+
+<PageTitle>SIAD - Bloqueo de Clientes</PageTitle>
+
+<div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
+    <div class="header-section mb-3">
+        <div>
+            <h2 class="page-title">Bloqueo de clientes</h2>
+            <p class="page-subtitle">Consulta y gestión del estado de bloqueo por cobranza</p>
+        </div>
+    </div>
+
+    <!-- SELECCIÓN DE CLIENTE -->
+    <div class="modern-card mb-4">
+        <div class="section-header mb-3">
+            <i class="bi bi-person-search"></i>
+            <h5 class="m-0">Búsqueda de cliente</h5>
+        </div>
+
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Cliente" ColSpanXs="12" ColSpanMd="8" Context="f1">
+                <ClienteLookup Items="@clientesCombo"
+                               Value="@clienteClave"
+                               ValueChanged="@OnClienteSeleccionado"
+                               NullText="Escriba clave o nombre del cliente..."
+                               MinSearchLength="2"
+                               SearchDelay="400" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <!-- ESTADO Y ACCIÓN -->
+    @if (isLoading)
+    {
+        <DxLoadingPanel Visible="true" Text="Consultando estado..." />
+        <div style="height:60px"></div>
+    }
+    else if (estado is not null)
+    {
+        <div class="modern-card">
+            <div class="section-header mb-3">
+                <i class="bi bi-lock"></i>
+                <h5 class="m-0">Estado de bloqueo</h5>
+            </div>
+
+            <div class="d-flex align-items-center gap-3 mb-4">
+                <div>
+                    <div class="fw-semibold">@estado.NombreCliente</div>
+                    <div class="text-muted small">Clave: @estado.ClienteClave</div>
+                </div>
+                <span class="status-pill @(estado.Bloqueado ? "blocked" : "ok") ms-2">
+                    @(estado.Bloqueado ? "Bloqueado" : "Habilitado")
+                </span>
+            </div>
+
+            @if (!string.IsNullOrEmpty(errorAccion))
+            {
+                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorAccion</DxAlert>
+            }
+
+            <div class="d-flex gap-2">
+                @if (estado.Bloqueado)
+                {
+                    <DxButton Text="Desbloquear cliente"
+                              IconCssClass="bi bi-unlock"
+                              RenderStyle="ButtonRenderStyle.Success"
+                              Click="() => AbrirConfirmacion(false)" />
+                }
+                else
+                {
+                    <DxButton Text="Bloquear cliente"
+                              IconCssClass="bi bi-lock"
+                              RenderStyle="ButtonRenderStyle.Danger"
+                              Click="() => AbrirConfirmacion(true)" />
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Popup confirmación bloqueo/desbloqueo -->
+<DxPopup @bind-Visible="mostrarConfirmacion"
+         HeaderText="@(accionBloquear ? "Bloquear cliente" : "Desbloquear cliente")"
+         Width="min(480px, 95vw)"
+         ShowFooter="true"
+         CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Motivo" ColSpanXs="12" Context="fm1">
+                <DxMemo @bind-Text="motivo"
+                        Rows="3"
+                        Placeholder="Ingrese el motivo de la acción..."
+                        CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Contraseña de autorización" ColSpanXs="12" Context="fm2">
+                <DxTextBox @bind-Text="password"
+                           Password="true"
+                           Placeholder="Contraseña del usuario en sesión"
+                           CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+
+        @if (!string.IsNullOrEmpty(confirmacionError))
+        {
+            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@confirmacionError</DxAlert>
+        }
+    </BodyTemplate>
+    <FooterTemplate>
+        <div class="d-flex gap-2 justify-content-end">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="() => mostrarConfirmacion = false" />
+            <DxButton Text="@(accionBloquear ? "Bloquear" : "Desbloquear")"
+                      RenderStyle="@(accionBloquear ? ButtonRenderStyle.Danger : ButtonRenderStyle.Success)"
+                      Click="EjecutarAccion"
+                      Enabled="@(!isExecuting)" />
+        </div>
+    </FooterTemplate>
+</DxPopup>
+
+@code {
+    private List<ClienteComboDto> clientesCombo = [];
+    private string? clienteClave;
+    private BloqueoClienteEstadoDto? estado;
+    private bool isLoading;
+    private string? errorAccion;
+    private ErrorNotice errorNotice = default!;
+
+    private bool mostrarConfirmacion;
+    private bool accionBloquear;
+    private string? motivo;
+    private string? password;
+    private bool isExecuting;
+    private string? confirmacionError;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var items = await CaptacionClient.GetClientesAsync(null);
+        clientesCombo = items.ToList();
+    }
+
+    private async Task OnClienteSeleccionado(string? clave)
+    {
+        clienteClave = clave;
+        estado = null;
+        errorAccion = null;
+        if (string.IsNullOrWhiteSpace(clave)) return;
+
+        isLoading = true;
+        try
+        {
+            estado = await CobranzaClient.GetEstadoBloqueoAsync(clave);
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo consultar el estado.", ex);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AbrirConfirmacion(bool bloquear)
+    {
+        accionBloquear = bloquear;
+        motivo = null;
+        password = null;
+        confirmacionError = null;
+        mostrarConfirmacion = true;
+    }
+
+    private async Task EjecutarAccion()
+    {
+        if (string.IsNullOrWhiteSpace(password))
+        {
+            confirmacionError = "Ingrese su contraseña para autorizar la acción.";
+            return;
+        }
+
+        confirmacionError = null;
+        isExecuting = true;
+        try
+        {
+            await CobranzaClient.BloquearDesbloquearAsync(
+                new BloquearClienteRequest(clienteClave!, accionBloquear, motivo, password));
+
+            mostrarConfirmacion = false;
+            // Recargar estado actualizado
+            await OnClienteSeleccionado(clienteClave);
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo ejecutar la acción.", ex);
+        }
+        finally
+        {
+            isExecuting = false;
+        }
+    }
+}

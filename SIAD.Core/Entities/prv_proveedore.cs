@@ -19,11 +19,15 @@ public partial class prv_proveedore
 
     public DateTime? fecha_modificacion { get; set; }
 
+    public string usuario_creo { get; set; } = null!;
+
+    public string? usuario_modifica { get; set; }
+
     public bool? status { get; set; }
 
-    public string cuenta_bancaria { get; set; } = null!;
-
     public Guid? rowid { get; set; }
+
+    public int ultimo_correlativo_compromiso { get; set; }
 
     public double? compras_acum { get; set; }
 
@@ -51,7 +55,5 @@ public partial class prv_proveedore
 
     public string? email { get; set; }
 
-    public string? nombrebanco1 { get; set; }
-
-    public string? nombrebanco2 { get; set; }
+    public int company_id { get; set; }
 }

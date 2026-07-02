@@ -1,4 +1,4 @@
-@page "/proveedores/tipos"
+﻿@page "/proveedores/tipos"
 @attribute [Authorize]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
@@ -8,8 +8,12 @@
 @using apc.Client.Services.Proveedores
 @using SIAD.Core.DTOs.Proveedores
 
+<PageTitle>SIAD - Tipos de Proveedor</PageTitle>
+
 <DxScrollView Height="100%">
     <div class="page-container">
+        <ErrorNotice @ref="errorNotice" />
+
         <div class="d-flex justify-content-between align-items-center mb-4 header-section">
             <div>
                 <h2 class="page-title">Tipos de proveedor</h2>
@@ -80,6 +84,7 @@
     private readonly List<TipoProveedorListItemDto> tipos = new();
     private bool isLoading;
     private string? errorMessage;
+    private ErrorNotice errorNotice = default!;
 
     protected override async Task OnInitializedAsync()
     {
@@ -99,7 +104,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo cargar el catalogo de tipos: {ex.Message}";
+            errorMessage = "No se pudo cargar el catálogo de tipos.";
         }
         finally
         {
@@ -131,7 +136,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo eliminar el tipo: {ex.Message}";
+            errorNotice.ShowError("No se pudo eliminar el tipo.", ex);
         }
     }
 }

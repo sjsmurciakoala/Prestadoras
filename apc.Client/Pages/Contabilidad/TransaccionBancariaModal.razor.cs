@@ -1,10 +1,11 @@
-﻿using System;
+using System;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Contabilidad;
+using SIAD.Core.Utilities;
 using apc.Client.Services.Bancos;
 using apc.Client.Services.Tenant;
 
@@ -67,6 +68,7 @@ public partial class TransaccionBancariaModal : IDisposable
     protected DateTime fecha = DateTime.Now;
     protected bool Guardando { get; set; }
     protected string? MensajeError { get; set; }
+    protected bool MensajeEsAdvertencia { get; set; }
     private bool isDisposed;
     private bool detalleInicializado;
     private long? detalleKardexId;
@@ -101,6 +103,7 @@ public partial class TransaccionBancariaModal : IDisposable
     private decimal TotalContra => ContraLineasValidas.Sum(l => l.Monto);
     private decimal DiferenciaMonto => NuevaTransaccion.Monto - TotalContra;
     private string DiferenciaAlertClass => DiferenciaMonto == 0m ? "alert-success" : "alert-warning";
+    private string MensajeAlertClass => MensajeEsAdvertencia ? "alert alert-warning mt-3" : "alert alert-danger mt-3";
     private static readonly CultureInfo MontoCulture = new("en-US");
 
     private bool EsEntrada
@@ -115,6 +118,21 @@ public partial class TransaccionBancariaModal : IDisposable
 
     private string DebitoHeader => "Débito";
     private string CreditoHeader => "Crédito";
+    private string? ReporteUrl
+    {
+        get
+        {
+            if (!ReadOnly || TransaccionDetalle is null || TransaccionDetalle.BanKardexId <= 0)
+            {
+                return null;
+            }
+
+            var reporteUri = NavigationManager.ToAbsoluteUri(
+                $"api/bancos/transacciones/{TransaccionDetalle.BanKardexId}/reporte");
+
+            return reporteUri.ToString();
+        }
+    }
 
     private string ModalBodyClass
         => DisableInternalScroll
@@ -136,6 +154,25 @@ public partial class TransaccionBancariaModal : IDisposable
         }
     }
 
+    protected string DescripcionTransaccion
+    {
+        get => NuevaTransaccion.Descripcion;
+        set
+        {
+            var descripcionAnterior = NormalizeRequiredText(NuevaTransaccion.Descripcion);
+            var descripcionNueva = NormalizeRequiredText(value);
+
+            NuevaTransaccion.Descripcion = descripcionNueva;
+
+            if (string.Equals(descripcionAnterior, descripcionNueva, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            SincronizarDescripcionDetalle(descripcionAnterior, descripcionNueva);
+        }
+    }
+
     private BancoCuentaListDto? CuentaBancariaSeleccionada
         => CuentasFiltradas.FirstOrDefault(c => c.BancoCuentaId == NuevaTransaccion.BancoCuentaId);
 
@@ -149,7 +186,7 @@ public partial class TransaccionBancariaModal : IDisposable
     {
         if (!ReadOnly && NuevaTransaccion.ContraCuentas.Count == 0)
         {
-            NuevaTransaccion.ContraCuentas.Add(new BanTransaccionContraLineaDto());
+            NuevaTransaccion.ContraCuentas.Add(CrearContraLinea());
         }
 
         loadCts?.Cancel();
@@ -228,7 +265,7 @@ public partial class TransaccionBancariaModal : IDisposable
 
             if (!string.IsNullOrWhiteSpace(DefaultDescripcion))
             {
-                NuevaTransaccion.Descripcion = DefaultDescripcion.Trim();
+                DescripcionTransaccion = DefaultDescripcion;
             }
 
             defaultsSignatureApplied = currentDefaultsSignature;
@@ -336,7 +373,7 @@ public partial class TransaccionBancariaModal : IDisposable
             return;
         }
 
-        NuevaTransaccion.ContraCuentas.Add(new BanTransaccionContraLineaDto());
+        NuevaTransaccion.ContraCuentas.Add(CrearContraLinea());
     }
 
     private void QuitarContraLinea(BanTransaccionContraLineaDto linea)
@@ -357,7 +394,7 @@ public partial class TransaccionBancariaModal : IDisposable
         }
         if (NuevaTransaccion.ContraCuentas.Count == 0)
         {
-            NuevaTransaccion.ContraCuentas.Add(new BanTransaccionContraLineaDto());
+            NuevaTransaccion.ContraCuentas.Add(CrearContraLinea());
         }
     }
 
@@ -455,12 +492,12 @@ public partial class TransaccionBancariaModal : IDisposable
             var name = cuenta.Name?.Trim() ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
             {
-                return $"{code} ({name})";
+                return $"{AccountCodeFormatter.Format(code)} ({name})";
             }
 
             if (!string.IsNullOrWhiteSpace(code))
             {
-                return code;
+                return AccountCodeFormatter.Format(code);
             }
 
             if (!string.IsNullOrWhiteSpace(name))
@@ -479,6 +516,11 @@ public partial class TransaccionBancariaModal : IDisposable
             return linea.Descripcion.Trim();
         }
 
+        if (!string.IsNullOrWhiteSpace(NuevaTransaccion.Descripcion))
+        {
+            return NuevaTransaccion.Descripcion.Trim();
+        }
+
         var cuenta = GetCuentaDisplay(linea.CuentaId);
         return string.IsNullOrWhiteSpace(cuenta) ? "Contra-cuenta" : $"Contra-cuenta: {cuenta}";
     }
@@ -495,12 +537,12 @@ public partial class TransaccionBancariaModal : IDisposable
         var name = cuenta.CuentaContableNombre?.Trim();
         if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
         {
-            return $"{code} ({name})";
+            return $"{AccountCodeFormatter.Format(code)} ({name})";
         }
 
         if (!string.IsNullOrWhiteSpace(code))
         {
-            return code;
+            return AccountCodeFormatter.Format(code);
         }
 
         if (!string.IsNullOrWhiteSpace(name))
@@ -527,32 +569,33 @@ public partial class TransaccionBancariaModal : IDisposable
 
         try
         {
-            MensajeError = null;
+            LimpiarMensaje();
             Guardando = true;
 
             NuevaTransaccion.FechaMovimiento = DateOnly.FromDateTime(fecha);
             var today = DateOnly.FromDateTime(DateTime.Today);
             if (NuevaTransaccion.FechaMovimiento > today)
             {
-                MensajeError = "No se permiten transacciones futuras.";
+                MostrarAdvertencia("No se permiten transacciones futuras.");
                 return;
             }
 
             AjustarTasaCambio();
+            var descripcionTransaccion = NormalizeOptionalText(NuevaTransaccion.Descripcion);
             NuevaTransaccion.ContraCuentas = NuevaTransaccion.ContraCuentas
                 .Where(l => l.CuentaId > 0 && l.Monto > 0)
                 .Select(l => new BanTransaccionContraLineaDto
                 {
                     CuentaId = l.CuentaId,
                     Monto = l.Monto,
-                    Descripcion = string.IsNullOrWhiteSpace(l.Descripcion) ? null : l.Descripcion.Trim(),
+                    Descripcion = NormalizeOptionalText(l.Descripcion) ?? descripcionTransaccion,
                     SourceDocument = string.IsNullOrWhiteSpace(l.SourceDocument) ? null : l.SourceDocument.Trim()
                 })
                 .ToList();
 
             if (NuevaTransaccion.ContraCuentas.Count == 0)
             {
-                MensajeError = "Agregue al menos una contracuenta válida.";
+                MostrarAdvertencia("Agregue al menos una contracuenta válida.");
                 return;
             }
 
@@ -563,14 +606,36 @@ public partial class TransaccionBancariaModal : IDisposable
             await OnTransaccionGuardada.InvokeAsync();
             await CancelarAsync();
         }
+        catch (HttpRequestException ex)
+        {
+            MostrarAdvertencia(ex.Message);
+        }
         catch (Exception ex)
         {
-            MensajeError = $"Error: {ex.Message}";
+            MostrarError(ex.Message);
         }
         finally
         {
             Guardando = false;
         }
+    }
+
+    private void LimpiarMensaje()
+    {
+        MensajeError = null;
+        MensajeEsAdvertencia = false;
+    }
+
+    private void MostrarAdvertencia(string mensaje)
+    {
+        MensajeError = $"Advertencia: {mensaje}";
+        MensajeEsAdvertencia = true;
+    }
+
+    private void MostrarError(string mensaje)
+    {
+        MensajeError = $"Error: {mensaje}";
+        MensajeEsAdvertencia = false;
     }
 
     protected async Task CancelarAsync()
@@ -626,5 +691,46 @@ public partial class TransaccionBancariaModal : IDisposable
         {
             NuevaTransaccion.TasaCambio = 1m;
         }
+    }
+
+    private BanTransaccionContraLineaDto CrearContraLinea()
+    {
+        return new BanTransaccionContraLineaDto
+        {
+            Descripcion = NormalizeRequiredText(NuevaTransaccion.Descripcion)
+        };
+    }
+
+    private void SincronizarDescripcionDetalle(string descripcionAnterior, string descripcionNueva)
+    {
+        if (NuevaTransaccion.ContraCuentas.Count == 0)
+        {
+            return;
+        }
+
+        var descripcionAnteriorNormalizada = NormalizeOptionalText(descripcionAnterior);
+
+        foreach (var linea in NuevaTransaccion.ContraCuentas)
+        {
+            var descripcionLinea = NormalizeOptionalText(linea.Descripcion);
+            if (descripcionLinea is not null
+                && (descripcionAnteriorNormalizada is null
+                    || !string.Equals(descripcionLinea, descripcionAnteriorNormalizada, StringComparison.Ordinal)))
+            {
+                continue;
+            }
+
+            linea.Descripcion = descripcionNueva;
+        }
+    }
+
+    private static string NormalizeRequiredText(string? value)
+    {
+        return value?.Trim() ?? string.Empty;
+    }
+
+    private static string? NormalizeOptionalText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 }

@@ -1,4 +1,4 @@
-@page "/facturacion/miscelaneos/catalogo"
+﻿@page "/facturacion/miscelaneos/catalogo"
 @attribute [Authorize]
 
 @using DevExpress.Blazor
@@ -8,6 +8,8 @@
 
 @inject FacturacionMiscelaneosClient Client
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Catálogo de Misceláneos</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="CatalogoToast" MaxToastCount="4" />

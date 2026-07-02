@@ -15,6 +15,63 @@ public static class ReportesWebConstants
     public const string CodigoReporteEstadoResultados = "estado-resultados";
     public const string CodigoDatasetEstadoResultados = "estado-resultados";
     public const string OrigenDatasetEstadoResultados = "public.rep_estado_resultados";
+    public const string CodigoReporteTransaccionesPeriodo = "transacciones-periodo";
+    public const string CodigoDatasetTransaccionesPeriodo = "transacciones-periodo";
+    public const string OrigenDatasetTransaccionesPeriodo = "public.rep_transacciones_periodo";
+    public const string CodigoReporteSaldoClientesCategoria = "saldo-clientes-categoria";
+    public const string CodigoDatasetSaldoClientesCategoria = "saldo-clientes-categoria";
+    public const string OrigenDatasetSaldoClientesCategoria = "public.rep_saldo_clientes_categoria";
+    public const string CodigoReporteDesgloseFacturacion = "desglose-facturacion";
+    public const string CodigoDatasetDesgloseFacturacion = "desglose-facturacion";
+    public const string OrigenDatasetDesgloseFacturacion = "public.rep_desglose_facturacion";
+    public const string CodigoReporteMovimientoPeriodo = "movimiento-periodo";
+    public const string CodigoDatasetMovimientoPeriodo = "movimiento-periodo";
+    public const string OrigenDatasetMovimientoPeriodo = "public.rep_movimiento_periodo";
+    public const string CodigoReporteAuxiliarLectura = "auxiliar-lectura";
+    public const string CodigoDatasetAuxiliarLectura = "auxiliar-lectura";
+    public const string OrigenDatasetAuxiliarLectura = "public.rep_auxiliar_lectura";
+    public const string CodigoReporteHistorialRecibosEmitidos = "historial-recibos-emitidos";
+    public const string CodigoDatasetHistorialRecibosEmitidos = "historial-recibos-emitidos";
+    public const string OrigenDatasetHistorialRecibosEmitidos = "public.rep_historial_recibos_emitidos";
+    public const string CodigoReporteSaldoClientesAntiguedad = "saldo-clientes-antiguedad";
+    public const string CodigoDatasetSaldoClientesAntiguedad = "saldo-clientes-antiguedad";
+    public const string OrigenDatasetSaldoClientesAntiguedad = "public.rep_saldo_clientes_antiguedad";
+    public const string CodigoReporteAnalisisAntiguedadCobros = "analisis-antiguedad-cobros";
+    public const string CodigoDatasetAnalisisAntiguedadCobros = "analisis-antiguedad-cobros";
+    public const string OrigenDatasetAnalisisAntiguedadCobros = "public.rep_analisis_antiguedad_cobros";
+    
+    public const string CodigoReporteSaldoClientesCiclo = "saldo-clientes-ciclo";
+    public const string CodigoDatasetSaldoClientesCiclo = "saldo-clientes-ciclo";
+    public const string OrigenDatasetSaldoClientesCiclo = "public.rep_saldo_clientes_ciclo";
+
+    public const string CodigoReporteSaldoClientesCategoriaCobranza = "saldo-clientes-categoria-cobranza";
+    public const string CodigoDatasetSaldoClientesCategoriaCobranza = "saldo-clientes-categoria-cobranza";
+    public const string OrigenDatasetSaldoClientesCategoriaCobranza = "public.rep_saldo_clientes_categoria_cobranza";
+
+    public const string CodigoReporteRecaudacion = "informe-recaudacion";
+    public const string CodigoDatasetRecaudacion = "informe-recaudacion";
+    public const string OrigenDatasetRecaudacion = "public.rep_recaudacion";
+
+    public const string CodigoReporteSaldoClientesCategoriaDetalle = "saldo-clientes-categoria-detalle";
+    public const string CodigoDatasetSaldoClientesCategoriaDetalle = "saldo-clientes-categoria-detalle";
+    public const string OrigenDatasetSaldoClientesCategoriaDetalle = "public.rep_saldo_clientes_categoria_detalle";
+
+    public const string CodigoReporteSaldosAguaPotableCiclo = "saldos-agua-potable-ciclo";
+    public const string CodigoDatasetSaldosAguaPotableCiclo = "saldos-agua-potable-ciclo";
+    public const string OrigenDatasetSaldosAguaPotableCiclo = "public.rep_saldos_agua_potable_ciclo";
+
+    public const string CodigoReporteSaldosAlcantarilladoSanitarioCiclo = "saldos-alcantarillado-sanitario-ciclo";
+    public const string CodigoDatasetSaldosAlcantarilladoSanitarioCiclo = "saldos-alcantarillado-sanitario-ciclo";
+    public const string OrigenDatasetSaldosAlcantarilladoSanitarioCiclo = "public.rep_saldos_alcantarillado_sanitario_ciclo";
+
+    public const string CodigoReporteSumarialTarifarioMedicion = "sumarial-tarifario-medicion";
+    public const string CodigoDatasetSumarialTarifarioMedicion = "sumarial-tarifario-medicion";
+    public const string OrigenDatasetSumarialTarifarioMedicion = "public.rep_sumarial_tarifario_medicion";
+
+    public const string CodigoReporteSumarialTarifasNoMedido = "sumarial-tarifas-no-medido";
+    public const string CodigoDatasetSumarialTarifasNoMedido = "sumarial-tarifas-no-medido";
+    public const string OrigenDatasetSumarialTarifasNoMedido = "public.rep_sumarial_tarifario_nomedido";
+
     public const string DefaultReportingConnectionName = "DefaultConnection";
 
     public static class LayoutStatus
@@ -85,6 +142,57 @@ public static class ReportesWebConstants
 
     public static string BuildDesignerRoute(string codigo)
         => $"/informes/reportes/{NormalizeCode(codigo)}/designer";
+
+    public static string BuildTransaccionesPeriodoPreviewRoute()
+        => "/informes/medicion/transacciones-periodo";
+
+    public static string BuildSaldoClientesCategoriaPreviewRoute()
+        => "/informes/medicion/saldo-clientes-categoria";
+
+    public static string BuildDesgloseFacturacionPreviewRoute()
+        => "/informes/medicion/desglose-facturacion";
+
+    public static string BuildMovimientoPeriodoPreviewRoute()
+        => "/informes/medicion/movimiento-periodo";
+
+    public static string BuildAuxiliarLecturaPreviewRoute()
+        => "/informes/medicion/auxiliar-lectura";
+
+    public static string BuildHistorialRecibosEmitidosPreviewRoute()
+        => "/informes/medicion/historial-recibos-emitidos";
+
+    public static string BuildInformesCobranzasRoute()
+        => "/informes/cobranzas";
+
+    public static string BuildSaldoClientesAntiguedadPreviewRoute()
+        => "/informes/cobranzas/saldo-clientes-antiguedad";
+
+    public static string BuildAnalisisAntiguedadCobrosPreviewRoute()
+        => "/informes/cobranzas/analisis-antiguedad-cobros";
+
+    public static string BuildSaldoClientesCicloPreviewRoute()
+        => "/informes/cobranzas/saldo-clientes-ciclo";
+
+    public static string BuildSaldoClientesCategoriaCobranzaPreviewRoute()
+        => "/informes/cobranzas/saldo-clientes-categoria";
+
+    public static string BuildRecaudacionPreviewRoute()
+        => "/informes/cobranzas/recaudacion";
+
+    public static string BuildSaldoClientesCategoriaDetallePreviewRoute()
+        => "/informes/cobranzas/saldo-clientes-categoria-detalle";
+
+    public static string BuildSaldosAguaPotableCicloPreviewRoute()
+        => "/informes/medicion/saldos-agua-potable-ciclo";
+
+    public static string BuildSaldosAlcantarilladoSanitarioCicloPreviewRoute()
+        => "/informes/medicion/saldos-alcantarillado-sanitario-ciclo";
+
+    public static string BuildSumarialTarifarioMedicionPreviewRoute()
+        => "/informes/medicion/sumarial-tarifario-medicion";
+
+    public static string BuildSumarialTarifasNoMedidoPreviewRoute()
+        => "/informes/medicion/sumarial-tarifas-no-medido";
 
     public static string BuildReportName(string codigo, string mode)
         => $"{NormalizeCode(codigo)}?mode={mode}";

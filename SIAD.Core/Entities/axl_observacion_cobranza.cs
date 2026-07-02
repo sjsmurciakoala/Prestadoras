@@ -9,5 +9,7 @@ public partial class axl_observacion_cobranza
 
     public string observacion { get; set; } = null!;
 
+    public bool activo { get; set; }
+
     public Guid? rowid { get; set; }
 }

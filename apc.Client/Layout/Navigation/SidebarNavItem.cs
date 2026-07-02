@@ -8,6 +8,7 @@ public sealed class SidebarNavItem
     public string? NavigateUrl { get; init; }
     public IReadOnlyList<string> MatchPrefixes { get; init; } = Array.Empty<string>();
     public IReadOnlyList<SidebarNavItem> Children { get; init; } = Array.Empty<SidebarNavItem>();
+    public bool MatchExact { get; init; }
 
     public bool HasChildren => Children.Count > 0;
 }

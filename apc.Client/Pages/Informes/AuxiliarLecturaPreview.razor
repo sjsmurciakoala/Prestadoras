@@ -1,0 +1,187 @@
+﻿@page "/informes/medicion/auxiliar-lectura"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Globalization
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Rutas
+@using apc.Client.Services.Informes
+@inject InformesClient InformesClient
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Auxiliar de Lectura</PageTitle>
+
+<div class="page-container reporte-auxiliar-lectura">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Auxiliar de Lectura</h2>
+            <p class="page-subtitle">Seleccione periodo, ciclo y estado para generar el PDF del auxiliar de lecturas.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/medicion"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Limpiar"
+                      Click="LimpiarFiltros"
+                      IconCssClass="bi bi-eraser"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Generar PDF"
+                      Click="GenerarPdf"
+                      IconCssClass="bi bi-file-earmark-pdf"
+                      RenderStyle="ButtonRenderStyle.Primary" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        <DxFormLayout ColCountMd="12">
+            <DxFormLayoutItem Caption="Año" ColSpanMd="3">
+                <DxSpinEdit @bind-Value="anio"
+                            MinValue="2000"
+                            MaxValue="2099"
+                            Increment="1" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Mes" ColSpanMd="3">
+                <DxComboBox Data="@meses"
+                            @bind-Value="mes"
+                            ValueFieldName="@nameof(MesOption.Id)"
+                            TextFieldName="@nameof(MesOption.Nombre)"
+                            DropDownStyleMode="DropDownStyleMode.DropDownList" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Ciclo" ColSpanMd="3">
+                <DxComboBox Data="@ciclos"
+                            @bind-Value="cicloId"
+                            ValueFieldName="@nameof(CicloLookupDto.Id)"
+                            TextFieldName="@nameof(CicloLookupDto.Descripcion)"
+                            NullText="Todos"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            DropDownStyleMode="DropDownStyleMode.DropDownList" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Estado" ColSpanMd="3">
+                <DxComboBox Data="@estadosLectura"
+                            @bind-Value="soloPendientes"
+                            ValueFieldName="@nameof(EstadoLecturaOption.SoloPendientes)"
+                            TextFieldName="@nameof(EstadoLecturaOption.Nombre)"
+                            DropDownStyleMode="DropDownStyleMode.DropDownList" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Reporte" ColSpanMd="6">
+                <DxTextBox Text="Auxiliar de Lectura"
+                           ReadOnly="true"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card p-3 viewer-shell">
+        @if (string.IsNullOrWhiteSpace(pdfUrl))
+        {
+            <div class="empty-preview">
+                <div class="empty-preview__icon">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                </div>
+                <h3 class="empty-preview__title">PDF no generado</h3>
+                <p class="empty-preview__description">
+                    Defina el periodo y pulse Generar PDF para previsualizar el informe.
+                </p>
+            </div>
+        }
+        else
+        {
+            <iframe class="pdf-frame"
+                    src="@pdfUrl"
+                    title="Auxiliar de Lectura"></iframe>
+        }
+    </div>
+</div>
+
+@code {
+    private sealed record MesOption(int Id, string Nombre);
+    private sealed record EstadoLecturaOption(bool SoloPendientes, string Nombre);
+
+    private static readonly List<MesOption> meses =
+    [
+        new(1, "Enero"),
+        new(2, "Febrero"),
+        new(3, "Marzo"),
+        new(4, "Abril"),
+        new(5, "Mayo"),
+        new(6, "Junio"),
+        new(7, "Julio"),
+        new(8, "Agosto"),
+        new(9, "Septiembre"),
+        new(10, "Octubre"),
+        new(11, "Noviembre"),
+        new(12, "Diciembre")
+    ];
+
+    private static readonly List<EstadoLecturaOption> estadosLectura =
+    [
+        new(false, "Todos"),
+        new(true, "Solo pendientes")
+    ];
+
+    private int anio = DateTime.Today.Year;
+    private int mes = DateTime.Today.Month;
+    private int cicloId;
+    private bool soloPendientes;
+    private string? errorMessage;
+    private string? pdfUrl;
+    private List<CicloLookupDto> ciclos = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var items = await InformesClient.GetCiclosAsync();
+            ciclos =
+            [
+                new CicloLookupDto(0, "Todos"),
+                .. items
+            ];
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No fue posible cargar los ciclos: {ex.Message}";
+            ciclos = [new CicloLookupDto(0, "Todos")];
+        }
+    }
+
+    private void GenerarPdf()
+    {
+        if (anio < 2000 || anio > 2099)
+        {
+            errorMessage = "El año del periodo no es válido.";
+            pdfUrl = null;
+            return;
+        }
+
+        if (mes < 1 || mes > 12)
+        {
+            errorMessage = "El mes del periodo no es válido.";
+            pdfUrl = null;
+            return;
+        }
+
+        errorMessage = null;
+        pdfUrl =
+            $"api/informes/reportes/{ReportesWebConstants.CodigoReporteAuxiliarLectura}/pdf" +
+            $"?anio={anio.ToString(CultureInfo.InvariantCulture)}" +
+            $"&mes={mes.ToString(CultureInfo.InvariantCulture)}" +
+            $"&cicloId={cicloId.ToString(CultureInfo.InvariantCulture)}" +
+            $"&soloPendientes={soloPendientes.ToString().ToLowerInvariant()}";
+    }
+
+    private void LimpiarFiltros()
+    {
+        anio = DateTime.Today.Year;
+        mes = DateTime.Today.Month;
+        cicloId = 0;
+        soloPendientes = false;
+        errorMessage = null;
+        pdfUrl = null;
+    }
+}

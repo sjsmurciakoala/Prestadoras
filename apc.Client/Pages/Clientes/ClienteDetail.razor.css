@@ -469,14 +469,13 @@
 }
 
 .historico-consumo-body {
-    max-height: calc(90vh - 140px);
-    overflow-y: auto;
+    /* El scroll lo gestiona el DxPopup con Scrollable="true" + MaxHeight.
+       Quitamos overflow propio para evitar la barra de desplazamiento doble. */
     padding: 0.75rem;
 }
 
 @media (max-width: 768px) {
     .historico-consumo-body {
-        max-height: calc(95vh - 140px);
         padding: 0.5rem;
     }
 }

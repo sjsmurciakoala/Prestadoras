@@ -1,4 +1,4 @@
-@page "/parametros/usuarios/nuevo"
+﻿@page "/parametros/usuarios/nuevo"
 @page "/parametros/usuarios/editar/{UsuarioId}"
 @attribute [Authorize(Policy = SIAD.Core.Constants.AuthorizationPolicies.SuperAdmin)]
 
@@ -11,6 +11,8 @@
 @inject UsuariosPortalClient UsuariosClient
 @inject TenantCompaniesClient CompaniesClient
 @inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Usuario</PageTitle>
 
 <h3>@(EsNuevo ? "Nuevo Usuario" : "Editar Usuario")</h3>
 

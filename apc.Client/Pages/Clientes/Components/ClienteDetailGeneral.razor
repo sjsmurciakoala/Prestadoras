@@ -1,4 +1,4 @@
-﻿@using SIAD.Core.DTOs.Clientes
+@using SIAD.Core.DTOs.Clientes
 
 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
     <DxFormLayoutGroup Caption="Datos personales" HeaderIconCssClass="bi bi-person-lines-fill" ColSpanXs="12">
@@ -12,11 +12,19 @@
 
         <DxFormLayoutItem Caption="Tercera edad" ColSpanXs="12" ColSpanMd="3">@MostrarBooleano(Cliente.TerceraEdad)</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Bloqueado cobranza" ColSpanXs="12" ColSpanMd="3">@MostrarBooleano(Cliente.BloqueadoCobranza)</DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" ColSpanMd="6">@MostrarAbogado()</DxFormLayoutItem>
+        @* MC-5: Estudio socioeconómico y No cortable (ya estaban en DTO, solo faltaban en vista) *@
+        <DxFormLayoutItem Caption="Estudio socioeconómico" ColSpanXs="12" ColSpanMd="3">@MostrarBooleano(Cliente.EstudioSocioeconomico)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="No cortable" ColSpanXs="12" ColSpanMd="3">@MostrarBooleano(Cliente.NoCortable)</DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" ColSpanMd="12">@MostrarAbogado()</DxFormLayoutItem>
 
         <DxFormLayoutItem Caption="Teléfono" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Telefono)</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Teléfono móvil" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.TelefonoMovil)</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Email)</DxFormLayoutItem>
+
+        @* MC-4: Clave catastral movida a Datos personales (es dato del predio, no del medidor) *@
+        <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="6">@MostrarTexto(Cliente.ClaveCatastral)</DxFormLayoutItem>
+        <DxFormLayoutItem Caption="Clave SURE" ColSpanXs="12" ColSpanMd="6">@MostrarTexto(Cliente.ClaveSure)</DxFormLayoutItem>
     </DxFormLayoutGroup>
 
     <DxFormLayoutGroup Caption="Dirección" HeaderIconCssClass="bi bi-geo-alt-fill" ColSpanXs="12" CssClass="mt-2">
@@ -37,16 +45,18 @@
         <DxFormLayoutItem Caption="Categoría" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.CategoriaServicioNombre ?? Cliente.CategoriaServicioId?.ToString())</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Tipo uso" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.TipoUsoCodigo)</DxFormLayoutItem>
 
-        <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.LetraCodigo)</DxFormLayoutItem>
+        @* MC-3: Letra solo visible para clientes sin medidor *@
+        @if (!(Cliente.TieneMedidor ?? false))
+        {
+            <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.LetraCodigo)</DxFormLayoutItem>
+        }
         <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.CicloDescripcion ?? Cliente.CicloId?.ToString())</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Libreta" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.Libreta)</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Secuencia" ColSpanXs="12" ColSpanMd="3">@MostrarTexto(Cliente.Secuencia)</DxFormLayoutItem>
 
         <DxFormLayoutItem Caption="Indicativo ruta" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.IndicativoRuta)</DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.ClaveCatastral)</DxFormLayoutItem>
-        <DxFormLayoutItem Caption="Clave SURE" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.ClaveSure)</DxFormLayoutItem>
 
-        <DxFormLayoutItem Caption="Contador" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.Contador)</DxFormLayoutItem>
+        @* MC-1: Campo "Contador" eliminado (equivalente al medidor) *@
         <DxFormLayoutItem Caption="Tiene medidor" ColSpanXs="12" ColSpanMd="4">@MostrarBooleano(Cliente.TieneMedidor)</DxFormLayoutItem>
         <DxFormLayoutItem Caption="Medidor" ColSpanXs="12" ColSpanMd="4">@MostrarTexto(Cliente.MedidorNumero ?? Cliente.MedidorId?.ToString())</DxFormLayoutItem>
 

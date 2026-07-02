@@ -38,7 +38,7 @@ public sealed class CuentasBancosController : ControllerBase
     {
         if (companyId <= 0)
         {
-            return BadRequest(new { detail = "Debe proporcionar un companyId válido." });
+            return BadRequest(new { detail = "Debe proporcionar un companyId vï¿½lido." });
         }
 
         if (!await ValidarAccesoEmpresaAsync(companyId, ct))
@@ -150,11 +150,19 @@ public sealed class CuentasBancosController : ControllerBase
         using var stream = new MemoryStream();
         workbook.SaveAs(stream);
         var content = stream.ToArray();
+        var fileName = $"Conciliacion-{DateTime.Now:yyyyMMdd-HHmm}.xlsx";
 
         return File(
             content,
             "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-            "ConciliacionCuentaBancariaTemplate.xlsx");
+            fileName);
+    }
+
+    [HttpGet("server-datetime")]
+    public IActionResult GetServerDateTime()
+    {
+        var serverDateTime = DateTime.Now;
+        return Ok(new { serverDateTime });
     }
 
     [HttpPost("conciliacion/importar")]
@@ -256,7 +264,7 @@ public sealed class CuentasBancosController : ControllerBase
     {
         if (dto is null || dto.BancoCuentaId <= 0)
         {
-            return BadRequest(new { detail = "Debe proporcionar una cuenta bancaria válida." });
+            return BadRequest(new { detail = "Debe proporcionar una cuenta bancaria vï¿½lida." });
         }
 
         if (dto.Movimientos is null || dto.Movimientos.Count == 0)
@@ -533,4 +541,3 @@ public sealed class CuentasBancosController : ControllerBase
         return actual == companyId;
     }
 }
-

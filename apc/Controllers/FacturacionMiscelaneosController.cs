@@ -124,5 +124,11 @@ public class FacturacionMiscelaneosController : ControllerBase
         var ok = await _service.EliminarCatalogoItemAsync(id, ct);
         return ok ? Ok(new { success = true }) : NotFound();
     }
+
+    // GET api/facturacion/miscelaneos/consulta
+    [HttpGet("consulta")]
+    public async Task<IActionResult> ConsultarRecibos(
+        [FromQuery] MiscelaneosConsultaFiltroDto filtro, CancellationToken ct)
+        => Ok(await _service.ConsultarRecibosAsync(filtro, ct));
 }
 

@@ -1,0 +1,771 @@
+@page "/proveedores/compromisos-proveedor/{NumeroOrden:int}/procesar"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Microsoft.AspNetCore.Components.Authorization
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services.Presupuesto
+
+@inject OrdenesPagoDirectoClient OrdenesPagoDirectoClient
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject ILogger<CompromisoProveedorProcesar> Logger
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Procesar Compromiso</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CompromisoProveedorProcesarToast" MaxToastCount="4" />
+    <ErrorNotice @ref="errorNotice" />
+
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Procesar compromiso de proveedor</h2>
+            <p class="page-subtitle">@SubtituloPagina</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            @if (CanReturnToOrigin)
+            {
+                <DxButton Text="Volver al origen"
+                          IconCssClass="bi bi-arrow-left-circle"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="btn-modern shadow-sm"
+                          Click="VolverAlOrigen" />
+            }
+            <DxButton Text="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern shadow-sm"
+                      Click="Volver" />
+            <DxButton Text="@(isProcessing ? "Procesando..." : "Procesar compromiso")"
+                      IconCssClass="bi bi-check2-circle"
+                      RenderStyle="ButtonRenderStyle.Success"
+                      CssClass="btn-modern shadow-sm"
+                      Click="ProcesarAsync"
+                      Enabled="@CanProcess" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    @if (validationMessages.Count > 0)
+    {
+        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            <ul class="mb-0 ps-3">
+                @foreach (var message in validationMessages)
+                {
+                    <li>@message</li>
+                }
+            </ul>
+        </DxAlert>
+    }
+
+    @if (isLoading)
+    {
+        <div class="modern-card">
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+        </div>
+    }
+    else if (ordenDetalle is null)
+    {
+        <DxAlert AlertType="AlertType.Warning">No se encontro el compromiso solicitado.</DxAlert>
+    }
+    else
+    {
+        <div class="summary-strip mb-3">
+            <div class="summary-card">
+                <div class="summary-label">Compromiso</div>
+                <div class="summary-value">@ordenDetalle.NumeroOrden</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Proveedor</div>
+                <div class="summary-value">@ProveedorResumenTexto</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Monto</div>
+                <div class="summary-value">@ordenDetalle.Monto.ToString("N2")</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Estado</div>
+                <div class="summary-value">
+                    <span class="badge-status @(ordenDetalle.Procesada ? "inactive" : "active")">
+                        @(ordenDetalle.Procesada ? "Procesada" : "Pendiente")
+                    </span>
+                </div>
+            </div>
+        </div>
+
+        <div class="modern-card mb-3">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-3 section-header">
+                <div>
+                    <h5 class="mb-0">Detalle del compromiso</h5>
+                    <small class="text-muted">Informacion base del compromiso antes de generar la partida.</small>
+                </div>
+                <div class="d-flex flex-wrap gap-2">
+                    <span class="summary-pill">Lineas: <strong>@ordenDetalle.Detalles.Count</strong></span>
+                    <span class="summary-pill">Cuenta de servicio: <strong>@FormatCuentaOrDash(ordenDetalle.CuentaContable)</strong></span>
+                </div>
+            </div>
+
+            @if (ordenDetalle.Detalles.Count == 0)
+            {
+                <DxAlert AlertType="AlertType.Warning">
+                    El compromiso no tiene lineas presupuestarias asociadas.
+                </DxAlert>
+            }
+            else
+            {
+                <div class="grid-wrapper">
+                    <DxGrid Data="@ordenDetalle.Detalles"
+                            TData="OrdenPagoDirectoDetalleLineaDto"
+                            PageSize="10"
+                            ShowFilterRow="false"
+                            ShowSearchBox="false"
+                            ShowGroupPanel="false"
+                            SizeMode="SizeMode.Large"
+                            CssClass="grid-modern">
+                        <Columns>
+                            <DxGridDataColumn Caption="Fecha"
+                                              Width="130px">
+                                <CellDisplayTemplate>
+                                    @GetFechaTexto(ordenDetalle.FechaCompromiso)
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoDetalleLineaDto.CuentaContable)"
+                                              Caption="Cuenta de gasto"
+                                              Width="160px">
+                                <CellDisplayTemplate Context="cell">
+                                    @FormatCuentaOrDash(((OrdenPagoDirectoDetalleLineaDto)cell.DataItem).CuentaContable)
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoDetalleLineaDto.Descripcion)"
+                                              Caption="Descripcion"
+                                              MinWidth="220" />
+                            <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoDetalleLineaDto.Monto)"
+                                              Caption="Monto"
+                                              Width="140px"
+                                              DisplayFormat="N2"
+                                              TextAlignment="GridTextAlignment.Right" />
+                        </Columns>
+                    </DxGrid>
+                </div>
+            }
+        </div>
+
+        @if (ordenDetalle.Procesada)
+        {
+            <DxAlert AlertType="AlertType.Warning">
+                Este compromiso ya fue procesado. Se muestra solo en modo consulta.
+            </DxAlert>
+        }
+        else
+        {
+            <div class="modern-card">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-3 section-header">
+                    <div>
+                        <h5 class="mb-0">Partida contable del compromiso a procesar</h5>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="summary-pill">Debito: <strong>@TotalDebitoTexto</strong></span>
+                        <span class="summary-pill">Credito: <strong>@TotalCreditoTexto</strong></span>
+                    </div>
+                </div>
+
+                @if (!TieneCuentaProveedorDisponible)
+                {
+                    <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                        El proveedor no tiene una cuenta contable valida configurada. No se puede procesar el compromiso.
+                    </DxAlert>
+                }
+
+                <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                    <span class="text-muted">Distribuya el monto del compromiso<br />entre una o varias cuentas del plan contable.</span>
+                    <button type="button"
+                            class="btn btn-outline-primary btn-sm"
+                            disabled="@(!PuedeEditarContraLineas)"
+                            @onclick="AgregarContraLinea">
+                        <i class="bi bi-plus-lg me-1"></i>Agregar
+                    </button>
+                </div>
+
+                @if (cuentasContables.Count == 0)
+                {
+                    <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                        No hay cuentas contables disponibles para distribuir el debito del compromiso.
+                    </DxAlert>
+                }
+
+                @if (PartidaNoCuadra)
+                {
+                    <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                        Precaucion: @PartidaNoCuadraMensaje
+                    </DxAlert>
+                }
+
+                <div class="table-responsive detail-table mb-3">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="min-width:280px;">Cuenta</th>
+                                <th style="min-width:200px;">Descripcion</th>
+                                <th style="min-width:110px;">Debito</th>
+                                <th style="min-width:110px;">Credito</th>
+                                <th style="width:72px;"></th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @for (var i = 0; i < lineasPartida.Count; i++)
+                            {
+                                var rowIndex = i;
+                                var linea = lineasPartida[rowIndex];
+                                var esLineaProveedor = IsProviderLine(rowIndex);
+                                <tr>
+                                    <td>
+                                        @if (!esLineaProveedor)
+                                        {
+                                            <DxComboBox Data="@cuentasContables"
+                                                        TData="CuentaContableLookupDto"
+                                                        TValue="long"
+                                                        @bind-Value="linea.CuentaId"
+                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                        NullText="Seleccione cuenta contable"
+                                                        SearchMode="ListSearchMode.AutoSearch"
+                                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                        SearchDelay="200"
+                                                        DropDownStyle="DropDownStyle.DropDown"
+                                                        DropDownTriggerMode="DropDownTriggerMode.Input"
+                                                        AllowUserInput="true"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        ValidationEnabled="false"
+                                                        Enabled="@PuedeEditarContraLineas" />
+                                        }
+                                        else
+                                        {
+                                            <div class="d-flex flex-column">
+                                                <span class="fw-semibold">@CuentaProveedorCodigoTexto</span>
+                                                <small class="text-muted">@CuentaProveedorNombreTexto</small>
+                                            </div>
+                                        }
+                                    </td>
+                                    <td>
+                                        @if (!esLineaProveedor)
+                                        {
+                                            <DxTextBox @bind-Text="linea.Descripcion"
+                                                       NullText="Descripcion"
+                                                       MaxLength="200"
+                                                       Enabled="@PuedeEditarContraLineas" />
+                                        }
+                                        else
+                                        {
+                                            @GetTextOrDash(linea.Descripcion)
+                                        }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (!esLineaProveedor)
+                                        {
+                                            <DxSpinEdit TValue="decimal"
+                                                        @bind-Value="linea.Debito"
+                                                        Min="0m"
+                                                        Increment="0.01m"
+                                                        DisplayFormat="N2"
+                                                        InputCssClass="text-end"
+                                                        ValidationEnabled="false"
+                                                        Enabled="@PuedeEditarContraLineas" />
+                                        }
+                                        else
+                                        {
+                                            @linea.Debito.ToString("N2")
+                                        }
+                                    </td>
+                                    <td class="text-end">@linea.Credito.ToString("N2")</td>
+                                    <td class="text-end">
+                                        @if (!esLineaProveedor)
+                                        {
+                                            <button type="button"
+                                                    class="btn-icon btn-delete"
+                                                    title="Eliminar cuenta"
+                                                    disabled="@(!PuedeEliminarContraLinea(rowIndex))"
+                                                    @onclick="@(() => EliminarContraLinea(rowIndex))">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        }
+                                    </td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="fw-semibold">
+                                <td colspan="2" class="text-end">Totales</td>
+                                <td class="text-end">@TotalDebitoTexto</td>
+                                <td class="text-end">@TotalCreditoTexto</td>
+                                <td></td>
+                            </tr>
+                            @if (PartidaNoCuadra)
+                            {
+                                <tr class="partida-no-cuadra-message">
+                                    <td colspan="5">@PartidaNoCuadraMensaje</td>
+                                </tr>
+                            }
+                        </tfoot>
+                    </table>
+                </div>
+
+                <div class="total-bar">
+                    <div class="text-muted">
+                        Usuario: <strong>@UsuarioActualTexto</strong>
+                    </div>
+                    <div class="d-flex flex-wrap gap-2">
+                        <DxButton Text="Cancelar"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  CssClass="btn-modern shadow-sm"
+                                  Click="Volver"
+                                  Enabled="@(!isProcessing)" />
+                        <DxButton Text="@(isProcessing ? "Procesando..." : "Confirmar y generar nueva partida")"
+                                  IconCssClass="bi bi-check2-circle"
+                                  RenderStyle="ButtonRenderStyle.Success"
+                                  CssClass="btn-modern shadow-sm"
+                                  Click="ProcesarAsync"
+                                  Enabled="@CanProcess" />
+                    </div>
+                </div>
+            </div>
+        }
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int NumeroOrden { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    [SupplyParameterFromQuery(Name = "originUrl")]
+    public string? OriginUrlQuery { get; set; }
+
+    private readonly List<CuentaContableLookupDto> cuentasContables = new();
+    private readonly List<PartidaLineaOrdenPagoDto> lineasPartida = new();
+
+    private OrdenPagoDirectoDetalleDto? ordenDetalle;
+    private long? cuentaProveedorId;
+    private bool isLoading = true;
+    private bool isProcessing;
+    private string? errorMessage;
+    private ErrorNotice errorNotice = default!;
+    private readonly List<string> validationMessages = new();
+    private string usuarioActual = "SISTEMA";
+
+    private decimal TotalDebito => lineasPartida.Sum(x => x.Debito);
+    private decimal TotalCredito => lineasPartida.Sum(x => x.Credito);
+    private string TotalDebitoTexto => TotalDebito.ToString("N2");
+    private string TotalCreditoTexto => TotalCredito.ToString("N2");
+    private bool PartidaNoCuadra => Math.Abs(TotalDebito - TotalCredito) > 0.01m;
+    private string PartidaNoCuadraMensaje => $"La partida contable no cuadra. Debito: {TotalDebito:N2}, Credito: {TotalCredito:N2}.";
+    private string SubtituloPagina => "Genere la partida contable y cierre el compromiso seleccionado.";
+    private string UsuarioActualTexto => string.IsNullOrWhiteSpace(usuarioActual) ? "SISTEMA" : usuarioActual;
+    private bool TieneCuentaProveedorDisponible => cuentaProveedorId.HasValue && cuentaProveedorId.Value > 0;
+    private bool PuedeEditarContraLineas => !isProcessing && TieneCuentaProveedorDisponible && cuentasContables.Count > 0;
+    private int ContraLineCount => lineasPartida.Count > 0 ? lineasPartida.Count - 1 : 0;
+    private string CuentaProveedorCodigoTexto => FormatCuentaOrDash(ordenDetalle?.CuentaContableProveedor);
+    private string CuentaProveedorNombreTexto => GetCuentaNombre(cuentaProveedorId);
+    private string ProveedorResumenTexto => BuildProveedorResumenTexto();
+    private bool CanProcess => !isLoading &&
+                               !isProcessing &&
+                               ordenDetalle is not null &&
+                               !ordenDetalle.Procesada &&
+                               TieneCuentaProveedorDisponible &&
+                               ContraLineCount > 0;
+    private bool CanReturnToOrigin => GetOriginUrl() is not null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+        validationMessages.Clear();
+        ordenDetalle = null;
+        lineasPartida.Clear();
+        cuentaProveedorId = null;
+
+        try
+        {
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            usuarioActual = authState.User.Identity?.Name ?? "SISTEMA";
+
+            var ordenTask = OrdenesPagoDirectoClient.GetByNumeroOrdenAsync(NumeroOrden);
+            var cuentasContablesTask = OrdenesPagoDirectoClient.GetCuentasContablesAsync();
+            await Task.WhenAll(ordenTask, cuentasContablesTask);
+
+            ordenDetalle = await ordenTask;
+            var cuentasPlan = await cuentasContablesTask;
+
+            cuentasContables.Clear();
+            cuentasContables.AddRange(cuentasPlan);
+
+            if (ordenDetalle is null)
+            {
+                errorMessage = $"No se encontro el compromiso {NumeroOrden}.";
+                return;
+            }
+
+            cuentaProveedorId = ResolveCuentaProveedorId(ordenDetalle.CuentaContableProveedor);
+            InicializarLineas();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "No se pudo cargar la pantalla de proceso.";
+            Logger.LogError(ex, "Error al cargar pantalla de proceso para compromiso {NumeroOrden}", NumeroOrden);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void InicializarLineas()
+    {
+        lineasPartida.Clear();
+
+        if (ordenDetalle is null || ordenDetalle.Procesada)
+        {
+            return;
+        }
+
+        lineasPartida.Add(new PartidaLineaOrdenPagoDto
+        {
+            Descripcion = ordenDetalle.Concepto,
+            Debito = ordenDetalle.Monto,
+            Credito = 0m
+        });
+
+        lineasPartida.Add(new PartidaLineaOrdenPagoDto
+        {
+            CuentaId = cuentaProveedorId ?? 0,
+            Descripcion = ordenDetalle.Concepto,
+            Debito = 0m,
+            Credito = ordenDetalle.Monto
+        });
+    }
+
+    private void AgregarContraLinea()
+    {
+        if (!PuedeEditarContraLineas || ordenDetalle is null)
+        {
+            return;
+        }
+
+        var insertIndex = Math.Max(0, lineasPartida.Count - 1);
+        lineasPartida.Insert(insertIndex, new PartidaLineaOrdenPagoDto
+        {
+            Descripcion = ordenDetalle.Concepto,
+            Debito = 0m,
+            Credito = 0m
+        });
+    }
+
+    private void EliminarContraLinea(int rowIndex)
+    {
+        if (!PuedeEliminarContraLinea(rowIndex))
+        {
+            return;
+        }
+
+        lineasPartida.RemoveAt(rowIndex);
+    }
+
+    private async Task ProcesarAsync()
+    {
+        if (ordenDetalle is null || ordenDetalle.Procesada)
+        {
+            return;
+        }
+
+        errorMessage = null;
+        validationMessages.Clear();
+
+        if (!ValidarPartida())
+        {
+            ShowToast("Validacion", BuildValidationToastMessage(), ToastRenderStyle.Warning);
+            return;
+        }
+
+        try
+        {
+            isProcessing = true;
+
+            var dto = new ProcesarOrdenPagoDirectoDto
+            {
+                Usuario = UsuarioActualTexto,
+                Lineas = GetContraLineas()
+                    .Select(x => new PartidaLineaOrdenPagoDto
+                    {
+                        CuentaId = x.CuentaId,
+                        CentroCostoId = x.CentroCostoId,
+                        Descripcion = x.Descripcion,
+                        Debito = x.Debito,
+                        Credito = 0m
+                    })
+                    .ToList()
+            };
+
+            var result = await OrdenesPagoDirectoClient.ProcesarAsync(NumeroOrden, dto);
+            if (!result.Success)
+            {
+                errorMessage = result.Message;
+                return;
+            }
+
+            ShowToast("Exito", result.Message, ToastRenderStyle.Success);
+            Navigation.NavigateTo(GetReturnUrl(), true);
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al procesar compromiso {NumeroOrden}", NumeroOrden);
+            errorNotice.ShowError("No se pudo procesar el compromiso.", ex);
+        }
+        finally
+        {
+            isProcessing = false;
+        }
+    }
+
+    private void Volver()
+    {
+        Navigation.NavigateTo(GetReturnUrl(), true);
+    }
+
+    private void VolverAlOrigen()
+    {
+        var originUrl = GetOriginUrl();
+        if (string.IsNullOrWhiteSpace(originUrl))
+        {
+            return;
+        }
+
+        Navigation.NavigateTo(originUrl, true);
+    }
+
+    private bool ValidarPartida()
+    {
+        if (!TieneCuentaProveedorDisponible)
+        {
+            validationMessages.Add("El proveedor no tiene una cuenta contable valida configurada.");
+        }
+
+        var lineasContra = GetContraLineas();
+        if (lineasContra.Count == 0)
+        {
+            validationMessages.Add("Debe agregar al menos una cuenta para distribuir el debito.");
+        }
+
+        for (var i = 0; i < lineasContra.Count; i++)
+        {
+            var linea = lineasContra[i];
+            if (linea.CuentaId <= 0)
+            {
+                validationMessages.Add($"Debe seleccionar la cuenta contable en la fila {i + 1}.");
+            }
+            else if (cuentaProveedorId.HasValue && linea.CuentaId == cuentaProveedorId.Value)
+            {
+                validationMessages.Add($"La cuenta de la fila {i + 1} no puede ser la misma cuenta contable del proveedor.");
+            }
+
+            if (linea.Debito <= 0m)
+            {
+                validationMessages.Add($"El monto de la fila {i + 1} debe ser mayor a cero.");
+            }
+        }
+
+        if (ordenDetalle is not null)
+        {
+            var totalDistribuido = lineasContra.Sum(x => x.Debito);
+            if (Math.Abs(totalDistribuido - ordenDetalle.Monto) > 0.01m)
+            {
+                validationMessages.Add(
+                    $"La distribucion del debito debe sumar {ordenDetalle.Monto:N2}. Total distribuido: {totalDistribuido:N2}.");
+            }
+        }
+
+        if (PartidaNoCuadra)
+        {
+            validationMessages.Add(PartidaNoCuadraMensaje);
+        }
+
+        return validationMessages.Count == 0;
+    }
+
+    private bool IsProviderLine(int rowIndex)
+    {
+        return rowIndex >= 0 &&
+               lineasPartida.Count > 0 &&
+               rowIndex == lineasPartida.Count - 1;
+    }
+
+    private bool PuedeEliminarContraLinea(int rowIndex)
+    {
+        return PuedeEditarContraLineas &&
+               !IsProviderLine(rowIndex) &&
+               ContraLineCount > 1;
+    }
+
+    private List<PartidaLineaOrdenPagoDto> GetContraLineas()
+    {
+        return ContraLineCount <= 0
+            ? new List<PartidaLineaOrdenPagoDto>()
+            : lineasPartida.Take(ContraLineCount).ToList();
+    }
+
+    private long? ResolveCuentaProveedorId(string? cuentaContable)
+    {
+        if (string.IsNullOrWhiteSpace(cuentaContable))
+        {
+            return null;
+        }
+
+        var cuenta = cuentasContables.FirstOrDefault(c =>
+            c.Code.Trim().Equals(cuentaContable.Trim(), StringComparison.OrdinalIgnoreCase));
+
+        return cuenta?.AccountId;
+    }
+
+    private string BuildCuentaDisplay(long? cuentaId, string? fallbackCode)
+    {
+        var cuenta = cuentasContables.FirstOrDefault(c => c.AccountId == cuentaId);
+        if (cuenta is not null)
+        {
+            return cuenta.Display;
+        }
+
+        return FormatCuentaOrDash(fallbackCode);
+    }
+
+    private static string FormatCuentaOrDash(string? cuenta)
+    {
+        var formatted = AccountCodeFormatter.Format(cuenta);
+        return string.IsNullOrWhiteSpace(formatted) ? "-" : formatted;
+    }
+
+    private string GetCuentaNombre(long? cuentaId)
+    {
+        var cuenta = cuentasContables.FirstOrDefault(c => c.AccountId == cuentaId);
+        return cuenta is null
+            ? "-"
+            : GetTextOrDash(cuenta.Description);
+    }
+
+    private string BuildValidationToastMessage()
+    {
+        if (validationMessages.Count == 0)
+        {
+            return "Revise las advertencias antes de generar la partida.";
+        }
+
+        return "Revise las advertencias antes de generar la partida: " +
+               string.Join(" | ", validationMessages);
+    }
+
+    private string GetReturnUrl()
+    {
+        var returnUrl = NormalizeLocalUrl(ReturnUrl);
+        if (string.IsNullOrWhiteSpace(returnUrl))
+        {
+            return BuildDefaultReturnUrl();
+        }
+
+        return returnUrl;
+    }
+
+    private string BuildDefaultReturnUrl()
+    {
+        var baseUrl = "/proveedores/compromisos-proveedor";
+        var originUrl = GetOriginUrl();
+
+        return string.IsNullOrWhiteSpace(originUrl)
+            ? baseUrl
+            : $"{baseUrl}?originUrl={Uri.EscapeDataString(originUrl)}";
+    }
+
+    private string? GetOriginUrl()
+    {
+        var originUrl = NormalizeLocalUrl(OriginUrlQuery);
+        if (string.IsNullOrWhiteSpace(originUrl))
+        {
+            return null;
+        }
+
+        return string.Equals(GetUrlPath(originUrl), "/proveedores/compromisos-proveedor", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : originUrl;
+    }
+
+    private static string? NormalizeLocalUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var normalized = url.Trim();
+        return !normalized.StartsWith("/", StringComparison.Ordinal) || normalized.StartsWith("//", StringComparison.Ordinal)
+            ? null
+            : normalized;
+    }
+
+    private static string GetUrlPath(string url)
+    {
+        var separatorIndex = url.IndexOfAny(['?', '#']);
+        return separatorIndex >= 0 ? url[..separatorIndex] : url;
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = message,
+            RenderStyle = style,
+            ProviderName = "CompromisoProveedorProcesarToast"
+        });
+    }
+
+    private static string GetTextOrDash(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+
+    private static string GetFechaTexto(DateTime? fecha)
+        => fecha.HasValue ? fecha.Value.ToString("dd/MM/yyyy") : "-";
+
+    private static string GetCorrelativoProveedorTexto(int? correlativoProveedor)
+        => correlativoProveedor.HasValue ? correlativoProveedor.Value.ToString() : "-";
+
+    private string BuildProveedorResumenTexto()
+    {
+        var correlativo = GetCorrelativoProveedorTexto(ordenDetalle?.CorrelativoProveedor);
+        var proveedor = GetTextOrDash(ordenDetalle?.Proveedor);
+
+        if (correlativo == "-")
+        {
+            return proveedor;
+        }
+
+        if (proveedor == "-")
+        {
+            return correlativo;
+        }
+
+        return $"{correlativo} - {proveedor}";
+    }
+}

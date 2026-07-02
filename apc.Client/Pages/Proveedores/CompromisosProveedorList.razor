@@ -1,0 +1,545 @@
+@page "/proveedores/compromisos-proveedor"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Presupuesto
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services.Presupuesto
+@using apc.Client.Services.Proveedores
+
+@inject OrdenesPagoDirectoClient OrdenesPagoDirectoClient
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject ILogger<CompromisosProveedorList> Logger
+
+<PageTitle>SIAD - Compromisos</PageTitle>
+
+<div class="page-container">
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Compromisos de proveedor</h2>
+            <p class="page-subtitle">Cree, edite y elimine compromisos de proveedor desde el modulo de proveedores.</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            @if (CanReturnToOrigin)
+            {
+                <DxButton Text="Volver al origen"
+                          Click="VolverAlOrigen"
+                          IconCssClass="bi bi-arrow-left-circle"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="btn-modern shadow-sm" />
+            }
+            <DxButton Text="Nuevo compromiso"
+                      Click="NuevaOrden"
+                      IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern shadow-sm" />
+            <DxButton Text="Actualizar"
+                      Click="BuscarAsync"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading)" />
+        </div>
+    </div>
+
+    @if (proveedorSeleccionado is not null)
+    {
+        <div class="modern-card mb-3">
+            <div class="row g-3">
+                <div class="col-md-2">
+                    <div class="small text-muted">Proveedor</div>
+                    <div class="fw-semibold">@proveedorSeleccionado.Codigo</div>
+                </div>
+                <div class="col-md-4">
+                    <div class="small text-muted">Nombre</div>
+                    <div class="fw-semibold">@proveedorSeleccionado.Nombre</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">RTN</div>
+                    <div class="fw-semibold">@GetTextOrDash(proveedorSeleccionado.Rtn)</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="small text-muted">Cuenta contable</div>
+                    <div class="fw-semibold">@FormatCuentaOrDash(proveedorSeleccionado.CuentaContable)</div>
+                </div>
+            </div>
+        </div>
+    }
+
+    <ErrorNotice @ref="errorNotice" />
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card mb-3">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Numero de compromiso" ColSpanMd="2">
+                <DxSpinEdit TValue="int?"
+                            @bind-Value="filtro.NumeroOrden"
+                            Min="1"
+                            NullText="Compromiso"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(!isLoading)" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Codigo proveedor" ColSpanMd="3">
+                <DxComboBox Data="@proveedoresFiltro"
+                            TData="ProveedorFiltroItem"
+                            TValue="string"
+                            @bind-Value="filtro.CodigoProveedor"
+                            ValueFieldName="@nameof(ProveedorFiltroItem.Codigo)"
+                            TextFieldName="@nameof(ProveedorFiltroItem.Display)"
+                            NullText="Seleccione proveedor"
+                            SearchMode="ListSearchMode.AutoSearch"
+                            SearchFilterCondition="ListSearchFilterCondition.Contains"
+                            SearchDelay="200"
+                            DropDownStyle="DropDownStyle.DropDownList"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(!isLoading)">
+                    <ItemTemplate Context="item">
+                        <div class="d-flex flex-column">
+                            <span class="fw-semibold">@item.Codigo - @item.Nombre</span>
+                            <small class="text-muted">RTN: @GetTextOrDash(item.Rtn)</small>
+                        </div>
+                    </ItemTemplate>
+                </DxComboBox>
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Busqueda" ColSpanMd="5">
+                <DxTextBox @bind-Text="filtro.Search"
+                           NullText="Proveedor, RTN, correlativo, concepto o cuenta"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                           Enabled="@(!isLoading)" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Incluir procesadas" ColSpanMd="2">
+                <DxCheckBox Checked="@filtro.IncludeProcessed"
+                            CheckedChanged="@((bool v) => OnIncludeProcessedChanged(v))"
+                            Enabled="@(!isLoading)" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem ColSpanMd="12">
+                <DxButton Text="Buscar"
+                          IconCssClass="bi bi-search"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          CssClass="btn-modern shadow-sm"
+                          Click="BuscarAsync"
+                          Enabled="@(!isLoading)" />
+                <DxButton Text="Limpiar"
+                          IconCssClass="bi bi-eraser"
+                          CssClass="ms-2 btn-modern shadow-sm"
+                          Click="LimpiarAsync"
+                          Enabled="@(!isLoading)" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card position-relative">
+        <div class="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+            <div>
+                <h5 class="mb-0">Listado de compromisos</h5>
+                <small class="text-muted">Los compromisos procesados se muestran solo cuando activa el filtro correspondiente.</small>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <span class="summary-pill">Registros: <strong>@ordenes.Count</strong></span>
+                <span class="summary-pill">Monto: <strong>@MontoTexto</strong></span>
+            </div>
+        </div>
+
+        @if (isLoading)
+        {
+            <div class="py-5 text-center text-muted">Cargando compromisos de proveedor...</div>
+        }
+        else if (ordenes.Count == 0)
+        {
+            <DxAlert AlertType="AlertType.Info">
+                No se encontraron compromisos para los filtros seleccionados.
+            </DxAlert>
+        }
+        else
+        {
+            <div class="grid-wrapper">
+                <DxGrid Data="@ordenes"
+                        TData="OrdenPagoDirectoListItemDto"
+                        KeyFieldName="@nameof(OrdenPagoDirectoListItemDto.NumeroOrden)"
+                        PageSize="12"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false"
+                        ShowSearchBox="false"
+                        SizeMode="SizeMode.Large"
+                        CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoListItemDto.CorrelativoProveedor)"
+                                          Caption="Correlativo"
+                                          Width="120px"
+                                          TextAlignment="GridTextAlignment.Center" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoListItemDto.FechaCompromiso)"
+                                          Caption="Fecha"
+                                          Width="120px"
+                                          DisplayFormat="dd/MM/yyyy" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoListItemDto.Proveedor)"
+                                          Caption="Proveedor"
+                                          MinWidth="220" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoListItemDto.Concepto)"
+                                          Caption="Concepto"
+                                          MinWidth="240" />
+                        <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoListItemDto.CuentaContable)"
+                                          Caption="Cuenta contable"
+                                          Width="170px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is OrdenPagoDirectoListItemDto item)
+                                {
+                                    <span>@FormatCuentaOrDash(item.CuentaContable)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(OrdenPagoDirectoListItemDto.Monto)"
+                                          Caption="Monto"
+                                          Width="140px"
+                                          DisplayFormat="N2"
+                                          TextAlignment="GridTextAlignment.Right" />
+                        <DxGridDataColumn Caption="Estado" Width="120px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is OrdenPagoDirectoListItemDto item)
+                                {
+                                    <span class="badge-status @(item.Procesada ? "inactive" : "active")">
+                                        @(item.Procesada ? "Procesada" : "Pendiente")
+                                    </span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is OrdenPagoDirectoListItemDto item)
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button type="button"
+                                                class="btn-icon btn-edit"
+                                                title="Abrir compromiso"
+                                                @onclick="@(() => AbrirOrden(item.NumeroOrden))">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button type="button"
+                                                class="btn-icon btn-consolidate"
+                                                title="Procesar compromiso"
+                                                disabled="@item.Procesada"
+                                                @onclick="@(() => IrAProcesar(item.NumeroOrden))">
+                                            <i class="bi bi-check2-circle"></i>
+                                        </button>
+                                        <button type="button"
+                                                class="btn-icon btn-delete"
+                                                title="Eliminar compromiso"
+                                                disabled="@item.Procesada"
+                                                @onclick="@(() => EliminarAsync(item))">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+@code {
+    [SupplyParameterFromQuery(Name = "proveedor")]
+    public string? ProveedorCodigoQuery { get; set; }
+
+    [SupplyParameterFromQuery(Name = "originUrl")]
+    public string? OriginUrlQuery { get; set; }
+
+    private readonly OrdenPagoDirectoFilterDto filtro = new();
+    private readonly List<OrdenPagoDirectoListItemDto> ordenes = new();
+    private readonly List<ProveedorFiltroItem> proveedoresFiltro = new();
+    private string? proveedorQueryActual;
+    private bool isLoading;
+    private string? errorMessage;
+    private ErrorNotice errorNotice = default!;
+    private ProveedorDetailDto? proveedorSeleccionado;
+
+    private string MontoTexto => ordenes.Sum(x => x.Monto).ToString("N2");
+    private bool CanReturnToOrigin => GetOriginUrl() is not null;
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var proveedorNormalizado = NormalizeProveedorCode(ProveedorCodigoQuery);
+        var cambioProveedor = !string.Equals(proveedorQueryActual, proveedorNormalizado, StringComparison.OrdinalIgnoreCase);
+
+        if (cambioProveedor)
+        {
+            proveedorQueryActual = proveedorNormalizado;
+            filtro.CodigoProveedor = proveedorNormalizado;
+        }
+
+        await BuscarAsync();
+    }
+
+    private async Task BuscarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            await EnsureProveedoresFiltroAsync();
+            await CargarProveedorSeleccionadoAsync();
+
+            var data = await OrdenesPagoDirectoClient.GetAsync(filtro);
+            ordenes.Clear();
+            ordenes.AddRange(data);
+        }
+        catch (Exception ex)
+        {
+            ordenes.Clear();
+            errorMessage = "No se pudieron cargar los compromisos.";
+            Logger.LogError(ex, "Error al cargar compromisos de proveedor.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task LimpiarAsync()
+    {
+        filtro.NumeroOrden = null;
+        filtro.Search = null;
+        filtro.IncludeProcessed = false;
+        filtro.CodigoProveedor = proveedorQueryActual;
+        await BuscarAsync();
+    }
+
+    private async Task OnIncludeProcessedChanged(bool value)
+    {
+        filtro.IncludeProcessed = value;
+        await BuscarAsync();
+    }
+
+    private void NuevaOrden()
+    {
+        var url = "/proveedores/compromisos-proveedor/nuevo";
+        var query = new List<string>();
+
+        if (!string.IsNullOrWhiteSpace(filtro.CodigoProveedor))
+        {
+            query.Add($"proveedor={Uri.EscapeDataString(filtro.CodigoProveedor.Trim())}");
+        }
+
+        query.Add($"returnUrl={Uri.EscapeDataString(GetCurrentRelativeUrl())}");
+
+        var originUrl = GetOriginUrl();
+        if (!string.IsNullOrWhiteSpace(originUrl))
+        {
+            query.Add($"originUrl={Uri.EscapeDataString(originUrl)}");
+        }
+
+        if (query.Count > 0)
+        {
+            url += $"?{string.Join("&", query)}";
+        }
+
+        Navigation.NavigateTo(url);
+    }
+
+    private void AbrirOrden(int numeroOrden)
+    {
+        var url = $"/proveedores/compromisos-proveedor/{numeroOrden}/editar";
+        var query = new List<string>
+        {
+            $"returnUrl={Uri.EscapeDataString(GetCurrentRelativeUrl())}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(filtro.CodigoProveedor))
+        {
+            query.Add($"proveedor={Uri.EscapeDataString(filtro.CodigoProveedor.Trim())}");
+        }
+
+        var originUrl = GetOriginUrl();
+        if (!string.IsNullOrWhiteSpace(originUrl))
+        {
+            query.Add($"originUrl={Uri.EscapeDataString(originUrl)}");
+        }
+
+        url += $"?{string.Join("&", query)}";
+        Navigation.NavigateTo(url);
+    }
+
+    private void IrAProcesar(int numeroOrden)
+    {
+        var query = new List<string>
+        {
+            $"returnUrl={Uri.EscapeDataString(GetCurrentRelativeUrl())}"
+        };
+        var originUrl = GetOriginUrl();
+
+        if (!string.IsNullOrWhiteSpace(originUrl))
+        {
+            query.Add($"originUrl={Uri.EscapeDataString(originUrl)}");
+        }
+
+        Navigation.NavigateTo($"/proveedores/compromisos-proveedor/{numeroOrden}/procesar?{string.Join("&", query)}");
+    }
+
+    private void VolverAlOrigen()
+    {
+        var originUrl = GetOriginUrl();
+        if (string.IsNullOrWhiteSpace(originUrl))
+        {
+            return;
+        }
+
+        Navigation.NavigateTo(originUrl);
+    }
+
+    private async Task EliminarAsync(OrdenPagoDirectoListItemDto item)
+    {
+        var confirmado = await JS.InvokeAsync<bool>(
+            "confirm",
+            $"Eliminar la orden {item.NumeroOrden} de {item.Proveedor}?");
+
+        if (!confirmado)
+        {
+            return;
+        }
+
+        try
+        {
+            await OrdenesPagoDirectoClient.EliminarAsync(item.NumeroOrden);
+            await BuscarAsync();
+        }
+        catch (Exception ex)
+        {
+            errorNotice.ShowError("No se pudo eliminar el compromiso.", ex);
+            Logger.LogError(ex, "Error al eliminar compromiso {NumeroOrden}", item.NumeroOrden);
+        }
+    }
+
+    private async Task EnsureProveedoresFiltroAsync()
+    {
+        if (proveedoresFiltro.Count > 0)
+        {
+            return;
+        }
+
+        var data = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto());
+        proveedoresFiltro.Clear();
+        proveedoresFiltro.AddRange(data
+            .Where(x => !string.IsNullOrWhiteSpace(x.Codigo))
+            .OrderBy(x => x.Codigo, StringComparer.OrdinalIgnoreCase)
+            .Select(x => new ProveedorFiltroItem
+            {
+                Codigo = x.Codigo.Trim(),
+                Nombre = x.Nombre?.Trim() ?? string.Empty,
+                Rtn = NormalizeProveedorCode(x.Rtn),
+                Display = BuildProveedorDisplay(x.Codigo, x.Nombre)
+            }));
+    }
+
+    private async Task CargarProveedorSeleccionadoAsync()
+    {
+        proveedorSeleccionado = null;
+
+        if (string.IsNullOrWhiteSpace(filtro.CodigoProveedor))
+        {
+            return;
+        }
+
+        proveedorSeleccionado = await ProveedoresClient.ObtenerPorCodigoAsync(filtro.CodigoProveedor.Trim());
+    }
+
+    private string GetCurrentRelativeUrl()
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            return "/proveedores/compromisos-proveedor";
+        }
+
+        return relative.StartsWith("/", StringComparison.Ordinal) ? relative : $"/{relative}";
+    }
+
+    private string? GetOriginUrl()
+    {
+        var originUrl = NormalizeLocalUrl(OriginUrlQuery);
+        if (string.IsNullOrWhiteSpace(originUrl))
+        {
+            return null;
+        }
+
+        return string.Equals(GetUrlPath(originUrl), "/proveedores/compromisos-proveedor", StringComparison.OrdinalIgnoreCase)
+            ? null
+            : originUrl;
+    }
+
+    private static string? NormalizeLocalUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var normalized = url.Trim();
+        return !normalized.StartsWith("/", StringComparison.Ordinal) || normalized.StartsWith("//", StringComparison.Ordinal)
+            ? null
+            : normalized;
+    }
+
+    private static string GetUrlPath(string url)
+    {
+        var separatorIndex = url.IndexOfAny(['?', '#']);
+        return separatorIndex >= 0 ? url[..separatorIndex] : url;
+    }
+
+    private static string? NormalizeProveedorCode(string? codigo)
+        => string.IsNullOrWhiteSpace(codigo) ? null : codigo.Trim();
+
+    private static string BuildProveedorDisplay(string? codigo, string? nombre)
+    {
+        var codigoNormalizado = NormalizeProveedorCode(codigo) ?? string.Empty;
+        var nombreNormalizado = string.IsNullOrWhiteSpace(nombre) ? null : nombre.Trim();
+
+        if (string.Equals(
+            codigoNormalizado,
+            ProveedoresConstants.CodigoProveedorGenericoCompromisos,
+            StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(
+                codigoNormalizado,
+                ProveedoresConstants.CodigoProveedorGenericoCompromisosLegacy,
+            StringComparison.OrdinalIgnoreCase))
+        {
+            var nombreGenerico = string.IsNullOrWhiteSpace(nombreNormalizado)
+                ? ProveedoresConstants.NombreProveedorGenericoCompromisos
+                : nombreNormalizado;
+
+            return $"{codigoNormalizado} - {nombreGenerico} (cabecera manual)";
+        }
+
+        return string.IsNullOrWhiteSpace(nombreNormalizado)
+            ? codigoNormalizado
+            : $"{codigoNormalizado} - {nombreNormalizado}";
+    }
+
+    private static string FormatCuentaOrDash(string? value)
+    {
+        var formatted = AccountCodeFormatter.Format(value);
+        return string.IsNullOrWhiteSpace(formatted) ? "-" : formatted;
+    }
+
+    private static string GetTextOrDash(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+
+    private sealed class ProveedorFiltroItem
+    {
+        public string Codigo { get; init; } = string.Empty;
+        public string Nombre { get; init; } = string.Empty;
+        public string? Rtn { get; init; }
+        public string Display { get; init; } = string.Empty;
+    }
+}

@@ -219,8 +219,7 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
         if (!isNew)
         {
             var accountId = request.AccountId
-                ?? throw new InvalidOperationException("La cuenta contable no existe.");
-
+                ?? throw new InvalidOperationException("El identificador de la cuenta es obligatorio para editar.");
             entity = await _context.con_plan_cuentas
                          .FirstOrDefaultAsync(c => c.account_id == accountId, cancellationToken)
                      ?? throw new InvalidOperationException("La cuenta contable no existe.");
@@ -497,10 +496,14 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
 
     public async Task<IReadOnlyList<TipoPartidaDto>> GetTiposPartidaAsync(CancellationToken cancellationToken = default)
     {
-        return await _context.cnt_tipopartida
+        var companyId = EnsureCompanyId();
+        return await _context.con_tipo_transacciones
             .AsNoTracking()
-            .OrderBy(t => t.cod_tipopartida)
-            .Select(t => new TipoPartidaDto(t.cod_tipopartida, t.nombre))
+            .Where(t => t.company_id == companyId)
+            .OrderBy(t => t.code)
+            .Select(t => new TipoPartidaDto(
+                t.type_id,
+                $"{t.code} - {(string.IsNullOrWhiteSpace(t.description) ? t.name : t.description!)}"))
             .ToListAsync(cancellationToken);
     }
 
@@ -1860,6 +1863,107 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
         return true;
     }
 
+    public async Task<IReadOnlyList<ReglaIntegracionListDto>> GetReglasIntegracionAbonosAsync(CancellationToken cancellationToken = default)
+    {
+        var companyId = EnsureCompanyId();
+        return await _context.con_regla_integracions
+            .AsNoTracking()
+            .Where(r => r.company_id == companyId && r.module == "CAJA")
+            .Select(r => new ReglaIntegracionListDto(
+                r.regla_id,
+                r.company_id,
+                r.module,
+                r.document_type_id,
+                _context.cfg_document_types.Where(d => d.document_type_id == r.document_type_id).Select(d => d.code).FirstOrDefault() ?? string.Empty,
+                r.scenario_code,
+                r.description,
+                r.debit_account_id,
+                r.debit_account != null ? r.debit_account.code : string.Empty,
+                r.debit_account != null ? r.debit_account.name : string.Empty,
+                r.credit_account_id,
+                r.credit_account != null ? r.credit_account.code : string.Empty,
+                r.credit_account != null ? r.credit_account.name : string.Empty,
+                r.cost_center_id,
+                r.cost_center != null ? r.cost_center.code : null,
+                r.cost_center != null ? r.cost_center.name : null,
+                r.is_active,
+                r.created_at,
+                r.created_by,
+                r.updated_at,
+                r.updated_by
+            ))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<long> SaveReglaIntegracionAbonosAsync(ReglaIntegracionUpsertDto request, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        var companyId = EnsureCompanyId();
+
+        var documentTypeId = await _context.cfg_document_types
+            .Where(d => d.company_id == companyId && d.module == "CAJA" && d.code == "ABO")
+            .Select(d => d.document_type_id)
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (documentTypeId == 0)
+        {
+            throw new InvalidOperationException("No se encontró el tipo de documento CAJA/ABO configurado en el sistema.");
+        }
+
+        con_regla_integracion entity;
+        if (request.ReglaId.HasValue && request.ReglaId.Value > 0)
+        {
+            entity = await _context.con_regla_integracions
+                .FirstOrDefaultAsync(r => r.company_id == companyId && r.regla_id == request.ReglaId.Value, cancellationToken)
+                ?? throw new InvalidOperationException("La regla de integración especificada no existe.");
+        }
+        else
+        {
+            var duplicate = await _context.con_regla_integracions
+                .AnyAsync(r => r.company_id == companyId && r.module == "CAJA" && r.scenario_code == request.ScenarioCode, cancellationToken);
+            if (duplicate)
+            {
+                throw new InvalidOperationException($"Ya existe una regla de integración para el escenario '{request.ScenarioCode}'.");
+            }
+
+            entity = new con_regla_integracion
+            {
+                company_id = companyId,
+                module = "CAJA",
+                document_type_id = documentTypeId,
+                scenario_code = request.ScenarioCode,
+                created_at = DateTime.UtcNow,
+                created_by = request.User
+            };
+            _context.con_regla_integracions.Add(entity);
+        }
+
+        entity.description = request.Description;
+        entity.debit_account_id = request.DebitAccountId;
+        entity.credit_account_id = request.CreditAccountId;
+        entity.cost_center_id = request.CostCenterId;
+        entity.is_active = request.IsActive;
+        entity.updated_at = DateTime.UtcNow;
+        entity.updated_by = request.User;
+
+        await _context.SaveChangesAsync(cancellationToken);
+        return entity.regla_id;
+    }
+
+    public async Task<bool> DeleteReglaIntegracionAbonosAsync(long reglaId, CancellationToken cancellationToken = default)
+    {
+        if (reglaId <= 0) return false;
+        var companyId = EnsureCompanyId();
+        
+        var entity = await _context.con_regla_integracions
+            .FirstOrDefaultAsync(r => r.company_id == companyId && r.regla_id == reglaId, cancellationToken);
+            
+        if (entity is null) return false;
+
+        _context.con_regla_integracions.Remove(entity);
+        await _context.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 }
 
 

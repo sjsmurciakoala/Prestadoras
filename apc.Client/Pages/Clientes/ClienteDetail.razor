@@ -1,38 +1,38 @@
+@page "/clientes/{Id:int}"
 @attribute [Authorize]
 
 @using Microsoft.AspNetCore.Components
 @using SIAD.Core.DTOs.Clientes
 @using apc.Client.Services.Clientes
 @using apc.Client.Pages.Clientes.Components
+@using apc.Client.Services.Facturacion
 @using DevExpress.Blazor
 
 @inject ClientesClient ClientesClient
 @inject NavigationManager Navigation
 @inject ILogger<ClienteDetail> Logger
+@inject CobranzaClient CobranzaClient
 
 <div class="page-container cliente-detail-page">
     <DxToastProvider Name="MainToast" MaxToastCount="4" />
 
     <div class="cliente-detail-scroll">
 
-        @if (MostrarEncabezado)
-        {
-            <!-- HEADER -->
-            <div class="header-section">
-                <div>
-                    <h2 class="page-title">Detalle de Cliente</h2>
-                    <p class="page-subtitle">
-                        Información general, dirección, contacto y opciones del cliente
-                    </p>
-                </div>
-
-                <div class="header-actions">
-                    <DxButton Text="Volver" Click="BackToList" IconCssClass="bi bi-arrow-left"
-                        RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
-                        CssClass="btn-modern" />
-                </div>
+        <!-- HEADER -->
+        <div class="header-section">
+            <div>
+                <h2 class="page-title">Detalle de Cliente</h2>
+                <p class="page-subtitle">
+                    Información general, dirección, contacto y opciones del cliente
+                </p>
             </div>
-        }
+
+            <div class="header-actions">
+                <DxButton Text="Volver" Click="BackToList" IconCssClass="bi bi-arrow-left"
+                    RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                    CssClass="btn-modern" />
+            </div>
+        </div>
 
         @if (isLoading)
         {
@@ -94,6 +94,14 @@
                     </div>
                 </div>
 
+                @if (cliente.BloqueadoCobranza == true)
+                {
+                    <div class="alert alert-danger d-flex align-items-center gap-3 mt-3 mb-0"
+                         style="font-size:1rem;font-weight:700;border-radius:8px;border-left:6px solid #dc3545;">
+                        <i class="bi bi-lock-fill" style="font-size:1.4rem;"></i>
+                        <span>🚫 CLIENTE BLOQUEADO PARA COBRANZAS Y FACTURACIÓN</span>
+                    </div>
+                }
             </div>
 
             <!-- ACCIONES DEL CLIENTE -->
@@ -119,17 +127,14 @@
                     <DxButton Text="Foto medidor" Click="AbrirFotoMedidor"
                         IconCssClass="bi bi-camera" RenderStyle="ButtonRenderStyle.Secondary"
                         RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
-                    <DxButton Text="Historial cortes" Enabled="false"
-                        IconCssClass="bi bi-scissors" RenderStyle="ButtonRenderStyle.Secondary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
-                    <DxButton Text="Historial de pagos" Enabled="false"
-                        IconCssClass="bi bi-cash-stack" RenderStyle="ButtonRenderStyle.Secondary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
-                    <DxButton Text="Abono especial" Enabled="false"
+                    <DxButton Text="Abono especial" Click="AbrirAbonoEspecial"
                         IconCssClass="bi bi-coin" RenderStyle="ButtonRenderStyle.Secondary"
                         RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
-                    <DxButton Text="Acción cobranza" Enabled="false"
-                        IconCssClass="bi bi-exclamation-triangle" RenderStyle="ButtonRenderStyle.Secondary"
+                    <DxButton Text="Acción cobranza" Click="AbrirAccionesCobranza"
+                        IconCssClass="bi bi-journal-text" RenderStyle="ButtonRenderStyle.Primary"
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                    <DxButton Text="Bitácora Estado" Click="AbrirEstadoLog"
+                        IconCssClass="bi bi-clock-history" RenderStyle="ButtonRenderStyle.Secondary"
                         RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
                 </div>
             </div>
@@ -175,6 +180,9 @@
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="12">
                                     <div class="field-value">@MostrarTexto(cliente.Email)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="12">
+                                    <div class="field-value">@MostrarTexto(cliente.ClaveCatastral)</div>
                                 </DxFormLayoutItem>
                             </DxFormLayoutGroup>
                         </DxFormLayout>
@@ -263,9 +271,12 @@
                     <DxFormLayoutItem Caption="Ciclo" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
                         <div class="field-value">@MostrarTexto(cliente.CicloDescripcion)</div>
                     </DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
-                        <div class="field-value">@MostrarTexto(cliente.LetraCodigo)</div>
-                    </DxFormLayoutItem>
+                    @if (cliente.TieneMedidor != true)
+                    {
+                        <DxFormLayoutItem Caption="Letra" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                            <div class="field-value">@MostrarTexto(cliente.LetraCodigo)</div>
+                        </DxFormLayoutItem>
+                    }
                     <DxFormLayoutItem Caption="Indicativo ruta" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
                         <div class="field-value">@MostrarTexto(cliente.IndicativoRuta)</div>
                     </DxFormLayoutItem>
@@ -292,11 +303,8 @@
                     <DxFormLayoutItem Caption="N° medidor" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
                         <div class="field-value">@MostrarTexto(cliente.MedidorNumero)</div>
                     </DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Contador" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
-                        <div class="field-value">@MostrarTexto(cliente.Contador)</div>
-                    </DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Clave catastral" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
-                        <div class="field-value">@MostrarTexto(cliente.ClaveCatastral)</div>
+                    <DxFormLayoutItem Caption="Clave SURE" ColSpanXs="12" ColSpanMd="4" ColSpanLg="3">
+                        <div class="field-value">@MostrarTexto(cliente.ClaveSure)</div>
                     </DxFormLayoutItem>
                 </DxFormLayout>
             </div>
@@ -383,16 +391,87 @@
          Scrollable="true"
          HeaderText="Estado de cuenta"
          CssClass="historico-consumo-popup">
-    <BodyTemplate>
+    <BodyContentTemplate>
         <div class="p-2 historico-consumo-body">
             <ClienteEstadoCuentaTab ClienteId="@Id" @key="(mostrarEstadoCuentaModal, Id)" />
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+<!-- Popup acciones de cobranza -->
+<DxPopup Visible="@mostrarAccionesCobranzaModal"
+         VisibleChanged="@(v => { mostrarAccionesCobranzaModal = v; })"
+         Width="min(1100px, 96vw)"
+         MaxHeight="90vh"
+         Scrollable="true"
+         HeaderText="Acciones de cobranza"
+         CssClass="historico-consumo-popup">
+    <BodyTemplate>
+        <div class="p-2 historico-consumo-body">
+            @if (cliente is not null)
+            {
+                <ClienteAccionesCobranzaTab ClienteClave="@cliente.Codigo"
+                                            @key="(mostrarAccionesCobranzaModal, cliente.Codigo)" />
+            }
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<!-- Popup llamadas de cobranza -->
+<DxPopup Visible="@mostrarLlamadasCobranzaModal"
+         VisibleChanged="@(v => { mostrarLlamadasCobranzaModal = v; })"
+         Width="min(900px, 95vw)"
+         MaxHeight="90vh"
+         Scrollable="true"
+         HeaderText="Llamadas de cobranza"
+         CssClass="historico-consumo-popup">
+    <BodyTemplate>
+        <div class="p-2 historico-consumo-body">
+            @if (cliente is not null)
+            {
+                <ClienteLlamadasCobranzaTab ClienteClave="@cliente.Codigo"
+                                            @key="(mostrarLlamadasCobranzaModal, cliente.Codigo)" />
+            }
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<!-- Popup notas de cobro -->
+<DxPopup Visible="@mostrarNotasCobroModal"
+         VisibleChanged="@(v => { mostrarNotasCobroModal = v; })"
+         Width="min(980px, 95vw)"
+         MaxHeight="90vh"
+         Scrollable="true"
+         HeaderText="Notas de cobro"
+         CssClass="historico-consumo-popup">
+    <BodyTemplate>
+        <div class="p-2 historico-consumo-body">
+            @if (cliente is not null)
+            {
+                <ClienteNotasCobroTab ClienteClave="@cliente.Codigo"
+                                      @key="(mostrarNotasCobroModal, cliente.Codigo)" />
+            }
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<!-- Popup bitácora de Estado y Clasificación -->
+<DxPopup Visible="@mostrarEstadoLogModal"
+         VisibleChanged="@(v => { mostrarEstadoLogModal = v; })"
+         Width="min(900px, 95vw)"
+         MaxHeight="90vh"
+         Scrollable="true"
+         HeaderText="Bitácora de Estado y Clasificación"
+         CssClass="historico-consumo-popup">
+    <BodyTemplate>
+        <div class="p-2 historico-consumo-body">
+            <ClienteEstadoLogTab ClienteId="@Id" @key="(mostrarEstadoLogModal, Id)" />
         </div>
     </BodyTemplate>
 </DxPopup>
 
 @code {
     [Parameter] public int Id { get; set; }
-    [Parameter] public bool MostrarEncabezado { get; set; } = true;
     [Parameter]
     [SupplyParameterFromQuery(Name = "abrirPruebaCalculoV3")]
     public bool AbrirPruebaCalculoV3DesdeQuery { get; set; }
@@ -403,6 +482,10 @@
     bool mostrarFotoMedidorModal = false;
     bool mostrarPruebaCalculoModal = false;
     bool mostrarEstadoCuentaModal = false;
+    bool mostrarAccionesCobranzaModal = false;
+    bool mostrarLlamadasCobranzaModal = false;
+    bool mostrarNotasCobroModal = false;
+    bool mostrarEstadoLogModal = false;
     ClienteEstadoCuentaDto? estadoCuenta;
 
     protected override async Task OnParametersSetAsync()
@@ -438,10 +521,15 @@
 
     void BackToList() => Navigation.NavigateTo("/clientes");
     void AbrirHistoricoConsumo() => mostrarHistoricoConsumoModal = true;
+    void AbrirAbonoEspecial() => Navigation.NavigateTo($"/facturacion/captacion/abono-especial/{Id}");
     void AbrirServiciosTarifario() => Navigation.NavigateTo($"/tarifario/cliente-servicio-v3?clienteId={Id}");
     void AbrirPruebaCalculo() => mostrarPruebaCalculoModal = true;
     void AbrirFotoMedidor() => mostrarFotoMedidorModal = true;
     void AbrirEstadoCuenta() => mostrarEstadoCuentaModal = true;
+    void AbrirAccionesCobranza() => mostrarAccionesCobranzaModal = true;
+    void AbrirLlamadasCobranza() => mostrarLlamadasCobranzaModal = true;
+    void AbrirNotasCobro() => mostrarNotasCobroModal = true;
+    void AbrirEstadoLog() => mostrarEstadoLogModal = true;
 
     string GetInitials(string? name)
     => string.IsNullOrWhiteSpace(name) ? "C" : name.Substring(0, 1).ToUpper();

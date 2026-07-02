@@ -10,7 +10,7 @@
 @inject InformesClient InformesClient
 @inject PolizasClient PolizasClient
 
-<PageTitle>Partidas de Contabilidad</PageTitle>
+<PageTitle>SIAD - Partidas de Contabilidad</PageTitle>
 
 <div class="page-container">
     <div class="header-section">
@@ -224,7 +224,11 @@
                     PageSize="10"
                     SizeMode="SizeMode.Small">
                 <Columns>
-                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.AccountCode)" Caption="Cuenta" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.AccountCode)" Caption="Cuenta" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @AccountCodeFormatter.Format(((PolizaLineaConDetallesDto)cell.DataItem).AccountCode)
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
                     <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.AccountName)" Caption="Descripción" MinWidth="240" />
                     <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.CostCenterCode)" Caption="Centro costo" Width="140px" />
                     <DxGridDataColumn FieldName="@nameof(PolizaLineaConDetallesDto.Description)" Caption="Detalle" MinWidth="220" />

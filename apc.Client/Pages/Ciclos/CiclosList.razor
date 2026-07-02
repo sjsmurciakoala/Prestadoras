@@ -1,4 +1,4 @@
-@page "/ciclos"
+﻿@page "/ciclos"
 @attribute [Authorize]
 
 @using DevExpress.Blazor
@@ -8,6 +8,8 @@
 
 @inject CiclosClient CiclosClient
 @inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Ciclos</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="CiclosToast" MaxToastCount="4" />

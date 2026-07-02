@@ -1,0 +1,162 @@
+﻿@page "/informes/cobranzas/analisis-antiguedad-cobros"
+@attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
+@using System.Globalization
+@inject NavigationManager NavigationManager
+
+<PageTitle>SIAD - Analisis de antigüedad de cobros</PageTitle>
+
+<div class="page-container reporte-analisis-antiguedad-cobros">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Analisis de antigüedad de cobros</h2>
+            <p class="page-subtitle">Seleccione la fecha base y el retroceso en meses o años para generar el PDF del análisis de cobro.</p>
+        </div>
+
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/cobranzas"))"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Limpiar"
+                      Click="LimpiarFiltros"
+                      IconCssClass="bi bi-eraser"
+                      RenderStyle="ButtonRenderStyle.Secondary" />
+            <DxButton Text="Generar PDF"
+                      Click="GenerarPdf"
+                      IconCssClass="bi bi-file-earmark-pdf"
+                      RenderStyle="ButtonRenderStyle.Primary" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+    }
+
+    <div class="modern-card p-4">
+        <DxFormLayout ColCountMd="12">
+            <DxFormLayoutItem Caption="Fecha base" ColSpanMd="3">
+                <DxDateEdit @bind-Date="fechaBase"
+                            NullText="Seleccione fecha"
+                            DisplayFormat="dd/MM/yyyy" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Retroceso" ColSpanMd="3">
+                <DxSpinEdit @bind-Value="retrocesoValor"
+                            MinValue="1"
+                            MaxValue="120"
+                            Increment="1" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Unidad" ColSpanMd="3">
+                <DxComboBox Data="@unidadesTiempo"
+                            @bind-Value="unidadTiempo"
+                            ValueFieldName="@nameof(UnidadTiempoOption.Id)"
+                            TextFieldName="@nameof(UnidadTiempoOption.Nombre)"
+                            DropDownStyleMode="DropDownStyleMode.DropDownList" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Fecha mínima calculada" ColSpanMd="3">
+                <DxTextBox Text="@fechaMinimaCalculadaTexto"
+                           ReadOnly="true"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Reporte" ColSpanMd="6">
+                <DxTextBox Text="Analisis de antigüedad de cobros"
+                           ReadOnly="true"
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+    </div>
+
+    <div class="modern-card p-3 viewer-shell">
+        @if (string.IsNullOrWhiteSpace(pdfUrl))
+        {
+            <div class="empty-preview">
+                <div class="empty-preview__icon">
+                    <i class="bi bi-file-earmark-pdf"></i>
+                </div>
+                <h3 class="empty-preview__title">PDF no generado</h3>
+                <p class="empty-preview__description">
+                    Defina la fecha base y el retroceso para previsualizar el informe.
+                </p>
+            </div>
+        }
+        else
+        {
+            <iframe class="pdf-frame"
+                    src="@pdfUrl"
+                    title="Analisis de antigüedad de cobros"></iframe>
+        }
+    </div>
+</div>
+
+@code {
+    private sealed record UnidadTiempoOption(string Id, string Nombre);
+
+    private static readonly List<UnidadTiempoOption> unidadesTiempo =
+    [
+        new("MESES", "Meses"),
+        new("ANIOS", "Años")
+    ];
+
+    private DateTime? fechaBase = DateTime.Today;
+    private int retrocesoValor = 12;
+    private string unidadTiempo = "MESES";
+    private string? errorMessage;
+    private string? pdfUrl;
+
+    private string fechaMinimaCalculadaTexto
+    {
+        get
+        {
+            if (!fechaBase.HasValue || retrocesoValor <= 0)
+            {
+                return string.Empty;
+            }
+
+            var fechaMinima = unidadTiempo == "ANIOS"
+                ? fechaBase.Value.Date.AddYears(-retrocesoValor)
+                : fechaBase.Value.Date.AddMonths(-retrocesoValor);
+
+            return fechaMinima.ToString("dd/MM/yyyy", CultureInfo.InvariantCulture);
+        }
+    }
+
+    private void GenerarPdf()
+    {
+        if (!fechaBase.HasValue)
+        {
+            errorMessage = "La fecha base es obligatoria.";
+            pdfUrl = null;
+            return;
+        }
+
+        if (retrocesoValor <= 0)
+        {
+            errorMessage = "El retroceso debe ser mayor que cero.";
+            pdfUrl = null;
+            return;
+        }
+
+        if (unidadTiempo is not ("MESES" or "ANIOS"))
+        {
+            errorMessage = "La unidad de tiempo no es válida.";
+            pdfUrl = null;
+            return;
+        }
+
+        errorMessage = null;
+        pdfUrl =
+            $"api/informes/reportes/{SIAD.Core.Constants.ReportesWebConstants.CodigoReporteAnalisisAntiguedadCobros}/pdf" +
+            $"?fechaBase={Uri.EscapeDataString(fechaBase.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
+            $"&retrocesoValor={retrocesoValor.ToString(CultureInfo.InvariantCulture)}" +
+            $"&unidadTiempo={Uri.EscapeDataString(unidadTiempo)}";
+    }
+
+    private void LimpiarFiltros()
+    {
+        fechaBase = DateTime.Today;
+        retrocesoValor = 12;
+        unidadTiempo = "MESES";
+        errorMessage = null;
+        pdfUrl = null;
+    }
+}

@@ -1,4 +1,4 @@
-﻿@using DevExpress.Blazor
+@using DevExpress.Blazor
 
 <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
     <DataAnnotationsValidator />
@@ -41,7 +41,9 @@
         </DxFormLayoutItem>
 
         <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="6">
-            <DxTextBox @bind-Text="Model.CodCuenta"
+            <DxTextBox Text="@AccountCodeFormatter.Format(Model.CodCuenta)"
+                       TextChanged="@OnCodCuentaChanged"
+                       TextExpression="@(() => Model.CodCuenta)"
                        NullText="Código cuenta contable"
                        MaxLength="100" />
             <ValidationMessage For="() => Model.CodCuenta" />
@@ -93,6 +95,12 @@
             await OnValidSubmit.InvokeAsync();
         }
     }
+
+    private void OnCodCuentaChanged(string? value)
+    {
+        Model.CodCuenta = AccountCodeFormatter.Normalize(value);
+    }
+
     private async Task Cancel()
     {
         if (OnCancel.HasDelegate)

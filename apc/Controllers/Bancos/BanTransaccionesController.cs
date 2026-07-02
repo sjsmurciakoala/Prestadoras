@@ -10,6 +10,7 @@ using SIAD.Services.Bancos;
 using System.IO;
 using System.Security.Claims;
 using apc.Security;
+using apc.Reportes;
 
 namespace apc.Controllers.Bancos;
 
@@ -197,7 +198,7 @@ public sealed class BanTransaccionesController : ControllerBase
                     "No fue posible determinar la empresa actual."));
             }
 
-            var transaccion = await transaccionesService.GetTransaccionByIdAsync(
+            var transaccion = await transaccionesService.GetTransaccionDetalleAsync(
                 banKardexId,
                 companyId,
                 ct);
@@ -209,10 +210,19 @@ public sealed class BanTransaccionesController : ControllerBase
                     "La transaccion bancaria especificada no existe."));
             }
 
-            var reporte = new Rpt_DE_Transacciones_Bancarias
+            if (companyId > int.MaxValue || banKardexId > int.MaxValue)
             {
-                DataSource = new[] { transaccion }
-            };
+                return BadRequest(CrearProblemDetalle(
+                    "Parametros Invalidos",
+                    "Los IDs exceden el rango soportado por el reporte."));
+            }
+
+            var reporte = new Rpt_DE_Transacciones_Bancarias();
+            reporte.RequestParameters = false;
+            reporte.Parameters["id_compani"].Value = (int)companyId;
+            reporte.Parameters["id_compani"].Visible = false;
+            reporte.Parameters["kdx_id"].Value = (int)banKardexId;
+            reporte.Parameters["kdx_id"].Visible = false;
 
             using var stream = new MemoryStream();
             reporte.ExportToPdf(stream);
@@ -235,6 +245,72 @@ public sealed class BanTransaccionesController : ControllerBase
             return StatusCode(500, CrearProblemDetalle(
                 "Error del Servidor",
                 $"No fue posible generar el reporte: {ex.Message}"));
+        }
+    }
+
+    [HttpGet("reporte/lista")]
+    public IActionResult GetReporteListaTransacciones(
+        [FromQuery] DateOnly? fechaDesde = null,
+        [FromQuery] DateOnly? fechaHasta = null)
+    {
+        try
+        {
+            var companyId = currentCompanyService.GetCompanyId();
+            if (companyId <= 0)
+            {
+                return BadRequest(CrearProblemDetalle(
+                    "Compania Invalida",
+                    "No fue posible determinar la empresa actual."));
+            }
+
+            var hoy = DateOnly.FromDateTime(DateTime.Today);
+            var desde = fechaDesde ?? new DateOnly(hoy.Year, hoy.Month, 1);
+            var hasta = fechaHasta ?? hoy;
+
+            if (desde > hasta)
+            {
+                return BadRequest(CrearProblemDetalle(
+                    "Parametros Invalidos",
+                    "La fecha inicial no puede ser mayor que la fecha final."));
+            }
+
+            if (companyId > int.MaxValue)
+            {
+                return BadRequest(CrearProblemDetalle(
+                    "Parametros Invalidos",
+                    "El ID de la empresa excede el rango soportado por el reporte."));
+            }
+
+            var reporte = new Rpt_Dev_Lista_Transacciones_Bancarias();
+            reporte.RequestParameters = false;
+            reporte.Parameters["p_Compania_ID"].Value = (int)companyId;
+            reporte.Parameters["p_Compania_ID"].Visible = false;
+            reporte.Parameters["p_Fecha_Inicio"].Value = desde;
+            reporte.Parameters["p_Fecha_Inicio"].Visible = false;
+            reporte.Parameters["p_Fecha_Fin"].Value = hasta;
+            reporte.Parameters["p_Fecha_Fin"].Visible = false;
+
+            using var stream = new MemoryStream();
+            reporte.ExportToPdf(stream);
+
+            return File(stream.ToArray(), "application/pdf");
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(CrearProblemDetalle("Parametro Invalido", ex.Message));
+        }
+        catch (PostgresException ex)
+        {
+            var detalle = string.IsNullOrWhiteSpace(ex.MessageText) ? ex.Message : ex.MessageText;
+            return BadRequest(CrearProblemDetalle(
+                "Error de Base de Datos",
+                detalle));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, CrearProblemDetalle(
+                "Error del Servidor",
+                $"No fue posible generar el reporte de transacciones: {ex.Message}"));
         }
     }
 

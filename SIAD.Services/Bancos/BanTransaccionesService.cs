@@ -1,4 +1,4 @@
-using System.Data;
+﻿using System.Data;
 using System.Text;
 using AutoMapper;
 using Microsoft.EntityFrameworkCore;
@@ -48,7 +48,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             if (cuentaInfo is null)
             {
                 // LOG: Cuenta no encontrada
-                Console.WriteLine($"❌ Cuenta {bancoCuentaId} no encontrada para company {companyId}");
+                Console.WriteLine($"âŒ Cuenta {bancoCuentaId} no encontrada para company {companyId}");
                 return Array.Empty<BanTransaccionListDto>();
             }
 
@@ -58,8 +58,8 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
             if (bancoIdToUse <= 0)
             {
-                // LOG: Banco ID inválido
-                Console.WriteLine($"❌ BancoId inválido: bancoId={bancoId}, ban_banco_id={cuentaInfo.ban_banco_id}");
+                // LOG: Banco ID invÃ¡lido
+                Console.WriteLine($"âŒ BancoId invÃ¡lido: bancoId={bancoId}, ban_banco_id={cuentaInfo.ban_banco_id}");
                 return Array.Empty<BanTransaccionListDto>();
             }
 
@@ -67,7 +67,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             var fechaHastaValue = fechaHasta ?? GetLastDayOfCurrentMonth();
 
             // LOG: Llamada al SP
-            Console.WriteLine($"✅ Llamando SP: banco={bancoIdToUse}, cuenta={cuentaInfo.banco_cuenta_id}, desde={fechaDesdeValue}, hasta={fechaHastaValue}");
+            Console.WriteLine($"âœ… Llamando SP: banco={bancoIdToUse}, cuenta={cuentaInfo.banco_cuenta_id}, desde={fechaDesdeValue}, hasta={fechaHastaValue}");
 
             var transaccionesSp = await GetTransaccionesFromProcedureAsync(
                 bancoIdToUse,
@@ -79,7 +79,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             await CompletarCamposDesdeKardexAsync(companyId, transaccionesSp, ct);
 
             // LOG: Resultado del SP
-            Console.WriteLine($"📊 SP retornó {transaccionesSp.Count} registros");
+            Console.WriteLine($"ðŸ“Š SP retornÃ³ {transaccionesSp.Count} registros");
 
             var filtradas = AplicarFiltroFechas(transaccionesSp, fechaDesde, fechaHasta);
             if (incluirAnuladas)
@@ -142,6 +142,8 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
                 ActualizadoEn = k.updated_at
             })
             .ToListAsync(ct);
+
+        await CompletarCamposDesdeKardexAsync(companyId, transacciones, ct);
 
         if (incluirAnuladas)
         {
@@ -369,11 +371,11 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (contraLineas.Count == 0)
         {
-            throw new ArgumentException("Debe especificar al menos una contracuenta válida.", nameof(contraCuentas));
+            throw new ArgumentException("Debe especificar al menos una contracuenta vÃ¡lida.", nameof(contraCuentas));
         }
         if (contraLineas.Any(l => string.IsNullOrWhiteSpace(l.Descripcion)))
         {
-            throw new ArgumentException("La descripción de la partida es obligatoria.", nameof(contraCuentas));
+            throw new ArgumentException("La descripciÃ³n de la partida es obligatoria.", nameof(contraCuentas));
         }
         if (contraLineas.Any(l => string.IsNullOrWhiteSpace(l.SourceDocument)))
         {
@@ -470,7 +472,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
             if (kardexId <= 0)
             {
-                throw new InvalidOperationException("No fue posible registrar la transacción bancaria.");
+                throw new InvalidOperationException("No fue posible registrar la transacciÃ³n bancaria.");
             }
 
             if (partidaId.HasValue && partidaId.Value > 0)
@@ -483,7 +485,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
                     ct);
             }
 
-            return (kardexId, saldoResultante);
+            return (BanKardexId: kardexId, SaldoResultante: saldoResultante);
         }
         finally
         {
@@ -536,7 +538,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (contraIds.Count == 0)
         {
-            throw new InvalidOperationException("Debe especificar al menos una contracuenta válida.");
+            throw new InvalidOperationException("Debe especificar al menos una contracuenta vÃ¡lida.");
         }
 
         var cuentasContra = await context.con_plan_cuentas
@@ -547,17 +549,17 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (cuentasContra.Count != contraIds.Count)
         {
-            throw new InvalidOperationException("Una o más contracuentas no existen en la empresa actual.");
+            throw new InvalidOperationException("Una o mÃ¡s contracuentas no existen en la empresa actual.");
         }
 
         if (cuentasContra.Any(c => !c.allows_posting))
         {
-            throw new InvalidOperationException("Una o más contracuentas no permiten movimientos.");
+            throw new InvalidOperationException("Una o mÃ¡s contracuentas no permiten movimientos.");
         }
 
         if (cuentasContra.Any(c => !IsCuentaActiva(c.status)))
         {
-            throw new InvalidOperationException("Una o más contracuentas están inactivas.");
+            throw new InvalidOperationException("Una o mÃ¡s contracuentas estÃ¡n inactivas.");
         }
 
         var cuentasContraLookup = cuentasContra.ToDictionary(c => c.account_id, c => (c.code, c.name));
@@ -570,7 +572,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (tipoInfo is null)
         {
-            throw new InvalidOperationException("El tipo de transacción no está configurado.");
+            throw new InvalidOperationException("El tipo de transacciÃ³n no estÃ¡ configurado.");
         }
 
         var entraSale = string.IsNullOrWhiteSpace(tipoInfo.entra_sale)
@@ -579,7 +581,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (entraSale != "E" && entraSale != "S")
         {
-            throw new InvalidOperationException("El tipo de transacción no tiene configuración válida de entrada/salida.");
+            throw new InvalidOperationException("El tipo de transacciÃ³n no tiene configuraciÃ³n vÃ¡lida de entrada/salida.");
         }
 
         var periodId = await ResolvePeriodoIdAsync(companyId, fechaMovimiento, ct);
@@ -595,7 +597,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         var amount = Math.Abs(monto);
         if (Math.Abs(amount - totalContra) > 0.01m)
         {
-            throw new InvalidOperationException("El monto de la transacción no coincide con el total de las contracuentas.");
+            throw new InvalidOperationException("El monto de la transacciÃ³n no coincide con el total de las contracuentas.");
         }
 
         var bankDebit = entraSale == "E" ? totalContra : 0m;
@@ -612,7 +614,6 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         }
 
         var documento = BuildDocumentNumber(idTipoTransaccion, referencia);
-        var partidaNumber = documento;
         var sourceDocumentNormalizado = NormalizeSourceDocument(sourceDocument);
         var partidaDate = DateTime.SpecifyKind(
             fechaMovimiento.ToDateTime(TimeOnly.MinValue),
@@ -666,7 +667,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (lineas.Count < 2)
         {
-            throw new InvalidOperationException("La partida contable requiere al menos dos líneas.");
+            throw new InvalidOperationException("La partida contable requiere al menos dos lÃ­neas.");
         }
 
         var lineasSql = BuildLineasSql(lineas.Count);
@@ -682,9 +683,21 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         try
         {
-            var supportsSourceDocuments = await SupportsSourceDocumentsAsync(connection, ct);
+            await using var dbTransaction = await connection.BeginTransactionAsync(ct);
+
+            await ValidarYAplicarPresupuestoCreditosAsync(
+                connection,
+                dbTransaction,
+                companyId,
+                fechaMovimiento,
+                lineas,
+                ct);
+
+            var supportsSourceDocuments = await SupportsSourceDocumentsAsync(connection, dbTransaction as NpgsqlTransaction, ct);
+            var partidaNumber = await GenerateMonthlyPartidaNumberAsync(connection, dbTransaction as NpgsqlTransaction, companyId, partidaDate, ct);
 
             await using var command = connection.CreateCommand();
+            command.Transaction = dbTransaction;
             command.CommandType = CommandType.Text;
             command.CommandText = supportsSourceDocuments
                 ? $@"
@@ -761,6 +774,7 @@ CALL public.sp_registrar_partida_contable(
 
             partidaId = await TryResolvePartidaIdAsync(
                 connection,
+                dbTransaction,
                 companyId,
                 idTipoTransaccion,
                 documento,
@@ -807,9 +821,10 @@ CALL public.sp_registrar_partida_contable(
         await command.ExecuteNonQueryAsync(ct);
     }
 
-    private static async Task<bool> SupportsSourceDocumentsAsync(NpgsqlConnection connection, CancellationToken ct)
+    private static async Task<bool> SupportsSourceDocumentsAsync(NpgsqlConnection connection, NpgsqlTransaction? transaction, CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = @"
 SELECT 1
 FROM pg_proc p
@@ -829,9 +844,10 @@ LIMIT 1;";
         long companyId,
         long banKardexId,
         long partidaId,
-        CancellationToken ct)
+        CancellationToken ct,
+        NpgsqlTransaction? transaction = null)
     {
-        var (hasPolizaId, hasPartidaCuentaId) = await DetectarColumnasPartidaEnKardexAsync(connection, ct);
+        var (hasPolizaId, hasPartidaCuentaId) = await DetectarColumnasPartidaEnKardexAsync(connection, ct, transaction);
 
         if (!hasPolizaId && !hasPartidaCuentaId)
         {
@@ -853,6 +869,7 @@ LIMIT 1;";
         }
 
         await using var updateCommand = connection.CreateCommand();
+        updateCommand.Transaction = transaction;
         updateCommand.CommandType = CommandType.Text;
         updateCommand.CommandText = $@"
 UPDATE public.ban_kardex
@@ -869,9 +886,11 @@ UPDATE public.ban_kardex
 
     private static async Task<(bool HasPolizaId, bool HasPartidaCuentaId)> DetectarColumnasPartidaEnKardexAsync(
         NpgsqlConnection connection,
-        CancellationToken ct)
+        CancellationToken ct,
+        NpgsqlTransaction? transaction = null)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = @"
 SELECT column_name
 FROM information_schema.columns
@@ -901,6 +920,7 @@ WHERE table_schema = 'public'
 
     private static async Task<long?> TryResolvePartidaIdAsync(
         NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         long companyId,
         string idTipoTransaccion,
         string documentNumber,
@@ -911,10 +931,11 @@ WHERE table_schema = 'public'
         var normalizedDocument = documentNumber.Trim();
         var normalizedUser = createdBy.Trim();
 
-        if (await TableExistsAsync(connection, "con_partida_hdr", ct))
+        if (await TableExistsAsync(connection, transaction, "con_partida_hdr", ct))
         {
             var partidaId = await TryResolvePartidaIdInConPartidaHdrAsync(
                 connection,
+            transaction,
                 companyId,
                 normalizedType,
                 normalizedDocument,
@@ -927,10 +948,11 @@ WHERE table_schema = 'public'
             }
         }
 
-        if (await TableExistsAsync(connection, "con_partida_hdr", ct))
+        if (await TableExistsAsync(connection, transaction, "con_poliza", ct))
         {
             var partidaId = await TryResolvePartidaIdInConPolizaAsync(
                 connection,
+            transaction,
                 companyId,
                 normalizedType,
                 normalizedDocument,
@@ -948,10 +970,12 @@ WHERE table_schema = 'public'
 
     private static async Task<bool> TableExistsAsync(
         NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         string tableName,
         CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = @"
 SELECT 1
 FROM information_schema.tables
@@ -966,6 +990,7 @@ LIMIT 1;";
 
     private static async Task<long?> TryResolvePartidaIdInConPartidaHdrAsync(
         NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         long companyId,
         string documentType,
         string documentNumber,
@@ -974,7 +999,7 @@ LIMIT 1;";
     {
         const string sql = @"
 SELECT poliza_id
-FROM public.con_partida_hdr
+ FROM public.con_poliza
 WHERE company_id = @company_id
   AND ""module"" = 'BANCOS'
   AND document_type = @document_type
@@ -988,6 +1013,7 @@ LIMIT 1;";
 
         var partidaId = await ExecuteScalarInt64Async(
             connection,
+            transaction,
             sql,
             companyId,
             documentType,
@@ -1002,7 +1028,7 @@ LIMIT 1;";
 
         const string sqlSinUsuario = @"
 SELECT poliza_id
-FROM public.con_partida_hdr
+ FROM public.con_poliza
 WHERE company_id = @company_id
   AND ""module"" = 'BANCOS'
   AND document_type = @document_type
@@ -1015,6 +1041,7 @@ LIMIT 1;";
 
         return await ExecuteScalarInt64Async(
             connection,
+            transaction,
             sqlSinUsuario,
             companyId,
             documentType,
@@ -1025,6 +1052,7 @@ LIMIT 1;";
 
     private static async Task<long?> TryResolvePartidaIdInConPolizaAsync(
         NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         long companyId,
         string documentType,
         string documentNumber,
@@ -1048,6 +1076,7 @@ LIMIT 1;";
 
         var partidaId = await ExecuteScalarInt64Async(
             connection,
+            transaction,
             sql,
             companyId,
             documentType,
@@ -1076,6 +1105,7 @@ LIMIT 1;";
 
         return await ExecuteScalarInt64Async(
             connection,
+            transaction,
             sqlSinUsuario,
             companyId,
             documentType,
@@ -1086,6 +1116,7 @@ LIMIT 1;";
 
     private static async Task<long?> ExecuteScalarInt64Async(
         NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
         string sql,
         long companyId,
         string documentType,
@@ -1094,6 +1125,7 @@ LIMIT 1;";
         CancellationToken ct)
     {
         await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
         command.CommandText = sql;
         command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
         command.Parameters.AddWithValue("document_type", NpgsqlDbType.Varchar, documentType);
@@ -1110,6 +1142,116 @@ LIMIT 1;";
         }
 
         return Convert.ToInt64(result);
+    }
+
+    private static async Task ValidarYAplicarPresupuestoCreditosAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        DateOnly fechaMovimiento,
+        IReadOnlyList<PartidaLinea> lineas,
+        CancellationToken ct)
+    {
+        var cuentasDisplay = await ObtenerDisplayCuentasAsync(
+            connection,
+            transaction,
+            companyId,
+            lineas.Select(l => l.AccountId),
+            ct);
+
+        foreach (var linea in lineas)
+        {
+            var credito = Math.Abs(linea.Credit);
+            if (credito <= 0m)
+            {
+                continue;
+            }
+
+            var cuentaDisplay = cuentasDisplay.TryGetValue(linea.AccountId, out var display)
+                ? display
+                : linea.AccountId.ToString();
+
+            await using var command = connection.CreateCommand();
+            command.Transaction = transaction;
+            command.CommandType = CommandType.Text;
+            command.CommandText = @"
+SELECT public.fn_pst_afectar_saldo_real_credito(
+    @p_company_id,
+    @p_account_id,
+    @p_poliza_date,
+    @p_credito
+);";
+
+            command.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+            command.Parameters.AddWithValue("p_account_id", NpgsqlDbType.Bigint, linea.AccountId);
+            command.Parameters.AddWithValue("p_poliza_date", NpgsqlDbType.Date, fechaMovimiento);
+            command.Parameters.AddWithValue("p_credito", NpgsqlDbType.Numeric, credito);
+
+            var result = await command.ExecuteScalarAsync(ct);
+            var estado = result is DBNull || result is null ? 1 : Convert.ToInt32(result);
+            if (estado == 0)
+            {
+                throw new ArgumentException(
+                    $"La transacciÃ³n excede el saldo proyectado del presupuesto para la cuenta {cuentaDisplay}.");
+            }
+
+            if (estado == 2)
+            {
+                throw new ArgumentException(
+                    $"No se puede registrar la transacciÃ³n porque el presupuesto de la cuenta {cuentaDisplay} no estÃ¡ aprobado.");
+            }
+        }
+    }
+
+    private static async Task<Dictionary<long, string>> ObtenerDisplayCuentasAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        IEnumerable<long> accountIds,
+        CancellationToken ct)
+    {
+        var ids = accountIds
+            .Where(id => id > 0)
+            .Distinct()
+            .ToArray();
+
+        if (ids.Length == 0)
+        {
+            return new Dictionary<long, string>();
+        }
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandType = CommandType.Text;
+        command.CommandText = @"
+SELECT c.account_id, c.code, c.name
+FROM public.con_plan_cuentas c
+WHERE c.company_id = @p_company_id
+  AND c.account_id = ANY(@p_account_ids);";
+
+        command.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.Add(new NpgsqlParameter("p_account_ids", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
+        {
+            Value = ids
+        });
+
+        var cuentas = new Dictionary<long, string>();
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var accountId = reader.GetInt64(0);
+            var code = reader.IsDBNull(1) ? string.Empty : reader.GetString(1).Trim();
+            var name = reader.IsDBNull(2) ? string.Empty : reader.GetString(2).Trim();
+
+            cuentas[accountId] = string.IsNullOrWhiteSpace(code)
+                ? (string.IsNullOrWhiteSpace(name) ? accountId.ToString() : name)
+                : string.IsNullOrWhiteSpace(name)
+                    ? code
+                    : $"{code} - {name}";
+        }
+
+        return cuentas;
     }
 
     private async Task<long> ResolveJournalIdAsync(long companyId, CancellationToken ct)
@@ -1136,7 +1278,7 @@ LIMIT 1;";
 
         if (journalId <= 0)
         {
-            throw new InvalidOperationException("No se encontró un diario contable activo para registrar la partida.");
+            throw new InvalidOperationException("No se encontrÃ³ un diario contable activo para registrar la partida.");
         }
 
         return journalId;
@@ -1232,6 +1374,65 @@ LIMIT 1;";
                || string.Equals(status, "ACTIVO", StringComparison.OrdinalIgnoreCase);
     }
 
+    private static async Task<string> GenerateMonthlyPartidaNumberAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        long companyId,
+        DateTime partidaDate,
+        CancellationToken ct)
+    {
+        var year = partidaDate.Year;
+        var month = partidaDate.Month;
+        var prefix = $"{companyId}-{year:D4}-{month:D2}-";
+        var periodKey = checked(year * 100 + month);
+        var advisoryKey = unchecked((companyId << 32) ^ (uint)periodKey);
+
+        await using (var lockCommand = connection.CreateCommand())
+        {
+            lockCommand.Transaction = transaction;
+            lockCommand.CommandText = "SELECT pg_advisory_xact_lock(@advisory_key);";
+            lockCommand.Parameters.AddWithValue("advisory_key", NpgsqlDbType.Bigint, advisoryKey);
+            await lockCommand.ExecuteNonQueryAsync(ct);
+        }
+
+        var existingNumbers = new List<string>();
+        await using (var command = connection.CreateCommand())
+        {
+            command.Transaction = transaction;
+            command.CommandText = @"
+SELECT poliza_number
+FROM public.con_partida_hdr
+WHERE company_id = @company_id
+  AND poliza_number LIKE @prefix_pattern;";
+            command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+            command.Parameters.AddWithValue("prefix_pattern", NpgsqlDbType.Varchar, prefix + "%");
+
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                if (!reader.IsDBNull(0))
+                {
+                    existingNumbers.Add(reader.GetString(0));
+                }
+            }
+        }
+
+        var lastSequence = 0;
+        foreach (var existingNumber in existingNumbers)
+        {
+            if (existingNumber.Length <= prefix.Length)
+                continue;
+
+            if (int.TryParse(existingNumber[prefix.Length..], out var currentSequence) &&
+                currentSequence > lastSequence)
+            {
+                lastSequence = currentSequence;
+            }
+        }
+
+        return $"{prefix}{lastSequence + 1:D6}";
+    }
+
     private static string BuildDocumentNumber(string idTipoTransaccion, string? referencia)
     {
         var baseValue = !string.IsNullOrWhiteSpace(referencia)
@@ -1260,6 +1461,12 @@ LIMIT 1;";
         }
 
         return Math.Round(tasaCambio, 4, MidpointRounding.AwayFromZero);
+    }
+
+    private static string TrimToLength(string? value, int maxLength, string fallback = "")
+    {
+        var normalized = string.IsNullOrWhiteSpace(value) ? fallback : value.Trim();
+        return normalized.Length <= maxLength ? normalized : normalized[..maxLength];
     }
 
     public async Task<(long BanKardexIdAnulacion, decimal SaldoResultante)> AnularMovimientoAsync(
@@ -1294,7 +1501,26 @@ LIMIT 1;";
 
         try
         {
+            await using var dbTransaction = await connection.BeginTransactionAsync(ct);
+
+            await ValidarMovimientoNoConciliadoAsync(
+                connection,
+                dbTransaction,
+                companyId,
+                bancoCuentaId,
+                banKardexIdOriginal,
+                ct);
+
+            var partidaOriginal = await TryObtenerPartidaContableOriginalAsync(
+                connection,
+                dbTransaction,
+                companyId,
+                bancoCuentaId,
+                banKardexIdOriginal,
+                ct);
+
             await using var command = connection.CreateCommand();
+            command.Transaction = dbTransaction;
             command.CommandType = CommandType.StoredProcedure;
             command.CommandText = "public.sp_ban_kardex_anular_movimiento_recalcular";
 
@@ -1323,9 +1549,35 @@ LIMIT 1;";
 
             if (kardexId <= 0)
             {
-                throw new InvalidOperationException("No fue posible anular la transacción bancaria.");
+                throw new InvalidOperationException("No fue posible anular la transacciÃ³n bancaria.");
             }
 
+            if (partidaOriginal is not null)
+            {
+                var partidaAnulacionId = await RegistrarPartidaContableReversaAsync(
+                    connection,
+                    dbTransaction,
+                    companyId,
+                    banKardexIdOriginal,
+                    kardexId,
+                    motivoNormalizado,
+                    usuario,
+                    partidaOriginal,
+                    ct);
+
+                if (partidaAnulacionId.HasValue && partidaAnulacionId.Value > 0)
+                {
+                    await VincularPartidaEnKardexAsync(
+                        connection,
+                        companyId,
+                        kardexId,
+                        partidaAnulacionId.Value,
+                        ct,
+                        dbTransaction);
+                }
+            }
+
+            await dbTransaction.CommitAsync(ct);
             return (kardexId, saldoResultante);
         }
         finally
@@ -1335,6 +1587,427 @@ LIMIT 1;";
                 await connection.CloseAsync();
             }
         }
+    }
+
+    private static async Task ValidarMovimientoNoConciliadoAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction? transaction,
+        long companyId,
+        long bancoCuentaId,
+        long banKardexIdOriginal,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandType = CommandType.Text;
+        command.CommandText = @"
+SELECT UPPER(COALESCE(estado_conciliacion, 'NOC'))
+FROM public.ban_kardex
+WHERE company_id = @p_company_id
+  AND banco_cuenta_id = @p_banco_cuenta_id
+  AND ban_kardex_id = @p_ban_kardex_id
+LIMIT 1;";
+
+        command.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("p_banco_cuenta_id", NpgsqlDbType.Bigint, bancoCuentaId);
+        command.Parameters.AddWithValue("p_ban_kardex_id", NpgsqlDbType.Bigint, banKardexIdOriginal);
+
+        var estadoConciliacion = await command.ExecuteScalarAsync(ct) as string;
+        if (string.Equals(estadoConciliacion, "CON", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new ArgumentException(
+                "No se puede anular una transaccion bancaria que ya esta conciliada.",
+                nameof(banKardexIdOriginal));
+        }
+    }
+
+    private static async Task<PartidaContableOriginal?> TryObtenerPartidaContableOriginalAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        long bancoCuentaId,
+        long banKardexIdOriginal,
+        CancellationToken ct)
+    {
+        var partidaId = await TryObtenerPartidaVinculadaAsync(
+            connection,
+            transaction,
+            companyId,
+            bancoCuentaId,
+            banKardexIdOriginal,
+            ct);
+
+        if (!partidaId.HasValue || partidaId.Value <= 0)
+        {
+            return null;
+        }
+
+        var hasPartidaHdr = await TableExistsAsync(connection, transaction, "con_partida_hdr", ct);
+        var hasPartidaDtl = await TableExistsAsync(connection, transaction, "con_partida_dtl", ct);
+        if (!hasPartidaHdr || !hasPartidaDtl)
+        {
+            throw new InvalidOperationException("No estan disponibles las tablas contables requeridas para generar la contrapartida.");
+        }
+
+        await using var headerCommand = connection.CreateCommand();
+        headerCommand.Transaction = transaction;
+        headerCommand.CommandType = CommandType.Text;
+        headerCommand.CommandText = @"
+SELECT
+    h.poliza_id,
+    h.journal_id,
+    h.period_id,
+    h.type_id,
+    h.document_type,
+    h.document_number,
+    h.poliza_number,
+    h.description
+FROM public.con_partida_hdr h
+WHERE h.company_id = @p_company_id
+  AND h.poliza_id = @p_poliza_id
+LIMIT 1;";
+
+        headerCommand.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+        headerCommand.Parameters.AddWithValue("p_poliza_id", NpgsqlDbType.Bigint, partidaId.Value);
+
+        await using var headerReader = await headerCommand.ExecuteReaderAsync(ct);
+        if (!await headerReader.ReadAsync(ct))
+        {
+            throw new InvalidOperationException(
+                $"La transaccion bancaria {banKardexIdOriginal} tiene una partida contable vinculada que no existe.");
+        }
+
+        var partidaOriginal = new PartidaContableOriginal(
+            PartidaId: headerReader.GetInt64(0),
+            JournalId: headerReader.IsDBNull(1) ? null : headerReader.GetInt64(1),
+            PeriodId: headerReader.IsDBNull(2) ? null : headerReader.GetInt64(2),
+            TypeId: headerReader.IsDBNull(3) ? null : headerReader.GetInt64(3),
+            DocumentType: headerReader.IsDBNull(4) ? string.Empty : headerReader.GetString(4),
+            DocumentNumber: headerReader.IsDBNull(5) ? null : headerReader.GetString(5),
+            PolizaNumber: headerReader.IsDBNull(6) ? null : headerReader.GetString(6),
+            Description: headerReader.IsDBNull(7) ? null : headerReader.GetString(7),
+            Lineas: new List<PartidaContableOriginalLinea>());
+
+        await headerReader.CloseAsync();
+
+        await using var detailCommand = connection.CreateCommand();
+        detailCommand.Transaction = transaction;
+        detailCommand.CommandType = CommandType.Text;
+        detailCommand.CommandText = @"
+SELECT
+    d.account_id,
+    d.cost_center_id,
+    d.description,
+    COALESCE(d.debit_amount, 0),
+    COALESCE(d.credit_amount, 0),
+    d.third_party_id,
+    d.currency_code,
+    d.exchange_rate,
+    d.source_document
+FROM public.con_partida_dtl d
+WHERE d.company_id = @p_company_id
+  AND d.poliza_id = @p_poliza_id
+ORDER BY d.line_number;";
+
+        detailCommand.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+        detailCommand.Parameters.AddWithValue("p_poliza_id", NpgsqlDbType.Bigint, partidaId.Value);
+
+        await using var detailReader = await detailCommand.ExecuteReaderAsync(ct);
+        while (await detailReader.ReadAsync(ct))
+        {
+            partidaOriginal.Lineas.Add(new PartidaContableOriginalLinea(
+                AccountId: detailReader.GetInt64(0),
+                CostCenterId: detailReader.IsDBNull(1) ? null : detailReader.GetInt64(1),
+                Description: detailReader.IsDBNull(2) ? null : detailReader.GetString(2),
+                Debit: detailReader.GetDecimal(3),
+                Credit: detailReader.GetDecimal(4),
+                ThirdPartyId: detailReader.IsDBNull(5) ? null : detailReader.GetInt64(5),
+                CurrencyCode: detailReader.IsDBNull(6) ? null : detailReader.GetString(6),
+                ExchangeRate: detailReader.IsDBNull(7) ? null : detailReader.GetDecimal(7),
+                SourceDocument: detailReader.IsDBNull(8) ? null : detailReader.GetString(8)));
+        }
+
+        if (partidaOriginal.Lineas.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"La partida contable {partidaOriginal.PartidaId} no tiene lineas para generar la contrapartida.");
+        }
+
+        return partidaOriginal;
+    }
+
+    private static async Task<long?> TryObtenerPartidaVinculadaAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        long bancoCuentaId,
+        long banKardexIdOriginal,
+        CancellationToken ct)
+    {
+        var (hasPolizaId, hasPartidaCuentaId) = await DetectarColumnasPartidaEnKardexAsync(connection, ct, transaction);
+        if (!hasPolizaId && !hasPartidaCuentaId)
+        {
+            return null;
+        }
+
+        var partidaColumn = hasPolizaId && hasPartidaCuentaId
+            ? "COALESCE(k.partida_cuenta_id, k.poliza_id)"
+            : hasPartidaCuentaId
+                ? "k.partida_cuenta_id"
+                : "k.poliza_id";
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandType = CommandType.Text;
+        command.CommandText = $@"
+SELECT {partidaColumn}
+FROM public.ban_kardex k
+WHERE k.company_id = @p_company_id
+  AND k.banco_cuenta_id = @p_banco_cuenta_id
+  AND k.ban_kardex_id = @p_ban_kardex_id
+LIMIT 1;";
+
+        command.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("p_banco_cuenta_id", NpgsqlDbType.Bigint, bancoCuentaId);
+        command.Parameters.AddWithValue("p_ban_kardex_id", NpgsqlDbType.Bigint, banKardexIdOriginal);
+
+        var result = await command.ExecuteScalarAsync(ct);
+        if (result is null || result is DBNull)
+        {
+            return null;
+        }
+
+        return Convert.ToInt64(result);
+    }
+
+    private async Task<long?> RegistrarPartidaContableReversaAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        long banKardexIdOriginal,
+        long banKardexIdAnulacion,
+        string motivo,
+        string usuario,
+        PartidaContableOriginal partidaOriginal,
+        CancellationToken ct)
+    {
+        var kardexAnulacion = await ObtenerDatosKardexAnulacionAsync(
+            connection,
+            transaction,
+            companyId,
+            banKardexIdAnulacion,
+            ct);
+
+        var fechaAnulacion = kardexAnulacion.FechaMovimiento;
+        var journalId = partidaOriginal.JournalId.HasValue && partidaOriginal.JournalId.Value > 0
+            ? partidaOriginal.JournalId.Value
+            : await ResolveJournalIdAsync(companyId, ct);
+        var periodId = await ResolvePeriodoIdAsync(companyId, fechaAnulacion, ct);
+        var typeId = partidaOriginal.TypeId.HasValue && partidaOriginal.TypeId.Value > 0
+            ? partidaOriginal.TypeId.Value
+            : await ResolveTipoPartidaIdAsync(companyId, null, ct);
+
+        var documentType = string.IsNullOrWhiteSpace(partidaOriginal.DocumentType)
+            ? "BAN"
+            : partidaOriginal.DocumentType.Trim();
+        var documentNumber = BuildDocumentNumber(documentType, kardexAnulacion.Referencia);
+        var partidaNumber = await GenerateMonthlyPartidaNumberAsync(connection, transaction, companyId, DateTime.SpecifyKind(fechaAnulacion.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc), ct);
+        var description = TrimToLength(
+            string.IsNullOrWhiteSpace(kardexAnulacion.Descripcion)
+                ? $"ANULACION PARTIDA kardex={banKardexIdOriginal} {motivo}"
+                : kardexAnulacion.Descripcion,
+            500);
+        var partidaDate = DateTime.SpecifyKind(
+            fechaAnulacion.ToDateTime(TimeOnly.MinValue),
+            DateTimeKind.Utc);
+
+        var lineas = partidaOriginal.Lineas
+            .Select(linea => new PartidaLinea(
+                linea.AccountId,
+                linea.CostCenterId,
+                TrimToLength(string.IsNullOrWhiteSpace(linea.Description) ? description : linea.Description, 300),
+                linea.Credit,
+                linea.Debit,
+                linea.ThirdPartyId,
+                string.IsNullOrWhiteSpace(linea.CurrencyCode) ? "HNL" : linea.CurrencyCode.Trim().ToUpperInvariant(),
+                linea.ExchangeRate.HasValue && linea.ExchangeRate.Value > 0m ? linea.ExchangeRate.Value : 1m))
+            .ToList();
+
+        var fallbackSource = NormalizeSourceDocument(partidaOriginal.DocumentNumber)
+            ?? NormalizeSourceDocument(partidaOriginal.PolizaNumber)
+            ?? NormalizeSourceDocument(kardexAnulacion.Referencia)
+            ?? documentNumber;
+        var sourceDocuments = partidaOriginal.Lineas
+            .Select(linea => NormalizeSourceDocument(linea.SourceDocument) ?? fallbackSource)
+            .ToList();
+
+        return await RegistrarPartidaContableReversaAsync(
+            connection,
+            transaction,
+            companyId,
+            journalId,
+            periodId,
+            documentType,
+            documentNumber,
+            partidaNumber,
+            partidaDate,
+            description,
+            usuario,
+            typeId,
+            lineas,
+            sourceDocuments,
+            ct);
+    }
+
+    private static async Task<long?> RegistrarPartidaContableReversaAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        long journalId,
+        long periodId,
+        string documentType,
+        string documentNumber,
+        string partidaNumber,
+        DateTime partidaDate,
+        string description,
+        string usuario,
+        long typeId,
+        IReadOnlyList<PartidaLinea> lineas,
+        IReadOnlyList<string?> sourceDocuments,
+        CancellationToken ct)
+    {
+        if (lineas.Count == 0)
+        {
+            return null;
+        }
+
+        var lineasSql = BuildLineasSql(lineas.Count);
+        var supportsSourceDocuments = await SupportsSourceDocumentsAsync(connection, transaction, ct);
+
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandType = CommandType.Text;
+        command.CommandText = supportsSourceDocuments
+            ? $@"
+CALL public.sp_registrar_partida_contable(
+    @p_company_id,
+    @p_journal_id,
+    @p_period_id,
+    @p_module,
+    @p_document_type,
+    @p_document_number,
+    @p_partida_number,
+    @p_partida_date,
+    @p_description,
+    @p_created_by,
+    @p_type_id,
+    @p_source_documents,
+    {lineasSql}
+);"
+            : $@"
+CALL public.sp_registrar_partida_contable(
+    @p_company_id,
+    @p_journal_id,
+    @p_period_id,
+    @p_module,
+    @p_document_type,
+    @p_document_number,
+    @p_partida_number,
+    @p_partida_date,
+    @p_description,
+    @p_created_by,
+    @p_type_id,
+    {lineasSql}
+);";
+
+        command.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("p_journal_id", NpgsqlDbType.Bigint, journalId);
+        command.Parameters.AddWithValue("p_period_id", NpgsqlDbType.Bigint, periodId);
+        command.Parameters.AddWithValue("p_module", NpgsqlDbType.Varchar, "BANCOS");
+        command.Parameters.AddWithValue("p_document_type", NpgsqlDbType.Varchar, documentType);
+        command.Parameters.AddWithValue("p_document_number", NpgsqlDbType.Varchar, documentNumber);
+        command.Parameters.AddWithValue("p_partida_number", NpgsqlDbType.Varchar, partidaNumber);
+        command.Parameters.AddWithValue("p_partida_date", NpgsqlDbType.TimestampTz, partidaDate);
+        command.Parameters.AddWithValue("p_description", NpgsqlDbType.Varchar, description);
+        command.Parameters.AddWithValue("p_created_by", NpgsqlDbType.Varchar, usuario.Trim());
+        command.Parameters.AddWithValue("p_type_id", NpgsqlDbType.Bigint, typeId);
+        if (supportsSourceDocuments)
+        {
+            command.Parameters.Add(new NpgsqlParameter("p_source_documents", NpgsqlDbType.Array | NpgsqlDbType.Varchar)
+            {
+                Value = sourceDocuments.ToArray()
+            });
+        }
+
+        for (var i = 0; i < lineas.Count; i++)
+        {
+            var linea = lineas[i];
+            command.Parameters.AddWithValue($"acc_{i}", NpgsqlDbType.Bigint, linea.AccountId);
+            command.Parameters.Add(new NpgsqlParameter($"cc_{i}", NpgsqlDbType.Bigint)
+            {
+                Value = linea.CostCenterId.HasValue ? linea.CostCenterId.Value : DBNull.Value
+            });
+            command.Parameters.AddWithValue($"desc_{i}", NpgsqlDbType.Varchar, linea.Description);
+            command.Parameters.AddWithValue($"deb_{i}", NpgsqlDbType.Numeric, linea.Debit);
+            command.Parameters.AddWithValue($"cred_{i}", NpgsqlDbType.Numeric, linea.Credit);
+            command.Parameters.Add(new NpgsqlParameter($"third_{i}", NpgsqlDbType.Bigint)
+            {
+                Value = linea.ThirdPartyId.HasValue ? linea.ThirdPartyId.Value : DBNull.Value
+            });
+            command.Parameters.AddWithValue($"curr_{i}", NpgsqlDbType.Varchar, linea.CurrencyCode);
+            command.Parameters.AddWithValue($"rate_{i}", NpgsqlDbType.Numeric, linea.ExchangeRate);
+        }
+
+        await command.ExecuteNonQueryAsync(ct);
+
+        return await TryResolvePartidaIdAsync(
+            connection,
+            transaction,
+            companyId,
+            documentType,
+            documentNumber,
+            usuario,
+            ct);
+    }
+
+    private static async Task<KardexAnulacionInfo> ObtenerDatosKardexAnulacionAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        long banKardexIdAnulacion,
+        CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandType = CommandType.Text;
+        command.CommandText = @"
+SELECT
+    k.fecha_movimiento,
+    k.referencia,
+    k.descripcion
+FROM public.ban_kardex k
+WHERE k.company_id = @p_company_id
+  AND k.ban_kardex_id = @p_ban_kardex_id
+LIMIT 1;";
+
+        command.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("p_ban_kardex_id", NpgsqlDbType.Bigint, banKardexIdAnulacion);
+
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        if (!await reader.ReadAsync(ct))
+        {
+            throw new InvalidOperationException(
+                $"No se pudo obtener el kardex de anulacion {banKardexIdAnulacion}.");
+        }
+
+        var fechaMovimiento = TryReadDateOnly(reader, 0)
+            ?? throw new InvalidOperationException(
+                $"El kardex de anulacion {banKardexIdAnulacion} no tiene fecha de movimiento.");
+
+        return new KardexAnulacionInfo(
+            FechaMovimiento: fechaMovimiento,
+            Referencia: reader.IsDBNull(1) ? null : reader.GetString(1),
+            Descripcion: reader.IsDBNull(2) ? null : reader.GetString(2));
     }
 
     private static IReadOnlyList<BanTransaccionListDto> AplicarFiltroFechas(
@@ -1483,32 +2156,72 @@ LIMIT 1;";
             return;
         }
 
-        var camposPorId = await context.ban_kardex
-            .AsNoTracking()
-            .Where(k => k.company_id == companyId && ids.Contains(k.ban_kardex_id))
-            .Select(k => new
-            {
-                k.ban_kardex_id,
-                k.descripcion,
-                k.referencia
-            })
-            .ToDictionaryAsync(x => x.ban_kardex_id, ct);
-
-        foreach (var transaccion in transacciones)
+        var connection = (NpgsqlConnection)context.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
         {
-            if (!camposPorId.TryGetValue(transaccion.BanKardexId, out var campos))
+            await connection.OpenAsync(ct);
+        }
+
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.CommandType = CommandType.Text;
+            command.CommandText = @"
+SELECT
+    k.ban_kardex_id,
+    k.descripcion,
+    k.referencia,
+    UPPER(COALESCE(k.estado_conciliacion, 'NOC')) AS estado_conciliacion
+FROM public.ban_kardex k
+WHERE k.company_id = @p_company_id
+  AND k.ban_kardex_id = ANY(@p_ids);";
+
+            command.Parameters.AddWithValue("p_company_id", NpgsqlDbType.Bigint, companyId);
+            command.Parameters.Add(new NpgsqlParameter("p_ids", NpgsqlDbType.Array | NpgsqlDbType.Bigint)
             {
-                continue;
+                Value = ids.ToArray()
+            });
+
+            var camposPorId = new Dictionary<long, (string? Descripcion, string? Referencia, string? EstadoConciliacion)>();
+
+            await using (var reader = await command.ExecuteReaderAsync(ct))
+            {
+                while (await reader.ReadAsync(ct))
+                {
+                    var banKardexId = reader.GetInt64(0);
+                    var descripcion = reader.IsDBNull(1) ? null : reader.GetString(1);
+                    var referencia = reader.IsDBNull(2) ? null : reader.GetString(2);
+                    var estadoConciliacion = reader.IsDBNull(3) ? null : reader.GetString(3);
+                    camposPorId[banKardexId] = (descripcion, referencia, estadoConciliacion);
+                }
             }
 
-            if (string.IsNullOrWhiteSpace(transaccion.Descripcion))
+            foreach (var transaccion in transacciones)
             {
-                transaccion.Descripcion = campos.descripcion ?? string.Empty;
-            }
+                if (!camposPorId.TryGetValue(transaccion.BanKardexId, out var campos))
+                {
+                    continue;
+                }
 
-            if (string.IsNullOrWhiteSpace(transaccion.Referencia))
+                if (string.IsNullOrWhiteSpace(transaccion.Descripcion))
+                {
+                    transaccion.Descripcion = campos.Descripcion ?? string.Empty;
+                }
+
+                if (string.IsNullOrWhiteSpace(transaccion.Referencia))
+                {
+                    transaccion.Referencia = campos.Referencia;
+                }
+
+                transaccion.EstadoConciliacion = campos.EstadoConciliacion;
+            }
+        }
+        finally
+        {
+            if (shouldClose)
             {
-                transaccion.Referencia = campos.referencia;
+                await connection.CloseAsync();
             }
         }
     }
@@ -1553,7 +2266,7 @@ LIMIT 1;";
 
     private static string BuildContraDescripcion(
         BanTransaccionContraLineaDto linea,
-        IReadOnlyDictionary<long, (string? Code, string? Name)> cuentasLookup)
+        IReadOnlyDictionary<long, (string Code, string Name)> cuentasLookup)
     {
         if (!string.IsNullOrWhiteSpace(linea.Descripcion))
         {
@@ -1562,8 +2275,8 @@ LIMIT 1;";
 
         if (cuentasLookup.TryGetValue(linea.CuentaId, out var cuenta))
         {
-            var code = cuenta.Code?.Trim() ?? string.Empty;
-            var name = cuenta.Name?.Trim() ?? string.Empty;
+            var code = cuenta.Code.Trim();
+            var name = cuenta.Name.Trim();
             var label = string.Join(" ", new[] { code, name }.Where(v => !string.IsNullOrWhiteSpace(v)));
             if (!string.IsNullOrWhiteSpace(label))
             {
@@ -1606,6 +2319,33 @@ LIMIT 1;";
         long? ThirdPartyId,
         string CurrencyCode,
         decimal ExchangeRate);
+
+    private sealed record PartidaContableOriginal(
+        long PartidaId,
+        long? JournalId,
+        long? PeriodId,
+        long? TypeId,
+        string DocumentType,
+        string? DocumentNumber,
+        string? PolizaNumber,
+        string? Description,
+        List<PartidaContableOriginalLinea> Lineas);
+
+    private sealed record PartidaContableOriginalLinea(
+        long AccountId,
+        long? CostCenterId,
+        string? Description,
+        decimal Debit,
+        decimal Credit,
+        long? ThirdPartyId,
+        string? CurrencyCode,
+        decimal? ExchangeRate,
+        string? SourceDocument);
+
+    private sealed record KardexAnulacionInfo(
+        DateOnly FechaMovimiento,
+        string? Referencia,
+        string? Descripcion);
 
     private async Task<IReadOnlyList<BanTransaccionListDto>> ExcluirTransaccionesAnuladasAsync(
         IReadOnlyList<BanTransaccionListDto> transacciones,

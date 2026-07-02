@@ -75,7 +75,8 @@
                             <DxSpinEdit TValue="decimal?" @bind-Value="EditModel.SaldoActual"
                                         Min="0m"
                                         Increment="100m"
-                                        DisplayFormatString="N2"
+                                        Decimals="2"
+                                        DisplayFormat="N2"
                                         NullText="Ingrese saldo actual"
                                         SpinButtonsVisible="true" />
                             <ValidationMessage For="@(() => EditModel.SaldoActual)" />
@@ -102,7 +103,9 @@
                             }
                             else
                             {
-                                <DxTextBox @bind-Text="EditModel.CtaConc"
+                                <DxTextBox Text="@AccountCodeFormatter.Format(EditModel.CtaConc)"
+                                           TextChanged="@OnCuentaConcChanged"
+                                           TextExpression="@(() => EditModel.CtaConc)"
                                            NullText="Ingrese cuenta contable"
                                            MaxLength="255" />
                                 <ValidationMessage For="@(() => EditModel.CtaConc)" />
@@ -153,6 +156,11 @@
     [Parameter] public string CuentaIdDisplay { get; set; } = string.Empty;
     [Parameter] public EventCallback OnSave { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+
+    private void OnCuentaConcChanged(string? value)
+    {
+        EditModel.CtaConc = AccountCodeFormatter.Normalize(value);
+    }
 
     private async Task OnVisibleChanged(bool value)
     {

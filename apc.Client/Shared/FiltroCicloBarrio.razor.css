@@ -1,0 +1,22 @@
+.filtro-ciclo-barrio {
+    display: flex;
+    flex-direction: column;
+    gap: .35rem;
+}
+
+.filtro-toggle {
+    display: inline-flex;
+    gap: 0;
+}
+
+/* Une los dos botones como un segmentado */
+.filtro-toggle ::deep .dxbl-btn:first-child {
+    border-top-right-radius: 0;
+    border-bottom-right-radius: 0;
+}
+
+.filtro-toggle ::deep .dxbl-btn:last-child {
+    border-top-left-radius: 0;
+    border-bottom-left-radius: 0;
+    margin-left: -1px;
+}

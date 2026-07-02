@@ -1,4 +1,4 @@
-@page "/informes/reportes"
+﻿@page "/informes/reportes"
 @attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
 @using apc.Client.Services.Informes
 @using SIAD.Core.Constants
@@ -6,7 +6,7 @@
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
 
-<PageTitle>Reportes Web</PageTitle>
+<PageTitle>SIAD - Reportes Web</PageTitle>
 
 <div class="page-container">
     <div class="header-section">
@@ -21,7 +21,7 @@
                       IconCssClass="bi bi-arrow-clockwise"
                       RenderStyle="ButtonRenderStyle.Secondary" />
             <DxButton Text="Datasets"
-                      Click="@(() => NavigationManager.NavigateTo("/informes/reportes/datasets"))"
+                      Click="@(() => NavigationManager.NavigateTo("/informes/datasets"))"
                       IconCssClass="bi bi-database"
                       RenderStyle="ButtonRenderStyle.Secondary" />
             <AuthorizeView Policy="@PermissionNames.Reporteria.Create">

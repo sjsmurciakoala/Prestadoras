@@ -1,4 +1,4 @@
-using Microsoft.EntityFrameworkCore;
+﻿using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
@@ -88,8 +88,8 @@ public sealed class PolizaService : IPolizaService
             var diario = await ResolveDiarioAsync(companyId, journalId, ct);
             var tipo = await LockTipoTransaccionAsync(companyId, typeId, ct);
             var sequenceNumber = await GenerarSecuenciaDiarioAsync(companyId, diario, safeUser, ct);
-            await LockPolizaNumberScopeAsync(companyId, polizaDate.Date.Year, ct);
-            var polizaNumber = await GenerarNumeroPolizaAsync(companyId, polizaDate.Date.Year, ct);
+            await LockPolizaNumberScopeAsync(companyId, polizaDate.Date.Year, polizaDate.Date.Month, ct);
+            var polizaNumber = await GenerarNumeroPolizaAsync(companyId, polizaDate.Date.Year, polizaDate.Date.Month, ct);
             var resolvedDocumentNumber = IsManualModule(normalizedModule)
                 ? await GenerarDocumentoManualAsync(tipo, safeUser, ct)
                 : ResolveDocumentNumber(requestedDocumentNumber, lineas, polizaNumber);
@@ -510,10 +510,10 @@ public sealed class PolizaService : IPolizaService
 
         var diariosPorDefecto = diarios.Where(x => x.is_default_manual).ToList();
         if (diariosPorDefecto.Count == 0)
-            throw new InvalidOperationException("No existe un diario manual por defecto activo. Configure uno en el catálogo de diarios.");
+            throw new InvalidOperationException("No existe un diario manual por defecto activo. Configure uno en el catÃ¡logo de diarios.");
 
         if (diariosPorDefecto.Count > 1)
-            throw new InvalidOperationException("Existe más de un diario manual por defecto activo. Revise el catálogo de diarios.");
+            throw new InvalidOperationException("Existe mÃ¡s de un diario manual por defecto activo. Revise el catÃ¡logo de diarios.");
 
         return diariosPorDefecto[0];
     }
@@ -532,9 +532,10 @@ public sealed class PolizaService : IPolizaService
             ?? throw new InvalidOperationException($"Tipo de transaccion {typeId} no encontrado para empresa {companyId}.");
     }
 
-    private async Task LockPolizaNumberScopeAsync(long companyId, int year, CancellationToken ct)
+    private async Task LockPolizaNumberScopeAsync(long companyId, int year, int month, CancellationToken ct)
     {
-        var advisoryKey = unchecked((companyId << 32) ^ (uint)year);
+        var periodKey = checked(year * 100 + month);
+        var advisoryKey = unchecked((companyId << 32) ^ (uint)periodKey);
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $@"SELECT pg_advisory_xact_lock({advisoryKey});",
             ct);
@@ -612,9 +613,9 @@ public sealed class PolizaService : IPolizaService
         return siguiente;
     }
 
-    private async Task<string> GenerarNumeroPolizaAsync(long companyId, int year, CancellationToken ct = default)
+    private async Task<string> GenerarNumeroPolizaAsync(long companyId, int year, int month, CancellationToken ct = default)
     {
-        var prefix = $"{companyId}-{year}-";
+        var prefix = $"{companyId}-{year:D4}-{month:D2}-";
         var existingNumbers = await _context.con_partida_hdrs
             .AsNoTracking()
             .Where(x => x.company_id == companyId && x.poliza_number.StartsWith(prefix))
