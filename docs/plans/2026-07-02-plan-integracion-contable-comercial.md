@@ -26,9 +26,9 @@ empresas usan ese plan (debe funcionar igual con NIIF o un plan propio).
 | D3 | **Configuración de Integración Contable por empresa** | Modal con pestañas (estilo HODSOFT comercial / ConfiguracionSistema existente). Se configura una vez al dar de alta la empresa. Multitenant (`ICompanyScopedEntity`) |
 | D4 | **Plan-agnóstica** | La matriz apunta a `account_id` del plan que la empresa tenga (ERSAPS, NIIF, propio). Modos de granularidad: `Cuenta General` / `Por Servicio` / `Por Servicio + Categoría`. Perfiles de auto-llenado opcionales (ERSAPS primero; NIIF después) |
 | D5 | **Partidas de facturación (app lectores) = proceso MANUAL** | La sincronización de lecturas NUNCA postea ni depende del período contable (el lector jamás se bloquea). El contador genera el lote de partidas después, desde una pantalla |
-| D6 | **Mes comercial en sintonía con mes contable** | `con_periodo_contable` es EL período maestro; los ciclos de lectura viven dentro de él (`adm_periodo_ciclo`). `historialmes` se reemplaza (sin company_id, estados en letras, columnas rotas). `historicomedicion` queda solo como histórico de lecturas — ninguna lógica de período depende de ella |
+| D6 | **Dos períodos: mes comercial Y mes contable, separados** | Cada uno con su ciclo de vida y su cierre manual. Mes comercial: nuevo modelo multitenant (`adm_periodo_comercial` + ciclos) que **reemplaza a `historialmes`** (sin company_id, estados en letras, columnas rotas). Mes contable: `con_periodo_contable` como está. Relación por reglas, no por fusión: el lote de partidas de un mes comercial exige período contable abierto; el sistema avisa si se desfasan. `historicomedicion` queda solo como histórico de lecturas — ninguna lógica de período depende de ella |
 | D7 | **Cierre de mes = proceso manual con avisos** | Botón "Cerrar mes" con checklist de validaciones. El sistema avisa (banner/alertas) cuando hay cierre pendiente, facturas sin partida o falta período |
-| D8 | **WS de bancos: contrato CONGELADO** | Mismas rutas `/simafi/api/...`, mismos XML de petición/respuesta (Manual desarrollo Web Service Aguas.docx). El banco no cambia nada. Se reimplementa dentro del portal `apc` |
+| D8 | **WS de bancos: contrato CONGELADO — es una MIGRACIÓN, no una certificación** | La certificación bancaria ya existe (el banco consume el WS SIMAFI en producción). Mismas rutas `/simafi/api/...`, mismos XML de petición/respuesta (Manual desarrollo Web Service Aguas.docx). Se reimplementa dentro del portal `apc` con respuestas byte-compatibles y corte controlado (cutover) |
 | D9 | **App Android y WS de lectores: cero cambios** | Toda la contabilidad se genera del lado servidor (SPs / servicios) |
 | D10 | Automático vs manual | Automático donde hay dinero real que debe cuadrar al instante (caja, bancos, notas fiscales). Manual donde hay volumen masivo con revisión contable (lote de facturación, previsión, cierres) |
 
@@ -48,9 +48,11 @@ empresas usan ese plan (debe funcionar igual con NIIF o un plan propio).
 
 ## 4. Escenarios contables (comportamiento objetivo)
 
-Dos calendarios: **mes operativo** (ciclos de lectura, dentro del período maestro) y
-**mes contable** (`con_periodo_contable`, por empresa). Facturar exige ciclo abierto;
-postear exige período contable abierto.
+Dos calendarios independientes: **mes comercial** (`adm_periodo_comercial` + ciclos de
+lectura, por empresa) y **mes contable** (`con_periodo_contable`, por empresa). Facturar
+exige ciclo del mes comercial abierto; postear exige período contable abierto. El lote
+de partidas de facturación conecta ambos: factura del mes comercial X se postea en el
+período contable que cubra la fecha del lote.
 
 | Escenario | Generación | Partida (Debe / Haber) |
 |---|---|---|
@@ -156,27 +158,34 @@ Criterio: correr el lote dos veces no duplica; ESF/balance de comprobación refl
 3. `rep_balance_comprobacion` de períodos **cerrados** lee del caché; períodos abiertos siguen en vivo.
 4. Regla operativa: única escritura vía motor único (ya garantizado por D1); la remigración SIMAFI futura debe terminar con reconstrucción.
 
-### Fase 7 — Período unificado + cierre de mes con avisos
+### Fase 7 — Períodos comercial y contable + cierres de mes con avisos
 **Rama:** `feat/ci-fase7-periodo-cierre` · **Estimación:** 4–6 días · **Depende de:** F3 (validación "facturas con partida")
 
-1. Tabla `adm_periodo_ciclo` (period_id × ciclo, estado lectura, auditoría, multitenant) — reemplaza `historialmes` como fuente de verdad.
-2. Función `fn_adm_periodo_actual(company)` + repunte de consumidores: `sp_adm_calcular_factura_lectura`, SP de GetCiclo del WS (solo SQL — la app NO cambia), y los 4 servicios C# que hoy leen `historialmes`.
-3. Trigger espejo `adm_periodo_ciclo` → `historialmes` durante la transición (solo lectura legacy); plan de retiro.
+1. Tabla `adm_periodo_comercial` (empresa × año-mes, estado, auditoría) + `adm_periodo_comercial_ciclo` (período × ciclo, estado de lectura/facturación) — **reemplazan a `historialmes`** como fuente de verdad del mes comercial. Multitenant, estados numéricos.
+2. Función `fn_adm_periodo_comercial_actual(company)` + repunte de consumidores: `sp_adm_calcular_factura_lectura`, SP de GetCiclo del WS (solo SQL — la app NO cambia), y los 4 servicios C# que hoy leen `historialmes`.
+3. Trigger espejo → `historialmes` durante la transición (solo lectura legacy); plan de retiro.
 4. Migración de datos de `historialmes` existente.
-5. Proceso "Cerrar mes" (pantalla Períodos): checklist bloqueante — ciclos cerrados, facturas del mes con partida, sin partidas en borrador, caja posteada → precierre → cierre → crea el período siguiente. **Ninguna validación consulta `historicomedicion`.**
-6. Avisos en el portal (componente en layout): mes vencido sin cerrar, N facturas sin partida, período del mes actual inexistente.
-7. Tests de regresión del motor tarifario (`LecturaV3Tests`) — riesgo mayor de la fase.
+5. **Dos cierres manuales, cada uno con su checklist:**
+   - **Cierre del mes comercial**: todos los ciclos del mes cerrados, sin rutas pendientes de sincronizar (validado contra facturas emitidas por ciclo, NO contra `historicomedicion`) → habilita el mes comercial siguiente.
+   - **Cierre del mes contable** (pantalla Períodos): facturas del mes con partida generada, sin partidas en borrador, caja del mes posteada, cola de pendientes vacía → precierre → cierre → crea el período contable siguiente.
+6. Reglas de relación (sin fusión): el lote de partidas exige período contable abierto; aviso si el mes comercial abierto se desfasa más de N meses del contable (configurable).
+7. Avisos en el portal (componente en layout): mes comercial/contable vencido sin cerrar, N facturas sin partida, período del mes actual inexistente, desfase comercial-contable.
+8. Tests de regresión del motor tarifario (`LecturaV3Tests`) — riesgo mayor de la fase.
 
-### Fase 8 — WS bancario (contrato congelado)
-**Rama:** `feat/ci-fase8-ws-bancos` · **Estimación:** 6–8 días dev + certificación banco (externa) · **Depende de:** F1, F4 (posteo de pagos)
+### Fase 8 — Migración del WS bancario (contrato congelado, cutover controlado)
+**Rama:** `feat/ci-fase8-ws-bancos` · **Estimación:** 5–7 días dev + ventana de corte · **Depende de:** F1, F4 (posteo de pagos)
+
+> La certificación con el banco YA EXISTE (consume el WS SIMAFI en producción).
+> Esto es una migración: respuestas byte-compatibles y cambio de backend sin que
+> el banco modifique nada.
 
 1. Controllers XML en `apc` replicando el contrato EXACTO (Manual 2014): rutas `/simafi/api/auth/genkey`, `/consulta/{servicios|otros}`, `/pago/{servicios|otros}`, `/reversion/{servicios|otros}`; mismos elementos XML (`<factura><cabecera><detalle>`, `<pago>`, `<reversion>`, `<mensaje>` de error con HTTP 400).
-2. Tabla `ban_ws_credencial` (banco, llave, vigencia, activo) multitenant + middleware de validación `banco`+`key`.
+2. Tabla `ban_ws_credencial` (banco, llave, vigencia, activo) multitenant + validación `banco`+`key` — migrar las llaves vigentes del WS actual para que las peticiones del banco sigan autenticando sin cambios.
 3. Consulta → saldos pendientes SIAD (facturas + mora) mapeados al XML.
 4. Pago → aplicación FIFO a facturas (parcial = abono), movimiento bancario (`ban_kardex` por cuenta del banco) + partida automática. **Idempotencia por `referencia`**.
 5. Reversión → por referencia, reusa reversas existentes.
-6. Pruebas de contrato automatizadas (golden files XML) + ambiente de certificación para el banco.
-7. **Iniciar coordinación con el banco desde el arranque del plan** (calendario externo, suele ser lo más lento).
+6. **Pruebas de equivalencia**: golden files XML del WS viejo vs nuevo (mismas consultas → misma estructura y semántica de respuesta); shadow testing con tráfico de consulta real si es posible.
+7. **Plan de cutover** (el pago debe caer en UN solo sistema de registro): fecha/hora de corte acordada con el banco u operaciones → repuntar IP/DNS o proxy al portal → monitoreo intensivo de las primeras transacciones → rollback plan (repuntar al WS viejo). Congelar reversiones cruzadas durante la ventana (una reversión de pago pre-corte se maneja manualmente).
 
 ---
 
@@ -191,9 +200,9 @@ Criterio: correr el lote dos veces no duplica; ESF/balance de comprobación refl
 | F4 Captación → config | 2–3 |
 | F5 NC/ND analítico | 1–2 |
 | F6 Saldos oficiales | 2–3 |
-| F7 Período + cierre | 4–6 |
-| F8 WS bancos | 6–8 (+ certificación externa) |
-| **Total** | **~24–34 días (5–7 semanas)** |
+| F7 Períodos + cierres | 4–6 |
+| F8 Migración WS bancos | 5–7 (+ ventana de corte) |
+| **Total** | **~23–33 días (5–7 semanas)** |
 
 Paralelizable con dos personas: F2 en paralelo con F3; F8 (contrato/consultas) en paralelo desde F4.
 
@@ -209,7 +218,7 @@ Paralelizable con dos personas: F2 en paralelo con F3; F8 (contrato/consultas) e
 | Riesgo / pendiente | Mitigación / dueño |
 |---|---|
 | Repunte de `sp_adm_calcular_factura_lectura` (corazón tarifario, F7) | Tests de regresión `LecturaV3Tests` + espejo `historialmes` transitorio |
-| Certificación bancaria (F8) es calendario externo | Iniciar gestión con el banco en la semana 1 |
+| Cutover del WS bancario (F8): los pagos deben caer en UN solo sistema | Golden files viejo-vs-nuevo, ventana de corte acordada, rollback repuntando al WS viejo, reversiones cruzadas manuales durante la ventana |
 | 25 facturas piloto sin contabilidad | Decidir con el contador: partida retroactiva vs corte desde julio (F3) |
 | 2 clientes sin categoría en producción | Corregir datos + validación obligatoria en pantalla Clientes (F3) |
 | Perfil NIIF | Fase posterior; el modelo (D4) ya lo soporta |
