@@ -1,4 +1,8 @@
+using System.Collections.Generic;
+using System.Linq;
+
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 
 namespace SIAD.Data;
@@ -13,9 +17,15 @@ public partial class SiadDbContext
 
     public virtual DbSet<con_partida_pendiente> con_partida_pendientes { get; set; } = null!;
 
+    public virtual DbSet<con_integracion_asiento> con_integracion_asientos { get; set; } = null!;
+
     // Llamado desde OnModelCreatingPartial en SiadDbContext.Accounting.cs
     private void ConfigureIntegracionContableModel(ModelBuilder modelBuilder)
     {
+        // Los CHECK se generan desde las constantes de SIAD.Core para que la
+        // lista de valores tenga una sola fuente (el script SQL debe coincidir).
+        static string ListaSql(IEnumerable<string> valores) =>
+            string.Join(", ", valores.Select(v => $"'{v}'"));
         modelBuilder.Entity<con_integracion_config>(entity =>
         {
             entity.HasKey(e => e.config_id);
@@ -31,6 +41,7 @@ public partial class SiadDbContext
             entity.Property(e => e.activo_bancos).HasDefaultValue(false);
             entity.Property(e => e.activo_notas).HasDefaultValue(false);
             entity.Property(e => e.activo_miscelaneos).HasDefaultValue(false);
+            entity.Property(e => e.activo_proveedores).HasDefaultValue(false);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
 
@@ -63,9 +74,7 @@ public partial class SiadDbContext
 
             entity.HasCheckConstraint(
                 "ck_con_integracion_cuenta_uso",
-                "uso IN ('CXC', 'INGRESO', 'CAJA', 'BANCO_DEFAULT', 'ISV', 'DESCUENTO', " +
-                "'RECARGO_MORA', 'PREVISION_INCOBRABLE', 'GASTO_INCOBRABLE', " +
-                "'RESULTADO_EJERCICIO', 'RESULTADO_ACUMULADO', 'DEVOLUCION_NC', 'TRANSITORIA')");
+                $"uso IN ({ListaSql(IntegracionContableUsos.Todos)})");
             entity.HasCheckConstraint(
                 "ck_con_integracion_cuenta_dims",
                 "servicio_id IS NOT NULL OR (categoria_servicio_id IS NULL AND con_medicion IS NULL)");
@@ -78,6 +87,40 @@ public partial class SiadDbContext
             entity.HasOne(e => e.account)
                 .WithMany()
                 .HasForeignKey(e => e.account_id)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<con_integracion_asiento>(entity =>
+        {
+            entity.HasKey(e => e.integracion_asiento_id);
+            entity.ToTable("con_integracion_asiento", "public");
+            entity.HasIndex(e => new { e.company_id, e.module }).IsUnique();
+
+            entity.Property(e => e.integracion_asiento_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.module).HasMaxLength(30);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasCheckConstraint(
+                "ck_con_integracion_asiento_module",
+                $"module IN ({ListaSql(IntegracionContableModulos.Todos)})");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            // FK compuesta tenant-safe (AK uq_con_diario_company_journal)
+            entity.HasOne<con_diario>()
+                .WithMany()
+                .HasForeignKey(e => new { e.company_id, e.journal_id })
+                .HasPrincipalKey(d => new { d.company_id, d.journal_id })
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<con_tipo_transaccion>()
+                .WithMany()
+                .HasForeignKey(e => new { e.company_id, e.type_id })
+                .HasPrincipalKey(t => new { t.company_id, t.type_id })
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

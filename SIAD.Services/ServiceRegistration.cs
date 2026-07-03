@@ -84,6 +84,7 @@ public static class ServiceRegistration
         services.AddScoped<ICompanyManagementService, CompanyManagementService>();
         services.AddScoped<IPeriodoContableService, PeriodoContableService>();
         services.AddScoped<IConfiguracionSistemaService, ConfiguracionSistemaService>();
+        services.AddScoped<IIntegracionContableService, IntegracionContableService>();
         services.AddScoped<ISaldosService, SaldosService>();
         services.AddScoped<IPolizaService, PolizaService>();
         services.AddScoped<ITerceroService, TerceroService>();
