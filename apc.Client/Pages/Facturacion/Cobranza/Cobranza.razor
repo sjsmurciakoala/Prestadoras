@@ -25,7 +25,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorCobranza))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorCobranza</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorCobranza</SiadAlert>
     }
 
     <DxTabs @bind-ActiveTabIndex="tabActivo" CssClass="tabs-modern">
@@ -91,9 +91,9 @@
 
                 @if (bloqueado)
                 {
-                    <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                    <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
                         El cliente está bloqueado por cobranza. Revise la situación antes de registrar un plan.
-                    </DxAlert>
+                    </SiadAlert>
                 }
 
                 <div class="modern-card mb-4">

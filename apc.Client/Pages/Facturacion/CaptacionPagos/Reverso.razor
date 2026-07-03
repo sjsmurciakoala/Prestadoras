@@ -13,7 +13,7 @@
 
     @if (!string.IsNullOrWhiteSpace(error))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</SiadAlert>
     }
 
     <DxCard CssClass="mb-4">
@@ -91,9 +91,9 @@
             </DxDataGrid>
             @if (miscelaneos.Count == 0 && string.IsNullOrWhiteSpace(error))
             {
-                <DxAlert AlertType="AlertType.Info" CssClass="mt-2">
+                <SiadAlert AlertType="AlertType.Info" CssClass="mt-2">
                     No se encontraron pagos misceláneos recientes para los criterios indicados.
-                </DxAlert>
+                </SiadAlert>
             }
         </BodyTemplate>
     </DxCard>

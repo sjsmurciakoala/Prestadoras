@@ -229,9 +229,9 @@
     <BodyContentTemplate Context="popupBody">
         @if (!string.IsNullOrWhiteSpace(formErrorMessage))
         {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">
+            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
                 @formErrorMessage
-            </DxAlert>
+            </SiadAlert>
         }
 
         <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical" CssClass="w-100">

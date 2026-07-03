@@ -26,7 +26,7 @@
 
     @if (!string.IsNullOrWhiteSpace(ciclosError))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@ciclosError</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@ciclosError</SiadAlert>
     }
 
     @if (mostrarFiltros)
@@ -95,7 +95,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
     }
 
     <div class="modern-card">
@@ -221,7 +221,7 @@
         else if (!string.IsNullOrWhiteSpace(formError))
         {
             <div class="p-3">
-                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger">@formError</SiadAlert>
             </div>
         }
         else

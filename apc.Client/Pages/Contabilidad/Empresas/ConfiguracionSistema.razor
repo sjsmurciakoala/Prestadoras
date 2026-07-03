@@ -39,32 +39,32 @@
                 {
                     @if (alertaEstilo == MessageBoxRenderStyle.Danger)
                     {
-                        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@alerta</DxAlert>
+                        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@alerta</SiadAlert>
                     }
                     else if (alertaEstilo == MessageBoxRenderStyle.Warning)
                     {
-                        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">@alerta</DxAlert>
+                        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">@alerta</SiadAlert>
                     }
                     else if (alertaEstilo == MessageBoxRenderStyle.Success)
                     {
-                        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@alerta</DxAlert>
+                        <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@alerta</SiadAlert>
                     }
                     else
                     {
-                        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@alerta</DxAlert>
+                        <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">@alerta</SiadAlert>
                     }
                 }
                 @if (MostrarAvisoSinConfiguracion)
                 {
-                    <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+                    <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
                         Esta empresa aún no tiene configuración del sistema contable. Complete el formulario a continuación para configurarla.
-                    </DxAlert>
+                    </SiadAlert>
                 }
                 @if (MostrarAvisoSinPlanCuentas)
                 {
-                    <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                    <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
                         No existe un plan de cuentas cargado para esta empresa. Por ahora solo se validará y guardará la pestaña de configuración principal.
-                    </DxAlert>
+                    </SiadAlert>
                 }
 
                 <div class="mb-4">

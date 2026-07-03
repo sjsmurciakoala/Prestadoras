@@ -36,7 +36,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@errorMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@errorMessage</SiadAlert>
     }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
@@ -142,26 +142,26 @@
         <div class="p-2 reportes-feedback-panel">
             @if (!string.IsNullOrWhiteSpace(createErrorMessage))
             {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@createErrorMessage</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@createErrorMessage</SiadAlert>
             }
 
             @if (isEditMode)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
+                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
                     Editar un dataset no reescribe layouts ya persistidos. Si un reporte ya tiene layout guardado, el cambio de dataset puede requerir regenerar o volver a guardar el layout.
-                </DxAlert>
+                </SiadAlert>
             }
 
             @if (createValidationMessages.Count > 0)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
+                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
                     <ul class="mb-0 ps-3">
                         @foreach (var message in createValidationMessages)
                         {
                             <li>@message</li>
                         }
                     </ul>
-                </DxAlert>
+                </SiadAlert>
             }
 
             <DxFormLayout ColCountMd="12">
@@ -336,7 +336,7 @@
         <div class="p-2 reportes-feedback-panel">
             @if (!string.IsNullOrWhiteSpace(previewErrorMessage))
             {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@previewErrorMessage</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@previewErrorMessage</SiadAlert>
             }
 
             @if (isPreviewLoading)
@@ -456,7 +456,7 @@
         <div class="p-3 reportes-feedback-panel">
             @if (!string.IsNullOrWhiteSpace(deleteErrorMessage))
             {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@deleteErrorMessage</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@deleteErrorMessage</SiadAlert>
             }
 
             <p class="mb-3">

@@ -136,9 +136,9 @@
 
         @if (!string.IsNullOrEmpty(gridError))
         {
-            <DxAlert AlertType="AlertType.Danger" Title="Error">
+            <SiadAlert AlertType="AlertType.Danger" Title="Error">
                 @gridError
-            </DxAlert>
+            </SiadAlert>
         }
 
         <div class="grid-wrapper">
@@ -196,15 +196,15 @@
 
         <BodyTemplate Context="popupContext">
             <div class="popup-body">
-                <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+                <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
                     Se cerrará automáticamente el período anterior abierto y se prepararán lecturas base clonando del período previo.
-                </DxAlert>
+                </SiadAlert>
 
                 @if (!string.IsNullOrEmpty(generarErrorMsg))
                 {
-                    <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">
+                    <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
                         @generarErrorMsg
-                    </DxAlert>
+                    </SiadAlert>
                 }
 
                 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
@@ -264,16 +264,16 @@
             <div class="popup-body popup-body--wide">
                 @if (!string.IsNullOrEmpty(cargaMasivaError))
                 {
-                    <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">
+                    <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
                         @cargaMasivaError
-                    </DxAlert>
+                    </SiadAlert>
                 }
 
-                <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+                <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
                     <div class="fw-bold mb-2">Formato (CSV con punto y coma)</div>
                     <div class="small">CLAVE;CONTADOR;LECTURA_ANTERIOR;LECTURA_ACTUAL;USUARIO</div>
                     <div class="small text-muted mt-2">Ejemplo: CLI-001;MED-001;100;120;JUAN</div>
-                </DxAlert>
+                </SiadAlert>
 
                 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
                     <DxFormLayoutItem Caption="Año *" ColSpanXs="12" ColSpanMd="4">

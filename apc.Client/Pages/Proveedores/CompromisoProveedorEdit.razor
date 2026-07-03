@@ -56,20 +56,20 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
     }
 
     @if (ordenProcesada)
     {
-        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
             El compromiso ya fue procesado. Se muestra en modo consulta y no se puede modificar.
-        </DxAlert>
+        </SiadAlert>
     }
     else if (TienePartidaContableRegistrada)
     {
-        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+        <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
             El compromiso ya tiene una partida contable registrada. Se muestra en modo consulta hasta que sea procesado.
-        </DxAlert>
+        </SiadAlert>
     }
 
     @if (!isLoading)
@@ -181,9 +181,9 @@
                         @if (IsProveedorGenericoSeleccionado)
                         {
                             <DxFormLayoutItem ColSpanMd="12">
-                                <DxAlert AlertType="AlertType.Info" CssClass="mb-0">
+                                <SiadAlert AlertType="AlertType.Info" CssClass="mb-0">
                                     Con el proveedor generico, RTN, pagar a y cuenta de servicio se capturan manualmente.
-                                </DxAlert>
+                                </SiadAlert>
                             </DxFormLayoutItem>
                         }
 
@@ -253,9 +253,9 @@
 
                     @if (model.Detalles.Count == 0)
                     {
-                        <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+                        <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
                             Agregue al menos una linea para poder guardar el compromiso.
-                        </DxAlert>
+                        </SiadAlert>
                     }
                     else
                     {
@@ -385,20 +385,20 @@
                         {
                         @if (partidaPreview.Lineas.Count == 0)
                         {
-                            <DxAlert AlertType="AlertType.Info" CssClass="mb-0">
+                            <SiadAlert AlertType="AlertType.Info" CssClass="mb-0">
                                 Seleccione una cuenta de servicio o una cuenta de gasto en el detalle para construir la partida contable.
-                            </DxAlert>
+                            </SiadAlert>
                         }
                         else
                         {
                             @if (!string.IsNullOrWhiteSpace(partidaPreview.WarningMessage))
                             {
-                                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">@partidaPreview.WarningMessage</DxAlert>
+                                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">@partidaPreview.WarningMessage</SiadAlert>
                             }
 
                             @if (!string.IsNullOrWhiteSpace(partidaPreview.InfoMessage))
                             {
-                                <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@partidaPreview.InfoMessage</DxAlert>
+                                <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">@partidaPreview.InfoMessage</SiadAlert>
                             }
 
                             <div class="table-responsive detail-table">
@@ -468,9 +468,9 @@
 
                         @if (LineasPartidaContable.Count == 0)
                         {
-                            <DxAlert AlertType="AlertType.Warning" CssClass="mb-0">
+                            <SiadAlert AlertType="AlertType.Warning" CssClass="mb-0">
                                 No se encontro una partida contable asociada a este compromiso.
-                            </DxAlert>
+                            </SiadAlert>
                         }
                         else
                         {

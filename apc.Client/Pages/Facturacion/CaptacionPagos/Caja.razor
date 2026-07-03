@@ -19,12 +19,12 @@
 
     @if (!string.IsNullOrWhiteSpace(error))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-4">@error</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-4">@error</SiadAlert>
     }
 
     @if (!string.IsNullOrWhiteSpace(info))
     {
-        <DxAlert AlertType="AlertType.Info" CssClass="mb-4">@info</DxAlert>
+        <SiadAlert AlertType="AlertType.Info" CssClass="mb-4">@info</SiadAlert>
     }
 
     @* --- TARJETA 2: REGISTRO DE PAGOS --- *@

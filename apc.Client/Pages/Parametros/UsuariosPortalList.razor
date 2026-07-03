@@ -14,12 +14,12 @@
 
 @if (!string.IsNullOrWhiteSpace(errorMessage))
 {
-    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
+    <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</SiadAlert>
 }
 
 @if (!string.IsNullOrWhiteSpace(successMessage))
 {
-    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
+    <SiadAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</SiadAlert>
 }
 
 <div class="d-flex gap-2 mb-3 mt-3">

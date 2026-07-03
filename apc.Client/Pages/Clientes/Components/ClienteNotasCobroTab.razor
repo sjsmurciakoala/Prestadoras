@@ -27,7 +27,7 @@
     }
     else if (!string.IsNullOrEmpty(errorMsg))
     {
-        <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+        <SiadAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</SiadAlert>
     }
     else
     {
@@ -85,7 +85,7 @@
         </DxFormLayout>
         @if (!string.IsNullOrEmpty(emitirError))
         {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@emitirError</DxAlert>
+            <SiadAlert AlertType="AlertType.Error" CssClass="mt-2">@emitirError</SiadAlert>
         }
     </BodyTemplate>
     <FooterTemplate>
@@ -113,7 +113,7 @@
         </DxFormLayout>
         @if (!string.IsNullOrEmpty(anularError))
         {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@anularError</DxAlert>
+            <SiadAlert AlertType="AlertType.Error" CssClass="mt-2">@anularError</SiadAlert>
         }
     </BodyTemplate>
     <FooterTemplate>

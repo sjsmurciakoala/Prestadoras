@@ -69,9 +69,9 @@
 
     @if (!string.IsNullOrEmpty(errorMsg))
     {
-        <DxAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle" CssClass="mb-3">
+        <SiadAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle" CssClass="mb-3">
             @errorMsg
-        </DxAlert>
+        </SiadAlert>
     }
 
     <!-- RESULTADOS -->
@@ -97,10 +97,10 @@
 
         @if (resultadoTruncado)
         {
-            <DxAlert AlertType="AlertType.Warning" IconCssClass="bi bi-exclamation-circle" CssClass="mb-3">
+            <SiadAlert AlertType="AlertType.Warning" IconCssClass="bi bi-exclamation-circle" CssClass="mb-3">
                 Se alcanzó el límite de @CobranzaHistorialConstantes.MaxFilas registros.
                 Acote el rango de fechas para ver el detalle completo.
-            </DxAlert>
+            </SiadAlert>
         }
 
         @if (isLoading)

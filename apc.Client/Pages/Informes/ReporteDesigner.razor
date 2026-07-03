@@ -42,35 +42,35 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
     }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
     {
-        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</SiadAlert>
     }
 
     @if (!isLoading && detalle is not null && !string.IsNullOrWhiteSpace(detalle.MensajeRegeneracionBorrador))
     {
         @if (detalle.TieneDesfaseDatasetLayout)
         {
-            <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
                 @detalle.MensajeRegeneracionBorrador
-            </DxAlert>
+            </SiadAlert>
         }
         else
         {
-            <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+            <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
                 @detalle.MensajeRegeneracionBorrador
-            </DxAlert>
+            </SiadAlert>
         }
     }
 
     @if (!isLoading && detalle is not null && !detalle.TieneBorrador)
     {
-        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
             @GetDraftWarningMessage(detalle)
-        </DxAlert>
+        </SiadAlert>
     }
 
     <div class="modern-card p-3">

@@ -27,9 +27,9 @@
         }
         else if (!string.IsNullOrEmpty(errorCuenta))
         {
-            <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
+            <SiadAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
                 @errorCuenta
-            </DxAlert>
+            </SiadAlert>
         }
         else if (estadoCuenta != null)
         {
@@ -129,9 +129,9 @@
         {
             @if (!string.IsNullOrWhiteSpace(movimientosDataSource?.LastError))
             {
-                <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
+                <SiadAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
                     @movimientosDataSource!.LastError
-                </DxAlert>
+                </SiadAlert>
             }
 
             <div class="grid-wrapper">

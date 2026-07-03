@@ -68,7 +68,7 @@
             }
             else if (!string.IsNullOrEmpty(errorMsg))
             {
-                <DxAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle">@errorMsg</SiadAlert>
             }
             else
             {
@@ -229,7 +229,7 @@
 
         @if (!string.IsNullOrEmpty(guardarError))
         {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@guardarError</DxAlert>
+            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@guardarError</SiadAlert>
         }
     </BodyTemplate>
     <FooterTemplate>

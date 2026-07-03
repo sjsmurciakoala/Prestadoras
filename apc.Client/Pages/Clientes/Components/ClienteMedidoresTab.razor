@@ -42,9 +42,9 @@
 
             @if (!string.IsNullOrEmpty(medidoresError))
             {
-                <DxAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle">
+                <SiadAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle">
                     @medidoresError
-                </DxAlert>
+                </SiadAlert>
             }
             else if (medidores.Count == 0)
             {
@@ -104,11 +104,11 @@
             }
             else if (!string.IsNullOrEmpty(medidoresDisponiblesError))
             {
-                <DxAlert AlertType="AlertType.Danger">@medidoresDisponiblesError</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger">@medidoresDisponiblesError</SiadAlert>
             }
             else if (!string.IsNullOrEmpty(asignacionError))
             {
-                <DxAlert AlertType="AlertType.Danger">@asignacionError</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger">@asignacionError</SiadAlert>
             }
             else
             {
@@ -146,7 +146,7 @@
         <BodyTemplate Context="popupContext">
             @if (!string.IsNullOrEmpty(lecturaError))
             {
-                <DxAlert AlertType="AlertType.Danger">@lecturaError</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger">@lecturaError</SiadAlert>
             }
             <DxFormLayout>
                 <DxFormLayoutItem Caption="Clave">
@@ -191,7 +191,7 @@
             }
             else if (!string.IsNullOrEmpty(medidorDetalleError))
             {
-                <DxAlert AlertType="AlertType.Danger">@medidorDetalleError</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger">@medidorDetalleError</SiadAlert>
             }
             else if (medidorDetalle != null)
             {

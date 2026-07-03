@@ -27,21 +27,21 @@
 
         @if (_sesionActiva is null)
         {
-            <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
                 <strong>Caja no abierta.</strong>
                 No tiene una sesión de caja activa. Abra la caja desde
                 <a href="/facturacion/caja">Gestión de Caja</a> antes de facturar.
-            </DxAlert>
+            </SiadAlert>
         }
 
         @if (!string.IsNullOrWhiteSpace(error))
         {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</SiadAlert>
         }
 
         @if (!string.IsNullOrWhiteSpace(info))
         {
-            <DxAlert AlertType="AlertType.Info" CssClass="mb-3">@info</DxAlert>
+            <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">@info</SiadAlert>
         }
 
         <div class="modern-card mb-4">
@@ -177,9 +177,9 @@
                         </DxGridCommandColumn>
                     </Columns>
                     <EmptyDataAreaTemplate>
-                        <DxAlert AlertType="AlertType.Info">
+                        <SiadAlert AlertType="AlertType.Info">
                             Aún no se han agregado conceptos misceláneos. Usa el botón "Agregar misceláneos" para seleccionar del catálogo.
-                        </DxAlert>
+                        </SiadAlert>
                     </EmptyDataAreaTemplate>
                 </DxGrid>
             </div>
@@ -203,9 +203,9 @@
 
         @if (ultimoRecibo is not null)
         {
-            <DxAlert AlertType="AlertType.Success">
+            <SiadAlert AlertType="AlertType.Success">
                 Recibo @ultimoRecibo.NumeroRecibo generado para el cliente @ultimoRecibo.ClienteClave el @ultimoRecibo.FechaEmision:d. Total @ultimoRecibo.Total.ToString("C2").
-            </DxAlert>
+            </SiadAlert>
         }
     </div>
 </DxScrollView>
@@ -258,9 +258,9 @@
             </DxGridCommandColumn>
         </Columns>
         <EmptyDataAreaTemplate Context="emptyContext">
-            <DxAlert AlertType="AlertType.Info">
+            <SiadAlert AlertType="AlertType.Info">
                 No se encontraron clientes que coincidan con el criterio proporcionado.
-            </DxAlert>
+            </SiadAlert>
         </EmptyDataAreaTemplate>
             </DxGrid>
         </div>

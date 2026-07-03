@@ -56,9 +56,9 @@
 
     @if (cuenta is null)
     {
-        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
             Seleccione una cuenta bancaria para consultar transacciones conciliadas.
-        </DxAlert>
+        </SiadAlert>
     }
     else
     {
@@ -93,9 +93,9 @@
         <div class="modern-card position-relative" style="min-height: 320px;">
             @if (transaccionesConciliadas.Count == 0)
             {
-                <DxAlert AlertType="AlertType.Info" CssClass="mt-3">
+                <SiadAlert AlertType="AlertType.Info" CssClass="mt-3">
                     No hay transacciones conciliadas para el rango seleccionado.
-                </DxAlert>
+                </SiadAlert>
             }
             else
             {

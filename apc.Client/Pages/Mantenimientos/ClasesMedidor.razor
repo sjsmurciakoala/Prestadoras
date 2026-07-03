@@ -23,11 +23,11 @@
 
     @if (!string.IsNullOrEmpty(errorMsg))
     {
-        <DxAlert AlertType="AlertType.Error" CssClass="mb-3" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
+        <SiadAlert AlertType="AlertType.Error" CssClass="mb-3" IconCssClass="bi bi-exclamation-triangle">@errorMsg</SiadAlert>
     }
     @if (!string.IsNullOrEmpty(successMsg))
     {
-        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMsg</DxAlert>
+        <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@successMsg</SiadAlert>
     }
 
     <div class="modern-card">
@@ -110,7 +110,7 @@
         </DxFormLayout>
         @if (!string.IsNullOrEmpty(formError))
         {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@formError</DxAlert>
+            <SiadAlert AlertType="AlertType.Error" CssClass="mt-2">@formError</SiadAlert>
         }
     </BodyTemplate>
     <FooterTemplate>
@@ -134,7 +134,7 @@
         <p class="text-muted small">No se puede eliminar si tiene medidores asociados.</p>
         @if (!string.IsNullOrEmpty(eliminarError))
         {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@eliminarError</DxAlert>
+            <SiadAlert AlertType="AlertType.Error" CssClass="mt-2">@eliminarError</SiadAlert>
         }
     </BodyTemplate>
     <FooterTemplate>

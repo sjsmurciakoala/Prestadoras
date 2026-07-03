@@ -31,11 +31,11 @@
 
         @if (!string.IsNullOrEmpty(error))
         {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
+            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</SiadAlert>
         }
         else if (!string.IsNullOrEmpty(mensaje))
         {
-            <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@mensaje</DxAlert>
+            <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@mensaje</SiadAlert>
         }
 
         <div class="modern-card mb-4">

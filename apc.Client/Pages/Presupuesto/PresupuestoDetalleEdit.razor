@@ -30,7 +30,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
     }
 
     <div class="modern-card mb-3">
@@ -54,24 +54,24 @@
         }
         else if (detalle is null)
         {
-            <DxAlert AlertType="AlertType.Warning">
+            <SiadAlert AlertType="AlertType.Warning">
                 No se encontró el detalle solicitado.
-            </DxAlert>
+            </SiadAlert>
         }
         else
         {
             @if (!presupuestoVigente)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
                     @GetMensajeBloqueoPorRango()
-                </DxAlert>
+                </SiadAlert>
             }
 
             @if (presupuestoAprobado)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
                     Este presupuesto ya está aprobado. No se permite editar el detalle.
-                </DxAlert>
+                </SiadAlert>
             }
 
             <EditForm Model="form" OnValidSubmit="GuardarAsync" Context="detalleEditFormContext">

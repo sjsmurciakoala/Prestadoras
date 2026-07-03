@@ -29,7 +29,7 @@
 
 @if (!string.IsNullOrWhiteSpace(loadError))
 {
-    <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@loadError</DxAlert>
+    <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@loadError</SiadAlert>
 }
 else
 {
@@ -42,7 +42,7 @@ else
 
             @if (!string.IsNullOrWhiteSpace(loadWarning))
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">@loadWarning</DxAlert>
+                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">@loadWarning</SiadAlert>
             }
 
             @if (editContext.GetValidationMessages().Any())
@@ -198,7 +198,7 @@ else
                                                       CssClass="mt-2" />
                                             @if (!string.IsNullOrWhiteSpace(uploadError))
                                             {
-                                                <DxAlert AlertType="AlertType.Danger" CssClass="mt-3 shadow-sm">@uploadError</DxAlert>
+                                                <SiadAlert AlertType="AlertType.Danger" CssClass="mt-3 shadow-sm">@uploadError</SiadAlert>
                                             }
                                         </div>
                                     </div>

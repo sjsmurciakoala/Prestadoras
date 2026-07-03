@@ -3,11 +3,11 @@
 
 @if (!string.IsNullOrEmpty(ErrorMessage))
 {
-    <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@ErrorMessage</DxAlert>
+    <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@ErrorMessage</SiadAlert>
 }
 else if (!string.IsNullOrEmpty(SuccessMessage))
 {
-    <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@SuccessMessage</DxAlert>
+    <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@SuccessMessage</SiadAlert>
 }
 
 <DxFormLayout>

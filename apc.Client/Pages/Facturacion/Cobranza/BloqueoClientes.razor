@@ -65,7 +65,7 @@
 
             @if (!string.IsNullOrEmpty(errorAccion))
             {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorAccion</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorAccion</SiadAlert>
             }
 
             <div class="d-flex gap-2">
@@ -112,7 +112,7 @@
 
         @if (!string.IsNullOrEmpty(confirmacionError))
         {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@confirmacionError</DxAlert>
+            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@confirmacionError</SiadAlert>
         }
     </BodyTemplate>
     <FooterTemplate>

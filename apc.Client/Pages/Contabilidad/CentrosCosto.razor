@@ -198,11 +198,11 @@
                     
                     @if (!string.IsNullOrWhiteSpace(formErrorMessage))
                     {
-                        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 mx-2 mt-2">
+                        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3 mx-2 mt-2">
                             <span>@formErrorMessage</span>
                             <DxButton RenderStyle="ButtonRenderStyle.None" CssClass="btn-close ms-2 float-end" SizeMode="SizeMode.Small"
                                 Click="@(() => formErrorMessage = null)" />
-                        </DxAlert>
+                        </SiadAlert>
                     }
 
                     <div class="flex-grow-1 p-3 overflow-auto custom-scrollbar">

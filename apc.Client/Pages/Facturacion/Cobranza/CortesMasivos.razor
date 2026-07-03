@@ -83,15 +83,15 @@
 
         @if (!string.IsNullOrEmpty(generarError))
         {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@generarError</DxAlert>
+            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@generarError</SiadAlert>
         }
         @if (ultimoLoteGenerado is not null)
         {
-            <DxAlert AlertType="AlertType.Success" CssClass="mt-2">
+            <SiadAlert AlertType="AlertType.Success" CssClass="mt-2">
                 Lote <strong>@ultimoLoteGenerado.Correlativo</strong> generado con
                 <strong>@ultimoLoteGenerado.TotalClientes</strong> clientes —
                 Período <strong>@($"{ultimoLoteGenerado.PeriodoMes:D2}/{ultimoLoteGenerado.PeriodoAnio}")</strong>.
-            </DxAlert>
+            </SiadAlert>
         }
     </div>
 

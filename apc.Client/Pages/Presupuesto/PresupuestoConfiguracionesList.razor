@@ -36,7 +36,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
     }
 
     <div class="modern-card position-relative">
@@ -185,7 +185,7 @@
 
         @if (selectedHeader is null)
         {
-            <DxAlert AlertType="AlertType.Info">Seleccione un encabezado en el grid superior.</DxAlert>
+            <SiadAlert AlertType="AlertType.Info">Seleccione un encabezado en el grid superior.</SiadAlert>
         }
         else if (isLoadingDetalles)
         {
@@ -193,15 +193,15 @@
         }
         else if (!string.IsNullOrWhiteSpace(detalleErrorMessage))
         {
-            <DxAlert AlertType="AlertType.Danger">@detalleErrorMessage</DxAlert>
+            <SiadAlert AlertType="AlertType.Danger">@detalleErrorMessage</SiadAlert>
         }
         else
         {
             @if (!IsPresupuestoVigente())
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-2">
+                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-2">
                     @GetMensajeBloqueoPorRango("operar detalles")
-                </DxAlert>
+                </SiadAlert>
             }
 
             <div class="grid-wrapper">
@@ -325,14 +325,14 @@
         {
             @if (!string.IsNullOrWhiteSpace(detalleFormError))
             {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@detalleFormError</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@detalleFormError</SiadAlert>
             }
 
             @if (cuentasDisponiblesDetalle.Count == 0)
             {
-                <DxAlert AlertType="AlertType.Warning">
+                <SiadAlert AlertType="AlertType.Warning">
                     No hay cuentas contables disponibles para agregar en este presupuesto.
-                </DxAlert>
+                </SiadAlert>
                 <div class="d-flex justify-content-end mt-3">
                     <DxButton Text="Cerrar"
                               RenderStyle="ButtonRenderStyle.Secondary"

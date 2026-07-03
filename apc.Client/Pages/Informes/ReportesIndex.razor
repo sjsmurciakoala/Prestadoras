@@ -37,12 +37,12 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
     }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
     {
-        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</DxAlert>
+        <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</SiadAlert>
     }
 
     <div class="modern-card p-4">
@@ -181,7 +181,7 @@
         <div class="p-3">
             @if (!string.IsNullOrWhiteSpace(deleteErrorMessage))
             {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@deleteErrorMessage</DxAlert>
+                <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@deleteErrorMessage</SiadAlert>
             }
 
             <p class="mb-3">

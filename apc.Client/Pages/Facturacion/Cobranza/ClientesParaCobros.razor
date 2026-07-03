@@ -78,7 +78,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMsg))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMsg</DxAlert>
+        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMsg</SiadAlert>
     }
 
     <!-- RESULTADOS + ACCIONES MASIVAS -->
@@ -212,7 +212,7 @@
 
         @if (!string.IsNullOrEmpty(accionLoteError))
         {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@accionLoteError</DxAlert>
+            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@accionLoteError</SiadAlert>
         }
     </BodyTemplate>
     <FooterTemplate>
