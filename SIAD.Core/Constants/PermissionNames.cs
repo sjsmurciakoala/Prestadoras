@@ -38,6 +38,11 @@ public static class PermissionResources
         public const string NotasCreditoDebito = "notas_credito_debito";
         public const string Caja = "caja";
     }
+
+    public static class Contabilidad
+    {
+        public const string Integracion = "integracion";
+    }
 }
 
 public static class PermissionNames

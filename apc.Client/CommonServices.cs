@@ -56,6 +56,7 @@ namespace apc.Client
             services.AddScoped<ClientesCobroClient>();
             services.AddScoped<EmpresasContabilidadClient>();
             services.AddScoped<ConfiguracionSistemaClient>();
+            services.AddScoped<IntegracionContableClient>();
             services.AddScoped<PeriodosContablesClient>();
             services.AddScoped<EmpresaClient>();
             services.AddScoped<BancoConfiguracionClient>();

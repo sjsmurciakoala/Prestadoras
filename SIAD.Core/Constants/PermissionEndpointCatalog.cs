@@ -391,5 +391,58 @@ public static class PermissionEndpointCatalog
             Route: "api/facturacion/notas/motivos/{id:int}"),
     ];
 
-    public static IEnumerable<EndpointPermissionDefinition> All => Ventas;
+    public static readonly EndpointPermissionDefinition[] Contabilidad =
+    [
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_integracion_companyid",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/integracion/{companyId}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_integracion_companyid",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/contabilidad/integracion/{companyId}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_integracion_companyid_validacion",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/integracion/{companyId}/validacion"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_integracion_companyid_perfil_perfil",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/contabilidad/integracion/{companyId}/perfil/{perfil}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_integracion_companyid_servicios",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/integracion/{companyId}/servicios"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_integracion_companyid_cuentas_posteables",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/integracion/{companyId}/cuentas-posteables"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_integracion_categorias",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/integracion/categorias"),
+    ];
+
+    public static IEnumerable<EndpointPermissionDefinition> All => [.. Ventas, .. Contabilidad];
 }

@@ -13,6 +13,8 @@ public partial class SiadDbContext
 
     public virtual DbSet<con_partida_pendiente> con_partida_pendientes { get; set; } = null!;
 
+    public virtual DbSet<con_integracion_asiento> con_integracion_asientos { get; set; } = null!;
+
     // Llamado desde OnModelCreatingPartial en SiadDbContext.Accounting.cs
     private void ConfigureIntegracionContableModel(ModelBuilder modelBuilder)
     {
@@ -78,6 +80,38 @@ public partial class SiadDbContext
             entity.HasOne(e => e.account)
                 .WithMany()
                 .HasForeignKey(e => e.account_id)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<con_integracion_asiento>(entity =>
+        {
+            entity.HasKey(e => e.integracion_asiento_id);
+            entity.ToTable("con_integracion_asiento", "public");
+            entity.HasIndex(e => new { e.company_id, e.module }).IsUnique();
+
+            entity.Property(e => e.integracion_asiento_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.module).HasMaxLength(30);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+
+            entity.HasCheckConstraint(
+                "ck_con_integracion_asiento_module",
+                "module IN ('FACTURACION', 'CAJA', 'BANCOS', 'NOTAS', 'MISCELANEOS')");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<con_diario>()
+                .WithMany()
+                .HasForeignKey(e => e.journal_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<con_tipo_transaccion>()
+                .WithMany()
+                .HasForeignKey(e => new { e.company_id, e.type_id })
+                .HasPrincipalKey(t => new { t.company_id, t.type_id })
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
