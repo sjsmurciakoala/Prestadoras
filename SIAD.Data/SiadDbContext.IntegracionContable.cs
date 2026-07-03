@@ -19,6 +19,10 @@ public partial class SiadDbContext
 
     public virtual DbSet<con_integracion_asiento> con_integracion_asientos { get; set; } = null!;
 
+    public virtual DbSet<con_lote_facturacion> con_lote_facturacions { get; set; } = null!;
+
+    public virtual DbSet<con_partida_factura> con_partida_facturas { get; set; } = null!;
+
     // Llamado desde OnModelCreatingPartial en SiadDbContext.Accounting.cs
     private void ConfigureIntegracionContableModel(ModelBuilder modelBuilder)
     {
@@ -158,6 +162,64 @@ public partial class SiadDbContext
                 .WithMany()
                 .HasForeignKey(e => e.poliza_id)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        // ----- Fase 3: lote de partidas de facturación -----
+
+        modelBuilder.Entity<con_lote_facturacion>(entity =>
+        {
+            entity.HasKey(e => e.lote_id);
+            entity.ToTable("con_lote_facturacion", "public");
+            entity.HasIndex(e => new { e.company_id, e.created_at });
+
+            entity.Property(e => e.lote_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.modo_agrupacion).HasMaxLength(20).HasDefaultValue("DIA");
+            entity.Property(e => e.total).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
+            entity.Property(e => e.status_id).HasDefaultValue((short)1);
+            entity.Property(e => e.created_by).HasMaxLength(100);
+
+            entity.HasCheckConstraint(
+                "ck_con_lote_facturacion_modo",
+                "modo_agrupacion IN ('DIA', 'PERIODO')");
+            entity.HasCheckConstraint(
+                "ck_con_lote_facturacion_status",
+                "status_id IN (1, 2, 3)");
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<con_partida_factura>(entity =>
+        {
+            entity.HasKey(e => e.partida_factura_id);
+            entity.ToTable("con_partida_factura", "public");
+            entity.HasIndex(e => new { e.company_id, e.factura_id }).IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.poliza_id });
+
+            entity.Property(e => e.partida_factura_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.created_by).HasMaxLength(100);
+
+            entity.HasOne<cfg_company>()
+                .WithMany()
+                .HasForeignKey(e => e.company_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<factura>()
+                .WithMany()
+                .HasForeignKey(e => e.factura_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne<con_lote_facturacion>()
+                .WithMany()
+                .HasForeignKey(e => e.lote_id)
+                .OnDelete(DeleteBehavior.Cascade);
+
+            entity.HasOne<con_partida_hdr>()
+                .WithMany()
+                .HasForeignKey(e => e.poliza_id)
+                .OnDelete(DeleteBehavior.Restrict);
         });
     }
 }

@@ -442,6 +442,34 @@ public static class PermissionEndpointCatalog
             Action: PermissionAction.View,
             HttpMethod: "GET",
             Route: "api/contabilidad/integracion/categorias"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_lote_facturacion_companyid_preview",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/lote-facturacion/{companyId}/preview"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_lote_facturacion_companyid_generar",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/contabilidad/lote-facturacion/{companyId}/generar"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_lote_facturacion_companyid_historial",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/lote-facturacion/{companyId}/historial"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Integracion,
+            Resource: "integracion__contabilidad_lote_facturacion_companyid_pendientes",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/lote-facturacion/{companyId}/pendientes"),
     ];
 
     public static IEnumerable<EndpointPermissionDefinition> All => [.. Ventas, .. Contabilidad];
