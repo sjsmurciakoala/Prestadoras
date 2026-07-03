@@ -6,9 +6,9 @@
 @using apc.Client.Services.Tenant
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Contabilidad
-@using SIAD.Core.DTOs.Tenant
 @inject IntegracionContableClient IntegracionClient
-@inject TenantCompaniesClient TenantCompaniesClient
+@inject TenantState TenantState
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Configuración de Integración Contable</PageTitle>
 
@@ -30,10 +30,6 @@
 
         <ChildContent>
             <div class="p-4">
-                @if (!string.IsNullOrWhiteSpace(alerta))
-                {
-                    <div class="alert alert-danger mb-3" role="alert">@alerta</div>
-                }
                 @if (validacion is not null)
                 {
                     @foreach (var error in validacion.Errores)
@@ -58,23 +54,6 @@
 
                 <div class="mb-4">
                     <DxToolbar ItemSpacing="12px">
-                        <DxToolbarItem>
-                            <Template>
-                                <DxComboBox Data="@empresas"
-                                            TData="TenantCompanyDto"
-                                            TValue="long"
-                                            Value="@empresaSeleccionadaId"
-                                            ValueChanged="@OnEmpresaChangedAsync"
-                                            ValueExpression="@(() => empresaSeleccionadaId)"
-                                            ValueFieldName="@nameof(TenantCompanyDto.CompanyId)"
-                                            TextFieldName="@nameof(TenantCompanyDto.Name)"
-                                            NullText="Seleccione empresa"
-                                            SearchMode="ListSearchMode.AutoSearch"
-                                            SearchFilterCondition="ListSearchFilterCondition.Contains"
-                                            Enabled="@(!cargando && empresas.Count > 0)"
-                                            Width="260px" />
-                            </Template>
-                        </DxToolbarItem>
                         <DxToolbarItem IconCssClass="bi bi-arrow-clockwise"
                                        Text="Recargar"
                                        RenderStyle="ButtonRenderStyle.Secondary"
@@ -359,34 +338,11 @@
                     IsContentBlocked="true"
                     Text="Cargando configuración..." />
 
-    <DxPopup @bind-Visible="popupVisible"
-             Width="440px"
-             CloseOnEscape="true"
-             CloseOnOutsideClick="true"
-             ShowFooter="true">
-        <HeaderContentTemplate>
-            <div class="d-flex align-items-center gap-2 p-1">
-                <i class="bi bi-check-circle-fill fs-3 text-success"></i>
-                <strong>@popupTitulo</strong>
-            </div>
-        </HeaderContentTemplate>
-        <BodyContentTemplate>
-            <div class="p-3">
-                <p class="mb-0">@popupMensaje</p>
-            </div>
-        </BodyContentTemplate>
-        <FooterContentTemplate Context="popupFooter">
-            <div class="p-2 text-end">
-                <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Aceptar" Click="@popupFooter.CloseCallback" />
-            </div>
-        </FooterContentTemplate>
-    </DxPopup>
 </div>
 
 @code {
     private IntegracionContableDto? modelo;
     private IntegracionValidacionDto? validacion;
-    private List<TenantCompanyDto> empresas = new();
     private IReadOnlyList<CuentaContableLookupDto> cuentasPosteables = Array.Empty<CuentaContableLookupDto>();
     private IReadOnlyList<ServicioIntegracionLookupDto> servicios = Array.Empty<ServicioIntegracionLookupDto>();
     private IReadOnlyList<CategoriaServicioLookupDto> categorias = Array.Empty<CategoriaServicioLookupDto>();
@@ -400,10 +356,6 @@
     private long empresaSeleccionadaId;
     private int activeTabIndex;
     private bool cargando;
-    private string? alerta;
-        private bool popupVisible;
-    private string popupTitulo = "Configuración guardada";
-    private string popupMensaje = string.Empty;
 
     private static readonly string[] usosDimensionables = IntegracionContableUsos.Dimensionables;
 
@@ -430,49 +382,24 @@
     private async Task RecargarAsync()
     {
         cargando = true;
-        alerta = null;
         validacion = null;
         try
         {
-            empresas = (await TenantCompaniesClient.ObtenerAsync())?.ToList() ?? new List<TenantCompanyDto>();
-            empresaSeleccionadaId = empresaSeleccionadaId > 0 ? empresaSeleccionadaId : empresas.FirstOrDefault()?.CompanyId ?? 0;
+            // La pantalla opera sobre la empresa actual del usuario (claims);
+            // no ofrece cambiar de tenant (regla multitenant del portal).
+            empresaSeleccionadaId = await TenantState.EnsureCompanyAsync();
             if (empresaSeleccionadaId > 0)
             {
                 await CargarConfiguracionAsync(empresaSeleccionadaId);
+            }
+            else
+            {
+                MostrarError("Su sesión no tiene una empresa activa; vuelva a iniciar sesión.");
             }
         }
         catch (Exception ex)
         {
             MostrarError($"No fue posible cargar la configuración: {ex.Message}");
-        }
-        finally
-        {
-            cargando = false;
-            StateHasChanged();
-        }
-    }
-
-    private async Task OnEmpresaChangedAsync(long nuevaEmpresaId)
-    {
-        cargando = true;
-        alerta = null;
-        validacion = null;
-        activeTabIndex = 0;
-        try
-        {
-            empresaSeleccionadaId = nuevaEmpresaId;
-            if (nuevaEmpresaId > 0)
-            {
-                await CargarConfiguracionAsync(nuevaEmpresaId);
-            }
-            else
-            {
-                modelo = null;
-            }
-        }
-        catch (Exception ex)
-        {
-            MostrarError($"No fue posible cambiar de empresa: {ex.Message}");
         }
         finally
         {
@@ -556,10 +483,12 @@
 
     private void AgregarFilaMatriz()
     {
+        // Sin servicio por defecto: una fila de matriz con servicio vacío se
+        // volvería la fila comodín general del uso al guardar; el usuario debe
+        // elegirlo y GuardarAsync lo exige.
         matrizRows.Add(new IntegracionCuentaDto
         {
             Uso = IntegracionContableUsos.Ingreso,
-            ServicioId = servicios.FirstOrDefault()?.ServicioId,
             IsActive = true
         });
     }
@@ -591,19 +520,33 @@
             return;
         }
 
+        var incompletas = matrizRows.Count(f => f.ServicioId is null || f.AccountId is null or <= 0);
+        if (incompletas > 0)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Matriz incompleta",
+                Text = $"Hay {incompletas} fila(s) de la matriz sin servicio o sin cuenta. Complételas o elimínelas antes de guardar.",
+                RenderStyle = ToastRenderStyle.Warning
+            });
+            return;
+        }
+
         cargando = true;
-        alerta = null;
         try
         {
             var resultado = await IntegracionClient.GuardarAsync(empresaSeleccionadaId, ArmarDtoParaGuardar());
             modelo = resultado.Configuracion;
             validacion = resultado.Validacion;
             SepararFilas();
-            popupTitulo = "Configuración guardada";
-            popupMensaje = resultado.Validacion.Advertencias.Count > 0
-                ? $"La configuración se guardó correctamente con {resultado.Validacion.Advertencias.Count} advertencia(s). Revíselas en la parte superior."
-                : "La configuración se guardó correctamente.";
-            popupVisible = true;
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Configuración guardada",
+                Text = resultado.Validacion.Advertencias.Count > 0
+                    ? $"Guardada con {resultado.Validacion.Advertencias.Count} advertencia(s); revíselas en la parte superior."
+                    : "La configuración se guardó correctamente.",
+                RenderStyle = ToastRenderStyle.Success
+            });
         }
         catch (Exception ex)
         {
@@ -624,7 +567,6 @@
         }
 
         cargando = true;
-        alerta = null;
         try
         {
             validacion = await IntegracionClient.ValidarAsync(empresaSeleccionadaId);
@@ -648,15 +590,17 @@
         }
 
         cargando = true;
-        alerta = null;
         try
         {
             var resultado = await IntegracionClient.AplicarPerfilAsync(empresaSeleccionadaId, "ERSAPS");
             await CargarConfiguracionAsync(empresaSeleccionadaId);
-            popupTitulo = "Perfil ERSAPS aplicado";
-            popupMensaje = $"Filas insertadas: {resultado.Insertadas}. Ya existentes (no se tocaron): {resultado.Existentes}. " +
-                           $"Sin cuenta en el plan (omitidas): {resultado.SinCuenta}.";
-            popupVisible = true;
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Perfil ERSAPS aplicado",
+                Text = $"Filas insertadas: {resultado.Insertadas}. Ya existentes (no se tocaron): {resultado.Existentes}. " +
+                       $"Sin cuenta en el plan (omitidas): {resultado.SinCuenta}.",
+                RenderStyle = ToastRenderStyle.Success
+            });
         }
         catch (Exception ex)
         {
@@ -671,7 +615,12 @@
 
     private void MostrarError(string mensaje)
     {
-        alerta = mensaje;
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Integración contable",
+            Text = mensaje,
+            RenderStyle = ToastRenderStyle.Danger
+        });
     }
 
     private static string EtiquetaUso(string uso) => uso switch
@@ -694,11 +643,12 @@
 
     private static string EtiquetaModulo(string module) => module switch
     {
-        IntegracionContableModulos.Facturacion => "Facturación (lote manual)",
+        IntegracionContableModulos.Ventas => "Ventas / facturación (lote manual)",
         IntegracionContableModulos.Caja => "Caja / cobros",
         IntegracionContableModulos.Bancos => "Bancos",
         IntegracionContableModulos.Notas => "Notas C/D",
         IntegracionContableModulos.Miscelaneos => "Misceláneos",
+        IntegracionContableModulos.Proveedores => "Proveedores (compromisos)",
         _ => module
     };
 }

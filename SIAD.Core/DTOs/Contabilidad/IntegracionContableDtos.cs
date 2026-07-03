@@ -50,16 +50,26 @@ public static class IntegracionContableModos
     public static readonly string[] Todos = [General, PorServicio, PorServicioCategoria];
 }
 
-/// <summary>Módulos comerciales que generan partidas (con_integracion_asiento.module).</summary>
+/// <summary>
+/// Módulos comerciales que generan partidas (con_integracion_asiento.module).
+/// Vocabulario alineado con el del motor de posteo (con_partida_hdr.module y
+/// las constantes de CaptacionPagosService/AbonoService/BanTransaccionesService/
+/// OrdenesPagoDirectoService): VENTAS, CAJA, BANCOS, PROV. NOTAS y MISCELANEOS
+/// son flujos con diario/tipo propio configurables que hoy el motor estampa
+/// bajo module='VENTAS' en el hdr.
+/// Fuente única: el CHECK del script SQL y el HasCheckConstraint de EF se
+/// generan desde <see cref="Todos"/> — no duplicar la lista.
+/// </summary>
 public static class IntegracionContableModulos
 {
-    public const string Facturacion = "FACTURACION";
+    public const string Ventas = "VENTAS";
     public const string Caja = "CAJA";
     public const string Bancos = "BANCOS";
     public const string Notas = "NOTAS";
     public const string Miscelaneos = "MISCELANEOS";
+    public const string Proveedores = "PROV";
 
-    public static readonly string[] Todos = [Facturacion, Caja, Bancos, Notas, Miscelaneos];
+    public static readonly string[] Todos = [Ventas, Caja, Bancos, Notas, Miscelaneos, Proveedores];
 }
 
 /// <summary>Cabecera de configuración (con_integracion_config).</summary>

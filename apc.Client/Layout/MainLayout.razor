@@ -7,6 +7,13 @@
                     IsActive="@isXSmall"
                     IsActiveChanged="@OnXSmallChanged" />
 
+@* Contenedor único de notificaciones DxToast para toda la app
+   (IToastNotificationService.ShowToast desde cualquier página). *@
+<DxToastProvider VerticalAlignment="VerticalEdge.Top"
+                 HorizontalAlignment="HorizontalAlignment.Right"
+                 DisplayTime="@TimeSpan.FromSeconds(6)"
+                 MaxToastCount="5" />
+
 <AuthorizeView>
     <Authorized>
         <div class="page">

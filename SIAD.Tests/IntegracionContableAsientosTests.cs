@@ -33,11 +33,11 @@ public sealed class IntegracionContableAsientosTests : IntegrationTestBase
         await Connection.ExecuteAsync(new CommandDefinition(@"
             DELETE FROM public.con_integracion_asiento WHERE company_id = @CompanyId;
             INSERT INTO public.con_integracion_asiento (company_id, module, journal_id, type_id, created_by)
-            VALUES (@CompanyId, 'FACTURACION', @JournalId, @TypeId, 'test')",
+            VALUES (@CompanyId, 'VENTAS', @JournalId, @TypeId, 'test')",
             new { CompanyId, JournalId = journalId, TypeId = typeId }, Transaction));
 
         var fila = await Connection.QueryFirstAsync<(long journal_id, long type_id)>(new CommandDefinition(
-            "SELECT journal_id, type_id FROM public.con_integracion_asiento WHERE company_id = @CompanyId AND module = 'FACTURACION'",
+            "SELECT journal_id, type_id FROM public.con_integracion_asiento WHERE company_id = @CompanyId AND module = 'VENTAS'",
             new { CompanyId }, Transaction));
 
         Assert.Equal(journalId, fila.journal_id);
@@ -75,6 +75,19 @@ public sealed class IntegracionContableAsientosTests : IntegrationTestBase
     }
 
     [SkippableFact]
+    public async Task Rechaza_vocabulario_viejo_FACTURACION()
+    {
+        // v2 del script: el vocabulario quedó alineado al motor (VENTAS).
+        var ex = await Assert.ThrowsAsync<PostgresException>(() =>
+            Connection.ExecuteAsync(new CommandDefinition(@"
+                INSERT INTO public.con_integracion_asiento (company_id, module, created_by)
+                VALUES (@CompanyId, 'FACTURACION', 'test')",
+                new { CompanyId }, Transaction)));
+
+        Assert.Equal(PostgresErrorCodes.CheckViolation, ex.SqlState);
+    }
+
+    [SkippableFact]
     public async Task Rechaza_tipo_de_partida_de_otra_empresa()
     {
         var tipoAjeno = await Connection.ExecuteScalarAsync<long?>(new CommandDefinition(
@@ -87,6 +100,36 @@ public sealed class IntegracionContableAsientosTests : IntegrationTestBase
                 INSERT INTO public.con_integracion_asiento (company_id, module, type_id, created_by)
                 VALUES (@CompanyId, 'BANCOS', @TypeId, 'test')",
                 new { CompanyId, TypeId = tipoAjeno }, Transaction)));
+
+        Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, ex.SqlState);
+    }
+
+    [SkippableFact]
+    public async Task Rechaza_diario_de_otra_empresa()
+    {
+        // Crea una segunda empresa con su diario dentro de la transacción para
+        // ejercer la FK compuesta aunque la BD de pruebas sea monoempresa.
+        var diarioAjeno = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            WITH otra AS (
+                INSERT INTO public.cfg_company
+                    (code, commercial_name, legal_name, tax_id, country_code, currency_code,
+                     timezone, status, created_at, created_by)
+                VALUES ('TESTF2', 'Empresa test F2', 'Empresa test F2 SA', '0000-0000-000000',
+                        'HND', 'HNL', 'America/Tegucigalpa', 'ACTIVE', now(), 'test')
+                RETURNING company_id
+            )
+            INSERT INTO public.con_diario
+                (company_id, code, name, last_sequence, is_active, allows_manual, created_at, created_by)
+            SELECT company_id, 'TESTDIA', 'Diario test ajeno', 0, true, true, now(), 'test'
+            FROM otra
+            RETURNING journal_id",
+            new { }, Transaction));
+
+        var ex = await Assert.ThrowsAsync<PostgresException>(() =>
+            Connection.ExecuteAsync(new CommandDefinition(@"
+                INSERT INTO public.con_integracion_asiento (company_id, module, journal_id, created_by)
+                VALUES (@CompanyId, 'BANCOS', @JournalId, 'test')",
+                new { CompanyId, JournalId = diarioAjeno }, Transaction)));
 
         Assert.Equal(PostgresErrorCodes.ForeignKeyViolation, ex.SqlState);
     }

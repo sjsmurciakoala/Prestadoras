@@ -141,16 +141,38 @@ public sealed class IntegracionContableService : IIntegracionContableService
             AsignarActivo(config, asiento.Module, asiento.Activo);
         }
 
-        // Matriz: diff por id (update / insert / delete)
+        // Matriz: diff por id y, para filas nuevas (id 0), por dimensiones.
+        // El matcheo por dimensiones actualiza in-place la fila existente con la
+        // misma combinación (uso × servicio × categoría × medición): sin él, un
+        // "limpiar y re-elegir" en la UI produce INSERT + DELETE del mismo
+        // comodín y el índice único de expresiones (que EF no puede modelar)
+        // puede rechazar el guardado si el INSERT sale primero (23505).
         var cuentasExistentes = await _context.con_integracion_cuentas
             .Where(c => c.company_id == companyId)
             .ToListAsync(ct);
         var porId = cuentasExistentes.ToDictionary(c => c.integracion_cuenta_id);
+        var porDims = cuentasExistentes.ToDictionary(
+            c => (c.uso, c.servicio_id, c.categoria_servicio_id, c.con_medicion));
         var idsEnDto = new HashSet<long>();
 
         foreach (var cuentaDto in dto.Cuentas)
         {
-            if (cuentaDto.IntegracionCuentaId > 0 && porId.TryGetValue(cuentaDto.IntegracionCuentaId, out var existente))
+            con_integracion_cuenta? existente = null;
+            if (cuentaDto.IntegracionCuentaId > 0)
+            {
+                porId.TryGetValue(cuentaDto.IntegracionCuentaId, out existente);
+            }
+
+            if (existente is null
+                && porDims.TryGetValue(
+                    (cuentaDto.Uso, cuentaDto.ServicioId, cuentaDto.CategoriaServicioId, cuentaDto.ConMedicion),
+                    out var mismaDims)
+                && !idsEnDto.Contains(mismaDims.integracion_cuenta_id))
+            {
+                existente = mismaDims;
+            }
+
+            if (existente is not null)
             {
                 idsEnDto.Add(existente.integracion_cuenta_id);
                 existente.uso = cuentaDto.Uso;
@@ -380,12 +402,50 @@ public sealed class IntegracionContableService : IIntegracionContableService
         }
 
         // --- Asientos por módulo -----------------------------------------
+        var modulosDuplicados = asientos
+            .GroupBy(a => a.Module)
+            .Where(g => g.Count() > 1);
+        foreach (var grupo in modulosDuplicados)
+        {
+            resultado.Errores.Add($"Asientos: el módulo '{grupo.Key}' aparece más de una vez.");
+        }
+
+        // Diarios y tipos deben pertenecer a la empresa (defensa en el servicio,
+        // además de las FKs compuestas tenant-safe del esquema).
+        var journalIds = asientos.Where(a => a.JournalId.HasValue).Select(a => a.JournalId!.Value).Distinct().ToList();
+        var diariosValidos = journalIds.Count == 0
+            ? new HashSet<long>()
+            : (await _context.con_diarios.AsNoTracking()
+                .Where(d => d.company_id == companyId && journalIds.Contains(d.journal_id))
+                .Select(d => d.journal_id)
+                .ToListAsync(ct)).ToHashSet();
+
+        var typeIds = asientos.Where(a => a.TypeId.HasValue).Select(a => a.TypeId!.Value).Distinct().ToList();
+        var tiposValidos = typeIds.Count == 0
+            ? new HashSet<long>()
+            : (await _context.con_tipo_transacciones.AsNoTracking()
+                .Where(t => t.company_id == companyId && typeIds.Contains(t.type_id))
+                .Select(t => t.type_id)
+                .ToListAsync(ct)).ToHashSet();
+
         foreach (var asiento in asientos)
         {
             if (!IntegracionContableModulos.Todos.Contains(asiento.Module))
             {
                 resultado.Errores.Add($"Asientos: módulo desconocido '{asiento.Module}'.");
                 continue;
+            }
+
+            if (asiento.JournalId.HasValue && !diariosValidos.Contains(asiento.JournalId.Value))
+            {
+                resultado.Errores.Add(
+                    $"Asientos: el diario del módulo {asiento.Module} no existe o no pertenece a la empresa.");
+            }
+
+            if (asiento.TypeId.HasValue && !tiposValidos.Contains(asiento.TypeId.Value))
+            {
+                resultado.Errores.Add(
+                    $"Asientos: el tipo de partida del módulo {asiento.Module} no existe o no pertenece a la empresa.");
             }
 
             if (asiento.Activo && (asiento.JournalId is null || asiento.TypeId is null))
@@ -400,7 +460,7 @@ public sealed class IntegracionContableService : IIntegracionContableService
         var servicios = await ListarServiciosAsync(companyId, ct);
         var categorias = await ListarCategoriasAsync(ct);
         var ventasRelacionadoActivo = activos.Overlaps(
-            [IntegracionContableModulos.Facturacion, IntegracionContableModulos.Notas, IntegracionContableModulos.Miscelaneos, IntegracionContableModulos.Caja]);
+            [IntegracionContableModulos.Ventas, IntegracionContableModulos.Notas, IntegracionContableModulos.Miscelaneos, IntegracionContableModulos.Caja]);
 
         ValidarCobertura(resultado, activas, servicios, categorias,
             IntegracionContableUsos.Ingreso, dto.Config.ModoVentas, esError: ventasRelacionadoActivo);
@@ -534,21 +594,24 @@ public sealed class IntegracionContableService : IIntegracionContableService
             : $"Fila {cuenta.Uso} ({string.Join(" × ", dims)})";
     }
 
+    // El módulo VENTAS activa el flag activo_facturacion (lote de facturación F3);
+    // la columna conserva su nombre de F1.
     private static bool ObtenerActivo(con_integracion_config config, string module) => module switch
     {
-        IntegracionContableModulos.Facturacion => config.activo_facturacion,
+        IntegracionContableModulos.Ventas => config.activo_facturacion,
         IntegracionContableModulos.Caja => config.activo_caja,
         IntegracionContableModulos.Bancos => config.activo_bancos,
         IntegracionContableModulos.Notas => config.activo_notas,
         IntegracionContableModulos.Miscelaneos => config.activo_miscelaneos,
-        _ => false
+        IntegracionContableModulos.Proveedores => config.activo_proveedores,
+        _ => throw new ArgumentOutOfRangeException(nameof(module), module, "Módulo de integración sin flag de activación mapeado.")
     };
 
     private static void AsignarActivo(con_integracion_config config, string module, bool valor)
     {
         switch (module)
         {
-            case IntegracionContableModulos.Facturacion:
+            case IntegracionContableModulos.Ventas:
                 config.activo_facturacion = valor;
                 break;
             case IntegracionContableModulos.Caja:
@@ -563,6 +626,11 @@ public sealed class IntegracionContableService : IIntegracionContableService
             case IntegracionContableModulos.Miscelaneos:
                 config.activo_miscelaneos = valor;
                 break;
+            case IntegracionContableModulos.Proveedores:
+                config.activo_proveedores = valor;
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(module), module, "Módulo de integración sin flag de activación mapeado.");
         }
     }
 
