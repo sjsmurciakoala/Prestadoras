@@ -7,6 +7,7 @@
 @using apc.Client.Services.CaptacionPagos
 @inject CaptacionPagosClient CaptacionClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Informe de recaudación</PageTitle>
 
@@ -32,11 +33,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -89,7 +85,6 @@
     private DateTime fechaDesde;
     private DateTime fechaHasta = DateTime.Today;
     private BancoDto? medioPago;
-    private string? errorMessage;
     private string? pdfUrl;
     private List<BancoDto> mediosPago = [];
 
@@ -109,7 +104,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No fue posible cargar los medios de pago: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = $"No fue posible cargar los medios de pago: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             mediosPago = [new BancoDto { Codigo = string.Empty, Nombre = "Todos" }];
         }
     }
@@ -118,12 +113,10 @@
     {
         if (fechaDesde.Date > fechaHasta.Date)
         {
-            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde no puede ser mayor que la fecha hasta.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
-
-        errorMessage = null;
 
         var query = new List<string>
         {
@@ -145,7 +138,6 @@
         fechaDesde = new DateTime(hoy.Year, hoy.Month, 1);
         fechaHasta = DateTime.Today;
         medioPago = null;
-        errorMessage = null;
         pdfUrl = null;
     }
 }

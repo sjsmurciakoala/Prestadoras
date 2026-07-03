@@ -40,10 +40,6 @@
             </div>
         </div>
     }
-    else if (_error is not null)
-    {
-        <SiadAlert AlertType="AlertType.Danger">@_error</SiadAlert>
-    }
     else if (_modelo is not null)
     {
         <ClienteForm Modelo="@_modelo"
@@ -59,7 +55,6 @@
 
     private bool _loading = true;
     private bool _saving;
-    private string? _error;
     private ClienteCreateDto? _modelo;
 
     protected override async Task OnInitializedAsync()
@@ -75,14 +70,26 @@
             var detalle = await ClientesClient.ObtenerPorIdAsync(Id);
             if (detalle is null)
             {
-                _error = "No se encontró el cliente.";
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Clientes",
+                    Text = "No se encontró el cliente.",
+                    RenderStyle = ToastRenderStyle.Danger,
+                    ProviderName = "EditClienteToast"
+                });
                 return;
             }
             _modelo = MapearDetalleAEdicion(detalle);
         }
         catch (Exception ex)
         {
-            _error = $"Error al cargar el cliente: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Clientes",
+                Text = $"Error al cargar el cliente: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "EditClienteToast"
+            });
         }
         finally
         {

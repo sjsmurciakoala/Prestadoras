@@ -1,6 +1,7 @@
 ﻿@page "/contabilidad/diarios"
 @attribute [Authorize]
 @inject HttpClient Http
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Diarios contables</PageTitle>
 
@@ -196,13 +197,6 @@
          HeaderText="@popupTitle"
          CssClass="diarios-popup">
     <BodyContentTemplate Context="popupBody">
-        @if (!string.IsNullOrWhiteSpace(formErrorMessage))
-        {
-            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
-                @formErrorMessage
-            </SiadAlert>
-        }
-
         <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical" CssClass="w-100">
             <DxFormLayoutGroup Caption="Datos del diario" HeaderIconCssClass="bi bi-book">
                 <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
@@ -323,7 +317,6 @@
     private bool isLoading;
     private bool isXSmallScreen;
     private string popupTitle = "Nuevo diario";
-    private string? formErrorMessage;
     private ErrorNotice errorNotice = default!;
     private bool statusMessageVisible;
     private string statusMessageTitle = string.Empty;
@@ -360,8 +353,6 @@
 
     private void OpenForm(DiarioDto? diario)
     {
-        formErrorMessage = null;
-
         if (diario is null)
         {
             formModel = new DiarioFormModel
@@ -393,7 +384,6 @@
 
     private void CloseForm()
     {
-        formErrorMessage = null;
         isFormVisible = false;
     }
 
@@ -401,7 +391,7 @@
     {
         if (string.IsNullOrWhiteSpace(formModel.Code) || string.IsNullOrWhiteSpace(formModel.Name))
         {
-            formErrorMessage = "Codigo y nombre son obligatorios.";
+            ToastService.ShowToast(new ToastOptions { Title = "Diarios", Text = "Codigo y nombre son obligatorios.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
@@ -424,16 +414,18 @@
         try
         {
             isSaving = true;
-            formErrorMessage = null;
 
             var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/diarios", payload);
             var detail = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
             {
-                formErrorMessage = string.IsNullOrWhiteSpace(detail)
-                    ? "No se pudo guardar el diario."
-                    : detail;
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Diarios",
+                    Text = string.IsNullOrWhiteSpace(detail) ? "No se pudo guardar el diario." : detail,
+                    RenderStyle = ToastRenderStyle.Danger
+                });
                 return;
             }
 

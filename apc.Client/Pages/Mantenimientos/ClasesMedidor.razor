@@ -4,6 +4,7 @@
 @using apc.Client.Services.Catalogos
 @using DevExpress.Blazor
 @inject CatalogosClient CatalogosClient
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Clases de Medidor</PageTitle>
 
@@ -20,15 +21,6 @@
                       Click="AbrirFormNuevo" />
         </div>
     </div>
-
-    @if (!string.IsNullOrEmpty(errorMsg))
-    {
-        <SiadAlert AlertType="AlertType.Error" CssClass="mb-3" IconCssClass="bi bi-exclamation-triangle">@errorMsg</SiadAlert>
-    }
-    @if (!string.IsNullOrEmpty(successMsg))
-    {
-        <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@successMsg</SiadAlert>
-    }
 
     <div class="modern-card">
         @if (isLoading)
@@ -108,10 +100,6 @@
                 </DxFormLayoutItem>
             }
         </DxFormLayout>
-        @if (!string.IsNullOrEmpty(formError))
-        {
-            <SiadAlert AlertType="AlertType.Error" CssClass="mt-2">@formError</SiadAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -132,10 +120,6 @@
     <BodyTemplate>
         <p>¿Eliminar la clase <strong>@claseAEliminar?.Codigo — @claseAEliminar?.Descripcion</strong>?</p>
         <p class="text-muted small">No se puede eliminar si tiene medidores asociados.</p>
-        @if (!string.IsNullOrEmpty(eliminarError))
-        {
-            <SiadAlert AlertType="AlertType.Error" CssClass="mt-2">@eliminarError</SiadAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -150,32 +134,27 @@
 @code {
     private List<ClaseMedidorDto> clases = [];
     private bool isLoading = true;
-    private string? errorMsg;
-    private string? successMsg;
 
     private bool mostrarForm = false;
     private bool editando = false;
     private string formCodigo = string.Empty;
     private string formDescripcion = string.Empty;
     private bool formEstado = true;
-    private string? formError;
     private bool isSaving = false;
 
     private bool mostrarConfirmEliminar = false;
     private ClaseMedidorDto? claseAEliminar;
-    private string? eliminarError;
 
     protected override async Task OnInitializedAsync() => await CargarAsync();
 
     private async Task CargarAsync()
     {
         isLoading = true;
-        errorMsg = null;
         try
         {
             clases = ((await CatalogosClient.GetClasesMedidorCrudAsync()) ?? []).ToList();
         }
-        catch (Exception ex) { errorMsg = $"Error al cargar: {ex.Message}"; }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = $"Error al cargar: {ex.Message}", RenderStyle = ToastRenderStyle.Danger }); }
         finally { isLoading = false; }
     }
 
@@ -185,7 +164,6 @@
         formCodigo = string.Empty;
         formDescripcion = string.Empty;
         formEstado = true;
-        formError = null;
         mostrarForm = true;
     }
 
@@ -195,7 +173,6 @@
         formCodigo = c.Codigo;
         formDescripcion = c.Descripcion;
         formEstado = c.Estado;
-        formError = null;
         mostrarForm = true;
     }
 
@@ -203,16 +180,15 @@
     {
         if (string.IsNullOrWhiteSpace(formDescripcion))
         {
-            formError = "La descripción es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = "La descripción es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
         if (!editando && string.IsNullOrWhiteSpace(formCodigo))
         {
-            formError = "El código es obligatorio.";
+            ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = "El código es obligatorio.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
-        formError = null;
         isSaving = true;
         try
         {
@@ -222,17 +198,16 @@
                 await CatalogosClient.CrearClaseMedidorAsync(new ClaseMedidorCreateDto(formCodigo, formDescripcion));
 
             mostrarForm = false;
-            successMsg = editando ? "Clase actualizada correctamente." : "Clase creada correctamente.";
+            ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = editando ? "Clase actualizada correctamente." : "Clase creada correctamente.", RenderStyle = ToastRenderStyle.Success });
             await CargarAsync();
         }
-        catch (Exception ex) { formError = $"Error: {ex.Message}"; }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = $"Error: {ex.Message}", RenderStyle = ToastRenderStyle.Danger }); }
         finally { isSaving = false; }
     }
 
     private void ConfirmarEliminar(ClaseMedidorDto c)
     {
         claseAEliminar = c;
-        eliminarError = null;
         mostrarConfirmEliminar = true;
     }
 
@@ -240,22 +215,21 @@
     {
         if (claseAEliminar is null) return;
         isSaving = true;
-        eliminarError = null;
         try
         {
             var ok = await CatalogosClient.EliminarClaseMedidorAsync(claseAEliminar.Codigo);
             if (ok)
             {
                 mostrarConfirmEliminar = false;
-                successMsg = $"Clase {claseAEliminar.Codigo} eliminada.";
+                ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = $"Clase {claseAEliminar.Codigo} eliminada.", RenderStyle = ToastRenderStyle.Success });
                 await CargarAsync();
             }
             else
             {
-                eliminarError = "No se pudo eliminar la clase.";
+                ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = "No se pudo eliminar la clase.", RenderStyle = ToastRenderStyle.Danger });
             }
         }
-        catch (Exception ex) { eliminarError = $"Error: {ex.Message}"; }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Clases de medidor", Text = $"Error: {ex.Message}", RenderStyle = ToastRenderStyle.Danger }); }
         finally { isSaving = false; }
     }
 }

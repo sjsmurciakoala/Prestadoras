@@ -36,7 +36,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
     }
 
     <div class="modern-card position-relative">
@@ -185,7 +185,7 @@
 
         @if (selectedHeader is null)
         {
-            <SiadAlert AlertType="AlertType.Info">Seleccione un encabezado en el grid superior.</SiadAlert>
+            <div class="alert alert-info" role="alert">Seleccione un encabezado en el grid superior.</div>
         }
         else if (isLoadingDetalles)
         {
@@ -193,15 +193,15 @@
         }
         else if (!string.IsNullOrWhiteSpace(detalleErrorMessage))
         {
-            <SiadAlert AlertType="AlertType.Danger">@detalleErrorMessage</SiadAlert>
+            <div class="alert alert-danger" role="alert">@detalleErrorMessage</div>
         }
         else
         {
             @if (!IsPresupuestoVigente())
             {
-                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-2">
+                <div class="alert alert-warning mb-2" role="alert">
                     @GetMensajeBloqueoPorRango("operar detalles")
-                </SiadAlert>
+                </div>
             }
 
             <div class="grid-wrapper">
@@ -323,16 +323,11 @@
         }
         else
         {
-            @if (!string.IsNullOrWhiteSpace(detalleFormError))
-            {
-                <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@detalleFormError</SiadAlert>
-            }
-
             @if (cuentasDisponiblesDetalle.Count == 0)
             {
-                <SiadAlert AlertType="AlertType.Warning">
+                <div class="alert alert-warning" role="alert">
                     No hay cuentas contables disponibles para agregar en este presupuesto.
-                </SiadAlert>
+                </div>
                 <div class="d-flex justify-content-end mt-3">
                     <DxButton Text="Cerrar"
                               RenderStyle="ButtonRenderStyle.Secondary"
@@ -456,7 +451,6 @@
     private bool puedeAprobarPresupuesto;
     private string? aprobandoPresupuestoId;
     private string? validandoAprobacionPresupuestoId;
-    private string? detalleFormError;
     private ConfiguracionPresupuestoDetalleEditDto detalleForm = new();
     private IReadOnlyList<CuentaContableLookupDto> cuentasDetalle = Array.Empty<CuentaContableLookupDto>();
     private IReadOnlyList<CuentaContableLookupDto> cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
@@ -518,7 +512,6 @@
         selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
         detalleErrorMessage = null;
         detalleFormVisible = false;
-        detalleFormError = null;
         cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
 
         if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
@@ -540,7 +533,6 @@
         detalleFormVisible = false;
         detalleFormLoading = false;
         detalleSaving = false;
-        detalleFormError = null;
         detalleForm = new ConfiguracionPresupuestoDetalleEditDto();
         cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
     }
@@ -819,7 +811,6 @@
             return;
         }
 
-        detalleFormError = null;
         detalleForm = new ConfiguracionPresupuestoDetalleEditDto();
 
         try
@@ -838,7 +829,7 @@
         }
         catch (Exception ex)
         {
-            detalleFormError = $"No se pudieron cargar las cuentas contables: {ex.Message}";
+            ShowToast("Error", $"No se pudieron cargar las cuentas contables: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -852,26 +843,25 @@
     {
         if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
         {
-            detalleFormError = "Seleccione un encabezado de presupuesto válido.";
+            ShowToast("Error", "Seleccione un encabezado de presupuesto válido.", ToastRenderStyle.Danger);
             return;
         }
 
         if (!IsPresupuestoVigente())
         {
-            detalleFormError = GetMensajeBloqueoPorRango("guardar detalle");
+            ShowToast("Error", GetMensajeBloqueoPorRango("guardar detalle"), ToastRenderStyle.Danger);
             return;
         }
 
         if (IsPresupuestoAprobado())
         {
-            detalleFormError = "El presupuesto está aprobado y no permite agregar detalle.";
+            ShowToast("Error", "El presupuesto está aprobado y no permite agregar detalle.", ToastRenderStyle.Danger);
             return;
         }
 
         try
         {
             detalleSaving = true;
-            detalleFormError = null;
 
             await ConfiguracionPresupuestoClient.AddDetailAsync(selectedHeader.IdPresupuesto, detalleForm);
             await CargarDetallesAsync(selectedHeader.IdPresupuesto);
@@ -881,7 +871,7 @@
         }
         catch (Exception ex)
         {
-            detalleFormError = $"No se pudo guardar el detalle: {ex.Message}";
+            ShowToast("Error", $"No se pudo guardar el detalle: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -892,7 +882,6 @@
     private void CerrarDetalleForm()
     {
         detalleFormVisible = false;
-        detalleFormError = null;
         detalleForm = new ConfiguracionPresupuestoDetalleEditDto();
     }
 

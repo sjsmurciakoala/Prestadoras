@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
 @using System.Globalization
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Desglose de Facturacion</PageTitle>
 
@@ -27,11 +28,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -78,33 +74,31 @@
 @code {
     private DateTime? fechaDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime? fechaHasta = DateTime.Today;
-    private string? errorMessage;
     private string? pdfUrl;
 
     private void GenerarPdf()
     {
         if (!fechaDesde.HasValue)
         {
-            errorMessage = "La fecha desde es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (!fechaHasta.HasValue)
         {
-            errorMessage = "La fecha hasta es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha hasta es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (fechaDesde.Value.Date > fechaHasta.Value.Date)
         {
-            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde no puede ser mayor que la fecha hasta.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
-        errorMessage = null;
         pdfUrl =
             $"api/informes/reportes/{SIAD.Core.Constants.ReportesWebConstants.CodigoReporteDesgloseFacturacion}/pdf" +
             $"?fechaDesde={Uri.EscapeDataString(fechaDesde.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
@@ -115,7 +109,6 @@
     {
         fechaDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
         fechaHasta = DateTime.Today;
-        errorMessage = null;
         pdfUrl = null;
     }
 }

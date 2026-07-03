@@ -5,6 +5,7 @@
 @using apc.Client.Services.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Saldo de clientes segun antigüedad</PageTitle>
 
@@ -30,11 +31,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -110,7 +106,6 @@
     private int diasMinimos = 60;
     private int estadoClienteId;
     private int cicloId;
-    private string? errorMessage;
     private string? pdfUrl;
     private List<CicloLookupDto> ciclos = [];
 
@@ -127,7 +122,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No fue posible cargar los ciclos: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = $"No fue posible cargar los ciclos: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             ciclos = [new CicloLookupDto(0, "Todos")];
         }
     }
@@ -136,19 +131,18 @@
     {
         if (!fechaCorte.HasValue)
         {
-            errorMessage = "La fecha de corte es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha de corte es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (diasMinimos <= 0)
         {
-            errorMessage = "Los dias minimos deben ser mayores que cero.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "Los dias minimos deben ser mayores que cero.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
-        errorMessage = null;
         pdfUrl =
             $"api/informes/reportes/{SIAD.Core.Constants.ReportesWebConstants.CodigoReporteSaldoClientesAntiguedad}/pdf" +
             $"?fechaCorte={Uri.EscapeDataString(fechaCorte.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
@@ -163,7 +157,6 @@
         diasMinimos = 60;
         estadoClienteId = 0;
         cicloId = 0;
-        errorMessage = null;
         pdfUrl = null;
     }
 }

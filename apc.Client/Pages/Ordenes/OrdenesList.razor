@@ -29,15 +29,6 @@
             </div>
         </div>
 
-        @if (!string.IsNullOrEmpty(error))
-        {
-            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</SiadAlert>
-        }
-        else if (!string.IsNullOrEmpty(mensaje))
-        {
-            <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@mensaje</SiadAlert>
-        }
-
         <div class="modern-card mb-4">
             <DxTabs ActiveTabIndex="@tabIndex" ActiveTabIndexChanged="OnTabChanged" CssClass="mb-3">
                 <Tabs>
@@ -361,8 +352,6 @@
     private CrearOrdenTrabajoDto nuevo = new();
     private bool mostrarCrear;
     private bool mostrarAsignar;
-    private string? error;
-    private string? mensaje;
     private int tabIndex;
     private string departamentoActivo = "01";
     private string? usuarioActual;
@@ -437,14 +426,12 @@
     {
         try
         {
-            error = null;
-            mensaje = null;
             filtro.Departamento = departamentoActivo;
             ordenes = await OrdenesClient.GetOrdenesAsync(filtro);
         }
         catch (Exception ex)
         {
-            error = ex.Message;
+            ShowToast("Órdenes de trabajo", ex.Message, ToastRenderStyle.Danger);
             ordenes = Array.Empty<OrdenTrabajoListItemDto>();
         }
     }
@@ -484,8 +471,6 @@
         empleadoCrearTexto = string.Empty;
 
         mostrarCrear = true;
-        mensaje = null;
-        error = null;
     }
 
     private async Task GuardarNuevaOrdenAsync()
@@ -498,14 +483,12 @@
         var resultado = await OrdenesClient.CrearOrdenAsync(nuevo);
         if (resultado.Exitoso)
         {
-            mensaje = resultado.Mensaje;
             mostrarCrear = false;
             ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Success);
             await BuscarAsync();
         }
         else
         {
-            error = resultado.Mensaje;
             ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Danger);
         }
     }
@@ -519,8 +502,7 @@
     {
         if (!SeleccionadasOrdenes.Any())
         {
-            error = "Seleccione al menos una orden para asignar.";
-            ShowToast("Órdenes de trabajo", error, ToastRenderStyle.Danger);
+            ShowToast("Órdenes de trabajo", "Seleccione al menos una orden para asignar.", ToastRenderStyle.Danger);
             return;
         }
 
@@ -531,8 +513,6 @@
         empleadoAsignacionTexto = empleadoAsignacion ?? string.Empty;
         estadoAsignacionTexto = estadosAsignacion.FirstOrDefault(e => e.Codigo == estadoAsignacion)?.Nombre ?? string.Empty;
         mostrarAsignar = true;
-        mensaje = null;
-        error = null;
     }
 
     private async Task ConfirmarAsignacionAsync()
@@ -548,14 +528,12 @@
         var resultado = await OrdenesClient.AsignarOrdenesAsync(dto);
         if (resultado.Exitoso)
         {
-            mensaje = resultado.Mensaje;
             mostrarAsignar = false;
             ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Success);
             await BuscarAsync();
         }
         else
         {
-            error = resultado.Mensaje;
             ShowToast("Órdenes de trabajo", resultado.Mensaje, ToastRenderStyle.Danger);
         }
     }
@@ -921,7 +899,6 @@
     private void ManejarErrorCatalogo(string contexto, Exception ex)
     {
         var mensajeError = $"No se pudo {contexto}. {ex.Message}";
-        error = mensajeError;
         ShowToast("Órdenes de trabajo", mensajeError, ToastRenderStyle.Danger);
     }
 }

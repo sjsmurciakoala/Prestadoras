@@ -43,7 +43,7 @@
 
     @if (gestionBloqueadaPorRango && !string.IsNullOrWhiteSpace(bloqueoRangoMessage))
     {
-        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">@bloqueoRangoMessage</SiadAlert>
+        <div class="alert alert-warning mb-3" role="alert">@bloqueoRangoMessage</div>
     }
 
     <div class="modern-card">
@@ -122,7 +122,7 @@
                         }
                         else if (!string.IsNullOrWhiteSpace(saldosPresupuestoErrorMessage))
                         {
-                            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@saldosPresupuestoErrorMessage</SiadAlert>
+                            <div class="alert alert-danger mt-2" role="alert">@saldosPresupuestoErrorMessage</div>
                         }
                         else
                         {
@@ -154,7 +154,7 @@
                         }
                         else if (!string.IsNullOrWhiteSpace(cuentasOrigenErrorMessage))
                         {
-                            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@cuentasOrigenErrorMessage</SiadAlert>
+                            <div class="alert alert-danger mt-2" role="alert">@cuentasOrigenErrorMessage</div>
                         }
                         else if (cuentasOrigenTraslado.Count == 0)
                         {
@@ -224,7 +224,7 @@
         }
         else if (!string.IsNullOrWhiteSpace(solicitudesErrorMessage))
         {
-            <SiadAlert AlertType="AlertType.Danger">@solicitudesErrorMessage</SiadAlert>
+            <div class="alert alert-danger" role="alert">@solicitudesErrorMessage</div>
         }
         else
         {

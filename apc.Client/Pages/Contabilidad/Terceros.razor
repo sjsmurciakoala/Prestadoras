@@ -4,6 +4,7 @@
 @using SIAD.Core.DTOs.Contabilidad
 
 @inject HttpClient Http
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Terceros</PageTitle>
 
@@ -204,15 +205,6 @@
                 @{ var model = (TerceroEditModel)ctx.EditModel; }
                 <div class="d-flex flex-column h-100">
 
-                    @if (!string.IsNullOrWhiteSpace(formErrorMessage))
-                    {
-                        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3 mx-2 mt-2">
-                            <span>@formErrorMessage</span>
-                            <DxButton RenderStyle="ButtonRenderStyle.None" CssClass="btn-close ms-2 float-end" SizeMode="SizeMode.Small"
-                                      Click="@(() => formErrorMessage = null)" />
-                        </SiadAlert>
-                    }
-
                     <div class="flex-grow-1 p-3 overflow-auto">
                         <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical">
 
@@ -360,7 +352,6 @@
     private bool isXSmallScreen;
 
     private DxGrid? gridTerceros;
-    private string? formErrorMessage;
     private string popupHeaderText = "Tercero";
 
     private bool statusMessageVisible;
@@ -451,13 +442,12 @@
 
     private async Task OnEditModelSaving(GridEditModelSavingEventArgs e)
     {
-        formErrorMessage = null;
         var model = (TerceroEditModel)e.EditModel;
 
         if (string.IsNullOrWhiteSpace(model.Code))
-        { formErrorMessage = "El código es obligatorio"; e.Cancel = true; return; }
+        { ToastService.ShowToast(new ToastOptions { Title = "Terceros", Text = "El código es obligatorio", RenderStyle = ToastRenderStyle.Danger }); e.Cancel = true; return; }
         if (string.IsNullOrWhiteSpace(model.Name))
-        { formErrorMessage = "El nombre es obligatorio"; e.Cancel = true; return; }
+        { ToastService.ShowToast(new ToastOptions { Title = "Terceros", Text = "El nombre es obligatorio", RenderStyle = ToastRenderStyle.Danger }); e.Cancel = true; return; }
 
         try
         {
@@ -477,7 +467,7 @@
             if (!response.IsSuccessStatusCode)
             {
                 var problem = await response.Content.ReadFromJsonAsync<ProblemDetails>();
-                formErrorMessage = problem?.Detail ?? "Error al guardar";
+                ToastService.ShowToast(new ToastOptions { Title = "Terceros", Text = problem?.Detail ?? "Error al guardar", RenderStyle = ToastRenderStyle.Danger });
                 e.Cancel = true;
                 return;
             }
@@ -487,14 +477,13 @@
         }
         catch (Exception ex)
         {
-            formErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Terceros", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
             e.Cancel = true;
         }
     }
 
     private void OnCancelarClick()
     {
-        formErrorMessage = null;
         gridTerceros?.CancelEditAsync();
     }
 

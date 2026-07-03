@@ -1,5 +1,6 @@
 @using SIAD.Core.DTOs.Solicitudes
 @using DevExpress.Blazor
+@inject IToastNotificationService ToastService
 
 <div class="p-2">
     <DxTabs>
@@ -134,11 +135,6 @@
               CssClass="form-btn" />
 </div>
 
-@if (!string.IsNullOrEmpty(validationError))
-{
-    <SiadAlert AlertType="AlertType.Danger" CssClass="mt-3">@validationError</SiadAlert>
-}
-
 @code {
     [Parameter]
     [EditorRequired]
@@ -156,14 +152,11 @@
         "Blanco", "Negro", "Gris", "Rojo", "Verde", "Azul", "Amarillo", "Naranja", "Rosa", "Marrón"
     };
 
-    private string? validationError;
-
     private async Task GuardarAsync()
     {
-        validationError = null;
         if (!ValidarFormulario())
         {
-            validationError = "Completa los campos obligatorios y verifica las máscaras.";
+            ToastService.ShowToast(new ToastOptions { Title = "Solicitudes", Text = "Completa los campos obligatorios y verifica las máscaras.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 

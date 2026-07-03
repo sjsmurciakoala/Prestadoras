@@ -9,6 +9,7 @@
 @inject HttpClient Http
 @inject ConfiguracionSistemaClient ConfiguracionClient
 @inject TenantState TenantState
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Centros de Costo</PageTitle>
 <DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall" @bind-IsActive="isXSmallScreen" />
@@ -195,15 +196,6 @@
             <EditFormTemplate Context="ctx">
                 @{ var model = (CentroCostoEditModel)ctx.EditModel; }
                 <div class="d-flex flex-column h-100">
-                    
-                    @if (!string.IsNullOrWhiteSpace(formErrorMessage))
-                    {
-                        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3 mx-2 mt-2">
-                            <span>@formErrorMessage</span>
-                            <DxButton RenderStyle="ButtonRenderStyle.None" CssClass="btn-close ms-2 float-end" SizeMode="SizeMode.Small"
-                                Click="@(() => formErrorMessage = null)" />
-                        </SiadAlert>
-                    }
 
                     <div class="flex-grow-1 p-3 overflow-auto custom-scrollbar">
                         <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical">
@@ -332,7 +324,6 @@
     private IReadOnlyList<int> nivelesCentros = Array.Empty<int>();
     private IReadOnlyList<int> nivelesCuentas = Array.Empty<int>();
 
-    private string? formErrorMessage;
     private DxGrid? gridCentros;
 
     private bool deleteConfirmVisible;
@@ -447,7 +438,6 @@
         try
         {
             cargando = true;
-            formErrorMessage = null;
             var result = await Http.GetFromJsonAsync<List<CentroCostoDto>>("api/contabilidad/catalogos/centros-costo");
             centros = result ?? new List<CentroCostoDto>();
         }
@@ -483,9 +473,6 @@
 
     private void OnCustomizeEditModel(GridCustomizeEditModelEventArgs e)
     {
-        // Limpiar mensaje de error al abrir formulario
-        formErrorMessage = null;
-
         if (e.IsNew || e.DataItem is not CentroCostoDto item)
         {
             popupHeaderText = "Nuevo centro de costo";
@@ -527,13 +514,10 @@
     {
         if (e.EditModel is CentroCostoEditModel model)
         {
-            // Limpiar mensaje previo
-            formErrorMessage = null;
-
             var validationMessage = ValidateCentroCosto(model);
             if (!string.IsNullOrWhiteSpace(validationMessage))
             {
-                formErrorMessage = validationMessage;
+                ToastService.ShowToast(new ToastOptions { Title = "Centros de costo", Text = validationMessage, RenderStyle = ToastRenderStyle.Danger });
                 e.Cancel = true;
                 return;
             }
@@ -561,9 +545,12 @@
                 if (!response.IsSuccessStatusCode)
                 {
                     var detail = await response.Content.ReadAsStringAsync();
-                    formErrorMessage = string.IsNullOrWhiteSpace(detail)
-                        ? "No se pudo guardar el centro de costo."
-                        : detail;
+                    ToastService.ShowToast(new ToastOptions
+                    {
+                        Title = "Centros de costo",
+                        Text = string.IsNullOrWhiteSpace(detail) ? "No se pudo guardar el centro de costo." : detail,
+                        RenderStyle = ToastRenderStyle.Danger
+                    });
                     e.Cancel = true;
                     return;
                 }
@@ -571,7 +558,7 @@
             }
             catch (Exception ex)
             {
-                formErrorMessage = ex.Message;
+                ToastService.ShowToast(new ToastOptions { Title = "Centros de costo", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
                 e.Cancel = true;
             }
         }
@@ -581,7 +568,6 @@
     {
         try
         {
-            formErrorMessage = null;
             var response = await Http.DeleteAsync($"api/contabilidad/catalogos/centros-costo/{costCenterId}");
             if (!response.IsSuccessStatusCode)
             {

@@ -117,24 +117,24 @@
     <div class="modern-card position-relative" style="min-height: 400px;">
         @if (!bancoSeleccionadoId.HasValue)
         {
-            <SiadAlert AlertType="AlertType.Info" CssClass="mt-3">
+            <div class="alert alert-info mt-3" role="alert">
                 Seleccione un banco para visualizar las cuentas disponibles.
-            </SiadAlert>
+            </div>
         }
         else if (!filtroSeleccionadoCuentaId.HasValue)
         {
-            <SiadAlert AlertType="AlertType.Info" CssClass="mt-3">
+            <div class="alert alert-info mt-3" role="alert">
                 Seleccione una cuenta bancaria para visualizar sus transacciones.
-            </SiadAlert>
+            </div>
         }
         else if (transaccionesFiltradas.Count == 0)
         {
-            <SiadAlert AlertType="AlertType.Warning" CssClass="mt-3">
+            <div class="alert alert-warning mt-3" role="alert">
                 No hay transacciones bancarias registradas para los filtros seleccionados.
                 <div class="mt-2">
                     <small>Banco: @bancoNombre | Cuenta: @filtroSeleccionadoCuentaId | Registros cargados: @transacciones.Count</small>
                 </div>
-            </SiadAlert>
+            </div>
         }
         else
         {
@@ -290,9 +290,9 @@
     <div class="p-4">
         @if (transaccionSeleccionada is null)
         {
-            <SiadAlert AlertType="AlertType.Warning">
+            <div class="alert alert-warning" role="alert">
                 Seleccione una transacción para anular.
-            </SiadAlert>
+            </div>
         }
         else
         {

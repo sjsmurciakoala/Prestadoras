@@ -3,6 +3,7 @@
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject IToastNotificationService ToastService
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization
 @using apc.Client.Services.Proveedores
@@ -36,11 +37,6 @@
                           Enabled="@(!isLoading)" />
             </div>
         </div>
-
-        @if (!string.IsNullOrWhiteSpace(errorMessage))
-        {
-            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-        }
 
         <div class="modern-card position-relative" style="min-height: 300px;">
             @if (isLoading)
@@ -83,7 +79,6 @@
 @code {
     private readonly List<TipoProveedorListItemDto> tipos = new();
     private bool isLoading;
-    private string? errorMessage;
     private ErrorNotice errorNotice = default!;
 
     protected override async Task OnInitializedAsync()
@@ -96,7 +91,6 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
 
             var data = await ProveedoresClient.ObtenerTiposCatalogoAsync();
             tipos.Clear();
@@ -104,7 +98,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = "No se pudo cargar el catálogo de tipos.";
+            ToastService.ShowToast(new ToastOptions { Title = "Tipos de proveedor", Text = "No se pudo cargar el catálogo de tipos.", RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

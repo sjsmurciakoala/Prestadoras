@@ -6,6 +6,7 @@
 @using apc.Client.Services.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Historial de recibos emitidos</PageTitle>
 
@@ -31,11 +32,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -88,7 +84,6 @@
     private DateTime fechaDesde = DateTime.Today;
     private DateTime fechaHasta = DateTime.Today;
     private string usuario = string.Empty;
-    private string? errorMessage;
     private string? pdfUrl;
     private List<UsuarioInformeLookupDto> usuarios = [];
 
@@ -105,7 +100,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No fue posible cargar los usuarios: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = $"No fue posible cargar los usuarios: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             usuarios = [new UsuarioInformeLookupDto(string.Empty, "Todos")];
         }
     }
@@ -114,12 +109,10 @@
     {
         if (fechaDesde.Date > fechaHasta.Date)
         {
-            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde no puede ser mayor que la fecha hasta.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
-
-        errorMessage = null;
 
         var query = new List<string>
         {
@@ -140,7 +133,6 @@
         fechaDesde = DateTime.Today;
         fechaHasta = DateTime.Today;
         usuario = string.Empty;
-        errorMessage = null;
         pdfUrl = null;
     }
 }

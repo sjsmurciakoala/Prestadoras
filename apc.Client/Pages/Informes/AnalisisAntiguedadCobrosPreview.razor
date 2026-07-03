@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = PermissionNames.Reporteria.View)]
 @using System.Globalization
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Analisis de antigüedad de cobros</PageTitle>
 
@@ -27,11 +28,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -100,7 +96,6 @@
     private DateTime? fechaBase = DateTime.Today;
     private int retrocesoValor = 12;
     private string unidadTiempo = "MESES";
-    private string? errorMessage;
     private string? pdfUrl;
 
     private string fechaMinimaCalculadaTexto
@@ -124,26 +119,25 @@
     {
         if (!fechaBase.HasValue)
         {
-            errorMessage = "La fecha base es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha base es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (retrocesoValor <= 0)
         {
-            errorMessage = "El retroceso debe ser mayor que cero.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "El retroceso debe ser mayor que cero.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (unidadTiempo is not ("MESES" or "ANIOS"))
         {
-            errorMessage = "La unidad de tiempo no es válida.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La unidad de tiempo no es válida.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
-        errorMessage = null;
         pdfUrl =
             $"api/informes/reportes/{SIAD.Core.Constants.ReportesWebConstants.CodigoReporteAnalisisAntiguedadCobros}/pdf" +
             $"?fechaBase={Uri.EscapeDataString(fechaBase.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
@@ -156,7 +150,6 @@
         fechaBase = DateTime.Today;
         retrocesoValor = 12;
         unidadTiempo = "MESES";
-        errorMessage = null;
         pdfUrl = null;
     }
 }

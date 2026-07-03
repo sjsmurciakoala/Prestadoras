@@ -5,6 +5,7 @@
 @using SIAD.Core.Constants
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Informes</PageTitle>
 
@@ -22,11 +23,6 @@
                       RenderStyle="ButtonRenderStyle.Secondary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         @if (isLoading)
@@ -135,7 +131,6 @@
 @code {
     private List<InformeCatalogoItemDto> items = [];
     private bool isLoading;
-    private string? errorMessage;
     private string searchQuery = string.Empty;
 
     protected override async Task OnInitializedAsync()
@@ -148,12 +143,11 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
             items = (await InformesClient.GetCatalogoAsync()).OrderBy(x => x.Orden).ThenBy(x => x.Nombre).ToList();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
             items = [];
         }
         finally

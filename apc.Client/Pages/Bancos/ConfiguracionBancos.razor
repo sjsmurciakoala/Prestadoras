@@ -11,6 +11,7 @@
 @inject BancoConfiguracionClient ConfiguracionClient
 @inject TenantCompaniesClient TenantCompaniesClient
 @inject TenantState TenantState
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Configuración de Bancos</PageTitle>
 
@@ -32,13 +33,6 @@
         <ChildContent>
             <div class="p-4">
                 <ErrorNotice @ref="errorNotice" />
-
-                @if (!string.IsNullOrWhiteSpace(alerta))
-                {
-                    <SiadAlert AlertType="@alertaTipo" Visible="true" CssClass="mb-3">
-                        @alerta
-                    </SiadAlert>
-                }
 
                 <DxToolbar ItemSpacing="12px" CssClass="mb-3">
                     <DxToolbarItem>
@@ -186,8 +180,6 @@
     private long empresaSeleccionadaId;
     private BancoConfiguracionDto modelo = new();
     private EditContext? editContext;
-    private string? alerta;
-    private AlertType alertaTipo = AlertType.Info;
     private ErrorNotice errorNotice = default!;
     private bool cargando;
 
@@ -218,8 +210,7 @@
         }
         catch (Exception)
         {
-            alerta = "No se pudieron cargar las empresas.";
-            alertaTipo = AlertType.Danger;
+            ToastService.ShowToast(new ToastOptions { Title = "Bancos", Text = "No se pudieron cargar las empresas.", RenderStyle = ToastRenderStyle.Danger });
         }
     }
 
@@ -236,25 +227,21 @@
         cargando = true;
         try
         {
-            alerta = null;
             cuentasMayores = await ConfiguracionClient.ListarCuentasMayoresAsync(empresaSeleccionadaId);
             modelo = await ConfiguracionClient.ObtenerAsync(empresaSeleccionadaId);
             editContext = new EditContext(modelo);
             if (modelo.ConfigId == 0)
             {
-                alerta = "Esta empresa no tiene configuracion de bancos. Complete los datos y guarde.";
-                alertaTipo = AlertType.Info;
+                ToastService.ShowToast(new ToastOptions { Title = "Bancos", Text = "Esta empresa no tiene configuracion de bancos. Complete los datos y guarde.", RenderStyle = ToastRenderStyle.Info });
             }
         }
         catch (UnauthorizedAccessException)
         {
-            alerta = "La sesión expiró. Vuelve a iniciar sesión.";
-            alertaTipo = AlertType.Danger;
+            ToastService.ShowToast(new ToastOptions { Title = "Bancos", Text = "La sesión expiró. Vuelve a iniciar sesión.", RenderStyle = ToastRenderStyle.Danger });
         }
         catch (Exception)
         {
-            alerta = "No se pudo cargar la configuración.";
-            alertaTipo = AlertType.Danger;
+            ToastService.ShowToast(new ToastOptions { Title = "Bancos", Text = "No se pudo cargar la configuración.", RenderStyle = ToastRenderStyle.Danger });
             modelo = new BancoConfiguracionDto();
             editContext = new EditContext(modelo);
         }
@@ -293,11 +280,9 @@
             return;
         }
 
-        alerta = null;
         if (!editContext.Validate())
         {
-            alerta = "Revisa los campos del formulario.";
-            alertaTipo = AlertType.Danger;
+            ToastService.ShowToast(new ToastOptions { Title = "Bancos", Text = "Revisa los campos del formulario.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
@@ -306,8 +291,7 @@
         {
             modelo = await ConfiguracionClient.GuardarAsync(empresaSeleccionadaId, modelo);
             editContext = new EditContext(modelo);
-            alerta = "Configuracion guardada correctamente.";
-            alertaTipo = AlertType.Success;
+            ToastService.ShowToast(new ToastOptions { Title = "Bancos", Text = "Configuracion guardada correctamente.", RenderStyle = ToastRenderStyle.Success });
         }
         catch (Exception ex)
         {

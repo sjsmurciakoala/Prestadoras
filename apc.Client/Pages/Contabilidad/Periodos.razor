@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @using SIAD.Core.Constants
 @inject HttpClient Http
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Periodos contables</PageTitle>
 
@@ -227,13 +228,6 @@
          HeaderText="@popupTitle"
          CssClass="periodos-popup">
     <BodyContentTemplate Context="popupBody">
-        @if (!string.IsNullOrWhiteSpace(formErrorMessage))
-        {
-            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
-                @formErrorMessage
-            </SiadAlert>
-        }
-
         <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical" CssClass="w-100">
             <DxFormLayoutGroup Caption="Datos del periodo" HeaderIconCssClass="bi bi-calendar-range">
                 <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6" ColSpanXs="12">
@@ -357,7 +351,6 @@
     private bool isClosingPeriod;
     private bool isXSmallScreen;
     private string popupTitle = "Nuevo periodo";
-    private string? formErrorMessage;
     private bool statusMessageVisible;
     private string statusMessageTitle = string.Empty;
     private string statusMessageText = string.Empty;
@@ -402,8 +395,6 @@
 
     private void OpenForm(PeriodoContableDto? periodo)
     {
-        formErrorMessage = null;
-
         if (periodo is null)
         {
             formModel = new PeriodoFormModel
@@ -433,7 +424,6 @@
 
     private void CloseForm()
     {
-        formErrorMessage = null;
         isFormVisible = false;
     }
 
@@ -441,13 +431,13 @@
     {
         if (string.IsNullOrWhiteSpace(formModel.Code) || string.IsNullOrWhiteSpace(formModel.Name))
         {
-            formErrorMessage = "Codigo y nombre son obligatorios.";
+            ToastService.ShowToast(new ToastOptions { Title = "Periodos", Text = "Codigo y nombre son obligatorios.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
         if (formModel.EndDate < formModel.StartDate)
         {
-            formErrorMessage = "La fecha final debe ser posterior o igual al inicio.";
+            ToastService.ShowToast(new ToastOptions { Title = "Periodos", Text = "La fecha final debe ser posterior o igual al inicio.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
@@ -464,16 +454,18 @@
         try
         {
             isSaving = true;
-            formErrorMessage = null;
 
             var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/periodos", payload);
             var detail = await response.Content.ReadAsStringAsync();
 
             if (!response.IsSuccessStatusCode)
             {
-                formErrorMessage = string.IsNullOrWhiteSpace(detail)
-                    ? "No se pudo guardar el periodo."
-                    : detail;
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Periodos",
+                    Text = string.IsNullOrWhiteSpace(detail) ? "No se pudo guardar el periodo." : detail,
+                    RenderStyle = ToastRenderStyle.Danger
+                });
                 return;
             }
 
@@ -483,7 +475,7 @@
         }
         catch (Exception ex)
         {
-            formErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Periodos", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

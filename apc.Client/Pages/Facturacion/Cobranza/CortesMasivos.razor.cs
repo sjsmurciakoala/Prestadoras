@@ -10,6 +10,7 @@ using SIAD.Core.DTOs.Rutas;
 using apc.Client.Services.Cobranza;
 using apc.Client.Services.Catalogos;
 using apc.Client.Services.Informes;
+using DevExpress.Blazor;
 
 namespace apc.Client.Pages.Facturacion.Cobranza;
 
@@ -20,6 +21,7 @@ public class CortesMasivosBase : ComponentBase
     [Inject] protected InformesClient InformesClient { get; set; } = default!;
     [Inject] protected IJSRuntime JS { get; set; } = default!;
     [Inject] protected NavigationManager Navigation { get; set; } = default!;
+    [Inject] private IToastNotificationService ToastService { get; set; } = default!;
 
     protected static readonly IReadOnlyList<MesLookup> meses =
     [
@@ -43,8 +45,6 @@ public class CortesMasivosBase : ComponentBase
 
     // Estado generación
     protected bool isGenerando = false;
-    protected string? generarError;
-    protected CorteMasivoHdrDto? ultimoLoteGenerado;
 
     // Historial
     protected List<CorteMasivoHdrDto> lotes = [];
@@ -102,22 +102,20 @@ public class CortesMasivosBase : ComponentBase
     {
         if (periodoAnio < 2020 || periodoAnio > 2099)
         {
-            generarError = "El año del período debe estar entre 2020 y 2099.";
+            ToastService.ShowToast(new ToastOptions { Title = "Cortes masivos", Text = "El año del período debe estar entre 2020 y 2099.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
         if (periodoMes < 1 || periodoMes > 12)
         {
-            generarError = "Seleccione un mes de período válido.";
+            ToastService.ShowToast(new ToastOptions { Title = "Cortes masivos", Text = "Seleccione un mes de período válido.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
         if (diasCorte is < 0)
         {
-            generarError = "Los días de corte no pueden ser negativos.";
+            ToastService.ShowToast(new ToastOptions { Title = "Cortes masivos", Text = "Los días de corte no pueden ser negativos.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
-        generarError = null;
-        ultimoLoteGenerado = null;
         isGenerando = true;
         try
         {
@@ -130,12 +128,21 @@ public class CortesMasivosBase : ComponentBase
                 ValorMinimo:  valorMinimo ?? 0m,
                 DiasCorte:    diasCorte ?? 0);
 
-            ultimoLoteGenerado = await CorteMasivoClient.GenerarAsync(req);
+            var loteGenerado = await CorteMasivoClient.GenerarAsync(req);
+            if (loteGenerado is not null)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Cortes masivos",
+                    Text = $"Lote {loteGenerado.Correlativo} generado con {loteGenerado.TotalClientes} clientes — Período {loteGenerado.PeriodoMes:D2}/{loteGenerado.PeriodoAnio}.",
+                    RenderStyle = ToastRenderStyle.Success
+                });
+            }
             await CargarHistorial();
         }
         catch (Exception ex)
         {
-            generarError = "No se pudieron generar los cortes.";
+            ToastService.ShowToast(new ToastOptions { Title = "Cortes masivos", Text = "No se pudieron generar los cortes.", RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

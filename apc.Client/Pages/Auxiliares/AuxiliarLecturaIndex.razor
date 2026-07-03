@@ -136,9 +136,10 @@
 
         @if (!string.IsNullOrEmpty(gridError))
         {
-            <SiadAlert AlertType="AlertType.Danger" Title="Error">
+            <div class="alert alert-danger" role="alert">
+                <strong class="me-1">Error</strong>
                 @gridError
-            </SiadAlert>
+            </div>
         }
 
         <div class="grid-wrapper">
@@ -196,16 +197,9 @@
 
         <BodyTemplate Context="popupContext">
             <div class="popup-body">
-                <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
+                <div class="alert alert-info mb-3" role="alert">
                     Se cerrará automáticamente el período anterior abierto y se prepararán lecturas base clonando del período previo.
-                </SiadAlert>
-
-                @if (!string.IsNullOrEmpty(generarErrorMsg))
-                {
-                    <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
-                        @generarErrorMsg
-                    </SiadAlert>
-                }
+                </div>
 
                 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
                     <DxFormLayoutItem Caption="Año *" ColSpanXs="12" ColSpanMd="4">
@@ -240,7 +234,7 @@
                                       CssClass="popup-btn" />
 
                             <DxButton Text="Cancelar"
-                                      Click="@(() => { generarPopupVisible = false; generarErrorMsg = null; })"
+                                      Click="@(() => generarPopupVisible = false)"
                                       RenderStyle="ButtonRenderStyle.None"
                                       RenderStyleMode="ButtonRenderStyleMode.Outline"
                                       CssClass="popup-btn" />
@@ -262,18 +256,11 @@
 
         <BodyTemplate Context="popupContext2">
             <div class="popup-body popup-body--wide">
-                @if (!string.IsNullOrEmpty(cargaMasivaError))
-                {
-                    <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
-                        @cargaMasivaError
-                    </SiadAlert>
-                }
-
-                <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
+                <div class="alert alert-info mb-3" role="alert">
                     <div class="fw-bold mb-2">Formato (CSV con punto y coma)</div>
                     <div class="small">CLAVE;CONTADOR;LECTURA_ANTERIOR;LECTURA_ACTUAL;USUARIO</div>
                     <div class="small text-muted mt-2">Ejemplo: CLI-001;MED-001;100;120;JUAN</div>
-                </SiadAlert>
+                </div>
 
                 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
                     <DxFormLayoutItem Caption="Año *" ColSpanXs="12" ColSpanMd="4">
@@ -346,11 +333,9 @@
     private bool generarPopupVisible;
     private GenerarPeriodoModel generarPeriodoModel = new(DateTime.Now.Year, DateTime.Now.Month, "01");
     private bool generarGuardando;
-    private string? generarErrorMsg;
 
     private bool cargaMasivaPopupVisible;
     private bool cargaMasivaGuardando;
-    private string? cargaMasivaError;
     private CargaMasivaModel cargaMasivaModel = new();
 
     private class GenerarPeriodoModel
@@ -456,7 +441,6 @@
         generarPeriodoModel.Anio = auxiliarFiltro.Anio ?? DateTime.Now.Year;
         generarPeriodoModel.Mes = auxiliarFiltro.Mes ?? DateTime.Now.Month;
         generarPeriodoModel.Ciclo = !string.IsNullOrWhiteSpace(auxiliarFiltro.Ciclo) ? auxiliarFiltro.Ciclo : "01";
-        generarErrorMsg = null;
         generarPopupVisible = true;
     }
 
@@ -468,7 +452,6 @@
             Mes = auxiliarFiltro.Mes ?? DateTime.Now.Month,
             Ciclo = auxiliarFiltro.Ciclo
         };
-        cargaMasivaError = null;
         cargaMasivaGuardando = false;
         cargaMasivaPopupVisible = true;
     }
@@ -477,30 +460,27 @@
     {
         cargaMasivaPopupVisible = false;
         cargaMasivaGuardando = false;
-        cargaMasivaError = null;
         cargaMasivaModel = new CargaMasivaModel();
     }
 
     private async Task GenerarPeriodoAsync()
     {
-        generarErrorMsg = null;
-
         if (generarPeriodoModel.Anio < 2020 || generarPeriodoModel.Anio > 2099)
         {
-            generarErrorMsg = "El año debe estar entre 2020 y 2099.";
+            ShowToast("Validación", "El año debe estar entre 2020 y 2099.", ToastRenderStyle.Danger);
             return;
         }
 
         if (generarPeriodoModel.Mes <= 0 || generarPeriodoModel.Mes > 12)
         {
-            generarErrorMsg = "El mes debe estar entre 1 y 12.";
+            ShowToast("Validación", "El mes debe estar entre 1 y 12.", ToastRenderStyle.Danger);
             return;
         }
 
         var ciclo = (generarPeriodoModel.Ciclo ?? string.Empty).Trim();
         if (string.IsNullOrEmpty(ciclo))
         {
-            generarErrorMsg = "El ciclo es requerido.";
+            ShowToast("Validación", "El ciclo es requerido.", ToastRenderStyle.Danger);
             return;
         }
 
@@ -513,7 +493,6 @@
             if (response.IsSuccessStatusCode)
             {
                 generarPopupVisible = false;
-                generarErrorMsg = null;
                 ShowToast("Éxito", "Período generado correctamente.", ToastRenderStyle.Success);
                 filtrosSincronizados = false;
                 await CargarPeriodoActualAsync(sincronizarFiltros: true);
@@ -522,16 +501,15 @@
             else
             {
                 var detail = await response.Content.ReadAsStringAsync();
-                generarErrorMsg = !string.IsNullOrWhiteSpace(detail)
+                var mensajeError = !string.IsNullOrWhiteSpace(detail)
                     ? $"Error: {detail}"
                     : "No se pudo generar el período. Verifica que no exista.";
-                ShowToast("Error", generarErrorMsg, ToastRenderStyle.Danger);
+                ShowToast("Error", mensajeError, ToastRenderStyle.Danger);
             }
         }
         catch (Exception ex)
         {
-            generarErrorMsg = $"Error: {ex.Message}";
-            ShowToast("Error", generarErrorMsg, ToastRenderStyle.Danger);
+            ShowToast("Error", $"Error: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -603,11 +581,9 @@
     {
         if (cargaMasivaGuardando) return;
 
-        cargaMasivaError = null;
-
         if (cargaMasivaModel.Anio <= 0 || cargaMasivaModel.Mes <= 0)
         {
-            cargaMasivaError = "Indica año y mes válidos.";
+            ShowToast("Validación", "Indica año y mes válidos.", ToastRenderStyle.Danger);
             return;
         }
 
@@ -645,12 +621,12 @@
             else
             {
                 var detail = await response.Content.ReadAsStringAsync();
-                cargaMasivaError = string.IsNullOrWhiteSpace(detail) ? "Error al cargar las lecturas." : detail;
+                ShowToast("Error", string.IsNullOrWhiteSpace(detail) ? "Error al cargar las lecturas." : detail, ToastRenderStyle.Danger);
             }
         }
         catch (Exception ex)
         {
-            cargaMasivaError = $"Error: {ex.Message}";
+            ShowToast("Error", $"Error: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -662,7 +638,7 @@
     {
         if (string.IsNullOrWhiteSpace(contenido))
         {
-            cargaMasivaError = "Ingresa al menos una línea con lecturas.";
+            ShowToast("Validación", "Ingresa al menos una línea con lecturas.", ToastRenderStyle.Danger);
             return null;
         }
 
@@ -677,19 +653,19 @@
             var parts = line.Split(';');
             if (parts.Length < 5)
             {
-                cargaMasivaError = $"Línea {index + 1}: formato inválido. Usa clave;contador;anterior;actual;usuario.";
+                ShowToast("Validación", $"Línea {index + 1}: formato inválido. Usa clave;contador;anterior;actual;usuario.", ToastRenderStyle.Danger);
                 return null;
             }
 
             if (!decimal.TryParse(parts[2], NumberStyles.Number, CultureInfo.InvariantCulture, out var anterior))
             {
-                cargaMasivaError = $"Línea {index + 1}: lectura anterior no es número válido.";
+                ShowToast("Validación", $"Línea {index + 1}: lectura anterior no es número válido.", ToastRenderStyle.Danger);
                 return null;
             }
 
             if (!decimal.TryParse(parts[3], NumberStyles.Number, CultureInfo.InvariantCulture, out var actual))
             {
-                cargaMasivaError = $"Línea {index + 1}: lectura actual no es número válido.";
+                ShowToast("Validación", $"Línea {index + 1}: lectura actual no es número válido.", ToastRenderStyle.Danger);
                 return null;
             }
 
@@ -703,7 +679,7 @@
 
         if (result.Count == 0)
         {
-            cargaMasivaError = "No se encontraron lecturas para procesar.";
+            ShowToast("Validación", "No se encontraron lecturas para procesar.", ToastRenderStyle.Danger);
             return null;
         }
 
@@ -721,7 +697,6 @@
     {
         ToastService.ShowToast(new ToastOptions
         {
-            ProviderName = "MainToast",
             Title = title,
             Text = message,
             RenderStyle = style

@@ -2,6 +2,7 @@
 @attribute [Authorize]
 @inject HttpClient Http
 @inject apc.Client.Services.Caja.AbonoClient AbonoClient
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Configuración de Cuentas - Abonos</PageTitle>
 
@@ -145,13 +146,6 @@
          CloseOnOutsideClick="false"
          HeaderText="@popupTitle">
     <BodyContentTemplate Context="popupBody">
-        @if (!string.IsNullOrWhiteSpace(formErrorMessage))
-        {
-            <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">
-                @formErrorMessage
-            </SiadAlert>
-        }
-
         <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical" CssClass="w-100">
             <DxFormLayoutItem ColSpanMd="6" ColSpanXs="12">
                 <CaptionTemplate><span class="fw-semibold">Código del Escenario</span></CaptionTemplate>
@@ -263,7 +257,6 @@
     private bool isSaving;
     private bool isLoading;
     private string popupTitle = "Nueva regla de abono";
-    private string? formErrorMessage;
     private bool statusMessageVisible;
     private string statusMessageTitle = string.Empty;
     private string statusMessageText = string.Empty;
@@ -339,7 +332,6 @@
 
     private void OpenForm(ReglaIntegracionListDto? rule)
     {
-        formErrorMessage = null;
         if (rule is null)
         {
             formModel = new RuleFormModel { IsActive = true };
@@ -377,13 +369,13 @@
     {
         if (string.IsNullOrWhiteSpace(formModel.ScenarioCode))
         {
-            formErrorMessage = "El código de escenario es obligatorio.";
+            ToastService.ShowToast(new ToastOptions { Title = "Reglas de abono", Text = "El código de escenario es obligatorio.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
         if (selectedDebitAccount is null || selectedCreditAccount is null)
         {
-            formErrorMessage = "Las cuentas de débito y crédito son obligatorias.";
+            ToastService.ShowToast(new ToastOptions { Title = "Reglas de abono", Text = "Las cuentas de débito y crédito son obligatorias.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
@@ -401,12 +393,16 @@
         try
         {
             isSaving = true;
-            formErrorMessage = null;
             var response = await Http.PostAsJsonAsync("api/contabilidad/catalogos/reglas-abonos", request);
             if (!response.IsSuccessStatusCode)
             {
                 var error = await response.Content.ReadAsStringAsync();
-                formErrorMessage = string.IsNullOrWhiteSpace(error) ? "Error al guardar la regla." : error;
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Reglas de abono",
+                    Text = string.IsNullOrWhiteSpace(error) ? "Error al guardar la regla." : error,
+                    RenderStyle = ToastRenderStyle.Danger
+                });
                 return;
             }
 
@@ -416,7 +412,7 @@
         }
         catch (Exception ex)
         {
-            formErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Reglas de abono", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

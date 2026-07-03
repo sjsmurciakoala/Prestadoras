@@ -79,11 +79,6 @@
         </DxFormLayout>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(errorMsg))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMsg</SiadAlert>
-    }
-
     <!-- RESULTADOS + ACCIONES MASIVAS -->
     <div class="modern-card position-relative">
         <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando cartera..." />
@@ -181,10 +176,6 @@
                 <DxMemo @bind-Text="observacion" Rows="3" CssClass="w-100" />
             </DxFormLayoutItem>
         </DxFormLayout>
-        @if (!string.IsNullOrEmpty(accionLoteError))
-        {
-            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@accionLoteError</SiadAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -219,7 +210,6 @@
 
     private bool isLoading;
     private bool isGenerandoCartas;
-    private string? errorMsg;
     private ErrorNotice errorNotice = default!;
 
     // Popup acción en lote
@@ -228,7 +218,6 @@
     private int? observacionId;
     private string? observacion;
     private bool isAplicando;
-    private string? accionLoteError;
 
     private List<string> SeleccionadosClaves =>
         seleccionados.OfType<CarteraVencidaClienteDto>().Select(c => c.Clave).ToList();
@@ -263,7 +252,6 @@
     private async Task BuscarAsync()
     {
         isLoading = true;
-        errorMsg = null;
         try
         {
             var result = await ClientesCobroClient.ListarCarteraVencidaAsync(BuildFiltro());
@@ -272,7 +260,7 @@
         }
         catch (Exception ex)
         {
-            errorMsg = "No se pudo cargar la cartera.";
+            ShowToast("Cartera vencida", "No se pudo cargar la cartera.", ToastRenderStyle.Danger);
             clientes = Array.Empty<CarteraVencidaClienteDto>();
         }
         finally { isLoading = false; }
@@ -288,17 +276,16 @@
 
     private void AbrirAccionLote()
     {
-        accionId = null; observacionId = null; observacion = null; accionLoteError = null;
+        accionId = null; observacionId = null; observacion = null;
         mostrarAccionLote = true;
     }
 
     private async Task AplicarAccionLoteAsync()
     {
-        if (accionId is null) { accionLoteError = "Seleccione un tipo de acción."; return; }
+        if (accionId is null) { ShowToast("Acción en lote", "Seleccione un tipo de acción.", ToastRenderStyle.Danger); return; }
         var claves = SeleccionadosClaves;
-        if (claves.Count == 0) { accionLoteError = "No hay clientes seleccionados."; return; }
+        if (claves.Count == 0) { ShowToast("Acción en lote", "No hay clientes seleccionados.", ToastRenderStyle.Danger); return; }
 
-        accionLoteError = null;
         isAplicando = true;
         try
         {

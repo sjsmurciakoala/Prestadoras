@@ -7,6 +7,7 @@
 @using apc.Client.Services.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Saldos de agua potable por ciclo</PageTitle>
 
@@ -42,11 +43,6 @@
                       Enabled="@(!isLoading)" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -106,7 +102,6 @@
 @code {
     private FiltroSaldosAguaPotableCiclo filtro = BuildDefaultFilter();
     private bool isLoading;
-    private string? errorMessage;
     private string? reportName;
     private List<CicloLookupDto> ciclos = [];
 
@@ -123,7 +118,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No fue posible cargar los ciclos: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = $"No fue posible cargar los ciclos: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             ciclos = [new CicloLookupDto(0, "Todos")];
         }
     }
@@ -137,7 +132,6 @@
         }
 
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -152,7 +146,6 @@
     private void LimpiarFiltros()
     {
         filtro = BuildDefaultFilter();
-        errorMessage = null;
         reportName = null;
     }
 
@@ -160,23 +153,22 @@
     {
         if (!filtro.FechaDesde.HasValue)
         {
-            errorMessage = "La fecha desde es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             return false;
         }
 
         if (!filtro.FechaHasta.HasValue)
         {
-            errorMessage = "La fecha hasta es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha hasta es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             return false;
         }
 
         if (filtro.FechaDesde.Value.Date > filtro.FechaHasta.Value.Date)
         {
-            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde no puede ser mayor que la fecha hasta.", RenderStyle = ToastRenderStyle.Danger });
             return false;
         }
 
-        errorMessage = null;
         return true;
     }
 

@@ -5,21 +5,12 @@
 @using apc.Client.Services
 @inject BrandingClient BrandingClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Branding Portal</PageTitle>
 
 <h3>Branding del Portal</h3>
 <p class="text-muted">Configura el nombre, el nombre corto y el logo del portal.</p>
-
-@if (!string.IsNullOrWhiteSpace(errorMessage))
-{
-    <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</SiadAlert>
-}
-
-@if (!string.IsNullOrWhiteSpace(successMessage))
-{
-    <SiadAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</SiadAlert>
-}
 
 @if (isLoading)
 {
@@ -73,8 +64,6 @@ else
 }
 
 @code {
-    private string? errorMessage;
-    private string? successMessage;
     private bool isLoading = true;
     private bool isSaving;
 
@@ -91,7 +80,6 @@ else
     private async Task CargarBrandingAsync()
     {
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -108,7 +96,7 @@ else
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Branding", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -130,8 +118,6 @@ else
         }
 
         isSaving = true;
-        errorMessage = null;
-        successMessage = null;
 
         try
         {
@@ -149,7 +135,7 @@ else
 
             BrandingClient.InvalidateCache();
             await CargarBrandingAsync();
-            successMessage = "Branding actualizado correctamente.";
+            ToastService.ShowToast(new ToastOptions { Title = "Branding", Text = "Branding actualizado correctamente.", RenderStyle = ToastRenderStyle.Success });
         }
         catch (UnauthorizedAccessException)
         {
@@ -157,7 +143,7 @@ else
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Branding", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

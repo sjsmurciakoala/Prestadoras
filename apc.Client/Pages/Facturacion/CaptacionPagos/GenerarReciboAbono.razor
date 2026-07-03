@@ -10,11 +10,6 @@
     <DxToastProvider Name="@ToastProviderName" MaxToastCount="4" />
     <ErrorNotice @ref="errorNotice" />
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</SiadAlert>
-    }
-
     <div class="row g-3">
         @* ── Facturas pendientes del cliente ── *@
         <div class="col-md-6">
@@ -206,7 +201,6 @@
     private decimal montoRecibo;
     private bool isLoading;
     private bool isSaving;
-    private string? error;
     private ErrorNotice errorNotice = default!;
     private bool _initialLoadDone;
 
@@ -225,7 +219,6 @@
     private async Task CargarFacturasAsync()
     {
         isLoading = true;
-        error = null;
         try
         {
             var res = await AbonoClient.ListarFacturasPendientesPorClienteAsync(ClienteClave);
@@ -233,7 +226,7 @@
         }
         catch (Exception ex)
         {
-            error = "No se pudieron cargar las facturas.";
+            MostrarToast("Error", "No se pudieron cargar las facturas.", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -245,7 +238,6 @@
     {
         selectedFactura = fact;
         montoRecibo = fact.SaldoPendiente;
-        error = null;
         await CargarRecibosPendientesAsync(fact.NumFactura);
     }
 
@@ -275,7 +267,6 @@
         if (selectedFactura is null || montoRecibo <= 0) return;
 
         isSaving = true;
-        error = null;
 
         try
         {
@@ -309,8 +300,7 @@
             }
             else
             {
-                error = response?.Message ?? "No se pudo generar el recibo.";
-                MostrarToast("Error", error, ToastRenderStyle.Danger);
+                MostrarToast("Error", response?.Message ?? "No se pudo generar el recibo.", ToastRenderStyle.Danger);
             }
         }
         catch (Exception ex)

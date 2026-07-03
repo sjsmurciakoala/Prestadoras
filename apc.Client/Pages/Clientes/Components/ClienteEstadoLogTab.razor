@@ -1,6 +1,7 @@
 @using SIAD.Core.DTOs.Clientes
 @using apc.Client.Services.Clientes
 @inject ClientesClient ClientesClient
+@inject IToastNotificationService ToastService
 
 <div class="estado-log-container">
 
@@ -20,10 +21,6 @@
     {
         <DxLoadingPanel Visible="true" Text="Cargando bitácora..." />
         <div style="height:60px"></div>
-    }
-    else if (!string.IsNullOrEmpty(errorMsg))
-    {
-        <SiadAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</SiadAlert>
     }
     else if (!items.Any())
     {
@@ -79,7 +76,6 @@
 
     private List<ClienteEstadoLogItemDto> items = new();
     private bool isLoading = true;
-    private string? errorMsg;
 
     protected override async Task OnInitializedAsync()
         => await CargarLog();
@@ -87,14 +83,18 @@
     private async Task CargarLog()
     {
         isLoading = true;
-        errorMsg = null;
         try
         {
             items = await ClientesClient.ObtenerEstadoLogAsync(ClienteId);
         }
         catch (Exception ex)
         {
-            errorMsg = $"No fue posible cargar la bitácora: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Bitácora de estado",
+                Text = $"No fue posible cargar la bitácora: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {

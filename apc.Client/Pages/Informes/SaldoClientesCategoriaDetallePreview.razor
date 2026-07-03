@@ -5,6 +5,7 @@
 @using apc.Client.Services.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Detalle de saldos de clientes por categoría</PageTitle>
 
@@ -30,11 +31,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -91,7 +87,6 @@
     private DateTime? fechaDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime? fechaHasta = DateTime.Today;
     private int categoriaServicioId;
-    private string? errorMessage;
     private string? pdfUrl;
     private List<ServicioCategoriaLookupDto> categorias = [];
 
@@ -108,7 +103,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No fue posible cargar las categorías: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = $"No fue posible cargar las categorías: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             categorias = [new ServicioCategoriaLookupDto(0, "Todas")];
         }
     }
@@ -117,26 +112,25 @@
     {
         if (!fechaDesde.HasValue)
         {
-            errorMessage = "La fecha desde es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (!fechaHasta.HasValue)
         {
-            errorMessage = "La fecha hasta es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha hasta es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (fechaDesde.Value.Date > fechaHasta.Value.Date)
         {
-            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha desde no puede ser mayor que la fecha hasta.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
-        errorMessage = null;
         pdfUrl =
             $"api/informes/reportes/{SIAD.Core.Constants.ReportesWebConstants.CodigoReporteSaldoClientesCategoriaDetalle}/pdf" +
             $"?fechaDesde={Uri.EscapeDataString(fechaDesde.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
@@ -149,7 +143,6 @@
         fechaDesde = new(DateTime.Today.Year, DateTime.Today.Month, 1);
         fechaHasta = DateTime.Today;
         categoriaServicioId = 0;
-        errorMessage = null;
         pdfUrl = null;
     }
 }

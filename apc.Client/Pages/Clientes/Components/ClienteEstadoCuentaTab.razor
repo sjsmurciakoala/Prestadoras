@@ -3,6 +3,7 @@
 @using apc.Client.Pages.Clientes
 @using DevExpress.Blazor
 @inject ClientesClient ClientesClient
+@inject IToastNotificationService ToastService
 
 <div class="cliente-estado-cuenta-container">
     <!-- ENCABEZADO -->
@@ -24,12 +25,6 @@
                 <DxLoadingPanel Visible="true" Text="Cargando estado de cuenta..." />
                 <div style="height:80px"></div>
             </div>
-        }
-        else if (!string.IsNullOrEmpty(errorCuenta))
-        {
-            <SiadAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
-                @errorCuenta
-            </SiadAlert>
         }
         else if (estadoCuenta != null)
         {
@@ -129,9 +124,10 @@
         {
             @if (!string.IsNullOrWhiteSpace(movimientosDataSource?.LastError))
             {
-                <SiadAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
                     @movimientosDataSource!.LastError
-                </SiadAlert>
+                </div>
             }
 
             <div class="grid-wrapper">
@@ -207,7 +203,6 @@
 
     private ClienteEstadoCuentaDto? estadoCuenta;
     private bool isLoadingCuenta = true;
-    private string? errorCuenta;
 
     private DxGrid? movimientosGrid;
     private ClienteMovimientosGridDataSource? movimientosDataSource;
@@ -255,7 +250,6 @@
     private async Task LoadEstadoCuentaAsync()
     {
         isLoadingCuenta = true;
-        errorCuenta = null;
 
         try
         {
@@ -263,7 +257,12 @@
         }
         catch (Exception ex)
         {
-            errorCuenta = $"Error al cargar el estado de cuenta: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Estado de cuenta",
+                Text = $"Error al cargar el estado de cuenta: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {

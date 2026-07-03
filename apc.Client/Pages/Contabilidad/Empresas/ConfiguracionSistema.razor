@@ -14,6 +14,7 @@
 @inject PeriodosContablesClient PeriodosClient
 @inject TenantCompaniesClient TenantCompaniesClient
 @inject IConfiguration Configuration
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Configuración del Sistema Contable</PageTitle>
 
@@ -35,36 +36,17 @@
 
         <ChildContent>
             <div class="p-4 configuracion-loading-target">
-                @if (!string.IsNullOrWhiteSpace(alerta))
-                {
-                    @if (alertaEstilo == MessageBoxRenderStyle.Danger)
-                    {
-                        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@alerta</SiadAlert>
-                    }
-                    else if (alertaEstilo == MessageBoxRenderStyle.Warning)
-                    {
-                        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">@alerta</SiadAlert>
-                    }
-                    else if (alertaEstilo == MessageBoxRenderStyle.Success)
-                    {
-                        <SiadAlert AlertType="AlertType.Success" CssClass="mb-3">@alerta</SiadAlert>
-                    }
-                    else
-                    {
-                        <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">@alerta</SiadAlert>
-                    }
-                }
                 @if (MostrarAvisoSinConfiguracion)
                 {
-                    <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
+                    <div class="alert alert-info mb-3" role="alert">
                         Esta empresa aún no tiene configuración del sistema contable. Complete el formulario a continuación para configurarla.
-                    </SiadAlert>
+                    </div>
                 }
                 @if (MostrarAvisoSinPlanCuentas)
                 {
-                    <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                    <div class="alert alert-warning mb-3" role="alert">
                         No existe un plan de cuentas cargado para esta empresa. Por ahora solo se validará y guardará la pestaña de configuración principal.
-                    </SiadAlert>
+                    </div>
                 }
 
                 <div class="mb-4">
@@ -492,7 +474,6 @@
     private bool cargando;
     private bool configuracionExiste = false;
     private string? alerta;
-    private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
     private bool popupGuardadoVisible;
     private string? formatoCuentasSugerido;
     private List<BalancePreviewRow> balancePreviewData = CrearBalancePreview();
@@ -524,7 +505,6 @@
     {
         cargando = true;
         alerta = null;
-        alertaEstilo = MessageBoxRenderStyle.Info;
         configuracionExiste = false;
         formatoCuentasSugerido = null;
         ResetBalancePreview();
@@ -546,7 +526,7 @@
         catch (Exception ex)
         {
             alerta = $"No fue posible cargar la empresa o configuración: {ex.Message}";
-            alertaEstilo = MessageBoxRenderStyle.Danger;
+            ToastService.ShowToast(new ToastOptions { Title = "Configuración", Text = alerta, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -618,7 +598,7 @@
             if (erroresPrincipal.Count > 0)
             {
                 alerta = $"Errores de validación: {string.Join(", ", erroresPrincipal)}";
-                alertaEstilo = MessageBoxRenderStyle.Danger;
+                ToastService.ShowToast(new ToastOptions { Title = "Configuración", Text = alerta, RenderStyle = ToastRenderStyle.Danger });
                 StateHasChanged();
                 return;
             }
@@ -627,7 +607,7 @@
         {
             var errores = editContext.GetValidationMessages().ToList();
             alerta = errores.Count > 0 ? $"Errores de validación: {string.Join(", ", errores)}" : "Hay datos incompletos o inválidos.";
-            alertaEstilo = MessageBoxRenderStyle.Danger;
+            ToastService.ShowToast(new ToastOptions { Title = "Configuración", Text = alerta, RenderStyle = ToastRenderStyle.Danger });
             StateHasChanged();
             return;
         }
@@ -648,8 +628,8 @@
         }
         catch (Exception ex)
         {
-            alertaEstilo = MessageBoxRenderStyle.Danger;
             alerta = $"No fue posible guardar: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Configuración", Text = alerta, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -662,7 +642,6 @@
     {
         cargando = true;
         alerta = null;
-        alertaEstilo = MessageBoxRenderStyle.Info;
         configuracionExiste = false;
         formatoCuentasSugerido = null;
         ResetBalancePreview();
@@ -685,7 +664,7 @@
         catch (Exception ex)
         {
             alerta = $"No fue posible cambiar de empresa: {ex.Message}";
-            alertaEstilo = MessageBoxRenderStyle.Danger;
+            ToastService.ShowToast(new ToastOptions { Title = "Configuración", Text = alerta, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

@@ -61,7 +61,7 @@
 
     @if (cuenta is null)
     {
-        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <div class="alert alert-warning mb-3" role="alert">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <span>No hay cuenta seleccionada para conciliar.</span>
                 <button type="button"
@@ -70,15 +70,15 @@
                     Volver a cuentas
                 </button>
             </div>
-        </SiadAlert>
+        </div>
     }
     else
     {
         @if (!bancoActivo)
         {
-            <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            <div class="alert alert-warning mb-3" role="alert">
                 El banco seleccionado esta inactivo. La conciliacion puede no estar disponible.
-            </SiadAlert>
+            </div>
         }
 
         <div class="modern-card mb-4">

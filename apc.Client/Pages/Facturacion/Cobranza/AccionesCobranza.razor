@@ -10,6 +10,7 @@
 @inject CaptacionPagosClient CaptacionClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Acciones de Cobranza</PageTitle>
 
@@ -65,10 +66,6 @@
             {
                 <DxLoadingPanel Visible="true" Text="Cargando acciones..." />
                 <div style="height:60px"></div>
-            }
-            else if (!string.IsNullOrEmpty(errorMsg))
-            {
-                <SiadAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle">@errorMsg</SiadAlert>
             }
             else
             {
@@ -226,11 +223,6 @@
                 <DxMemo @bind-Text="nuevaObservacion" Rows="3" CssClass="w-100" />
             </DxFormLayoutItem>
         </DxFormLayout>
-
-        @if (!string.IsNullOrEmpty(guardarError))
-        {
-            <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@guardarError</SiadAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -254,7 +246,6 @@
     private List<ObservacionCobranzaCatalogoDto> catalogoObservaciones = [];
     private List<AbogadoCobranzaLookupDto> catalogoAbogados = [];
     private bool isLoading;
-    private string? errorMsg;
     private ErrorNotice errorNotice = default!;
 
     private bool mostrarDetalle;
@@ -267,7 +258,6 @@
     private string? nuevaEjecutadoPor;
     private string? nuevaObservacion;
     private bool isSaving;
-    private string? guardarError;
 
     protected override async Task OnInitializedAsync()
     {
@@ -279,7 +269,6 @@
     {
         clienteClave = clave;
         acciones = [];
-        errorMsg = null;
         if (!string.IsNullOrWhiteSpace(clave))
             await CargarAcciones();
     }
@@ -288,7 +277,6 @@
     {
         if (string.IsNullOrWhiteSpace(clienteClave)) return;
         isLoading = true;
-        errorMsg = null;
         try
         {
             var tareaAcciones = CobranzaClient.GetAccionesAsync(clienteClave);
@@ -303,7 +291,7 @@
         }
         catch (Exception ex)
         {
-            errorMsg = "No se pudieron cargar las acciones.";
+            ToastService.ShowToast(new ToastOptions { Title = "Acciones de cobranza", Text = "No se pudieron cargar las acciones.", RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -324,7 +312,6 @@
         nuevaAbogadoId = null;
         nuevaEjecutadoPor = null;
         nuevaObservacion = null;
-        guardarError = null;
         mostrarFormulario = true;
     }
 
@@ -332,10 +319,9 @@
     {
         if (nuevaAccionId is null)
         {
-            guardarError = "Seleccione un tipo de acción.";
+            ToastService.ShowToast(new ToastOptions { Title = "Registrar acción", Text = "Seleccione un tipo de acción.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
-        guardarError = null;
         isSaving = true;
         try
         {

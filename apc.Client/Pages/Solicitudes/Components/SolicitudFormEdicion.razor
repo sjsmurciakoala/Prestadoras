@@ -1,4 +1,5 @@
 @using SIAD.Core.DTOs.Solicitudes
+@inject IToastNotificationService ToastService
 
 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
     
@@ -54,24 +55,16 @@
 
 </DxFormLayout>
 
-@if (!string.IsNullOrEmpty(validationError))
-{
-    <SiadAlert AlertType="AlertType.Danger" CssClass="mt-3">@validationError</SiadAlert>
-}
-
 @code {
     [Parameter] public SolicitudUpdateDto Solicitud { get; set; } = default!;
     [Parameter] public List<SolicitudCategoriaDto> Categorias { get; set; } = new();
     [Parameter] public EventCallback OnGuardar { get; set; }
 
-    private string? validationError;
-
     private async Task GuardarAsync()
     {
-        validationError = null;
         if (!ValidarFormulario())
         {
-            validationError = "Completa los campos obligatorios y verifica las máscaras.";
+            ToastService.ShowToast(new ToastOptions { Title = "Solicitudes", Text = "Completa los campos obligatorios y verifica las máscaras.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 

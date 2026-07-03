@@ -9,6 +9,7 @@
 
 @inject ClientesClient ClientesClient
 @inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Clientes</PageTitle>
 
@@ -232,7 +233,7 @@
 
 <!-- Popup medidores -->
 <DxPopup Visible="@mostrarMedidoresModal"
-         VisibleChanged="@(v => { mostrarMedidoresModal = v; if (!v) { clienteAccionId = null; clienteAccionDetalle = null; clienteAccionError = null; clienteAccionLoading = false; } })"
+         VisibleChanged="@(v => { mostrarMedidoresModal = v; if (!v) { clienteAccionId = null; clienteAccionDetalle = null; clienteAccionLoading = false; } })"
          Width="min(1000px, 95vw)"
          MaxHeight="90vh"
          Scrollable="true"
@@ -243,12 +244,6 @@
             <div class="p-4 text-center">
                 <DxLoadingPanel Visible="true" Text="Cargando cliente..." />
                 <div style="height:80px"></div>
-            </div>
-        }
-        else if (!string.IsNullOrWhiteSpace(clienteAccionError))
-        {
-            <div class="p-2">
-                <SiadAlert AlertType="AlertType.Danger">@clienteAccionError</SiadAlert>
             </div>
         }
         else if (clienteAccionDetalle is not null)
@@ -269,7 +264,6 @@
     private int? clienteAccionId;
     private ClienteDetailDto? clienteAccionDetalle;
     private bool clienteAccionLoading = false;
-    private string? clienteAccionError;
 
     private string filtroBusqueda = "";
     private bool filtroSoloActivos = true;
@@ -350,7 +344,6 @@
     {
         clienteAccionId = id;
         clienteAccionDetalle = null;
-        clienteAccionError = null;
         clienteAccionLoading = true;
         mostrarMedidoresModal = true;
 
@@ -359,12 +352,22 @@
             clienteAccionDetalle = await ClientesClient.ObtenerPorIdAsync(id);
             if (clienteAccionDetalle is null)
             {
-                clienteAccionError = "No se encontró el cliente.";
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Clientes",
+                    Text = "No se encontró el cliente.",
+                    RenderStyle = ToastRenderStyle.Danger
+                });
             }
         }
         catch (Exception ex)
         {
-            clienteAccionError = $"Error al cargar el cliente: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Clientes",
+                Text = $"Error al cargar el cliente: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {

@@ -4,6 +4,7 @@
 @using apc.Client.Services.Facturacion
 @using DevExpress.Blazor
 @inject FacturacionMiscelaneosClient Client
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Consulta de Misceláneos</PageTitle>
 
@@ -43,10 +44,6 @@
         {
             <DxLoadingPanel Visible="true" Text="Buscando..." />
             <div style="height:60px"></div>
-        }
-        else if (!string.IsNullOrEmpty(errorMsg))
-        {
-            <SiadAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</SiadAlert>
         }
         else
         {
@@ -135,7 +132,6 @@
 @code {
     private List<MiscelaneoConsultaDto> recibos = [];
     private bool isLoading = false;
-    private string? errorMsg;
 
     private DateTime? fechaDesde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
     private DateTime? fechaHasta = DateTime.Today;
@@ -151,7 +147,6 @@
     private async Task BuscarAsync()
     {
         isLoading = true;
-        errorMsg = null;
         try
         {
             var desde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : (DateOnly?)null;
@@ -160,7 +155,12 @@
         }
         catch (Exception ex)
         {
-            errorMsg = $"Error al buscar: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Misceláneos",
+                Text = $"Error al buscar: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {

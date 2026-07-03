@@ -11,11 +11,6 @@
     <DxToastProvider Name="@ToastName" MaxToastCount="3" />
     <ErrorNotice @ref="errorNotice" />
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</SiadAlert>
-    }
-
     <DxCard CssClass="mb-4">
         <HeaderTemplate>
             <h5 class="mb-0">Reverso de pago</h5>
@@ -91,9 +86,9 @@
             </DxDataGrid>
             @if (miscelaneos.Count == 0 && string.IsNullOrWhiteSpace(error))
             {
-                <SiadAlert AlertType="AlertType.Info" CssClass="mt-2">
+                <div class="alert alert-info mt-2" role="alert">
                     No se encontraron pagos misceláneos recientes para los criterios indicados.
-                </SiadAlert>
+                </div>
             }
         </BodyTemplate>
     </DxCard>

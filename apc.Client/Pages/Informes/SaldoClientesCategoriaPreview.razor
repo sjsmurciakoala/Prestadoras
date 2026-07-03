@@ -5,6 +5,7 @@
 @using apc.Client.Services.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Saldo de clientes por categoria</PageTitle>
 
@@ -30,11 +31,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -103,7 +99,6 @@
     private DateTime? fechaCorte = DateTime.Today;
     private int categoriaServicioId;
     private int estadoClienteId;
-    private string? errorMessage;
     private string? pdfUrl;
     private List<ServicioCategoriaLookupDto> categorias = [];
 
@@ -120,7 +115,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No fue posible cargar las categorias: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = $"No fue posible cargar las categorias: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             categorias = [new ServicioCategoriaLookupDto(0, "Todas")];
         }
     }
@@ -129,12 +124,11 @@
     {
         if (!fechaCorte.HasValue)
         {
-            errorMessage = "La fecha de corte es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "La fecha de corte es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
-        errorMessage = null;
         pdfUrl =
             $"api/informes/reportes/{SIAD.Core.Constants.ReportesWebConstants.CodigoReporteSaldoClientesCategoria}/pdf" +
             $"?fechaCorte={Uri.EscapeDataString(fechaCorte.Value.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture))}" +
@@ -147,7 +141,6 @@
         fechaCorte = DateTime.Today;
         categoriaServicioId = 0;
         estadoClienteId = 0;
-        errorMessage = null;
         pdfUrl = null;
     }
 }

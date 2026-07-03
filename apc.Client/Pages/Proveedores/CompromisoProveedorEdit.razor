@@ -54,22 +54,17 @@
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <SiadAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</SiadAlert>
-    }
-
     @if (ordenProcesada)
     {
-        <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <div class="alert alert-warning mb-3" role="alert">
             El compromiso ya fue procesado. Se muestra en modo consulta y no se puede modificar.
-        </SiadAlert>
+        </div>
     }
     else if (TienePartidaContableRegistrada)
     {
-        <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
+        <div class="alert alert-info mb-3" role="alert">
             El compromiso ya tiene una partida contable registrada. Se muestra en modo consulta hasta que sea procesado.
-        </SiadAlert>
+        </div>
     }
 
     @if (!isLoading)
@@ -181,9 +176,9 @@
                         @if (IsProveedorGenericoSeleccionado)
                         {
                             <DxFormLayoutItem ColSpanMd="12">
-                                <SiadAlert AlertType="AlertType.Info" CssClass="mb-0">
+                                <div class="alert alert-info mb-0" role="alert">
                                     Con el proveedor generico, RTN, pagar a y cuenta de servicio se capturan manualmente.
-                                </SiadAlert>
+                                </div>
                             </DxFormLayoutItem>
                         }
 
@@ -253,9 +248,9 @@
 
                     @if (model.Detalles.Count == 0)
                     {
-                        <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">
+                        <div class="alert alert-info mb-3" role="alert">
                             Agregue al menos una linea para poder guardar el compromiso.
-                        </SiadAlert>
+                        </div>
                     }
                     else
                     {
@@ -385,20 +380,20 @@
                         {
                         @if (partidaPreview.Lineas.Count == 0)
                         {
-                            <SiadAlert AlertType="AlertType.Info" CssClass="mb-0">
+                            <div class="alert alert-info mb-0" role="alert">
                                 Seleccione una cuenta de servicio o una cuenta de gasto en el detalle para construir la partida contable.
-                            </SiadAlert>
+                            </div>
                         }
                         else
                         {
                             @if (!string.IsNullOrWhiteSpace(partidaPreview.WarningMessage))
                             {
-                                <SiadAlert AlertType="AlertType.Warning" CssClass="mb-3">@partidaPreview.WarningMessage</SiadAlert>
+                                <div class="alert alert-warning mb-3" role="alert">@partidaPreview.WarningMessage</div>
                             }
 
                             @if (!string.IsNullOrWhiteSpace(partidaPreview.InfoMessage))
                             {
-                                <SiadAlert AlertType="AlertType.Info" CssClass="mb-3">@partidaPreview.InfoMessage</SiadAlert>
+                                <div class="alert alert-info mb-3" role="alert">@partidaPreview.InfoMessage</div>
                             }
 
                             <div class="table-responsive detail-table">
@@ -468,9 +463,9 @@
 
                         @if (LineasPartidaContable.Count == 0)
                         {
-                            <SiadAlert AlertType="AlertType.Warning" CssClass="mb-0">
+                            <div class="alert alert-warning mb-0" role="alert">
                                 No se encontro una partida contable asociada a este compromiso.
-                            </SiadAlert>
+                            </div>
                         }
                         else
                         {
@@ -547,7 +542,6 @@
     private bool ordenProcesada;
     private bool cuentaContableProveedorBloqueada;
     private bool mostrarPreviaPartida;
-    private string? errorMessage;
     private ErrorNotice errorNotice = default!;
 
     private bool IsEdit => NumeroOrden > 0;
@@ -608,7 +602,6 @@
     private async Task CargarAsync()
     {
         isLoading = true;
-        errorMessage = null;
         ordenProcesada = false;
         ordenDetalle = null;
         correlativoProveedor = null;
@@ -647,7 +640,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = "No se pudo cargar la pantalla.";
+            ShowToast("Compromisos de proveedor", "No se pudo cargar la pantalla.", ToastRenderStyle.Danger);
             Logger.LogError(ex, "Error al cargar gestion de compromisos de proveedor.");
         }
         finally
@@ -710,7 +703,7 @@
         if (detalle is null)
         {
             ordenDetalle = null;
-            errorMessage = $"No se encontro el compromiso {NumeroOrden}.";
+            ShowToast("Compromisos de proveedor", $"No se encontro el compromiso {NumeroOrden}.", ToastRenderStyle.Danger);
             model = new OrdenPagoDirectoUpsertDto
             {
                 FechaCompromiso = DateTime.Today,
@@ -887,7 +880,6 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
 
             var payload = BuildPayload();
             OrdenPagoDirectoOperacionResultadoDto result;
@@ -942,7 +934,6 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
             var result = await OrdenesPagoDirectoClient.GenerarPartidaAsync(NumeroOrden);
             ShowToast("Exito", result.Message, ToastRenderStyle.Success);
             await CargarAsync();
@@ -962,14 +953,13 @@
     {
         if (ordenProcesada)
         {
-            errorMessage = "El compromiso ya fue procesado y no se puede modificar.";
+            ShowToast("Validacion", "El compromiso ya fue procesado y no se puede modificar.", ToastRenderStyle.Danger);
             return false;
         }
 
         if (model.Detalles.Count == 0)
         {
-            errorMessage = "Debe agregar al menos una linea presupuestaria.";
-            ShowToast("Validacion", errorMessage, ToastRenderStyle.Warning);
+            ShowToast("Validacion", "Debe agregar al menos una linea presupuestaria.", ToastRenderStyle.Warning);
             return false;
         }
 
@@ -980,30 +970,26 @@
 
             if (string.IsNullOrWhiteSpace(detalle.Descripcion))
             {
-                errorMessage = $"La linea {linea} requiere una descripcion.";
-                ShowToast("Validacion", errorMessage, ToastRenderStyle.Warning);
+                ShowToast("Validacion", $"La linea {linea} requiere una descripcion.", ToastRenderStyle.Warning);
                 return false;
             }
 
             if (detalle.Monto <= 0)
             {
-                errorMessage = $"La linea {linea} debe tener un monto mayor a cero.";
-                ShowToast("Validacion", errorMessage, ToastRenderStyle.Warning);
+                ShowToast("Validacion", $"La linea {linea} debe tener un monto mayor a cero.", ToastRenderStyle.Warning);
                 return false;
             }
         }
 
         if (!IsEdit && model.GenerarPartida && !TieneCuentaServicio() && !model.Detalles.Any(TieneCuentaGasto))
         {
-            errorMessage = "Para generar la partida del compromiso, se debe elegir una cuenta de servicio o de gasto.";
-            ShowToast("Validacion", errorMessage, ToastRenderStyle.Warning);
+            ShowToast("Validacion", "Para generar la partida del compromiso, se debe elegir una cuenta de servicio o de gasto.", ToastRenderStyle.Warning);
             return false;
         }
 
         if (!IsEdit && model.GenerarPartida && !PuedeGenerarPartidaContable())
         {
-            errorMessage = "No se puede generar el compromiso porque la partida contable no esta completa. Asigne cuenta de gasto en todas las lineas necesarias.";
-            ShowToast("Validacion", errorMessage, ToastRenderStyle.Warning);
+            ShowToast("Validacion", "No se puede generar el compromiso porque la partida contable no esta completa. Asigne cuenta de gasto en todas las lineas necesarias.", ToastRenderStyle.Warning);
             return false;
         }
 

@@ -11,20 +11,11 @@
 @inject UsuariosPortalClient UsuariosClient
 @inject TenantCompaniesClient CompaniesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Usuario</PageTitle>
 
 <h3>@(EsNuevo ? "Nuevo Usuario" : "Editar Usuario")</h3>
-
-@if (!string.IsNullOrWhiteSpace(errorMessage))
-{
-    <SiadAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</SiadAlert>
-}
-
-@if (!string.IsNullOrWhiteSpace(successMessage))
-{
-    <SiadAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</SiadAlert>
-}
 
 @if (isLoading)
 {
@@ -122,8 +113,6 @@ else
     private long? companyIdSeleccionado;
     private bool bloqueado;
 
-    private string? errorMessage;
-    private string? successMessage;
     private bool isLoading = true;
     private bool isSaving;
 
@@ -148,7 +137,7 @@ else
                 usuarioCargado = await UsuariosClient.ObtenerAsync(UsuarioId!);
                 if (usuarioCargado is null)
                 {
-                    errorMessage = "El usuario no existe.";
+                    ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = "El usuario no existe.", RenderStyle = ToastRenderStyle.Danger });
                 }
                 else
                 {
@@ -181,7 +170,7 @@ else
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -211,8 +200,6 @@ else
         if (isSaving) return;
 
         isSaving = true;
-        errorMessage = null;
-        successMessage = null;
 
         try
         {
@@ -223,7 +210,7 @@ else
                 crearDto.CompanyId = companyIdSeleccionado;
                 crearDto.Roles = rolesSeleccionados;
                 await UsuariosClient.CrearAsync(crearDto);
-                successMessage = "Usuario creado correctamente.";
+                ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = "Usuario creado correctamente.", RenderStyle = ToastRenderStyle.Success });
                 NavigationManager.NavigateTo("/parametros/usuarios");
             }
             else
@@ -236,12 +223,12 @@ else
                     Bloqueado = bloqueado
                 };
                 await UsuariosClient.ActualizarAsync(UsuarioId!, dto);
-                successMessage = "Usuario actualizado correctamente.";
+                ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = "Usuario actualizado correctamente.", RenderStyle = ToastRenderStyle.Success });
             }
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         catch (UnauthorizedAccessException)
         {
