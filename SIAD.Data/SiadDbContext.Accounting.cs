@@ -1014,6 +1014,9 @@ public partial class SiadDbContext
 
         // SAR-Compliance: configuración de entidades nuevas (2026-05-07)
         ConfigureSarComplianceModel(modelBuilder);
+
+        // Integración contable-comercial Fase 1 (2026-07-02)
+        ConfigureIntegracionContableModel(modelBuilder);
     }
 }
 
