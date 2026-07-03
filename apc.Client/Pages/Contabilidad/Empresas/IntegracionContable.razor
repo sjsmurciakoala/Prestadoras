@@ -1,0 +1,654 @@
+﻿@page "/contabilidad/empresas/integracion"
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
+
+@using DevExpress.Blazor
+@using apc.Client.Services.Contabilidad
+@using apc.Client.Services.Tenant
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Contabilidad
+@inject IntegracionContableClient IntegracionClient
+@inject TenantState TenantState
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Configuración de Integración Contable</PageTitle>
+
+<div id="integracion-contable-superficie" class="contabilidad-page contabilidad-content h-100">
+    <DxCard CssClass="shadow-sm border-0 rounded w-100 h-100">
+        <HeaderContent>
+            <div class="d-flex flex-wrap justify-content-between align-items-center p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-circle bg-primary text-white d-flex align-items-center justify-content-center">
+                        <i class="bi bi-arrow-left-right fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-bold text-secondary">Configuración de Integración Contable</h5>
+                        <small class="text-muted">Define las cuentas, diarios y modos con que los movimientos comerciales generan contabilidad.</small>
+                    </div>
+                </div>
+            </div>
+        </HeaderContent>
+
+        <ChildContent>
+            <div class="p-4">
+                @if (validacion is not null)
+                {
+                    @foreach (var error in validacion.Errores)
+                    {
+                        <div class="alert alert-danger mb-2" role="alert"><i class="bi bi-x-circle-fill me-2"></i>@error</div>
+                    }
+                    @foreach (var advertencia in validacion.Advertencias)
+                    {
+                        <div class="alert alert-warning mb-2" role="alert"><i class="bi bi-exclamation-triangle-fill me-2"></i>@advertencia</div>
+                    }
+                    @if (validacion.EsValida && validacion.Advertencias.Count == 0)
+                    {
+                        <div class="alert alert-success mb-2" role="alert"><i class="bi bi-check-circle-fill me-2"></i>La configuración es válida: sin errores ni advertencias.</div>
+                    }
+                }
+                @if (modelo is not null && !modelo.Existe && empresaSeleccionadaId > 0 && !cargando)
+                {
+                    <div class="alert alert-info mb-3" role="alert">
+                        Esta empresa aún no tiene configuración de integración contable. Complete las pestañas o aplique el perfil ERSAPS y guarde.
+                    </div>
+                }
+
+                <div class="mb-4">
+                    <DxToolbar ItemSpacing="12px">
+                        <DxToolbarItem IconCssClass="bi bi-arrow-clockwise"
+                                       Text="Recargar"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       Enabled="@(!cargando)"
+                                       Click="@RecargarAsync" />
+                        <DxToolbarItem IconCssClass="bi bi-clipboard-check"
+                                       Text="Validar"
+                                       RenderStyle="ButtonRenderStyle.Secondary"
+                                       Enabled="@(!cargando && empresaSeleccionadaId > 0)"
+                                       Click="@ValidarAsync" />
+                    </DxToolbar>
+                </div>
+
+                @if (modelo is not null)
+                {
+                    <DxTabs CssClass="modern-tabs"
+                            @bind-ActiveTabIndex="activeTabIndex"
+                            RenderMode="TabsRenderMode.OnDemand">
+
+                        @* ---------------- Cuentas generales ---------------- *@
+                        <DxTabPage Text="Cuentas generales" CssClass="p-3">
+                            <div class="alert alert-info mb-3" role="alert">
+                                Cuentas comodín por uso: se aplican cuando la matriz de Ventas / CxC no tiene una fila más específica
+                                (fallback de <code>fn_con_resolver_cuenta</code>). Solo se listan cuentas que permiten posteo directo.
+                            </div>
+                            <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" CaptionPosition="CaptionPosition.Vertical" ReadOnly="@cargando">
+                                <DxFormLayoutGroup Caption="Operación diaria" ColSpanMd="12" CssClass="mb-3">
+                                    @foreach (var uso in new[] { IntegracionContableUsos.Cxc, IntegracionContableUsos.Ingreso, IntegracionContableUsos.Caja, IntegracionContableUsos.BancoDefault })
+                                    {
+                                        <DxFormLayoutItem Caption="@EtiquetaUso(uso)" ColSpanMd="6" ColSpanSm="12">
+                                            @CuentaGeneralCombo(uso)
+                                        </DxFormLayoutItem>
+                                    }
+                                </DxFormLayoutGroup>
+                                <DxFormLayoutGroup Caption="Impuestos, descuentos y mora" ColSpanMd="12" CssClass="mb-3">
+                                    @foreach (var uso in new[] { IntegracionContableUsos.Isv, IntegracionContableUsos.Descuento, IntegracionContableUsos.RecargoMora, IntegracionContableUsos.Transitoria })
+                                    {
+                                        <DxFormLayoutItem Caption="@EtiquetaUso(uso)" ColSpanMd="6" ColSpanSm="12">
+                                            @CuentaGeneralCombo(uso)
+                                        </DxFormLayoutItem>
+                                    }
+                                </DxFormLayoutGroup>
+                                <DxFormLayoutGroup Caption="Previsión y cierre" ColSpanMd="12" CssClass="mb-3">
+                                    @foreach (var uso in new[] { IntegracionContableUsos.PrevisionIncobrable, IntegracionContableUsos.GastoIncobrable, IntegracionContableUsos.ResultadoEjercicio, IntegracionContableUsos.ResultadoAcumulado })
+                                    {
+                                        <DxFormLayoutItem Caption="@EtiquetaUso(uso)" ColSpanMd="6" ColSpanSm="12">
+                                            @CuentaGeneralCombo(uso)
+                                        </DxFormLayoutItem>
+                                    }
+                                </DxFormLayoutGroup>
+                                <DxFormLayoutGroup Caption="Comportamiento" ColSpanMd="12">
+                                    <DxFormLayoutItem ColSpanMd="12">
+                                        <DxCheckBox @bind-Checked="modelo.Config.EncolarSinPeriodo" CheckType="CheckType.Switch">
+                                            Si no hay período contable abierto, encolar la partida en la cola de regularización (en lugar de rechazar la operación)
+                                        </DxCheckBox>
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+                            </DxFormLayout>
+                        </DxTabPage>
+
+                        @* ---------------- Ventas / CxC ---------------- *@
+                        <DxTabPage Text="Ventas / CxC" CssClass="p-3">
+                            <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" CaptionPosition="CaptionPosition.Vertical" ReadOnly="@cargando" CssClass="mb-3">
+                                <DxFormLayoutItem Caption="Modo de ingresos (ventas)" ColSpanMd="4" ColSpanSm="12">
+                                    <DxComboBox Data="@modos" TData="ModoOption" TValue="string"
+                                                ValueFieldName="@nameof(ModoOption.Valor)"
+                                                TextFieldName="@nameof(ModoOption.Texto)"
+                                                @bind-Value="modelo.Config.ModoVentas"
+                                                DropDownStyle="DropDownStyle.DropDownList" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Modo de CxC" ColSpanMd="4" ColSpanSm="12">
+                                    <DxComboBox Data="@modos" TData="ModoOption" TValue="string"
+                                                ValueFieldName="@nameof(ModoOption.Valor)"
+                                                TextFieldName="@nameof(ModoOption.Texto)"
+                                                @bind-Value="modelo.Config.ModoCxc"
+                                                DropDownStyle="DropDownStyle.DropDownList" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem ColSpanMd="4" ColSpanSm="12" Caption=" ">
+                                    <DxButton Text="Aplicar perfil ERSAPS"
+                                              IconCssClass="bi bi-magic"
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              Enabled="@(!cargando && empresaSeleccionadaId > 0)"
+                                              Click="@AplicarPerfilErsapsAsync" />
+                                </DxFormLayoutItem>
+                            </DxFormLayout>
+
+                            <div class="alert alert-info mb-3" role="alert">
+                                La matriz define la cuenta por servicio × categoría × medición. Una dimensión vacía actúa como comodín;
+                                al resolver gana la fila más específica y, si ninguna aplica, la cuenta general de la pestaña anterior.
+                                El perfil ERSAPS llena la matriz por convención del plan regulatorio sin pisar filas existentes.
+                            </div>
+
+                            <div class="d-flex align-items-center gap-2 mb-2">
+                                <DxButton Text="Agregar fila"
+                                          IconCssClass="bi bi-plus-lg"
+                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                          Click="@AgregarFilaMatriz"
+                                          Enabled="@(!cargando)" />
+                                <small class="text-muted">@matrizRows.Count fila(s) con dimensión de servicio.</small>
+                            </div>
+
+                            @if (matrizRows.Count == 0)
+                            {
+                                <div class="alert alert-info" role="alert">
+                                    No hay filas por servicio. En modo GENERAL basta con las cuentas generales; para los modos por servicio
+                                    agregue filas o aplique el perfil ERSAPS.
+                                </div>
+                            }
+                            else
+                            {
+                                <DxGrid Data="@matrizRows"
+                                        KeyFieldName="@nameof(IntegracionCuentaDto.RowId)"
+                                        PageSize="20"
+                                        TextWrapEnabled="false">
+                                    <Columns>
+                                        <DxGridDataColumn FieldName="@nameof(IntegracionCuentaDto.Uso)" Caption="Uso" Width="170px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{ var fila = (IntegracionCuentaDto)cell.DataItem; }
+                                                <DxComboBox Data="@usosDimensionables" TData="string" TValue="string"
+                                                            @bind-Value="fila.Uso"
+                                                            DropDownStyle="DropDownStyle.DropDownList" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(IntegracionCuentaDto.ServicioId)" Caption="Servicio" Width="200px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{ var fila = (IntegracionCuentaDto)cell.DataItem; }
+                                                <DxComboBox Data="@servicios" TData="ServicioIntegracionLookupDto" TValue="long?"
+                                                            ValueFieldName="@nameof(ServicioIntegracionLookupDto.ServicioId)"
+                                                            TextFieldName="@nameof(ServicioIntegracionLookupDto.Display)"
+                                                            @bind-Value="fila.ServicioId"
+                                                            NullText="Seleccione servicio"
+                                                            SearchMode="ListSearchMode.AutoSearch"
+                                                            SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(IntegracionCuentaDto.CategoriaServicioId)" Caption="Categoría" Width="170px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{ var fila = (IntegracionCuentaDto)cell.DataItem; }
+                                                <DxComboBox Data="@categorias" TData="CategoriaServicioLookupDto" TValue="int?"
+                                                            ValueFieldName="@nameof(CategoriaServicioLookupDto.CategoriaServicioId)"
+                                                            TextFieldName="@nameof(CategoriaServicioLookupDto.Descripcion)"
+                                                            @bind-Value="fila.CategoriaServicioId"
+                                                            NullText="(todas)"
+                                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(IntegracionCuentaDto.ConMedicion)" Caption="Medición" Width="140px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{ var fila = (IntegracionCuentaDto)cell.DataItem; }
+                                                <DxComboBox Data="@medicionOptions" TData="MedicionOption" TValue="bool?"
+                                                            ValueFieldName="@nameof(MedicionOption.Valor)"
+                                                            TextFieldName="@nameof(MedicionOption.Texto)"
+                                                            @bind-Value="fila.ConMedicion"
+                                                            NullText="(ambas)"
+                                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(IntegracionCuentaDto.AccountId)" Caption="Cuenta contable" MinWidth="240">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{ var fila = (IntegracionCuentaDto)cell.DataItem; }
+                                                <DxComboBox Data="@cuentasPosteables" TData="CuentaContableLookupDto" TValue="long?"
+                                                            ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                                                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                            @bind-Value="fila.AccountId"
+                                                            NullText="Seleccione cuenta"
+                                                            DropDownWidth="420px"
+                                                            SearchMode="ListSearchMode.AutoSearch"
+                                                            SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(IntegracionCuentaDto.IsActive)" Caption="Activa" Width="90px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{ var fila = (IntegracionCuentaDto)cell.DataItem; }
+                                                <DxCheckBox @bind-Checked="fila.IsActive" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn Caption="" Width="110px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @{ var fila = (IntegracionCuentaDto)cell.DataItem; }
+                                                <DxButton Text="Eliminar"
+                                                          RenderStyle="ButtonRenderStyle.Danger"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                          Click="@(() => EliminarFilaMatriz(fila.RowId))"
+                                                          Enabled="@(!cargando)" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                    </Columns>
+                                </DxGrid>
+                            }
+                        </DxTabPage>
+
+                        @* ---------------- Notas C/D ---------------- *@
+                        <DxTabPage Text="Notas C/D" CssClass="p-3">
+                            <div class="alert alert-info mb-3" role="alert">
+                                Las notas de crédito y débito <strong>espejan la partida de la factura origen</strong>: usan las mismas cuentas
+                                de ingreso y CxC de las líneas facturadas (con signo invertido en la NC). Por eso no requieren configuración propia.
+                            </div>
+                            <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" CaptionPosition="CaptionPosition.Vertical" ReadOnly="@cargando">
+                                <DxFormLayoutGroup Caption="Cuenta de devolución (opcional)" ColSpanMd="12">
+                                    <DxFormLayoutItem Caption="@EtiquetaUso(IntegracionContableUsos.DevolucionNc)" ColSpanMd="6" ColSpanSm="12">
+                                        @CuentaGeneralCombo(IntegracionContableUsos.DevolucionNc)
+                                    </DxFormLayoutItem>
+                                    <DxFormLayoutItem ColSpanMd="6" ColSpanSm="12">
+                                        <small class="text-muted">
+                                            Solo configúrela si la empresa registra las devoluciones por NC en una cuenta específica en lugar de
+                                            revertir el ingreso original. Vacía = comportamiento espejo (recomendado ERSAPS).
+                                        </small>
+                                    </DxFormLayoutItem>
+                                </DxFormLayoutGroup>
+                            </DxFormLayout>
+                        </DxTabPage>
+
+                        @* ---------------- Asientos ---------------- *@
+                        <DxTabPage Text="Asientos" CssClass="p-3">
+                            <div class="alert alert-info mb-3" role="alert">
+                                Diario contable y tipo de partida con que cada módulo genera sus asientos. Un módulo solo puede activarse
+                                con diario y tipo configurados; la activación se hace por empresa al desplegar cada fase del plan.
+                            </div>
+                            <DxGrid Data="@modelo.Asientos"
+                                    KeyFieldName="@nameof(IntegracionAsientoDto.Module)"
+                                    ShowAllRows="true"
+                                    TextWrapEnabled="false">
+                                <Columns>
+                                    <DxGridDataColumn FieldName="@nameof(IntegracionAsientoDto.Module)" Caption="Módulo" Width="180px">
+                                        <CellDisplayTemplate Context="cell">
+                                            @{ var asiento = (IntegracionAsientoDto)cell.DataItem; }
+                                            <span class="fw-semibold">@EtiquetaModulo(asiento.Module)</span>
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                    <DxGridDataColumn FieldName="@nameof(IntegracionAsientoDto.JournalId)" Caption="Diario" MinWidth="200">
+                                        <CellDisplayTemplate Context="cell">
+                                            @{ var asiento = (IntegracionAsientoDto)cell.DataItem; }
+                                            <DxComboBox Data="@diarios" TData="DiarioDto" TValue="long?"
+                                                        ValueFieldName="@nameof(DiarioDto.JournalId)"
+                                                        TextFieldName="@nameof(DiarioDto.Name)"
+                                                        @bind-Value="asiento.JournalId"
+                                                        NullText="Seleccione diario"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        SearchMode="ListSearchMode.AutoSearch"
+                                                        SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                    <DxGridDataColumn FieldName="@nameof(IntegracionAsientoDto.TypeId)" Caption="Tipo de partida" MinWidth="200">
+                                        <CellDisplayTemplate Context="cell">
+                                            @{ var asiento = (IntegracionAsientoDto)cell.DataItem; }
+                                            <DxComboBox Data="@tiposPartida" TData="TipoPartidaDto" TValue="long?"
+                                                        ValueFieldName="@nameof(TipoPartidaDto.type_id)"
+                                                        TextFieldName="@nameof(TipoPartidaDto.concatenado)"
+                                                        @bind-Value="asiento.TypeId"
+                                                        NullText="Seleccione tipo"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        SearchMode="ListSearchMode.AutoSearch"
+                                                        SearchFilterCondition="ListSearchFilterCondition.Contains" />
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                    <DxGridDataColumn FieldName="@nameof(IntegracionAsientoDto.Activo)" Caption="Posteo activo" Width="140px">
+                                        <CellDisplayTemplate Context="cell">
+                                            @{ var asiento = (IntegracionAsientoDto)cell.DataItem; }
+                                            <DxCheckBox @bind-Checked="asiento.Activo" CheckType="CheckType.Switch" />
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                </Columns>
+                            </DxGrid>
+                        </DxTabPage>
+                    </DxTabs>
+
+                    <div class="d-flex flex-wrap gap-2 mt-4">
+                        <DxButton RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-save"
+                                  Text="Guardar configuración" Enabled="@(!cargando && empresaSeleccionadaId > 0)"
+                                  Click="@GuardarAsync" />
+                        <DxButton RenderStyle="ButtonRenderStyle.Secondary" IconCssClass="bi bi-arrow-counterclockwise"
+                                  Text="Restablecer" Enabled="@(!cargando)" Click="@RecargarAsync" />
+                    </div>
+                }
+            </div>
+        </ChildContent>
+    </DxCard>
+
+    <DxLoadingPanel Visible="@cargando"
+                    PositionTarget="#integracion-contable-superficie"
+                    ApplyBackgroundShading="false"
+                    IsContentBlocked="true"
+                    Text="Cargando configuración..." />
+
+</div>
+
+@code {
+    private IntegracionContableDto? modelo;
+    private IntegracionValidacionDto? validacion;
+    private IReadOnlyList<CuentaContableLookupDto> cuentasPosteables = Array.Empty<CuentaContableLookupDto>();
+    private IReadOnlyList<ServicioIntegracionLookupDto> servicios = Array.Empty<ServicioIntegracionLookupDto>();
+    private IReadOnlyList<CategoriaServicioLookupDto> categorias = Array.Empty<CategoriaServicioLookupDto>();
+    private IReadOnlyList<DiarioDto> diarios = Array.Empty<DiarioDto>();
+    private IReadOnlyList<TipoPartidaDto> tiposPartida = Array.Empty<TipoPartidaDto>();
+
+    // Filas generales (comodín) por uso y filas con dimensión de servicio.
+    private readonly Dictionary<string, IntegracionCuentaDto> generalRows = new();
+    private List<IntegracionCuentaDto> matrizRows = new();
+
+    private long empresaSeleccionadaId;
+    private int activeTabIndex;
+    private bool cargando;
+
+    private static readonly string[] usosDimensionables = IntegracionContableUsos.Dimensionables;
+
+    private sealed record ModoOption(string Valor, string Texto);
+    private static readonly IReadOnlyList<ModoOption> modos =
+    [
+        new(IntegracionContableModos.General, "Cuenta general"),
+        new(IntegracionContableModos.PorServicio, "Por servicio"),
+        new(IntegracionContableModos.PorServicioCategoria, "Por servicio + categoría")
+    ];
+
+    private sealed record MedicionOption(bool? Valor, string Texto);
+    private static readonly IReadOnlyList<MedicionOption> medicionOptions =
+    [
+        new(true, "Con medición"),
+        new(false, "Sin medición")
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RecargarAsync();
+    }
+
+    private async Task RecargarAsync()
+    {
+        cargando = true;
+        validacion = null;
+        try
+        {
+            // La pantalla opera sobre la empresa actual del usuario (claims);
+            // no ofrece cambiar de tenant (regla multitenant del portal).
+            empresaSeleccionadaId = await TenantState.EnsureCompanyAsync();
+            if (empresaSeleccionadaId > 0)
+            {
+                await CargarConfiguracionAsync(empresaSeleccionadaId);
+            }
+            else
+            {
+                MostrarError("Su sesión no tiene una empresa activa; vuelva a iniciar sesión.");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible cargar la configuración: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CargarConfiguracionAsync(long companyId)
+    {
+        modelo = await IntegracionClient.ObtenerAsync(companyId);
+
+        cuentasPosteables = await IntegracionClient.ListarCuentasPosteablesAsync(companyId);
+        servicios = await IntegracionClient.ListarServiciosAsync(companyId);
+        categorias = await IntegracionClient.ListarCategoriasAsync();
+        diarios = (await IntegracionClient.ListarDiariosAsync()).Where(d => d.IsActive).ToList();
+        tiposPartida = await IntegracionClient.ListarTiposPartidaAsync();
+
+        SepararFilas();
+    }
+
+    private void SepararFilas()
+    {
+        generalRows.Clear();
+        matrizRows = new List<IntegracionCuentaDto>();
+        if (modelo is null)
+        {
+            return;
+        }
+
+        foreach (var cuenta in modelo.Cuentas)
+        {
+            if (cuenta.RowId == Guid.Empty)
+            {
+                cuenta.RowId = Guid.NewGuid();
+            }
+
+            if (cuenta.ServicioId is null)
+            {
+                generalRows[cuenta.Uso] = cuenta;
+            }
+            else
+            {
+                matrizRows.Add(cuenta);
+            }
+        }
+    }
+
+    private long? GetCuentaGeneral(string uso)
+        => generalRows.TryGetValue(uso, out var fila) ? fila.AccountId : null;
+
+    private void SetCuentaGeneral(string uso, long? accountId)
+    {
+        if (accountId is null)
+        {
+            generalRows.Remove(uso);
+            return;
+        }
+
+        if (generalRows.TryGetValue(uso, out var fila))
+        {
+            fila.AccountId = accountId;
+        }
+        else
+        {
+            generalRows[uso] = new IntegracionCuentaDto { Uso = uso, AccountId = accountId };
+        }
+    }
+
+    private RenderFragment CuentaGeneralCombo(string uso) =>
+        @<DxComboBox Data="@cuentasPosteables" TData="CuentaContableLookupDto" TValue="long?"
+                     ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                     TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                     Value="@GetCuentaGeneral(uso)"
+                     ValueChanged="@((long? accountId) => SetCuentaGeneral(uso, accountId))"
+                     NullText="Sin configurar"
+                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                     DropDownWidth="420px"
+                     SearchMode="ListSearchMode.AutoSearch"
+                     SearchFilterCondition="ListSearchFilterCondition.Contains" />;
+
+    private void AgregarFilaMatriz()
+    {
+        // Sin servicio por defecto: una fila de matriz con servicio vacío se
+        // volvería la fila comodín general del uso al guardar; el usuario debe
+        // elegirlo y GuardarAsync lo exige.
+        matrizRows.Add(new IntegracionCuentaDto
+        {
+            Uso = IntegracionContableUsos.Ingreso,
+            IsActive = true
+        });
+    }
+
+    private void EliminarFilaMatriz(Guid rowId)
+    {
+        matrizRows.RemoveAll(f => f.RowId == rowId);
+    }
+
+    private IntegracionContableDto ArmarDtoParaGuardar()
+    {
+        var dto = new IntegracionContableDto
+        {
+            Existe = modelo!.Existe,
+            Config = modelo.Config,
+            Asientos = modelo.Asientos,
+            Cuentas = generalRows.Values
+                .Where(c => c.AccountId is > 0)
+                .Concat(matrizRows)
+                .ToList()
+        };
+        return dto;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (modelo is null || empresaSeleccionadaId <= 0)
+        {
+            return;
+        }
+
+        var incompletas = matrizRows.Count(f => f.ServicioId is null || f.AccountId is null or <= 0);
+        if (incompletas > 0)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Matriz incompleta",
+                Text = $"Hay {incompletas} fila(s) de la matriz sin servicio o sin cuenta. Complételas o elimínelas antes de guardar.",
+                RenderStyle = ToastRenderStyle.Warning
+            });
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var resultado = await IntegracionClient.GuardarAsync(empresaSeleccionadaId, ArmarDtoParaGuardar());
+            modelo = resultado.Configuracion;
+            validacion = resultado.Validacion;
+            SepararFilas();
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Configuración guardada",
+                Text = resultado.Validacion.Advertencias.Count > 0
+                    ? $"Guardada con {resultado.Validacion.Advertencias.Count} advertencia(s); revíselas en la parte superior."
+                    : "La configuración se guardó correctamente.",
+                RenderStyle = ToastRenderStyle.Success
+            });
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible guardar: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ValidarAsync()
+    {
+        if (empresaSeleccionadaId <= 0)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            validacion = await IntegracionClient.ValidarAsync(empresaSeleccionadaId);
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible validar: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AplicarPerfilErsapsAsync()
+    {
+        if (empresaSeleccionadaId <= 0)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var resultado = await IntegracionClient.AplicarPerfilAsync(empresaSeleccionadaId, "ERSAPS");
+            await CargarConfiguracionAsync(empresaSeleccionadaId);
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Perfil ERSAPS aplicado",
+                Text = $"Filas insertadas: {resultado.Insertadas}. Ya existentes (no se tocaron): {resultado.Existentes}. " +
+                       $"Sin cuenta en el plan (omitidas): {resultado.SinCuenta}.",
+                RenderStyle = ToastRenderStyle.Success
+            });
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible aplicar el perfil: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private void MostrarError(string mensaje)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Integración contable",
+            Text = mensaje,
+            RenderStyle = ToastRenderStyle.Danger
+        });
+    }
+
+    private static string EtiquetaUso(string uso) => uso switch
+    {
+        IntegracionContableUsos.Cxc => "CxC abonados (fallback)",
+        IntegracionContableUsos.Ingreso => "Ingresos (fallback)",
+        IntegracionContableUsos.Caja => "Caja general",
+        IntegracionContableUsos.BancoDefault => "Banco por defecto",
+        IntegracionContableUsos.Isv => "ISV / impuestos por pagar",
+        IntegracionContableUsos.Descuento => "Descuentos sobre venta",
+        IntegracionContableUsos.RecargoMora => "Recargo por mora",
+        IntegracionContableUsos.PrevisionIncobrable => "Previsión incobrables (contra-activo)",
+        IntegracionContableUsos.GastoIncobrable => "Gasto por incobrables",
+        IntegracionContableUsos.ResultadoEjercicio => "Resultados del ejercicio",
+        IntegracionContableUsos.ResultadoAcumulado => "Resultados acumulados",
+        IntegracionContableUsos.DevolucionNc => "Cuenta de devolución NC",
+        IntegracionContableUsos.Transitoria => "Cuenta transitoria (puente)",
+        _ => uso
+    };
+
+    private static string EtiquetaModulo(string module) => module switch
+    {
+        IntegracionContableModulos.Ventas => "Ventas / facturación (lote manual)",
+        IntegracionContableModulos.Caja => "Caja / cobros",
+        IntegracionContableModulos.Bancos => "Bancos",
+        IntegracionContableModulos.Notas => "Notas C/D",
+        IntegracionContableModulos.Miscelaneos => "Misceláneos",
+        IntegracionContableModulos.Proveedores => "Proveedores (compromisos)",
+        _ => module
+    };
+}
