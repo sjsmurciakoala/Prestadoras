@@ -5,6 +5,7 @@
 @using SIAD.Core.Constants
 @using apc.Client.Services.Informes
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Sumarial tarifario Medicion por periodo</PageTitle>
 
@@ -40,11 +41,6 @@
                       Enabled="@(!isLoading)" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -95,7 +91,6 @@
 @code {
     private FiltroSumarialTarifarioMedicion filtro = BuildDefaultFilter();
     private bool isLoading;
-    private string? errorMessage;
     private string? reportName;
 
     private void GenerarReporte()
@@ -107,7 +102,6 @@
         }
 
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -122,7 +116,6 @@
     private void LimpiarFiltros()
     {
         filtro = BuildDefaultFilter();
-        errorMessage = null;
         reportName = null;
     }
 
@@ -130,23 +123,22 @@
     {
         if (!filtro.FechaDesde.HasValue)
         {
-            errorMessage = "La fecha desde es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Validación", Text = "La fecha desde es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             return false;
         }
 
         if (!filtro.FechaHasta.HasValue)
         {
-            errorMessage = "La fecha hasta es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Validación", Text = "La fecha hasta es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             return false;
         }
 
         if (filtro.FechaDesde.Value.Date > filtro.FechaHasta.Value.Date)
         {
-            errorMessage = "La fecha desde no puede ser mayor que la fecha hasta.";
+            ToastService.ShowToast(new ToastOptions { Title = "Validación", Text = "La fecha desde no puede ser mayor que la fecha hasta.", RenderStyle = ToastRenderStyle.Danger });
             return false;
         }
 
-        errorMessage = null;
         return true;
     }
 

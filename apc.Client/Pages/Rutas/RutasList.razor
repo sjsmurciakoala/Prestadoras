@@ -24,11 +24,6 @@
                   Click="@(() => OpenFormAsync(null))" />
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(ciclosError))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@ciclosError</DxAlert>
-    }
-
     @if (mostrarFiltros)
     {
         <div class="modern-card mb-4">
@@ -95,7 +90,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
     }
 
     <div class="modern-card">
@@ -221,7 +216,7 @@
         else if (!string.IsNullOrWhiteSpace(formError))
         {
             <div class="p-3">
-                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+                <div class="alert alert-danger" role="alert">@formError</div>
             </div>
         }
         else
@@ -275,7 +270,6 @@
     private bool mostrarFiltros = true;
 
     private string? errorMessage;
-    private string? ciclosError;
     private int totalRutas;
 
     private bool confirmVisible;
@@ -360,11 +354,16 @@
             var data = await Client.GetCiclosAsync();
             ciclos.Clear();
             ciclos.AddRange(data ?? Enumerable.Empty<CicloLookupDto>());
-            ciclosError = null;
         }
         catch (Exception ex)
         {
-            ciclosError = $"No se pudo cargar la lista de ciclos: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Rutas",
+                Text = $"No se pudo cargar la lista de ciclos: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "RutasToast"
+            });
         }
     }
 

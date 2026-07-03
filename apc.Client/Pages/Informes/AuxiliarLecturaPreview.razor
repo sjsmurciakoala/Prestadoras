@@ -6,6 +6,7 @@
 @using apc.Client.Services.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Auxiliar de Lectura</PageTitle>
 
@@ -31,11 +32,6 @@
                       RenderStyle="ButtonRenderStyle.Primary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
 
     <div class="modern-card p-4">
         <DxFormLayout ColCountMd="12">
@@ -128,7 +124,6 @@
     private int mes = DateTime.Today.Month;
     private int cicloId;
     private bool soloPendientes;
-    private string? errorMessage;
     private string? pdfUrl;
     private List<CicloLookupDto> ciclos = [];
 
@@ -145,7 +140,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No fue posible cargar los ciclos: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = $"No fue posible cargar los ciclos: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             ciclos = [new CicloLookupDto(0, "Todos")];
         }
     }
@@ -154,19 +149,18 @@
     {
         if (anio < 2000 || anio > 2099)
         {
-            errorMessage = "El año del periodo no es válido.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "El año del periodo no es válido.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
         if (mes < 1 || mes > 12)
         {
-            errorMessage = "El mes del periodo no es válido.";
+            ToastService.ShowToast(new ToastOptions { Title = "Informes", Text = "El mes del periodo no es válido.", RenderStyle = ToastRenderStyle.Danger });
             pdfUrl = null;
             return;
         }
 
-        errorMessage = null;
         pdfUrl =
             $"api/informes/reportes/{ReportesWebConstants.CodigoReporteAuxiliarLectura}/pdf" +
             $"?anio={anio.ToString(CultureInfo.InvariantCulture)}" +
@@ -181,7 +175,6 @@
         mes = DateTime.Today.Month;
         cicloId = 0;
         soloPendientes = false;
-        errorMessage = null;
         pdfUrl = null;
     }
 }

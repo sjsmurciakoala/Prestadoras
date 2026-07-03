@@ -40,11 +40,6 @@
         }
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@error</DxAlert>
-    }
-
     @* ── Búsqueda ── *@
     <div class="ab-search">
         <div class="ab-search-row">
@@ -456,7 +451,6 @@
     private bool isLoading;
     private bool isSaving;
     private bool hasSearched;
-    private string? error;
     private ErrorNotice errorNotice = default!;
 
     private List<ReciboPendienteDto> recibosPendientes = new();
@@ -538,7 +532,6 @@
             MostrarToast("Búsqueda", "Escribe un término para buscar.", ToastRenderStyle.Warning);
             return;
         }
-        error = null;
         isLoading = true;
         hasSearched = true;
         selectedFactura = null;
@@ -566,7 +559,6 @@
         selectedClienteClave = clave;
         if (string.IsNullOrWhiteSpace(clave)) return;
 
-        error = null;
         isLoading = true;
         hasSearched = true;
         selectedFactura = null;
@@ -580,7 +572,7 @@
         }
         catch (Exception ex)
         {
-            error = "No se pudieron cargar las facturas.";
+            MostrarToast("Error", "No se pudieron cargar las facturas.", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -595,7 +587,6 @@
         formaPago = "EFECTIVO";
         bancoCuentaIdSeleccionado = null;
         reciboPendienteSeleccionado = null;
-        error = null;
 
         await Task.WhenAll(
             CargarRecibosPendientesAsync(fact.NumFactura),
@@ -686,7 +677,7 @@
             }
             else
             {
-                error = response?.Message ?? "No se pudo anular el recibo.";
+                MostrarToast("Error", response?.Message ?? "No se pudo anular el recibo.", ToastRenderStyle.Danger);
             }
         }
         catch (Exception ex)
@@ -713,7 +704,6 @@
             return;
         }
 
-        error = null;
         isSaving = true;
 
         var bancoCuenta = Bancos.FirstOrDefault(b => b.BancoCuentaId == bancoCuentaIdSeleccionado);
@@ -752,8 +742,7 @@
             }
             else
             {
-                error = response?.Message ?? "No se pudo registrar el abono.";
-                MostrarToast("Error", error, ToastRenderStyle.Danger);
+                MostrarToast("Error", response?.Message ?? "No se pudo registrar el abono.", ToastRenderStyle.Danger);
             }
         }
         catch (Exception ex)

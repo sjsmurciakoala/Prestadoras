@@ -17,16 +17,6 @@
         </div>
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-4">@error</DxAlert>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(info))
-    {
-        <DxAlert AlertType="AlertType.Info" CssClass="mb-4">@info</DxAlert>
-    }
-
     @* --- TARJETA 2: REGISTRO DE PAGOS --- *@
     <DxCard CssClass="custom-dx-card mb-4">
         <HeaderTemplate>
@@ -180,8 +170,6 @@
     private ArqueosGridDataSource arqueosDataSource = default!;
     private int totalArqueos;
 
-    private string? error;
-    private string? info;
     private string? usuarioActual;
     private bool puedePagarEnBanco;
     private bool buscandoArqueos;
@@ -222,15 +210,10 @@
         try
         {
             cajas = (await CaptacionClient.GetCajasAsync()).ToList();
-            if (cajas.Count == 0)
-            {
-                info = null;
-            }
         }
         catch (Exception ex)
         {
-            error = "No se pudieron cargar las cajas.";
-            MostrarToast("Error", error, ToastRenderStyle.Danger);
+            MostrarToast("Error", "No se pudieron cargar las cajas.", ToastRenderStyle.Danger);
         }
     }
 
@@ -242,7 +225,7 @@
         }
         catch (Exception ex)
         {
-            error = "No se pudieron cargar los bancos.";
+            MostrarToast("Error", "No se pudieron cargar los bancos.", ToastRenderStyle.Danger);
         }
     }
 
@@ -254,7 +237,7 @@
         }
         catch (Exception ex)
         {
-            error = "No se pudieron cargar los clientes.";
+            MostrarToast("Error", "No se pudieron cargar los clientes.", ToastRenderStyle.Danger);
         }
     }
 
@@ -266,13 +249,12 @@
         }
         catch (Exception ex)
         {
-            error = "No se pudo cargar el periodo.";
+            MostrarToast("Error", "No se pudo cargar el periodo.", ToastRenderStyle.Danger);
         }
     }
 
     private async Task BuscarArqueosAsync()
     {
-        error = null;
         buscandoArqueos = true;
 
         arqueosDataSource.CajaId = filtro.CajaId;

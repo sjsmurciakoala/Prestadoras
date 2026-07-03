@@ -1,6 +1,7 @@
 @using SIAD.Core.DTOs.Cobranza
 @using apc.Client.Services.Facturacion
 @inject CobranzaClient CobranzaClient
+@inject IToastNotificationService ToastService
 
 <div class="llamadas-cobranza-container">
 
@@ -24,10 +25,6 @@
     {
         <DxLoadingPanel Visible="true" Text="Cargando llamadas..." />
         <div style="height:60px"></div>
-    }
-    else if (!string.IsNullOrEmpty(errorMsg))
-    {
-        <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
     }
     else
     {
@@ -72,10 +69,6 @@
                 <DxMemo @bind-Text="nuevaObservacion" Rows="3" CssClass="w-100" />
             </DxFormLayoutItem>
         </DxFormLayout>
-        @if (!string.IsNullOrEmpty(guardarError))
-        {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@guardarError</DxAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -101,14 +94,12 @@
 
     private List<LlamadaCobranzaDto> llamadas = [];
     private bool isLoading = true;
-    private string? errorMsg;
 
     private bool mostrarFormulario = false;
     private string? nuevoNumero;
     private string? nuevoResultado;
     private string? nuevaObservacion;
     private bool isSaving = false;
-    private string? guardarError;
 
     protected override async Task OnParametersSetAsync()
         => await CargarLlamadas();
@@ -116,7 +107,6 @@
     private async Task CargarLlamadas()
     {
         isLoading = true;
-        errorMsg = null;
         try
         {
             var result = await CobranzaClient.GetLlamadasAsync(ClienteClave);
@@ -124,7 +114,12 @@
         }
         catch (Exception ex)
         {
-            errorMsg = $"Error al cargar: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Llamadas de cobranza",
+                Text = $"Error al cargar: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {
@@ -137,7 +132,6 @@
         nuevoNumero = null;
         nuevoResultado = null;
         nuevaObservacion = null;
-        guardarError = null;
         mostrarFormulario = true;
     }
 
@@ -145,10 +139,14 @@
     {
         if (string.IsNullOrWhiteSpace(nuevoResultado))
         {
-            guardarError = "Seleccione el resultado de la llamada.";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Llamadas de cobranza",
+                Text = "Seleccione el resultado de la llamada.",
+                RenderStyle = ToastRenderStyle.Danger
+            });
             return;
         }
-        guardarError = null;
         isSaving = true;
         try
         {
@@ -159,7 +157,12 @@
         }
         catch (Exception ex)
         {
-            guardarError = $"Error al guardar: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Llamadas de cobranza",
+                Text = $"Error al guardar: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {

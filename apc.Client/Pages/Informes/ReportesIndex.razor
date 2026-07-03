@@ -5,6 +5,7 @@
 @using SIAD.Core.DTOs.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Reportes Web</PageTitle>
 
@@ -34,16 +35,6 @@
             </AuthorizeView>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(successMessage))
-    {
-        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</DxAlert>
-    }
 
     <div class="modern-card p-4">
         @if (isLoading)
@@ -179,11 +170,6 @@
          HeaderText="Eliminar reporte">
     <BodyTemplate Context="popupContext">
         <div class="p-3">
-            @if (!string.IsNullOrWhiteSpace(deleteErrorMessage))
-            {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@deleteErrorMessage</DxAlert>
-            }
-
             <p class="mb-3">
                 @(deleteCandidate is null
                     ? "No hay reporte seleccionado."
@@ -215,9 +201,6 @@
     private bool isCreatePopupVisible;
     private bool isDeletePopupVisible;
     private bool isDeleting;
-    private string? errorMessage;
-    private string? successMessage;
-    private string? deleteErrorMessage;
 
     protected override async Task OnInitializedAsync()
     {
@@ -229,13 +212,12 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
             items = (await InformesClient.GetReportesDisenoAsync()).OrderBy(x => x.Categoria).ThenBy(x => x.Nombre).ToList();
             datasets = (await InformesClient.GetReportesDatasetsAsync()).Where(x => x.IsActive).OrderBy(x => x.Nombre).ToList();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Reportes", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
             items = [];
             datasets = [];
         }
@@ -247,8 +229,6 @@
 
     private void OpenCreatePopup()
     {
-        errorMessage = null;
-        successMessage = null;
         createModel = new ReporteDisenoCreateDto { Categoria = "General" };
         isCreatePopupVisible = true;
     }
@@ -263,16 +243,15 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
             var created = await InformesClient.CreateReporteDisenoAsync(createModel);
             isCreatePopupVisible = false;
             await LoadAsync();
-            successMessage = $"Reporte '{created.Nombre}' creado con borrador inicial persistido en base de datos.";
+            ToastService.ShowToast(new ToastOptions { Title = "Reporte creado", Text = $"Reporte '{created.Nombre}' creado con borrador inicial persistido en base de datos.", RenderStyle = ToastRenderStyle.Success });
             NavigationManager.NavigateTo(created.DesignerRoute);
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Reportes", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -284,14 +263,13 @@
     {
         try
         {
-            errorMessage = null;
             var result = await InformesClient.PublishReporteDisenoAsync(codigo);
-            successMessage = $"Se publicó la versión {result.PublishedVersion?.ToString() ?? "actual"} de '{result.Nombre}'.";
+            ToastService.ShowToast(new ToastOptions { Title = "Publicación", Text = $"Se publicó la versión {result.PublishedVersion?.ToString() ?? "actual"} de '{result.Nombre}'.", RenderStyle = ToastRenderStyle.Success });
             await LoadAsync();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Publicación", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
     }
 
@@ -304,14 +282,13 @@
 
         try
         {
-            errorMessage = null;
             var result = await InformesClient.PublishReporteDisenoAsync(codigo);
             await LoadAsync();
-            successMessage = $"Se publicó la versión {result.PublishedVersion?.ToString() ?? "actual"} de '{result.Nombre}'.";
+            ToastService.ShowToast(new ToastOptions { Title = "Publicación", Text = $"Se publicó la versión {result.PublishedVersion?.ToString() ?? "actual"} de '{result.Nombre}'.", RenderStyle = ToastRenderStyle.Success });
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Publicación", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -327,7 +304,6 @@
         }
 
         deleteCandidate = item;
-        deleteErrorMessage = null;
         isDeletePopupVisible = true;
     }
 
@@ -341,18 +317,16 @@
         try
         {
             isDeleting = true;
-            errorMessage = null;
-            deleteErrorMessage = null;
             var deletedName = deleteCandidate.Nombre;
             await InformesClient.DeleteReporteDisenoAsync(deleteCandidate.Codigo);
             isDeletePopupVisible = false;
             deleteCandidate = null;
             await LoadAsync();
-            successMessage = $"Reporte '{deletedName}' eliminado.";
+            ToastService.ShowToast(new ToastOptions { Title = "Reporte eliminado", Text = $"Reporte '{deletedName}' eliminado.", RenderStyle = ToastRenderStyle.Success });
         }
         catch (Exception ex)
         {
-            deleteErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Eliminar reporte", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

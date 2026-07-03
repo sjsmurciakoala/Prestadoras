@@ -4,6 +4,7 @@
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject ILogger<BancoProveedorEdit> Logger
+@inject IToastNotificationService ToastService
 @using apc.Client.Services.Proveedores
 @using Microsoft.AspNetCore.Authorization
 @using SIAD.Core.DTOs.Proveedores
@@ -26,11 +27,6 @@
                       CssClass="btn-modern" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
 
     <div class="modern-card">
         @if (isLoading)
@@ -55,7 +51,6 @@
     private ProveedorBancoUpsertDto model = new();
     private bool isLoading = true;
     private bool isSaving;
-    private string? errorMessage;
     private ErrorNotice errorNotice = default!;
 
     private bool IsEdit => Id.HasValue && Id.Value > 0;
@@ -89,7 +84,6 @@
     private async Task CargarDatosAsync()
     {
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -98,7 +92,7 @@
                 var detail = await ProveedoresClient.ObtenerBancoAsync(Id!.Value);
                 if (detail is null)
                 {
-                    errorMessage = $"No se encontro el banco de proveedor {Id}.";
+                    ToastService.ShowToast(new ToastOptions { Title = "Bancos de proveedor", Text = $"No se encontro el banco de proveedor {Id}.", RenderStyle = ToastRenderStyle.Danger });
                     model = new ProveedorBancoUpsertDto();
                 }
                 else
@@ -120,7 +114,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = "No se pudo cargar la pantalla.";
+            ToastService.ShowToast(new ToastOptions { Title = "Bancos de proveedor", Text = "No se pudo cargar la pantalla.", RenderStyle = ToastRenderStyle.Danger });
             Logger.LogError(ex, "Error al cargar pantalla de banco de proveedor.");
         }
         finally
@@ -134,7 +128,6 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
 
             if (IsEdit)
             {

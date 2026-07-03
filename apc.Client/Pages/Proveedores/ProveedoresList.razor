@@ -3,6 +3,7 @@
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
+@inject IToastNotificationService ToastService
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization
 @using Microsoft.JSInterop
@@ -50,11 +51,6 @@
                           Enabled="@(!isLoading)" />
             </div>
         </div>
-
-        @if (!string.IsNullOrEmpty(errorMessage))
-        {
-            <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-        }
 
         <div class="modern-card position-relative" style="min-height: 320px;">
             <DxFormLayout CssClass="mb-3">
@@ -136,7 +132,6 @@
     private readonly List<ProveedorListItemDto> proveedores = new();
     private ProveedorFilterDto filtro = new();
     private bool isLoading;
-    private string? errorMessage;
     private ErrorNotice errorNotice = default!;
 
     protected override async Task OnInitializedAsync()
@@ -149,7 +144,6 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
 
             var data = await ProveedoresClient.BuscarAsync(filtro);
             proveedores.Clear();
@@ -157,7 +151,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = "No se pudo cargar el catálogo de proveedores.";
+            ToastService.ShowToast(new ToastOptions { Title = "Proveedores", Text = "No se pudo cargar el catálogo de proveedores.", RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

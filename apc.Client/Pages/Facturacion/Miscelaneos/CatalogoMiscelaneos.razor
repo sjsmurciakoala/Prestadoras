@@ -27,11 +27,6 @@
                   Click="AbrirNuevo" />
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
-
     <div class="modern-card position-relative">
         @if (loading)
         {
@@ -151,7 +146,7 @@
         else if (!string.IsNullOrWhiteSpace(formError))
         {
             <div class="p-3">
-                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+                <div class="alert alert-danger" role="alert">@formError</div>
             </div>
         }
         else
@@ -198,7 +193,6 @@
     private IReadOnlyList<CuentaContableLookupDto> cuentasContables = Array.Empty<CuentaContableLookupDto>();
 
     private string filtroBusqueda = string.Empty;
-    private string? errorMessage;
     private int totalItems;
     private bool loading = true;
 
@@ -228,7 +222,6 @@
     private async Task CargarDatosAsync()
     {
         loading = true;
-        errorMessage = null;
 
         try
         {
@@ -243,7 +236,13 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"Error al cargar el catalogo: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = $"Error al cargar el catalogo: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "CatalogoToast"
+            });
         }
         finally
         {

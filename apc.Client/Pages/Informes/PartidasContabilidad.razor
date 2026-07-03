@@ -9,6 +9,7 @@
 @inject HttpClient Http
 @inject InformesClient InformesClient
 @inject PolizasClient PolizasClient
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Partidas de Contabilidad</PageTitle>
 
@@ -40,11 +41,6 @@
                       RenderStyle="ButtonRenderStyle.Secondary" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
 
     <div class="modern-card mb-3 p-4">
         <DxFormLayout ColCountMd="12">
@@ -265,7 +261,6 @@
     private bool isLoading;
     private bool isDetalleVisible;
     private bool isDetalleLoading;
-    private string? errorMessage;
     private string detalleTitulo = "Detalle de póliza";
     private PolizaConLineasDto? detalleActual;
 
@@ -297,7 +292,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Catálogos", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
     }
 
@@ -306,12 +301,11 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
             resultado = await InformesClient.ConsultarPartidasAsync(filtro);
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Partidas", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
             resultado = emptyResult;
         }
         finally
@@ -360,7 +354,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Detalle de póliza", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

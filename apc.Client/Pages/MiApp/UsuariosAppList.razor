@@ -33,11 +33,6 @@
                   Click="AbrirNuevo" />
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(rutasError))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@rutasError</DxAlert>
-    }
-
     @if (mostrarFiltros)
     {
         <div class="modern-card mb-4">
@@ -96,11 +91,6 @@
                 </DxFormLayoutGroup>
             </DxFormLayout>
         </div>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
     }
 
     <div class="modern-card position-relative">
@@ -236,7 +226,7 @@
         else if (!string.IsNullOrWhiteSpace(formError))
         {
             <div class="p-3">
-                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+                <div class="alert alert-danger" role="alert">@formError</div>
             </div>
         }
         else
@@ -284,8 +274,6 @@
     private bool filtroSoloActivos = true;
     private bool mostrarFiltros = true;
 
-    private string? errorMessage;
-    private string? rutasError;
     private int totalUsuarios;
 
     private bool formVisible;
@@ -323,7 +311,17 @@
 
     private void OnGridStateChanged()
     {
-        errorMessage = dataSource.LastError;
+        if (!string.IsNullOrWhiteSpace(dataSource.LastError))
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Usuarios App",
+                Text = dataSource.LastError,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "UsuariosAppToast"
+            });
+        }
+
         totalUsuarios = dataSource.LastTotalCount;
         InvokeAsync(StateHasChanged);
     }
@@ -540,11 +538,16 @@
             var data = await RutasClient.GetAsync();
             rutas.Clear();
             rutas.AddRange(data.Where(r => r.Activo).OrderBy(r => r.CodRuta));
-            rutasError = null;
         }
         catch (Exception ex)
         {
-            rutasError = $"No se pudo cargar la lista de rutas: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Usuarios App",
+                Text = $"No se pudo cargar la lista de rutas: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "UsuariosAppToast"
+            });
         }
     }
 
@@ -558,7 +561,13 @@
         }
         catch (Exception ex)
         {
-            rutasError = $"No se pudo cargar la lista de ciclos: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Usuarios App",
+                Text = $"No se pudo cargar la lista de ciclos: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "UsuariosAppToast"
+            });
         }
     }
 }

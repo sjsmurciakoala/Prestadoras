@@ -8,6 +8,7 @@
 @using SIAD.Core.DTOs.Informes
 @inject InformesClient InformesClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Datasets de Reportes</PageTitle>
 
@@ -33,11 +34,6 @@
             </AuthorizeView>
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@errorMessage</DxAlert>
-    }
 
     @if (!string.IsNullOrWhiteSpace(successMessage))
     {
@@ -140,28 +136,23 @@
          HeaderText="@(isEditMode ? "Editar dataset de reportería" : "Nuevo dataset de reportería")">
     <BodyTemplate Context="popupContext">
         <div class="p-2 reportes-feedback-panel">
-            @if (!string.IsNullOrWhiteSpace(createErrorMessage))
-            {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@createErrorMessage</DxAlert>
-            }
-
             @if (isEditMode)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
+                <div class="alert alert-warning mb-3 reportes-feedback-alert reportes-feedback-alert--warning" role="alert">
                     Editar un dataset no reescribe layouts ya persistidos. Si un reporte ya tiene layout guardado, el cambio de dataset puede requerir regenerar o volver a guardar el layout.
-                </DxAlert>
+                </div>
             }
 
             @if (createValidationMessages.Count > 0)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--warning">
+                <div class="alert alert-warning mb-3 reportes-feedback-alert reportes-feedback-alert--warning" role="alert">
                     <ul class="mb-0 ps-3">
                         @foreach (var message in createValidationMessages)
                         {
                             <li>@message</li>
                         }
                     </ul>
-                </DxAlert>
+                </div>
             }
 
             <DxFormLayout ColCountMd="12">
@@ -334,11 +325,6 @@
          HeaderText="@(previewDataset?.Nombre is null ? "Probar dataset" : $"Probar dataset: {previewDataset.Nombre}")">
     <BodyTemplate Context="popupContext">
         <div class="p-2 reportes-feedback-panel">
-            @if (!string.IsNullOrWhiteSpace(previewErrorMessage))
-            {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@previewErrorMessage</DxAlert>
-            }
-
             @if (isPreviewLoading)
             {
                 <div class="d-flex justify-content-center py-5">
@@ -454,11 +440,6 @@
          HeaderText="Eliminar dataset">
     <BodyTemplate Context="popupContext">
         <div class="p-3 reportes-feedback-panel">
-            @if (!string.IsNullOrWhiteSpace(deleteErrorMessage))
-            {
-                <DxAlert AlertType="AlertType.Danger" CssClass="mb-3 reportes-feedback-alert reportes-feedback-alert--danger">@deleteErrorMessage</DxAlert>
-            }
-
             <p class="mb-3">
                 @(deleteCandidate is null
                     ? "No hay dataset seleccionado."
@@ -520,11 +501,7 @@
     private bool isDeleting;
     private bool isSuccessMessageVisible;
     private string? editingCode;
-    private string? errorMessage;
     private string? successMessage;
-    private string? createErrorMessage;
-    private string? previewErrorMessage;
-    private string? deleteErrorMessage;
     private List<string> createValidationMessages = [];
 
     private bool IsStoredProcedureSource => string.Equals(createModel.TipoOrigen, ReportesWebConstants.DatasetSourceType.StoredProcedure, StringComparison.OrdinalIgnoreCase);
@@ -567,12 +544,11 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
             items = (await InformesClient.GetReportesDatasetsAsync()).OrderBy(x => x.Nombre).ToList();
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Datasets", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
             items = [];
         }
         finally
@@ -583,7 +559,6 @@
 
     private void OpenCreatePopup()
     {
-        errorMessage = null;
         successMessage = null;
         ResetCreateModel();
         isEditMode = false;
@@ -600,7 +575,6 @@
 
         try
         {
-            errorMessage = null;
             successMessage = null;
             ResetCreateModel();
             isEditMode = true;
@@ -639,7 +613,7 @@
         catch (Exception ex)
         {
             isCreatePopupVisible = false;
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Datasets", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
     }
 
@@ -660,9 +634,6 @@
         previewAutomaticParameters = [];
         previewDataset = null;
         previewResult = null;
-        createErrorMessage = null;
-        previewErrorMessage = null;
-        deleteErrorMessage = null;
         createValidationMessages = [];
     }
 
@@ -689,8 +660,6 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
-            createErrorMessage = null;
             createValidationMessages = ValidateCreateRequest();
 
             if (createValidationMessages.Count > 0)
@@ -733,7 +702,7 @@
         }
         catch (Exception ex)
         {
-            createErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Dataset", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -752,7 +721,6 @@
         previewResult = null;
         previewParameters = [];
         previewAutomaticParameters = [];
-        previewErrorMessage = null;
         isPreviewPopupVisible = true;
         isPreviewLoading = true;
 
@@ -786,7 +754,7 @@
         }
         catch (Exception ex)
         {
-            previewErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Probar dataset", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -804,7 +772,6 @@
         try
         {
             isPreviewRunning = true;
-            previewErrorMessage = null;
             previewResult = null;
 
             var request = new ReporteDatasetPreviewRequestDto
@@ -819,7 +786,7 @@
         }
         catch (Exception ex)
         {
-            previewErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Probar dataset", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -840,7 +807,6 @@
         }
 
         deleteCandidate = item;
-        deleteErrorMessage = null;
         isDeletePopupVisible = true;
     }
 
@@ -854,7 +820,6 @@
         try
         {
             isDeleting = true;
-            deleteErrorMessage = null;
             await InformesClient.DeleteReporteDatasetAsync(deleteCandidate.Codigo);
             successMessage = $"Dataset '{deleteCandidate.Nombre}' eliminado.";
             isSuccessMessageVisible = true;
@@ -864,7 +829,7 @@
         }
         catch (Exception ex)
         {
-            deleteErrorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Eliminar dataset", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

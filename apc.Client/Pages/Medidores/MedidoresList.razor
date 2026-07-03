@@ -100,7 +100,7 @@
 
     @if (!string.IsNullOrWhiteSpace(errorMessage))
     {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
     }
 
     <div class="modern-card position-relative">
@@ -288,7 +288,7 @@
         else if (!string.IsNullOrWhiteSpace(formError))
         {
             <div class="p-3">
-                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+                <div class="alert alert-danger" role="alert">@formError</div>
             </div>
         }
         else

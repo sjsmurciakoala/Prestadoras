@@ -12,10 +12,6 @@
             <div style="height:80px"></div>
         </div>
     }
-    else if (!string.IsNullOrWhiteSpace(error))
-    {
-        <DxAlert AlertType="AlertType.Danger">@error</DxAlert>
-    }
     else if (header is null)
     {
         <div class="text-muted text-center p-4">No se encontró información del cliente.</div>
@@ -138,7 +134,6 @@
     private DateTime desdeInput = DateTime.Today.AddYears(-1);
     private DateTime hastaInput = DateTime.Today;
     private bool isLoading = true;
-    private string? error;
     private bool mostrarFotoModal;
     private string? fotoUrl;
 
@@ -150,7 +145,6 @@
     private async Task LoadAsync()
     {
         isLoading = true;
-        error = null;
         items.Clear();
 
         try
@@ -160,7 +154,13 @@
         }
         catch (Exception ex)
         {
-            error = $"Error al cargar fotos: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Foto de medidor",
+                Text = $"Error al cargar fotos: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "FotoMedidorToast"
+            });
         }
         finally
         {

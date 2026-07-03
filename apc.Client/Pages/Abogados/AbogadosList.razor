@@ -72,11 +72,6 @@
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
-
     <div class="modern-card position-relative">
         <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
 
@@ -238,7 +233,7 @@
         else if (!string.IsNullOrWhiteSpace(formError))
         {
             <div class="p-3">
-                <DxAlert AlertType="AlertType.Danger">@formError</DxAlert>
+                <div class="alert alert-danger" role="alert">@formError</div>
             </div>
         }
         else
@@ -284,7 +279,6 @@
     private bool mostrarFiltros = true;
 
     private bool isLoading;
-    private string? errorMessage;
     private int totalAbogados;
 
     private bool formVisible;
@@ -324,13 +318,18 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
             abogados = await AbogadosClient.GetAsync(BuildFilter());
             totalAbogados = abogados.Count;
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudieron cargar los abogados: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Abogados",
+                Text = $"No se pudieron cargar los abogados: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "AbogadosToast"
+            });
         }
         finally
         {

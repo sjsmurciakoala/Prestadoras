@@ -16,6 +16,7 @@
 @inject RutasClient RutasClient
 @inject SolicitudesClient SolicitudesClient
 @inject ILogger<ClienteForm> Logger
+@inject IToastNotificationService ToastService
 
 <EditForm Model="@Modelo" OnValidSubmit="ProcesarGuardado" Context="EditFormContext">
     <DataAnnotationsValidator />
@@ -398,10 +399,6 @@
                            CssClass="w-100" />
             </DxFormLayoutItem>
         </DxFormLayout>
-        @if (!string.IsNullOrEmpty(_noCortableError))
-        {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@_noCortableError</DxAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -444,10 +441,6 @@
                            CssClass="w-100" />
             </DxFormLayoutItem>
         </DxFormLayout>
-        @if (!string.IsNullOrEmpty(_bloqueoError))
-        {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@_bloqueoError</DxAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -766,7 +759,6 @@
     private bool _nuevoEstadoNoCortable = false;
     private string? _passwordNoCortable;
     private string? _motivoNoCortable;
-    private string? _noCortableError;
     private bool _ejecutandoNoCortable = false;
     private bool? _noCortableCargado;
 
@@ -787,7 +779,6 @@
         _nuevoEstadoNoCortable = nuevoValor;
         _passwordNoCortable = null;
         _motivoNoCortable = null;
-        _noCortableError = null;
         _mostrarConfirmNoCortable = true;
     }
 
@@ -800,17 +791,26 @@
     {
         if (string.IsNullOrWhiteSpace(_motivoNoCortable))
         {
-            _noCortableError = "Ingrese el motivo del cambio.";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "No Cortable",
+                Text = "Ingrese el motivo del cambio.",
+                RenderStyle = ToastRenderStyle.Danger
+            });
             return;
         }
 
         if (string.IsNullOrWhiteSpace(_passwordNoCortable))
         {
-            _noCortableError = "Ingrese su contraseña para confirmar.";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "No Cortable",
+                Text = "Ingrese su contraseña para confirmar.",
+                RenderStyle = ToastRenderStyle.Danger
+            });
             return;
         }
 
-        _noCortableError = null;
         _ejecutandoNoCortable = true;
         try
         {
@@ -821,7 +821,12 @@
         }
         catch (Exception ex)
         {
-            _noCortableError = $"Error: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "No Cortable",
+                Text = $"Error: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {
@@ -835,7 +840,6 @@
     private bool _nuevoEstadoBloqueo = false;
     private string? _motivoBloqueo;
     private string? _passwordBloqueo;
-    private string? _bloqueoError;
     private bool _ejecutandoBloqueo = false;
     // Valor de bloqueo tal como llegó del servidor — para detectar cambios reales del usuario.
     private bool? _bloqueadoCargado;
@@ -860,7 +864,6 @@
         _nuevoEstadoBloqueo = nuevoValor;
         _motivoBloqueo = null;
         _passwordBloqueo = null;
-        _bloqueoError = null;
         _mostrarConfirmBloqueo = true;
     }
 
@@ -874,16 +877,25 @@
     {
         if (string.IsNullOrWhiteSpace(_motivoBloqueo))
         {
-            _bloqueoError = "Ingrese el motivo del bloqueo/desbloqueo.";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Bloqueo de cobro",
+                Text = "Ingrese el motivo del bloqueo/desbloqueo.",
+                RenderStyle = ToastRenderStyle.Danger
+            });
             return;
         }
         if (string.IsNullOrWhiteSpace(_passwordBloqueo))
         {
-            _bloqueoError = "Ingrese su contraseña para confirmar.";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Bloqueo de cobro",
+                Text = "Ingrese su contraseña para confirmar.",
+                RenderStyle = ToastRenderStyle.Danger
+            });
             return;
         }
 
-        _bloqueoError = null;
         _ejecutandoBloqueo = true;
         try
         {
@@ -894,7 +906,12 @@
         }
         catch (Exception ex)
         {
-            _bloqueoError = $"Error: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Bloqueo de cobro",
+                Text = $"Error: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {

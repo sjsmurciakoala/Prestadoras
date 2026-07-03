@@ -6,21 +6,12 @@
 @using apc.Client.Services.Parametros
 @inject UsuariosPortalClient UsuariosClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Usuarios</PageTitle>
 
 <h3>Usuarios del Portal</h3>
 <p class="text-muted">Administra los usuarios, roles y permisos del sistema.</p>
-
-@if (!string.IsNullOrWhiteSpace(errorMessage))
-{
-    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
-}
-
-@if (!string.IsNullOrWhiteSpace(successMessage))
-{
-    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
-}
 
 <div class="d-flex gap-2 mb-3 mt-3">
     <DxButton Text="Nuevo Usuario"
@@ -105,8 +96,6 @@ else
 
 @code {
     private List<UsuarioPortalDto> usuarios = [];
-    private string? errorMessage;
-    private string? successMessage;
     private bool isLoading = true;
     private bool isSyncing;
 
@@ -118,7 +107,6 @@ else
     private async Task CargarUsuariosAsync()
     {
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -130,7 +118,7 @@ else
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -141,17 +129,15 @@ else
     private async Task SincronizarRolesAsync()
     {
         isSyncing = true;
-        errorMessage = null;
-        successMessage = null;
 
         try
         {
             await UsuariosClient.SincronizarRolesAsync();
-            successMessage = "Roles sincronizados correctamente.";
+            ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = "Roles sincronizados correctamente.", RenderStyle = ToastRenderStyle.Success });
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Usuarios", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

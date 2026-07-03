@@ -40,13 +40,7 @@
                           CssClass="medidores-action-btn action-lectura" />
             </div>
 
-            @if (!string.IsNullOrEmpty(medidoresError))
-            {
-                <DxAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle">
-                    @medidoresError
-                </DxAlert>
-            }
-            else if (medidores.Count == 0)
+            @if (medidores.Count == 0)
             {
                 <div class="text-center p-4">
                     <i class="bi bi-speedometer" style="font-size: 3rem; color: #6c757d; opacity: 0.5;"></i>
@@ -102,14 +96,6 @@
             {
                 <DxSkeletonLine />
             }
-            else if (!string.IsNullOrEmpty(medidoresDisponiblesError))
-            {
-                <DxAlert AlertType="AlertType.Danger">@medidoresDisponiblesError</DxAlert>
-            }
-            else if (!string.IsNullOrEmpty(asignacionError))
-            {
-                <DxAlert AlertType="AlertType.Danger">@asignacionError</DxAlert>
-            }
             else
             {
                 <DxFormLayout>
@@ -144,10 +130,6 @@
              ShowFooter="true"
              CssClass="medidores-popup">
         <BodyTemplate Context="popupContext">
-            @if (!string.IsNullOrEmpty(lecturaError))
-            {
-                <DxAlert AlertType="AlertType.Danger">@lecturaError</DxAlert>
-            }
             <DxFormLayout>
                 <DxFormLayoutItem Caption="Clave">
                     <DxTextBox @bind-Text="@lecturaModel.Clave" Enabled="false" />
@@ -189,10 +171,6 @@
             {
                 <DxSkeletonLine />
             }
-            else if (!string.IsNullOrEmpty(medidorDetalleError))
-            {
-                <DxAlert AlertType="AlertType.Danger">@medidorDetalleError</DxAlert>
-            }
             else if (medidorDetalle != null)
             {
                 <DxFormLayout>
@@ -226,25 +204,20 @@
 
     private List<MedidorListDto> medidores = new();
     private bool medidoresLoading;
-    private string? medidoresError;
 
     private MedidorDetailDto? medidorDetalle;
     private bool medidorDetalleVisible;
     private bool medidorDetalleCargando;
-    private string? medidorDetalleError;
 
     private List<MedidorListDto> medidoresDisponibles = new();
     private bool medidoresDisponiblesLoading;
-    private string? medidoresDisponiblesError;
 
     private bool asignacionPopupVisible;
     private bool asignacionGuardando;
-    private string? asignacionError;
     private MedidorAssignModel asignacionModel = new();
 
     private bool lecturaPopupVisible;
     private bool lecturaGuardando;
-    private string? lecturaError;
     private LecturaSinMedidorModel lecturaModel = new();
 
     private class MedidorAssignModel
@@ -271,7 +244,6 @@
             return;
 
         medidoresLoading = true;
-        medidoresError = null;
 
         try
         {
@@ -279,7 +251,7 @@
         }
         catch (Exception ex)
         {
-            medidoresError = $"Error al cargar medidores: {ex.Message}";
+            ShowToast("Medidores", $"Error al cargar medidores: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -291,7 +263,6 @@
     {
         medidorDetalleVisible = true;
         medidorDetalleCargando = true;
-        medidorDetalleError = null;
 
         try
         {
@@ -299,7 +270,7 @@
         }
         catch (Exception ex)
         {
-            medidorDetalleError = $"Error al cargar detalle: {ex.Message}";
+            ShowToast("Medidores", $"Error al cargar detalle: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -309,7 +280,6 @@
 
     private async Task AsignarMedidorPopupAsync()
     {
-        asignacionError = null;
         asignacionModel = new MedidorAssignModel();
         asignacionPopupVisible = true;
         await LoadMedidoresDisponiblesAsync();
@@ -318,7 +288,6 @@
     private async Task LoadMedidoresDisponiblesAsync()
     {
         medidoresDisponiblesLoading = true;
-        medidoresDisponiblesError = null;
 
         try
         {
@@ -326,7 +295,7 @@
         }
         catch (Exception ex)
         {
-            medidoresDisponiblesError = $"Error al cargar medidores disponibles: {ex.Message}";
+            ShowToast("Medidores", $"Error al cargar medidores disponibles: {ex.Message}", ToastRenderStyle.Danger);
             medidoresDisponibles = new List<MedidorListDto>();
         }
         finally
@@ -339,12 +308,11 @@
     {
         if (Cliente is null || !asignacionModel.MedidorId.HasValue)
         {
-            asignacionError = "Seleccione un medidor.";
+            ShowToast("Medidores", "Seleccione un medidor.", ToastRenderStyle.Danger);
             return;
         }
 
         asignacionGuardando = true;
-        asignacionError = null;
 
         try
         {
@@ -359,14 +327,14 @@
             else
             {
                 var detail = await response.Content.ReadAsStringAsync();
-                asignacionError = string.IsNullOrWhiteSpace(detail)
+                ShowToast("Medidores", string.IsNullOrWhiteSpace(detail)
                     ? "Error al asignar el medidor."
-                    : detail;
+                    : detail, ToastRenderStyle.Danger);
             }
         }
         catch (Exception ex)
         {
-            asignacionError = $"Error: {ex.Message}";
+            ShowToast("Medidores", $"Error: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -379,7 +347,6 @@
         if (Cliente is null)
             return;
 
-        lecturaError = null;
         var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         var usuarioActual = auth.User?.Identity?.Name;
         lecturaModel = new LecturaSinMedidorModel
@@ -395,12 +362,11 @@
     {
         if (string.IsNullOrWhiteSpace(lecturaModel.Clave))
         {
-            lecturaError = "La clave es obligatoria.";
+            ShowToast("Medidores", "La clave es obligatoria.", ToastRenderStyle.Danger);
             return;
         }
 
         lecturaGuardando = true;
-        lecturaError = null;
 
         try
         {
@@ -423,14 +389,14 @@
             else
             {
                 var detail = await response.Content.ReadAsStringAsync();
-                lecturaError = string.IsNullOrWhiteSpace(detail)
+                ShowToast("Medidores", string.IsNullOrWhiteSpace(detail)
                     ? "Error al registrar la lectura."
-                    : detail;
+                    : detail, ToastRenderStyle.Danger);
             }
         }
         catch (Exception ex)
         {
-            lecturaError = $"Error: {ex.Message}";
+            ShowToast("Medidores", $"Error: {ex.Message}", ToastRenderStyle.Danger);
         }
         finally
         {

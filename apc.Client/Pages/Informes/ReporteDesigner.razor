@@ -5,6 +5,7 @@
 @using SIAD.Core.DTOs.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Diseñador de Reporte</PageTitle>
 
@@ -40,37 +41,27 @@
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
-
-    @if (!string.IsNullOrWhiteSpace(successMessage))
-    {
-        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMessage</DxAlert>
-    }
-
     @if (!isLoading && detalle is not null && !string.IsNullOrWhiteSpace(detalle.MensajeRegeneracionBorrador))
     {
         @if (detalle.TieneDesfaseDatasetLayout)
         {
-            <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+            <div class="alert alert-warning mb-3" role="alert">
                 @detalle.MensajeRegeneracionBorrador
-            </DxAlert>
+            </div>
         }
         else
         {
-            <DxAlert AlertType="AlertType.Info" CssClass="mb-3">
+            <div class="alert alert-info mb-3" role="alert">
                 @detalle.MensajeRegeneracionBorrador
-            </DxAlert>
+            </div>
         }
     }
 
     @if (!isLoading && detalle is not null && !detalle.TieneBorrador)
     {
-        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <div class="alert alert-warning mb-3" role="alert">
             @GetDraftWarningMessage(detalle)
-        </DxAlert>
+        </div>
     }
 
     <div class="modern-card p-3">
@@ -102,8 +93,6 @@
     private bool isLoading;
     private bool isPublishing;
     private bool isRegenerating;
-    private string? errorMessage;
-    private string? successMessage;
     private ReporteDisenoDetalleDto? detalle;
 
     protected override async Task OnParametersSetAsync()
@@ -116,13 +105,11 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
-            successMessage = null;
             detalle = await InformesClient.GetReporteDisenoAsync(Codigo);
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Diseñador", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
             detalle = null;
         }
         finally
@@ -141,13 +128,12 @@
         try
         {
             isRegenerating = true;
-            errorMessage = null;
             detalle = await InformesClient.RegenerateReporteDraftAsync(detalle.Codigo);
-            successMessage = "Se regeneró el borrador desde el dataset actual. Revise el Field List y vuelva a guardar si necesita ajustar el layout.";
+            ToastService.ShowToast(new ToastOptions { Title = "Borrador", Text = "Se regeneró el borrador desde el dataset actual. Revise el Field List y vuelva a guardar si necesita ajustar el layout.", RenderStyle = ToastRenderStyle.Success });
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Borrador", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -165,13 +151,12 @@
         try
         {
             isPublishing = true;
-            errorMessage = null;
             detalle = await InformesClient.PublishReporteDisenoAsync(detalle.Codigo);
-            successMessage = $"Se publicó la versión {detalle.PublishedVersion?.ToString() ?? "actual"} del reporte.";
+            ToastService.ShowToast(new ToastOptions { Title = "Publicación", Text = $"Se publicó la versión {detalle.PublishedVersion?.ToString() ?? "actual"} del reporte.", RenderStyle = ToastRenderStyle.Success });
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Publicación", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

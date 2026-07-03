@@ -5,6 +5,7 @@
 @using SIAD.Core.DTOs.Informes
 @inject InformesClient InformesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Visor de Reporte</PageTitle>
 
@@ -34,16 +35,11 @@
         </div>
     }
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
-
     @if (!isLoading && detalle is not null && !detalle.TieneLayoutPublicado)
     {
-        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <div class="alert alert-warning mb-3" role="alert">
             Este reporte todavía no tiene una versión publicada en base de datos. Publica un borrador para visualizarlo aquí.
-        </DxAlert>
+        </div>
     }
 
     <div class="modern-card p-3">
@@ -73,7 +69,6 @@
     public string Codigo { get; set; } = string.Empty;
 
     private bool isLoading;
-    private string? errorMessage;
     private ReporteDisenoDetalleDto? detalle;
 
     protected override async Task OnParametersSetAsync()
@@ -86,12 +81,11 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
             detalle = await InformesClient.GetReporteDisenoAsync(Codigo);
         }
         catch (Exception ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Visor", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
             detalle = null;
         }
         finally

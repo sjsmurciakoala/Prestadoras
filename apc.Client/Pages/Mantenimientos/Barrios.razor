@@ -4,6 +4,7 @@
 @using apc.Client.Services.Catalogos
 @using DevExpress.Blazor
 @inject CatalogosClient CatalogosClient
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Barrios</PageTitle>
 
@@ -20,15 +21,6 @@
                       Click="AbrirFormNuevo" />
         </div>
     </div>
-
-    @if (!string.IsNullOrEmpty(errorMsg))
-    {
-        <DxAlert AlertType="AlertType.Error" CssClass="mb-3" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
-    }
-    @if (!string.IsNullOrEmpty(successMsg))
-    {
-        <DxAlert AlertType="AlertType.Success" CssClass="mb-3">@successMsg</DxAlert>
-    }
 
     <div class="modern-card">
         @if (isLoading)
@@ -108,10 +100,6 @@
                 </DxFormLayoutItem>
             }
         </DxFormLayout>
-        @if (!string.IsNullOrEmpty(formError))
-        {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@formError</DxAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -132,10 +120,6 @@
     <BodyTemplate>
         <p>¿Eliminar el barrio <strong>@barrioAEliminar?.Codigo — @barrioAEliminar?.Descripcion</strong>?</p>
         <p class="text-muted small">No se puede eliminar si tiene clientes asociados.</p>
-        @if (!string.IsNullOrEmpty(eliminarError))
-        {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@eliminarError</DxAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -150,8 +134,6 @@
 @code {
     private List<BarrioDto> barrios = [];
     private bool isLoading = true;
-    private string? errorMsg;
-    private string? successMsg;
 
     // Form
     private bool mostrarForm = false;
@@ -159,25 +141,22 @@
     private string formCodigo = string.Empty;
     private string formDescripcion = string.Empty;
     private bool formEstado = true;
-    private string? formError;
     private bool isSaving = false;
 
     // Eliminar
     private bool mostrarConfirmEliminar = false;
     private BarrioDto? barrioAEliminar;
-    private string? eliminarError;
 
     protected override async Task OnInitializedAsync() => await CargarAsync();
 
     private async Task CargarAsync()
     {
         isLoading = true;
-        errorMsg = null;
         try
         {
             barrios = ((await CatalogosClient.GetBarriosCrudAsync()) ?? []).ToList();
         }
-        catch (Exception ex) { errorMsg = $"Error al cargar: {ex.Message}"; }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = $"Error al cargar: {ex.Message}", RenderStyle = ToastRenderStyle.Danger }); }
         finally { isLoading = false; }
     }
 
@@ -187,7 +166,6 @@
         formCodigo = string.Empty;
         formDescripcion = string.Empty;
         formEstado = true;
-        formError = null;
         mostrarForm = true;
     }
 
@@ -197,7 +175,6 @@
         formCodigo = b.Codigo;
         formDescripcion = b.Descripcion;
         formEstado = b.Estado;
-        formError = null;
         mostrarForm = true;
     }
 
@@ -205,16 +182,15 @@
     {
         if (string.IsNullOrWhiteSpace(formDescripcion))
         {
-            formError = "La descripción es obligatoria.";
+            ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = "La descripción es obligatoria.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
         if (!editando && string.IsNullOrWhiteSpace(formCodigo))
         {
-            formError = "El código es obligatorio.";
+            ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = "El código es obligatorio.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
-        formError = null;
         isSaving = true;
         try
         {
@@ -224,17 +200,16 @@
                 await CatalogosClient.CrearBarrioAsync(new BarrioCreateDto(formCodigo, formDescripcion));
 
             mostrarForm = false;
-            successMsg = editando ? "Barrio actualizado correctamente." : "Barrio creado correctamente.";
+            ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = editando ? "Barrio actualizado correctamente." : "Barrio creado correctamente.", RenderStyle = ToastRenderStyle.Success });
             await CargarAsync();
         }
-        catch (Exception ex) { formError = $"Error: {ex.Message}"; }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = $"Error: {ex.Message}", RenderStyle = ToastRenderStyle.Danger }); }
         finally { isSaving = false; }
     }
 
     private void ConfirmarEliminar(BarrioDto b)
     {
         barrioAEliminar = b;
-        eliminarError = null;
         mostrarConfirmEliminar = true;
     }
 
@@ -242,22 +217,21 @@
     {
         if (barrioAEliminar is null) return;
         isSaving = true;
-        eliminarError = null;
         try
         {
             var ok = await CatalogosClient.EliminarBarrioAsync(barrioAEliminar.Codigo);
             if (ok)
             {
                 mostrarConfirmEliminar = false;
-                successMsg = $"Barrio {barrioAEliminar.Codigo} eliminado.";
+                ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = $"Barrio {barrioAEliminar.Codigo} eliminado.", RenderStyle = ToastRenderStyle.Success });
                 await CargarAsync();
             }
             else
             {
-                eliminarError = "No se pudo eliminar el barrio.";
+                ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = "No se pudo eliminar el barrio.", RenderStyle = ToastRenderStyle.Danger });
             }
         }
-        catch (Exception ex) { eliminarError = $"Error: {ex.Message}"; }
+        catch (Exception ex) { ToastService.ShowToast(new ToastOptions { Title = "Barrios", Text = $"Error: {ex.Message}", RenderStyle = ToastRenderStyle.Danger }); }
         finally { isSaving = false; }
     }
 }

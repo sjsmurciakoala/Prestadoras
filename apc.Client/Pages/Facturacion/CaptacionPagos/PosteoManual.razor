@@ -63,13 +63,9 @@
         </DxFormLayoutGroup>
     </DxFormLayout>
 
-    @if (!string.IsNullOrWhiteSpace(error))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mt-3">@error</DxAlert>
-    }
     @if (!string.IsNullOrWhiteSpace(info))
     {
-        <DxAlert AlertType="AlertType.Info" CssClass="mt-3">@info</DxAlert>
+        <div class="alert alert-info mt-3" role="alert">@info</div>
     }
 
     <DxDataGrid Data="@saldos" ShowFilterRow="false" ShowGroupPanel="false" PageSize="10"
@@ -171,7 +167,6 @@
 
     private bool cargando;
     private bool procesando;
-    private string? error;
     private ErrorNotice errorNotice = default!;
     private string? info;
     private bool UsaCatalogoBancoCuenta => Bancos.Any(b => b.BancoCuentaId.HasValue && b.BancoCuentaId.Value > 0);
@@ -185,7 +180,6 @@
             return;
         }
 
-        error = null;
         info = null;
         cargando = true;
 
@@ -234,8 +228,7 @@
         }
         catch (Exception ex)
         {
-            error = "No se pudieron cargar los saldos.";
-            ShowToast(error, ToastRenderStyle.Danger);
+            ShowToast("No se pudieron cargar los saldos.", ToastRenderStyle.Danger);
         }
         finally
         {
@@ -248,8 +241,6 @@
     {
         if (procesando)
             return;
-
-        error = null;
 
         if (seleccionado is null)
         {
@@ -347,8 +338,6 @@
     {
         if (procesando)
             return;
-
-        error = null;
 
         if (seleccionado is null)
         {
@@ -506,7 +495,6 @@
 
     private void ShowValidation(string message, ToastRenderStyle style = ToastRenderStyle.Warning)
     {
-        error = message;
         ShowToast(message, style);
     }
 

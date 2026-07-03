@@ -7,21 +7,12 @@
 @using apc.Client.Services.Parametros
 @inject RolesPortalClient RolesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Roles</PageTitle>
 
 <h3>Roles y permisos</h3>
 <p class="text-muted">Configura los roles del sistema y sus permisos por módulo.</p>
-
-@if (!string.IsNullOrWhiteSpace(errorMessage))
-{
-    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
-}
-
-@if (!string.IsNullOrWhiteSpace(successMessage))
-{
-    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
-}
 
 <div class="d-flex gap-2 mb-3 mt-3">
     <DxButton Text="Nuevo Rol"
@@ -78,8 +69,6 @@ else
 
 @code {
     private List<RoleDto> roles = [];
-    private string? errorMessage;
-    private string? successMessage;
     private bool isLoading = true;
 
     protected override async Task OnInitializedAsync()
@@ -90,7 +79,6 @@ else
     private async Task CargarRolesAsync()
     {
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -102,7 +90,7 @@ else
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Roles", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

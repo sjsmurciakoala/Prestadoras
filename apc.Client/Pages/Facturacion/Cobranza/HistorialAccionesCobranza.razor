@@ -7,6 +7,7 @@
 @using DevExpress.Blazor
 @inject CobranzaClient CobranzaClient
 @inject CaptacionPagosClient CaptacionClient
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Historial de Bitácora de Cobranza</PageTitle>
 
@@ -67,13 +68,6 @@
         </div>
     </div>
 
-    @if (!string.IsNullOrEmpty(errorMsg))
-    {
-        <DxAlert AlertType="AlertType.Danger" IconCssClass="bi bi-exclamation-triangle" CssClass="mb-3">
-            @errorMsg
-        </DxAlert>
-    }
-
     <!-- RESULTADOS -->
     <div class="modern-card">
         <div class="section-header mb-3">
@@ -97,10 +91,11 @@
 
         @if (resultadoTruncado)
         {
-            <DxAlert AlertType="AlertType.Warning" IconCssClass="bi bi-exclamation-circle" CssClass="mb-3">
+            <div class="alert alert-warning mb-3" role="alert">
+                <i class="bi bi-exclamation-circle me-2"></i>
                 Se alcanzó el límite de @CobranzaHistorialConstantes.MaxFilas registros.
                 Acote el rango de fechas para ver el detalle completo.
-            </DxAlert>
+            </div>
         }
 
         @if (isLoading)
@@ -153,7 +148,6 @@
     private bool isLoading;
     private bool busquedaRealizada;
     private bool resultadoTruncado;
-    private string? errorMsg;
     private ErrorNotice errorNotice = default!;
 
     protected override async Task OnInitializedAsync()
@@ -168,7 +162,7 @@
         }
         catch (Exception ex)
         {
-            errorMsg = "No se pudieron cargar los catálogos.";
+            ToastService.ShowToast(new ToastOptions { Title = "Historial de cobranza", Text = "No se pudieron cargar los catálogos.", RenderStyle = ToastRenderStyle.Danger });
         }
     }
 
@@ -182,12 +176,11 @@
     {
         if (desde.Date > hasta.Date)
         {
-            errorMsg = "Rango de fechas inválido: 'Desde' debe ser menor o igual a 'Hasta'.";
+            ToastService.ShowToast(new ToastOptions { Title = "Historial de cobranza", Text = "Rango de fechas inválido: 'Desde' debe ser menor o igual a 'Hasta'.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
         isLoading = true;
-        errorMsg = null;
         resultadoTruncado = false;
         try
         {

@@ -16,6 +16,7 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject ILogger<CompromisosProveedorList> Logger
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Compromisos</PageTitle>
 
@@ -73,11 +74,6 @@
     }
 
     <ErrorNotice @ref="errorNotice" />
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
 
     <div class="modern-card mb-3">
         <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
@@ -156,9 +152,9 @@
         }
         else if (ordenes.Count == 0)
         {
-            <DxAlert AlertType="AlertType.Info">
+            <div class="alert alert-info" role="alert">
                 No se encontraron compromisos para los filtros seleccionados.
-            </DxAlert>
+            </div>
         }
         else
         {
@@ -260,7 +256,6 @@
     private readonly List<ProveedorFiltroItem> proveedoresFiltro = new();
     private string? proveedorQueryActual;
     private bool isLoading;
-    private string? errorMessage;
     private ErrorNotice errorNotice = default!;
     private ProveedorDetailDto? proveedorSeleccionado;
 
@@ -286,7 +281,6 @@
         try
         {
             isLoading = true;
-            errorMessage = null;
 
             await EnsureProveedoresFiltroAsync();
             await CargarProveedorSeleccionadoAsync();
@@ -298,7 +292,7 @@
         catch (Exception ex)
         {
             ordenes.Clear();
-            errorMessage = "No se pudieron cargar los compromisos.";
+            ToastService.ShowToast(new ToastOptions { Title = "Compromisos de proveedor", Text = "No se pudieron cargar los compromisos.", RenderStyle = ToastRenderStyle.Danger });
             Logger.LogError(ex, "Error al cargar compromisos de proveedor.");
         }
         finally

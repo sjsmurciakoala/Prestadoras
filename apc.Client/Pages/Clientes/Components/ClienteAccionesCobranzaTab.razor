@@ -1,6 +1,7 @@
 @using SIAD.Core.DTOs.Cobranza
 @using apc.Client.Services.Facturacion
 @inject CobranzaClient CobranzaClient
+@inject IToastNotificationService ToastService
 
 <div class="acciones-cobranza-container">
 
@@ -24,10 +25,6 @@
     {
         <DxLoadingPanel Visible="true" Text="Cargando acciones..." />
         <div style="height:60px"></div>
-    }
-    else if (!string.IsNullOrEmpty(errorMsg))
-    {
-        <DxAlert AlertType="AlertType.Error" IconCssClass="bi bi-exclamation-triangle">@errorMsg</DxAlert>
     }
     else
     {
@@ -173,11 +170,6 @@
                 <DxMemo @bind-Text="nuevaObservacion" Rows="3" CssClass="w-100" />
             </DxFormLayoutItem>
         </DxFormLayout>
-
-        @if (!string.IsNullOrEmpty(guardarError))
-        {
-            <DxAlert AlertType="AlertType.Error" CssClass="mt-2">@guardarError</DxAlert>
-        }
     </BodyTemplate>
     <FooterTemplate>
         <div class="d-flex gap-2 justify-content-end">
@@ -200,7 +192,6 @@
     private List<ObservacionCobranzaCatalogoDto> catalogoObservaciones = [];
     private List<AbogadoCobranzaLookupDto> catalogoAbogados = [];
     private bool isLoading = true;
-    private string? errorMsg;
 
     // Ver detalle
     private bool mostrarDetalle = false;
@@ -214,7 +205,6 @@
     private string? nuevaEjecutadoPor;
     private string? nuevaObservacion;
     private bool isSaving = false;
-    private string? guardarError;
 
     protected override async Task OnParametersSetAsync()
         => await CargarAcciones();
@@ -222,7 +212,6 @@
     private async Task CargarAcciones()
     {
         isLoading = true;
-        errorMsg = null;
         try
         {
             var tareaAcciones = CobranzaClient.GetAccionesAsync(ClienteClave);
@@ -237,7 +226,12 @@
         }
         catch (Exception ex)
         {
-            errorMsg = $"Error al cargar: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Acciones de cobranza",
+                Text = $"Error al cargar: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {
@@ -298,7 +292,6 @@
         nuevaAbogadoId = null;
         nuevaEjecutadoPor = null;
         nuevaObservacion = null;
-        guardarError = null;
         mostrarFormulario = true;
     }
 
@@ -306,10 +299,14 @@
     {
         if (nuevaAccionId is null)
         {
-            guardarError = "Seleccione un tipo de acción.";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Acciones de cobranza",
+                Text = "Seleccione un tipo de acción.",
+                RenderStyle = ToastRenderStyle.Danger
+            });
             return;
         }
-        guardarError = null;
         isSaving = true;
         try
         {
@@ -320,7 +317,12 @@
         }
         catch (Exception ex)
         {
-            guardarError = $"Error al guardar: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Acciones de cobranza",
+                Text = $"Error al guardar: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
         }
         finally
         {

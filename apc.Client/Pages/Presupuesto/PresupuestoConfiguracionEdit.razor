@@ -29,11 +29,6 @@
                   CssClass="btn-modern" />
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
-
     <div class="modern-card mb-3">
         <div class="context-grid">
             <div class="context-item">
@@ -79,7 +74,6 @@
     private bool isLoading = true;
     private bool isSaving;
     private bool isGeneratingId;
-    private string? errorMessage;
 
     private bool IsEdit => !string.IsNullOrWhiteSpace(IdPresupuesto);
 
@@ -118,7 +112,6 @@
     private async Task CargarAsync()
     {
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -136,7 +129,7 @@
 
             if (detail is null)
             {
-                errorMessage = "No se encontró la configuración de presupuesto solicitada.";
+                ShowToast("Error", "No se encontró la configuración de presupuesto solicitada.", ToastRenderStyle.Danger);
                 model = CrearModeloNuevo(fechaServidorActual);
                 return;
             }
@@ -145,7 +138,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo cargar la configuración: {ex.Message}";
+            ShowToast("Error", $"No se pudo cargar la configuración: {ex.Message}", ToastRenderStyle.Danger);
             Logger.LogError(ex, "Error al cargar configuración de presupuesto {IdPresupuesto}", IdPresupuesto);
         }
         finally
@@ -159,13 +152,11 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
             fechaServidorActual = await ObtenerFechaServidorActualAsync();
 
             if (model.ValorGlobal <= 0m)
             {
                 const string message = "El presupuesto debe ser mayor a cero.";
-                errorMessage = message;
                 ShowToast("Error", message, ToastRenderStyle.Danger);
                 return;
             }
@@ -173,7 +164,6 @@
             if (model.FechaInicia < fechaServidorActual)
             {
                 var message = $"La fecha inicial debe ser igual o mayor que la fecha actual del servidor ({fechaServidorActual:yyyy-MM-dd}).";
-                errorMessage = message;
                 ShowToast("Error", message, ToastRenderStyle.Danger);
                 return;
             }
@@ -198,7 +188,6 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo guardar la configuración: {ex.Message}";
             Logger.LogError(ex, "Error al guardar configuración de presupuesto {IdPresupuesto}", IdPresupuesto);
             ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
         }
@@ -228,17 +217,11 @@
         {
             isGeneratingId = true;
             model.IdPresupuesto = await ConfiguracionPresupuestoClient.GetNextIdAsync();
-
-            if (!string.IsNullOrWhiteSpace(errorMessage) &&
-                errorMessage.StartsWith("No se pudo generar el ID de presupuesto", StringComparison.OrdinalIgnoreCase))
-            {
-                errorMessage = null;
-            }
         }
         catch (Exception ex)
         {
             model.IdPresupuesto = string.Empty;
-            errorMessage = $"No se pudo generar el ID de presupuesto: {ex.Message}";
+            ShowToast("Error", $"No se pudo generar el ID de presupuesto: {ex.Message}", ToastRenderStyle.Danger);
             Logger.LogError(ex, "Error al generar ID de presupuesto.");
         }
         finally

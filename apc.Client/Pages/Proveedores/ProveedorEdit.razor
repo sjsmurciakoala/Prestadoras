@@ -4,6 +4,7 @@
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject ILogger<ProveedorEdit> Logger
+@inject IToastNotificationService ToastService
 @using apc.Client.Services.Proveedores
 @using Microsoft.AspNetCore.Authorization
 @using SIAD.Core.DTOs.Contabilidad
@@ -27,11 +28,6 @@
                       CssClass="btn-modern" />
         </div>
     </div>
-
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
 
     <div class="modern-card">
         @if (isLoading)
@@ -67,7 +63,6 @@
     private ProveedorUpsertDto model = new();
     private bool isLoading = true;
     private bool isSaving;
-    private string? errorMessage;
 
     private bool IsEdit => !string.IsNullOrWhiteSpace(Codigo);
     private string SubtituloPagina => IsEdit
@@ -104,7 +99,6 @@
     private async Task CargarDatosAsync()
     {
         isLoading = true;
-        errorMessage = null;
 
         try
         {
@@ -131,7 +125,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo cargar la pantalla: {ex.Message}";
+            ToastService.ShowToast(new ToastOptions { Title = "Proveedores", Text = $"No se pudo cargar la pantalla: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
             Logger.LogError(ex, "Error al cargar pantalla de proveedor.");
         }
         finally
@@ -172,14 +166,14 @@
         var codigo = Codigo?.Trim();
         if (string.IsNullOrWhiteSpace(codigo))
         {
-            errorMessage = "Codigo invalido.";
+            ToastService.ShowToast(new ToastOptions { Title = "Proveedores", Text = "Codigo invalido.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
         var detail = await ProveedoresClient.ObtenerPorCodigoAsync(codigo);
         if (detail is null)
         {
-            errorMessage = $"No se encontro el proveedor {codigo}.";
+            ToastService.ShowToast(new ToastOptions { Title = "Proveedores", Text = $"No se encontro el proveedor {codigo}.", RenderStyle = ToastRenderStyle.Danger });
             return;
         }
 
@@ -223,7 +217,6 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
 
             if (IsEdit)
             {

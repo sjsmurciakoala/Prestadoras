@@ -28,11 +28,6 @@
                   Click="VolverALista" />
     </div>
 
-    @if (!string.IsNullOrWhiteSpace(errorMessage))
-    {
-        <DxAlert AlertType="AlertType.Danger" CssClass="mb-3">@errorMessage</DxAlert>
-    }
-
     <div class="modern-card mb-3">
         <div class="context-grid">
             <div class="context-item">
@@ -54,24 +49,24 @@
         }
         else if (detalle is null)
         {
-            <DxAlert AlertType="AlertType.Warning">
+            <div class="alert alert-warning" role="alert">
                 No se encontró el detalle solicitado.
-            </DxAlert>
+            </div>
         }
         else
         {
             @if (!presupuestoVigente)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                <div class="alert alert-warning mb-3" role="alert">
                     @GetMensajeBloqueoPorRango()
-                </DxAlert>
+                </div>
             }
 
             @if (presupuestoAprobado)
             {
-                <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+                <div class="alert alert-warning mb-3" role="alert">
                     Este presupuesto ya está aprobado. No se permite editar el detalle.
-                </DxAlert>
+                </div>
             }
 
             <EditForm Model="form" OnValidSubmit="GuardarAsync" Context="detalleEditFormContext">
@@ -128,7 +123,6 @@
 
     private bool isLoading = true;
     private bool isSaving;
-    private string? errorMessage;
     private ConfiguracionPresupuestoDetalleListItemDto? detalle;
     private DetalleEditForm form = new();
     private string? cuentaContableDisplay;
@@ -161,7 +155,6 @@
     private async Task CargarAsync()
     {
         isLoading = true;
-        errorMessage = null;
         detalle = null;
         form = new DetalleEditForm();
         cuentaContableDisplay = null;
@@ -175,7 +168,7 @@
         {
             if (string.IsNullOrWhiteSpace(IdPresupuesto) || string.IsNullOrWhiteSpace(CuentaContable))
             {
-                errorMessage = "Debe indicar el presupuesto y la cuenta contable del detalle.";
+                ShowToast("Error", "Debe indicar el presupuesto y la cuenta contable del detalle.", ToastRenderStyle.Danger);
                 return;
             }
 
@@ -186,14 +179,14 @@
 
             if (detalle is null)
             {
-                errorMessage = "No se encontró el detalle del presupuesto solicitado.";
+                ShowToast("Error", "No se encontró el detalle del presupuesto solicitado.", ToastRenderStyle.Danger);
                 return;
             }
 
             var header = await ConfiguracionPresupuestoClient.GetByIdAsync(id);
             if (header is null)
             {
-                errorMessage = "No se encontró el encabezado del presupuesto.";
+                ShowToast("Error", "No se encontró el encabezado del presupuesto.", ToastRenderStyle.Danger);
                 return;
             }
 
@@ -217,7 +210,7 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo cargar el detalle: {ex.Message}";
+            ShowToast("Error", $"No se pudo cargar el detalle: {ex.Message}", ToastRenderStyle.Danger);
             Logger.LogError(ex, "Error al cargar detalle de presupuesto {IdPresupuesto}/{CuentaContable}", IdPresupuesto, CuentaContable);
         }
         finally
@@ -249,7 +242,6 @@
         if (form.ValorProyeccion > presupuestoHdr)
         {
             const string message = "El valor proyectado del detalle no puede ser mayor al presupuesto del encabezado.";
-            errorMessage = message;
             ShowToast("Validación", message, ToastRenderStyle.Warning);
             return;
         }
@@ -257,7 +249,6 @@
         try
         {
             isSaving = true;
-            errorMessage = null;
 
             var updated = await ConfiguracionPresupuestoClient.UpdateDetailAsync(
                 detalle.IdPresupuesto,
@@ -275,7 +266,6 @@
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudo actualizar el detalle: {ex.Message}";
             Logger.LogError(ex, "Error al actualizar detalle de presupuesto {IdPresupuesto}/{CuentaContable}", detalle.IdPresupuesto, detalle.CuentaContableCodigo);
             ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
         }

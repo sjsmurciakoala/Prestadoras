@@ -11,20 +11,11 @@
 @using apc.Client.Services.Parametros
 @inject RolesPortalClient RolesClient
 @inject NavigationManager NavigationManager
+@inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Rol</PageTitle>
 
 <h3>@(EsNuevo ? "Nuevo Rol" : "Editar Rol")</h3>
-
-@if (!string.IsNullOrWhiteSpace(errorMessage))
-{
-    <DxAlert AlertType="AlertType.Danger" CssClass="mt-2">@errorMessage</DxAlert>
-}
-
-@if (!string.IsNullOrWhiteSpace(successMessage))
-{
-    <DxAlert AlertType="AlertType.Success" CssClass="mt-2">@successMessage</DxAlert>
-}
 
 @if (isLoading)
 {
@@ -150,8 +141,6 @@ else
     private readonly List<EndpointPermiso> endpoints = [];
     private HashSet<string> permisosOriginales = new(StringComparer.OrdinalIgnoreCase);
 
-    private string? errorMessage;
-    private string? successMessage;
     private bool isLoading = true;
     private bool isSaving;
 
@@ -171,7 +160,7 @@ else
                 var role = await RolesClient.ObtenerAsync(RoleId!);
                 if (role is null)
                 {
-                    errorMessage = "El rol no existe.";
+                    ToastService.ShowToast(new ToastOptions { Title = "Roles", Text = "El rol no existe.", RenderStyle = ToastRenderStyle.Danger });
                 }
                 else
                 {
@@ -199,7 +188,7 @@ else
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Roles", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {
@@ -296,8 +285,6 @@ else
         }
 
         isSaving = true;
-        errorMessage = null;
-        successMessage = null;
 
         try
         {
@@ -348,19 +335,19 @@ else
             {
                 crearDto.Permissions = listaPermisos;
                 await RolesClient.CrearAsync(crearDto);
-                successMessage = "Rol creado correctamente.";
+                ToastService.ShowToast(new ToastOptions { Title = "Roles", Text = "Rol creado correctamente.", RenderStyle = ToastRenderStyle.Success });
                 NavigationManager.NavigateTo("/parametros/roles");
             }
             else
             {
                 editarDto.Permissions = listaPermisos;
                 await RolesClient.ActualizarAsync(RoleId!, editarDto);
-                successMessage = "Rol actualizado correctamente.";
+                ToastService.ShowToast(new ToastOptions { Title = "Roles", Text = "Rol actualizado correctamente.", RenderStyle = ToastRenderStyle.Success });
             }
         }
         catch (HttpRequestException ex)
         {
-            errorMessage = ex.Message;
+            ToastService.ShowToast(new ToastOptions { Title = "Roles", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
         }
         catch (UnauthorizedAccessException)
         {

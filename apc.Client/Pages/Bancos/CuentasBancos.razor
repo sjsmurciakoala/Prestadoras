@@ -65,14 +65,14 @@
 
     @if (showNoBancosAlert)
     {
-        <DxAlert AlertType="AlertType.Warning" CssClass="mb-3">
+        <div class="alert alert-warning mb-3" role="alert">
             <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
                 <span>No hay bancos registrados. Cree uno antes de gestionar cuentas.</span>
                 <DxButton Text="Ir a bancos"
                           RenderStyle="ButtonRenderStyle.Secondary"
                           Click="CloseOrGoToBancosAsync" />
             </div>
-        </DxAlert>
+        </div>
     }
 
     <div class="modern-card mb-4">
