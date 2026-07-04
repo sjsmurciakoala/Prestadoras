@@ -4,6 +4,7 @@ using Npgsql;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.CaptacionPagos;
 using SIAD.Core.DTOs.Common;
@@ -1903,12 +1904,14 @@ public class CaptacionPagosService : ICaptacionPagosService
 
     public async Task<PeriodoActualDto> ObtenerPeriodoActualAsync(CancellationToken ct = default)
     {
-        var periodo = await _context.historialmes
+        // F7: el período comercial vive en adm_periodo_comercial (tenant-scoped);
+        // historialmes queda como espejo de solo lectura.
+        var periodo = await _context.adm_periodo_comercials
             .AsNoTracking()
-            .Where(p => p.cerrarperiodo == 'P')
-            .OrderByDescending(p => p.ano)
+            .Where(p => p.status_id == EstadoPeriodoComercial.Abierto)
+            .OrderByDescending(p => p.anio)
             .ThenByDescending(p => p.mes)
-            .Select(p => new { p.ano, p.mes })
+            .Select(p => new { p.anio, p.mes })
             .FirstOrDefaultAsync(ct);
 
         if (periodo is null)
@@ -1922,8 +1925,8 @@ public class CaptacionPagosService : ICaptacionPagosService
             };
         }
 
-        var ano = Convert.ToInt32(periodo.ano);
-        var mes = Convert.ToInt32(periodo.mes);
+        var ano = periodo.anio;
+        int mes = periodo.mes;
         return new PeriodoActualDto
         {
             Periodo = $"{ano:D4}{mes:D2}",
@@ -1969,12 +1972,13 @@ public class CaptacionPagosService : ICaptacionPagosService
 
     private async Task<string> ObtenerPeriodoActualCodigoAsync(CancellationToken ct)
     {
-        var periodo = await _context.historialmes
+        // F7: el período comercial vive en adm_periodo_comercial (tenant-scoped)
+        var periodo = await _context.adm_periodo_comercials
             .AsNoTracking()
-            .Where(p => p.cerrarperiodo == 'P')
-            .OrderByDescending(p => p.ano)
+            .Where(p => p.status_id == EstadoPeriodoComercial.Abierto)
+            .OrderByDescending(p => p.anio)
             .ThenByDescending(p => p.mes)
-            .Select(p => new { p.ano, p.mes })
+            .Select(p => new { p.anio, p.mes })
             .FirstOrDefaultAsync(ct);
 
         if (periodo is null)
@@ -1982,9 +1986,7 @@ public class CaptacionPagosService : ICaptacionPagosService
             return DateTime.UtcNow.ToString("yyyyMM");
         }
 
-        var ano = Convert.ToInt32(periodo.ano);
-        var mes = Convert.ToInt32(periodo.mes);
-        return $"{ano:D4}{mes:D2}";
+        return $"{periodo.anio:D4}{periodo.mes:D2}";
     }
 
     private async Task<string?> ResolverBancoCodigoAsync(long? bancoCuentaId, string? bancoFallback, CancellationToken ct)

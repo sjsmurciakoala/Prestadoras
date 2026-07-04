@@ -1017,6 +1017,9 @@ public partial class SiadDbContext
 
         // Integración contable-comercial Fase 1 (2026-07-02)
         ConfigureIntegracionContableModel(modelBuilder);
+
+        // Período comercial Fase 7 (2026-07-04)
+        ConfigurePeriodoComercialModel(modelBuilder);
     }
 }
 

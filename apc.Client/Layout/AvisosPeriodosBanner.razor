@@ -1,0 +1,62 @@
+@using apc.Client.Services.Facturacion
+@using apc.Client.Services.Tenant
+@using SIAD.Core.DTOs.PeriodosComerciales
+@inject PeriodosComercialesClient PeriodosClient
+@inject TenantState TenantState
+
+@* Avisos de períodos (F7): mes comercial/contable vencido sin cerrar,
+   período del mes inexistente, facturas sin partida, cola de pendientes y
+   desfase comercial-contable. Carga una vez por circuito; si el endpoint
+   falla (p. ej. usuario sin empresa) el banner simplemente no se muestra. *@
+
+@if (!descartado && avisos.Count > 0)
+{
+    <div class="alert @(HayWarnings ? "alert-warning" : "alert-info") d-flex align-items-start gap-2 py-2 px-3 mb-2 avisos-periodos-banner" role="alert">
+        <i class="bi @(HayWarnings ? "bi-exclamation-triangle-fill" : "bi-info-circle-fill") fs-5 mt-1"></i>
+        <div class="flex-grow-1">
+            <strong>Avisos de períodos</strong>
+            <ul class="mb-0 ps-3">
+                @foreach (var aviso in avisos)
+                {
+                    <li>
+                        @if (aviso.Severidad == "WARN")
+                        {
+                            <strong>@aviso.Mensaje</strong>
+                        }
+                        else
+                        {
+                            @aviso.Mensaje
+                        }
+                    </li>
+                }
+            </ul>
+        </div>
+        <button type="button" class="btn-close" aria-label="Descartar avisos"
+                @onclick="@(() => descartado = true)"></button>
+    </div>
+}
+
+@code {
+    private IReadOnlyList<AvisoPeriodoDto> avisos = Array.Empty<AvisoPeriodoDto>();
+    private bool descartado;
+
+    private bool HayWarnings => avisos.Any(a => a.Severidad == "WARN");
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId > 0)
+            {
+                avisos = await PeriodosClient.AvisosAsync(companyId);
+            }
+        }
+        catch
+        {
+            // Banner informativo: cualquier fallo (sesión sin empresa, permisos,
+            // red) lo deja oculto sin romper el layout.
+            avisos = Array.Empty<AvisoPeriodoDto>();
+        }
+    }
+}

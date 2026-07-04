@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.AuxiliarLectura;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
@@ -21,21 +22,33 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
 
     public async Task<AuxiliarLecturaPeriodoDto?> GetPeriodoActualAsync(CancellationToken ct = default)
     {
-        var periodo = await _context.historialmes
+        // F7: el período comercial vive en adm_periodo_comercial(_ciclo);
+        // historialmes queda como espejo de solo lectura para el WS.
+        var periodo = await _context.adm_periodo_comercials
             .AsNoTracking()
-            .Where(p => p.cerrarperiodo == 'P')
-            .OrderByDescending(p => p.ano)
+            .Where(p => p.status_id == EstadoPeriodoComercial.Abierto)
+            .OrderByDescending(p => p.anio)
             .ThenByDescending(p => p.mes)
+            .Select(p => new
+            {
+                p.anio,
+                p.mes,
+                Ciclo = p.ciclos
+                    .Where(c => c.status_id == EstadoPeriodoComercial.Abierto)
+                    .OrderByDescending(c => c.fecha_apertura)
+                    .Select(c => new { c.ciclo_codigo, c.fecha_limite })
+                    .FirstOrDefault()
+            })
             .FirstOrDefaultAsync(ct);
 
         return periodo is null
             ? null
             : new AuxiliarLecturaPeriodoDto(
-                (int)periodo.ano,
-                (int)periodo.mes,
-                periodo.ciclo?.Trim(),
-                periodo.cerrado == 'A',
-                periodo.fechacierre?.ToDateTime(TimeOnly.MinValue));
+                periodo.anio,
+                periodo.mes,
+                periodo.Ciclo?.ciclo_codigo,
+                true,
+                periodo.Ciclo?.fecha_limite?.ToDateTime(TimeOnly.MinValue));
     }
 
     public async Task<IReadOnlyList<AuxiliarLecturaDto>> SearchAsync(
@@ -250,44 +263,94 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
     {
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
 
-        // cerrar el periodo abierto si existe
-        var abierto = await _context.historialmes
-            .Where(p => p.cerrarperiodo == 'P')
-            .FirstOrDefaultAsync(ct);
-
-        if (abierto is not null)
-        {
-            abierto.cerrarperiodo = 'C';
-            abierto.cerrado = 'C';
-            abierto.usuariocierre = usuario;
-            _context.historialmes.Update(abierto);
-        }
-
-        // evitar duplicados
+        var ahora = DateTime.UtcNow;
         var cicloNormalizado = string.IsNullOrWhiteSpace(ciclo)
             ? "01"
             : NormalizeCiclo(ciclo);
 
-        var existente = await _context.historialmes
-            .AnyAsync(p => p.ano == anio && p.mes == mes && p.ciclo == cicloNormalizado, ct);
+        // Flujo legacy conservado: generar un período cierra el ciclo abierto
+        // vigente SIN checklist (así operaba historialmes). El cierre formal
+        // con validación de rutas contra facturas vive en la pantalla
+        // Períodos comerciales (F7).
+        var abierto = await _context.adm_periodo_comercial_ciclos
+            .Include(c => c.periodo)
+            .Where(c => c.status_id == EstadoPeriodoComercial.Abierto)
+            .OrderByDescending(c => c.periodo.anio)
+            .ThenByDescending(c => c.periodo.mes)
+            .FirstOrDefaultAsync(ct);
+
+        if (abierto is not null)
+        {
+            abierto.status_id = EstadoPeriodoComercial.Cerrado;
+            abierto.fecha_cierre = ahora;
+            abierto.cerrado_por = usuario;
+            abierto.updated_at = ahora;
+            abierto.updated_by = usuario;
+
+            var quedanAbiertos = await _context.adm_periodo_comercial_ciclos
+                .AnyAsync(c => c.periodo_comercial_id == abierto.periodo_comercial_id
+                    && c.periodo_ciclo_id != abierto.periodo_ciclo_id
+                    && c.status_id == EstadoPeriodoComercial.Abierto, ct);
+
+            if (!quedanAbiertos)
+            {
+                abierto.periodo.status_id = EstadoPeriodoComercial.Cerrado;
+                abierto.periodo.fecha_cierre = ahora;
+                abierto.periodo.cerrado_por = usuario;
+                abierto.periodo.updated_at = ahora;
+                abierto.periodo.updated_by = usuario;
+            }
+        }
+
+        // evitar duplicados: el mismo (anio, mes, ciclo) ya fue generado
+        var existente = await _context.adm_periodo_comercial_ciclos
+            .AnyAsync(c => c.periodo.anio == anio && c.periodo.mes == mes
+                && c.ciclo_codigo == cicloNormalizado, ct);
 
         if (existente)
             return false;
 
-        // crear periodo
-        var periodo = new historialme
-        {
-            ano = anio,
-            mes = mes,
-            ciclo = cicloNormalizado,
-            fecha = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified),
-            usuarioapertura = usuario,
-            cerrado = 'A',
-            cerrarperiodo = 'P',
-            fechacierre = DateOnly.FromDateTime(new DateTime(anio, mes, DateTime.DaysInMonth(anio, mes)))
-        };
+        // crear (o reutilizar) el período del mes y su ciclo
+        var periodo = await _context.adm_periodo_comercials
+            .FirstOrDefaultAsync(p => p.anio == anio && p.mes == mes, ct);
 
-        _context.historialmes.Add(periodo);
+        if (periodo is null)
+        {
+            periodo = new adm_periodo_comercial
+            {
+                anio = anio,
+                mes = (short)mes,
+                status_id = EstadoPeriodoComercial.Abierto,
+                fecha_apertura = ahora,
+                abierto_por = usuario,
+                created_at = ahora,
+                created_by = usuario
+            };
+            _context.adm_periodo_comercials.Add(periodo);
+        }
+        else if (periodo.status_id != EstadoPeriodoComercial.Abierto)
+        {
+            // legacy permitía generar otro ciclo de un mes ya cerrado (la PK de
+            // historialmes era ano+mes+ciclo); reabrir el período conserva esa
+            // capacidad para el flujo operativo del auxiliar de lectura
+            periodo.status_id = EstadoPeriodoComercial.Abierto;
+            periodo.fecha_cierre = null;
+            periodo.cerrado_por = null;
+            periodo.updated_at = ahora;
+            periodo.updated_by = usuario;
+        }
+
+        _context.adm_periodo_comercial_ciclos.Add(new adm_periodo_comercial_ciclo
+        {
+            periodo = periodo,
+            ciclo_codigo = cicloNormalizado,
+            status_id = EstadoPeriodoComercial.Abierto,
+            fecha_apertura = ahora,
+            abierto_por = usuario,
+            fecha_limite = DateOnly.FromDateTime(new DateTime(anio, mes, DateTime.DaysInMonth(anio, mes))),
+            created_at = ahora,
+            created_by = usuario
+        });
 
         // obtener lecturas del mes anterior
         var (anioPrev, mesPrev) = mes == 1 ? (anio - 1, 12) : (anio, mes - 1);
@@ -465,17 +528,29 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
         if (pendientes)
             return false;
 
-        var periodo = await _context.historialmes
-            .Where(p => p.ano == anio && p.mes == mes)
+        var periodo = await _context.adm_periodo_comercials
+            .Include(p => p.ciclos)
+            .Where(p => p.anio == anio && p.mes == mes)
             .FirstOrDefaultAsync(ct);
 
         if (periodo is null)
             return false;
 
-        periodo.cerrarperiodo = 'C';
-        periodo.cerrado = 'C';
-        periodo.usuariocierre = "api";
-        periodo.fechacierre = DateOnly.FromDateTime(DateTime.UtcNow);
+        var ahora = DateTime.UtcNow;
+        foreach (var cicloAbierto in periodo.ciclos.Where(c => c.status_id == EstadoPeriodoComercial.Abierto))
+        {
+            cicloAbierto.status_id = EstadoPeriodoComercial.Cerrado;
+            cicloAbierto.fecha_cierre = ahora;
+            cicloAbierto.cerrado_por = "api";
+            cicloAbierto.updated_at = ahora;
+            cicloAbierto.updated_by = "api";
+        }
+
+        periodo.status_id = EstadoPeriodoComercial.Cerrado;
+        periodo.fecha_cierre = ahora;
+        periodo.cerrado_por = "api";
+        periodo.updated_at = ahora;
+        periodo.updated_by = "api";
         await _context.SaveChangesAsync(ct);
         return true;
     }
@@ -491,12 +566,18 @@ public class AuxiliarLecturaService : IAuxiliarLecturaService
         if (lecturas.Any(h => !string.IsNullOrEmpty(h.usuario)))
             return false;
 
-        var periodo = await _context.historialmes
-            .Where(p => p.ano == anio && p.mes == mes)
+        var periodo = await _context.adm_periodo_comercials
+            .Include(p => p.ciclos)
+            .Where(p => p.anio == anio && p.mes == mes)
             .FirstOrDefaultAsync(ct);
 
         if (periodo is not null)
-            _context.historialmes.Remove(periodo);
+        {
+            // EF elimina primero los ciclos (dependientes); el trigger espejo
+            // borra las filas correspondientes de historialmes
+            _context.adm_periodo_comercial_ciclos.RemoveRange(periodo.ciclos);
+            _context.adm_periodo_comercials.Remove(periodo);
+        }
 
         if (lecturas.Count > 0)
             _context.historicomedicions.RemoveRange(lecturas);

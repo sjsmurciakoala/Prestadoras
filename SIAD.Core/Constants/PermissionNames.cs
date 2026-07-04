@@ -37,6 +37,10 @@ public static class PermissionResources
         public const string FacturacionMiscelaneos = "facturacion_miscelaneos";
         public const string NotasCreditoDebito = "notas_credito_debito";
         public const string Caja = "caja";
+
+        // Períodos comerciales F7: abrir mes / cerrar ciclo / cerrar mes son
+        // operaciones sensibles del calendario de facturación — recurso propio.
+        public const string PeriodosComerciales = "periodos_comerciales";
     }
 
     public static class Contabilidad

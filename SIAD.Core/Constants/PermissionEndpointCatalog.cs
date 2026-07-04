@@ -389,6 +389,48 @@ public static class PermissionEndpointCatalog
             Action: PermissionAction.View,
             HttpMethod: "GET",
             Route: "api/facturacion/notas/motivos/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/periodos-comerciales/{companyId}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_periodocicloid_rutas",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/rutas"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_periodocomercialid_checklist",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/periodos-comerciales/{companyId}/{periodoComercialId}/checklist"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_abrir",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/ventas/periodos-comerciales/{companyId}/abrir"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_periodocicloid_cerrar",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/cerrar"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_periodocomercialid_cerrar",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/ventas/periodos-comerciales/{companyId}/{periodoComercialId}/cerrar"),
     ];
 
     public static readonly EndpointPermissionDefinition[] Contabilidad =

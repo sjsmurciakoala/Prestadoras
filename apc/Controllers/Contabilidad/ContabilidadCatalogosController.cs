@@ -188,14 +188,50 @@ public class ContabilidadCatalogosController : ControllerBase
         });
     }
 
+    /// <summary>Checklist del cierre del período (F7).</summary>
+    [HttpGet("periodos/{periodId:long}/checklist-cierre")]
+    public async Task<IActionResult> ChecklistCierrePeriodo(long periodId, CancellationToken cancellationToken)
+    {
+        return await ExecuteCatalogActionAsync(async () =>
+        {
+            var checklist = await _catalogosService.GetChecklistCierrePeriodoAsync(periodId, cancellationToken);
+            return Ok(checklist);
+        });
+    }
+
+    /// <summary>Abierto → Precierre (checklist en verde obligatorio).</summary>
+    [HttpPost("periodos/{periodId:long}/precerrar")]
+    public async Task<IActionResult> PrecerrarPeriodo(long periodId, CancellationToken cancellationToken)
+    {
+        return await ExecuteCatalogActionAsync(async () =>
+        {
+            var userName = User?.Identity?.Name ?? "system";
+            await _catalogosService.PrecerrarPeriodoAsync(periodId, userName, cancellationToken);
+            return Ok();
+        });
+    }
+
+    /// <summary>Precierre → Cerrado; crea el período siguiente (F7).</summary>
     [HttpPost("periodos/{periodId:long}/cerrar")]
     public async Task<IActionResult> ClosePeriodo(long periodId, CancellationToken cancellationToken)
     {
         return await ExecuteCatalogActionAsync(async () =>
         {
             var userName = User?.Identity?.Name ?? "system";
-            var closed = await _catalogosService.ClosePeriodoAsync(periodId, userName, cancellationToken);
-            return closed ? Ok() : NotFound();
+            var siguienteId = await _catalogosService.CerrarPeriodoAsync(periodId, userName, cancellationToken);
+            return Ok(new { periodoSiguienteId = siguienteId });
+        });
+    }
+
+    /// <summary>Precierre → Abierto.</summary>
+    [HttpPost("periodos/{periodId:long}/reabrir")]
+    public async Task<IActionResult> ReabrirPeriodo(long periodId, CancellationToken cancellationToken)
+    {
+        return await ExecuteCatalogActionAsync(async () =>
+        {
+            var userName = User?.Identity?.Name ?? "system";
+            await _catalogosService.ReabrirPeriodoAsync(periodId, userName, cancellationToken);
+            return Ok();
         });
     }
 
@@ -382,6 +418,11 @@ public async Task<IActionResult> SaveTipoTransaccionRule(long typeId, [FromBody]
         catch (InvalidOperationException ex)
         {
             return new BadRequestObjectResult(ex.Message);
+        }
+        catch (PostgresException ex)
+        {
+            // Los SPs de cierre (F7) validan checklist/estados con RAISE EXCEPTION.
+            return new BadRequestObjectResult(ex.MessageText);
         }
     }
 

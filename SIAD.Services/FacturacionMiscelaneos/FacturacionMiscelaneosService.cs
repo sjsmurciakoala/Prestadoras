@@ -1,5 +1,6 @@
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.FacturacionMiscelaneos;
 using SIAD.Core.Entities;
@@ -484,12 +485,14 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
 
     private async Task<string> ObtenerPeriodoActualAsync(CancellationToken ct)
     {
-        var periodo = await _context.historialmes
+        // F7: el período comercial vive en adm_periodo_comercial (tenant-scoped);
+        // historialmes queda como espejo de solo lectura.
+        var periodo = await _context.adm_periodo_comercials
             .AsNoTracking()
-            .Where(p => p.cerrarperiodo == 'P')
-            .OrderByDescending(p => p.ano)
+            .Where(p => p.status_id == EstadoPeriodoComercial.Abierto)
+            .OrderByDescending(p => p.anio)
             .ThenByDescending(p => p.mes)
-            .Select(p => new { p.ano, p.mes })
+            .Select(p => new { p.anio, p.mes })
             .FirstOrDefaultAsync(ct);
 
         if (periodo is null)
@@ -497,9 +500,7 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
             return DateTime.UtcNow.ToString("yyyyMM");
         }
 
-        var ano = Convert.ToInt32(periodo.ano);
-        var mes = Convert.ToInt32(periodo.mes);
-        return $"{ano:D4}{mes:D2}";
+        return $"{periodo.anio:D4}{periodo.mes:D2}";
     }
 
     private async Task<decimal> ObtenerSaldoClienteAsync(string clienteClave, CancellationToken ct)

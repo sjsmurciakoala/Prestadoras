@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Text;
@@ -944,6 +945,15 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
             entity = await _context.con_periodo_contables
                          .FirstOrDefaultAsync(p => p.period_id == request.PeriodId.Value, cancellationToken)
                      ?? throw new InvalidOperationException("El periodo contable no existe.");
+
+            // F7: el estado no se edita libremente — las transiciones pasan por
+            // el flujo validado (precierre → cierre → reapertura) con checklist.
+            var estadoActual = EstadoPeriodoHelper.Require(entity.status_id, $"con_periodo_contable.period_id={entity.period_id}");
+            if (request.StatusId != estadoActual)
+            {
+                throw new InvalidOperationException(
+                    "El estado del período se cambia con el flujo de cierre (precierre → cierre) o la reapertura, no desde la edición.");
+            }
         }
         else
         {
@@ -954,9 +964,17 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
                 created_by = request.User
             };
             await _context.con_periodo_contables.AddAsync(entity, cancellationToken);
+
+            // F7: un período nuevo nace ABIERTO; cerrarlo requiere el flujo validado.
+            if (request.StatusId != EstadoPeriodoHelper.AbiertoId)
+            {
+                throw new InvalidOperationException("Un período nuevo solo puede crearse en estado Abierto.");
+            }
         }
 
-        var statusId = EstadoPeriodoHelper.Require(request.StatusId, nameof(request.StatusId));
+        var statusId = EstadoPeriodoHelper.Require(
+            request.PeriodId.HasValue ? entity.status_id : EstadoPeriodoHelper.AbiertoId,
+            nameof(request.StatusId));
 
         entity.code = request.Code.Trim().ToUpperInvariant();
         entity.name = request.Name.Trim();
@@ -967,47 +985,68 @@ public class ContabilidadCatalogosService : IContabilidadCatalogosService
         entity.updated_at = DateTime.UtcNow;
         entity.updated_by = request.User;
 
-        if (statusId == EstadoPeriodoHelper.CerradoId)
-        {
-            entity.closed_at ??= DateTime.UtcNow;
-            entity.closed_by ??= request.User;
-        }
-        else
-        {
-            entity.closed_at = null;
-            entity.closed_by = null;
-        }
-
         await _context.SaveChangesAsync(cancellationToken);
         return entity.period_id;
     }
 
-    public async Task<bool> ClosePeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default)
+    public async Task<IReadOnlyList<SIAD.Core.DTOs.PeriodosComerciales.ChecklistCierreItemDto>> GetChecklistCierrePeriodoAsync(
+        long periodId, CancellationToken cancellationToken = default)
     {
-        EnsureCompanyId();
-        var entity = await _context.con_periodo_contables
-            .FirstOrDefaultAsync(p => p.period_id == periodId, cancellationToken);
+        var companyId = EnsureCompanyId();
 
-        if (entity is null)
-        {
-            return false;
-        }
+        var conn = _context.Database.GetDbConnection();
+        var filas = await conn.QueryAsync<(string item, bool ok, decimal cantidad, string detalle)>(
+            new CommandDefinition(@"
+                SELECT item, ok, cantidad, detalle
+                FROM public.fn_con_checklist_cierre_periodo(@companyId, @periodId)",
+                new { companyId, periodId },
+                cancellationToken: cancellationToken));
 
-        var statusId = EstadoPeriodoHelper.Require(entity.status_id, $"con_periodo_contable.period_id={entity.period_id}");
-        if (statusId == EstadoPeriodoHelper.CerradoId)
-        {
-            return true;
-        }
+        return filas
+            .Select(f => new SIAD.Core.DTOs.PeriodosComerciales.ChecklistCierreItemDto
+            {
+                Item = f.item,
+                Ok = f.ok,
+                Cantidad = f.cantidad,
+                Detalle = f.detalle
+            })
+            .ToList();
+    }
 
-        entity.status_id = EstadoPeriodoHelper.CerradoId;
-        entity.status = EstadoPeriodoHelper.ToText(EstadoPeriodoHelper.CerradoId);
-        entity.closed_at = DateTime.UtcNow;
-        entity.closed_by = user;
-        entity.updated_at = DateTime.UtcNow;
-        entity.updated_by = user;
+    public async Task PrecerrarPeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default)
+    {
+        var companyId = EnsureCompanyId();
 
-        await _context.SaveChangesAsync(cancellationToken);
-        return true;
+        var conn = _context.Database.GetDbConnection();
+        await conn.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT public.sp_con_periodo_precerrar(@companyId, @periodId, @user)",
+                new { companyId, periodId, user },
+                cancellationToken: cancellationToken));
+    }
+
+    public async Task<long?> CerrarPeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default)
+    {
+        var companyId = EnsureCompanyId();
+
+        var conn = _context.Database.GetDbConnection();
+        return await conn.ExecuteScalarAsync<long?>(
+            new CommandDefinition(
+                "SELECT public.sp_con_periodo_cerrar(@companyId, @periodId, @user)",
+                new { companyId, periodId, user },
+                cancellationToken: cancellationToken));
+    }
+
+    public async Task ReabrirPeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default)
+    {
+        var companyId = EnsureCompanyId();
+
+        var conn = _context.Database.GetDbConnection();
+        await conn.ExecuteAsync(
+            new CommandDefinition(
+                "SELECT public.sp_con_periodo_reabrir(@companyId, @periodId, @user)",
+                new { companyId, periodId, user },
+                cancellationToken: cancellationToken));
     }
 
     private static readonly HashSet<string> ValidAccountTypes = new(StringComparer.OrdinalIgnoreCase)

@@ -33,6 +33,12 @@ public partial class con_integracion_config : ICompanyScopedEntity
 
     public bool activo_proveedores { get; set; }
 
+    /// <summary>
+    /// Meses de desfase tolerados entre el mes comercial abierto y el período
+    /// contable abierto antes de emitir aviso (F7, decisión D6).
+    /// </summary>
+    public short desfase_max_meses { get; set; } = 1;
+
     public DateTime created_at { get; set; }
 
     public string created_by { get; set; } = null!;
