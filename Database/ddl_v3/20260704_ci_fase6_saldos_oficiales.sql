@@ -12,22 +12,35 @@
 -- Contenido:
 --   1. con_saldo_cuenta_backup_hist — respaldo histórico de cada rebuild
 --      (misma forma que dejó 20260310_reconciliacion_con_saldo_cuenta.sql
---      donde ese script corrió; aquí se crea idempotente con forma explícita).
+--      donde ese script corrió; aquí se crea idempotente con forma explícita)
+--      + índice ix_con_partida_hdr_company_status_period (soporta la
+--      agregación del libro del rebuild/verificador y el reporte híbrido).
+--   1b. fn_con_saldo_libro(company, period?, cuenta?) — agregación CANÓNICA
+--      del libro (pólizas POSTED por período/cuenta). Fuente única consumida
+--      por el rebuild y el verificador: por diseño ambos DEBEN calcular
+--      idéntico (reconstruir ⇒ 0 divergencias).
 --   2. sp_con_reconstruir_saldo_cuenta(company, user) — reconstrucción TOTAL
 --      del caché (bucket mes=13/tipo_transaccion=0, el único que escribe el
---      motor) desde las pólizas POSTED (status=1) de con_partida_hdr/dtl.
---      Multitenant (solo la empresa pedida), idempotente (re-correr produce
---      el mismo estado), respalda antes de borrar y preserva `presupuesto`.
---      Corrige la inconsistencia acumulada por remigraciones+cierres SIMAFI.
+--      motor) desde fn_con_saldo_libro. Multitenant (solo la empresa pedida),
+--      idempotente (re-correr produce el mismo estado), respalda antes de
+--      borrar y preserva `presupuesto`. Corrige la inconsistencia acumulada
+--      por remigraciones+cierres SIMAFI.
 --   3. fn_con_verificar_saldo_cuenta(company, period?, cuenta?) — reconciliación
---      caché vs cálculo vivo desde con_partida_dtl; devuelve las divergencias
---      por período/cuenta (SOLO_CACHE / SOLO_LIBRO / MONTOS / CONTEOS).
---      Consumida por el endpoint api/contabilidad/saldos y la pantalla de
---      Períodos.
+--      caché vs fn_con_saldo_libro; devuelve las divergencias por período/
+--      cuenta (SOLO_CACHE / SOLO_LIBRO / MONTOS / CONTEOS) más el diagnóstico
+--      FECHA_FUERA_PERIODO (pólizas POSTED cuya poliza_date cae fuera del
+--      rango de su período — rompen la equivalencia caché=vivo del reporte
+--      híbrido; el motor lo impide al postear, así que >0 = data legacy a
+--      corregir). Consumida por el endpoint api/contabilidad/saldos y la
+--      pantalla de Períodos.
 --   4. rep_balance_comprobacion v2 (misma firma y columnas — el ESF la llama
 --      dos veces): períodos CERRADOS (status_id=2) leen del caché
 --      con_saldo_cuenta; abiertos/precierre y rangos que parten un período
 --      siguen calculando en vivo desde con_partida_dtl.
+--   5. Reconstrucción automática del caché de TODAS las empresas con pólizas
+--      POSTED al aplicar este script: desde la sección 4 los períodos
+--      cerrados REPORTAN desde el caché, así que no puede existir ventana
+--      con caché divergente entre aplicar el DDL y el primer rebuild manual.
 --
 -- REGLA OPERATIVA (documentada aquí a pedido del plan §5 F6.4):
 --   Cualquier remigración SIMAFI futura (re-carga de stg_simafi_* /
@@ -70,6 +83,60 @@ CREATE INDEX IF NOT EXISTS ix_con_saldo_cuenta_backup_hist_tag
 
 COMMENT ON TABLE public.con_saldo_cuenta_backup_hist IS
 'Respaldo histórico de con_saldo_cuenta previo a cada reconstrucción (sp_con_reconstruir_saldo_cuenta, F6). backup_tag identifica la corrida.';
+
+-- Soporta la agregación del libro (fn_con_saldo_libro: company+status+period)
+-- del rebuild, el verificador y el anti-join del reporte híbrido. Sin él,
+-- cada verificación hace seq scan de con_partida_hdr completo.
+CREATE INDEX IF NOT EXISTS ix_con_partida_hdr_company_status_period
+    ON public.con_partida_hdr (company_id, status, period_id);
+
+-- -----------------------------------------------------------------------------
+-- 1b. fn_con_saldo_libro — agregación canónica del libro por período/cuenta
+-- -----------------------------------------------------------------------------
+-- ÚNICA definición de "lo que el caché debería contener": pólizas POSTED
+-- (status=1) con período, agregadas por (period_id, código de cuenta) con la
+-- MISMA semántica que sp_con_actualizar_saldos_por_poliza (motor único):
+-- suma de débitos/créditos + conteo de líneas con monto > 0. La consumen el
+-- rebuild (sección 2) y el verificador (sección 3) — mantenerla como fuente
+-- única es lo que garantiza que reconstruir deje 0 divergencias.
+CREATE OR REPLACE FUNCTION public.fn_con_saldo_libro(
+    p_company_id bigint,
+    p_period_id bigint DEFAULT NULL,
+    p_codigo_cuenta varchar DEFAULT NULL
+) RETURNS TABLE(
+    period_id bigint,
+    codigo_cuenta varchar,
+    debitos numeric,
+    creditos numeric,
+    cantidad_debitos integer,
+    cantidad_creditos integer
+)
+LANGUAGE sql
+STABLE
+AS $function$
+    SELECT
+        h.period_id,
+        a.code AS codigo_cuenta,
+        ROUND(SUM(COALESCE(d.debit_amount, 0)), 2) AS debitos,
+        ROUND(SUM(COALESCE(d.credit_amount, 0)), 2) AS creditos,
+        SUM(CASE WHEN COALESCE(d.debit_amount, 0) > 0 THEN 1 ELSE 0 END)::int AS cantidad_debitos,
+        SUM(CASE WHEN COALESCE(d.credit_amount, 0) > 0 THEN 1 ELSE 0 END)::int AS cantidad_creditos
+    FROM public.con_partida_hdr h
+    JOIN public.con_partida_dtl d
+      ON d.company_id = h.company_id
+     AND d.poliza_id = h.poliza_id
+    JOIN public.con_plan_cuentas a
+      ON a.account_id = d.account_id
+    WHERE h.company_id = p_company_id
+      AND h.status = 1
+      AND h.period_id IS NOT NULL
+      AND (p_period_id IS NULL OR h.period_id = p_period_id)
+      AND (p_codigo_cuenta IS NULL OR a.code = p_codigo_cuenta)
+    GROUP BY h.period_id, a.code
+$function$;
+
+COMMENT ON FUNCTION public.fn_con_saldo_libro(bigint, bigint, varchar) IS
+'F6: agregación canónica del libro (con_partida_dtl POSTED) por período/cuenta, con la misma semántica que el motor. Fuente única del rebuild y el verificador.';
 
 -- -----------------------------------------------------------------------------
 -- 2. sp_con_reconstruir_saldo_cuenta — reconstrucción total desde el libro
@@ -118,7 +185,9 @@ BEGIN
              || '_c' || p_company_id || '_' || COALESCE(NULLIF(trim(p_user), ''), 'system');
 
     -- Bloquea escrituras concurrentes del motor mientras dura el rebuild
-    -- (mismo lock que usaba el script manual 20260310).
+    -- (mismo lock que usaba el script manual 20260310). OJO: es lock de
+    -- TABLA — durante el rebuild ninguna empresa puede postear/revertir;
+    -- por eso la reconstrucción es de ventana de mantenimiento.
     LOCK TABLE public.con_saldo_cuenta IN SHARE ROW EXCLUSIVE MODE;
 
     SELECT COUNT(*) INTO v_sin_periodo
@@ -147,23 +216,10 @@ BEGIN
     GET DIAGNOSTICS v_eliminadas = ROW_COUNT;
 
     WITH posted AS (
-        SELECT
-            h.period_id,
-            a.code AS codigo_cuenta,
-            ROUND(SUM(COALESCE(d.debit_amount, 0)), 2) AS debitos,
-            ROUND(SUM(COALESCE(d.credit_amount, 0)), 2) AS creditos,
-            SUM(CASE WHEN COALESCE(d.debit_amount, 0) > 0 THEN 1 ELSE 0 END)::int AS cantidad_debitos,
-            SUM(CASE WHEN COALESCE(d.credit_amount, 0) > 0 THEN 1 ELSE 0 END)::int AS cantidad_creditos
-        FROM public.con_partida_hdr h
-        JOIN public.con_partida_dtl d
-          ON d.company_id = h.company_id
-         AND d.poliza_id = h.poliza_id
-        JOIN public.con_plan_cuentas a
-          ON a.account_id = d.account_id
-        WHERE h.company_id = p_company_id
-          AND h.status = 1
-          AND h.period_id IS NOT NULL
-        GROUP BY h.period_id, a.code
+        -- Fuente única (sección 1b): misma agregación que usa el verificador.
+        SELECT l.period_id, l.codigo_cuenta, l.debitos, l.creditos,
+               l.cantidad_debitos, l.cantidad_creditos
+        FROM public.fn_con_saldo_libro(p_company_id) l
     ),
     presupuesto_previo AS (
         -- filas con presupuesto cargado en el caché anterior (el motor no lo
@@ -216,14 +272,24 @@ COMMENT ON FUNCTION public.sp_con_reconstruir_saldo_cuenta(bigint, text) IS
 -- -----------------------------------------------------------------------------
 -- 3. fn_con_verificar_saldo_cuenta — reconciliación caché vs libro
 -- -----------------------------------------------------------------------------
--- Compara con_saldo_cuenta (bucket del motor) contra el cálculo vivo desde
--- con_partida_hdr/dtl por (período, cuenta). Devuelve SOLO las divergencias:
---   SOLO_CACHE  — fila en el caché sin respaldo en el libro (se ignoran las
---                 filas solo-presupuesto: montos y conteos en 0)
+-- Compara con_saldo_cuenta (bucket del motor) contra fn_con_saldo_libro
+-- (agregación canónica del libro) por (período, cuenta). Devuelve SOLO las
+-- divergencias:
+--   SOLO_CACHE  — fila en el caché sin respaldo en el libro
 --   SOLO_LIBRO  — movimientos posteados sin fila en el caché
 --   MONTOS      — débitos/créditos distintos
 --   CONTEOS     — montos iguales pero cantidad_debitos/creditos distintas
--- 0 filas = caché consistente. Solo lectura; multitenant por p_company_id.
+--   FECHA_FUERA_PERIODO — pólizas POSTED cuya poliza_date cae fuera del rango
+--                 de su período (columnas *_libro = montos afectados, *_cache
+--                 NULL). No es divergencia caché-vs-libro, pero rompe la
+--                 equivalencia caché=vivo del balance híbrido (sección 4):
+--                 el reporte por rango de fechas y el caché por período
+--                 clasifican esa póliza distinto. El motor lo impide al
+--                 postear, así que >0 = data legacy/remigración a corregir.
+-- Los grupos con montos y conteos en 0 se excluyen SIMÉTRICAMENTE de ambos
+-- lados (líneas 0.00 del libro y filas solo-presupuesto del caché no son
+-- divergencia). 0 filas = caché consistente + supuesto del híbrido válido.
+-- Solo lectura; multitenant por p_company_id.
 CREATE OR REPLACE FUNCTION public.fn_con_verificar_saldo_cuenta(
     p_company_id bigint,
     p_period_id bigint DEFAULT NULL,
@@ -246,25 +312,13 @@ LANGUAGE sql
 STABLE
 AS $function$
     WITH libro AS (
-        SELECT
-            h.period_id,
-            a.code AS codigo_cuenta,
-            ROUND(SUM(COALESCE(d.debit_amount, 0)), 2) AS debitos,
-            ROUND(SUM(COALESCE(d.credit_amount, 0)), 2) AS creditos,
-            SUM(CASE WHEN COALESCE(d.debit_amount, 0) > 0 THEN 1 ELSE 0 END)::int AS cantidad_debitos,
-            SUM(CASE WHEN COALESCE(d.credit_amount, 0) > 0 THEN 1 ELSE 0 END)::int AS cantidad_creditos
-        FROM public.con_partida_hdr h
-        JOIN public.con_partida_dtl d
-          ON d.company_id = h.company_id
-         AND d.poliza_id = h.poliza_id
-        JOIN public.con_plan_cuentas a
-          ON a.account_id = d.account_id
-        WHERE h.company_id = p_company_id
-          AND h.status = 1
-          AND h.period_id IS NOT NULL
-          AND (p_period_id IS NULL OR h.period_id = p_period_id)
-          AND (p_codigo_cuenta IS NULL OR a.code = p_codigo_cuenta)
-        GROUP BY h.period_id, a.code
+        -- Fuente única (sección 1b) con la MISMA exclusión de grupos todo-cero
+        -- que el lado caché (una línea 0.00 posteada no es divergencia).
+        SELECT l.period_id, l.codigo_cuenta, l.debitos, l.creditos,
+               l.cantidad_debitos, l.cantidad_creditos
+        FROM public.fn_con_saldo_libro(p_company_id, p_period_id, p_codigo_cuenta) l
+        WHERE NOT (l.debitos = 0 AND l.creditos = 0
+                   AND l.cantidad_debitos = 0 AND l.cantidad_creditos = 0)
     ),
     cache AS (
         SELECT
@@ -280,45 +334,89 @@ AS $function$
           AND s.tipo_transaccion = 0
           AND (p_period_id IS NULL OR s.periodo_id = p_period_id)
           AND (p_codigo_cuenta IS NULL OR s.codigo_cuenta = p_codigo_cuenta)
-          -- filas solo-presupuesto (sin montos ni conteos) no son divergencia
+          -- exclusión simétrica: filas todo-cero (p.ej. solo-presupuesto)
           AND NOT (s.debitos = 0 AND s.creditos = 0
                    AND s.cantidad_debitos = 0 AND s.cantidad_creditos = 0)
+    ),
+    divergencias AS (
+        SELECT
+            COALESCE(l.period_id, c.period_id) AS period_id,
+            COALESCE(l.codigo_cuenta, c.codigo_cuenta) AS codigo_cuenta,
+            CASE
+                WHEN l.period_id IS NULL THEN 'SOLO_CACHE'
+                WHEN c.period_id IS NULL THEN 'SOLO_LIBRO'
+                WHEN l.debitos <> c.debitos OR l.creditos <> c.creditos THEN 'MONTOS'
+                ELSE 'CONTEOS'
+            END AS tipo_divergencia,
+            c.debitos AS debitos_cache,
+            l.debitos AS debitos_libro,
+            c.creditos AS creditos_cache,
+            l.creditos AS creditos_libro,
+            c.cantidad_debitos AS cantidad_debitos_cache,
+            l.cantidad_debitos AS cantidad_debitos_libro,
+            c.cantidad_creditos AS cantidad_creditos_cache,
+            l.cantidad_creditos AS cantidad_creditos_libro
+        FROM libro l
+        FULL OUTER JOIN cache c
+          ON c.period_id = l.period_id
+         AND c.codigo_cuenta = l.codigo_cuenta
+        WHERE l.period_id IS NULL
+           OR c.period_id IS NULL
+           OR l.debitos <> c.debitos
+           OR l.creditos <> c.creditos
+           OR l.cantidad_debitos <> c.cantidad_debitos
+           OR l.cantidad_creditos <> c.cantidad_creditos
+
+        UNION ALL
+
+        -- Diagnóstico: pólizas POSTED con poliza_date fuera del rango de su
+        -- período — el balance híbrido las clasifica distinto por caché
+        -- (período) que por libro (fecha). Corregir period_id o poliza_date
+        -- y reconstruir.
+        SELECT
+            h.period_id,
+            a.code AS codigo_cuenta,
+            'FECHA_FUERA_PERIODO' AS tipo_divergencia,
+            NULL::numeric, ROUND(SUM(COALESCE(d.debit_amount, 0)), 2),
+            NULL::numeric, ROUND(SUM(COALESCE(d.credit_amount, 0)), 2),
+            NULL::integer, NULL::integer, NULL::integer, NULL::integer
+        FROM public.con_partida_hdr h
+        JOIN public.con_periodo_contable per
+          ON per.period_id = h.period_id
+        JOIN public.con_partida_dtl d
+          ON d.company_id = h.company_id
+         AND d.poliza_id = h.poliza_id
+        JOIN public.con_plan_cuentas a
+          ON a.account_id = d.account_id
+        WHERE h.company_id = p_company_id
+          AND h.status = 1
+          AND (p_period_id IS NULL OR h.period_id = p_period_id)
+          AND (p_codigo_cuenta IS NULL OR a.code = p_codigo_cuenta)
+          AND (h.poliza_date::date < per.start_date::date
+               OR h.poliza_date::date > per.end_date::date)
+        GROUP BY h.period_id, a.code
     )
     SELECT
-        COALESCE(l.period_id, c.period_id) AS period_id,
+        dv.period_id,
         pc.code AS periodo_code,
-        COALESCE(l.codigo_cuenta, c.codigo_cuenta) AS codigo_cuenta,
-        CASE
-            WHEN l.period_id IS NULL THEN 'SOLO_CACHE'
-            WHEN c.period_id IS NULL THEN 'SOLO_LIBRO'
-            WHEN l.debitos <> c.debitos OR l.creditos <> c.creditos THEN 'MONTOS'
-            ELSE 'CONTEOS'
-        END AS tipo_divergencia,
-        c.debitos AS debitos_cache,
-        l.debitos AS debitos_libro,
-        c.creditos AS creditos_cache,
-        l.creditos AS creditos_libro,
-        c.cantidad_debitos AS cantidad_debitos_cache,
-        l.cantidad_debitos AS cantidad_debitos_libro,
-        c.cantidad_creditos AS cantidad_creditos_cache,
-        l.cantidad_creditos AS cantidad_creditos_libro
-    FROM libro l
-    FULL OUTER JOIN cache c
-      ON c.period_id = l.period_id
-     AND c.codigo_cuenta = l.codigo_cuenta
+        dv.codigo_cuenta,
+        dv.tipo_divergencia,
+        dv.debitos_cache,
+        dv.debitos_libro,
+        dv.creditos_cache,
+        dv.creditos_libro,
+        dv.cantidad_debitos_cache,
+        dv.cantidad_debitos_libro,
+        dv.cantidad_creditos_cache,
+        dv.cantidad_creditos_libro
+    FROM divergencias dv
     LEFT JOIN public.con_periodo_contable pc
-      ON pc.period_id = COALESCE(l.period_id, c.period_id)
-    WHERE l.period_id IS NULL
-       OR c.period_id IS NULL
-       OR l.debitos <> c.debitos
-       OR l.creditos <> c.creditos
-       OR l.cantidad_debitos <> c.cantidad_debitos
-       OR l.cantidad_creditos <> c.cantidad_creditos
-    ORDER BY 1, 3;
+      ON pc.period_id = dv.period_id
+    ORDER BY 1, 3, 4;
 $function$;
 
 COMMENT ON FUNCTION public.fn_con_verificar_saldo_cuenta(bigint, bigint, varchar) IS
-'F6: reconciliación automática con_saldo_cuenta (caché del motor) vs cálculo vivo desde con_partida_dtl por período/cuenta. 0 filas = consistente. Divergencias → correr sp_con_reconstruir_saldo_cuenta en ventana de mantenimiento.';
+'F6: reconciliación con_saldo_cuenta (caché del motor) vs fn_con_saldo_libro por período/cuenta, más diagnóstico FECHA_FUERA_PERIODO. 0 filas = consistente. Divergencias → sp_con_reconstruir_saldo_cuenta en ventana de mantenimiento; FECHA_FUERA_PERIODO → corregir period_id/poliza_date.';
 
 -- -----------------------------------------------------------------------------
 -- 4. rep_balance_comprobacion v2 — períodos cerrados leen del caché
@@ -464,6 +562,12 @@ BEGIN
         WHERE pc.company_id = p_company_id
           AND pc.status_id = 2
     ),
+    -- El caché guarda el CÓDIGO de cuenta snapshoteado al postear: si una
+    -- cuenta se recodifica en el plan, sus filas cacheadas dejan de matchear
+    -- este join y el saldo desaparecería del reporte de períodos cerrados.
+    -- fn_con_verificar_saldo_cuenta lo delata (SOLO_CACHE del código viejo +
+    -- SOLO_LIBRO del nuevo) y sp_con_reconstruir_saldo_cuenta lo sana
+    -- (reagrega con los códigos vigentes).
     mov_cache AS
     (
         SELECT
@@ -496,14 +600,16 @@ BEGIN
         JOIN public.con_partida_dtl d
           ON d.company_id = h.company_id
          AND d.poliza_id = h.poliza_id
+        -- anti-join (en vez de OR NOT EXISTS, que degrada a subplan por
+        -- fila): excluye las pólizas de períodos servidos por el caché;
+        -- h.period_id NULL nunca matchea el join → esas pólizas quedan vivas.
+        LEFT JOIN periodos_cerrados pcer
+          ON pcer.period_id = h.period_id
+         AND pcer.bucket IN (1, 2)
         WHERE h.company_id = p_company_id
           AND h.status = 1
           AND h.poliza_date::date <= p_fecha_hasta
-          AND (h.period_id IS NULL OR NOT EXISTS (
-                SELECT 1
-                FROM periodos_cerrados pcer
-                WHERE pcer.period_id = h.period_id
-                  AND pcer.bucket IN (1, 2)))
+          AND pcer.period_id IS NULL
         GROUP BY d.account_id
     ),
     movimientos_base AS
@@ -623,3 +729,35 @@ $function$;
 
 COMMENT ON FUNCTION public.rep_balance_comprobacion(bigint, date, date, boolean)
 IS 'Balance de comprobacion para reporteria web. F6: períodos cerrados (status_id=2) contenidos en el rango suman desde con_saldo_cuenta (caché oficial); abiertos/precierre y períodos partidos por el rango calculan en vivo desde con_partida_dtl.';
+
+-- -----------------------------------------------------------------------------
+-- 5. Reconstrucción inicial del caché al aplicar el script
+-- -----------------------------------------------------------------------------
+-- Desde la sección 4 los períodos cerrados REPORTAN desde el caché. Para que
+-- no exista ninguna ventana con caché divergente (la "inconsistencia
+-- acumulada por remigraciones+cierres SIMAFI" que este script viene a
+-- corregir), se reconstruye aquí mismo el caché de TODAS las empresas con
+-- pólizas POSTED. Idempotente: re-aplicar el script re-reconstruye al mismo
+-- estado (los respaldos se acumulan en con_saldo_cuenta_backup_hist, cada
+-- corrida con su backup_tag).
+DO $do$
+DECLARE
+    v_company bigint;
+    v_resultado record;
+BEGIN
+    FOR v_company IN
+        SELECT DISTINCT h.company_id
+        FROM public.con_partida_hdr h
+        WHERE h.status = 1
+        ORDER BY 1
+    LOOP
+        SELECT * INTO v_resultado
+        FROM public.sp_con_reconstruir_saldo_cuenta(v_company, 'ddl-f6');
+
+        RAISE NOTICE 'F6 rebuild company %: % filas insertadas (respaldadas %, períodos %, cuentas %, pólizas sin período %) — tag %',
+            v_company, v_resultado.filas_insertadas, v_resultado.filas_respaldadas,
+            v_resultado.periodos, v_resultado.cuentas, v_resultado.polizas_sin_periodo,
+            v_resultado.backup_tag;
+    END LOOP;
+END
+$do$;

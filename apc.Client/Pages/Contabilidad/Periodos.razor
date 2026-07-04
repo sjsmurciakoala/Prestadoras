@@ -68,7 +68,7 @@
                       IconCssClass="bi bi-shield-check"
                       title="Reconciliar el caché oficial de saldos (con_saldo_cuenta) contra el libro"
                       Click="VerificarSaldosAsync"
-                      Enabled="@(!IsBusy && !isVerifyingSaldos)" />
+                      Enabled="@(!IsBusy)" />
             <DxButton Text="Actualizar"
                       RenderStyle="ButtonRenderStyle.Secondary"
                       RenderStyleMode="ButtonRenderStyleMode.Outline"
@@ -103,7 +103,7 @@
                 <div class="flex-grow-1">
                     <strong>@saldoVerificacion.TotalDivergencias divergencia(s)</strong> entre el caché de saldos y el libro
                     (montos: @saldoVerificacion.Montos, conteos: @saldoVerificacion.Conteos,
-                    solo caché: @saldoVerificacion.SoloCache, solo libro: @saldoVerificacion.SoloLibro).
+                    solo caché: @saldoVerificacion.SoloCache, solo libro: @saldoVerificacion.SoloLibro@(saldoVerificacion.FechasFueraPeriodo > 0 ? $", fechas fuera de período: {saldoVerificacion.FechasFueraPeriodo}" : string.Empty)).
                     Reportes de períodos cerrados pueden estar incorrectos — coordinar la reconstrucción
                     (sp_con_reconstruir_saldo_cuenta) en ventana de mantenimiento.
                 </div>
@@ -393,7 +393,15 @@
             Cada fila es un (período, cuenta) donde con_saldo_cuenta no coincide con la suma de
             con_partida_dtl posteada. La corrección es la reconstrucción por SQL
             (sp_con_reconstruir_saldo_cuenta) en ventana de mantenimiento — ningún dato del libro se toca.
+            Las filas FECHA_FUERA_PERIODO son pólizas con fecha fuera del rango de su período:
+            se corrige la póliza, no el caché.
         </p>
+        @if (saldoVerificacion?.DetalleTruncado == true)
+        {
+            <div class="alert alert-warning py-1 px-2 small mb-2">
+                El detalle se truncó a @saldoVerificacion.Divergencias.Count filas; los contadores del aviso sí son totales.
+            </div>
+        }
         <DxGrid Data="@(saldoVerificacion?.Divergencias)"
                 ShowPager="true"
                 PageSize="10"
@@ -442,7 +450,7 @@
     private bool isDivergenciasPopupVisible;
     private SaldoVerificacionResultDto? saldoVerificacion;
 
-    private bool IsBusy => isLoading || isSaving || isClosingPeriod;
+    private bool IsBusy => isLoading || isSaving || isClosingPeriod || isVerifyingSaldos;
     private int OpenCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.AbiertoId);
     private int PreCloseCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.PrecierreId);
     private int ClosedCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.CerradoId);
@@ -488,15 +496,16 @@
             }
 
             saldoVerificacion = await PeriodosClient.VerificarSaldosAsync(companyId);
-            if (saldoVerificacion is null)
-            {
-                ToastService.ShowToast(new ToastOptions { Title = "Saldos", Text = "La verificación de saldos no está disponible.", RenderStyle = ToastRenderStyle.Warning });
-            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            saldoVerificacion = null;
+            ShowStatusMessage("Sesión expirada", "La sesión expiró. Vuelve a iniciar sesión.", MessageBoxRenderStyle.Danger);
         }
         catch (Exception ex)
         {
             saldoVerificacion = null;
-            ToastService.ShowToast(new ToastOptions { Title = "Saldos", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
+            ToastService.ShowToast(new ToastOptions { Title = "Saldos", Text = $"No se pudo verificar: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
         }
         finally
         {

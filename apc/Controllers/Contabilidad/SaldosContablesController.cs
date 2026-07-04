@@ -17,7 +17,7 @@ namespace apc.Controllers.Contabilidad;
 /// </summary>
 [ApiController]
 [Route("api/contabilidad/saldos")]
-[ModuleAuthorize(PermissionModules.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad, PermissionResources.Contabilidad.Saldos)]
 public sealed class SaldosContablesController : ControllerBase
 {
     private readonly SiadDbContext dbContext;

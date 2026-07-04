@@ -61,32 +61,20 @@ public sealed class PeriodosContablesClient
 
     /// <summary>
     /// Reconciliación caché de saldos (con_saldo_cuenta) vs libro (F6).
-    /// Devuelve null si el endpoint falla (el aviso de la pantalla lo trata
-    /// como "verificación no disponible", no como divergencia).
+    /// Usa las extensiones auth-aware: lanza UnauthorizedAccessException en
+    /// 401/403/redirect a login y HttpRequestException con el detalle en
+    /// errores del servidor — la página decide cómo mostrarlos.
     /// </summary>
-    public async Task<SaldoVerificacionResultDto?> VerificarSaldosAsync(long companyId, long? periodId = null,
+    public Task<SaldoVerificacionResultDto?> VerificarSaldosAsync(long companyId, long? periodId = null,
         CancellationToken ct = default)
     {
-        try
+        var url = $"api/contabilidad/saldos/{companyId}/verificacion";
+        if (periodId.HasValue)
         {
-            var url = $"api/contabilidad/saldos/{companyId}/verificacion";
-            if (periodId.HasValue)
-            {
-                url += $"?periodId={periodId.Value}";
-            }
-
-            var response = await _httpClient.GetAsync(url, ct);
-            if (!response.IsSuccessStatusCode)
-            {
-                return null;
-            }
-
-            return await response.Content.ReadFromJsonAsync<SaldoVerificacionResultDto>(cancellationToken: ct);
+            url += $"?periodId={periodId.Value}";
         }
-        catch
-        {
-            return null;
-        }
+
+        return _httpClient.GetFromJsonAsyncWithAuthCheck<SaldoVerificacionResultDto>(url, ct);
     }
 
     private sealed class ExistePeriodoAbiertoResponse

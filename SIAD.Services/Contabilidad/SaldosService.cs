@@ -97,11 +97,20 @@ public sealed class SaldosService : ISaldosService
         {
             VerificadoEn = DateTime.UtcNow,
             TotalDivergencias = divergencias.Count,
-            SoloCache = divergencias.Count(d => d.TipoDivergencia == "SOLO_CACHE"),
-            SoloLibro = divergencias.Count(d => d.TipoDivergencia == "SOLO_LIBRO"),
-            Montos = divergencias.Count(d => d.TipoDivergencia == "MONTOS"),
-            Conteos = divergencias.Count(d => d.TipoDivergencia == "CONTEOS"),
-            Divergencias = divergencias
+            SoloCache = divergencias.Count(d => d.TipoDivergencia == SaldoDivergenciaTipos.SoloCache),
+            SoloLibro = divergencias.Count(d => d.TipoDivergencia == SaldoDivergenciaTipos.SoloLibro),
+            Montos = divergencias.Count(d => d.TipoDivergencia == SaldoDivergenciaTipos.Montos),
+            Conteos = divergencias.Count(d => d.TipoDivergencia == SaldoDivergenciaTipos.Conteos),
+            FechasFueraPeriodo = divergencias.Count(d => d.TipoDivergencia == SaldoDivergenciaTipos.FechaFueraPeriodo),
+            DetalleTruncado = divergencias.Count > MaxDetalleDivergencias,
+            // Tras una remigración rota el detalle puede ser períodos×cuentas
+            // (decenas de miles de filas): los contadores van completos, el
+            // detalle al browser se acota.
+            Divergencias = divergencias.Count > MaxDetalleDivergencias
+                ? divergencias.Take(MaxDetalleDivergencias).ToList()
+                : divergencias
         };
     }
+
+    private const int MaxDetalleDivergencias = 500;
 }

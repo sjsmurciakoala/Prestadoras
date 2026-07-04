@@ -470,6 +470,13 @@ public static class PermissionEndpointCatalog
             Action: PermissionAction.View,
             HttpMethod: "GET",
             Route: "api/contabilidad/lote-facturacion/{companyId}/pendientes"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Contabilidad,
+            Option: PermissionResources.Contabilidad.Saldos,
+            Resource: "saldos__contabilidad_saldos_companyid_verificacion",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/contabilidad/saldos/{companyId}/verificacion"),
     ];
 
     public static IEnumerable<EndpointPermissionDefinition> All => [.. Ventas, .. Contabilidad];

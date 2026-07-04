@@ -281,4 +281,84 @@ public sealed class SaldosOficialesTests : IntegrationTestBase
         var ex = await Assert.ThrowsAsync<PostgresException>(() => ReconstruirAsync(999_999_999L));
         Assert.Contains("cfg_company", ex.MessageText);
     }
+
+    [SkippableFact]
+    public async Task Grupo_todo_cero_no_es_divergencia()
+    {
+        await ReconstruirAsync(CompanyId);
+        Assert.Equal(0, await DivergenciasAsync(CompanyId));
+
+        // Póliza POSTED con una única línea 0/0 (data migrada puede traerlas)
+        // + fila de caché en ceros como la crearía el motor: la exclusión de
+        // grupos todo-cero debe ser SIMÉTRICA — sin falso SOLO_LIBRO.
+        var insertado = await Connection.ExecuteScalarAsync<long?>(new CommandDefinition(@"
+            WITH per AS (
+                SELECT period_id FROM public.con_periodo_contable
+                WHERE company_id = @CompanyId AND status_id = 2 ORDER BY period_id LIMIT 1),
+            cta AS (
+                SELECT account_id, code FROM public.con_plan_cuentas
+                WHERE company_id = @CompanyId AND allows_posting ORDER BY account_id LIMIT 1),
+            hdr AS (
+                INSERT INTO public.con_partida_hdr
+                    (company_id, module, document_type, poliza_number, poliza_date, description,
+                     status, created_at, created_by, period_id, total_debit, total_credit, type_id)
+                SELECT @CompanyId, 'TEST', 'F6Z', 'F6-ZERO-TEST',
+                       (SELECT p2.start_date FROM public.con_periodo_contable p2 WHERE p2.period_id = per.period_id),
+                       'test cero F6', 1, now(), 'test-f6', per.period_id, 0, 0,
+                       (SELECT type_id FROM public.con_tipo_transaccion WHERE company_id = @CompanyId ORDER BY type_id LIMIT 1)
+                FROM per
+                RETURNING poliza_id, company_id, period_id
+            ),
+            dtl AS (
+                INSERT INTO public.con_partida_dtl
+                    (company_id, poliza_id, line_number, account_id, debit_amount, credit_amount)
+                SELECT hdr.company_id, hdr.poliza_id, 1, cta.account_id, 0, 0 FROM hdr, cta
+                RETURNING poliza_id
+            ),
+            saldo AS (
+                INSERT INTO public.con_saldo_cuenta
+                    (company_id, periodo_id, codigo_cuenta, mes, tipo_transaccion,
+                     debitos, creditos, cantidad_debitos, cantidad_creditos, presupuesto, created_at)
+                SELECT @CompanyId, hdr.period_id, cta.code, 13, 0, 0, 0, 0, 0, 0, now()
+                FROM hdr, cta
+                ON CONFLICT (company_id, periodo_id, codigo_cuenta, mes, tipo_transaccion) DO NOTHING
+            )
+            SELECT poliza_id FROM dtl",
+            new { CompanyId }, Transaction));
+        Skip.If(insertado is null, "No se pudo armar la póliza de prueba (falta período cerrado o tipo).");
+
+        Assert.Equal(0, await DivergenciasAsync(CompanyId));
+    }
+
+    [SkippableFact]
+    public async Task Poliza_con_fecha_fuera_de_su_periodo_se_diagnostica()
+    {
+        await ReconstruirAsync(CompanyId);
+        Assert.Equal(0, await DivergenciasAsync(CompanyId));
+
+        // Fecha corrida fuera del rango del período: no altera caché ni libro
+        // (ambos agrupan por period_id) pero rompe el supuesto del balance
+        // híbrido — el verificador debe delatarla como FECHA_FUERA_PERIODO.
+        var movida = await Connection.ExecuteScalarAsync<long?>(new CommandDefinition(@"
+            UPDATE public.con_partida_hdr h
+            SET poliza_date = DATE '2019-06-15'
+            WHERE h.poliza_id = (
+                SELECT h2.poliza_id FROM public.con_partida_hdr h2
+                WHERE h2.company_id = @CompanyId AND h2.status = 1 AND h2.period_id IS NOT NULL
+                ORDER BY h2.poliza_id LIMIT 1)
+            RETURNING h.poliza_id",
+            new { CompanyId }, Transaction));
+        Skip.If(movida is null, "La BD de pruebas no tiene pólizas posteadas.");
+
+        var tipos = (await Connection.QueryAsync<string>(new CommandDefinition(
+            "SELECT DISTINCT tipo_divergencia FROM public.fn_con_verificar_saldo_cuenta(@CompanyId)",
+            new { CompanyId }, Transaction))).ToList();
+
+        Assert.Equal(["FECHA_FUERA_PERIODO"], tipos);
+
+        // La reconstrucción NO la corrige (el caché no es el problema):
+        // hay que corregir la póliza.
+        await ReconstruirAsync(CompanyId);
+        Assert.True(await DivergenciasAsync(CompanyId) > 0);
+    }
 }
