@@ -1,9 +1,6 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Constants;
-using SIAD.Core.Tenancy;
-using SIAD.Data;
 using SIAD.Services.Contabilidad;
 using apc.Security;
 
@@ -20,15 +17,12 @@ namespace apc.Controllers.Contabilidad;
 [ModuleAuthorize(PermissionModules.Contabilidad, PermissionResources.Contabilidad.Saldos)]
 public sealed class SaldosContablesController : ControllerBase
 {
-    private readonly SiadDbContext dbContext;
-    private readonly ICurrentCompanyService currentCompanyService;
+    private readonly ICompanyAccessValidator accessValidator;
     private readonly ISaldosService saldosService;
 
-    public SaldosContablesController(SiadDbContext dbContext, ICurrentCompanyService currentCompanyService,
-        ISaldosService saldosService)
+    public SaldosContablesController(ICompanyAccessValidator accessValidator, ISaldosService saldosService)
     {
-        this.dbContext = dbContext;
-        this.currentCompanyService = currentCompanyService;
+        this.accessValidator = accessValidator;
         this.saldosService = saldosService;
     }
 
@@ -39,7 +33,7 @@ public sealed class SaldosContablesController : ControllerBase
     [HttpGet("{companyId:long}/verificacion")]
     public async Task<IActionResult> Verificacion(long companyId, [FromQuery] long? periodId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -57,20 +51,5 @@ public sealed class SaldosContablesController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { detail = $"Error al verificar los saldos contables: {ex.Message}" });
         }
-    }
-
-    private async Task<bool> ValidarAccesoEmpresaAsync(long companyId, CancellationToken ct)
-    {
-        var empresaExiste = await dbContext.cfg_companies
-            .AsNoTracking()
-            .AnyAsync(c => c.company_id == companyId, cancellationToken: ct);
-
-        if (!empresaExiste)
-        {
-            return false;
-        }
-
-        var companyIdActual = currentCompanyService.GetCompanyId();
-        return companyIdActual > 0 && companyIdActual == companyId;
     }
 }

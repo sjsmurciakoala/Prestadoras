@@ -5,7 +5,6 @@ using ClosedXML.Excel;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.Tenancy;
-using SIAD.Data;
 using SIAD.Services.Bancos;
 using System.IO;
 using System.Globalization;
@@ -20,16 +19,16 @@ namespace apc.Controllers.Bancos;
 public sealed class CuentasBancosController : ControllerBase
 {
     private readonly ICuentasBancosService cuentasService;
-    private readonly SiadDbContext dbContext;
+    private readonly ICompanyAccessValidator accessValidator;
     private readonly ICurrentCompanyService currentCompanyService;
 
     public CuentasBancosController(
         ICuentasBancosService cuentasService,
-        SiadDbContext dbContext,
+        ICompanyAccessValidator accessValidator,
         ICurrentCompanyService currentCompanyService)
     {
         this.cuentasService = cuentasService;
-        this.dbContext = dbContext;
+        this.accessValidator = accessValidator;
         this.currentCompanyService = currentCompanyService;
     }
 
@@ -41,7 +40,7 @@ public sealed class CuentasBancosController : ControllerBase
             return BadRequest(new { detail = "Debe proporcionar un companyId v�lido." });
         }
 
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -69,7 +68,7 @@ public sealed class CuentasBancosController : ControllerBase
             return BadRequest(new { detail = "Debe proporcionar companyId y bancoCuentaId validos." });
         }
 
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -106,7 +105,7 @@ public sealed class CuentasBancosController : ControllerBase
             return BadRequest(new { detail = "Debe proporcionar companyId y bancoCuentaId validos." });
         }
 
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -277,7 +276,7 @@ public sealed class CuentasBancosController : ControllerBase
         }
 
         var companyId = currentCompanyService.GetCompanyId();
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -378,7 +377,7 @@ public sealed class CuentasBancosController : ControllerBase
             return BadRequest(new { detail = "Debe proporcionar un companyId v?lido." });
         }
 
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -400,7 +399,7 @@ public sealed class CuentasBancosController : ControllerBase
     {
         try
         {
-            if (!await ValidarAccesoEmpresaAsync(currentCompanyService.GetCompanyId(), ct))
+            if (!await accessValidator.ValidarAccesoAsync(currentCompanyService.GetCompanyId(), ct))
             {
                 return Forbid();
             }
@@ -417,7 +416,7 @@ public sealed class CuentasBancosController : ControllerBase
 [HttpPost]
     public async Task<IActionResult> Post([FromBody] BancoCuentaCreateDto dto, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(currentCompanyService.GetCompanyId(), ct))
+        if (!await accessValidator.ValidarAccesoAsync(currentCompanyService.GetCompanyId(), ct))
         {
             return Forbid();
         }
@@ -452,7 +451,7 @@ public sealed class CuentasBancosController : ControllerBase
     [HttpPut("{cuentaId:long}")]
     public async Task<IActionResult> Put(long cuentaId, [FromBody] BancoCuentaEditDto dto, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(currentCompanyService.GetCompanyId(), ct))
+        if (!await accessValidator.ValidarAccesoAsync(currentCompanyService.GetCompanyId(), ct))
         {
             return Forbid();
         }
@@ -496,7 +495,7 @@ public sealed class CuentasBancosController : ControllerBase
     [HttpDelete("{cuentaId:long}")]
     public async Task<IActionResult> Delete(long cuentaId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(currentCompanyService.GetCompanyId(), ct))
+        if (!await accessValidator.ValidarAccesoAsync(currentCompanyService.GetCompanyId(), ct))
         {
             return Forbid();
         }
@@ -519,25 +518,5 @@ public sealed class CuentasBancosController : ControllerBase
             var detail = ex.GetBaseException()?.Message ?? ex.Message;
             return Conflict(new { detail });
         }
-    }
-
-    private async Task<bool> ValidarAccesoEmpresaAsync(long companyId, CancellationToken ct)
-    {
-        if (companyId <= 0)
-        {
-            return false;
-        }
-
-        var existe = await dbContext.cfg_companies
-            .AsNoTracking()
-            .AnyAsync(c => c.company_id == companyId, ct);
-
-        if (!existe)
-        {
-            return false;
-        }
-
-        var actual = currentCompanyService.GetCompanyId();
-        return actual == companyId;
     }
 }
