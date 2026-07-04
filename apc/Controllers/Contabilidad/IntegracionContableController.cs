@@ -4,8 +4,6 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
-using SIAD.Core.Tenancy;
-using SIAD.Data;
 using SIAD.Services.Contabilidad;
 using apc.Security;
 
@@ -20,15 +18,13 @@ namespace apc.Controllers.Contabilidad;
 [ModuleAuthorize(PermissionModules.Contabilidad, PermissionResources.Contabilidad.Integracion)]
 public sealed class IntegracionContableController : ControllerBase
 {
-    private readonly SiadDbContext dbContext;
-    private readonly ICurrentCompanyService currentCompanyService;
+    private readonly ICompanyAccessValidator accessValidator;
     private readonly IIntegracionContableService integracionService;
 
-    public IntegracionContableController(SiadDbContext dbContext, ICurrentCompanyService currentCompanyService,
+    public IntegracionContableController(ICompanyAccessValidator accessValidator,
         IIntegracionContableService integracionService)
     {
-        this.dbContext = dbContext;
-        this.currentCompanyService = currentCompanyService;
+        this.accessValidator = accessValidator;
         this.integracionService = integracionService;
     }
 
@@ -36,7 +32,7 @@ public sealed class IntegracionContableController : ControllerBase
     [HttpGet("{companyId:long}")]
     public async Task<IActionResult> Obtener(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -56,7 +52,7 @@ public sealed class IntegracionContableController : ControllerBase
     [HttpPost("{companyId:long}")]
     public async Task<IActionResult> Guardar(long companyId, [FromBody] IntegracionContableDto dto, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -88,7 +84,7 @@ public sealed class IntegracionContableController : ControllerBase
     [HttpPost("{companyId:long}/perfil/{perfil}")]
     public async Task<IActionResult> AplicarPerfil(long companyId, string perfil, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -116,7 +112,7 @@ public sealed class IntegracionContableController : ControllerBase
     [HttpGet("{companyId:long}/validacion")]
     public async Task<IActionResult> Validar(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -136,7 +132,7 @@ public sealed class IntegracionContableController : ControllerBase
     [HttpGet("{companyId:long}/servicios")]
     public async Task<IActionResult> ListarServicios(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -156,7 +152,7 @@ public sealed class IntegracionContableController : ControllerBase
     [HttpGet("{companyId:long}/cuentas-posteables")]
     public async Task<IActionResult> ListarCuentasPosteables(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -185,20 +181,5 @@ public sealed class IntegracionContableController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { detail = $"Error al cargar las categorías: {ex.Message}" });
         }
-    }
-
-    private async Task<bool> ValidarAccesoEmpresaAsync(long companyId, CancellationToken ct)
-    {
-        var empresaExiste = await dbContext.cfg_companies
-            .AsNoTracking()
-            .AnyAsync(c => c.company_id == companyId, cancellationToken: ct);
-
-        if (!empresaExiste)
-        {
-            return false;
-        }
-
-        var companyIdActual = currentCompanyService.GetCompanyId();
-        return companyIdActual > 0 && companyIdActual == companyId;
     }
 }

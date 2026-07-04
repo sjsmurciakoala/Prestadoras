@@ -7,7 +7,6 @@ using Npgsql;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
-using SIAD.Core.Tenancy;
 using SIAD.Data;
 using SIAD.Services.Contabilidad;
 using apc.Security;
@@ -20,14 +19,14 @@ namespace apc.Controllers.Contabilidad;
 public sealed class ConfiguracionSistemaController : ControllerBase
 {
     private readonly SiadDbContext dbContext;
-    private readonly ICurrentCompanyService currentCompanyService;
+    private readonly ICompanyAccessValidator accessValidator;
     private readonly IConfiguracionSistemaService configuracionService;
 
-    public ConfiguracionSistemaController(SiadDbContext dbContext, ICurrentCompanyService currentCompanyService,
+    public ConfiguracionSistemaController(SiadDbContext dbContext, ICompanyAccessValidator accessValidator,
         IConfiguracionSistemaService configuracionService)
     {
         this.dbContext = dbContext;
-        this.currentCompanyService = currentCompanyService;
+        this.accessValidator = accessValidator;
         this.configuracionService = configuracionService;
     }
 
@@ -37,7 +36,7 @@ public sealed class ConfiguracionSistemaController : ControllerBase
     [HttpGet("configuracion/{companyId}")]
     public async Task<IActionResult> ObtenerConfiguracion(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -88,7 +87,7 @@ public sealed class ConfiguracionSistemaController : ControllerBase
     [HttpPost("configuracion/{companyId}")]
     public async Task<IActionResult> GuardarConfiguracion(long companyId, [FromBody] ConfiguracionSistemaDto dto, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -145,7 +144,7 @@ public sealed class ConfiguracionSistemaController : ControllerBase
     [HttpGet("{companyId}/cuentas")]
     public async Task<IActionResult> ListarCuentas(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -171,21 +170,6 @@ public sealed class ConfiguracionSistemaController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { detail = $"Error al cargar las cuentas: {ex.Message}" });
         }
-    }
-
-    private async Task<bool> ValidarAccesoEmpresaAsync(long companyId, CancellationToken ct)
-    {
-        var empresaExiste = await dbContext.cfg_companies
-            .AsNoTracking()
-            .AnyAsync(c => c.company_id == companyId, cancellationToken: ct);
-
-        if (!empresaExiste)
-        {
-            return false;
-        }
-
-        var companyIdActual = currentCompanyService.GetCompanyId();
-        return companyIdActual > 0 && companyIdActual == companyId;
     }
 
     private static void NormalizarSeccionesDependientesDeCuentas(ConfiguracionSistemaDto dto)

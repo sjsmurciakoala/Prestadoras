@@ -1,11 +1,8 @@
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
-using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Contabilidad;
-using SIAD.Core.Tenancy;
-using SIAD.Data;
 using SIAD.Services.Contabilidad;
 using apc.Security;
 
@@ -20,15 +17,13 @@ namespace apc.Controllers.Contabilidad;
 [ModuleAuthorize(PermissionModules.Contabilidad, PermissionResources.Contabilidad.LoteFacturacion)]
 public sealed class LoteFacturacionController : ControllerBase
 {
-    private readonly SiadDbContext dbContext;
-    private readonly ICurrentCompanyService currentCompanyService;
+    private readonly ICompanyAccessValidator accessValidator;
     private readonly ILoteFacturacionService loteService;
 
-    public LoteFacturacionController(SiadDbContext dbContext, ICurrentCompanyService currentCompanyService,
+    public LoteFacturacionController(ICompanyAccessValidator accessValidator,
         ILoteFacturacionService loteService)
     {
-        this.dbContext = dbContext;
-        this.currentCompanyService = currentCompanyService;
+        this.accessValidator = accessValidator;
         this.loteService = loteService;
     }
 
@@ -37,7 +32,7 @@ public sealed class LoteFacturacionController : ControllerBase
     public async Task<IActionResult> Preview(long companyId, [FromQuery] DateOnly desde, [FromQuery] DateOnly hasta,
         [FromQuery] string modo, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -67,7 +62,7 @@ public sealed class LoteFacturacionController : ControllerBase
     public async Task<IActionResult> Generar(long companyId, [FromBody] LoteGenerarRequestDto request,
         CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -101,7 +96,7 @@ public sealed class LoteFacturacionController : ControllerBase
     [HttpGet("{companyId:long}/historial")]
     public async Task<IActionResult> Historial(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -121,7 +116,7 @@ public sealed class LoteFacturacionController : ControllerBase
     [HttpGet("{companyId:long}/pendientes")]
     public async Task<IActionResult> Pendientes(long companyId, CancellationToken ct)
     {
-        if (!await ValidarAccesoEmpresaAsync(companyId, ct))
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
         {
             return Forbid();
         }
@@ -135,20 +130,5 @@ public sealed class LoteFacturacionController : ControllerBase
             return StatusCode(StatusCodes.Status500InternalServerError,
                 new { detail = $"Error al cargar los pendientes de regularización: {ex.Message}" });
         }
-    }
-
-    private async Task<bool> ValidarAccesoEmpresaAsync(long companyId, CancellationToken ct)
-    {
-        var empresaExiste = await dbContext.cfg_companies
-            .AsNoTracking()
-            .AnyAsync(c => c.company_id == companyId, cancellationToken: ct);
-
-        if (!empresaExiste)
-        {
-            return false;
-        }
-
-        var companyIdActual = currentCompanyService.GetCompanyId();
-        return companyIdActual > 0 && companyIdActual == companyId;
     }
 }

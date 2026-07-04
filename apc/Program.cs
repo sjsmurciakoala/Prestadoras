@@ -142,6 +142,7 @@ builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingServerAuthenticationStateProvider>();
 builder.Services.AddScoped<IClaimsTransformation, TenantCompanyClaimTransformation>();
+builder.Services.AddScoped<ICompanyAccessValidator, CompanyAccessValidator>();
 
 builder.Services.AddAuthorization(options =>
 {
