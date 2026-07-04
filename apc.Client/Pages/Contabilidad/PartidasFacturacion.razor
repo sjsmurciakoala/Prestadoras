@@ -64,7 +64,7 @@
                                       IconCssClass="bi bi-journal-plus"
                                       RenderStyle="ButtonRenderStyle.Primary"
                                       Enabled="@(!cargando && previewCargado && previewLineas.Count > 0)"
-                                      Click="@GenerarAsync" />
+                                      Click="@(() => confirmarGenerarVisible = true)" />
                         </div>
                     </DxFormLayoutItem>
                 </DxFormLayout>
@@ -201,6 +201,39 @@
                     ApplyBackgroundShading="false"
                     IsContentBlocked="true"
                     Text="Procesando..." />
+
+    @* Confirmación antes de postear (D10: operación sensible e irreversible) *@
+    <DxPopup @bind-Visible="confirmarGenerarVisible"
+             Width="480px"
+             CloseOnEscape="true"
+             CloseOnOutsideClick="false"
+             ShowFooter="true">
+        <HeaderContentTemplate>
+            <div class="d-flex align-items-center gap-2 p-1">
+                <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+                <strong>Confirmar generación del lote</strong>
+            </div>
+        </HeaderContentTemplate>
+        <BodyContentTemplate>
+            <div class="p-3">
+                <p class="mb-2">
+                    Se generarán y <strong>postearán</strong> partidas contables por
+                    <strong>@previewLineas.Sum(l => l.Debe).ToString("N2")</strong> para el rango
+                    <strong>@(fechaDesde?.ToString("dd/MM/yyyy")) – @(fechaHasta?.ToString("dd/MM/yyyy"))</strong>
+                    (agrupación @(modoSeleccionado == "DIA" ? "por día" : "por período")).
+                </p>
+                <p class="mb-0 text-muted">El posteo afecta los saldos contables y no se deshace desde esta pantalla.</p>
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate Context="confirmFooter">
+            <div class="p-2 d-flex justify-content-end gap-2">
+                <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Cancelar"
+                          Click="@confirmFooter.CloseCallback" />
+                <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Generar y postear"
+                          Click="@GenerarConfirmadoAsync" />
+            </div>
+        </FooterContentTemplate>
+    </DxPopup>
 </div>
 
 @code {
@@ -212,6 +245,7 @@
     private string modoSeleccionado = "DIA";
 
     private bool previewCargado;
+    private bool confirmarGenerarVisible;
     private IReadOnlyList<LotePreviewLineaDto> previewLineas = Array.Empty<LotePreviewLineaDto>();
     private IReadOnlyList<LoteFacturacionDto> historial = Array.Empty<LoteFacturacionDto>();
     private IReadOnlyList<PartidaPendienteDto> pendientes = Array.Empty<PartidaPendienteDto>();
@@ -258,8 +292,11 @@
 
     private async Task CargarHistorialYPendientesAsync()
     {
-        historial = await LoteClient.HistorialAsync(empresaSeleccionadaId);
-        pendientes = await LoteClient.PendientesAsync(empresaSeleccionadaId);
+        var historialTask = LoteClient.HistorialAsync(empresaSeleccionadaId);
+        var pendientesTask = LoteClient.PendientesAsync(empresaSeleccionadaId);
+        await Task.WhenAll(historialTask, pendientesTask);
+        historial = historialTask.Result;
+        pendientes = pendientesTask.Result;
     }
 
     private bool ValidarFiltros(out DateOnly desde, out DateOnly hasta)
@@ -310,8 +347,9 @@
         }
     }
 
-    private async Task GenerarAsync()
+    private async Task GenerarConfirmadoAsync()
     {
+        confirmarGenerarVisible = false;
         if (empresaSeleccionadaId <= 0 || !ValidarFiltros(out var desde, out var hasta))
         {
             return;
@@ -354,12 +392,13 @@
         cargando = true;
         try
         {
-            // Reprocesa solo la fecha encolada (fecha_documento como desde y hasta).
+            // Reprocesa el lote ORIGINAL completo (rango y modo del payload);
+            // fecha_documento solo como último recurso si el payload no vino.
             var resultado = await LoteClient.GenerarAsync(empresaSeleccionadaId, new LoteGenerarRequestDto
             {
-                Desde = pendiente.FechaDocumento,
-                Hasta = pendiente.FechaDocumento,
-                Modo = "DIA"
+                Desde = pendiente.FechaDesde ?? pendiente.FechaDocumento,
+                Hasta = pendiente.FechaHasta ?? pendiente.FechaDocumento,
+                Modo = string.IsNullOrWhiteSpace(pendiente.ModoAgrupacion) ? "DIA" : pendiente.ModoAgrupacion
             });
 
             NotificarResultado(resultado);

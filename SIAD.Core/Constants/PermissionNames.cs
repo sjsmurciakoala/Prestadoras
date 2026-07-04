@@ -42,6 +42,10 @@ public static class PermissionResources
     public static class Contabilidad
     {
         public const string Integracion = "integracion";
+
+        // Recurso propio del posteo por lote (D10: operación sensible —
+        // configurar la integración NO debe implicar poder postear lotes).
+        public const string LoteFacturacion = "lotefacturacion";
     }
 }
 

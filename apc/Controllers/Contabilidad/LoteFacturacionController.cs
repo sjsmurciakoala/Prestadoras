@@ -17,7 +17,7 @@ namespace apc.Controllers.Contabilidad;
 /// </summary>
 [ApiController]
 [Route("api/contabilidad/lote-facturacion")]
-[ModuleAuthorize(PermissionModules.Contabilidad, PermissionResources.Contabilidad.Integracion)]
+[ModuleAuthorize(PermissionModules.Contabilidad, PermissionResources.Contabilidad.LoteFacturacion)]
 public sealed class LoteFacturacionController : ControllerBase
 {
     private readonly SiadDbContext dbContext;

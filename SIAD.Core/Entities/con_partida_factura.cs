@@ -18,7 +18,8 @@ public partial class con_partida_factura : ICompanyScopedEntity
 
     public long lote_id { get; set; }
 
-    public long poliza_id { get; set; }
+    /// <summary>NULL = factura procesada sin efecto contable (detalle neto en cero).</summary>
+    public long? poliza_id { get; set; }
 
     public DateTime created_at { get; set; }
 

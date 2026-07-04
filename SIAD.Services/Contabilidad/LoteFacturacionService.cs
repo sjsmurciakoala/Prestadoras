@@ -104,24 +104,70 @@ public sealed class LoteFacturacionService : ILoteFacturacionService
     {
         ValidarCompanyId(companyId);
 
-        return await _context.con_partida_pendientes
+        var filas = await _context.con_partida_pendientes
             .AsNoTracking()
             .Where(p => p.company_id == companyId
                 && p.module == IntegracionContableModulos.Ventas
                 && p.status_id == 1)
             .OrderBy(p => p.fecha_documento)
             .ThenBy(p => p.partida_pendiente_id)
-            .Select(p => new PartidaPendienteDto
+            .Select(p => new
             {
-                PartidaPendienteId = p.partida_pendiente_id,
-                FechaDocumento = p.fecha_documento,
-                Descripcion = p.descripcion,
-                Motivo = p.motivo,
-                StatusId = p.status_id,
-                Intentos = p.intentos,
-                CreatedAt = p.created_at
+                p.partida_pendiente_id,
+                p.fecha_documento,
+                p.descripcion,
+                p.motivo,
+                p.status_id,
+                p.intentos,
+                p.created_at,
+                p.payload
             })
             .ToListAsync(ct);
+
+        return filas
+            .Select(p =>
+            {
+                var dto = new PartidaPendienteDto
+                {
+                    PartidaPendienteId = p.partida_pendiente_id,
+                    FechaDocumento = p.fecha_documento,
+                    Descripcion = p.descripcion,
+                    Motivo = p.motivo,
+                    StatusId = p.status_id,
+                    Intentos = p.intentos,
+                    CreatedAt = p.created_at
+                };
+
+                // El payload guarda el rango y modo originales del lote (F1:
+                // datos para regenerar); el reproceso debe usar el rango
+                // completo, no solo fecha_documento.
+                try
+                {
+                    using var json = System.Text.Json.JsonDocument.Parse(p.payload);
+                    var root = json.RootElement;
+                    if (root.TryGetProperty("fecha_desde", out var desde)
+                        && DateOnly.TryParse(desde.GetString(), out var fechaDesde))
+                    {
+                        dto.FechaDesde = fechaDesde;
+                    }
+                    if (root.TryGetProperty("fecha_hasta", out var hasta)
+                        && DateOnly.TryParse(hasta.GetString(), out var fechaHasta))
+                    {
+                        dto.FechaHasta = fechaHasta;
+                    }
+                    if (root.TryGetProperty("modo_agrupacion", out var modo))
+                    {
+                        dto.ModoAgrupacion = modo.GetString();
+                    }
+                }
+                catch (System.Text.Json.JsonException)
+                {
+                    // payload ilegible: la pantalla cae a fecha_documento
+                }
+
+                return dto;
+            })
+            .ToList();
     }
 
     private static string ValidarParametros(long companyId, DateOnly desde, DateOnly hasta, string modo)

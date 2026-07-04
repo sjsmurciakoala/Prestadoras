@@ -71,4 +71,10 @@ public sealed class PartidaPendienteDto
     public short StatusId { get; set; }
     public int Intentos { get; set; }
     public DateTime CreatedAt { get; set; }
+
+    // Rango y modo originales del payload (para reprocesar el lote COMPLETO
+    // que quedó encolado, no solo el día de fecha_documento).
+    public DateOnly? FechaDesde { get; set; }
+    public DateOnly? FechaHasta { get; set; }
+    public string? ModoAgrupacion { get; set; }
 }

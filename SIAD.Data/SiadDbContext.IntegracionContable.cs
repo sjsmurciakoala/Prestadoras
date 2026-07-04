@@ -206,9 +206,12 @@ public partial class SiadDbContext
                 .HasForeignKey(e => e.company_id)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            // FKs compuestas tenant-safe (AKs uq_factura_company_id y
+            // uq_con_partida_hdr_company_poliza del script F3 v2)
             entity.HasOne<factura>()
                 .WithMany()
-                .HasForeignKey(e => e.factura_id)
+                .HasForeignKey(e => new { e.company_id, e.factura_id })
+                .HasPrincipalKey(f => new { f.company_id, f.id })
                 .OnDelete(DeleteBehavior.Restrict);
 
             entity.HasOne<con_lote_facturacion>()
@@ -218,7 +221,8 @@ public partial class SiadDbContext
 
             entity.HasOne<con_partida_hdr>()
                 .WithMany()
-                .HasForeignKey(e => e.poliza_id)
+                .HasForeignKey(e => new { e.company_id, e.poliza_id })
+                .HasPrincipalKey(h => new { h.company_id, h.poliza_id })
                 .OnDelete(DeleteBehavior.Restrict);
         });
     }
