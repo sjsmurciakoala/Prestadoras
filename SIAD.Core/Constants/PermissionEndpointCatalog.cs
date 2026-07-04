@@ -399,14 +399,14 @@ public static class PermissionEndpointCatalog
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.PeriodosComerciales,
-            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_rutas",
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_periodocicloid_rutas",
             Action: PermissionAction.View,
             HttpMethod: "GET",
             Route: "api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/rutas"),
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.PeriodosComerciales,
-            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_checklist",
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_periodocomercialid_checklist",
             Action: PermissionAction.View,
             HttpMethod: "GET",
             Route: "api/ventas/periodos-comerciales/{companyId}/{periodoComercialId}/checklist"),
@@ -420,14 +420,14 @@ public static class PermissionEndpointCatalog
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.PeriodosComerciales,
-            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_cerrar",
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_periodocicloid_cerrar",
             Action: PermissionAction.Create,
             HttpMethod: "POST",
             Route: "api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/cerrar"),
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.PeriodosComerciales,
-            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_cerrar",
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_periodocomercialid_cerrar",
             Action: PermissionAction.Create,
             HttpMethod: "POST",
             Route: "api/ventas/periodos-comerciales/{companyId}/{periodoComercialId}/cerrar"),

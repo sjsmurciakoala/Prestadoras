@@ -328,7 +328,9 @@ BEGIN
              fecha_apertura, abierto_por, fecha_limite, fecha_cierre, cerrado_por, created_by)
         SELECT v_company,
                p.periodo_comercial_id,
-               btrim(hm.ciclo),
+               -- normalización '1' → '01' (misma regla que fn_adm_periodo_comercial_ciclo_abierto)
+               CASE WHEN btrim(hm.ciclo) ~ '^[0-9]+$' THEN lpad(btrim(hm.ciclo), 2, '0')
+                    ELSE btrim(hm.ciclo) END,
                CASE WHEN COALESCE(hm.cerrarperiodo, 'P') = 'P' THEN 1 ELSE 2 END,
                COALESCE(hm.fecha AT TIME ZONE 'UTC', now()),
                COALESCE(left(btrim(hm.usuarioapertura), 100), 'migracion-f7'),
@@ -1572,19 +1574,12 @@ BEGIN
     FROM public.con_integracion_config c
     WHERE c.company_id = p_company_id;
 
-    -- 1. Facturas del período con partida generada (puente con_partida_factura, F3)
+    -- 1. Facturas del período con partida generada. Fuente única F3:
+    --    fn_con_candidatas_lote_facturacion define QUÉ es una factura de
+    --    lectura vigente sin partida (mismo criterio que el lote y su preview).
     IF v_activo_fact THEN
         SELECT count(*) INTO v_n
-        FROM public.factura f
-        WHERE f.company_id = p_company_id
-          AND f.tipofacturacion = 'S'
-          AND f.tipofactura = 'F'
-          AND COALESCE(f.estado_id, 1) <> 3
-          AND COALESCE(f.estado, 'A') <> 'N'
-          AND f.fechaemision BETWEEN v_desde AND v_hasta
-          AND NOT EXISTS (
-              SELECT 1 FROM public.con_partida_factura pf
-              WHERE pf.company_id = p_company_id AND pf.factura_id = f.id);
+        FROM public.fn_con_candidatas_lote_facturacion(p_company_id, v_desde, v_hasta);
 
         RETURN QUERY SELECT
             'FACTURAS_SIN_PARTIDA'::varchar, v_n = 0, v_n,
@@ -1610,7 +1605,10 @@ BEGIN
              ELSE format('%s partida(s) en borrador: postearlas o eliminarlas antes de cerrar.', v_n) END;
 
     -- 3. Caja del período posteada (transacciones de sesión de caja 201/202
-    --    con comprobante POSTED del módulo CAJA)
+    --    con comprobante POSTED del módulo CAJA).
+    --    El document_id del comprobante varía por flujo (F4): los cobros de
+    --    lectora usan el RECIBO (BuildContabilidadDocumentIdLectora) y los
+    --    abonos el IDE de la transacción — se casan ambos.
     IF v_activo_caja THEN
         SELECT count(*) INTO v_n
         FROM public.transaccion_abonado t
@@ -1623,8 +1621,9 @@ BEGIN
               SELECT 1 FROM public.con_partida_hdr h
               WHERE h.company_id = p_company_id
                 AND h.module = 'CAJA'
-                AND h.document_id = t.ide
-                AND h.status = 1);
+                AND h.status = 1
+                AND (h.document_id = t.ide
+                     OR (t.recibo IS NOT NULL AND h.document_id = t.recibo::bigint)));
 
         RETURN QUERY SELECT
             'CAJA_SIN_POSTEAR'::varchar, v_n = 0, v_n,
@@ -1754,14 +1753,19 @@ BEGIN
         updated_by = left(p_usuario, 100)
     WHERE pp.company_id = p_company_id AND pp.period_id = p_period_id;
 
-    -- Crear el período siguiente si no existe
+    -- Crear el período siguiente si no existe (match por código YYYYMM o por
+    -- solape de rango — los códigos son libres en la pantalla Períodos y un
+    -- duplicado solapado dejaría dos períodos abiertos ambiguos)
     v_next_start := (date_trunc('month', v_periodo.start_date) + interval '1 month')::date;
     v_next_end := (v_next_start + interval '1 month' - interval '1 day')::date;
     v_next_code := to_char(v_next_start, 'YYYYMM');
 
     SELECT pp.period_id INTO v_next_id
     FROM public.con_periodo_contable pp
-    WHERE pp.company_id = p_company_id AND pp.code = v_next_code
+    WHERE pp.company_id = p_company_id
+      AND (pp.code = v_next_code
+           OR (pp.start_date::date <= v_next_end AND pp.end_date::date >= v_next_start))
+    ORDER BY CASE WHEN pp.code = v_next_code THEN 0 ELSE 1 END, pp.start_date
     LIMIT 1;
 
     IF v_next_id IS NULL THEN
@@ -1892,22 +1896,20 @@ BEGIN
             'No existe un período contable que cubra la fecha actual.'::text, 1::bigint;
     END IF;
 
-    -- 5. Facturas sin partida (total acumulado, si la integración está activa)
+    -- 5. Facturas sin partida (si la integración está activa). Fuente única
+    --    F3 (fn_con_candidatas_lote_facturacion) y ventana acotada a los
+    --    últimos 12 meses: el aviso corre en el layout para cada usuario y no
+    --    debe escanear el histórico completo de facturas de la empresa.
     IF v_activo_fact THEN
         SELECT count(*) INTO v_n
-        FROM public.factura f
-        WHERE f.company_id = p_company_id
-          AND f.tipofacturacion = 'S'
-          AND f.tipofactura = 'F'
-          AND COALESCE(f.estado_id, 1) <> 3
-          AND COALESCE(f.estado, 'A') <> 'N'
-          AND NOT EXISTS (
-              SELECT 1 FROM public.con_partida_factura pf
-              WHERE pf.company_id = p_company_id AND pf.factura_id = f.id);
+        FROM public.fn_con_candidatas_lote_facturacion(
+            p_company_id,
+            (date_trunc('month', current_date) - interval '12 months')::date,
+            current_date);
 
         IF v_n > 0 THEN
             RETURN QUERY SELECT 'FACTURAS_SIN_PARTIDA'::varchar, 'INFO'::varchar,
-                format('%s factura(s) sin partida contable (generar lote de facturación).', v_n), v_n;
+                format('%s factura(s) sin partida contable en los últimos 12 meses (generar lote de facturación).', v_n), v_n;
         END IF;
     END IF;
 

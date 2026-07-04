@@ -719,8 +719,9 @@
         {
             isClosingPeriod = true;
 
-            var response = await Http.PostAsync(
-                $"api/contabilidad/catalogos/periodos/{cierrePeriodo.PeriodId}/{accion}", null);
+            // extensión auth-aware (regla del repo): lanza en 401/redirect a login
+            var response = await Http.PostAsJsonAsyncWithAuthCheck(
+                $"api/contabilidad/catalogos/periodos/{cierrePeriodo.PeriodId}/{accion}", new { });
 
             if (!response.IsSuccessStatusCode)
             {
