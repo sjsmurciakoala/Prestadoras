@@ -66,3 +66,21 @@ public static class CondicionLectura
     public const short Promedio     = 4;   // 'PD'
     public const short Reposicion   = 5;   // 'R'
 }
+
+// Período comercial F7 (adm_periodo_comercial / adm_periodo_comercial_ciclo).
+// Espejo legacy en historialmes: Abierto → cerrado='A'/cerrarperiodo='P';
+// Cerrado → 'C'/'C'.
+public static class EstadoPeriodoComercial
+{
+    public const short Abierto = 1;
+    public const short Cerrado = 2;
+}
+
+// Período contable (con_periodo_contable.status_id) — convención existente
+// de la pantalla Períodos, centralizada aquí desde F7.
+public static class EstadoPeriodoContable
+{
+    public const short Abierto   = 0;   // 'OPEN'
+    public const short Precierre = 1;   // 'PRECIERRE'
+    public const short Cerrado   = 2;   // 'CERRADO'
+}

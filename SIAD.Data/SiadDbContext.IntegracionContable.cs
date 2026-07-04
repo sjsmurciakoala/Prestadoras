@@ -46,6 +46,7 @@ public partial class SiadDbContext
             entity.Property(e => e.activo_notas).HasDefaultValue(false);
             entity.Property(e => e.activo_miscelaneos).HasDefaultValue(false);
             entity.Property(e => e.activo_proveedores).HasDefaultValue(false);
+            entity.Property(e => e.desfase_max_meses).HasDefaultValue((short)1);
             entity.Property(e => e.created_by).HasMaxLength(100);
             entity.Property(e => e.updated_by).HasMaxLength(100);
 
