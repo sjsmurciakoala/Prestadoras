@@ -8,6 +8,7 @@ using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Caja;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.CaptacionPagos;
@@ -658,12 +659,14 @@ public class AbonoService : IAbonoService
 
     private async Task<string> ObtenerPeriodoActualCodigoAsync(CancellationToken ct)
     {
-        var periodo = await _context.historialmes
+        // F7: el período comercial vive en adm_periodo_comercial (tenant-scoped);
+        // historialmes queda como espejo de solo lectura.
+        var periodo = await _context.adm_periodo_comercials
             .AsNoTracking()
-            .Where(p => p.cerrarperiodo == 'P')
-            .OrderByDescending(p => p.ano)
+            .Where(p => p.status_id == EstadoPeriodoComercial.Abierto)
+            .OrderByDescending(p => p.anio)
             .ThenByDescending(p => p.mes)
-            .Select(p => new { p.ano, p.mes })
+            .Select(p => new { p.anio, p.mes })
             .FirstOrDefaultAsync(ct);
 
         if (periodo is null)
@@ -671,7 +674,7 @@ public class AbonoService : IAbonoService
             return DateTime.UtcNow.ToString("yyyyMM");
         }
 
-        return $"{Convert.ToInt32(periodo.ano):D4}{Convert.ToInt32(periodo.mes):D2}";
+        return $"{periodo.anio:D4}{periodo.mes:D2}";
     }
 
     private async Task<string?> ResolverBancoCodigoAsync(long? bancoCuentaId, string? bancoFallback, CancellationToken ct)
