@@ -1,13 +1,16 @@
+using Dapper;
 using Microsoft.EntityFrameworkCore;
-using SIAD.Core.Entities;
+using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Data;
 
 namespace SIAD.Services.Contabilidad;
 
 /// <summary>
-/// Implementación de ISaldosService
-/// Maneja actualización de saldos en con_saldo_cuenta
-/// Estructura: saldo_id, company_id, periodo_id, codigo_cuenta, mes (1-13), tipo_transaccion, debitos/creditos
+/// Implementación de ISaldosService — solo lectura sobre con_saldo_cuenta.
+/// F6 retiró de aquí los métodos que escribían el caché desde C#
+/// (ActualizarSaldosPorPolizaAsync / InicializarPeriodoAsync): nunca tuvieron
+/// consumidores y duplicaban al motor único de BD, violando D1 si alguien
+/// los hubiera llamado.
 /// </summary>
 public sealed class SaldosService : ISaldosService
 {
@@ -16,85 +19,6 @@ public sealed class SaldosService : ISaldosService
     public SaldosService(SiadDbContext context)
     {
         _context = context;
-    }
-
-    public async Task ActualizarSaldosPorPolizaAsync(
-        long companyId,
-        long polizaId,
-        bool sumar,
-        CancellationToken ct = default
-    )
-    {
-        // Obtener póliza con todas sus líneas
-        var poliza = await _context.con_partida_hdrs
-            .Include(p => p.lineas)
-            .ThenInclude(l => l.account)
-            .Where(x => x.poliza_id == polizaId && x.company_id == companyId)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException($"Póliza {polizaId} no encontrada");
-
-        if (poliza.period_id == null)
-            throw new InvalidOperationException("La póliza debe tener período asociado para actualizar saldos");
-
-        // Procesar cada línea
-        if (poliza.lineas != null && poliza.lineas.Count > 0)
-        {
-            foreach (var linea in poliza.lineas)
-            {
-                var codigoCuenta = linea.account?.code ?? "";
-                
-                // Buscar o crear registro de saldo
-                var saldo = await _context.con_saldo_cuentas
-                    .Where(x =>
-                        x.company_id == companyId &&
-                        x.periodo_id == poliza.period_id.Value &&
-                        x.codigo_cuenta == codigoCuenta
-                    )
-                    .FirstOrDefaultAsync(ct);
-
-                if (saldo == null)
-                {
-                    // Crear nuevo registro de saldo
-                    saldo = new con_saldo_cuenta
-                    {
-                        company_id = companyId,
-                        periodo_id = poliza.period_id.Value,
-                        codigo_cuenta = codigoCuenta,
-                        mes = 13, // Acumulado
-                        tipo_transaccion = 0,
-                        debitos = 0,
-                        creditos = 0,
-                        cantidad_debitos = 0,
-                        cantidad_creditos = 0,
-                        presupuesto = 0,
-                        created_at = DateTime.UtcNow
-                    };
-                    _context.con_saldo_cuentas.Add(saldo);
-                }
-
-                // Actualizar saldos
-                if (sumar)
-                {
-                    // Registrar póliza
-                    saldo.debitos += linea.debit_amount;
-                    saldo.creditos += linea.credit_amount;
-                    if (linea.debit_amount > 0) saldo.cantidad_debitos++;
-                    if (linea.credit_amount > 0) saldo.cantidad_creditos++;
-                }
-                else
-                {
-                    // Revertir póliza
-                    saldo.debitos -= linea.debit_amount;
-                    saldo.creditos -= linea.credit_amount;
-                    if (linea.debit_amount > 0) saldo.cantidad_debitos--;
-                    if (linea.credit_amount > 0) saldo.cantidad_creditos--;
-                }
-
-                saldo.updated_at = DateTime.UtcNow;
-            }
-        }
-
-        await _context.SaveChangesAsync(ct);
     }
 
     public async Task<(decimal debitos, decimal creditos)> ObtenerSaldoAsync(
@@ -125,43 +49,59 @@ public sealed class SaldosService : ISaldosService
         return (saldo.debitos, saldo.creditos);
     }
 
-    public async Task InicializarPeriodoAsync(
+    public async Task<SaldoVerificacionResultDto> VerificarAsync(
         long companyId,
-        long nuevoPeriodId,
-        long periodoAnteriorId,
+        long? periodId = null,
         CancellationToken ct = default
     )
     {
-        // Obtener todos los saldos del período anterior
-        var saldosAnteriores = await _context.con_saldo_cuentas
-            .Where(x =>
-                x.company_id == companyId &&
-                x.periodo_id == periodoAnteriorId
-            )
-            .ToListAsync(ct);
-
-        // Copiar como saldos iniciales del nuevo período
-        foreach (var saldoAnterior in saldosAnteriores)
+        if (companyId <= 0)
         {
-            var nuevoSaldo = new con_saldo_cuenta
-            {
-                company_id = companyId,
-                periodo_id = nuevoPeriodId,
-                codigo_cuenta = saldoAnterior.codigo_cuenta,
-                mes = 13,
-                tipo_transaccion = 0,
-                debitos = saldoAnterior.debitos, // Saldos del período anterior pasan como débitos
-                creditos = saldoAnterior.creditos,
-                cantidad_debitos = 0,
-                cantidad_creditos = 0,
-                presupuesto = 0,
-                created_at = DateTime.UtcNow
-            };
-
-            _context.con_saldo_cuentas.Add(nuevoSaldo);
+            throw new ArgumentException("La empresa es obligatoria.", nameof(companyId));
         }
 
-        await _context.SaveChangesAsync(ct);
+        var conn = _context.Database.GetDbConnection();
+        var filas = await conn.QueryAsync<(long period_id, string? periodo_code, string codigo_cuenta,
+                string tipo_divergencia, decimal? debitos_cache, decimal? debitos_libro,
+                decimal? creditos_cache, decimal? creditos_libro,
+                int? cantidad_debitos_cache, int? cantidad_debitos_libro,
+                int? cantidad_creditos_cache, int? cantidad_creditos_libro)>(
+            new CommandDefinition(@"
+                SELECT period_id, periodo_code, codigo_cuenta, tipo_divergencia,
+                       debitos_cache, debitos_libro, creditos_cache, creditos_libro,
+                       cantidad_debitos_cache, cantidad_debitos_libro,
+                       cantidad_creditos_cache, cantidad_creditos_libro
+                FROM public.fn_con_verificar_saldo_cuenta(@companyId, @periodId, NULL)",
+                new { companyId, periodId },
+                cancellationToken: ct));
+
+        var divergencias = filas
+            .Select(f => new SaldoDivergenciaDto
+            {
+                PeriodId = f.period_id,
+                PeriodoCode = f.periodo_code,
+                CodigoCuenta = f.codigo_cuenta,
+                TipoDivergencia = f.tipo_divergencia,
+                DebitosCache = f.debitos_cache,
+                DebitosLibro = f.debitos_libro,
+                CreditosCache = f.creditos_cache,
+                CreditosLibro = f.creditos_libro,
+                CantidadDebitosCache = f.cantidad_debitos_cache,
+                CantidadDebitosLibro = f.cantidad_debitos_libro,
+                CantidadCreditosCache = f.cantidad_creditos_cache,
+                CantidadCreditosLibro = f.cantidad_creditos_libro
+            })
+            .ToList();
+
+        return new SaldoVerificacionResultDto
+        {
+            VerificadoEn = DateTime.UtcNow,
+            TotalDivergencias = divergencias.Count,
+            SoloCache = divergencias.Count(d => d.TipoDivergencia == "SOLO_CACHE"),
+            SoloLibro = divergencias.Count(d => d.TipoDivergencia == "SOLO_LIBRO"),
+            Montos = divergencias.Count(d => d.TipoDivergencia == "MONTOS"),
+            Conteos = divergencias.Count(d => d.TipoDivergencia == "CONTEOS"),
+            Divergencias = divergencias
+        };
     }
 }
-
