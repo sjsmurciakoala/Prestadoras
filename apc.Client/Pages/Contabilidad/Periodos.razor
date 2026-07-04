@@ -1,6 +1,8 @@
 ﻿@page "/contabilidad/periodos"
 @attribute [Authorize]
 @using SIAD.Core.Constants
+@using SIAD.Core.DTOs.PeriodosComerciales
+@using apc.Client.Services
 @using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Tenant
 @inject HttpClient Http
@@ -21,16 +23,7 @@
               ShowCloseButton="false"
               CloseOnOutsideClick="false" />
 
-<DxMessageBox @bind-Visible="closeConfirmVisible"
-              Type="MessageBoxType.Confirmation"
-              Title="Cerrar periodo"
-              Text="@closeConfirmText"
-              RenderStyle="MessageBoxRenderStyle.Warning"
-              OkButtonText="Cerrar periodo"
-              CancelButtonText="Cancelar"
-              ShowCloseButton="false"
-              CloseOnOutsideClick="false"
-              Closed="OnCloseConfirmClosed" />
+@* F7: el cierre pasa por el popup de checklist (precierre → cierre) *@
 
 <div class="periodos-page" id="periodos-grid-shell">
 
@@ -177,9 +170,9 @@
                                           RenderStyleMode="ButtonRenderStyleMode.Text"
                                           SizeMode="SizeMode.Small"
                                           IconCssClass="bi bi-lock fs-5"
-                                          title="Cerrar periodo"
+                                          title="Cierre del período (checklist)"
                                           Enabled="@(!IsPeriodoClosed(item) && !IsBusy)"
-                                          Click="@(() => AskClosePeriodo(item))" />
+                                          Click="@(() => AbrirCierrePeriodoAsync(item))" />
                             </div>
                         }
                     </CellDisplayTemplate>
@@ -320,7 +313,14 @@
                                     TextFieldName="@nameof(PeriodoStatusOption.Text)"
                                     ValueFieldName="@nameof(PeriodoStatusOption.Value)"
                                     NullText="Selecciona estado"
+                                    Enabled="@(!formModel.PeriodId.HasValue)"
                                     InputId="periodo-status" />
+                        @if (formModel.PeriodId.HasValue)
+                        {
+                            <small class="text-muted">
+                                El estado se cambia con el flujo de cierre (botón <i class="bi bi-lock"></i> del período).
+                            </small>
+                        }
                     </Template>
                 </DxFormLayoutItem>
             </DxFormLayoutGroup>
@@ -421,6 +421,75 @@
     </BodyContentTemplate>
 </DxPopup>
 
+@* ── Popup de cierre del período con checklist (F7) ── *@
+<DxPopup @bind-Visible="isCierrePopupVisible"
+         Width="640px"
+         MaxWidth="95vw"
+         Scrollable="true"
+         CloseOnEscape="true"
+         CloseOnOutsideClick="false"
+         ShowFooter="true">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2 p-1">
+            <i class="bi bi-lock fs-4 text-danger"></i>
+            <strong>Cierre del período @cierrePeriodo?.Code (@GetPeriodoStatusLabel(cierrePeriodo?.StatusId ?? -1))</strong>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="cierreBody">
+        <div class="p-3">
+            <ul class="list-group mb-3">
+                @foreach (var item in checklistCierre)
+                {
+                    <li class="list-group-item d-flex align-items-start gap-2">
+                        <i class="bi @(item.Ok ? "bi-check-circle-fill text-success" : "bi-x-circle-fill text-danger") mt-1"></i>
+                        <div>
+                            <div class="fw-semibold">@EtiquetaChecklistContable(item.Item)</div>
+                            <small class="text-muted">@item.Detalle</small>
+                        </div>
+                    </li>
+                }
+            </ul>
+            @if (cierrePeriodo?.StatusId == EstadoPeriodoHelper.AbiertoId)
+            {
+                <div class="alert @(ChecklistCierreOk ? "alert-success" : "alert-danger") mb-0">
+                    @(ChecklistCierreOk
+                        ? "Checklist en verde: el período puede pasar a precierre."
+                        : "Resuelva los puntos marcados antes de pasar a precierre.")
+                </div>
+            }
+            else if (cierrePeriodo?.StatusId == EstadoPeriodoHelper.PrecierreId)
+            {
+                <div class="alert @(ChecklistCierreOk ? "alert-warning" : "alert-danger") mb-0">
+                    @(ChecklistCierreOk
+                        ? "El cierre definitivo oficializa el período (los reportes pasan a leer el caché de saldos) y crea el período siguiente. No se reabre desde la aplicación."
+                        : "El checklist dejó de estar en verde: resuelva los puntos o reabra el período.")
+                </div>
+            }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate Context="cierreFooter">
+        <div class="p-2 d-flex justify-content-end gap-2">
+            <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Cancelar"
+                      Click="@cierreFooter.CloseCallback" />
+            @if (cierrePeriodo?.StatusId == EstadoPeriodoHelper.AbiertoId)
+            {
+                <DxButton RenderStyle="ButtonRenderStyle.Warning" Text="Pasar a precierre"
+                          Enabled="@(ChecklistCierreOk && !IsBusy)"
+                          Click="@PrecerrarPeriodoAsync" />
+            }
+            else if (cierrePeriodo?.StatusId == EstadoPeriodoHelper.PrecierreId)
+            {
+                <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Reabrir"
+                          Enabled="@(!IsBusy)"
+                          Click="@ReabrirPeriodoAsync" />
+                <DxButton RenderStyle="ButtonRenderStyle.Danger" Text="Cerrar definitivo"
+                          Enabled="@(ChecklistCierreOk && !IsBusy)"
+                          Click="@CerrarPeriodoDefinitivoAsync" />
+            }
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
 @code {
     private readonly PeriodoStatusOption[] statusOptions =
     [
@@ -442,15 +511,15 @@
     private string statusMessageTitle = string.Empty;
     private string statusMessageText = string.Empty;
     private MessageBoxRenderStyle statusMessageRenderStyle = MessageBoxRenderStyle.Info;
-    private bool closeConfirmVisible;
-    private string closeConfirmText = string.Empty;
-    private long? pendingClosePeriodId;
-    private string? pendingClosePeriodCode;
+    private bool isCierrePopupVisible;
+    private PeriodoContableDto? cierrePeriodo;
+    private List<ChecklistCierreItemDto> checklistCierre = [];
     private bool isVerifyingSaldos;
     private bool isDivergenciasPopupVisible;
     private SaldoVerificacionResultDto? saldoVerificacion;
 
     private bool IsBusy => isLoading || isSaving || isClosingPeriod || isVerifyingSaldos;
+    private bool ChecklistCierreOk => checklistCierre.Count > 0 && checklistCierre.All(i => i.Ok);
     private int OpenCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.AbiertoId);
     private int PreCloseCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.PrecierreId);
     private int ClosedCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.CerradoId);
@@ -603,65 +672,89 @@
         }
     }
 
-    private void AskClosePeriodo(PeriodoContableDto periodo)
+    // ── Cierre con checklist (F7): abierto → precierre → cerrado ──
+
+    private async Task AbrirCierrePeriodoAsync(PeriodoContableDto periodo)
     {
         if (IsPeriodoClosed(periodo) || IsBusy)
         {
             return;
         }
 
-        pendingClosePeriodId = periodo.PeriodId;
-        pendingClosePeriodCode = periodo.Code;
-        closeConfirmText = $"Se cerrara el periodo {periodo.Code}. Esta accion impide registrar movimientos adicionales en ese rango. Deseas continuar?";
-        closeConfirmVisible = true;
-    }
-
-    private async Task OnCloseConfirmClosed(bool confirmed)
-    {
-        if (!confirmed || !pendingClosePeriodId.HasValue)
-        {
-            ClearPendingClose();
-            return;
-        }
-
-        var periodId = pendingClosePeriodId.Value;
-        var periodCode = pendingClosePeriodCode;
-        ClearPendingClose();
-        await ClosePeriodoAsync(periodId, periodCode);
-    }
-
-    private async Task ClosePeriodoAsync(long periodId, string? periodCode)
-    {
         try
         {
             isClosingPeriod = true;
-
-            var response = await Http.PostAsync($"api/contabilidad/catalogos/periodos/{periodId}/cerrar", null);
-            var detail = await response.Content.ReadAsStringAsync();
-
-            if (!response.IsSuccessStatusCode)
-            {
-                ShowStatusMessage(
-                    "Error",
-                    string.IsNullOrWhiteSpace(detail)
-                        ? "No se pudo cerrar el periodo."
-                        : detail,
-                    MessageBoxRenderStyle.Danger);
-                return;
-            }
-
-            await LoadPeriodosAsync();
-            ShowStatusMessage("Exito", $"Periodo {(string.IsNullOrWhiteSpace(periodCode) ? "seleccionado" : periodCode)} cerrado correctamente.", MessageBoxRenderStyle.Success);
+            cierrePeriodo = periodo;
+            checklistCierre = await Http.GetFromJsonAsyncWithAuthCheck<List<ChecklistCierreItemDto>>(
+                $"api/contabilidad/catalogos/periodos/{periodo.PeriodId}/checklist-cierre") ?? [];
+            isCierrePopupVisible = true;
         }
         catch (Exception ex)
         {
-            ShowStatusMessage("Error", $"No se pudo cerrar el periodo: {ex.Message}", MessageBoxRenderStyle.Danger);
+            ShowStatusMessage("Error", $"No se pudo evaluar el checklist de cierre: {ex.Message}", MessageBoxRenderStyle.Danger);
         }
         finally
         {
             isClosingPeriod = false;
         }
     }
+
+    private Task PrecerrarPeriodoAsync() =>
+        EjecutarTransicionCierreAsync("precerrar", $"Período {cierrePeriodo?.Code} en precierre.");
+
+    private Task ReabrirPeriodoAsync() =>
+        EjecutarTransicionCierreAsync("reabrir", $"Período {cierrePeriodo?.Code} reabierto.");
+
+    private Task CerrarPeriodoDefinitivoAsync() =>
+        EjecutarTransicionCierreAsync("cerrar", $"Período {cierrePeriodo?.Code} cerrado. Se habilitó el período siguiente.");
+
+    private async Task EjecutarTransicionCierreAsync(string accion, string mensajeExito)
+    {
+        if (cierrePeriodo is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isClosingPeriod = true;
+
+            var response = await Http.PostAsync(
+                $"api/contabilidad/catalogos/periodos/{cierrePeriodo.PeriodId}/{accion}", null);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                var detail = await HttpClientExtensions.ObtenerMensajeErrorAsync(response);
+                ShowStatusMessage("Cierre bloqueado",
+                    string.IsNullOrWhiteSpace(detail) ? "No se pudo completar la transición." : detail,
+                    MessageBoxRenderStyle.Danger);
+                return;
+            }
+
+            isCierrePopupVisible = false;
+            cierrePeriodo = null;
+            await LoadPeriodosAsync();
+            ShowStatusMessage("Exito", mensajeExito, MessageBoxRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            ShowStatusMessage("Error", $"No se pudo completar la transición: {ex.Message}", MessageBoxRenderStyle.Danger);
+        }
+        finally
+        {
+            isClosingPeriod = false;
+        }
+    }
+
+    private static string EtiquetaChecklistContable(string item) => item switch
+    {
+        "FACTURAS_SIN_PARTIDA" => "Facturas del período con partida contable",
+        "PARTIDAS_BORRADOR" => "Sin partidas en borrador",
+        "CAJA_SIN_POSTEAR" => "Caja del período posteada",
+        "PENDIENTES_COLA" => "Cola de partidas pendientes vacía",
+        "SALDOS_CACHE" => "Caché de saldos consistente con el libro",
+        _ => item
+    };
 
     private void ShowStatusMessage(string title, string message, MessageBoxRenderStyle renderStyle = MessageBoxRenderStyle.Info)
     {
@@ -763,13 +856,6 @@
     private static bool IsPeriodoClosed(PeriodoContableDto periodo)
     {
         return periodo.StatusId == EstadoPeriodoHelper.CerradoId;
-    }
-
-    private void ClearPendingClose()
-    {
-        pendingClosePeriodId = null;
-        pendingClosePeriodCode = null;
-        closeConfirmText = string.Empty;
     }
 
     private sealed class PeriodoFormModel

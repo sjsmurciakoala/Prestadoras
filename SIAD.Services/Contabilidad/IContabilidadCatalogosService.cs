@@ -35,7 +35,21 @@ public interface IContabilidadCatalogosService
 
     Task<long> SavePeriodoAsync(PeriodoContableUpsertDto request, CancellationToken cancellationToken = default);
 
-    Task<bool> ClosePeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default);
+    /// <summary>Checklist del cierre del período contable (F7).</summary>
+    Task<IReadOnlyList<SIAD.Core.DTOs.PeriodosComerciales.ChecklistCierreItemDto>> GetChecklistCierrePeriodoAsync(
+        long periodId, CancellationToken cancellationToken = default);
+
+    /// <summary>Abierto → Precierre; exige checklist en verde.</summary>
+    Task PrecerrarPeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Precierre → Cerrado; re-valida el checklist y crea el período
+    /// siguiente. Devuelve el period_id del período siguiente.
+    /// </summary>
+    Task<long?> CerrarPeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default);
+
+    /// <summary>Precierre → Abierto (única reapertura permitida).</summary>
+    Task ReabrirPeriodoAsync(long periodId, string user, CancellationToken cancellationToken = default);
 
     Task<PlanCuentasImportResult> ImportPlanCuentasAsync(Stream fileStream, string user, bool dryRun, CancellationToken cancellationToken = default);
 
