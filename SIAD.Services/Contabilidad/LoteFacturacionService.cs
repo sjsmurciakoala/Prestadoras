@@ -108,6 +108,9 @@ public sealed class LoteFacturacionService : ILoteFacturacionService
             .AsNoTracking()
             .Where(p => p.company_id == companyId
                 && p.module == IntegracionContableModulos.Ventas
+                // Solo pendientes del lote: las de comprobantes (REC/MIS/ABO, F4)
+                // tienen otro payload y se reprocesan con sp_con_procesar_partida_pendiente.
+                && p.origen_tipo == "LOTE_FACTURACION"
                 && p.status_id == 1)
             .OrderBy(p => p.fecha_documento)
             .ThenBy(p => p.partida_pendiente_id)

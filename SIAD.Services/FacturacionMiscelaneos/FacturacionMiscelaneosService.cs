@@ -1,6 +1,3 @@
-using System.Data;
-using System.Text.Json;
-using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using SIAD.Core.DTOs.Common;
@@ -9,6 +6,7 @@ using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Contabilidad;
 // using SIAD.Services.Caja; — desvinculado de caja (2026-06-04)
 
 namespace SIAD.Services.FacturacionMiscelaneos;
@@ -17,7 +15,6 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
 {
     private const string ContabilidadModuloVentas = "VENTAS";
     private const string ContabilidadDocumentoMiscelaneo = "MIS";
-    private const string ContabilidadTipoTransaccionFacturacion = "FAC";
 
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _currentCompanyService;
@@ -352,72 +349,51 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
 
         await _context.SaveChangesAsync(ct);
 
-        // === Contabilidad automática: generar y postear póliza VENTAS/MIS ===
-        var contabilidadDetails = detallesValidos.Select(d => new
-        {
-            code = d.Codigo,
-            description = d.Nombre,
-            account_id = cuentaPorCodigo[d.Codigo],
-            total = d.ValorTotal
-        }).ToArray();
-
-        var pValues = JsonSerializer.Serialize(new
-        {
-            total,
-            details = contabilidadDetails
-        });
-
+        // === Contabilidad automática por configuración (F4, D2): Debe CxC de la
+        // matriz de integración / Haber ingreso del concepto (miscelaneos_catalogo).
+        // NULL = integración de misceláneos inactiva o partida encolada sin período.
+        long? polizaId = null;
         var connection = _context.Database.GetDbConnection();
         var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
 
-        var typeId = await ResolverTipoTransaccionContableAsync(
-            connection,
-            companyId,
-            ContabilidadTipoTransaccionFacturacion,
-            dbTransaction,
-            ct);
-
-        const string spSql = @"
-            SELECT public.sp_con_generar_comprobante(
-                @CompanyId,
-                @Module,
-                @DocumentType,
-                @DocumentId,
-                @DocumentNumber,
-                @PolizaDate::date,
-                @Description,
-                @Usuario,
-                NULL,
-                @TypeId,
-                NULL,
-                @ValuesJson::jsonb,
-                false
-            );
-        ";
-
-        var polizaId = await connection.ExecuteScalarAsync<long?>(
-            new CommandDefinition(
-                spSql,
-                new
-                {
-                    CompanyId = companyId,
-                    Module = ContabilidadModuloVentas,
-                    DocumentType = ContabilidadDocumentoMiscelaneo,
-                    DocumentId = (long)factura.numrecibo,
-                    DocumentNumber = $"MIS-{factura.numrecibo}",
-                    PolizaDate = hoy.ToDateTime(TimeOnly.MinValue),
-                    Description = $"Recibo miscelaneo {factura.numrecibo} - {cliente.Nombre}",
-                    Usuario = usuario,
-                    TypeId = typeId,
-                    ValuesJson = pValues
-                },
-                transaction: dbTransaction,
-                cancellationToken: ct));
-
-        if (!polizaId.HasValue || polizaId.Value <= 0)
+        var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, dbTransaction, ct);
+        if (config is not null && config.ActivoMiscelaneos)
         {
-            throw new InvalidOperationException(
-                $"No se obtuvo poliza_id al generar comprobante contable para recibo miscelaneo {factura.numrecibo}.");
+            var descripcionComprobante = $"Recibo miscelaneo {factura.numrecibo} - {cliente.Nombre}";
+            var cuentaCxc = await IntegracionContableConfigSql.ResolverCuentaAsync(
+                connection, companyId, "CXC", dbTransaction, ct);
+
+            // Haberes redondeados por cuenta y Debe = suma de esos redondeos,
+            // para que la partida balancee aunque los totales tengan >2 decimales.
+            var lineasHaber = detallesValidos
+                .GroupBy(d => cuentaPorCodigo[d.Codigo])
+                .OrderBy(g => g.Key)
+                .Select(g => new IntegracionContableConfigSql.ComprobanteLinea(
+                    g.Key, 0m,
+                    Math.Round(g.Sum(x => x.ValorTotal), 2, MidpointRounding.AwayFromZero),
+                    g.First().Nombre))
+                .Where(l => l.Haber > 0)
+                .ToList();
+
+            var lineas = new List<IntegracionContableConfigSql.ComprobanteLinea>
+            {
+                new(cuentaCxc, lineasHaber.Sum(l => l.Haber), 0m, descripcionComprobante)
+            };
+            lineas.AddRange(lineasHaber);
+
+            polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
+                connection,
+                companyId,
+                ContabilidadModuloVentas,
+                ContabilidadDocumentoMiscelaneo,
+                factura.numrecibo,
+                $"MIS-{factura.numrecibo}",
+                hoy,
+                descripcionComprobante,
+                usuario,
+                lineas,
+                dbTransaction,
+                ct);
         }
 
         await tx.CommitAsync(ct);
@@ -550,48 +526,5 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
         return companyId;
     }
 
-    private static async Task<long> ResolverTipoTransaccionContableAsync(
-        IDbConnection connection,
-        long companyId,
-        string transactionCode,
-        IDbTransaction? transaction,
-        CancellationToken ct)
-    {
-        const string sql = @"
-            SELECT t.type_id
-            FROM public.con_tipo_transaccion t
-            WHERE t.company_id = @CompanyId
-              AND upper(COALESCE(t.code, '')) = @TransactionCode
-              AND COALESCE(
-                    t.status_id,
-                    CASE
-                        WHEN upper(COALESCE(t.status, 'ACTIVE')) IN ('ACTIVE', 'ACTIVO') THEN 1
-                        WHEN upper(COALESCE(t.status, 'ACTIVE')) IN ('INACTIVE', 'INACTIVO') THEN 0
-                        ELSE 1
-                    END
-                  ) = 1
-            ORDER BY t.type_id
-            LIMIT 1;
-        ";
-
-        var typeId = await connection.ExecuteScalarAsync<long?>(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    CompanyId = companyId,
-                    TransactionCode = transactionCode.ToUpperInvariant()
-                },
-                transaction: transaction,
-                cancellationToken: ct));
-
-        if (!typeId.HasValue || typeId.Value <= 0)
-        {
-            throw new InvalidOperationException(
-                $"No existe con_tipo_transaccion activo para company_id={companyId} con code={transactionCode}.");
-        }
-
-        return typeId.Value;
-    }
 }
 
