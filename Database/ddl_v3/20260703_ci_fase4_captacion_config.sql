@@ -101,13 +101,18 @@ BEGIN
             p_document_id, v_module, v_doc_type;
     END IF;
 
-    -- Idempotencia por documento (misma semántica que sp_con_generar_comprobante).
+    -- Idempotencia por documento: solo cuenta la partida POSTEADA (status=1).
+    -- Un draft del mismo documento es una partida REVERTIDA por
+    -- sp_con_revertir_poliza: un nuevo cobro del documento debe generar
+    -- partida nueva (sp_con_generar_comprobante no filtraba status y devolvía
+    -- el draft revertido sin re-postear).
     SELECT h.poliza_id INTO v_poliza_id
     FROM public.con_partida_hdr h
     WHERE h.company_id = p_company_id
       AND h.module = v_module
       AND h.document_type = v_doc_type
       AND h.document_id = p_document_id
+      AND h.status = 1
     LIMIT 1;
     IF v_poliza_id IS NOT NULL THEN
         RETURN v_poliza_id;
@@ -224,7 +229,7 @@ BEGIN
         p_company_id, v_asiento.journal_id, v_period_id, v_module, v_doc_type,
         p_document_id, left(p_document_number, 50), v_numero.poliza_number, v_numero.seq,
         p_poliza_date, left(p_description, 500), 0, left(p_document_number, 50),
-        now(), COALESCE(p_user, current_user), v_asiento.type_id, 0, 0
+        now(), COALESCE(p_user, current_user), v_asiento.type_id, v_total_debe, v_total_haber
     )
     RETURNING poliza_id INTO v_poliza_id;
 
@@ -249,10 +254,6 @@ BEGIN
             left(p_document_number, 120)
         );
     END LOOP;
-
-    UPDATE public.con_partida_hdr h
-    SET total_debit = v_total_debe, total_credit = v_total_haber
-    WHERE h.poliza_id = v_poliza_id;
 
     -- Motor único (D1).
     PERFORM public.sp_con_postear_poliza(p_company_id, v_poliza_id, p_user);

@@ -363,15 +363,23 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
             var cuentaCxc = await IntegracionContableConfigSql.ResolverCuentaAsync(
                 connection, companyId, "CXC", dbTransaction, ct);
 
-            var lineas = new List<IntegracionContableConfigSql.ComprobanteLinea>
-            {
-                new(cuentaCxc, total, 0m, descripcionComprobante)
-            };
-            lineas.AddRange(detallesValidos
+            // Haberes redondeados por cuenta y Debe = suma de esos redondeos,
+            // para que la partida balancee aunque los totales tengan >2 decimales.
+            var lineasHaber = detallesValidos
                 .GroupBy(d => cuentaPorCodigo[d.Codigo])
                 .OrderBy(g => g.Key)
                 .Select(g => new IntegracionContableConfigSql.ComprobanteLinea(
-                    g.Key, 0m, g.Sum(x => x.ValorTotal), g.First().Nombre)));
+                    g.Key, 0m,
+                    Math.Round(g.Sum(x => x.ValorTotal), 2, MidpointRounding.AwayFromZero),
+                    g.First().Nombre))
+                .Where(l => l.Haber > 0)
+                .ToList();
+
+            var lineas = new List<IntegracionContableConfigSql.ComprobanteLinea>
+            {
+                new(cuentaCxc, lineasHaber.Sum(l => l.Haber), 0m, descripcionComprobante)
+            };
+            lineas.AddRange(lineasHaber);
 
             polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
                 connection,

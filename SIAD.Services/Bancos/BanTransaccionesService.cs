@@ -527,16 +527,10 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         var bancoAccountId = cuentaBanco.cont_account_id ?? 0;
         if (bancoAccountId <= 0)
         {
-            var fallbackConnection = context.Database.GetDbConnection();
-            if (fallbackConnection.State != ConnectionState.Open)
-            {
-                await fallbackConnection.OpenAsync(ct);
-            }
-
             try
             {
                 bancoAccountId = await IntegracionContableConfigSql.ResolverCuentaAsync(
-                    fallbackConnection, companyId, "BANCO_DEFAULT", transaction: null, ct);
+                    context.Database.GetDbConnection(), companyId, "BANCO_DEFAULT", transaction: null, ct);
             }
             catch (PostgresException ex) when (ex.SqlState == "P0001")
             {

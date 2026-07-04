@@ -263,6 +263,17 @@ public sealed class CaptacionConfigContabilidadTests : IntegrationTestBase
             new { CompanyId, PolizaId = polizaId }, Transaction));
         Assert.Equal(0, status);
 
+        // Re-cobro del mismo documento tras el reverso: la idempotencia ignora el
+        // draft revertido y genera una partida NUEVA posteada.
+        var polizaNueva = await GenerarAsync(DocumentoBase + 7, DateTime.Today, caja, cxc);
+        Assert.NotNull(polizaNueva);
+        Assert.NotEqual(polizaId, polizaNueva);
+
+        var statusNueva = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT status FROM public.con_partida_hdr WHERE company_id = @CompanyId AND poliza_id = @PolizaId",
+            new { CompanyId, PolizaId = polizaNueva }, Transaction));
+        Assert.Equal(1, statusNueva);
+
         // Documento encolado (sin período) → reverso descarta la pendiente y devuelve NULL.
         var encolada = await GenerarAsync(DocumentoBase + 8, new DateTime(2032, 3, 10), caja, cxc);
         Assert.Null(encolada);

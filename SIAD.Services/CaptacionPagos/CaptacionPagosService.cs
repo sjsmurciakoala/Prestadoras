@@ -1481,14 +1481,8 @@ public class CaptacionPagosService : ICaptacionPagosService
                 // El cobro de un misceláneo salda la CxC que dejó su emisión
                 // (Banco / CxC): contracuenta CxC general de la matriz de
                 // integración — el ingreso ya se reconoció al emitir el recibo.
-                var connection = _context.Database.GetDbConnection();
-                if (connection.State != ConnectionState.Open)
-                {
-                    await connection.OpenAsync(ct);
-                }
-
                 var cuentaCxc = await IntegracionContableConfigSql.ResolverCuentaAsync(
-                    connection, companyId, "CXC", transaction: null, ct);
+                    _context.Database.GetDbConnection(), companyId, "CXC", transaction: null, ct);
 
                 var contraCuentasBanco = new List<BanTransaccionContraLineaDto>
                 {
@@ -2177,7 +2171,7 @@ public class CaptacionPagosService : ICaptacionPagosService
     /// reemplaza al mapeo legacy servicios.cont_account_id, que acreditaba
     /// ingresos directo y dejaba la CxC de la facturación sin saldar).
     /// </summary>
-    private async Task<IReadOnlyList<BanTransaccionContraLineaDto>> ConstruirContraCuentasBancariasAsync(
+    private Task<IReadOnlyList<BanTransaccionContraLineaDto>> ConstruirContraCuentasBancariasAsync(
         IReadOnlyList<(string? ServicioCodigo, decimal Monto)> aplicaciones,
         int? categoriaServicioId,
         bool? conMedicion,
@@ -2185,58 +2179,15 @@ public class CaptacionPagosService : ICaptacionPagosService
         string sourceDocument,
         CancellationToken ct)
     {
-        var entradas = aplicaciones.Where(a => a.Monto > 0).ToList();
-        if (entradas.Count == 0)
-        {
-            throw new InvalidOperationException("No se recibieron detalles con monto para construir contracuentas bancarias.");
-        }
-
-        var sourceDocumentNormalizado = string.IsNullOrWhiteSpace(sourceDocument)
-            ? "CAPTACION"
-            : sourceDocument.Trim();
-        if (sourceDocumentNormalizado.Length > 120)
-        {
-            sourceDocumentNormalizado = sourceDocumentNormalizado[..120];
-        }
-
-        var companyId = EnsureCompanyId();
-        var connection = _context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync(ct);
-        }
-
-        var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, transaction: null, ct)
-            ?? throw new InvalidOperationException(
-                "La empresa no tiene configuración de integración contable (pantalla Integración Contable / perfil ERSAPS).");
-
-        var cuentasCxc = await IntegracionContableConfigSql.ResolverCuentasCxcPorServicioAsync(
-            connection,
-            companyId,
-            config.ModoCxc,
-            entradas.Select(a => a.ServicioCodigo),
+        return IntegracionContableConfigSql.ConstruirContraCuentasCxcAsync(
+            _context.Database.GetDbConnection(),
+            EnsureCompanyId(),
+            aplicaciones,
             categoriaServicioId,
             conMedicion,
-            transaction: null,
+            descripcion,
+            sourceDocument,
             ct);
-
-        var montosPorCuenta = new Dictionary<long, decimal>();
-        foreach (var entrada in entradas)
-        {
-            var cuentaId = cuentasCxc[(entrada.ServicioCodigo ?? string.Empty).Trim().ToUpperInvariant()];
-            montosPorCuenta[cuentaId] = montosPorCuenta.GetValueOrDefault(cuentaId) + entrada.Monto;
-        }
-
-        return montosPorCuenta
-            .OrderBy(x => x.Key)
-            .Select(x => new BanTransaccionContraLineaDto
-            {
-                CuentaId = x.Key,
-                Monto = Math.Round(x.Value, 2, MidpointRounding.AwayFromZero),
-                Descripcion = descripcion,
-                SourceDocument = sourceDocumentNormalizado
-            })
-            .ToList();
     }
 
     private async Task<string?> TryCompensarMovimientoBancarioAsync(
@@ -2325,10 +2276,6 @@ public class CaptacionPagosService : ICaptacionPagosService
         CancellationToken ct)
     {
         var connection = _context.Database.GetDbConnection();
-        if (connection.State != ConnectionState.Open)
-        {
-            await connection.OpenAsync(ct);
-        }
 
         var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, transaction, ct);
         if (config is null || !config.ActivoCaja)
@@ -2351,26 +2298,20 @@ public class CaptacionPagosService : ICaptacionPagosService
         }
         else
         {
-            var cuentasCxc = await IntegracionContableConfigSql.ResolverCuentasCxcPorServicioAsync(
+            aplicacionesCxc = await IntegracionContableConfigSql.ResolverAplicacionesCxcAsync(
                 connection,
                 companyId,
                 config.ModoCxc,
-                aplicaciones.Select(a => a.ServicioCodigo),
+                aplicaciones,
                 categoriaServicioId,
                 conMedicion,
                 transaction,
                 ct);
-
-            aplicacionesCxc = aplicaciones
-                .Where(a => a.Monto > 0)
-                .Select(a => (cuentasCxc[(a.ServicioCodigo ?? string.Empty).Trim().ToUpperInvariant()], a.Monto))
-                .ToList();
         }
 
         var lineas = IntegracionContableConfigSql.ArmarLineasCobro(
             cuentaCaja,
             aplicacionesCxc,
-            description,
             description);
 
         var polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(

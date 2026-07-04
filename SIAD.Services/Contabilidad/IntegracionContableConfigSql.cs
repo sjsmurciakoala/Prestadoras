@@ -1,6 +1,8 @@
 using System.Data;
+using System.Data.Common;
 using System.Text.Json;
 using Dapper;
+using SIAD.Core.DTOs.Bancos;
 
 namespace SIAD.Services.Contabilidad;
 
@@ -30,11 +32,13 @@ internal static class IntegracionContableConfigSql
 
     /// <summary>Config de integración de la empresa, o null si aún no fue configurada.</summary>
     internal static async Task<ConfigIntegracion?> ObtenerConfigAsync(
-        IDbConnection connection,
+        DbConnection connection,
         long companyId,
         IDbTransaction? transaction,
         CancellationToken ct)
     {
+        await EnsureOpenAsync(connection, ct);
+
         const string sql = @"
             SELECT modo_ventas AS ModoVentas,
                    modo_cxc AS ModoCxc,
@@ -55,12 +59,14 @@ internal static class IntegracionContableConfigSql
 
     /// <summary>Resuelve la cuenta de un uso general (fila comodín) vía fn_con_resolver_cuenta.</summary>
     internal static async Task<long> ResolverCuentaAsync(
-        IDbConnection connection,
+        DbConnection connection,
         long companyId,
         string uso,
         IDbTransaction? transaction,
         CancellationToken ct)
     {
+        await EnsureOpenAsync(connection, ct);
+
         const string sql = "SELECT public.fn_con_resolver_cuenta(@CompanyId, @Uso, NULL, NULL, NULL);";
         var accountId = await connection.ExecuteScalarAsync<long?>(
             new CommandDefinition(sql, new { CompanyId = companyId, Uso = uso }, transaction: transaction, cancellationToken: ct));
@@ -77,11 +83,12 @@ internal static class IntegracionContableConfigSql
     /// <summary>
     /// Resuelve la cuenta CxC para cada código de servicio del detalle según el
     /// modo configurado (fn_con_resolver_cuenta_modo). Los códigos sin servicio
-    /// asociado caen a la fila general por el fallback de la matriz. Devuelve el
-    /// mapa código-normalizado → account_id (los códigos se comparan en mayúsculas).
+    /// asociado caen a la fila general por el fallback de la matriz; si dos
+    /// servicios colisionan tras normalizar el código, gana el de menor id.
+    /// Devuelve el mapa código-normalizado → account_id.
     /// </summary>
     internal static async Task<Dictionary<string, long>> ResolverCuentasCxcPorServicioAsync(
-        IDbConnection connection,
+        DbConnection connection,
         long companyId,
         string modoCxc,
         IEnumerable<string?> codigosServicio,
@@ -91,7 +98,7 @@ internal static class IntegracionContableConfigSql
         CancellationToken ct)
     {
         var codigos = codigosServicio
-            .Select(c => (c ?? string.Empty).Trim().ToUpperInvariant())
+            .Select(NormalizarCodigo)
             .Distinct()
             .ToArray();
 
@@ -100,14 +107,21 @@ internal static class IntegracionContableConfigSql
             return new Dictionary<string, long>(StringComparer.OrdinalIgnoreCase);
         }
 
+        await EnsureOpenAsync(connection, ct);
+
         const string sql = @"
             SELECT c.codigo AS Codigo,
                    public.fn_con_resolver_cuenta_modo(
                        @CompanyId, 'CXC', @Modo, s.servicio_id, @CategoriaId, @ConMedicion) AS CuentaId
             FROM (SELECT DISTINCT upper(btrim(x)) AS codigo FROM unnest(@Codigos) AS x) c
-            LEFT JOIN public.adm_servicio s
-                   ON s.company_id = @CompanyId
-                  AND upper(btrim(s.codigo)) = c.codigo;
+            LEFT JOIN LATERAL (
+                SELECT s.servicio_id
+                FROM public.adm_servicio s
+                WHERE s.company_id = @CompanyId
+                  AND upper(btrim(s.codigo)) = c.codigo
+                ORDER BY s.servicio_id
+                LIMIT 1
+            ) s ON true;
         ";
 
         var rows = await connection.QueryAsync<(string Codigo, long CuentaId)>(
@@ -133,7 +147,7 @@ internal static class IntegracionContableConfigSql
     /// (sin período abierto y encolar_sin_periodo=true).
     /// </summary>
     internal static async Task<long?> GenerarComprobanteAsync(
-        IDbConnection connection,
+        DbConnection connection,
         long companyId,
         string module,
         string documentType,
@@ -146,6 +160,8 @@ internal static class IntegracionContableConfigSql
         IDbTransaction? transaction,
         CancellationToken ct)
     {
+        await EnsureOpenAsync(connection, ct);
+
         const string sql = @"
             SELECT public.sp_con_generar_comprobante_config(
                 @CompanyId, @Module, @DocumentType, @DocumentId, @DocumentNumber,
@@ -176,7 +192,7 @@ internal static class IntegracionContableConfigSql
     /// sp_con_revertir_comprobante_config. Devuelve el poliza_id revertido o null.
     /// </summary>
     internal static async Task<long?> RevertirComprobanteAsync(
-        IDbConnection connection,
+        DbConnection connection,
         long companyId,
         string module,
         string[] documentTypes,
@@ -185,6 +201,8 @@ internal static class IntegracionContableConfigSql
         IDbTransaction? transaction,
         CancellationToken ct)
     {
+        await EnsureOpenAsync(connection, ct);
+
         const string sql = @"
             SELECT public.sp_con_revertir_comprobante_config(
                 @CompanyId, @Module, @DocumentTypes, @DocumentId, @Usuario);
@@ -205,44 +223,150 @@ internal static class IntegracionContableConfigSql
                 cancellationToken: ct));
     }
 
-    /// <summary>Agrupa montos por cuenta y arma las líneas Debe caja / Haber CxC de un cobro.</summary>
+    /// <summary>
+    /// Arma las líneas Debe caja / Haber CxC de un cobro. Los haberes se
+    /// redondean por cuenta y el debe es la suma de esos redondeos, para que la
+    /// partida siempre balancee (redondear la suma cruda por un lado y los
+    /// parciales por el otro puede diferir con montos de más de 2 decimales).
+    /// </summary>
     internal static List<ComprobanteLinea> ArmarLineasCobro(
         long cuentaCajaId,
         IEnumerable<(long CuentaCxcId, decimal Monto)> aplicaciones,
-        string descripcionDebe,
-        string descripcionHaber)
+        string descripcion)
+    {
+        var lineasHaber = AgruparMontosPorCuenta(aplicaciones)
+            .Select(kvp => new ComprobanteLinea(kvp.Key, 0m, kvp.Value, descripcion))
+            .ToList();
+
+        var total = lineasHaber.Sum(l => l.Haber);
+        if (total <= 0)
+        {
+            throw new InvalidOperationException("El cobro no tiene montos aplicables para generar comprobante contable.");
+        }
+
+        var lineas = new List<ComprobanteLinea> { new(cuentaCajaId, total, 0m, descripcion) };
+        lineas.AddRange(lineasHaber);
+        return lineas;
+    }
+
+    /// <summary>
+    /// Contracuentas CxC analíticas del movimiento bancario de un cobro/abono,
+    /// resueltas por la matriz de integración según el modo configurado
+    /// (Banco / CxC — reemplaza al mapeo legacy por servicio y a la cuenta
+    /// única de con_regla_integracion).
+    /// </summary>
+    internal static async Task<IReadOnlyList<BanTransaccionContraLineaDto>> ConstruirContraCuentasCxcAsync(
+        DbConnection connection,
+        long companyId,
+        IReadOnlyList<(string? ServicioCodigo, decimal Monto)> aplicaciones,
+        int? categoriaServicioId,
+        bool? conMedicion,
+        string descripcion,
+        string sourceDocument,
+        CancellationToken ct)
+    {
+        var entradas = aplicaciones.Where(a => a.Monto > 0).ToList();
+        if (entradas.Count == 0)
+        {
+            throw new InvalidOperationException("No se recibieron detalles con monto para construir contracuentas bancarias.");
+        }
+
+        var sourceDocumentNormalizado = string.IsNullOrWhiteSpace(sourceDocument)
+            ? "CAPTACION"
+            : sourceDocument.Trim();
+        if (sourceDocumentNormalizado.Length > 120)
+        {
+            sourceDocumentNormalizado = sourceDocumentNormalizado[..120];
+        }
+
+        var config = await ObtenerConfigAsync(connection, companyId, transaction: null, ct)
+            ?? throw new InvalidOperationException(
+                "La empresa no tiene configuración de integración contable (pantalla Integración Contable / perfil ERSAPS).");
+
+        var cuentasCxc = await ResolverCuentasCxcPorServicioAsync(
+            connection,
+            companyId,
+            config.ModoCxc,
+            entradas.Select(a => a.ServicioCodigo),
+            categoriaServicioId,
+            conMedicion,
+            transaction: null,
+            ct);
+
+        return AgruparMontosPorCuenta(entradas.Select(a => (cuentasCxc[NormalizarCodigo(a.ServicioCodigo)], a.Monto)))
+            .Select(kvp => new BanTransaccionContraLineaDto
+            {
+                CuentaId = kvp.Key,
+                Monto = kvp.Value,
+                Descripcion = descripcion,
+                SourceDocument = sourceDocumentNormalizado
+            })
+            .ToList();
+    }
+
+    /// <summary>
+    /// Resuelve las aplicaciones (código de servicio, monto) a cuentas CxC según
+    /// el modo configurado. Punto único que comparten el comprobante de caja y
+    /// las contracuentas bancarias.
+    /// </summary>
+    internal static async Task<List<(long CuentaCxcId, decimal Monto)>> ResolverAplicacionesCxcAsync(
+        DbConnection connection,
+        long companyId,
+        string modoCxc,
+        IReadOnlyList<(string? ServicioCodigo, decimal Monto)> aplicaciones,
+        int? categoriaServicioId,
+        bool? conMedicion,
+        IDbTransaction? transaction,
+        CancellationToken ct)
+    {
+        var cuentasCxc = await ResolverCuentasCxcPorServicioAsync(
+            connection,
+            companyId,
+            modoCxc,
+            aplicaciones.Select(a => a.ServicioCodigo),
+            categoriaServicioId,
+            conMedicion,
+            transaction,
+            ct);
+
+        return aplicaciones
+            .Where(a => a.Monto > 0)
+            .Select(a => (cuentasCxc[NormalizarCodigo(a.ServicioCodigo)], a.Monto))
+            .ToList();
+    }
+
+    internal static string NormalizarCodigo(string? codigo) =>
+        (codigo ?? string.Empty).Trim().ToUpperInvariant();
+
+    /// <summary>Agrupa montos positivos por cuenta y redondea el total por cuenta (2 dec, AwayFromZero).</summary>
+    private static IEnumerable<KeyValuePair<long, decimal>> AgruparMontosPorCuenta(
+        IEnumerable<(long CuentaId, decimal Monto)> aplicaciones)
     {
         var porCuenta = new Dictionary<long, decimal>();
-        foreach (var (cuentaCxcId, monto) in aplicaciones)
+        foreach (var (cuentaId, monto) in aplicaciones)
         {
             if (monto <= 0)
             {
                 continue;
             }
 
-            porCuenta[cuentaCxcId] = porCuenta.GetValueOrDefault(cuentaCxcId) + monto;
+            porCuenta[cuentaId] = porCuenta.GetValueOrDefault(cuentaId) + monto;
         }
 
-        var total = Math.Round(porCuenta.Values.Sum(), 2, MidpointRounding.AwayFromZero);
-        if (total <= 0)
-        {
-            throw new InvalidOperationException("El cobro no tiene montos aplicables para generar comprobante contable.");
-        }
-
-        var lineas = new List<ComprobanteLinea>
-        {
-            new(cuentaCajaId, total, 0m, descripcionDebe)
-        };
-
-        lineas.AddRange(porCuenta
+        return porCuenta
             .OrderBy(kvp => kvp.Key)
-            .Select(kvp => new ComprobanteLinea(
+            .Select(kvp => new KeyValuePair<long, decimal>(
                 kvp.Key,
-                0m,
-                Math.Round(kvp.Value, 2, MidpointRounding.AwayFromZero),
-                descripcionHaber)));
+                Math.Round(kvp.Value, 2, MidpointRounding.AwayFromZero)))
+            .Where(kvp => kvp.Value > 0);
+    }
 
-        return lineas;
+    private static async Task EnsureOpenAsync(DbConnection connection, CancellationToken ct)
+    {
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(ct);
+        }
     }
 
     private static string SerializarLineas(IReadOnlyList<ComprobanteLinea> lineas)
