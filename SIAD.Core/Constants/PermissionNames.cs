@@ -46,6 +46,10 @@ public static class PermissionResources
         // Recurso propio del posteo por lote (D10: operación sensible —
         // configurar la integración NO debe implicar poder postear lotes).
         public const string LoteFacturacion = "lotefacturacion";
+
+        // Reconciliación del caché oficial de saldos (F6): solo lectura,
+        // pero con recurso propio para poder acotarla desde administración.
+        public const string Saldos = "saldos";
     }
 }
 

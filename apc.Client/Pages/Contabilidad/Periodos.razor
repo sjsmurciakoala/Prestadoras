@@ -1,8 +1,12 @@
 ﻿@page "/contabilidad/periodos"
 @attribute [Authorize]
 @using SIAD.Core.Constants
+@using apc.Client.Services.Contabilidad
+@using apc.Client.Services.Tenant
 @inject HttpClient Http
 @inject IToastNotificationService ToastService
+@inject PeriodosContablesClient PeriodosClient
+@inject TenantState TenantState
 
 <PageTitle>SIAD - Periodos contables</PageTitle>
 
@@ -58,6 +62,13 @@
             </div>
         </div>
         <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="@(isVerifyingSaldos ? "Verificando..." : "Verificar saldos")"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-shield-check"
+                      title="Reconciliar el caché oficial de saldos (con_saldo_cuenta) contra el libro"
+                      Click="VerificarSaldosAsync"
+                      Enabled="@(!IsBusy)" />
             <DxButton Text="Actualizar"
                       RenderStyle="ButtonRenderStyle.Secondary"
                       RenderStyleMode="ButtonRenderStyleMode.Outline"
@@ -71,6 +82,39 @@
                       Enabled="@(!IsBusy)" />
         </div>
     </div>
+
+    @* ── Aviso de reconciliación de saldos (F6) ── *@
+    @if (saldoVerificacion is not null)
+    {
+        @if (saldoVerificacion.Consistente)
+        {
+            <div class="alert alert-success d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+                <i class="bi bi-shield-check fs-5"></i>
+                <div>
+                    Saldos consistentes: el caché oficial (con_saldo_cuenta) coincide con el libro.
+                    <small class="text-muted d-block">Verificado: @saldoVerificacion.VerificadoEn.ToLocalTime().ToString("dd/MM/yyyy HH:mm")</small>
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="alert alert-danger d-flex align-items-center gap-2 py-2 mb-3" role="alert">
+                <i class="bi bi-shield-exclamation fs-5"></i>
+                <div class="flex-grow-1">
+                    <strong>@saldoVerificacion.TotalDivergencias divergencia(s)</strong> entre el caché de saldos y el libro
+                    (montos: @saldoVerificacion.Montos, conteos: @saldoVerificacion.Conteos,
+                    solo caché: @saldoVerificacion.SoloCache, solo libro: @saldoVerificacion.SoloLibro@(saldoVerificacion.FechasFueraPeriodo > 0 ? $", fechas fuera de período: {saldoVerificacion.FechasFueraPeriodo}" : string.Empty)).
+                    Reportes de períodos cerrados pueden estar incorrectos — coordinar la reconstrucción
+                    (sp_con_reconstruir_saldo_cuenta) en ventana de mantenimiento.
+                </div>
+                <DxButton Text="Ver detalle"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          SizeMode="SizeMode.Small"
+                          Click="@(() => isDivergenciasPopupVisible = true)" />
+            </div>
+        }
+    }
 
     @* ── Indicadores rapidos ── *@
     <div class="d-flex flex-wrap gap-2 mb-3">
@@ -334,6 +378,49 @@
     </FooterContentTemplate>
 </DxPopup>
 
+@* ── Popup de divergencias caché vs libro (F6) ── *@
+<DxPopup @bind-Visible="isDivergenciasPopupVisible"
+         Width="980px"
+         MaxWidth="95vw"
+         MinWidth="320px"
+         MaxHeight="90vh"
+         Scrollable="true"
+         ShowCloseButton="true"
+         CloseOnOutsideClick="true"
+         HeaderText="Divergencias caché de saldos vs libro">
+    <BodyContentTemplate Context="divergenciasBody">
+        <p class="text-muted small mb-2">
+            Cada fila es un (período, cuenta) donde con_saldo_cuenta no coincide con la suma de
+            con_partida_dtl posteada. La corrección es la reconstrucción por SQL
+            (sp_con_reconstruir_saldo_cuenta) en ventana de mantenimiento — ningún dato del libro se toca.
+            Las filas FECHA_FUERA_PERIODO son pólizas con fecha fuera del rango de su período:
+            se corrige la póliza, no el caché.
+        </p>
+        @if (saldoVerificacion?.DetalleTruncado == true)
+        {
+            <div class="alert alert-warning py-1 px-2 small mb-2">
+                El detalle se truncó a @saldoVerificacion.Divergencias.Count filas; los contadores del aviso sí son totales.
+            </div>
+        }
+        <DxGrid Data="@(saldoVerificacion?.Divergencias)"
+                ShowPager="true"
+                PageSize="10"
+                SizeMode="SizeMode.Small"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                CssClass="border-0">
+            <Columns>
+                <DxGridDataColumn FieldName="@nameof(SaldoDivergenciaDto.PeriodoCode)" Caption="Periodo" Width="90px" />
+                <DxGridDataColumn FieldName="@nameof(SaldoDivergenciaDto.CodigoCuenta)" Caption="Cuenta" Width="140px" />
+                <DxGridDataColumn FieldName="@nameof(SaldoDivergenciaDto.TipoDivergencia)" Caption="Tipo" Width="110px" />
+                <DxGridDataColumn FieldName="@nameof(SaldoDivergenciaDto.DebitosCache)" Caption="Débitos caché" DisplayFormat="{0:N2}" TextAlignment="GridTextAlignment.Right" />
+                <DxGridDataColumn FieldName="@nameof(SaldoDivergenciaDto.DebitosLibro)" Caption="Débitos libro" DisplayFormat="{0:N2}" TextAlignment="GridTextAlignment.Right" />
+                <DxGridDataColumn FieldName="@nameof(SaldoDivergenciaDto.CreditosCache)" Caption="Créditos caché" DisplayFormat="{0:N2}" TextAlignment="GridTextAlignment.Right" />
+                <DxGridDataColumn FieldName="@nameof(SaldoDivergenciaDto.CreditosLibro)" Caption="Créditos libro" DisplayFormat="{0:N2}" TextAlignment="GridTextAlignment.Right" />
+            </Columns>
+        </DxGrid>
+    </BodyContentTemplate>
+</DxPopup>
+
 @code {
     private readonly PeriodoStatusOption[] statusOptions =
     [
@@ -359,8 +446,11 @@
     private string closeConfirmText = string.Empty;
     private long? pendingClosePeriodId;
     private string? pendingClosePeriodCode;
+    private bool isVerifyingSaldos;
+    private bool isDivergenciasPopupVisible;
+    private SaldoVerificacionResultDto? saldoVerificacion;
 
-    private bool IsBusy => isLoading || isSaving || isClosingPeriod;
+    private bool IsBusy => isLoading || isSaving || isClosingPeriod || isVerifyingSaldos;
     private int OpenCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.AbiertoId);
     private int PreCloseCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.PrecierreId);
     private int ClosedCount => periodos.Count(item => item.StatusId == EstadoPeriodoHelper.CerradoId);
@@ -390,6 +480,36 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task VerificarSaldosAsync()
+    {
+        try
+        {
+            isVerifyingSaldos = true;
+            var companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0)
+            {
+                ToastService.ShowToast(new ToastOptions { Title = "Saldos", Text = "No se pudo resolver la empresa actual.", RenderStyle = ToastRenderStyle.Danger });
+                return;
+            }
+
+            saldoVerificacion = await PeriodosClient.VerificarSaldosAsync(companyId);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            saldoVerificacion = null;
+            ShowStatusMessage("Sesión expirada", "La sesión expiró. Vuelve a iniciar sesión.", MessageBoxRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            saldoVerificacion = null;
+            ToastService.ShowToast(new ToastOptions { Title = "Saldos", Text = $"No se pudo verificar: {ex.Message}", RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally
+        {
+            isVerifyingSaldos = false;
         }
     }
 

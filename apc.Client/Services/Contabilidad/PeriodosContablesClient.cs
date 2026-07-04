@@ -59,6 +59,24 @@ public sealed class PeriodosContablesClient
         }
     }
 
+    /// <summary>
+    /// Reconciliación caché de saldos (con_saldo_cuenta) vs libro (F6).
+    /// Usa las extensiones auth-aware: lanza UnauthorizedAccessException en
+    /// 401/403/redirect a login y HttpRequestException con el detalle en
+    /// errores del servidor — la página decide cómo mostrarlos.
+    /// </summary>
+    public Task<SaldoVerificacionResultDto?> VerificarSaldosAsync(long companyId, long? periodId = null,
+        CancellationToken ct = default)
+    {
+        var url = $"api/contabilidad/saldos/{companyId}/verificacion";
+        if (periodId.HasValue)
+        {
+            url += $"?periodId={periodId.Value}";
+        }
+
+        return _httpClient.GetFromJsonAsyncWithAuthCheck<SaldoVerificacionResultDto>(url, ct);
+    }
+
     private sealed class ExistePeriodoAbiertoResponse
     {
         public bool Existe { get; set; }
