@@ -141,7 +141,7 @@ public sealed class NotaCreditoDebitoContabilidadTests : IntegrationTestBase
             SELECT f.id FROM public.factura f
             WHERE f.company_id = @CompanyId
               AND COALESCE(f.estado, '') <> 'N'
-              AND COALESCE(f.saldototal, 0) > 0
+              AND COALESCE(f.saldototal, 0) >= 1
               AND EXISTS (SELECT 1 FROM public.cliente_maestro cm
                           WHERE cm.company_id = f.company_id
                             AND cm.maestro_cliente_clave = f.clientecodigo)
@@ -156,18 +156,25 @@ public sealed class NotaCreditoDebitoContabilidadTests : IntegrationTestBase
         return (facturaId.Value, caiId.Value);
     }
 
-    private Task<NotaResult> EmitirNcAsync(int facturaId, long caiId) =>
+    private Task<NotaResult> EmitirNcAsync(int facturaId, long caiId, decimal? monto = null, string? lineasJson = null) =>
         Connection.QueryFirstAsync<NotaResult>(new CommandDefinition(@"
             SELECT * FROM public.sp_adm_emitir_nota_credito(
                 p_company_id := @CompanyId,
                 p_factura_origen_id := @FacturaId,
                 p_motivo_anulacion_id := 1::smallint,
                 p_motivo_detalle := 'test posteo config F5',
-                p_monto_disminuir := NULL::numeric,
-                p_lineas := NULL::jsonb,
+                p_monto_disminuir := @Monto::numeric,
+                p_lineas := @Lineas::jsonb,
                 p_usuario_emisor := 'TEST',
                 p_cai_id := @CaiId)",
-            new { CompanyId, FacturaId = facturaId, CaiId = caiId }, Transaction));
+            new
+            {
+                CompanyId,
+                FacturaId = facturaId,
+                CaiId = caiId,
+                Monto = (object?)monto ?? DBNull.Value,
+                Lineas = (object?)lineasJson ?? DBNull.Value
+            }, Transaction));
 
     private Task<PartidaRow> PartidaDeNotaAsync(string docType, long notaId) =>
         Connection.QueryFirstAsync<PartidaRow>(new CommandDefinition(@"
@@ -177,16 +184,39 @@ public sealed class NotaCreditoDebitoContabilidadTests : IntegrationTestBase
               AND document_type = @DocType AND document_id = @NotaId",
             new { CompanyId, DocType = docType, NotaId = notaId }, Transaction));
 
-    private async Task<List<(string code, decimal debit, decimal credit)>> LineasAsync(long polizaId)
+    private async Task<List<(long account, string code, decimal debit, decimal credit)>> LineasAsync(long polizaId)
     {
-        var rows = await Connection.QueryAsync<(string, decimal, decimal)>(new CommandDefinition(@"
-            SELECT pc.code, d.debit_amount, d.credit_amount
+        var rows = await Connection.QueryAsync<(long, string, decimal, decimal)>(new CommandDefinition(@"
+            SELECT d.account_id, pc.code, d.debit_amount, d.credit_amount
             FROM public.con_partida_dtl d
             JOIN public.con_plan_cuentas pc ON pc.account_id = d.account_id
             WHERE d.company_id = @CompanyId AND d.poliza_id = @PolizaId
             ORDER BY d.line_number",
             new { CompanyId, PolizaId = polizaId }, Transaction));
         return rows.ToList();
+    }
+
+    /// <summary>
+    /// Recomputa por SQL independiente las cuentas analíticas que la partida
+    /// espejo debería usar para la factura (INGRESO/CXC por servicio del
+    /// detalle × snapshot dimensional × modos de la config) — detecta una
+    /// regresión que colapse la resolución al fallback general.
+    /// </summary>
+    private async Task<(HashSet<long> Ingresos, HashSet<long> Cxc)> CuentasEsperadasAsync(int facturaId)
+    {
+        var rows = (await Connection.QueryAsync<(long ingreso, long cxc)>(new CommandDefinition(@"
+            SELECT DISTINCT
+                public.fn_con_resolver_cuenta_modo(@CompanyId, 'INGRESO', cfg.modo_ventas,
+                    s.servicio_id, f.categoria_servicio_id, f.con_medicion),
+                public.fn_con_resolver_cuenta_modo(@CompanyId, 'CXC', cfg.modo_cxc,
+                    s.servicio_id, f.categoria_servicio_id, f.con_medicion)
+            FROM public.factura f
+            JOIN public.factura_detalle fd ON fd.factura_id = f.id AND COALESCE(fd.montovalor, 0) <> 0
+            LEFT JOIN public.adm_servicio s ON s.company_id = @CompanyId AND s.codigo = fd.tiposervicio
+            CROSS JOIN public.con_integracion_config cfg
+            WHERE f.company_id = @CompanyId AND f.id = @FacturaId AND cfg.company_id = @CompanyId",
+            new { CompanyId, FacturaId = facturaId }, Transaction))).ToList();
+        return (rows.Select(r => r.ingreso).ToHashSet(), rows.Select(r => r.cxc).ToHashSet());
     }
 
     [SkippableFact]
@@ -219,6 +249,39 @@ public sealed class NotaCreditoDebitoContabilidadTests : IntegrationTestBase
         // Espejo ERSAPS: Debe = Ingresos (5.x), Haber = CxC abonados (113x).
         var lineas = await LineasAsync(partida.poliza_id);
         Assert.True(lineas.Count >= 2);
+        Assert.All(lineas.Where(l => l.debit > 0), l => Assert.StartsWith("5", l.code));
+        Assert.All(lineas.Where(l => l.credit > 0), l => Assert.StartsWith("113", l.code));
+
+        // Espejo ANALÍTICO exacto: las cuentas posteadas son las que resuelve
+        // la config para las líneas de la factura (no el fallback general).
+        var esperadas = await CuentasEsperadasAsync(facturaId);
+        Assert.Equal(esperadas.Ingresos, lineas.Where(l => l.debit > 0).Select(l => l.account).ToHashSet());
+        Assert.Equal(esperadas.Cxc, lineas.Where(l => l.credit > 0).Select(l => l.account).ToHashSet());
+    }
+
+    [SkippableFact]
+    public async Task Emitir_NC_parcial_minima_prorratea_sin_invertir_lineas()
+    {
+        var arranged = await ArrangeAsync(tipoFiscal: 6);
+        Skip.If(arranged is null, "Faltan fixtures (CAI NC, factura con detalle positivo, diario/tipo o plan ERSAPS).");
+        var (facturaId, caiId) = arranged.Value;
+
+        // Caso límite del prorrateo por restos mayores: total mucho menor que
+        // la suma del detalle (20 líneas de 1.00 → total 0.10). Con redondeo
+        // por línea + residual en una sola línea, la línea mayor quedaba en
+        // -0.09 e invertía el lado (bruto 0.28 en vez de 0.10).
+        var lineas20 = "[" + string.Join(",", Enumerable.Repeat("{\"monto_total\": 1.00}", 20)) + "]";
+        var nota = await EmitirNcAsync(facturaId, caiId, monto: 0.10m, lineasJson: lineas20);
+        Assert.True(nota.success);
+
+        var partida = await PartidaDeNotaAsync("NC", nota.nota_credito_id);
+        Assert.Equal(1, partida.status);
+        Assert.Equal(0.10m, partida.total_debit);
+        Assert.Equal(0.10m, partida.total_credit);
+
+        // Sin inversión de lados: los débitos son solo de ingresos (5.x) y los
+        // haberes solo de CxC (113x).
+        var lineas = await LineasAsync(partida.poliza_id);
         Assert.All(lineas.Where(l => l.debit > 0), l => Assert.StartsWith("5", l.code));
         Assert.All(lineas.Where(l => l.credit > 0), l => Assert.StartsWith("113", l.code));
     }
@@ -312,6 +375,49 @@ public sealed class NotaCreditoDebitoContabilidadTests : IntegrationTestBase
             new { CompanyId, PolizaId = partida.poliza_id }, Transaction));
         var cuenta = Assert.Single(debitos);
         Assert.Equal(devolucionAccount, cuenta);
+    }
+
+    [SkippableFact]
+    public async Task Emitir_NC_con_devolucion_parcial_no_bloquea_y_espeja_lo_no_cubierto()
+    {
+        var arranged = await ArrangeAsync(tipoFiscal: 6);
+        Skip.If(arranged is null, "Faltan fixtures (CAI NC, factura con detalle positivo, diario/tipo o plan ERSAPS).");
+        var (facturaId, caiId) = arranged.Value;
+
+        // DEVOLUCION_NC configurada SOLO para un servicio de la factura
+        // (permitido por el modelo F1): la emisión no debe bloquearse — las
+        // líneas cubiertas usan la cuenta de devolución y el resto cae al
+        // espejo de ingresos.
+        var servicios = (await Connection.QueryAsync<long>(new CommandDefinition(@"
+            SELECT DISTINCT s.servicio_id
+            FROM public.factura_detalle fd
+            JOIN public.adm_servicio s ON s.company_id = @CompanyId AND s.codigo = fd.tiposervicio
+            WHERE fd.factura_id = @FacturaId AND COALESCE(fd.montovalor, 0) <> 0",
+            new { CompanyId, FacturaId = facturaId }, Transaction))).ToList();
+        Skip.If(servicios.Count == 0, "La factura elegida no tiene servicios mapeados a adm_servicio.");
+
+        var devolucionAccount = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT public.fn_con_resolver_cuenta(@CompanyId, 'DESCUENTO', NULL, NULL, NULL)",
+            new { CompanyId }, Transaction));
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.con_integracion_cuenta (company_id, uso, servicio_id, account_id, created_by)
+            VALUES (@CompanyId, 'DEVOLUCION_NC', @ServicioId, @Account, 'test-f5')",
+            new { CompanyId, ServicioId = servicios[0], Account = devolucionAccount }, Transaction));
+
+        var nota = await EmitirNcAsync(facturaId, caiId);
+        Assert.True(nota.success);
+
+        var partida = await PartidaDeNotaAsync("NC", nota.nota_credito_id);
+        Assert.Equal(1, partida.status);
+
+        var lineas = await LineasAsync(partida.poliza_id);
+        var cuentasDebito = lineas.Where(l => l.debit > 0).Select(l => l.account).ToHashSet();
+        Assert.Contains(devolucionAccount, cuentasDebito);
+        if (servicios.Count > 1)
+        {
+            // Los servicios no cubiertos siguen espejando sus cuentas de ingreso.
+            Assert.Contains(cuentasDebito, c => c != devolucionAccount);
+        }
     }
 
     [SkippableFact]

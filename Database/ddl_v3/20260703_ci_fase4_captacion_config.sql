@@ -26,6 +26,10 @@
 --      que no existe.)
 --   4. sp_con_procesar_partida_pendiente — reprocesa una pendiente de
 --      comprobante (las de LOTE_FACTURACION se reprocesan con el lote de F3).
+--      OJO: SUPERSEDED por 20260704_ci_fase5_ncnd_posteo_config.sql (v2 con
+--      backfill de poliza_id en las notas). Misma firma: si este script se
+--      re-aplica después de F5, re-aplicar F5 a continuación para no
+--      degradar la función.
 --
 -- Idempotente. Producción: aplicar SOLO en ventana de deploy acordada.
 -- =============================================================================

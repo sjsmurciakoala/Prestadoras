@@ -95,6 +95,13 @@ public sealed class IntegracionContableAsientosTests : IntegrationTestBase
             new { CompanyId }, Transaction));
         Skip.If(tipoAjeno is null, "No hay tipos de partida de otra empresa en la BD de pruebas.");
 
+        // La BD de pruebas puede traer un asiento BANCOS configurado desde la
+        // pantalla: despejarlo dentro de la transacción para que el INSERT
+        // ejerza la FK compuesta y no la unique (company, module).
+        await Connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM public.con_integracion_asiento WHERE company_id = @CompanyId AND module = 'BANCOS'",
+            new { CompanyId }, Transaction));
+
         var ex = await Assert.ThrowsAsync<PostgresException>(() =>
             Connection.ExecuteAsync(new CommandDefinition(@"
                 INSERT INTO public.con_integracion_asiento (company_id, module, type_id, created_by)
@@ -124,6 +131,12 @@ public sealed class IntegracionContableAsientosTests : IntegrationTestBase
             FROM otra
             RETURNING journal_id",
             new { }, Transaction));
+
+        // Ver nota en Rechaza_tipo_de_partida_de_otra_empresa: despejar el
+        // asiento BANCOS que la pantalla pudo dejar en la BD de pruebas.
+        await Connection.ExecuteAsync(new CommandDefinition(
+            "DELETE FROM public.con_integracion_asiento WHERE company_id = @CompanyId AND module = 'BANCOS'",
+            new { CompanyId }, Transaction));
 
         var ex = await Assert.ThrowsAsync<PostgresException>(() =>
             Connection.ExecuteAsync(new CommandDefinition(@"

@@ -13,14 +13,19 @@
 --
 -- Contenido:
 --   1. Columna poliza_id en adm_nota_credito / adm_nota_debito (idempotente;
---      ya existe donde corrió la versión superseded).
---   2. fn_con_lineas_nota — líneas de la partida espejo de la factura origen:
+--      ya existe donde corrió la versión superseded) + índice de documento en
+--      con_partida_hdr (soporta el probe de idempotencia de
+--      sp_con_generar_comprobante_config, que antes hacía seq scan).
+--   2. fn_con_resolver_cuenta_opcional — variante de fn_con_resolver_cuenta
+--      que devuelve NULL en vez de RAISE (para usos opcionales como
+--      DEVOLUCION_NC).
+--   2b. fn_con_lineas_nota — líneas de la partida espejo de la factura origen:
 --      detalle de la nota (que por defecto copia las líneas de la factura)
---      prorrateado al total_nota, cuentas resueltas vía fn_con_resolver_cuenta_modo
---      (F1/F3) con el snapshot dimensional de la factura (F3). Para NC, si el
---      uso DEVOLUCION_NC está configurado se usa en lugar del espejo de
---      ingresos (opcional — sin configurar = espejo, comportamiento por
---      defecto documentado en F2).
+--      prorrateado al total_nota por restos mayores, cuentas resueltas vía
+--      fn_con_resolver_cuenta_modo (F1/F3) con el snapshot dimensional de la
+--      factura (F3). Para NC, el uso DEVOLUCION_NC (opcional) se aplica POR
+--      LÍNEA con fallback al espejo de ingresos donde no esté configurado
+--      (comportamiento por defecto documentado en F2).
 --   3. sp_adm_emitir_nota_credito / sp_adm_emitir_nota_debito — cuerpo canónico
 --      de 20260514_nc_nd_v3_modelo.sql + paso de posteo por configuración:
 --      solo si con_integracion_config.activo_notas está encendido, en la MISMA
@@ -48,8 +53,50 @@ COMMENT ON COLUMN public.adm_nota_credito.poliza_id IS
 COMMENT ON COLUMN public.adm_nota_debito.poliza_id IS
 'Partida contable (con_partida_hdr) generada automáticamente al emitir la ND (F5). NULL = emitida sin posteo (activo_notas apagado) o encolada en con_partida_pendiente.';
 
+-- Soporta el probe de idempotencia por documento de
+-- sp_con_generar_comprobante_config (F4) — sin él, cada comprobante (F4 y
+-- ahora cada emisión de NC/ND) hacía un seq scan de con_partida_hdr dentro
+-- de la transacción de emisión.
+CREATE INDEX IF NOT EXISTS ix_con_partida_hdr_documento
+    ON public.con_partida_hdr (company_id, module, document_type, document_id);
+
 -- -----------------------------------------------------------------------------
--- 2. fn_con_lineas_nota — líneas de la partida espejo de una NC/ND
+-- 2. fn_con_resolver_cuenta_opcional — resolución que devuelve NULL sin RAISE
+-- -----------------------------------------------------------------------------
+-- Misma resolución "lo más específico gana" que fn_con_resolver_cuenta (F1)
+-- pero devuelve NULL cuando no hay fila aplicable, para usos OPCIONALES cuyo
+-- fallback decide el llamador (DEVOLUCION_NC en F5). Mantener el SELECT en
+-- sintonía con fn_con_resolver_cuenta si la semántica de F1 cambia.
+CREATE OR REPLACE FUNCTION public.fn_con_resolver_cuenta_opcional(
+    p_company_id bigint,
+    p_uso varchar,
+    p_servicio_id bigint DEFAULT NULL,
+    p_categoria_servicio_id integer DEFAULT NULL,
+    p_con_medicion boolean DEFAULT NULL
+) RETURNS bigint
+LANGUAGE sql
+STABLE
+AS $function$
+    SELECT ic.account_id
+    FROM public.con_integracion_cuenta ic
+    WHERE ic.company_id = p_company_id
+      AND ic.uso = p_uso
+      AND ic.is_active
+      AND (ic.servicio_id IS NULL OR ic.servicio_id = p_servicio_id)
+      AND (ic.categoria_servicio_id IS NULL OR ic.categoria_servicio_id = p_categoria_servicio_id)
+      AND (ic.con_medicion IS NULL OR ic.con_medicion = p_con_medicion)
+    ORDER BY (ic.servicio_id IS NOT NULL)::integer * 4
+           + (ic.categoria_servicio_id IS NOT NULL)::integer * 2
+           + (ic.con_medicion IS NOT NULL)::integer DESC,
+             ic.integracion_cuenta_id
+    LIMIT 1;
+$function$;
+
+COMMENT ON FUNCTION public.fn_con_resolver_cuenta_opcional(bigint, varchar, bigint, integer, boolean) IS
+'Variante de fn_con_resolver_cuenta (F1) que devuelve NULL en vez de RAISE cuando no hay fila aplicable — para usos opcionales (DEVOLUCION_NC) donde el llamador decide el fallback (plan F5).';
+
+-- -----------------------------------------------------------------------------
+-- 2b. fn_con_lineas_nota — líneas de la partida espejo de una NC/ND
 -- -----------------------------------------------------------------------------
 -- Devuelve el jsonb de líneas que consume sp_con_generar_comprobante_config:
 -- [{"account_id":…,"debe":…,"haber":…,"descripcion":…}, …].
@@ -57,17 +104,20 @@ COMMENT ON COLUMN public.adm_nota_debito.poliza_id IS
 -- Fuente: el detalle de la nota (adm_nota_*_detalle), que en el flujo por
 -- defecto es copia de las líneas de la factura origen. Los montos se
 -- prorratean al total_nota (el total de la nota puede diferir de la suma del
--- detalle: NC parcial, o total basado en saldototal) redondeando cada línea a
--- 2 decimales y ajustando la diferencia en la línea de mayor monto — la
--- partida SIEMPRE cuadra con lo asentado en transaccion_abonado.
+-- detalle: NC parcial, o total basado en saldototal) por RESTOS MAYORES:
+-- base truncada a 2 decimales por línea y los centavos residuales repartidos
+-- de a 0.01 a las líneas de mayor resto fraccional — ninguna línea cambia de
+-- signo y la suma es exactamente round(total_nota, 2), de modo que la partida
+-- SIEMPRE cuadra con lo asentado en transaccion_abonado.
 --
 -- Resolución de cuentas (config F1, modos de con_integracion_config, snapshot
 -- dimensional de la factura de F3): INGRESO con modo_ventas y CXC con modo_cxc
--- por servicio de cada línea. En NC, si el uso DEVOLUCION_NC tiene alguna fila
--- activa en la matriz, reemplaza a INGRESO (F2: opcional; sin configurar la NC
--- espeja las cuentas de ingreso de la factura). La columna
--- cuenta_contable_codigo del detalle NO se consulta: la config es la única
--- fuente de cuentas (D2).
+-- por servicio de cada línea. En NC, el uso DEVOLUCION_NC se aplica POR LÍNEA:
+-- donde su matriz resuelva se usa esa cuenta y donde no, la línea cae al
+-- espejo de INGRESO (F2: opcional; sin configurar la NC espeja las cuentas de
+-- ingreso de la factura — una config parcial de DEVOLUCION_NC nunca bloquea
+-- la emisión). La columna cuenta_contable_codigo del detalle NO se consulta:
+-- la config es la única fuente de cuentas (D2).
 --
 -- Dirección: NC = Debe Ingresos / Haber CxC; ND = Debe CxC / Haber Ingresos.
 -- Una línea de detalle negativa (p.ej. descuento copiado de la factura) va al
@@ -84,7 +134,7 @@ DECLARE
     v_tipo varchar := upper(btrim(p_tipo));
     v_modo_ventas varchar;
     v_modo_cxc varchar;
-    v_uso_ingreso varchar := 'INGRESO';
+    v_hay_devolucion boolean := false;
     v_total numeric(18,2);
     v_numero text;
     v_factura_id integer;
@@ -115,12 +165,14 @@ BEGIN
             RAISE EXCEPTION 'La nota de crédito % no existe para la empresa %.', p_nota_id, p_company_id;
         END IF;
 
-        IF EXISTS (SELECT 1 FROM public.con_integracion_cuenta ic
-                   WHERE ic.company_id = p_company_id
-                     AND ic.uso = 'DEVOLUCION_NC'
-                     AND ic.is_active) THEN
-            v_uso_ingreso := 'DEVOLUCION_NC';
-        END IF;
+        -- Gate barato: solo intentamos resolver DEVOLUCION_NC por línea si la
+        -- empresa tiene al menos una fila del uso (el fallback real es por
+        -- línea, en la CTE cuentas).
+        v_hay_devolucion := EXISTS (
+            SELECT 1 FROM public.con_integracion_cuenta ic
+            WHERE ic.company_id = p_company_id
+              AND ic.uso = 'DEVOLUCION_NC'
+              AND ic.is_active);
 
         SELECT jsonb_agg(jsonb_build_object(
                    'servicio_id', d.servicio_id,
@@ -176,25 +228,38 @@ BEGIN
     END IF;
 
     WITH det AS (
-        SELECT x.servicio_id, x.monto, x.descripcion,
-               row_number() OVER (ORDER BY abs(x.monto) DESC) AS rn
-        FROM jsonb_to_recordset(v_detalle)
-             AS x(servicio_id bigint, monto numeric, descripcion text)
+        SELECT x.servicio_id, x.monto, x.descripcion, x.ord
+        FROM ROWS FROM (
+                 jsonb_to_recordset(v_detalle)
+                 AS (servicio_id bigint, monto numeric, descripcion text)
+             ) WITH ORDINALITY AS x(servicio_id, monto, descripcion, ord)
     ),
-    -- Prorrateo al total de la nota: redondeo por línea (2 dec) y la
-    -- diferencia residual a la línea de mayor monto (regla F4: nunca
-    -- redondear la suma cruda de un lado).
-    prorrateo AS (
-        SELECT d.servicio_id, d.descripcion, d.rn,
-               round(d.monto * v_total / v_sum_detalle, 2) AS monto
+    -- Prorrateo al total de la nota por RESTOS MAYORES: base truncada a 2
+    -- decimales por línea; los centavos residuales se reparten de a 0.01 a
+    -- las líneas de mayor resto fraccional (desempate determinista por orden
+    -- del detalle). Garantiza suma exacta = v_total y que ninguna línea
+    -- cambie de signo (regla F4: nunca redondear la suma cruda de un lado).
+    exacta AS (
+        SELECT d.servicio_id, d.descripcion, d.ord,
+               d.monto * v_total / v_sum_detalle AS exacto,
+               trunc(d.monto * v_total / v_sum_detalle, 2) AS base
         FROM det d
     ),
+    rankeada AS (
+        SELECT e.servicio_id, e.descripcion, e.base,
+               row_number() OVER (ORDER BY (e.exacto - e.base) DESC, e.ord) AS rk,
+               COUNT(*) OVER () AS n,
+               round((v_total - SUM(e.base) OVER ()) * 100) AS centavos
+        FROM exacta e
+    ),
     ajustada AS (
-        SELECT p.servicio_id, p.descripcion,
-               p.monto + CASE WHEN p.rn = 1
-                              THEN v_total - (SELECT SUM(p2.monto) FROM prorrateo p2)
-                              ELSE 0 END AS monto
-        FROM prorrateo p
+        SELECT r.servicio_id, r.descripcion,
+               r.base + CASE
+                   WHEN r.centavos > 0 AND r.rk <= r.centavos THEN 0.01
+                   WHEN r.centavos < 0 AND r.rk > r.n + r.centavos THEN -0.01
+                   ELSE 0
+               END AS monto
+        FROM rankeada r
     ),
     -- Resolución UNA VEZ por servicio distinto (mismo patrón que el lote F3).
     combos AS (
@@ -202,8 +267,18 @@ BEGIN
     ),
     cuentas AS (
         SELECT co.servicio_id,
-               public.fn_con_resolver_cuenta_modo(p_company_id, v_uso_ingreso, v_modo_ventas,
-                   co.servicio_id, v_categoria, v_medicion) AS ingreso_account,
+               -- DEVOLUCION_NC por línea (opcional): donde no resuelva, la
+               -- línea cae al espejo de INGRESO — una config parcial nunca
+               -- bloquea la emisión.
+               COALESCE(
+                   CASE WHEN v_hay_devolucion THEN
+                       public.fn_con_resolver_cuenta_opcional(p_company_id, 'DEVOLUCION_NC',
+                           CASE WHEN v_modo_ventas <> 'GENERAL' THEN co.servicio_id END,
+                           CASE WHEN v_modo_ventas = 'POR_SERVICIO_CATEGORIA' THEN v_categoria END,
+                           CASE WHEN v_modo_ventas = 'POR_SERVICIO_CATEGORIA' THEN v_medicion END)
+                   END,
+                   public.fn_con_resolver_cuenta_modo(p_company_id, 'INGRESO', v_modo_ventas,
+                       co.servicio_id, v_categoria, v_medicion)) AS ingreso_account,
                public.fn_con_resolver_cuenta_modo(p_company_id, 'CXC', v_modo_cxc,
                    co.servicio_id, v_categoria, v_medicion) AS cxc_account
         FROM combos co
@@ -244,7 +319,7 @@ END;
 $function$;
 
 COMMENT ON FUNCTION public.fn_con_lineas_nota(bigint, varchar, bigint) IS
-'Líneas de la partida espejo de una NC/ND (plan F5): detalle de la nota prorrateado al total_nota, cuentas resueltas vía fn_con_resolver_cuenta_modo con el snapshot dimensional de la factura origen (F3). NC: Debe Ingresos (o DEVOLUCION_NC si está configurado) / Haber CxC. ND: inverso. Consumido por los SPs de emisión vía sp_con_generar_comprobante_config.';
+'Líneas de la partida espejo de una NC/ND (plan F5): detalle de la nota prorrateado al total_nota por restos mayores (suma exacta, sin cambios de signo), cuentas resueltas vía fn_con_resolver_cuenta_modo con el snapshot dimensional de la factura origen (F3). NC: Debe Ingresos — o DEVOLUCION_NC por línea donde esté configurada, con fallback al espejo — / Haber CxC. ND: inverso. Consumido por los SPs de emisión vía sp_con_generar_comprobante_config.';
 
 -- -----------------------------------------------------------------------------
 -- 3a. sp_adm_emitir_nota_credito — posteo por configuración (paso 9c)

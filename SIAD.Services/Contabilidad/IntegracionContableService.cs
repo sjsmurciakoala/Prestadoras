@@ -490,6 +490,21 @@ public sealed class IntegracionContableService : IIntegracionContableService
                 "DEVOLUCION_NC sin configurar: la nota de crédito espejará las cuentas de la factura origen (comportamiento por defecto). Configúrela solo si desea una cuenta de devolución específica.");
         }
 
+        // Las ND por defecto (línea única sin servicio) y las líneas de NC cuyo
+        // tiposervicio no matchea adm_servicio resuelven contra la fila general
+        // (comodín) de INGRESO/CXC — con NOTAS activo su ausencia bloquearía la
+        // emisión (F5).
+        var notasActivo = activos.Contains(IntegracionContableModulos.Notas);
+        foreach (var uso in new[] { IntegracionContableUsos.Ingreso, IntegracionContableUsos.Cxc })
+        {
+            if (!activas.Any(c => c.Uso == uso && c.ServicioId is null))
+            {
+                AgregarHallazgo(resultado,
+                    $"Falta la fila general (comodín) del uso {uso}: las notas de débito por defecto y las líneas sin servicio identificable no podrían resolver cuenta.",
+                    esError: notasActivo);
+            }
+        }
+
         return resultado;
     }
 
