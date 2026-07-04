@@ -19,6 +19,7 @@ using SIAD.Data;
 using SIAD.Core.Utilities;
 using SIAD.Services.Bancos;
 using SIAD.Services.Cobranza;
+using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.Caja;
 
@@ -30,7 +31,6 @@ public class AbonoService : IAbonoService
     private readonly ICorteMasivoService _corteMasivoService;
     private const string ContabilidadModuloCaja = "CAJA";
     private const string ContabilidadDocumentoAbono = "ABO";
-    private const string ContabilidadTipoTransaccionAbono = "FAC";
     private const string BancoMarkerPrefix = "BANCO_CUENTA:";
     private const string TipoTransaccionBancoDeposito = "DEP";
 
@@ -209,12 +209,9 @@ public class AbonoService : IAbonoService
             return ResponseModelDto.Fail($"El monto del abono ({dto.Monto:N2}) no puede exceder el saldo pendiente de la factura ({saldoPendiente:N2}).");
         }
 
+        // El período contable ya no se valida acá: sp_con_generar_comprobante_config
+        // encola en con_partida_pendiente o rechaza según encolar_sin_periodo (F4).
         var periodo = await ObtenerPeriodoActualCodigoAsync(ct);
-        var periodoAbierto = await IsPeriodoContableAbiertoAsync(periodo, ct);
-        if (!periodoAbierto)
-        {
-            return ResponseModelDto.Fail($"El período contable {periodo} está cerrado.");
-        }
 
         var integrarBancos = dto.FormaPago == "BANCO" && dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
         var banco = await ResolverBancoCodigoAsync(dto.BancoCuentaId, dto.Banco, ct);
@@ -229,39 +226,42 @@ public class AbonoService : IAbonoService
                 return ResponseModelDto.Fail("El recibo pendiente indicado no existe o ya fue procesado.");
         }
 
-        // Validar regla de integración activa
-        var escenario = integrarBancos ? "ABONO_BANCO" : "ABONO_EFECTIVO";
-        var regla = await _context.con_regla_integracions
-            .AsNoTracking()
-            .Where(r => r.company_id == companyId && r.module == "CAJA" && r.scenario_code == escenario && r.is_active)
-            .FirstOrDefaultAsync(ct);
-
-        if (regla is null)
-        {
-            return ResponseModelDto.Fail($"No existe una regla de integración contable activa para el escenario '{escenario}'.");
-        }
-
         var contabilidadDocumentNumber = string.IsNullOrWhiteSpace(factura.numfactura)
             ? $"ABO-{factura.numrecibo}"
             : factura.numfactura.Trim();
         var contabilidadDescription = $"Abono en Caja factura {contabilidadDocumentNumber}";
+
+        // Derrame planificado del abono sobre el detalle (mismo orden FIFO que se
+        // aplica dentro de la transacción): base de las líneas CxC analíticas de
+        // la integración por config (F4 — reemplaza a con_regla_integracion).
+        var aplicacionesContables = new List<(string? ServicioCodigo, decimal Monto)>();
+        var restantePlan = dto.Monto;
+        foreach (var detalle in detalles)
+        {
+            if (restantePlan <= 0) break;
+            var lineSaldo = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
+            if (lineSaldo <= 0) continue;
+
+            var aplicado = Math.Min(restantePlan, lineSaldo);
+            aplicacionesContables.Add((
+                string.IsNullOrWhiteSpace(detalle.tiposervicio) ? detalle.codigo : detalle.tiposervicio,
+                aplicado));
+            restantePlan -= aplicado;
+        }
 
         (long BanKardexId, decimal SaldoResultante)? movimientoBanco = null;
         if (integrarBancos)
         {
             try
             {
-                // Para abonos, construimos la contracuenta usando la cuenta CxC del cliente (regla.credit_account_id)
-                var contraCuentasBanco = new List<BanTransaccionContraLineaDto>
-                {
-                    new()
-                    {
-                        CuentaId = regla.credit_account_id,
-                        Monto = dto.Monto,
-                        Descripcion = contabilidadDescription,
-                        SourceDocument = contabilidadDocumentNumber
-                    }
-                };
+                var contraCuentasBanco = await ConstruirContraCuentasCxcAsync(
+                    companyId,
+                    aplicacionesContables,
+                    factura.categoria_servicio_id,
+                    factura.con_medicion,
+                    contabilidadDescription,
+                    contabilidadDocumentNumber,
+                    ct);
 
                 movimientoBanco = await RegistrarMovimientoBancarioCaptacionAsync(
                     dto.BancoCuentaId!.Value,
@@ -394,78 +394,50 @@ public class AbonoService : IAbonoService
             long? polizaId = null;
             if (!integrarBancos)
             {
-                // Generar póliza contable con sp_con_generar_comprobante
+                // Comprobante por configuración (F4): Debe caja / Haber CxC
+                // analítica, resuelto vía fn_con_resolver_cuenta[_modo] y posteado
+                // por el motor único; NULL = encolado en con_partida_pendiente.
                 var connection = _context.Database.GetDbConnection();
                 var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
 
-                var typeId = await ResolverTipoTransaccionContableAsync(
-                    connection,
-                    companyId,
-                    ContabilidadTipoTransaccionAbono,
-                    dbTransaction,
-                    ct);
-
-                // Forzar temporalmente las cuentas del escenario en la plantilla operativa si es necesario,
-                // o pasárselas al SP. sp_con_generar_comprobante asocia las cuentas de la plantilla.
-                // Actualizamos las líneas de la plantilla antes de invocar para asegurar consistencia
-                var template = await _context.con_plantilla_partida_hdrs
-                    .Where(h => h.company_id == companyId && h.module == ContabilidadModuloCaja && h.document_type == ContabilidadDocumentoAbono && h.is_active)
-                    .OrderByDescending(h => h.template_id)
-                    .FirstOrDefaultAsync(ct);
-
-                if (template != null)
+                var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, dbTransaction, ct);
+                if (config is not null && config.ActivoCaja)
                 {
-                    var lineas = await _context.con_plantilla_partida_dtls
-                        .Where(l => l.template_id == template.template_id)
-                        .OrderBy(l => l.line_number)
-                        .ToListAsync(ct);
+                    var cuentaCaja = await IntegracionContableConfigSql.ResolverCuentaAsync(
+                        connection, companyId, "CAJA", dbTransaction, ct);
 
-                    if (lineas.Count >= 2)
-                    {
-                        lineas[0].account_id = regla.debit_account_id;
-                        lineas[1].account_id = regla.credit_account_id;
-                        await _context.SaveChangesAsync(ct);
-                    }
+                    var cuentasCxc = await IntegracionContableConfigSql.ResolverCuentasCxcPorServicioAsync(
+                        connection,
+                        companyId,
+                        config.ModoCxc,
+                        aplicacionesContables.Select(a => a.ServicioCodigo),
+                        factura.categoria_servicio_id,
+                        factura.con_medicion,
+                        dbTransaction,
+                        ct);
+
+                    var lineas = IntegracionContableConfigSql.ArmarLineasCobro(
+                        cuentaCaja,
+                        aplicacionesContables.Select(a => (
+                            cuentasCxc[(a.ServicioCodigo ?? string.Empty).Trim().ToUpperInvariant()],
+                            a.Monto)),
+                        contabilidadDescription,
+                        contabilidadDescription);
+
+                    polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
+                        connection,
+                        companyId,
+                        ContabilidadModuloCaja,
+                        ContabilidadDocumentoAbono,
+                        transaccion.ide,
+                        $"ABO-{transaccion.ide}",
+                        fechaHoy,
+                        contabilidadDescription,
+                        usuario,
+                        lineas,
+                        dbTransaction,
+                        ct);
                 }
-
-                const string spSql = @"
-                    SELECT public.sp_con_generar_comprobante(
-                        @CompanyId,
-                        @Module,
-                        @DocumentType,
-                        @DocumentId,
-                        @DocumentNumber,
-                        @PolizaDate::date,
-                        @Description,
-                        @Usuario,
-                        NULL,
-                        @TypeId,
-                        NULL,
-                        @ValuesJson::jsonb,
-                        false
-                    );
-                ";
-
-                var pValues = JsonSerializer.Serialize(new { total = dto.Monto });
-
-                polizaId = await connection.ExecuteScalarAsync<long?>(
-                    new CommandDefinition(
-                        spSql,
-                        new
-                        {
-                            CompanyId = companyId,
-                            Module = ContabilidadModuloCaja,
-                            DocumentType = ContabilidadDocumentoAbono,
-                            DocumentId = (long)transaccion.ide,
-                            DocumentNumber = $"ABO-{transaccion.ide}",
-                            PolizaDate = fechaHoy.ToDateTime(TimeOnly.MinValue),
-                            Description = contabilidadDescription,
-                            Usuario = usuario,
-                            TypeId = typeId,
-                            ValuesJson = pValues
-                        },
-                        transaction: dbTransaction,
-                        cancellationToken: ct));
             }
 
             await tx.CommitAsync(ct);
@@ -573,33 +545,22 @@ public class AbonoService : IAbonoService
             }
             else
             {
-                // Revertir contabilidad central
-                const string spReversaSql = @"
-                    SELECT public.sp_con_revertir_poliza(
-                        @CompanyId,
-                        @Module,
-                        @DocumentType,
-                        @DocumentId,
-                        @Usuario
-                    );
-                ";
-
+                // Reverso por documento (F4): localiza la partida del abono, la
+                // revierte vía motor único y descarta la pendiente encolada si
+                // la hubiera. (La versión anterior invocaba una sobrecarga de
+                // sp_con_revertir_poliza por documento que no existe en la BD.)
                 var connection = _context.Database.GetDbConnection();
                 var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
 
-                polizaId = await connection.ExecuteScalarAsync<long?>(
-                    new CommandDefinition(
-                        spReversaSql,
-                        new
-                        {
-                            CompanyId = companyId,
-                            Module = ContabilidadModuloCaja,
-                            DocumentType = ContabilidadDocumentoAbono,
-                            DocumentId = (long)transaccion.ide,
-                            Usuario = usuario
-                        },
-                        transaction: dbTransaction,
-                        cancellationToken: ct));
+                polizaId = await IntegracionContableConfigSql.RevertirComprobanteAsync(
+                    connection,
+                    companyId,
+                    ContabilidadModuloCaja,
+                    new[] { ContabilidadDocumentoAbono },
+                    transaccion.ide,
+                    usuario,
+                    dbTransaction,
+                    ct);
             }
 
             await _context.SaveChangesAsync(ct);
@@ -690,15 +651,6 @@ public class AbonoService : IAbonoService
         }
 
         return $"{Convert.ToInt32(periodo.ano):D4}{Convert.ToInt32(periodo.mes):D2}";
-    }
-
-    private async Task<bool> IsPeriodoContableAbiertoAsync(string codigoPeriodo, CancellationToken ct)
-    {
-        var statusId = await _context.con_periodo_contables
-            .Where(p => p.company_id == _currentCompanyService.GetCompanyId() && p.code == codigoPeriodo)
-            .Select(p => (int?)p.status_id)
-            .FirstOrDefaultAsync(ct);
-        return statusId == 0;
     }
 
     private async Task<string?> ResolverBancoCodigoAsync(long? bancoCuentaId, string? bancoFallback, CancellationToken ct)
@@ -923,42 +875,63 @@ public class AbonoService : IAbonoService
         }).ToList();
     }
 
-    private static async Task<long> ResolverTipoTransaccionContableAsync(
-        IDbConnection connection,
+    /// <summary>
+    /// Contracuentas CxC analíticas del movimiento bancario de un abono,
+    /// resueltas por la matriz de integración según el modo configurado
+    /// (F4 — reemplaza a la cuenta única de con_regla_integracion).
+    /// </summary>
+    private async Task<IReadOnlyList<BanTransaccionContraLineaDto>> ConstruirContraCuentasCxcAsync(
         long companyId,
-        string transactionCode,
-        IDbTransaction? transaction,
+        IReadOnlyList<(string? ServicioCodigo, decimal Monto)> aplicaciones,
+        int? categoriaServicioId,
+        bool? conMedicion,
+        string descripcion,
+        string sourceDocument,
         CancellationToken ct)
     {
-        // Resuelve el tipo de transacción contable de forma robusta (igual que captación):
-        // prefiere el que coincide con el code sugerido, luego el marcado como default, y por
-        // último el primer activo. Así no depende de un code exacto por empresa (p. ej. FAC vs FACT).
-        const string sql = @"
-            SELECT t.type_id
-            FROM public.con_tipo_transaccion t
-            WHERE t.company_id = @CompanyId
-              AND COALESCE(
-                    t.status_id,
-                    CASE
-                        WHEN upper(COALESCE(t.status, 'ACTIVE')) IN ('ACTIVE', 'ACTIVO') THEN 1
-                        WHEN upper(COALESCE(t.status, 'ACTIVE')) IN ('INACTIVE', 'INACTIVO') THEN 0
-                        ELSE 1
-                    END
-                  ) = 1
-            ORDER BY
-                CASE WHEN upper(COALESCE(t.code, '')) = @TransactionCode THEN 0 ELSE 1 END,
-                CASE WHEN COALESCE(t.is_default, false) THEN 0 ELSE 1 END,
-                t.type_id
-            LIMIT 1;
-        ";
-        var typeId = await connection.ExecuteScalarAsync<long?>(
-            new CommandDefinition(sql, new { CompanyId = companyId, TransactionCode = transactionCode.ToUpperInvariant() }, transaction: transaction, cancellationToken: ct));
-
-        if (!typeId.HasValue || typeId.Value <= 0)
+        var entradas = aplicaciones.Where(a => a.Monto > 0).ToList();
+        if (entradas.Count == 0)
         {
-            throw new InvalidOperationException($"No existe ningún con_tipo_transaccion activo para company_id={companyId}.");
+            throw new InvalidOperationException("El abono no tiene montos aplicables para construir contracuentas bancarias.");
         }
-        return typeId.Value;
+
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, transaction: null, ct)
+            ?? throw new InvalidOperationException(
+                "La empresa no tiene configuración de integración contable (pantalla Integración Contable / perfil ERSAPS).");
+
+        var cuentasCxc = await IntegracionContableConfigSql.ResolverCuentasCxcPorServicioAsync(
+            connection,
+            companyId,
+            config.ModoCxc,
+            entradas.Select(a => a.ServicioCodigo),
+            categoriaServicioId,
+            conMedicion,
+            transaction: null,
+            ct);
+
+        var montosPorCuenta = new Dictionary<long, decimal>();
+        foreach (var entrada in entradas)
+        {
+            var cuentaId = cuentasCxc[(entrada.ServicioCodigo ?? string.Empty).Trim().ToUpperInvariant()];
+            montosPorCuenta[cuentaId] = montosPorCuenta.GetValueOrDefault(cuentaId) + entrada.Monto;
+        }
+
+        return montosPorCuenta
+            .OrderBy(x => x.Key)
+            .Select(x => new BanTransaccionContraLineaDto
+            {
+                CuentaId = x.Key,
+                Monto = Math.Round(x.Value, 2, MidpointRounding.AwayFromZero),
+                Descripcion = descripcion,
+                SourceDocument = sourceDocument
+            })
+            .ToList();
     }
 
     public async Task<ResponseModelDto> GenerarReciboPendienteAsync(GenerarReciboDto dto, CancellationToken ct = default)

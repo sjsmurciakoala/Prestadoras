@@ -8,6 +8,7 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
+using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.Bancos;
 
@@ -520,9 +521,29 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             throw new InvalidOperationException("La cuenta bancaria no existe o no pertenece a la empresa actual.");
         }
 
-        if (!cuentaBanco.cont_account_id.HasValue || cuentaBanco.cont_account_id.Value <= 0)
+        // La cuenta contable de ban_cuenta se mantiene como fuente primaria; si
+        // no está configurada, cae al uso BANCO_DEFAULT de la matriz de
+        // integración contable (plan F4).
+        var bancoAccountId = cuentaBanco.cont_account_id ?? 0;
+        if (bancoAccountId <= 0)
         {
-            throw new InvalidOperationException("La cuenta bancaria no tiene una cuenta contable asociada.");
+            var fallbackConnection = context.Database.GetDbConnection();
+            if (fallbackConnection.State != ConnectionState.Open)
+            {
+                await fallbackConnection.OpenAsync(ct);
+            }
+
+            try
+            {
+                bancoAccountId = await IntegracionContableConfigSql.ResolverCuentaAsync(
+                    fallbackConnection, companyId, "BANCO_DEFAULT", transaction: null, ct);
+            }
+            catch (PostgresException ex) when (ex.SqlState == "P0001")
+            {
+                throw new InvalidOperationException(
+                    "La cuenta bancaria no tiene una cuenta contable asociada y la empresa no tiene BANCO_DEFAULT configurado en Integración Contable.",
+                    ex);
+            }
         }
 
         if (contraLineas is null || contraLineas.Count == 0)
@@ -626,7 +647,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         var lineas = new List<PartidaLinea>
         {
             new PartidaLinea(
-                cuentaBanco.cont_account_id.Value,
+                bancoAccountId,
                 null,
                 descripcionNormalizada,
                 bankDebit,

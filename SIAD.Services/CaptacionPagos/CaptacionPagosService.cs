@@ -12,6 +12,7 @@ using SIAD.Core.Tenancy;
 using SIAD.Data;
 using SIAD.Services.Bancos;
 using SIAD.Services.Cobranza;
+using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.CaptacionPagos;
 
@@ -351,6 +352,15 @@ public class CaptacionPagosService : ICaptacionPagosService
             return ResponseModelDto.Fail("La factura no tiene saldo pendiente.");
         }
 
+        // Montos por servicio ANTES de saldar el detalle: son la base de las
+        // líneas CxC analíticas (efectivo y banco) de la integración por config.
+        var aplicacionesContables = detalles
+            .Select(d => (
+                ServicioCodigo: ResolveServicioCodigoDetalle(d.tiposervicio, d.codigo),
+                Monto: d.montovalor_saldo ?? d.montovalor ?? 0m))
+            .Where(a => a.Monto > 0)
+            .ToList();
+
         var integrarBancos = dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
         var companyId = EnsureCompanyId();
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
@@ -374,10 +384,10 @@ public class CaptacionPagosService : ICaptacionPagosService
             try
             {
                 var contraCuentasBanco = await ConstruirContraCuentasBancariasAsync(
-                    detalles.Select(d => new ContraCuentaInput(
-                        ResolveServicioCodigoDetalle(d.tiposervicio, d.codigo),
-                        d.montovalor_saldo ?? d.montovalor ?? 0m,
-                        d.descripcion)),
+                    aplicacionesContables,
+                    factura.categoria_servicio_id,
+                    factura.con_medicion,
+                    contabilidadDescription,
                     contabilidadDocumentNumber,
                     ct);
 
@@ -475,19 +485,22 @@ public class CaptacionPagosService : ICaptacionPagosService
 
             if (!integrarBancos)
             {
-                polizaId = await GenerarComprobanteContableCaptacionAsync(
+                (polizaId, var encolada) = await GenerarComprobanteCaptacionConfigAsync(
                     companyId,
                     contabilidadDocumentId,
                     contabilidadDocumentNumber,
                     fechaHoy,
-                    total,
                     contabilidadDescription,
                     usuario,
+                    aplicacionesContables,
+                    factura.categoria_servicio_id,
+                    factura.con_medicion,
+                    cxcGeneral: false,
                     _context.Database.CurrentTransaction?.GetDbTransaction(),
                     ct);
 
-                polizaStatus = 1;
-                polizaEstado = "POSTED";
+                polizaStatus = polizaId.HasValue ? 1 : null;
+                polizaEstado = polizaId.HasValue ? "POSTED" : (encolada ? "ENCOLADA" : null);
             }
 
             // Si el cliente queda sin saldo tras el pago, cancela las OT de corte (33)
@@ -1001,27 +1014,27 @@ public class CaptacionPagosService : ICaptacionPagosService
         var contabilidadDescription = $"Cobro manual captacion recibo {dto.NumRecibo}";
         var bancoCodigo = await ResolverBancoCodigoAsync(dto.BancoCuentaId, dto.Banco, ct) ?? "EFECTIVO";
 
+        // Montos por servicio de la distribución: base de las líneas CxC
+        // analíticas (efectivo y banco) de la integración por config.
+        var aplicacionesContables = distribuciones
+            .Select(d => (
+                ServicioCodigo: ResolveServicioCodigoDetalle(
+                    detalleLookup[d.Id].tiposervicio,
+                    detalleLookup[d.Id].codigo),
+                Monto: d.ValorDistribuido))
+            .Where(a => a.Monto > 0)
+            .ToList();
+
         (long BanKardexId, decimal SaldoResultante)? movimientoBanco = null;
         if (integrarBancos)
         {
             try
             {
-                var contraInputs = new List<ContraCuentaInput>(distribuciones.Count);
-                foreach (var distribucion in distribuciones)
-                {
-                    if (!detalleLookup.TryGetValue(distribucion.Id, out var detalle))
-                    {
-                        return ResponseModelDto.Fail($"No se encontro el detalle {distribucion.Id} para el posteo manual.");
-                    }
-
-                    contraInputs.Add(new ContraCuentaInput(
-                        ResolveServicioCodigoDetalle(detalle.tiposervicio, detalle.codigo),
-                        distribucion.ValorDistribuido,
-                        detalle.descripcion));
-                }
-
                 var contraCuentasBanco = await ConstruirContraCuentasBancariasAsync(
-                    contraInputs,
+                    aplicacionesContables,
+                    facturaPrevia.categoria_servicio_id,
+                    facturaPrevia.con_medicion,
+                    contabilidadDescription,
                     contabilidadDocumentNumber,
                     ct);
 
@@ -1150,19 +1163,22 @@ public class CaptacionPagosService : ICaptacionPagosService
             string? polizaEstado = null;
             if (!integrarBancos)
             {
-                polizaId = await GenerarComprobanteContableCaptacionAsync(
+                (polizaId, var encolada) = await GenerarComprobanteCaptacionConfigAsync(
                     companyId,
                     contabilidadDocumentId,
                     contabilidadDocumentNumber,
                     fechaContable,
-                    dto.Valor,
                     contabilidadDescription,
                     usuario,
+                    aplicacionesContables,
+                    facturaPrevia.categoria_servicio_id,
+                    facturaPrevia.con_medicion,
+                    cxcGeneral: false,
                     _context.Database.CurrentTransaction?.GetDbTransaction(),
                     ct);
 
-                polizaStatus = 1;
-                polizaEstado = "POSTED";
+                polizaStatus = polizaId.HasValue ? 1 : null;
+                polizaEstado = polizaId.HasValue ? "POSTED" : (encolada ? "ENCOLADA" : null);
             }
 
             // Si el cliente queda sin saldo tras el posteo, cancela las OT de corte (33)
@@ -1462,52 +1478,28 @@ public class CaptacionPagosService : ICaptacionPagosService
         {
             try
             {
-                // Para misceláneos, construir contra-cuentas desde miscelaneos_catalogo
-                // en lugar de la tabla servicios (que no tiene código MISC).
-                var codigosDetalle = detallesPrevios
-                    .Where(d => !string.IsNullOrWhiteSpace(d.codigo))
-                    .Select(d => d.codigo!.Trim().ToUpperInvariant())
-                    .Distinct()
-                    .ToList();
-
-                var catalogoCuentas = await _context.miscelaneos_catalogos
-                    .AsNoTracking()
-                    .Where(m => m.codigo != null && codigosDetalle.Contains(m.codigo.ToUpper())
-                                && m.cont_account_id.HasValue)
-                    .Select(m => new { Codigo = m.codigo!.ToUpper(), CuentaId = m.cont_account_id!.Value })
-                    .ToListAsync(ct);
-
-                var cuentaLookup = catalogoCuentas.ToDictionary(
-                    c => c.Codigo, c => c.CuentaId, StringComparer.OrdinalIgnoreCase);
-
-                var montosPorCuenta = new Dictionary<long, decimal>();
-                var descripcionPorCuenta = new Dictionary<long, string>();
-
-                foreach (var d in detallesPrevios)
+                // El cobro de un misceláneo salda la CxC que dejó su emisión
+                // (Banco / CxC): contracuenta CxC general de la matriz de
+                // integración — el ingreso ya se reconoció al emitir el recibo.
+                var connection = _context.Database.GetDbConnection();
+                if (connection.State != ConnectionState.Open)
                 {
-                    var codigo = (d.codigo ?? string.Empty).Trim().ToUpperInvariant();
-                    var monto = d.montovalor_saldo ?? d.montovalor ?? 0m;
-                    if (monto <= 0 || string.IsNullOrWhiteSpace(codigo)) continue;
-
-                    if (!cuentaLookup.TryGetValue(codigo, out var cuentaId))
-                    {
-                        throw new InvalidOperationException(
-                            $"El concepto '{codigo}' no tiene cuenta contable configurada en el catalogo de miscelaneos.");
-                    }
-
-                    montosPorCuenta[cuentaId] = montosPorCuenta.GetValueOrDefault(cuentaId) + monto;
-                    descripcionPorCuenta.TryAdd(cuentaId, d.descripcion ?? codigo);
+                    await connection.OpenAsync(ct);
                 }
 
-                var contraCuentasBanco = montosPorCuenta
-                    .Select(kvp => new BanTransaccionContraLineaDto
+                var cuentaCxc = await IntegracionContableConfigSql.ResolverCuentaAsync(
+                    connection, companyId, "CXC", transaction: null, ct);
+
+                var contraCuentasBanco = new List<BanTransaccionContraLineaDto>
+                {
+                    new()
                     {
-                        CuentaId = kvp.Key,
-                        Monto = kvp.Value,
-                        Descripcion = descripcionPorCuenta.GetValueOrDefault(kvp.Key, "Miscelaneo"),
+                        CuentaId = cuentaCxc,
+                        Monto = total,
+                        Descripcion = contabilidadDescription,
                         SourceDocument = contabilidadDocumentNumber
-                    })
-                    .ToList();
+                    }
+                };
 
                 movimientoBanco = await RegistrarMovimientoBancarioCaptacionAsync(
                     dto.BancoCuentaId!.Value,
@@ -1630,19 +1622,22 @@ public class CaptacionPagosService : ICaptacionPagosService
             string? polizaEstado = null;
             if (!integrarBancos)
             {
-                polizaId = await GenerarComprobanteContableCaptacionAsync(
+                (polizaId, var encolada) = await GenerarComprobanteCaptacionConfigAsync(
                     companyId,
                     contabilidadDocumentId,
                     contabilidadDocumentNumber,
                     fechaHoy,
-                    total,
                     contabilidadDescription,
                     usuario,
+                    new List<(string? ServicioCodigo, decimal Monto)> { (null, total) },
+                    categoriaServicioId: null,
+                    conMedicion: null,
+                    cxcGeneral: true,
                     _context.Database.CurrentTransaction?.GetDbTransaction(),
                     ct);
 
-                polizaStatus = 1;
-                polizaEstado = "POSTED";
+                polizaStatus = polizaId.HasValue ? 1 : null;
+                polizaEstado = polizaId.HasValue ? "POSTED" : (encolada ? "ENCOLADA" : null);
             }
 
             await tx.CommitAsync(ct);
@@ -2176,15 +2171,21 @@ public class CaptacionPagosService : ICaptacionPagosService
             ct);
     }
 
+    /// <summary>
+    /// Contracuentas del movimiento bancario de un cobro: CxC analítica resuelta
+    /// por la matriz de integración según el modo configurado (Banco / CxC —
+    /// reemplaza al mapeo legacy servicios.cont_account_id, que acreditaba
+    /// ingresos directo y dejaba la CxC de la facturación sin saldar).
+    /// </summary>
     private async Task<IReadOnlyList<BanTransaccionContraLineaDto>> ConstruirContraCuentasBancariasAsync(
-        IEnumerable<ContraCuentaInput> detalles,
+        IReadOnlyList<(string? ServicioCodigo, decimal Monto)> aplicaciones,
+        int? categoriaServicioId,
+        bool? conMedicion,
+        string descripcion,
         string sourceDocument,
         CancellationToken ct)
     {
-        var entradas = detalles
-            .Where(d => d is not null && d.Monto > 0)
-            .ToList();
-
+        var entradas = aplicaciones.Where(a => a.Monto > 0).ToList();
         if (entradas.Count == 0)
         {
             throw new InvalidOperationException("No se recibieron detalles con monto para construir contracuentas bancarias.");
@@ -2198,86 +2199,44 @@ public class CaptacionPagosService : ICaptacionPagosService
             sourceDocumentNormalizado = sourceDocumentNormalizado[..120];
         }
 
-        var cuentasServicio = await _context.servicios
-            .AsNoTracking()
-            .Where(s => s.estado && s.cont_account_id.HasValue && s.cont_account_id.Value > 0 && s.servicios_codigo != null)
-            .Select(s => new ServicioCuentaContable
-            {
-                Codigo = s.servicios_codigo,
-                CuentaId = s.cont_account_id!.Value,
-                Descripcion = s.servicios_descripcioncorta
-            })
-            .ToListAsync(ct);
-
-        var serviciosLookup = cuentasServicio
-            .ToDictionary(
-                s => s.Codigo.Trim().ToUpperInvariant(),
-                s => s,
-                StringComparer.OrdinalIgnoreCase);
-
-        var montosPorCuenta = new Dictionary<long, decimal>();
-        var descripcionPorCuenta = new Dictionary<long, string>();
-
-        foreach (var entrada in entradas)
+        var companyId = EnsureCompanyId();
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
         {
-            var servicioCodigo = string.IsNullOrWhiteSpace(entrada.ServicioCodigo)
-                ? null
-                : entrada.ServicioCodigo.Trim().ToUpperInvariant();
-            if (string.IsNullOrWhiteSpace(servicioCodigo))
-            {
-                throw new InvalidOperationException("Hay detalles de factura sin codigo de servicio para integrar con bancos.");
-            }
-
-            if (!serviciosLookup.TryGetValue(servicioCodigo, out var servicioInfo))
-            {
-                throw new InvalidOperationException(
-                    $"No existe configuracion de servicio/cuenta contable para codigo '{servicioCodigo}'.");
-            }
-
-            var cuentaId = servicioInfo.CuentaId;
-            var montoActual = montosPorCuenta.TryGetValue(cuentaId, out var acumulado) ? acumulado : 0m;
-            montosPorCuenta[cuentaId] = montoActual + entrada.Monto;
-
-            if (!descripcionPorCuenta.ContainsKey(cuentaId))
-            {
-                descripcionPorCuenta[cuentaId] = BuildDescripcionContraBanco(
-                    servicioCodigo,
-                    servicioInfo.Descripcion,
-                    entrada.Descripcion);
-            }
+            await connection.OpenAsync(ct);
         }
 
-        var contraCuentas = montosPorCuenta
-            .Where(x => x.Value > 0)
+        var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, transaction: null, ct)
+            ?? throw new InvalidOperationException(
+                "La empresa no tiene configuración de integración contable (pantalla Integración Contable / perfil ERSAPS).");
+
+        var cuentasCxc = await IntegracionContableConfigSql.ResolverCuentasCxcPorServicioAsync(
+            connection,
+            companyId,
+            config.ModoCxc,
+            entradas.Select(a => a.ServicioCodigo),
+            categoriaServicioId,
+            conMedicion,
+            transaction: null,
+            ct);
+
+        var montosPorCuenta = new Dictionary<long, decimal>();
+        foreach (var entrada in entradas)
+        {
+            var cuentaId = cuentasCxc[(entrada.ServicioCodigo ?? string.Empty).Trim().ToUpperInvariant()];
+            montosPorCuenta[cuentaId] = montosPorCuenta.GetValueOrDefault(cuentaId) + entrada.Monto;
+        }
+
+        return montosPorCuenta
+            .OrderBy(x => x.Key)
             .Select(x => new BanTransaccionContraLineaDto
             {
                 CuentaId = x.Key,
                 Monto = Math.Round(x.Value, 2, MidpointRounding.AwayFromZero),
-                Descripcion = descripcionPorCuenta.TryGetValue(x.Key, out var descripcion) ? descripcion : "Cobro captacion",
+                Descripcion = descripcion,
                 SourceDocument = sourceDocumentNormalizado
             })
             .ToList();
-
-        if (contraCuentas.Count == 0)
-        {
-            throw new InvalidOperationException("No se pudo construir ninguna contracuenta valida para el movimiento bancario.");
-        }
-
-        return contraCuentas;
-    }
-
-    private static string BuildDescripcionContraBanco(
-        string servicioCodigo,
-        string? descripcionServicio,
-        string? descripcionDetalle)
-    {
-        var descripcion = !string.IsNullOrWhiteSpace(descripcionDetalle)
-            ? descripcionDetalle.Trim()
-            : !string.IsNullOrWhiteSpace(descripcionServicio)
-                ? $"Cobro {descripcionServicio.Trim()}"
-                : $"Cobro servicio {servicioCodigo}";
-
-        return descripcion.Length > 500 ? descripcion[..500] : descripcion;
     }
 
     private async Task<string?> TryCompensarMovimientoBancarioAsync(
@@ -2345,14 +2304,23 @@ public class CaptacionPagosService : ICaptacionPagosService
         return CaptacionManualDocumentOffset + recibo;
     }
 
-    private async Task<long> GenerarComprobanteContableCaptacionAsync(
+    /// <summary>
+    /// Genera el comprobante del cobro (Debe caja / Haber CxC analítica) sobre la
+    /// configuración de integración contable (plan F4, D2). Devuelve
+    /// (null, false) si la integración de caja no está activa para la empresa y
+    /// (null, true) si quedó encolado en con_partida_pendiente por falta de período.
+    /// </summary>
+    private async Task<(long? PolizaId, bool Encolada)> GenerarComprobanteCaptacionConfigAsync(
         long companyId,
         long documentId,
         string documentNumber,
         DateOnly polizaDate,
-        decimal monto,
         string description,
         string usuario,
+        IReadOnlyList<(string? ServicioCodigo, decimal Monto)> aplicaciones,
+        int? categoriaServicioId,
+        bool? conMedicion,
+        bool cxcGeneral,
         IDbTransaction? transaction,
         CancellationToken ct)
     {
@@ -2362,56 +2330,64 @@ public class CaptacionPagosService : ICaptacionPagosService
             await connection.OpenAsync(ct);
         }
 
-        var documentType = await ResolverDocumentTypeCaptacionAsync(connection, companyId, transaction, ct);
-        var typeId = await ResolverTipoTransaccionContableAsync(connection, companyId, transaction, ct);
-        var total = Math.Round(Math.Max(monto, 0m), 2);
-        var valuesJson = BuildComprobanteValuesJson(total);
-        var polizaDateDb = polizaDate.ToDateTime(TimeOnly.MinValue);
-
-        const string sql = @"
-            SELECT public.sp_con_generar_comprobante(
-                @CompanyId,
-                @Module,
-                @DocumentType,
-                @DocumentId,
-                @DocumentNumber,
-                @PolizaDate::date,
-                @Description,
-                @Usuario,
-                NULL,
-                @TypeId,
-                NULL,
-                @ValuesJson::jsonb,
-                false
-            );
-        ";
-
-        var polizaId = await connection.ExecuteScalarAsync<long?>(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    CompanyId = companyId,
-                    Module = ContabilidadModuloVentas,
-                    DocumentType = documentType,
-                    DocumentId = documentId,
-                    DocumentNumber = documentNumber,
-                    PolizaDate = polizaDateDb,
-                    Description = description,
-                    Usuario = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim(),
-                    TypeId = typeId,
-                    ValuesJson = valuesJson
-                },
-                transaction: transaction,
-                cancellationToken: ct));
-
-        if (!polizaId.HasValue || polizaId.Value <= 0)
+        var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, transaction, ct);
+        if (config is null || !config.ActivoCaja)
         {
-            throw new InvalidOperationException(
-                $"No se obtuvo poliza_id al generar comprobante contable (doc_id={documentId}, doc_num={documentNumber}).");
+            return (null, false);
         }
 
-        return polizaId.Value;
+        var cuentaCaja = await IntegracionContableConfigSql.ResolverCuentaAsync(
+            connection, companyId, "CAJA", transaction, ct);
+
+        List<(long CuentaCxcId, decimal Monto)> aplicacionesCxc;
+        if (cxcGeneral)
+        {
+            var cuentaCxc = await IntegracionContableConfigSql.ResolverCuentaAsync(
+                connection, companyId, "CXC", transaction, ct);
+            aplicacionesCxc = aplicaciones
+                .Where(a => a.Monto > 0)
+                .Select(a => (cuentaCxc, a.Monto))
+                .ToList();
+        }
+        else
+        {
+            var cuentasCxc = await IntegracionContableConfigSql.ResolverCuentasCxcPorServicioAsync(
+                connection,
+                companyId,
+                config.ModoCxc,
+                aplicaciones.Select(a => a.ServicioCodigo),
+                categoriaServicioId,
+                conMedicion,
+                transaction,
+                ct);
+
+            aplicacionesCxc = aplicaciones
+                .Where(a => a.Monto > 0)
+                .Select(a => (cuentasCxc[(a.ServicioCodigo ?? string.Empty).Trim().ToUpperInvariant()], a.Monto))
+                .ToList();
+        }
+
+        var lineas = IntegracionContableConfigSql.ArmarLineasCobro(
+            cuentaCaja,
+            aplicacionesCxc,
+            description,
+            description);
+
+        var polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
+            connection,
+            companyId,
+            ContabilidadModuloVentas,
+            ContabilidadDocumentoRecibo,
+            documentId,
+            documentNumber,
+            polizaDate,
+            description,
+            usuario,
+            lineas,
+            transaction,
+            ct);
+
+        return (polizaId, polizaId is null);
     }
 
     private async Task<long?> RevertirComprobanteContableCaptacionAsync(
@@ -2427,166 +2403,17 @@ public class CaptacionPagosService : ICaptacionPagosService
             await connection.OpenAsync(ct);
         }
 
-        const string sqlPoliza = @"
-            SELECT h.poliza_id
-            FROM public.con_partida_hdr h
-            WHERE h.company_id = @CompanyId
-              AND h.module = @Module
-              AND h.document_id = @DocumentId
-              AND h.document_type IN (@DocRec, @DocFac)
-            ORDER BY
-                CASE WHEN h.status = 1 THEN 0 ELSE 1 END,
-                CASE WHEN h.document_type = @DocRec THEN 0 ELSE 1 END,
-                h.poliza_id DESC
-            LIMIT 1;
-        ";
-
-        var polizaId = await connection.ExecuteScalarAsync<long?>(
-            new CommandDefinition(
-                sqlPoliza,
-                new
-                {
-                    CompanyId = companyId,
-                    Module = ContabilidadModuloVentas,
-                    DocumentId = documentId,
-                    DocRec = ContabilidadDocumentoRecibo,
-                    DocFac = ContabilidadDocumentoFactura
-                },
-                transaction: transaction,
-                cancellationToken: ct));
-
-        if (!polizaId.HasValue || polizaId.Value <= 0)
-        {
-            return null;
-        }
-
-        const string sqlReversa = "SELECT public.sp_con_revertir_poliza(@CompanyId, @PolizaId, @Usuario);";
-        await connection.ExecuteAsync(
-            new CommandDefinition(
-                sqlReversa,
-                new
-                {
-                    CompanyId = companyId,
-                    PolizaId = polizaId.Value,
-                    Usuario = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim()
-                },
-                transaction: transaction,
-                cancellationToken: ct));
-
-        return polizaId.Value;
-    }
-
-    private static string BuildComprobanteValuesJson(decimal total)
-    {
-        var value = total.ToString("0.00", CultureInfo.InvariantCulture);
-        return $"{{\"cobrado\":{value},\"total\":{value},\"subtotal\":{value},\"iva\":0.00,\"monto\":{value},\"valor\":{value}}}";
-    }
-
-    private static async Task<string> ResolverDocumentTypeCaptacionAsync(
-        IDbConnection connection,
-        long companyId,
-        IDbTransaction? transaction,
-        CancellationToken ct)
-    {
-        const string sql = @"
-            SELECT
-                dt.code AS Code,
-                EXISTS (
-                    SELECT 1
-                    FROM public.con_plantilla_partida_hdr h
-                    WHERE h.company_id = dt.company_id
-                      AND h.module = dt.module
-                      AND h.document_type = dt.code
-                      AND h.is_active = true
-                ) AS HasActiveTemplate
-            FROM public.cfg_document_type dt
-            WHERE dt.company_id = @CompanyId
-              AND dt.module = @Module
-              AND dt.is_active = true
-              AND dt.code IN (@DocRec, @DocFac)
-            ORDER BY CASE WHEN dt.code = @DocRec THEN 0 ELSE 1 END, dt.document_type_id;
-        ";
-
-        var candidates = (await connection.QueryAsync<DocumentTypeCandidate>(
-            new CommandDefinition(
-                sql,
-                new
-                {
-                    CompanyId = companyId,
-                    Module = ContabilidadModuloVentas,
-                    DocRec = ContabilidadDocumentoRecibo,
-                    DocFac = ContabilidadDocumentoFactura
-                },
-                transaction: transaction,
-                cancellationToken: ct)))
-            .ToList();
-
-        if (candidates.Count == 0)
-        {
-            throw new InvalidOperationException(
-                $"No existe cfg_document_type activo para module={ContabilidadModuloVentas} con code REC/FAC (company={companyId}).");
-        }
-
-        var selected = candidates
-            .OrderBy(c => c.HasActiveTemplate ? 0 : 1)
-            .ThenBy(c => string.Equals(c.Code, ContabilidadDocumentoRecibo, StringComparison.OrdinalIgnoreCase) ? 0 : 1)
-            .First();
-
-        if (!selected.HasActiveTemplate)
-        {
-            throw new InvalidOperationException(
-                $"No existe plantilla contable activa para module={ContabilidadModuloVentas} con code REC/FAC (company={companyId}).");
-        }
-
-        return selected.Code.Trim().ToUpperInvariant();
-    }
-
-    private static async Task<long> ResolverTipoTransaccionContableAsync(
-        IDbConnection connection,
-        long companyId,
-        IDbTransaction? transaction,
-        CancellationToken ct)
-    {
-        const string sql = @"
-            SELECT t.type_id
-            FROM public.con_tipo_transaccion t
-            WHERE t.company_id = @CompanyId
-              AND COALESCE(
-                    t.status_id,
-                    CASE
-                        WHEN upper(COALESCE(t.status, 'ACTIVE')) IN ('ACTIVE', 'ACTIVO') THEN 1
-                        WHEN upper(COALESCE(t.status, 'ACTIVE')) IN ('INACTIVE', 'INACTIVO') THEN 0
-                        ELSE 1
-                    END
-                  ) = 1
-            ORDER BY
-                CASE WHEN COALESCE(t.is_default, false) THEN 0 ELSE 1 END,
-                t.type_id
-            LIMIT 1;
-        ";
-
-        var typeId = await connection.ExecuteScalarAsync<long?>(
-            new CommandDefinition(
-                sql,
-                new { CompanyId = companyId },
-                transaction: transaction,
-                cancellationToken: ct));
-
-        if (!typeId.HasValue || typeId.Value <= 0)
-        {
-            throw new InvalidOperationException($"No existe con_tipo_transaccion activo para company_id={companyId}.");
-        }
-
-        return typeId.Value;
-    }
-
-    private sealed record ContraCuentaInput(string? ServicioCodigo, decimal Monto, string? Descripcion);
-
-    private sealed class ServicioCuentaContable
-    {
-        public string Codigo { get; init; } = string.Empty;
-        public long CuentaId { get; init; }
-        public string? Descripcion { get; init; }
+        // REC es lo que estampa la integración por config; FAC cubre comprobantes
+        // legacy generados por el esquema de plantillas.
+        return await IntegracionContableConfigSql.RevertirComprobanteAsync(
+            connection,
+            companyId,
+            ContabilidadModuloVentas,
+            new[] { ContabilidadDocumentoRecibo, ContabilidadDocumentoFactura },
+            documentId,
+            usuario,
+            transaction,
+            ct);
     }
 
     private sealed class SaldoPosteoManualLegacyRow
@@ -2597,12 +2424,6 @@ public class CaptacionPagosService : ICaptacionPagosService
         public string? TipoServicio { get; init; }
         public decimal? Monto { get; init; }
         public decimal? MontoDistribuido { get; init; }
-    }
-
-    private sealed class DocumentTypeCandidate
-    {
-        public string Code { get; init; } = string.Empty;
-        public bool HasActiveTemplate { get; init; }
     }
 
     private static string MapTipoServicio(string? tipo)
