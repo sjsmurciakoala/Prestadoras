@@ -46,4 +46,10 @@ public partial class factura
     public string? tipofacturacion { get; set; }
 
     public string? referencia { get; set; }
+
+    // Snapshot dimensional al emitir (plan F3): categoría y medición del
+    // cliente AL MOMENTO de facturar (trigger trg_factura_snapshot_dimensional).
+    public int? categoria_servicio_id { get; set; }
+
+    public bool? con_medicion { get; set; }
 }

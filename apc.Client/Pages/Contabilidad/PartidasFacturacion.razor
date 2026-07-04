@@ -1,0 +1,492 @@
+@page "/contabilidad/partidas-facturacion"
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
+
+@using DevExpress.Blazor
+@using apc.Client.Services.Contabilidad
+@using apc.Client.Services.Tenant
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Contabilidad
+@inject LoteFacturacionClient LoteClient
+@inject TenantState TenantState
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Partidas de facturación</PageTitle>
+
+<div id="partidas-facturacion-superficie" class="contabilidad-page contabilidad-content h-100">
+    <DxCard CssClass="shadow-sm border-0 rounded w-100 h-100">
+        <HeaderContent>
+            <div class="d-flex flex-wrap justify-content-between align-items-center p-3">
+                <div class="d-flex align-items-center gap-3">
+                    <div class="icon-circle bg-primary text-white d-flex align-items-center justify-content-center">
+                        <i class="bi bi-journal-plus fs-4"></i>
+                    </div>
+                    <div>
+                        <h5 class="mb-0 fw-bold text-secondary">Lote de partidas de facturación</h5>
+                        <small class="text-muted">Genera las partidas contables de las facturas de lectura del rango seleccionado.</small>
+                    </div>
+                </div>
+            </div>
+        </HeaderContent>
+
+        <ChildContent>
+            <div class="p-4">
+                <div class="alert alert-info mb-3" role="alert">
+                    <i class="bi bi-info-circle-fill me-2"></i>
+                    El lote toma las <strong>facturas de lectura sin partida contable</strong> del rango (excluye anuladas),
+                    arma el asiento Debe CxC / Haber Ingresos según la configuración de Integración Contable y postea vía el
+                    motor único de pólizas. Es <strong>idempotente</strong>: correrlo de nuevo no duplica partidas. Si una fecha
+                    no tiene período contable abierto, el grupo se encola en la cola de regularización (según configuración).
+                </div>
+
+                @* ---------------- Filtros ---------------- *@
+                <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" CaptionPosition="CaptionPosition.Vertical" CssClass="mb-3">
+                    <DxFormLayoutItem Caption="Fecha desde" ColSpanMd="3" ColSpanSm="12">
+                        <DxDateEdit @bind-Date="fechaDesde" DisplayFormat="dd/MM/yyyy" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Fecha hasta" ColSpanMd="3" ColSpanSm="12">
+                        <DxDateEdit @bind-Date="fechaHasta" DisplayFormat="dd/MM/yyyy" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Modo de agrupación" ColSpanMd="3" ColSpanSm="12">
+                        <DxComboBox Data="@modos" TData="ModoOption" TValue="string"
+                                    ValueFieldName="@nameof(ModoOption.Valor)"
+                                    TextFieldName="@nameof(ModoOption.Texto)"
+                                    @bind-Value="modoSeleccionado"
+                                    DropDownStyle="DropDownStyle.DropDownList" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="3" ColSpanSm="12" Caption=" ">
+                        <div class="d-flex gap-2">
+                            <DxButton Text="Vista previa"
+                                      IconCssClass="bi bi-eye"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      Enabled="@(!cargando && empresaSeleccionadaId > 0)"
+                                      Click="@VistaPreviaAsync" />
+                            <DxButton Text="Generar partidas"
+                                      IconCssClass="bi bi-journal-plus"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Enabled="@(!cargando && previewCargado && previewLineas.Count > 0)"
+                                      Click="@(() => confirmarGenerarVisible = true)" />
+                        </div>
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                @* ---------------- Vista previa ---------------- *@
+                @if (previewCargado)
+                {
+                    @if (previewLineas.Count == 0)
+                    {
+                        <div class="alert alert-warning mb-3" role="alert">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                            No hay facturas de lectura pendientes de partida en el rango seleccionado.
+                        </div>
+                    }
+                    else
+                    {
+                        <h6 class="fw-bold text-secondary mb-2">Vista previa del lote</h6>
+                        <DxGrid Data="@previewLineas"
+                                PageSize="20"
+                                TextWrapEnabled="false"
+                                CssClass="mb-2">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(LotePreviewLineaDto.FechaPartida)" Caption="Fecha" DisplayFormat="{0:dd/MM/yyyy}" Width="120px" />
+                                <DxGridDataColumn FieldName="@nameof(LotePreviewLineaDto.Uso)" Caption="Uso" Width="110px" />
+                                <DxGridDataColumn FieldName="@nameof(LotePreviewLineaDto.AccountCode)" Caption="Cuenta" MinWidth="260">
+                                    <CellDisplayTemplate Context="cell">
+                                        @{ var linea = (LotePreviewLineaDto)cell.DataItem; }
+                                        <span>@linea.AccountCode - @linea.AccountName</span>
+                                    </CellDisplayTemplate>
+                                </DxGridDataColumn>
+                                <DxGridDataColumn FieldName="@nameof(LotePreviewLineaDto.Debe)" Caption="Debe" DisplayFormat="{0:N2}" Width="130px" />
+                                <DxGridDataColumn FieldName="@nameof(LotePreviewLineaDto.Haber)" Caption="Haber" DisplayFormat="{0:N2}" Width="130px" />
+                                <DxGridDataColumn FieldName="@nameof(LotePreviewLineaDto.Facturas)" Caption="Facturas" Width="100px" />
+                            </Columns>
+                        </DxGrid>
+                        <div class="d-flex flex-wrap gap-4 mb-3">
+                            <span class="fw-semibold">Total Debe: @previewLineas.Sum(l => l.Debe).ToString("N2")</span>
+                            <span class="fw-semibold">Total Haber: @previewLineas.Sum(l => l.Haber).ToString("N2")</span>
+                            <span class="text-muted">@previewLineas.Count línea(s) agregada(s)</span>
+                        </div>
+                    }
+                }
+
+                @* ---------------- Historial de lotes ---------------- *@
+                <h6 class="fw-bold text-secondary mb-2 mt-4">Historial de lotes</h6>
+                @if (historial.Count == 0)
+                {
+                    <div class="alert alert-info mb-3" role="alert">
+                        Aún no se ha generado ningún lote de partidas de facturación para esta empresa.
+                    </div>
+                }
+                else
+                {
+                    <DxGrid Data="@historial"
+                            KeyFieldName="@nameof(LoteFacturacionDto.LoteId)"
+                            PageSize="10"
+                            TextWrapEnabled="false"
+                            CssClass="mb-3">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.LoteId)" Caption="Lote" Width="80px" />
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.CreatedAt)" Caption="Fecha corrida" DisplayFormat="{0:dd/MM/yyyy HH:mm}" Width="150px" />
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.FechaDesde)" Caption="Rango" MinWidth="180">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var lote = (LoteFacturacionDto)cell.DataItem; }
+                                    <span>@lote.FechaDesde.ToString("dd/MM/yyyy") — @lote.FechaHasta.ToString("dd/MM/yyyy")</span>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.ModoAgrupacion)" Caption="Modo" Width="110px">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var lote = (LoteFacturacionDto)cell.DataItem; }
+                                    <span>@EtiquetaModo(lote.ModoAgrupacion)</span>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.Facturas)" Caption="Facturas" Width="95px" />
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.Polizas)" Caption="Pólizas" Width="90px" />
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.Encoladas)" Caption="Encoladas" Width="100px" />
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.Total)" Caption="Total" DisplayFormat="{0:N2}" Width="130px" />
+                            <DxGridDataColumn FieldName="@nameof(LoteFacturacionDto.StatusId)" Caption="Estado" Width="110px">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var lote = (LoteFacturacionDto)cell.DataItem; }
+                                    <span class="badge @ClaseEstado(lote.StatusId)">@EtiquetaEstado(lote.StatusId)</span>
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                }
+
+                @* ---------------- Pendientes de regularización ---------------- *@
+                <h6 class="fw-bold text-secondary mb-2 mt-4">Pendientes de regularización</h6>
+                @if (pendientes.Count == 0)
+                {
+                    <div class="alert alert-success mb-3" role="alert">
+                        <i class="bi bi-check-circle-fill me-2"></i>
+                        No hay partidas de facturación encoladas en espera de período contable.
+                    </div>
+                }
+                else
+                {
+                    <div class="alert alert-warning mb-2" role="alert">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        Hay grupos encolados sin período contable abierto. Abra el período correspondiente y use
+                        <strong>Reprocesar</strong> para generar la partida de esa fecha.
+                    </div>
+                    <DxGrid Data="@pendientes"
+                            KeyFieldName="@nameof(PartidaPendienteDto.PartidaPendienteId)"
+                            PageSize="10"
+                            TextWrapEnabled="false"
+                            CssClass="mb-3">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(PartidaPendienteDto.FechaDocumento)" Caption="Fecha" DisplayFormat="{0:dd/MM/yyyy}" Width="110px" />
+                            <DxGridDataColumn FieldName="@nameof(PartidaPendienteDto.Descripcion)" Caption="Descripción" MinWidth="280" />
+                            <DxGridDataColumn FieldName="@nameof(PartidaPendienteDto.Motivo)" Caption="Motivo" Width="180px" />
+                            <DxGridDataColumn FieldName="@nameof(PartidaPendienteDto.Intentos)" Caption="Intentos" Width="90px" />
+                            <DxGridDataColumn Caption="" Width="130px">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var pendiente = (PartidaPendienteDto)cell.DataItem; }
+                                    <DxButton Text="Reprocesar"
+                                              IconCssClass="bi bi-arrow-repeat"
+                                              RenderStyle="ButtonRenderStyle.Secondary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                              Enabled="@(!cargando)"
+                                              Click="@(() => ReprocesarPendienteAsync(pendiente))" />
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                }
+            </div>
+        </ChildContent>
+    </DxCard>
+
+    <DxLoadingPanel Visible="@cargando"
+                    PositionTarget="#partidas-facturacion-superficie"
+                    ApplyBackgroundShading="false"
+                    IsContentBlocked="true"
+                    Text="Procesando..." />
+
+    @* Confirmación antes de postear (D10: operación sensible e irreversible) *@
+    <DxPopup @bind-Visible="confirmarGenerarVisible"
+             Width="480px"
+             CloseOnEscape="true"
+             CloseOnOutsideClick="false"
+             ShowFooter="true">
+        <HeaderContentTemplate>
+            <div class="d-flex align-items-center gap-2 p-1">
+                <i class="bi bi-exclamation-triangle-fill fs-4 text-warning"></i>
+                <strong>Confirmar generación del lote</strong>
+            </div>
+        </HeaderContentTemplate>
+        <BodyContentTemplate>
+            <div class="p-3">
+                <p class="mb-2">
+                    Se generarán y <strong>postearán</strong> partidas contables por
+                    <strong>@previewLineas.Sum(l => l.Debe).ToString("N2")</strong> para el rango
+                    <strong>@(fechaDesde?.ToString("dd/MM/yyyy")) – @(fechaHasta?.ToString("dd/MM/yyyy"))</strong>
+                    (agrupación @(modoSeleccionado == "DIA" ? "por día" : "por período")).
+                </p>
+                <p class="mb-0 text-muted">El posteo afecta los saldos contables y no se deshace desde esta pantalla.</p>
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate Context="confirmFooter">
+            <div class="p-2 d-flex justify-content-end gap-2">
+                <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Cancelar"
+                          Click="@confirmFooter.CloseCallback" />
+                <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Generar y postear"
+                          Click="@GenerarConfirmadoAsync" />
+            </div>
+        </FooterContentTemplate>
+    </DxPopup>
+</div>
+
+@code {
+    private long empresaSeleccionadaId;
+    private bool cargando;
+
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+    private string modoSeleccionado = "DIA";
+
+    private bool previewCargado;
+    private bool confirmarGenerarVisible;
+    private IReadOnlyList<LotePreviewLineaDto> previewLineas = Array.Empty<LotePreviewLineaDto>();
+    private IReadOnlyList<LoteFacturacionDto> historial = Array.Empty<LoteFacturacionDto>();
+    private IReadOnlyList<PartidaPendienteDto> pendientes = Array.Empty<PartidaPendienteDto>();
+
+    private sealed record ModoOption(string Valor, string Texto);
+    private static readonly IReadOnlyList<ModoOption> modos =
+    [
+        new("DIA", "Una partida por día"),
+        new("PERIODO", "Una sola partida del rango")
+    ];
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Default: primer y último día del mes anterior.
+        var primerDiaMesActual = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+        fechaDesde = primerDiaMesActual.AddMonths(-1);
+        fechaHasta = primerDiaMesActual.AddDays(-1);
+
+        cargando = true;
+        try
+        {
+            // La pantalla opera sobre la empresa actual del usuario (claims);
+            // no ofrece cambiar de tenant (regla multitenant del portal).
+            empresaSeleccionadaId = await TenantState.EnsureCompanyAsync();
+            if (empresaSeleccionadaId > 0)
+            {
+                await CargarHistorialYPendientesAsync();
+            }
+            else
+            {
+                MostrarError("Su sesión no tiene una empresa activa; vuelva a iniciar sesión.");
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible cargar la pantalla: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CargarHistorialYPendientesAsync()
+    {
+        var historialTask = LoteClient.HistorialAsync(empresaSeleccionadaId);
+        var pendientesTask = LoteClient.PendientesAsync(empresaSeleccionadaId);
+        await Task.WhenAll(historialTask, pendientesTask);
+        historial = historialTask.Result;
+        pendientes = pendientesTask.Result;
+    }
+
+    private bool ValidarFiltros(out DateOnly desde, out DateOnly hasta)
+    {
+        desde = default;
+        hasta = default;
+
+        if (fechaDesde is null || fechaHasta is null)
+        {
+            MostrarAdvertencia("Seleccione la fecha inicial y la fecha final del rango.");
+            return false;
+        }
+
+        desde = DateOnly.FromDateTime(fechaDesde.Value);
+        hasta = DateOnly.FromDateTime(fechaHasta.Value);
+        if (desde > hasta)
+        {
+            MostrarAdvertencia("La fecha inicial no puede ser mayor que la fecha final.");
+            return false;
+        }
+
+        return true;
+    }
+
+    private async Task VistaPreviaAsync()
+    {
+        if (empresaSeleccionadaId <= 0 || !ValidarFiltros(out var desde, out var hasta))
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            previewLineas = await LoteClient.PreviewAsync(empresaSeleccionadaId, desde, hasta, modoSeleccionado);
+            previewCargado = true;
+        }
+        catch (Exception ex)
+        {
+            previewCargado = false;
+            previewLineas = Array.Empty<LotePreviewLineaDto>();
+            MostrarError($"No fue posible generar la vista previa: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task GenerarConfirmadoAsync()
+    {
+        confirmarGenerarVisible = false;
+        if (empresaSeleccionadaId <= 0 || !ValidarFiltros(out var desde, out var hasta))
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var resultado = await LoteClient.GenerarAsync(empresaSeleccionadaId, new LoteGenerarRequestDto
+            {
+                Desde = desde,
+                Hasta = hasta,
+                Modo = modoSeleccionado
+            });
+
+            NotificarResultado(resultado);
+
+            await CargarHistorialYPendientesAsync();
+            previewLineas = await LoteClient.PreviewAsync(empresaSeleccionadaId, desde, hasta, modoSeleccionado);
+            previewCargado = true;
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible generar el lote: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task ReprocesarPendienteAsync(PartidaPendienteDto pendiente)
+    {
+        if (empresaSeleccionadaId <= 0)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            // Reprocesa el lote ORIGINAL completo (rango y modo del payload);
+            // fecha_documento solo como último recurso si el payload no vino.
+            var resultado = await LoteClient.GenerarAsync(empresaSeleccionadaId, new LoteGenerarRequestDto
+            {
+                Desde = pendiente.FechaDesde ?? pendiente.FechaDocumento,
+                Hasta = pendiente.FechaHasta ?? pendiente.FechaDocumento,
+                Modo = string.IsNullOrWhiteSpace(pendiente.ModoAgrupacion) ? "DIA" : pendiente.ModoAgrupacion
+            });
+
+            NotificarResultado(resultado);
+            await CargarHistorialYPendientesAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible reprocesar el pendiente: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NotificarResultado(LoteGenerarResultDto resultado)
+    {
+        if (resultado.LoteId is null)
+        {
+            MostrarAdvertencia("No había facturas pendientes de partida en el rango: no se generó ningún lote.");
+            return;
+        }
+
+        var resumen = $"Lote #{resultado.LoteId}: {resultado.Polizas} póliza(s), {resultado.Facturas} factura(s), " +
+                      $"{resultado.Encoladas} encolada(s), total {resultado.Total:N2}.";
+
+        if (resultado.Polizas == 0 && resultado.Encoladas > 0)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Lote encolado",
+                Text = $"{resumen} Todo quedó en la cola de regularización por falta de período contable abierto.",
+                RenderStyle = ToastRenderStyle.Warning
+            });
+            return;
+        }
+
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Lote generado",
+            Text = resultado.Encoladas > 0
+                ? $"{resumen} Revise la sección de pendientes de regularización."
+                : resumen,
+            RenderStyle = ToastRenderStyle.Success
+        });
+    }
+
+    private void MostrarAdvertencia(string mensaje)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Partidas de facturación",
+            Text = mensaje,
+            RenderStyle = ToastRenderStyle.Warning
+        });
+    }
+
+    private void MostrarError(string mensaje)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Partidas de facturación",
+            Text = mensaje,
+            RenderStyle = ToastRenderStyle.Danger
+        });
+    }
+
+    private static string EtiquetaModo(string modo) => modo switch
+    {
+        "DIA" => "Por día",
+        "PERIODO" => "Por período",
+        _ => modo
+    };
+
+    private static string EtiquetaEstado(short statusId) => statusId switch
+    {
+        1 => "Generado",
+        2 => "Parcial",
+        3 => "Encolado",
+        _ => statusId.ToString()
+    };
+
+    private static string ClaseEstado(short statusId) => statusId switch
+    {
+        1 => "text-bg-success",
+        2 => "text-bg-warning",
+        3 => "text-bg-secondary",
+        _ => "text-bg-light"
+    };
+}
