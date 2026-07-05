@@ -120,6 +120,9 @@ public static class ServiceRegistration
         services.AddScoped<IBanTiposTransaccionesService, BanTiposTransaccionesService>();
         services.AddScoped<IBanTransaccionesService, BanTransaccionesService>();
 
+        // WS bancario F8 (lo consume el host apc.BancosWs; contrato SIMAFI congelado)
+        services.AddScoped<SIAD.Services.BancosWs.IBancosWsService, SIAD.Services.BancosWs.BancosWsService>();
+
         // tarifario v3
         services.AddScoped<IClienteServicioTarifarioService, ClienteServicioTarifarioService>();
         services.AddScoped<IPruebaCalculoService, PruebaCalculoService>();

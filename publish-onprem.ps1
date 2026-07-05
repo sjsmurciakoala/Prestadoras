@@ -6,11 +6,15 @@
 #   .\publish-onprem.ps1                 # publica portal + ws (default)
 #   .\publish-onprem.ps1 -Solo portal    # solo portal
 #   .\publish-onprem.ps1 -Solo ws        # solo ws
+#   .\publish-onprem.ps1 -Solo bancosws  # solo WS bancario (apc.BancosWs, F8)
 #   .\publish-onprem.ps1 -Output D:\deploy\apc\2026-05-09  # carpeta custom
+#
+# NOTA: bancosws NO entra en "todos" a proposito — el canal del banco es 24/7
+# y se publica solo en su propia ventana (cutover F8).
 # =============================================================================
 
 param(
-    [ValidateSet("portal", "ws", "todos")]
+    [ValidateSet("portal", "ws", "bancosws", "todos")]
     [string]$Solo = "todos",
     [string]$Output = ""
 )
@@ -60,6 +64,27 @@ if ($Solo -in @("portal", "todos")) {
         exit 1
     }
     Write-Host "    Portal publicado en: $portalOut" -ForegroundColor Green
+    Write-Host ""
+}
+
+# ----- WS bancario apc.BancosWs (.NET 9, F8 — contrato SIMAFI congelado) -----
+if ($Solo -eq "bancosws") {
+    Write-Host "==> Publicando WS bancario apc.BancosWs.csproj (.NET 9 Release)..." -ForegroundColor Cyan
+    $bancosOut = Join-Path $Output "bancosws"
+
+    & dotnet publish "$PSScriptRoot\apc.BancosWs\apc.BancosWs.csproj" `
+        -c Release `
+        -r win-x64 `
+        --self-contained false `
+        -p:PublishReadyToRun=true `
+        -o $bancosOut
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Falla publicando WS bancario."
+        exit 1
+    }
+    Write-Host "    WS bancario publicado en: $bancosOut" -ForegroundColor Green
+    Write-Host "    OJO: el binding IIS/proxy debe servirlo bajo el path /simafi/api (contrato congelado)." -ForegroundColor Yellow
     Write-Host ""
 }
 
