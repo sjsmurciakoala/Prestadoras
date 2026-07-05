@@ -88,9 +88,12 @@ DECLARE
     v_company_id bigint := 2;  -- APC (única empresa con lectores en siad_v3)
 BEGIN
     IF EXISTS (SELECT 1 FROM public.cfg_company WHERE company_id = v_company_id) THEN
+        -- DISTINCT ON (lower(codigo)): usuarioapc mezcla mayúsc./minúsc. y podría
+        -- tener el mismo login en dos casos; el índice único es case-insensitive,
+        -- así que se colapsan aquí (se queda el de menor ide) para no violar la UK.
         INSERT INTO public.adm_lector_credencial
             (company_id, codigo, clave_hash, lector_nombre, ruta, codciclo, activo, created_by)
-        SELECT
+        SELECT DISTINCT ON (lower(btrim(u.usuario)))
             v_company_id,
             btrim(u.usuario),
             crypt(coalesce(u.clave, ''), gen_salt('bf')),
@@ -106,6 +109,7 @@ BEGIN
               SELECT 1 FROM public.adm_lector_credencial c
               WHERE c.company_id = v_company_id
                 AND lower(c.codigo) = lower(btrim(u.usuario))
-          );
+          )
+        ORDER BY lower(btrim(u.usuario)), u.ide;
     END IF;
 END$$;

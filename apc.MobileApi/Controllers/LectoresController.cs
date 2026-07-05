@@ -66,7 +66,7 @@ public sealed class LectoresController : ControllerBase
     [HttpPost("logout")]
     public async Task<IActionResult> Logout(CancellationToken ct)
     {
-        var token = ExtraerToken();
+        var token = BearerToken.Parse(Request);
         await _service.LogoutAsync(token, ct);
         return NoContent();
     }
@@ -88,19 +88,5 @@ public sealed class LectoresController : ControllerBase
             Ruta = sesion.Ruta,
             CodCiclo = sesion.CodCiclo,
         });
-    }
-
-    private string? ExtraerToken()
-    {
-        var header = Request.Headers.Authorization.ToString();
-        if (string.IsNullOrWhiteSpace(header))
-        {
-            return null;
-        }
-
-        const string prefijo = "Bearer ";
-        return header.StartsWith(prefijo, StringComparison.OrdinalIgnoreCase)
-            ? header[prefijo.Length..].Trim()
-            : header.Trim();
     }
 }

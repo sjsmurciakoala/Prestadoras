@@ -199,8 +199,11 @@ public sealed class LecturaV3Request
     public string? Imagen { get; init; }
     public string? Informativo { get; init; }
     public string? Categoria { get; init; }
-    /// <summary>Total calculado por la app; se valida contra el servidor (preflight).</summary>
-    public decimal Total { get; init; }
+    /// <summary>
+    /// Total calculado por la app; si viene, se valida contra el servidor (preflight).
+    /// Nulo = el dispositivo no lo envía y el servidor calcula el suyo (autoritativo).
+    /// </summary>
+    public decimal? Total { get; init; }
 }
 
 /// <summary>Respuesta de la subida de lectura (paridad LecturaRespuestaV3).</summary>

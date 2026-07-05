@@ -35,7 +35,9 @@ Seven projects, all .NET 9:
 
 The Identity DbContext is `apc.Data.ApplicationDbContext` and is separate from `SiadDbContext`. Identity migrations are in `apc/Migrations/`; **do not put functional DB changes there**.
 
-Other directories in this folder (`apc.MobileApi/`, `apc.Client.Tests/`, `VerificadorUsuarios/`, `tools/`, `temp_excel_*`, `publish_*`, `artifacts/`, `*.log`) are untracked scratch/publish leftovers — they are **not** part of the solution; do not edit or reference them.
+`apc.BancosWs/` (WS bancario SIMAFI, F8) and `apc.MobileApi/` (API móvil de la app de lectores, L3) are standalone **net9 WS hosts** in the solution — sin Identity/Blazor, con su propio middleware de auth y `ICurrentCompanyService` que resuelve el tenant por credencial. Se despliegan aparte del portal (`publish-onprem.ps1 -Solo bancosws` / `-Solo mobileapi`).
+
+Other directories in this folder (`apc.Client.Tests/`, `VerificadorUsuarios/`, `tools/`, `temp_excel_*`, `publish_*`, `artifacts/`, `*.log`) are untracked scratch/publish leftovers — they are **not** part of the solution; do not edit or reference them.
 
 ## Architecture: a slice through the stack
 

@@ -312,6 +312,35 @@ public sealed class LectoresMobileServiceTests : IntegrationTestBase, IDisposabl
         Assert.False(conflicto.Success);
     }
 
+    [SkippableFact]
+    public async Task Lectura_sin_total_no_dispara_preflight()
+    {
+        Skip.IfNot(Fixture.Available, "BD de pruebas no disponible.");
+        var servicio = CrearServicio();
+        var clave = await PrimeraClaveRutaAsync();
+        Skip.If(clave is null, "La ruta de prueba no tiene medidores en esta BD.");
+
+        var cai = await Connection.QueryFirstOrDefaultAsync<CaiTest>(new CommandDefinition(@"
+            with b as (
+                select * from public.sp_adm_obtener_o_reservar_bloque_cai_ruta(@CompanyId, @Ruta, 250, 'test-l3')
+            )
+            select b.cai_id as IdCai, b.prefijo_documento as Prefijo, b.correlativo_hasta as Correlativo from b;",
+            new { CompanyId, Ruta }, Transaction));
+        Skip.If(cai is null || cai.Correlativo is null || cai.IdCai == 0, "No hay bloque CAI reservable en esta BD.");
+
+        // Sin Total (nulo): el preflight NO corre → no hay SYNC_CONFLICT_TOTAL.
+        var sinTotal = await servicio.ActualizarLecturaAsync(new LecturaV3Request
+        {
+            Clave = clave!, Anio = Anio, Mes = Mes, LecturaActual = 150, CondicionLectura = "N",
+            Usuario = "test-l3", IdCai = (int)cai!.IdCai, CorrelativoCai = (int)cai.Correlativo!.Value,
+            NumeroFactura = $"{cai.Prefijo}-{cai.Correlativo.Value:00000000}",
+            LecturaUuid = "UUID-L3-SIN-TOTAL", Total = null,
+        }, CompanyId);
+
+        Assert.NotEqual("SYNC_CONFLICT_TOTAL", sinTotal.Codigo);
+        Assert.True(sinTotal.Success, $"Esperaba éxito, fue {sinTotal.Codigo}: {sinTotal.Mensaje}");
+    }
+
     private async Task<string?> PrimeraClaveRutaAsync()
     {
         var clave = await Connection.ExecuteScalarAsync<string?>(new CommandDefinition(

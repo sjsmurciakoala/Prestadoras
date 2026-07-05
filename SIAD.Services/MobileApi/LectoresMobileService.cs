@@ -368,23 +368,35 @@ public sealed class LectoresMobileService : ILectoresMobileService
                 return Fail("CAI_FORMAL_REQUERIDO", "IdCai, CorrelativoCai y NumeroFactura deben venir juntos.");
             }
 
-            var prepare = await PrepararCorrelativoAsync(conn, companyId, identidad, request, ct);
+            // Prepara el correlativo CAI (idempotente en el SP); avanza el estado de sync.
+            await PrepararCorrelativoAsync(conn, companyId, identidad, request, ct);
 
-            // Idempotencia: factura ya emitida + prepare la reconoce → respuesta existente.
-            var facturaExistente = await FacturaRegistradaAsync(conn, identidad.ClienteClave, request.NumeroFactura!, ct);
-            if (facturaExistente is not null &&
-                prepare.EstadoCodigo is "IDEMPOTENTE" or "PENDING_SYNC" or "CONFIRMADO")
+            // Idempotencia: si la factura ya existe (mismo tenant/cliente/número), la
+            // subida es un reintento → se devuelve la existente sin re-postear (evita
+            // el "Ya existe factura" de sp_lectura_v3). numfactura es único por cliente.
+            var facturaExistente = await FacturaRegistradaAsync(conn, companyId, identidad.ClienteClave, request.NumeroFactura!, ct);
+            if (facturaExistente is not null)
             {
-                await ConfirmarCorrelativoAsync(conn, companyId, identidad, request, facturaExistente.FacturaId, ct);
-                return ConstruirRespuestaExistente(identidad, facturaExistente, request);
+                var confirmIdem = await ConfirmarCorrelativoAsync(conn, companyId, identidad, request, facturaExistente.FacturaId, ct);
+                var existente = ConstruirRespuestaExistente(identidad, facturaExistente, request);
+                if (!confirmIdem.Success)
+                {
+                    existente.Warnings.Add("La factura ya existía pero la confirmación del correlativo CAI falló.");
+                }
+
+                return existente;
             }
 
-            // Preflight de total: el total del dispositivo debe coincidir con el del servidor.
-            var totalServidor = await CalcularTotalPreflightAsync(conn, companyId, identidad, request, ct);
-            if (totalServidor.HasValue && Math.Abs(totalServidor.Value - request.Total) > 0.05m)
+            // Preflight de total: si el dispositivo envía un total, debe coincidir con el
+            // del servidor (si no lo envía, sp_lectura_v3 calcula el suyo, que es el válido).
+            if (request.Total.HasValue)
             {
-                return Fail("SYNC_CONFLICT_TOTAL",
-                    $"El total del dispositivo ({request.Total:0.00}) no coincide con el del servidor ({totalServidor.Value:0.00}).");
+                var totalServidor = await CalcularTotalPreflightAsync(conn, companyId, identidad, request, ct);
+                if (totalServidor.HasValue && Math.Abs(totalServidor.Value - request.Total.Value) > 0.05m)
+                {
+                    return Fail("SYNC_CONFLICT_TOTAL",
+                        $"El total del dispositivo ({request.Total.Value:0.00}) no coincide con el del servidor ({totalServidor.Value:0.00}).");
+                }
             }
         }
 
@@ -538,15 +550,16 @@ public sealed class LectoresMobileService : ILectoresMobileService
         }, cancellationToken: ct));
     }
 
-    private async Task<FacturaRegistrada?> FacturaRegistradaAsync(DbConnection conn, string clave, string numeroFactura, CancellationToken ct)
+    private async Task<FacturaRegistrada?> FacturaRegistradaAsync(DbConnection conn, long companyId, string clave, string numeroFactura, CancellationToken ct)
     {
+        // Acotado al tenant de la sesión (A6): clientecodigo puede repetirse entre empresas.
         const string sql = @"
             select f.id AS FacturaId, coalesce(f.numrecibo, 0) AS NumRecibo, coalesce(f.numfactura, '') AS NumeroFactura
             from public.factura f
-            where f.clientecodigo = @Clave and f.numfactura = @NumeroFactura
+            where f.company_id = @CompanyId and f.clientecodigo = @Clave and f.numfactura = @NumeroFactura
             order by f.id desc limit 1;";
         return await conn.QueryFirstOrDefaultAsync<FacturaRegistrada>(
-            new CommandDefinition(sql, new { Clave = clave, NumeroFactura = numeroFactura }, cancellationToken: ct));
+            new CommandDefinition(sql, new { CompanyId = companyId, Clave = clave, NumeroFactura = numeroFactura }, cancellationToken: ct));
     }
 
     private async Task<decimal?> CalcularTotalPreflightAsync(DbConnection conn, long companyId, ClienteIdentidad identidad, LecturaV3Request req, CancellationToken ct)

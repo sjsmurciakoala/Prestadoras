@@ -29,7 +29,7 @@ public sealed class MobileApiAuthMiddleware
             return;
         }
 
-        var token = ExtraerToken(context.Request);
+        var token = BearerToken.Parse(context.Request);
         var sesion = await service.ValidarSesionAsync(token, context.RequestAborted);
         if (sesion is null)
         {
@@ -47,22 +47,10 @@ public sealed class MobileApiAuthMiddleware
 
     private static bool EsRutaAbierta(string path)
     {
+        // Match exacto (no prefijo) para no abrir rutas como /api/diagnostico-xyz.
         var p = path.TrimEnd('/');
         return p.Equals("/api/lectores/login", StringComparison.OrdinalIgnoreCase)
-            || p.StartsWith("/api/diagnostico", StringComparison.OrdinalIgnoreCase);
-    }
-
-    private static string? ExtraerToken(HttpRequest request)
-    {
-        var header = request.Headers.Authorization.ToString();
-        if (string.IsNullOrWhiteSpace(header))
-        {
-            return null;
-        }
-
-        const string prefijo = "Bearer ";
-        return header.StartsWith(prefijo, StringComparison.OrdinalIgnoreCase)
-            ? header[prefijo.Length..].Trim()
-            : header.Trim();
+            || p.Equals("/api/diagnostico", StringComparison.OrdinalIgnoreCase)
+            || p.StartsWith("/api/diagnostico/", StringComparison.OrdinalIgnoreCase);
     }
 }
