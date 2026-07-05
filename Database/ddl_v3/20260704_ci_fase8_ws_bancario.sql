@@ -112,9 +112,26 @@ CREATE TABLE IF NOT EXISTS public.ban_ws_pago (
     created_by            varchar(100) NOT NULL DEFAULT CURRENT_USER,
     CONSTRAINT uq_ban_ws_pago_company_referencia UNIQUE (company_id, referencia),
     CONSTRAINT ck_ban_ws_pago_status CHECK (status_id IN (1, 2)),
+    -- tipo NO es un estado de ciclo de vida (esos son numéricos, status_id): es el
+    -- discriminador del contrato SIMAFI (tipofa 'S' servicios / 'O' otros). CHECK
+    -- para acotar el dominio.
+    CONSTRAINT ck_ban_ws_pago_tipo CHECK (tipo IN ('S', 'O')),
     CONSTRAINT fk_ban_ws_pago_cuenta FOREIGN KEY (company_id, banco_cuenta_id)
         REFERENCES public.ban_cuenta (company_id, banco_cuenta_id)
 );
+
+-- CHECK de tipo idempotente (la tabla usa CREATE TABLE IF NOT EXISTS; en una BD
+-- que ya la tenga sin el CHECK, agregarlo aquí).
+DO $$
+BEGIN
+    IF NOT EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'ck_ban_ws_pago_tipo' AND conrelid = 'public.ban_ws_pago'::regclass)
+    THEN
+        ALTER TABLE public.ban_ws_pago
+            ADD CONSTRAINT ck_ban_ws_pago_tipo CHECK (tipo IN ('S', 'O'));
+    END IF;
+END$$;
 
 CREATE INDEX IF NOT EXISTS ix_ban_ws_pago_company_clave
     ON public.ban_ws_pago (company_id, clave);
@@ -200,7 +217,11 @@ AS $function$
     WHERE f.company_id = p_company_id
       AND f.clientecodigo = btrim(p_clave)
       AND f.estado IN ('A', 'B')
-      AND COALESCE(d.montovalor_saldo, d.montovalor, 0) <> 0
+      -- Solo líneas con saldo POSITIVO (cargos por cobrar). El total que dicta el
+      -- banco == suma de estas líneas == lo que el pago puede aplicar: mantener
+      -- `> 0` (no `<> 0`) garantiza que consulta y pago coincidan. Una eventual
+      -- línea de crédito (saldo < 0) no la cobra el banco; se maneja en el portal.
+      AND COALESCE(d.montovalor_saldo, d.montovalor, 0) > 0
     ORDER BY f.fechaemision, f.numrecibo, d.id;
 $function$;
 
@@ -268,6 +289,12 @@ BEGIN
     -- Serializa por referencia dentro del tenant (idempotencia bajo concurrencia).
     PERFORM pg_advisory_xact_lock(
         hashtextextended('ban_ws_pago:' || p_company_id::text || ':' || v_referencia, 0));
+    -- Y por abonado: dos pagos con referencias DISTINTAS del mismo cliente (o un
+    -- cobro de caja simultáneo) no deben aplicarse contra el mismo snapshot de
+    -- saldos. Sin este lock, el UPDATE de montovalor_saldo (valor absoluto del
+    -- snapshot, no decremento) permitía doble aplicación.
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended('ban_ws_clave:' || p_company_id::text || ':' || v_clave, 0));
 
     SELECT * INTO v_existente
     FROM public.ban_ws_pago p
@@ -275,7 +302,16 @@ BEGIN
 
     IF FOUND THEN
         IF v_existente.status_id = 1 THEN
-            -- Replay del mismo pago: misma respuesta, cero duplicación.
+            -- Replay: solo es idempotente si es el MISMO abonado. Una referencia
+            -- reutilizada para OTRA clave (el WS viejo lo permitía y aplicaba el
+            -- segundo pago) NO debe devolver "Pago exitoso" sin aplicar nada:
+            -- se rechaza para no liquidar a un cliente sin cobrar.
+            IF v_existente.clave IS DISTINCT FROM v_clave THEN
+                RETURN QUERY SELECT 'REFERENCIA_EN_USO'::text, v_existente.pago_id,
+                    NULL::bigint, NULL::bigint, NULL::numeric;
+                RETURN;
+            END IF;
+            -- Mismo abonado: replay real, misma respuesta, cero duplicación.
             RETURN QUERY SELECT 'IDEMPOTENTE'::text, v_existente.pago_id,
                 v_existente.poliza_id, v_existente.ban_kardex_id, v_existente.monto;
             RETURN;
@@ -312,6 +348,15 @@ BEGIN
 
     -- Contrato /pago/servicios: el monto debe ser EXACTAMENTE el total pendiente.
     IF p_validar_monto AND round(p_monto, 2) <> round(v_total, 2) THEN
+        RETURN QUERY SELECT 'MONTO_NO_COINCIDE'::text, NULL::bigint, NULL::bigint, NULL::bigint, v_total;
+        RETURN;
+    END IF;
+
+    -- /pago/otros (parcial = abono, plan §5 F8.4): se permite monto < total, pero
+    -- NUNCA monto > total. Un sobrepago no tiene destino (no hay saldo a favor):
+    -- el kardex registraría el monto completo y el comprobante solo lo aplicado,
+    -- descuadrando banco vs contabilidad. Se rechaza el excedente.
+    IF NOT p_validar_monto AND round(p_monto, 2) > round(v_total, 2) THEN
         RETURN QUERY SELECT 'MONTO_NO_COINCIDE'::text, NULL::bigint, NULL::bigint, NULL::bigint, v_total;
         RETURN;
     END IF;
@@ -360,12 +405,12 @@ BEGIN
     FROM public.sp_obtener_cliente_saldo(p_company_id, v_clave) s;
     v_saldo_cliente := COALESCE(v_saldo_cliente, 0);
 
+    -- Período comercial actual vía la fuente única de F7 (no inlinear la consulta:
+    -- era la 5.ª copia). Fallback = mes de la fecha del banco si la empresa aún
+    -- no tiene período abierto.
     SELECT COALESCE(
-        (SELECT lpad(pc.anio::text, 4, '0') || lpad(pc.mes::text, 2, '0')
-         FROM public.adm_periodo_comercial pc
-         WHERE pc.company_id = p_company_id AND pc.status_id = 1
-         ORDER BY pc.anio DESC, pc.mes DESC
-         LIMIT 1),
+        (SELECT lpad(pa.anio::text, 4, '0') || lpad(pa.mes::text, 2, '0')
+         FROM public.fn_adm_periodo_comercial_actual(p_company_id) pa),
         to_char(p_fecha_registro, 'YYYYMM'))
     INTO v_periodo;
 
@@ -539,6 +584,12 @@ BEGIN
         RETURN;
     END IF;
 
+    -- Lock por abonado (mismo orden que sp_ban_ws_pagar): serializa la reversión
+    -- contra un pago/otra reversión del mismo cliente para no restituir saldos
+    -- sobre un snapshot que otro flujo está modificando.
+    PERFORM pg_advisory_xact_lock(
+        hashtextextended('ban_ws_clave:' || p_company_id::text || ':' || v_pago.clave, 0));
+
     IF v_pago.status_id <> 1 THEN
         RETURN QUERY SELECT 'YA_REVERSADA'::text, v_pago.pago_id, NULL::bigint, NULL::bigint;
         RETURN;
@@ -552,13 +603,22 @@ BEGIN
         FROM public.transaccion_abonado t
         WHERE t.company_id = p_company_id
           AND t.docuaplicar = v_pago.pago_id
+          -- El LIKE textual (además del '=') hace usable el índice parcial
+          -- ix_transaccion_abonado_wsbanco (su WHERE es LIKE 'WSBANCO:%'): el
+          -- planner no deriva el predicado parcial de una igualdad con expresión.
+          AND t.trans_aplicar LIKE 'WSBANCO:%'
           AND t.trans_aplicar = 'WSBANCO:' || v_pago.pago_id
           AND t.estado = 'C'
         ORDER BY t.ide
     LOOP
+        -- Filtra por clientecodigo (usa ix_factura_clientecodigo_numrecibo y evita
+        -- tomar una factura de otro cliente si numrecibo estuviera duplicado —
+        -- numrecibo es identity pero NO tiene UNIQUE).
         SELECT f.id INTO v_factura
         FROM public.factura f
-        WHERE f.company_id = p_company_id AND f.numrecibo = v_trans.recibo::integer;
+        WHERE f.company_id = p_company_id
+          AND f.clientecodigo = v_pago.clave
+          AND f.numrecibo = v_trans.recibo::integer;
 
         IF NOT FOUND THEN
             RAISE EXCEPTION 'sp_ban_ws_reversar: no existe la factura del recibo % (pago %).',

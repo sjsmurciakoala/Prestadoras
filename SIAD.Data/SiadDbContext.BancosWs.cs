@@ -63,6 +63,9 @@ public partial class SiadDbContext
             entity.HasCheckConstraint(
                 "ck_ban_ws_pago_status",
                 "status_id IN (1, 2)");
+            entity.HasCheckConstraint(
+                "ck_ban_ws_pago_tipo",
+                "tipo IN ('S', 'O')");
 
             entity.HasOne<cfg_company>()
                 .WithMany()

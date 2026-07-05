@@ -454,6 +454,61 @@ public sealed class BancosWsSqlTests : IntegrationTestBase
     }
 
     [SkippableFact]
+    public async Task Pago_otros_sobre_el_total_rechaza_sin_escribir()
+    {
+        var cuentaId = await ArrangeAsync();
+        Skip.If(cuentaId is null, "Falta diario/tipo, cuenta bancaria o tipo DEP en la BD de pruebas.");
+        await CrearClienteConFacturasAsync(100.00m);
+
+        // /pago/otros (validarMonto=false) permite parcial pero NO sobrepago: un
+        // excedente descuadraría kardex vs contabilidad (no hay saldo a favor).
+        var resultado = await PagarAsync("F8REF012", 150.00m, cuentaId, validarMonto: false);
+
+        Assert.Equal("MONTO_NO_COINCIDE", resultado.status);
+        Assert.Null(resultado.pagoId);
+        var registros = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT COUNT(*) FROM public.ban_ws_pago WHERE company_id = @CompanyId AND referencia = 'F8REF012'",
+            new { CompanyId }, Transaction));
+        Assert.Equal(0, registros);
+    }
+
+    [SkippableFact]
+    public async Task Idempotencia_con_clave_distinta_no_liquida_al_cliente_equivocado()
+    {
+        var cuentaId = await ArrangeAsync();
+        Skip.If(cuentaId is null, "Falta diario/tipo, cuenta bancaria o tipo DEP en la BD de pruebas.");
+        await CrearClienteConFacturasAsync(90.00m);
+
+        var primero = await PagarAsync("F8DUPREF", 90.00m, cuentaId);
+        Assert.Equal("OK", primero.status);
+
+        // Un segundo cliente con la MISMA referencia (banco reusa el número): NO
+        // debe responder "Pago exitoso" sin aplicar nada — se rechaza.
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.cliente_maestro
+                (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado)
+            VALUES (@CompanyId, '099999903', '0000000000000', 'OTRO CLIENTE F8', true)",
+            new { CompanyId }, Transaction));
+        var facturaId = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            INSERT INTO public.factura (company_id, numfactura, clientecodigo, tipofactura, tipofacturacion,
+                fechaemision, periodo, saldototal, usuario, estado, estado_id)
+            VALUES (@CompanyId, 'TEST-F8-OTRO', '099999903', 'F', 'S', current_date, '2026/6', 70, 'test-f8', 'A', 1)
+            RETURNING id", new { CompanyId }, Transaction));
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.factura_detalle (company_id, factura_id, codigo, tiposervicio, descripcion, montovalor, montovalor_saldo)
+            VALUES (@CompanyId, @FacturaId, '', 'AGUA_POTABLE', 'Agua Potable', 70, 70)",
+            new { CompanyId, FacturaId = facturaId }, Transaction));
+
+        var duplicada = await PagarAsync("F8DUPREF", 70.00m, cuentaId, clave: "099999903");
+        Assert.Equal("REFERENCIA_EN_USO", duplicada.status);
+
+        // El segundo cliente sigue debiendo (no se liquidó).
+        var estado = await Connection.ExecuteScalarAsync<string>(new CommandDefinition(
+            "SELECT estado FROM public.factura WHERE id = @Id", new { Id = facturaId }, Transaction));
+        Assert.Equal("A", estado);
+    }
+
+    [SkippableFact]
     public async Task Consulta_y_pago_comparten_la_fuente_unica_de_pendientes()
     {
         var cuentaId = await ArrangeAsync();

@@ -147,7 +147,7 @@ public sealed class BancosWsService : IBancosWsService
         return resultado;
     }
 
-    public async Task<BancosWsReversionResultDto> ReversarAsync(string referencia, string? cajero, CancellationToken ct = default)
+    public async Task<BancosWsReversionResultDto> ReversarAsync(string referencia, CancellationToken ct = default)
     {
         var companyId = _currentCompanyService.GetCompanyId();
         var connection = await AbrirAsync(ct);

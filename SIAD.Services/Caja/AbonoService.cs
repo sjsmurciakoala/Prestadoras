@@ -504,6 +504,17 @@ public class AbonoService : IAbonoService
             return ResponseModelDto.Fail("El abono ya se encuentra anulado o reversado.");
         }
 
+        // Los pagos del canal bancario (F8) también son transacciones 202, pero su
+        // reverso debe pasar por sp_ban_ws_reversar (restituye saldos + anula el
+        // kardex DEP + revierte la póliza PGB + marca ban_ws_pago REVERSADO). Si se
+        // reversan desde caja, la factura vuelve a 'A' pero ban_ws_pago queda
+        // APLICADO y un replay del banco respondería "Pago exitoso" sin cobrar.
+        if (transaccion.trans_aplicar is not null && transaccion.trans_aplicar.StartsWith("WSBANCO:"))
+        {
+            return ResponseModelDto.Fail(
+                "Este pago proviene del canal bancario (WS) y debe reversarse por ese canal, no desde caja.");
+        }
+
         var factura = await _context.facturas
             .FirstOrDefaultAsync(f => f.company_id == companyId && f.numrecibo == (int)transaccion.recibo!, ct);
 
@@ -603,9 +614,13 @@ public class AbonoService : IAbonoService
         var targetFecha = fecha?.Date ?? DateTime.UtcNow.Date;
         var targetDateOnly = DateOnly.FromDateTime(targetFecha);
 
+        // Excluye los pagos del canal bancario (F8, marker WSBANCO:): no son abonos
+        // de ventanilla y no deben sumar al arqueo de caja ni ofrecerse para reverso
+        // desde esta pantalla (su reverso va por sp_ban_ws_reversar).
         var query = _context.transaccion_abonados
             .AsNoTracking()
-            .Where(t => t.company_id == companyId && t.tipotransaccion == "202" && t.fecha_docu == targetDateOnly && t.estado != "P");
+            .Where(t => t.company_id == companyId && t.tipotransaccion == "202" && t.fecha_docu == targetDateOnly && t.estado != "P")
+            .Where(t => t.trans_aplicar == null || !t.trans_aplicar.StartsWith("WSBANCO:"));
 
         if (!string.IsNullOrWhiteSpace(usuario))
         {

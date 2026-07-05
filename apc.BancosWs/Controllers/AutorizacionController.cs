@@ -49,6 +49,18 @@ public sealed class AutorizacionController : ControllerBase
     [HttpGet("genkey")]
     public async Task<IActionResult> GenerarLlave([FromQuery] string? banco, [FromQuery] string? vigencia, CancellationToken ct)
     {
+        // genkey MUTA la credencial viva del banco; el middleware de auth (banco+key)
+        // NO cubre /auth. Sin este gate, cualquiera con acceso de red al host podría
+        // rotar la llave de un banco y dejar caído el canal de pagos (DoS del dinero
+        // real). genkey es una operación de aprovisionamiento (ops la corre en el
+        // servidor, fuera de línea): se restringe a conexiones de loopback. Un
+        // llamador remoto recibe el mismo 400 del contrato, sin filtrar el motivo.
+        var remoteIp = HttpContext.Connection.RemoteIpAddress;
+        if (remoteIp is null || !System.Net.IPAddress.IsLoopback(remoteIp))
+        {
+            return Texto(400, ContractXml.MsgNoSePuedeActualizarLlave);
+        }
+
         var actualizada = await _service.GenerarLlaveAsync(banco, vigencia, ct);
         return actualizada
             ? Texto(200, ContractXml.MsgLlaveActualizada)

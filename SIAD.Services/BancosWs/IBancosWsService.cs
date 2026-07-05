@@ -23,7 +23,7 @@ public interface IBancosWsService
     Task<BancosWsPagoResultDto> PagarAsync(BancosWsPagoRequestDto pago, long? bancoCuentaId, CancellationToken ct = default);
 
     /// <summary>Reversión por referencia vía sp_ban_ws_reversar.</summary>
-    Task<BancosWsReversionResultDto> ReversarAsync(string referencia, string? cajero, CancellationToken ct = default);
+    Task<BancosWsReversionResultDto> ReversarAsync(string referencia, CancellationToken ct = default);
 
     /// <summary>Semántica genkey de SrvAutorizacion: regenera la llave (40 hex) del banco. La llave NO se devuelve (contrato).</summary>
     Task<bool> GenerarLlaveAsync(string? banco, string? vigencia, CancellationToken ct = default);

@@ -62,7 +62,7 @@ public sealed class ReversionController : ControllerBase
 
         try
         {
-            var resultado = await _service.ReversarAsync(reversion.Referencia, reversion.Cajero, ct);
+            var resultado = await _service.ReversarAsync(reversion.Referencia, ct);
 
             return resultado.Status switch
             {

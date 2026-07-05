@@ -269,10 +269,13 @@ declaración XML (es un `toString()` manual, verificado en el log).
 
 ### 5.2 Regla "Las facturas estan vencidas" → SE REPLICA
 
-**Decisión (usuario): replicar el bloqueo.** Si la factura pendiente más antigua (FIFO) tiene
-`fechavence < hoy`, la consulta responde 400 `Las facturas estan vencidas` (`error=false`), igual
-que el WS viejo. `fechavence` NULL no bloquea (equivale al ELSE 'N' de SIMAFI). El pago no evalúa
-la regla (igual que el viejo: el pago solo exige monto == total).
+**Decisión (usuario): replicar el bloqueo.** En SIMAFI la cabecera salía de la PRIMERA fila que
+devolvía la consulta y su `vence` mandaba; esa fila corresponde a la factura **vigente** del
+abonado (la del mes en curso, que arrastra el saldo anterior). Por eso en SIAD la regla evalúa el
+`fechavence` de la factura pendiente **más reciente** (mayor `fechaemision`/`numrecibo`), no la más
+antigua: si esa factura vigente venció (`fechavence < hoy`), la consulta responde 400
+`Las facturas estan vencidas` (`error=false`). `fechavence` NULL no bloquea (equivale al ELSE 'N'
+de SIMAFI). El pago no evalúa la regla (igual que el viejo: el pago solo exige monto == total).
 
 ### 5.3 Granularidad de `<detalle>` → por concepto (verificado en producción SIMAFI)
 
