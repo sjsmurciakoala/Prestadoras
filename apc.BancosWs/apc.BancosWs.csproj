@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk.Web">
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <RootNamespace>apc.BancosWs</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\SIAD.Core\SIAD.Core.csproj" />
+    <ProjectReference Include="..\SIAD.Data\SIAD.Data.csproj" />
+    <ProjectReference Include="..\SIAD.Services\SIAD.Services.csproj" />
+  </ItemGroup>
+
+</Project>

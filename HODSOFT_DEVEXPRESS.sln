@@ -17,6 +17,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SIAD.Reports", "SIAD.Report
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "SIAD.Tests", "SIAD.Tests\SIAD.Tests.csproj", "{FED1E60D-A958-4A56-BE43-6D9A48F07836}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "apc.BancosWs", "apc.BancosWs\apc.BancosWs.csproj", "{5CBC8335-C40E-418F-A63D-329514619F85}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -111,6 +113,18 @@ Global
 		{FED1E60D-A958-4A56-BE43-6D9A48F07836}.Release|x64.Build.0 = Release|Any CPU
 		{FED1E60D-A958-4A56-BE43-6D9A48F07836}.Release|x86.ActiveCfg = Release|Any CPU
 		{FED1E60D-A958-4A56-BE43-6D9A48F07836}.Release|x86.Build.0 = Release|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Debug|x64.ActiveCfg = Debug|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Debug|x64.Build.0 = Debug|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Debug|x86.ActiveCfg = Debug|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Debug|x86.Build.0 = Debug|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Release|x64.ActiveCfg = Release|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Release|x64.Build.0 = Release|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Release|x86.ActiveCfg = Release|Any CPU
+		{5CBC8335-C40E-418F-A63D-329514619F85}.Release|x86.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
