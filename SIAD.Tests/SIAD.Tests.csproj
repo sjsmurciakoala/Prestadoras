@@ -23,6 +23,12 @@
     <ProjectReference Include="..\SIAD.Core\SIAD.Core.csproj" />
     <ProjectReference Include="..\SIAD.Data\SIAD.Data.csproj" />
     <ProjectReference Include="..\SIAD.Services\SIAD.Services.csproj" />
+    <ProjectReference Include="..\apc.BancosWs\apc.BancosWs.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <!-- Golden files del contrato del WS bancario (F8): comparación por bytes -->
+    <None Include="GoldenFiles\**" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 
   <ItemGroup>
