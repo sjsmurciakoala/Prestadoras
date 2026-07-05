@@ -7,14 +7,16 @@
 #   .\publish-onprem.ps1 -Solo portal    # solo portal
 #   .\publish-onprem.ps1 -Solo ws        # solo ws
 #   .\publish-onprem.ps1 -Solo bancosws  # solo WS bancario (apc.BancosWs, F8)
+#   .\publish-onprem.ps1 -Solo mobileapi # solo API movil de lectores (apc.MobileApi, L3)
 #   .\publish-onprem.ps1 -Output D:\deploy\apc\2026-05-09  # carpeta custom
 #
-# NOTA: bancosws NO entra en "todos" a proposito — el canal del banco es 24/7
-# y se publica solo en su propia ventana (cutover F8).
+# NOTA: bancosws y mobileapi NO entran en "todos" a proposito — son hosts
+# independientes con su propia ventana de deploy (el canal del banco es 24/7;
+# la API movil se despliega con el rollout de la app Flutter).
 # =============================================================================
 
 param(
-    [ValidateSet("portal", "ws", "bancosws", "todos")]
+    [ValidateSet("portal", "ws", "bancosws", "mobileapi", "todos")]
     [string]$Solo = "todos",
     [string]$Output = ""
 )
@@ -85,6 +87,28 @@ if ($Solo -eq "bancosws") {
     }
     Write-Host "    WS bancario publicado en: $bancosOut" -ForegroundColor Green
     Write-Host "    OJO: el binding IIS/proxy debe servirlo bajo el path /simafi/api (contrato congelado)." -ForegroundColor Yellow
+    Write-Host ""
+}
+
+# ----- API movil de lectores apc.MobileApi (.NET 9, L3 — paridad V3 sobre los mismos SPs) -----
+if ($Solo -eq "mobileapi") {
+    Write-Host "==> Publicando API movil apc.MobileApi.csproj (.NET 9 Release)..." -ForegroundColor Cyan
+    $mobileOut = Join-Path $Output "mobileapi"
+
+    & dotnet publish "$PSScriptRoot\apc.MobileApi\apc.MobileApi.csproj" `
+        -c Release `
+        -r win-x64 `
+        --self-contained false `
+        -p:PublishReadyToRun=true `
+        -o $mobileOut
+
+    if ($LASTEXITCODE -ne 0) {
+        Write-Error "Falla publicando API movil."
+        exit 1
+    }
+    Write-Host "    API movil publicada en: $mobileOut" -ForegroundColor Green
+    Write-Host "    OJO: configurar ConnectionStrings:DefaultConnection y MobileApi:SesionHoras en el server." -ForegroundColor Yellow
+    Write-Host "    El WS WCF viejo queda intacto para la app Java (no se toca en este deploy)." -ForegroundColor Yellow
     Write-Host ""
 }
 
