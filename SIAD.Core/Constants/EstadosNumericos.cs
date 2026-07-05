@@ -77,3 +77,12 @@ public static class EstadoPeriodoComercial
     public const short Abierto = 1;
     public const short Cerrado = 2;
 }
+
+// WS bancario F8 (ban_ws_pago.status_id) — contrato SIMAFI congelado:
+// una referencia APLICADA se puede reversar una sola vez; una referencia
+// REVERSADA no se puede volver a pagar.
+public static class EstadoBanWsPago
+{
+    public const short Aplicado  = 1;
+    public const short Reversado = 2;
+}

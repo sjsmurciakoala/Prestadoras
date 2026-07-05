@@ -1020,6 +1020,9 @@ public partial class SiadDbContext
 
         // Período comercial Fase 7 (2026-07-04)
         ConfigurePeriodoComercialModel(modelBuilder);
+
+        // WS bancario Fase 8 (2026-07-04)
+        ConfigureBancosWsModel(modelBuilder);
     }
 }
 
