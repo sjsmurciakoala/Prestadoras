@@ -17,11 +17,13 @@ public sealed class PagoController : ControllerBase
 {
     private readonly IBancosWsService _service;
     private readonly BancosWsRequestContext _requestContext;
+    private readonly ILogger<PagoController> _logger;
 
-    public PagoController(IBancosWsService service, BancosWsRequestContext requestContext)
+    public PagoController(IBancosWsService service, BancosWsRequestContext requestContext, ILogger<PagoController> logger)
     {
         _service = service;
         _requestContext = requestContext;
+        _logger = logger;
     }
 
     /// <summary>Endpoint de prueba del WS viejo (sin auth, valores fijos).</summary>
@@ -109,8 +111,9 @@ public sealed class PagoController : ControllerBase
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Pago WS bancario falló: clave {Clave}, referencia {Referencia}.", pago.Clave, pago.Referencia);
             return Error(true, ContractXml.MsgNoSePuedePagar);
         }
     }

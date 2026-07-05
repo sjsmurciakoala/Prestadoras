@@ -29,5 +29,5 @@ public interface IBancosWsService
     Task<bool> GenerarLlaveAsync(string? banco, string? vigencia, CancellationToken ct = default);
 
     /// <summary>Vigencia informativa del banco: fecha, "permanente" (null en BD) o null si el banco no existe.</summary>
-    Task<(bool Existe, DateOnly? Vigencia)> ObtenerVigenciaAsync(string? banco, CancellationToken ct = default);
+    Task<(bool Existe, DateTime? Vigencia)> ObtenerVigenciaAsync(string? banco, CancellationToken ct = default);
 }

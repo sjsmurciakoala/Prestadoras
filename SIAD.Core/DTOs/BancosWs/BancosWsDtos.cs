@@ -12,7 +12,9 @@ public sealed class BancosWsCredencialDto
     public long CompanyId { get; init; }
     public string Banco { get; init; } = string.Empty;
     public long? BancoCuentaId { get; init; }
-    public DateOnly? Vigencia { get; init; }
+    // DateTime (no DateOnly): las filas llegan por Dapper y el proveedor
+    // materializa date como DateTime.
+    public DateTime? Vigencia { get; init; }
 }
 
 public enum BancosWsConsultaResultado

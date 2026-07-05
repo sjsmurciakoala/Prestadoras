@@ -87,8 +87,8 @@ public sealed class BancosWsService : IBancosWsService
             .ThenByDescending(l => l.NumRecibo)
             .Select(l => l.FechaVence)
             .FirstOrDefault();
-        var hoy = DateOnly.FromDateTime(DateTime.Today);
-        if (fechaVenceVigente.HasValue && fechaVenceVigente.Value < hoy)
+        var hoy = DateTime.Today;
+        if (fechaVenceVigente.HasValue && fechaVenceVigente.Value.Date < hoy)
         {
             return new BancosWsConsultaDto { Resultado = BancosWsConsultaResultado.Vencidas };
         }
@@ -122,7 +122,7 @@ public sealed class BancosWsService : IBancosWsService
                    ban_kardex_id AS BanKardexId, total_pendiente AS TotalPendiente
             FROM public.sp_ban_ws_pagar(
                 @CompanyId, @Banco, @Referencia, @Clave, @Monto,
-                @FechaRegistro, @HoraRegistro, @FechaEfectiva, @Sucursal, @Cajero,
+                @FechaRegistro::date, @HoraRegistro::time, @FechaEfectiva::date, @Sucursal, @Cajero,
                 @BancoCuentaId, @Tipo, @ValidarMonto, @Usuario);";
 
         var resultado = await connection.QueryFirstAsync<BancosWsPagoResultDto>(
@@ -178,10 +178,10 @@ public sealed class BancosWsService : IBancosWsService
         // llave = 40 hex MAYÚSCULAS; vigencia se guarda tal cual (NULL si vacía)
         // y NUNCA se valida. La llave nueva NO viaja en la respuesta: se lee de
         // la BD y se comunica fuera de línea.
-        DateOnly? vigenciaFecha = null;
-        if (!string.IsNullOrWhiteSpace(vigencia) && DateOnly.TryParse(vigencia.Trim(), out var parsed))
+        DateTime? vigenciaFecha = null;
+        if (!string.IsNullOrWhiteSpace(vigencia) && DateTime.TryParse(vigencia.Trim(), System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var parsed))
         {
-            vigenciaFecha = parsed;
+            vigenciaFecha = parsed.Date;
         }
 
         var llave = Convert.ToHexString(RandomNumberGenerator.GetBytes(20)); // 40 hex uppercase
@@ -198,7 +198,7 @@ public sealed class BancosWsService : IBancosWsService
             )
             UPDATE public.ban_ws_credencial c
             SET llave = @Llave,
-                vigencia = @Vigencia,
+                vigencia = @Vigencia::date,
                 updated_at = now(),
                 updated_by = 'ws-genkey'
             FROM candidatas
@@ -211,7 +211,7 @@ public sealed class BancosWsService : IBancosWsService
         return afectadas == 1;
     }
 
-    public async Task<(bool Existe, DateOnly? Vigencia)> ObtenerVigenciaAsync(string? banco, CancellationToken ct = default)
+    public async Task<(bool Existe, DateTime? Vigencia)> ObtenerVigenciaAsync(string? banco, CancellationToken ct = default)
     {
         var bancoNormalizado = banco?.Trim();
         if (string.IsNullOrEmpty(bancoNormalizado))
@@ -220,7 +220,7 @@ public sealed class BancosWsService : IBancosWsService
         }
 
         var connection = await AbrirAsync(ct);
-        var filas = (await connection.QueryAsync<DateOnly?>(
+        var filas = (await connection.QueryAsync<DateTime?>(
             new CommandDefinition(
                 "SELECT vigencia FROM public.ban_ws_credencial WHERE banco = @Banco AND activo ORDER BY credencial_id LIMIT 1;",
                 new { Banco = bancoNormalizado }, cancellationToken: ct))).ToList();
@@ -239,12 +239,13 @@ public sealed class BancosWsService : IBancosWsService
         return connection;
     }
 
+    // Fechas como DateTime: Dapper materializa date de PostgreSQL como DateTime.
     private sealed class PendienteRow
     {
         public long FacturaId { get; init; }
         public int NumRecibo { get; init; }
-        public DateOnly? FechaEmision { get; init; }
-        public DateOnly? FechaVence { get; init; }
+        public DateTime? FechaEmision { get; init; }
+        public DateTime? FechaVence { get; init; }
         public long DetalleId { get; init; }
         public string? Codigo { get; init; }
         public string? TipoServicio { get; init; }

@@ -14,10 +14,12 @@ namespace apc.BancosWs.Controllers;
 public sealed class ReversionController : ControllerBase
 {
     private readonly IBancosWsService _service;
+    private readonly ILogger<ReversionController> _logger;
 
-    public ReversionController(IBancosWsService service)
+    public ReversionController(IBancosWsService service, ILogger<ReversionController> logger)
     {
         _service = service;
+        _logger = logger;
     }
 
     [HttpPost("servicios")]
@@ -74,8 +76,9 @@ public sealed class ReversionController : ControllerBase
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Reversión WS bancario falló: referencia {Referencia}.", reversion.Referencia);
             return Error(true, ContractXml.MsgNoSePuedeReversar);
         }
     }

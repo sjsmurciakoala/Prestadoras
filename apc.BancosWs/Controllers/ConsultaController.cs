@@ -15,10 +15,12 @@ namespace apc.BancosWs.Controllers;
 public sealed class ConsultaController : ControllerBase
 {
     private readonly IBancosWsService _service;
+    private readonly ILogger<ConsultaController> _logger;
 
-    public ConsultaController(IBancosWsService service)
+    public ConsultaController(IBancosWsService service, ILogger<ConsultaController> logger)
     {
         _service = service;
+        _logger = logger;
     }
 
     [HttpGet("servicios/{clave}")]
@@ -49,8 +51,9 @@ public sealed class ConsultaController : ControllerBase
         {
             throw;
         }
-        catch (Exception)
+        catch (Exception ex)
         {
+            _logger.LogError(ex, "Consulta WS bancario falló para clave {Clave}.", clave);
             return Xml(400, ContractXml.Mensaje(400, error: true, ContractXml.MsgProblemaServidor));
         }
     }
