@@ -240,6 +240,30 @@ public sealed class LectoresMobileService : ILectoresMobileService
     }
 
     // -------------------------------------------------------------------------
+    // Condiciones de lectura (catálogo administrable por empresa)
+    // -------------------------------------------------------------------------
+
+    public async Task<List<CondicionLecturaDto>> GetCondicionesAsync(long companyId, CancellationToken ct = default)
+    {
+        var conn = await AbrirAsync(ct);
+        // Scopeado por la empresa de la sesión (A6). requiereLectura se deriva del
+        // tipo (adm_condicion_lectura_tipo.requiere_lectura, true solo para N), no
+        // del ABM, para que nunca se desincronice de la semántica del motor.
+        const string sql = @"
+            select a.codigo AS Codigo, a.descripcion AS Descripcion, a.tipo AS Tipo,
+                   a.facturacion AS Facturacion, a.aplica_descuento AS AplicaDescuento,
+                   coalesce(t.requiere_lectura, a.tipo = 'N') AS RequiereLectura, a.orden AS Orden
+            from public.adm_condicion_lectura a
+            left join public.adm_condicion_lectura_tipo t on t.tipo = a.tipo
+            where a.company_id = @CompanyId and a.activo
+            order by a.orden, a.codigo;";
+
+        var filas = await conn.QueryAsync<CondicionLecturaDto>(
+            new CommandDefinition(sql, new { CompanyId = companyId }, cancellationToken: ct));
+        return filas.ToList();
+    }
+
+    // -------------------------------------------------------------------------
     // Snapshot offline V3 (paridad GetOfflineSnapshotV3)
     // -------------------------------------------------------------------------
 
@@ -828,6 +852,12 @@ public sealed class LectoresMobileService : ILectoresMobileService
 
     private static string? NullIfEmpty(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
+    // Pasa el CÓDIGO de la condición tal cual (sin ToChar1 del WS viejo, que trunca
+    // MIN→M/PND→P). El motor V3 ramifica sobre el vocabulario fijo N/MIN/PND/PD, así
+    // que hoy sólo calcula correcto cuando codigo == tipo (el seed estándar). La
+    // resolución codigo→tipo para el cálculo del consumo es explícitamente de L8
+    // (SPEC §1); en el piloto la condición es informativa para el server (el total
+    // lo calcula la app offline — SPEC §5.4). Ver [[al-condiciones-lectura]].
     private static string CondicionOrDefault(string? s) => string.IsNullOrWhiteSpace(s) ? "N" : s.Trim();
 
     private static string FirstCharOr(string? s, string def) =>

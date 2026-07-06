@@ -1,0 +1,465 @@
+@page "/facturacion/condiciones-lectura"
+@attribute [Authorize]
+
+@using System.ComponentModel.DataAnnotations
+@using apc.Client.Services.CondicionesLectura
+@using SIAD.Core.DTOs.CondicionesLectura
+
+@inject CondicionesLecturaClient CondicionesClient
+@inject TenantState TenantState
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Condiciones de lectura</PageTitle>
+
+<DxMessageBox @bind-Visible="deleteConfirmVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Eliminar condición"
+              Text="@deleteConfirmText"
+              RenderStyle="MessageBoxRenderStyle.Danger"
+              OkButtonText="Sí, eliminar"
+              CancelButtonText="Cancelar"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false"
+              Closed="OnDeleteConfirmClosed" />
+
+<div class="cl-page" id="condiciones-lectura-view">
+
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-list-check me-2 text-primary"></i>Condiciones de lectura
+            </h4>
+            <p class="text-muted mb-0">
+                Catálogo por empresa que consume la app de lectores. El <strong>tipo</strong> define el
+                comportamiento del motor de factura (no editable); el código, descripción y demás campos sí.
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2 flex-shrink-0">
+            <DxButton Text="Recargar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="@RecargarAsync"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Nuevo"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@OnNuevoClick"
+                      Enabled="@(!IsBusy)" />
+            <DxButton Text="Guardar cambios"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-check-lg"
+                      Click="@GuardarAsync"
+                      Enabled="@(!IsBusy && hayCambios)" />
+        </div>
+    </div>
+
+    @if (hayCambios)
+    {
+        <div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>Hay cambios sin guardar. Presione <strong>Guardar cambios</strong> para persistirlos.</span>
+        </div>
+    }
+
+    <div class="cl-grid-wrapper shadow-sm">
+        <DxGrid @ref="grid"
+                Data="@condiciones"
+                KeyFieldName="@nameof(CondicionLecturaAdminDto.CondicionLecturaId)"
+                ShowFilterRow="false"
+                ShowPager="false"
+                SizeMode="SizeMode.Medium"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                EditMode="GridEditMode.PopupEditForm"
+                PopupEditFormHeaderText="@popupHeaderText"
+                EditFormButtonsVisible="false"
+                CustomizeEditModel="OnCustomizeEditModel"
+                EditModelSaving="OnEditModelSaving"
+                CssClass="border-0">
+            <Columns>
+                <DxGridCommandColumn Caption="Acciones" Width="100px" VisibleIndex="99"
+                                     NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false">
+                    <CellDisplayTemplate Context="cellContext">
+                        <div class="d-flex gap-1 justify-content-center">
+                            <DxButton RenderStyle="ButtonRenderStyle.Info" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small"
+                                      IconCssClass="bi bi-pencil-square fs-5"
+                                      Click="@((MouseEventArgs e) => OnEditarClick(cellContext.VisibleIndex))"
+                                      title="Editar" />
+                            <DxButton RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Text" SizeMode="SizeMode.Small"
+                                      IconCssClass="bi bi-trash fs-5"
+                                      Click="@((MouseEventArgs e) => OpenDeleteConfirm((CondicionLecturaAdminDto)cellContext.DataItem))"
+                                      title="Eliminar" />
+                        </div>
+                    </CellDisplayTemplate>
+                </DxGridCommandColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CondicionLecturaAdminDto.Codigo)" Caption="Código" Width="110px">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="fw-bold text-primary">@cell.Value</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CondicionLecturaAdminDto.Descripcion)" Caption="Descripción" MinWidth="180" />
+
+                <DxGridDataColumn FieldName="@nameof(CondicionLecturaAdminDto.Tipo)" Caption="Tipo" Width="150px">
+                    <CellDisplayTemplate Context="cell">
+                        <span class="badge bg-secondary">@cell.Value</span>
+                        <span class="ms-1 text-muted small">@DescripcionTipo((string?)cell.Value)</span>
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn Caption="Requiere lectura" Width="130px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is CondicionLecturaAdminDto item && RequiereLectura(item.Tipo))
+                        {
+                            <i class="bi bi-check-circle-fill text-success" title="Exige lectura del medidor"></i>
+                        }
+                        else
+                        {
+                            <span class="text-muted">-</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CondicionLecturaAdminDto.Facturacion)" Caption="Factura" Width="90px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if ((string?)cell.Value == "S") { <i class="bi bi-check-circle-fill text-success"></i> } else { <span class="text-muted">No</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CondicionLecturaAdminDto.AplicaDescuento)" Caption="Descuento" Width="100px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if ((string?)cell.Value == "S") { <i class="bi bi-check-circle-fill text-success"></i> } else { <span class="text-muted">No</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(CondicionLecturaAdminDto.Orden)" Caption="Orden" Width="80px" TextAlignment="GridTextAlignment.Center" />
+
+                <DxGridDataColumn FieldName="@nameof(CondicionLecturaAdminDto.Activo)" Caption="Estado" Width="90px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if ((bool)cell.Value) { <span class="badge bg-success">Activo</span> } else { <span class="badge bg-secondary">Inactivo</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+
+            <EmptyDataAreaTemplate>
+                <div class="text-center p-5 text-muted">
+                    <i class="bi bi-list-check fs-1 d-block mb-2"></i>
+                    <h5 class="fw-bold text-dark">No hay condiciones</h5>
+                    <p class="mb-0">Cree la primera condición con el botón "Nuevo".</p>
+                </div>
+            </EmptyDataAreaTemplate>
+
+            <EditFormTemplate Context="ctx">
+                @{ var model = (CondicionEditModel)ctx.EditModel; }
+                <div class="d-flex flex-column h-100">
+                    <div class="flex-grow-1 p-3 overflow-auto custom-scrollbar">
+                        <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical">
+                            <DxFormLayoutItem ColSpanMd="6" ColSpanSm="12">
+                                <CaptionTemplate><span class="fw-semibold">Código</span></CaptionTemplate>
+                                <Template>
+                                    <DxTextBox @bind-Text="model.Codigo" NullText="Ej. N, MIN, PROM..." MaxLength="10" />
+                                    <ValidationMessage For="@(() => model.Codigo)" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem ColSpanMd="6" ColSpanSm="12">
+                                <CaptionTemplate><span class="fw-semibold">Tipo (comportamiento)</span></CaptionTemplate>
+                                <Template>
+                                    <DxComboBox TData="CondicionLecturaTipoDto" TValue="string"
+                                                Data="@tipos"
+                                                @bind-Value="model.Tipo"
+                                                ValueFieldName="@nameof(CondicionLecturaTipoDto.Tipo)"
+                                                TextFieldName="@nameof(CondicionLecturaTipoDto.Descripcion)"
+                                                NullText="Seleccione el tipo..." />
+                                    <div class="form-text">
+                                        @if (RequiereLectura(model.Tipo))
+                                        {
+                                            <span class="text-success"><i class="bi bi-info-circle"></i> Este tipo exige lectura del medidor.</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted"><i class="bi bi-info-circle"></i> Este tipo no exige lectura (@DescripcionTipo(model.Tipo)).</span>
+                                        }
+                                    </div>
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem ColSpanMd="12">
+                                <CaptionTemplate><span class="fw-semibold">Descripción</span></CaptionTemplate>
+                                <Template>
+                                    <DxTextBox @bind-Text="model.Descripcion" NullText="Ej. Normal" MaxLength="60" />
+                                    <ValidationMessage For="@(() => model.Descripcion)" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6">
+                                <CaptionTemplate><span class="fw-semibold">Orden</span></CaptionTemplate>
+                                <Template>
+                                    <DxSpinEdit @bind-Value="model.Orden" MinValue="0" MaxValue="999" />
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6">
+                                <Template>
+                                    <DxCheckBox @bind-Checked="model.Facturacion" CheckType="CheckType.Switch">Se factura</DxCheckBox>
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6">
+                                <Template>
+                                    <DxCheckBox @bind-Checked="model.AplicaDescuento" CheckType="CheckType.Switch">Aplica descuento</DxCheckBox>
+                                </Template>
+                            </DxFormLayoutItem>
+
+                            <DxFormLayoutItem ColSpanMd="4" ColSpanSm="6">
+                                <Template>
+                                    <DxCheckBox @bind-Checked="model.Activo" CheckType="CheckType.Switch">Activo</DxCheckBox>
+                                </Template>
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </div>
+
+                    <div class="d-flex justify-content-end align-items-center gap-2 p-3 border-top bg-light">
+                        <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" Click="@OnCancelarClick" />
+                        <DxButton Text="Aceptar" RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-check-lg" SubmitFormOnClick="true" />
+                    </div>
+                </div>
+            </EditFormTemplate>
+        </DxGrid>
+    </div>
+
+    <DxLoadingPanel Visible="@IsBusy"
+                    PositionTarget="#condiciones-lectura-view"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="Procesando..." />
+</div>
+
+@code {
+    private DxGrid? grid;
+    private List<CondicionLecturaAdminDto> condiciones = new();
+    private List<CondicionLecturaTipoDto> tipos = new();
+
+    private long companyId;
+    private bool cargando;
+    private bool hayCambios;
+    private long tempIdSeq = -1;
+
+    private string popupHeaderText = "Condición de lectura";
+    private bool deleteConfirmVisible;
+    private string deleteConfirmText = string.Empty;
+    private CondicionLecturaAdminDto? deleteItem;
+
+    private bool IsBusy => cargando;
+
+    protected override async Task OnInitializedAsync() => await RecargarAsync();
+
+    private async Task RecargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0)
+            {
+                ToastService.ShowToast(new ToastOptions { Title = "Condiciones de lectura", Text = "No se pudo resolver la empresa actual.", RenderStyle = ToastRenderStyle.Warning });
+                return;
+            }
+
+            var catalogo = await CondicionesClient.ObtenerAsync(companyId);
+            tipos = catalogo.Tipos;
+            condiciones = catalogo.Condiciones;
+            hayCambios = false;
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions { Title = "Condiciones de lectura", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task OnNuevoClick(MouseEventArgs e)
+    {
+        if (grid is not null)
+        {
+            await grid.StartEditNewRowAsync();
+        }
+    }
+
+    private Task OnCancelarClick(MouseEventArgs e)
+        => grid is null ? Task.CompletedTask : grid.CancelEditAsync();
+
+    private async Task OnEditarClick(int visibleIndex)
+    {
+        if (grid is not null && visibleIndex >= 0)
+        {
+            await grid.StartEditRowAsync(visibleIndex);
+        }
+    }
+
+    private void OnCustomizeEditModel(GridCustomizeEditModelEventArgs e)
+    {
+        if (e.IsNew || e.DataItem is not CondicionLecturaAdminDto item)
+        {
+            popupHeaderText = "Nueva condición";
+            e.EditModel = new CondicionEditModel
+            {
+                CondicionLecturaId = 0,
+                Tipo = tipos.FirstOrDefault()?.Tipo ?? "N",
+                Facturacion = true,
+                AplicaDescuento = false,
+                Orden = ProximoOrden(),
+                Activo = true,
+            };
+        }
+        else
+        {
+            popupHeaderText = "Editar condición";
+            e.EditModel = new CondicionEditModel
+            {
+                CondicionLecturaId = item.CondicionLecturaId,
+                Codigo = item.Codigo,
+                Descripcion = item.Descripcion,
+                Tipo = item.Tipo,
+                Facturacion = item.Facturacion == "S",
+                AplicaDescuento = item.AplicaDescuento == "S",
+                Orden = item.Orden,
+                Activo = item.Activo,
+            };
+        }
+    }
+
+    private void OnEditModelSaving(GridEditModelSavingEventArgs e)
+    {
+        if (e.EditModel is not CondicionEditModel model)
+        {
+            return;
+        }
+
+        var error = Validar(model);
+        if (error is not null)
+        {
+            ToastService.ShowToast(new ToastOptions { Title = "Condiciones de lectura", Text = error, RenderStyle = ToastRenderStyle.Danger });
+            e.Cancel = true;
+            return;
+        }
+
+        var destino = condiciones.FirstOrDefault(c => c.CondicionLecturaId == model.CondicionLecturaId && model.CondicionLecturaId != 0);
+        if (destino is null)
+        {
+            destino = new CondicionLecturaAdminDto { CondicionLecturaId = tempIdSeq-- };
+            condiciones.Add(destino);
+        }
+
+        destino.Codigo = model.Codigo.Trim().ToUpperInvariant();
+        destino.Descripcion = model.Descripcion.Trim();
+        destino.Tipo = model.Tipo;
+        destino.Facturacion = model.Facturacion ? "S" : "N";
+        destino.AplicaDescuento = model.AplicaDescuento ? "S" : "N";
+        destino.Orden = model.Orden;
+        destino.Activo = model.Activo;
+
+        condiciones = condiciones.OrderBy(c => c.Orden).ThenBy(c => c.Codigo).ToList();
+        hayCambios = true;
+    }
+
+    private void OpenDeleteConfirm(CondicionLecturaAdminDto item)
+    {
+        deleteItem = item;
+        deleteConfirmText = $"Se eliminará la condición '{item.Codigo} - {item.Descripcion}'. Se aplicará al guardar los cambios.";
+        deleteConfirmVisible = true;
+    }
+
+    private async Task OnDeleteConfirmClosed(bool confirmed)
+    {
+        var item = deleteItem;
+        deleteItem = null;
+        deleteConfirmText = string.Empty;
+
+        if (!confirmed || item is null)
+        {
+            return;
+        }
+
+        condiciones.Remove(item);
+        hayCambios = true;
+
+        if (grid is not null && grid.IsEditing())
+        {
+            await grid.CancelEditAsync();
+        }
+    }
+
+    private async Task GuardarAsync(MouseEventArgs e)
+    {
+        if (companyId <= 0)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var catalogo = await CondicionesClient.GuardarAsync(companyId, condiciones);
+            tipos = catalogo.Tipos;
+            condiciones = catalogo.Condiciones;
+            hayCambios = false;
+            ToastService.ShowToast(new ToastOptions { Title = "Condiciones de lectura", Text = "Cambios guardados correctamente.", RenderStyle = ToastRenderStyle.Success });
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions { Title = "Condiciones de lectura", Text = ex.Message, RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private string? Validar(CondicionEditModel model)
+    {
+        if (string.IsNullOrWhiteSpace(model.Codigo)) return "El código es obligatorio.";
+        if (model.Codigo.Trim().Length > 10) return "El código no puede exceder 10 caracteres.";
+        if (string.IsNullOrWhiteSpace(model.Descripcion)) return "La descripción es obligatoria.";
+        if (string.IsNullOrWhiteSpace(model.Tipo) || !tipos.Any(t => t.Tipo == model.Tipo)) return "Seleccione un tipo válido.";
+
+        var codigo = model.Codigo.Trim().ToUpperInvariant();
+        var duplicado = condiciones.Any(c =>
+            c.CondicionLecturaId != model.CondicionLecturaId &&
+            string.Equals(c.Codigo, codigo, StringComparison.OrdinalIgnoreCase));
+        if (duplicado) return $"El código '{codigo}' ya existe en el catálogo.";
+
+        return null;
+    }
+
+    private int ProximoOrden() => condiciones.Count == 0 ? 1 : condiciones.Max(c => c.Orden) + 1;
+
+    private bool RequiereLectura(string? tipo)
+        => tipos.FirstOrDefault(t => t.Tipo == tipo)?.RequiereLectura ?? false;
+
+    private string DescripcionTipo(string? tipo)
+        => tipos.FirstOrDefault(t => t.Tipo == tipo)?.Descripcion ?? string.Empty;
+
+    private sealed class CondicionEditModel
+    {
+        public long CondicionLecturaId { get; set; }
+
+        [Required(ErrorMessage = "El código es obligatorio.")]
+        public string Codigo { get; set; } = string.Empty;
+
+        [Required(ErrorMessage = "La descripción es obligatoria.")]
+        public string Descripcion { get; set; } = string.Empty;
+
+        public string Tipo { get; set; } = "N";
+        public bool Facturacion { get; set; } = true;
+        public bool AplicaDescuento { get; set; }
+        public int Orden { get; set; }
+        public bool Activo { get; set; } = true;
+    }
+}

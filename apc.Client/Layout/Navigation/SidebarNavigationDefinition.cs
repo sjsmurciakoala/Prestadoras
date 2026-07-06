@@ -258,6 +258,14 @@ public static class SidebarNavigationDefinition
                     NavigateUrl = "/facturacion/periodos-comerciales",
                     MatchPrefixes = ["/facturacion/periodos-comerciales"]
                 },
+                new SidebarNavItem
+                {
+                    Id = "fact-condiciones-lectura",
+                    Text = "Condiciones de lectura",
+                    IconCssClass = "bi bi-list-check",
+                    NavigateUrl = "/facturacion/condiciones-lectura",
+                    MatchPrefixes = ["/facturacion/condiciones-lectura"]
+                },
                 // Gestión de Caja desvinculada — módulo no utilizado (2026-06-04)
                 // new SidebarNavItem { Id = "fact-caja", Text = "Gestión de Caja", ... }
             ]

@@ -431,6 +431,23 @@ public static class PermissionEndpointCatalog
             Action: PermissionAction.Create,
             HttpMethod: "POST",
             Route: "api/ventas/periodos-comerciales/{companyId}/{periodoComercialId}/cerrar"),
+
+        // Condiciones de lectura (app_lectores 2026-07-06): ABM del catálogo por
+        // empresa. GET lista tipos + condiciones; POST persiste el conjunto.
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.CondicionesLectura,
+            Resource: "condiciones_lectura__ventas_condiciones_lectura_companyid",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/condiciones-lectura/{companyId}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.CondicionesLectura,
+            Resource: "condiciones_lectura__ventas_condiciones_lectura_companyid",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/ventas/condiciones-lectura/{companyId}"),
     ];
 
     public static readonly EndpointPermissionDefinition[] Contabilidad =

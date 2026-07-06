@@ -13,6 +13,7 @@ using apc.Client.Services.CaptacionPagos;
 using apc.Client.Services.Facturacion;
 using apc.Client.Services.Mantenimientos;
 using apc.Client.Services.Contabilidad;
+using apc.Client.Services.CondicionesLectura;
 using apc.Client.Services.Bancos;
 using apc.Client.Services.Catalogos;
 using apc.Client.Services.Abogados;
@@ -60,6 +61,7 @@ namespace apc.Client
             services.AddScoped<LoteFacturacionClient>();
             services.AddScoped<PeriodosContablesClient>();
             services.AddScoped<PeriodosComercialesClient>();
+            services.AddScoped<CondicionesLecturaClient>();
             services.AddScoped<EmpresaClient>();
             services.AddScoped<BancoConfiguracionClient>();
             services.AddScoped<ConfiguracionTransaccionesClient>();

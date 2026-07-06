@@ -41,6 +41,10 @@ public static class PermissionResources
         // Períodos comerciales F7: abrir mes / cerrar ciclo / cerrar mes son
         // operaciones sensibles del calendario de facturación — recurso propio.
         public const string PeriodosComerciales = "periodos_comerciales";
+
+        // Condiciones de lectura (app_lectores 2026-07-06): catálogo por empresa
+        // que administra el portal y consume la app; recurso propio.
+        public const string CondicionesLectura = "condiciones_lectura";
     }
 
     public static class Contabilidad
