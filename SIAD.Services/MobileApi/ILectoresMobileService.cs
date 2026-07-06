@@ -32,6 +32,13 @@ public interface ILectoresMobileService
     /// <summary>Medidores de la ruta para el ciclo/período (sp_medidores_por_ruta_ws).</summary>
     Task<List<MedidorDto>> GetRutaAsync(string ruta, int ciclo, int anio, int mes, CancellationToken ct = default);
 
+    /// <summary>
+    /// Catálogo de condiciones de lectura ACTIVAS de la empresa (adm_condicion_lectura),
+    /// ordenadas por `orden`. requiereLectura se deriva del tipo en el server. companyId
+    /// es el de la sesión (A6): nunca viene de un parámetro del cliente.
+    /// </summary>
+    Task<List<CondicionLecturaDto>> GetCondicionesAsync(long companyId, CancellationToken ct = default);
+
     /// <summary>Snapshot offline V3 de la ruta: medidores + snapshot por cliente + bloque CAI inyectado.</summary>
     Task<OfflineSnapshotRutaDto> GetSnapshotAsync(string ruta, int ciclo, int anio, int mes, CancellationToken ct = default);
 

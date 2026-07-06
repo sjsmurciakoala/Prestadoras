@@ -134,6 +134,27 @@ public sealed class MedidorDto
 }
 
 // ----------------------------------------------------------------------------
+// Condiciones de lectura (catálogo administrable por empresa)
+// ----------------------------------------------------------------------------
+
+/// <summary>
+/// Condición de lectura del catálogo por empresa (GET /api/condiciones). Solo
+/// activas, ordenadas por <see cref="Orden"/>. <see cref="RequiereLectura"/> lo
+/// deriva el server desde el tipo (adm_condicion_lectura_tipo.requiere_lectura,
+/// true solo para N) — no viene del ABM. company_id sale de la sesión (A6).
+/// </summary>
+public sealed class CondicionLecturaDto
+{
+    public string Codigo { get; init; } = string.Empty;
+    public string Descripcion { get; init; } = string.Empty;
+    public string Tipo { get; init; } = string.Empty;
+    public string Facturacion { get; init; } = "S";
+    public string AplicaDescuento { get; init; } = "N";
+    public bool RequiereLectura { get; init; }
+    public int Orden { get; init; }
+}
+
+// ----------------------------------------------------------------------------
 // Snapshot offline V3
 // ----------------------------------------------------------------------------
 

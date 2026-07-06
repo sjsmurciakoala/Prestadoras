@@ -240,6 +240,30 @@ public sealed class LectoresMobileService : ILectoresMobileService
     }
 
     // -------------------------------------------------------------------------
+    // Condiciones de lectura (catálogo administrable por empresa)
+    // -------------------------------------------------------------------------
+
+    public async Task<List<CondicionLecturaDto>> GetCondicionesAsync(long companyId, CancellationToken ct = default)
+    {
+        var conn = await AbrirAsync(ct);
+        // Scopeado por la empresa de la sesión (A6). requiereLectura se deriva del
+        // tipo (adm_condicion_lectura_tipo.requiere_lectura, true solo para N), no
+        // del ABM, para que nunca se desincronice de la semántica del motor.
+        const string sql = @"
+            select a.codigo AS Codigo, a.descripcion AS Descripcion, a.tipo AS Tipo,
+                   a.facturacion AS Facturacion, a.aplica_descuento AS AplicaDescuento,
+                   coalesce(t.requiere_lectura, a.tipo = 'N') AS RequiereLectura, a.orden AS Orden
+            from public.adm_condicion_lectura a
+            left join public.adm_condicion_lectura_tipo t on t.tipo = a.tipo
+            where a.company_id = @CompanyId and a.activo
+            order by a.orden, a.codigo;";
+
+        var filas = await conn.QueryAsync<CondicionLecturaDto>(
+            new CommandDefinition(sql, new { CompanyId = companyId }, cancellationToken: ct));
+        return filas.ToList();
+    }
+
+    // -------------------------------------------------------------------------
     // Snapshot offline V3 (paridad GetOfflineSnapshotV3)
     // -------------------------------------------------------------------------
 

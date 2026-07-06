@@ -1023,6 +1023,9 @@ public partial class SiadDbContext
 
         // WS bancario Fase 8 (2026-07-04)
         ConfigureBancosWsModel(modelBuilder);
+
+        // Condiciones de lectura administrables por empresa (2026-07-06, app_lectores)
+        ConfigureCondicionesLecturaModel(modelBuilder);
     }
 }
 

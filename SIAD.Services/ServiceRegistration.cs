@@ -87,6 +87,7 @@ public static class ServiceRegistration
         services.AddScoped<IIntegracionContableService, IntegracionContableService>();
         services.AddScoped<ILoteFacturacionService, LoteFacturacionService>();
         services.AddScoped<PeriodosComerciales.IPeriodoComercialService, PeriodosComerciales.PeriodoComercialService>();
+        services.AddScoped<CondicionesLectura.ICondicionesLecturaService, CondicionesLectura.CondicionesLecturaService>();
         services.AddScoped<ISaldosService, SaldosService>();
         services.AddScoped<IPolizaService, PolizaService>();
         services.AddScoped<ITerceroService, TerceroService>();
