@@ -31,7 +31,11 @@ public partial class SiadDbContext
         {
             entity.HasKey(e => e.condicion_lectura_id);
             entity.ToTable("adm_condicion_lectura", "public");
-            entity.HasIndex(e => new { e.company_id, e.codigo }).IsUnique();
+            // Índice NO declarado único en el modelo a propósito: la unicidad real
+            // es el constraint DEFERRABLE del DDL (uq_adm_condicion_lectura_company_codigo).
+            // Si EF lo tratara como único, un intercambio de códigos en un solo
+            // SaveChanges lanzaría "circular dependency" antes de tocar la BD.
+            entity.HasIndex(e => new { e.company_id, e.codigo });
 
             entity.Property(e => e.condicion_lectura_id).ValueGeneratedOnAdd();
             entity.Property(e => e.codigo).HasMaxLength(10);

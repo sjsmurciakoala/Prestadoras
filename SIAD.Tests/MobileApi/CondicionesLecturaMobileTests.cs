@@ -35,13 +35,13 @@ public sealed class CondicionesLecturaMobileTests : IntegrationTestBase, IDispos
     private async Task InsertarCondicionAsync(string codigo, string tipo, int orden, bool activo,
         string facturacion = "S", string aplicaDescuento = "N")
     {
+        // El UNIQUE(company_id, codigo) es DEFERRABLE → no sirve como árbitro de
+        // ON CONFLICT; se hace delete-then-insert (dentro de la transacción del test).
         await Connection.ExecuteAsync(new CommandDefinition(@"
+            DELETE FROM public.adm_condicion_lectura WHERE company_id = @CompanyId AND codigo = @Codigo;
             INSERT INTO public.adm_condicion_lectura
                 (company_id, codigo, descripcion, tipo, facturacion, aplica_descuento, orden, activo, created_by)
-            VALUES (@CompanyId, @Codigo, @Codigo || ' desc', @Tipo, @Fact, @Desc, @Orden, @Activo, 'test-cond')
-            ON CONFLICT (company_id, codigo) DO UPDATE
-              SET tipo = EXCLUDED.tipo, orden = EXCLUDED.orden, activo = EXCLUDED.activo,
-                  facturacion = EXCLUDED.facturacion, aplica_descuento = EXCLUDED.aplica_descuento;",
+            VALUES (@CompanyId, @Codigo, @Codigo || ' desc', @Tipo, @Fact, @Desc, @Orden, @Activo, 'test-cond');",
             new { CompanyId, Codigo = codigo, Tipo = tipo, Fact = facturacion, Desc = aplicaDescuento, Orden = orden, Activo = activo },
             Transaction));
     }

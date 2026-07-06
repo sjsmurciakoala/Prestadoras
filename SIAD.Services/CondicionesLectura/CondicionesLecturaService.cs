@@ -80,7 +80,9 @@ public sealed class CondicionesLecturaService : ICondicionesLecturaService
         var ahora = DateTime.UtcNow;
         // Abre transacción propia solo si no hay una ambiente (los tests de
         // integración corren dentro de la transacción del fixture — reusarla).
-        var txPropia = _context.Database.CurrentTransaction is null
+        // `await using` garantiza rollback+dispose si SaveChanges lanza (p.ej. el
+        // UNIQUE deferrable al commit); null cuando reusamos la transacción ambiente.
+        await using var txPropia = _context.Database.CurrentTransaction is null
             ? await _context.Database.BeginTransactionAsync(ct)
             : null;
 
@@ -133,7 +135,6 @@ public sealed class CondicionesLecturaService : ICondicionesLecturaService
         if (txPropia is not null)
         {
             await txPropia.CommitAsync(ct);
-            await txPropia.DisposeAsync();
         }
 
         return await ObtenerAsync(companyId, ct);

@@ -85,6 +85,34 @@ public sealed class CondicionesLecturaServiceTests : IntegrationTestBase, IDispo
     }
 
     [SkippableFact]
+    public async Task Guardar_permite_intercambiar_codigos_en_un_solo_guardado()
+    {
+        Skip.IfNot(Fixture.Available, "BD de pruebas no disponible.");
+        var servicio = CrearServicio();
+
+        // Parte de dos condiciones conocidas y les intercambia el código en un solo
+        // Guardar: el UNIQUE(company_id, codigo) es DEFERRABLE, así que el duplicado
+        // transitorio se resuelve al commit (antes tiraba 23505).
+        var baseCat = await servicio.GuardarAsync(CompanyId, new List<CondicionLecturaAdminDto>
+        {
+            new() { Codigo = "SWAPA", Descripcion = "A", Tipo = "N", Orden = 1 },
+            new() { Codigo = "SWAPB", Descripcion = "B", Tipo = "MIN", Orden = 2 },
+        }, "test-abm");
+
+        var a = baseCat.Condiciones.Single(c => c.Codigo == "SWAPA");
+        var b = baseCat.Condiciones.Single(c => c.Codigo == "SWAPB");
+        a.Codigo = "SWAPB";
+        b.Codigo = "SWAPA";
+
+        var resultado = await servicio.GuardarAsync(CompanyId,
+            new List<CondicionLecturaAdminDto> { a, b }, "test-abm");
+
+        // Los códigos quedaron intercambiados (mismos ids, códigos cruzados).
+        Assert.Equal("SWAPB", resultado.Condiciones.Single(c => c.CondicionLecturaId == a.CondicionLecturaId).Codigo);
+        Assert.Equal("SWAPA", resultado.Condiciones.Single(c => c.CondicionLecturaId == b.CondicionLecturaId).Codigo);
+    }
+
+    [SkippableFact]
     public async Task Guardar_rechaza_codigo_duplicado()
     {
         Skip.IfNot(Fixture.Available, "BD de pruebas no disponible.");

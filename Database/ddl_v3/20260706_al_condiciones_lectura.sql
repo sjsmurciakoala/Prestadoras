@@ -74,7 +74,11 @@ CREATE TABLE IF NOT EXISTS public.adm_condicion_lectura (
     updated_at           timestamptz,
     updated_by           varchar(100),
 
-    CONSTRAINT uq_adm_condicion_lectura_company_codigo UNIQUE (company_id, codigo),
+    -- DEFERRABLE: el ABM guarda todo el conjunto en una sola transacción; un
+    -- swap de códigos (A→B, B→A) o un borrado+reinserción del mismo código
+    -- produce un duplicado transitorio válido que se resuelve al commit.
+    CONSTRAINT uq_adm_condicion_lectura_company_codigo UNIQUE (company_id, codigo)
+        DEFERRABLE INITIALLY DEFERRED,
     CONSTRAINT fk_adm_condicion_lectura_company
         FOREIGN KEY (company_id) REFERENCES public.cfg_company (company_id) ON DELETE CASCADE,
     CONSTRAINT fk_adm_condicion_lectura_tipo
@@ -89,11 +93,30 @@ CREATE INDEX IF NOT EXISTS ix_adm_condicion_lectura_company_orden
     WHERE activo;
 
 COMMENT ON TABLE public.adm_condicion_lectura IS
-'Catálogo de condiciones de lectura administrable POR EMPRESA (A6, ICompanyScopedEntity). codigo/descripcion/orden/activo/facturacion/aplica_descuento editables; tipo elegido de adm_condicion_lectura_tipo (comportamiento del motor V3, no editable). GET /api/condiciones (apc.MobileApi) lo expone scopeado por la sesión; requiereLectura se deriva del tipo en el server.';
+'Catálogo de condiciones de lectura administrable POR EMPRESA (A6, ICompanyScopedEntity). codigo/descripcion/orden/activo/facturacion/aplica_descuento editables; tipo elegido de adm_condicion_lectura_tipo (comportamiento del motor V3, no editable). GET /api/condiciones (apc.MobileApi) lo expone scopeado por la sesión; requiereLectura se deriva del tipo en el server. NOTA: cfg_condicion_lectura (lookup numérico condicion_id) es el catálogo GLOBAL espejo del mismo vocabulario para historicomedicion.condicion_id; adm_condicion_lectura es la capa administrable por empresa que consume la app.';
+
+-- Si la tabla ya existía con el constraint NO deferrable (aplicaciones previas de
+-- este script), convertirlo a DEFERRABLE de forma idempotente.
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM pg_constraint
+        WHERE conname = 'uq_adm_condicion_lectura_company_codigo'
+          AND NOT condeferrable
+    ) THEN
+        ALTER TABLE public.adm_condicion_lectura
+            DROP CONSTRAINT uq_adm_condicion_lectura_company_codigo;
+        ALTER TABLE public.adm_condicion_lectura
+            ADD CONSTRAINT uq_adm_condicion_lectura_company_codigo
+            UNIQUE (company_id, codigo) DEFERRABLE INITIALLY DEFERRED;
+    END IF;
+END$$;
 
 -- -----------------------------------------------------------------------------
 -- 3. Seed inicial POR EMPRESA: las 4 condiciones estándar (codigo = tipo).
---    Idempotente (solo inserta las que faltan). El ABM las ajusta después.
+--    Solo siembra empresas SIN condiciones (no por-código): así no resucita una
+--    condición estándar que el admin haya renombrado/borrado en el ABM al
+--    re-aplicar el script.
 -- -----------------------------------------------------------------------------
 INSERT INTO public.adm_condicion_lectura
     (company_id, codigo, descripcion, tipo, facturacion, aplica_descuento, orden, activo, created_by)
@@ -108,7 +131,6 @@ CROSS JOIN (VALUES
 WHERE NOT EXISTS (
     SELECT 1 FROM public.adm_condicion_lectura a
     WHERE a.company_id = c.company_id
-      AND a.codigo = t.tipo
 );
 
 -- -----------------------------------------------------------------------------

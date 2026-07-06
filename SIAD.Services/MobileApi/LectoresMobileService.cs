@@ -852,6 +852,12 @@ public sealed class LectoresMobileService : ILectoresMobileService
 
     private static string? NullIfEmpty(string? s) => string.IsNullOrWhiteSpace(s) ? null : s.Trim();
 
+    // Pasa el CÓDIGO de la condición tal cual (sin ToChar1 del WS viejo, que trunca
+    // MIN→M/PND→P). El motor V3 ramifica sobre el vocabulario fijo N/MIN/PND/PD, así
+    // que hoy sólo calcula correcto cuando codigo == tipo (el seed estándar). La
+    // resolución codigo→tipo para el cálculo del consumo es explícitamente de L8
+    // (SPEC §1); en el piloto la condición es informativa para el server (el total
+    // lo calcula la app offline — SPEC §5.4). Ver [[al-condiciones-lectura]].
     private static string CondicionOrDefault(string? s) => string.IsNullOrWhiteSpace(s) ? "N" : s.Trim();
 
     private static string FirstCharOr(string? s, string def) =>
