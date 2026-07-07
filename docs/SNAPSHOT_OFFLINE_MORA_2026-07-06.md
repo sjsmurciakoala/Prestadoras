@@ -49,6 +49,10 @@ nunca por parámetro del cliente):
   Debe dar exactamente `mora.recargo`.
 - **`activo:false`** ⇒ no se aplica mora (recargo 0), aunque `tasa_mensual` traiga el
   valor configurado. La app **debe** gatear por `activo`.
+- **Redondeo:** el motor usa `ROUND(numeric, 4)` de PostgreSQL, que es
+  **half-away-from-zero** (0.00005 → 0.0001). La app debe redondear igual (Decimal
+  con `AwayFromZero`, **no** banker's/ToEven) o divergirá en los midpoints. En la duda,
+  tomar `mora.recargo` autoritativo sin recalcular.
 
 ## Reglas del contrato
 

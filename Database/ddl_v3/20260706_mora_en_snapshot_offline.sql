@@ -323,7 +323,8 @@ BEGIN
     SELECT rm.activo, rm.tasa_mensual, rm.dias_gracia
       INTO v_mora_activo, v_mora_tasa, v_mora_dias_gracia
       FROM public.cfg_recargo_mora rm
-     WHERE rm.company_id = p_company_id;
+     WHERE rm.company_id = p_company_id
+     LIMIT 1;
 
     v_mora_activo := COALESCE(v_mora_activo, false);
     v_mora_tasa := COALESCE(v_mora_tasa, 0);

@@ -79,7 +79,10 @@ public sealed class SnapshotMoraTests : IntegrationTestBase
         Assert.Equal(recargoOnline, mora.recargo);
 
         // 2) El recargo que la app calcularía DESDE el bloque (base * tasa_mensual) también coincide.
-        var recargoApp = Math.Round(mora.@base!.Value * mora.tasa_mensual!.Value, 4);
+        //    PostgreSQL ROUND(numeric) es half-away-from-zero; C# Math.Round es banker's
+        //    (ToEven) por defecto → hay que fijar AwayFromZero para modelar el motor (y así
+        //    debe redondear la app Flutter para lograr paridad exacta en los midpoints).
+        var recargoApp = Math.Round(mora.@base!.Value * mora.tasa_mensual!.Value, 4, MidpointRounding.AwayFromZero);
         Assert.Equal(recargoOnline, recargoApp);
 
         // 3) Y es un recargo real (> 0) para este cliente con saldo, no un falso verde.
