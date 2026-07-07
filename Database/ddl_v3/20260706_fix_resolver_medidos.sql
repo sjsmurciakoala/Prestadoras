@@ -64,7 +64,6 @@ DECLARE
     v_cuadro public.adm_cuadro_tarifario%ROWTYPE;
     v_requiere_consumo boolean;
     v_condicion_no_aplica_id bigint;
-    v_condicion_con_medicion_id bigint;
 BEGIN
     SELECT *
     INTO v_base
@@ -97,12 +96,6 @@ BEGIN
     FROM public.adm_condicion_medicion
     WHERE company_id = p_company_id
       AND codigo = 'NO_APLICA';
-
-    SELECT condicion_medicion_id
-    INTO v_condicion_con_medicion_id
-    FROM public.adm_condicion_medicion
-    WHERE company_id = p_company_id
-      AND codigo = 'CON_MEDICION';
 
     SELECT ct.*
     INTO v_cuadro

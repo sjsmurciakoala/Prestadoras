@@ -166,12 +166,16 @@ public sealed class LecturaV3MedidosTests : IntegrationTestBase
         // AGUA por MONTO_FIJO 199.27 exactamente igual que antes del fix.
         const long clienteSinMedidor = 102813;
 
-        var existe = await Connection.ExecuteScalarAsync<bool>(new CommandDefinition(@"
-            SELECT EXISTS(SELECT 1 FROM public.cliente_maestro
-                          WHERE company_id=@c AND maestro_cliente_id=@cli AND estado=true)",
+        var esSinMedidor = await Connection.ExecuteScalarAsync<bool?>(new CommandDefinition(@"
+            SELECT COALESCE(maestro_cliente_tiene_medidor, false) = false
+            FROM public.cliente_maestro
+            WHERE company_id=@c AND maestro_cliente_id=@cli AND estado=true",
             new { c = CompanyId, cli = clienteSinMedidor }, Transaction));
 
-        Skip.IfNot(existe, $"No existe el cliente {clienteSinMedidor} en esta BD.");
+        Skip.If(esSinMedidor is null, $"No existe el cliente {clienteSinMedidor} en esta BD.");
+        // Guarda de intención: el test solo prueba el camino NO medido si el cliente
+        // realmente no tiene medidor (si no, no estaría ejerciendo la regresión).
+        Assert.True(esSinMedidor!.Value, $"El cliente {clienteSinMedidor} debe ser SIN medidor para esta regresión.");
 
         var agua = await Connection.ExecuteScalarAsync<decimal>(new CommandDefinition(@"
             SELECT taservi1
