@@ -1,0 +1,291 @@
+@page "/mi-app/usuarios"
+@page "/mi-app/lectores"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.AppLectores
+@using apc.Client.Services.AppLectores
+
+@inject LectoresCredencialClient LectoresClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Lectores (app móvil)</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="LectoresToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Lectores de la app móvil</h2>
+            <p class="page-subtitle">Credenciales de acceso de la app de lectura V3 (adm_lector_credencial)</p>
+        </div>
+
+        <DxButton Text="Nuevo lector"
+                  IconCssClass="bi bi-person-plus"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Click="AbrirNuevo" />
+    </div>
+
+    <div class="modern-card position-relative">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@lectores" KeyFieldName="@nameof(LectorCredencialListItemDto.CredencialId)"
+                    PageSize="15" PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar código, nombre o ruta..." InputDelay="500"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   Style="min-width: 260px;" />
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarAsync" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@lectores.Count</span></div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.Codigo)" Caption="Código" Width="160px" />
+                    <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.Nombre)" Caption="Nombre" MinWidth="220" />
+                    <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.Ruta)" Caption="Ruta (libro)" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.CodCiclo)" Caption="Ciclo" Width="100px" />
+                    <DxGridDataColumn Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LectorCredencialListItemDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">
+                                    @(item.Activo ? "ACTIVO" : "INACTIVO")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LectorCredencialListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.CredencialId)">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay lectores registrados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(560px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CloseOnOutsideClick="false"
+         HeaderText="@(formModel.Id.HasValue ? "Editar lector" : "Nuevo lector")">
+    <BodyContentTemplate Context="popupCtx">
+        <EditForm Model="formModel" OnValidSubmit="GuardarAsync" Context="editCtx">
+            <DataAnnotationsValidator />
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Código *" ColSpanMd="6">
+                    <DxTextBox @bind-Text="formModel.Codigo" Enabled="@(!formModel.Id.HasValue)" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="@(formModel.Id.HasValue ? "Contraseña (vacío = no cambia)" : "Contraseña *")" ColSpanMd="6">
+                    <DxTextBox @bind-Text="formModel.Clave" Password="true" NullText="••••••" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Nombre" ColSpanMd="12">
+                    <DxTextBox @bind-Text="formModel.Nombre" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Ruta (libro, ej. 00L4)" ColSpanMd="6">
+                    <DxTextBox @bind-Text="formModel.Ruta" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Ciclo" ColSpanMd="6">
+                    <DxSpinEdit @bind-Value="formModel.CodCiclo" MinValue="0" MaxValue="99" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
+                    <DxCheckBox @bind-Checked="formModel.Activo" CheckType="CheckType.Switch" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <ValidationSummary />
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="CerrarForm" Enabled="@(!isSaving)" />
+                <DxButton SubmitFormOnClick="true" Text="@(isSaving ? "Guardando..." : "Guardar")"
+                          RenderStyle="ButtonRenderStyle.Primary" Enabled="@(!isSaving)" />
+            </div>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar lector?</h5>
+            <p class="text-muted">El lector no podrá iniciar sesión en la app, pero no se elimina.</p>
+            @if (lectorParaDesactivar is not null)
+            {
+                <div class="fw-semibold">@lectorParaDesactivar.Codigo</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="() => confirmVisible = false"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<LectorCredencialListItemDto> lectores = new();
+    private string filtroBusqueda = string.Empty;
+
+    private bool formVisible;
+    private bool isSaving;
+    private LectorCredencialEditDto formModel = new();
+
+    private bool confirmVisible;
+    private LectorCredencialListItemDto? lectorParaDesactivar;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            var filtro = new LectorCredencialFilterDto { Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda };
+            lectores = await LectoresClient.GetAsync(filtro);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar los lectores: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task RecargarAsync()
+    {
+        await CargarAsync();
+        grid?.Reload();
+    }
+
+    private void AbrirNuevo()
+    {
+        formModel = new LectorCredencialEditDto { Activo = true };
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(long id)
+    {
+        try
+        {
+            var detalle = await LectoresClient.GetByIdAsync(id);
+            if (detalle is null)
+            {
+                Toast("Error", "No se encontró el lector.", ToastRenderStyle.Danger);
+                return;
+            }
+            detalle.Clave = null; // no se trae el hash
+            formModel = detalle;
+            formVisible = true;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void CerrarForm()
+    {
+        if (isSaving) return;
+        formVisible = false;
+        formModel = new LectorCredencialEditDto();
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (formModel.Id.HasValue)
+            {
+                await LectoresClient.UpdateAsync(formModel.Id.Value, formModel);
+                Toast("Éxito", "Lector actualizado.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await LectoresClient.CreateAsync(formModel);
+                Toast("Éxito", "Lector registrado.", ToastRenderStyle.Success);
+            }
+            formVisible = false;
+            formModel = new LectorCredencialEditDto();
+            await CargarAsync();
+            grid?.Reload();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(LectorCredencialListItemDto item)
+    {
+        lectorParaDesactivar = item;
+        confirmVisible = true;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (lectorParaDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            var ok = await LectoresClient.DeactivateAsync(lectorParaDesactivar.CredencialId);
+            if (ok)
+            {
+                Toast("Éxito", "Lector desactivado.", ToastRenderStyle.Success);
+                await CargarAsync();
+                grid?.Reload();
+            }
+            else
+            {
+                Toast("Error", "No se pudo desactivar el lector.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            lectorParaDesactivar = null;
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title, Text = text, RenderStyle = style, ProviderName = "LectoresToast"
+        });
+}

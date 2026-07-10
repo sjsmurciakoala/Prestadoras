@@ -27,12 +27,20 @@ public sealed class LoteFacturacionService : ILoteFacturacionService
         modo = ValidarParametros(companyId, desde, hasta, modo);
 
         var conn = _context.Database.GetDbConnection();
+        // Dapper no sabe bindear DateOnly como parámetro ("cannot be used as a
+        // parameter value"): se envía como DateTime y se castea a date en SQL.
         var filas = await conn.QueryAsync<(DateTime fecha_partida, string uso, long account_id, string account_code,
                 string account_name, decimal debe, decimal haber, long facturas)>(
             new CommandDefinition(@"
                 SELECT fecha_partida, uso, account_id, account_code, account_name, debe, haber, facturas
-                FROM public.fn_con_preview_partidas_facturacion(@companyId, @desde, @hasta, @modo)",
-                new { companyId, desde, hasta, modo },
+                FROM public.fn_con_preview_partidas_facturacion(@companyId, @desde::date, @hasta::date, @modo)",
+                new
+                {
+                    companyId,
+                    desde = desde.ToDateTime(TimeOnly.MinValue),
+                    hasta = hasta.ToDateTime(TimeOnly.MinValue),
+                    modo
+                },
                 cancellationToken: ct));
 
         return filas
@@ -57,11 +65,19 @@ public sealed class LoteFacturacionService : ILoteFacturacionService
         usuario = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim();
 
         var conn = _context.Database.GetDbConnection();
+        // Mismo binding de fecha que en PreviewAsync: DateOnly → DateTime + ::date.
         var resultado = await conn.QueryFirstAsync<(long? lote_id, int polizas, int facturas, int encoladas, decimal total)>(
             new CommandDefinition(@"
                 SELECT lote_id, polizas, facturas, encoladas, total
-                FROM public.sp_con_generar_partidas_facturacion(@companyId, @desde, @hasta, @modo, @usuario)",
-                new { companyId, desde, hasta, modo, usuario },
+                FROM public.sp_con_generar_partidas_facturacion(@companyId, @desde::date, @hasta::date, @modo, @usuario)",
+                new
+                {
+                    companyId,
+                    desde = desde.ToDateTime(TimeOnly.MinValue),
+                    hasta = hasta.ToDateTime(TimeOnly.MinValue),
+                    modo,
+                    usuario
+                },
                 cancellationToken: ct));
 
         return new LoteGenerarResultDto

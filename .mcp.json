@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "dxdocs": {
+      "type": "http",
+      "url": "https://api.devexpress.com/mcp/docs"
+    }
+  }
+}
