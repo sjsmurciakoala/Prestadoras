@@ -84,7 +84,7 @@ namespace apc.Client
             // presupuesto (de Combinacio_E_J_1.0; TarifasBase/TarifasContador retirados como legacy)
             services.AddScoped<ConfiguracionPresupuestoClient>();
             services.AddScoped<OrdenesPagoDirectoClient>();
-            services.AddScoped<UsuariosAppClient>();
+            services.AddScoped<LectoresCredencialClient>();
             services.AddScoped<ClienteServicioTarifarioClient>();
             services.AddScoped<PruebaCalculoClient>();
             services.AddScoped<CuadroTarifarioClient>();

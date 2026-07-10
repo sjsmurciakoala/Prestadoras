@@ -1,4 +1,9 @@
-<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly">
+<!-- TreatAsLocalProperty: al publicar el portal (apc.csproj) con -p:PublishReadyToRun=true,
+     esa global property de MSBuild se propaga a este proyecto hijo (WASM browser-wasm) y
+     ReadyToRun NO es soportado en WASM (NETSDK1095). Un <PropertyGroup> normal NO puede pisar
+     una global property; TreatAsLocalProperty la degrada a local aqui para forzarla a false,
+     sin afectar el PublishReadyToRun=true del portal net9. -->
+<Project Sdk="Microsoft.NET.Sdk.BlazorWebAssembly" TreatAsLocalProperty="PublishReadyToRun">
   <PropertyGroup>
     <TargetFramework>net9.0</TargetFramework>
     <Nullable>enable</Nullable>
@@ -8,6 +13,8 @@
     <BlazorWebAssemblyEnableLinking>true</BlazorWebAssemblyEnableLinking>
     <!-- WASM no produce ejecutable. Sin esto, publish del portal con UseAppHost=true rompe el restore aqui. -->
     <UseAppHost>false</UseAppHost>
+    <!-- WASM no soporta ReadyToRun; forzado a false para ignorar la propiedad heredada del publish del portal. -->
+    <PublishReadyToRun>false</PublishReadyToRun>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)'=='Debug'">
     <WasmBuildNative>false</WasmBuildNative>

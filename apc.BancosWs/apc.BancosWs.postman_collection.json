@@ -1,0 +1,95 @@
+{
+  "info": {
+    "name": "apc.BancosWs (SIMAFI) - Demo",
+    "description": "Colección para probar el WS bancario (contrato SIMAFI congelado, F8) contra siad_v3_test. Flujo: Heartbeat -> Consulta -> Pago -> (Reversión). Auth por query string banco+key. Cuerpos en XML. Ajustá las variables de la colección (clave, referencia, monto) según el cliente a cobrar.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8087" },
+    { "key": "banco", "value": "099" },
+    { "key": "key", "value": "4BE30CE768671E628A22A1DF66FC6E11285A3F6B" },
+    { "key": "clave", "value": "090809121" },
+    { "key": "referencia", "value": "DEMO-POSTMAN-001" },
+    { "key": "monto", "value": "5672.74" }
+  ],
+  "item": [
+    {
+      "name": "1. Heartbeat (sin auth)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/simafi/api/heartbeat",
+          "host": ["{{baseUrl}}"],
+          "path": ["simafi", "api", "heartbeat"]
+        },
+        "description": "Prueba de vida del WS. Debe responder 'ok ok'."
+      }
+    },
+    {
+      "name": "2. Consulta servicios (pendientes del cliente)",
+      "request": {
+        "method": "GET",
+        "header": [],
+        "url": {
+          "raw": "{{baseUrl}}/simafi/api/consulta/servicios/{{clave}}?banco={{banco}}&key={{key}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["simafi", "api", "consulta", "servicios", "{{clave}}"],
+          "query": [
+            { "key": "banco", "value": "{{banco}}" },
+            { "key": "key", "value": "{{key}}" }
+          ]
+        },
+        "description": "Devuelve las facturas pendientes del cliente (cabecera + detalle). El 'totalMora' es el monto exacto que el banco debe pagar en el siguiente paso. 400 'No hay pagos pendientes' = el cliente no tiene saldo cobrable."
+      }
+    },
+    {
+      "name": "3. Pago servicios (cobra la factura)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/xml" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<pago>\n  <banco>{{banco}}</banco>\n  <clave>{{clave}}</clave>\n  <monto>{{monto}}</monto>\n  <referencia>{{referencia}}</referencia>\n  <fechaRegistro>2026-07-09</fechaRegistro>\n  <horaRegistro>10:00:00</horaRegistro>\n  <fechaEfectiva>2026-07-09</fechaEfectiva>\n  <sucursal>01</sucursal>\n  <cajero>DEMO</cajero>\n</pago>",
+          "options": { "raw": { "language": "xml" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/simafi/api/pago/servicios?banco={{banco}}&key={{key}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["simafi", "api", "pago", "servicios"],
+          "query": [
+            { "key": "banco", "value": "{{banco}}" },
+            { "key": "key", "value": "{{key}}" }
+          ]
+        },
+        "description": "Cobra la factura. 'monto' DEBE ser igual al total de la consulta (validación de servicios). 200 'Pago exitoso' = ok. Repetir con la MISMA referencia es idempotente (no duplica). Cambiá 'referencia' para un pago nuevo."
+      }
+    },
+    {
+      "name": "4. Reversión (anula un pago por referencia)",
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/xml" }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "<reversion>\n  <banco>{{banco}}</banco>\n  <referencia>{{referencia}}</referencia>\n  <fechaRegistro>2026-07-09</fechaRegistro>\n</reversion>",
+          "options": { "raw": { "language": "xml" } }
+        },
+        "url": {
+          "raw": "{{baseUrl}}/simafi/api/reversion/servicios?banco={{banco}}&key={{key}}",
+          "host": ["{{baseUrl}}"],
+          "path": ["simafi", "api", "reversion", "servicios"],
+          "query": [
+            { "key": "banco", "value": "{{banco}}" },
+            { "key": "key", "value": "{{key}}" }
+          ]
+        },
+        "description": "Revierte el pago identificado por 'referencia' (devuelve el saldo). Útil para dejar la demo repetible."
+      }
+    }
+  ]
+}

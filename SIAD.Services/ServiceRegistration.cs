@@ -109,8 +109,9 @@ public static class ServiceRegistration
         services.AddScoped<IConfiguracionPresupuestoService, ConfiguracionPresupuestoService>();
         services.AddScoped<IOrdenesPagoDirectoService, OrdenesPagoDirectoService>();
 
-        // app lectores
-        services.AddScoped<IUsuariosAppService, UsuariosAppService>();
+        // app lectores V3: mantenimiento de credenciales (adm_lector_credencial, bcrypt).
+        // Reemplaza al viejo usuarioapc/IUsuariosAppService (app Java retirada).
+        services.AddScoped<ILectoresCredencialService, LectoresCredencialService>();
 
         // tipos de documento fiscal (catalogo SAR Acuerdo 481-2017)
         services.AddScoped<SIAD.Services.TiposDocumentoFiscal.ITiposDocumentoFiscalService,

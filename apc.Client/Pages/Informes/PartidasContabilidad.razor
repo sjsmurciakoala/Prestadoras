@@ -154,7 +154,15 @@
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
-                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.DocumentType)" Caption="Documento" Width="130px" />
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.DocumentNumber)" Caption="Documento" Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.SourceReference)" Caption="Ref. SIMAFI" Width="120px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is PartidasInformeItemDto item && !string.IsNullOrWhiteSpace(item.SourceReference))
+                                {
+                                    <span>@item.SourceReference.Split('|')[^1]</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
                         <DxGridDataColumn FieldName="@nameof(PartidasInformeItemDto.Description)" Caption="Descripción" MinWidth="260" />
                         <DxGridDataColumn Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
                             <CellDisplayTemplate Context="cell">

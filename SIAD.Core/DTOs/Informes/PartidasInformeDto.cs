@@ -35,6 +35,7 @@ public sealed record PartidasInformeItemDto(
     string Module,
     string DocumentType,
     string? DocumentNumber,
+    string? SourceReference,
     string? Description,
     short Status,
     decimal TotalDebit,
