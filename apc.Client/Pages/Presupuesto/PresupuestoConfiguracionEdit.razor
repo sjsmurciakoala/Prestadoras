@@ -14,8 +14,13 @@
 
 <PageTitle>SIAD - Configuración de Presupuesto</PageTitle>
 
-<div class="page-container">
+<div class="page-container position-relative">
     <DxToastProvider Name="PresupuestoEditToast" MaxToastCount="4" />
+
+    <DxLoadingPanel Visible="@IsBusy"
+                    IsContentBlocked="true"
+                    ApplyBackgroundShading="true"
+                    Text="Procesando..." />
 
     <div class="header-section">
         <div>
@@ -55,7 +60,7 @@
 
         <PresupuestoConfiguracionForm Model="model"
                                       IsCreateMode="@(!IsEdit)"
-                                      MinFechaInicia="@fechaServidorActual"
+                                      MinFechaInicia="@MinFechaInicia"
                                       OnValidSubmit="GuardarAsync"
                                       OnCancel="Volver"
                                       IsBusy="@(isSaving || isLoading || isGeneratingId)" />
@@ -76,6 +81,11 @@
     private bool isGeneratingId;
 
     private bool IsEdit => !string.IsNullOrWhiteSpace(IdPresupuesto);
+
+    private DateOnly MinFechaInicia => new(fechaServidorActual.Year, 1, 1);
+
+    // Splash de página: visible mientras hay una llamada al servidor en curso.
+    private bool IsBusy => isLoading || isSaving || isGeneratingId;
 
     private string SubtituloPagina => IsEdit
         ? "Actualice la información de la configuración de presupuesto."
@@ -121,6 +131,7 @@
             {
                 model = CrearModeloNuevo(fechaServidorActual);
                 await AsignarSiguienteIdAsync();
+                await PrecargarValorGlobalPeriodoAnteriorAsync();
                 return;
             }
 
@@ -161,9 +172,9 @@
                 return;
             }
 
-            if (model.FechaInicia < fechaServidorActual)
+            if (model.FechaInicia < MinFechaInicia)
             {
-                var message = $"La fecha inicial debe ser igual o mayor que la fecha actual del servidor ({fechaServidorActual:yyyy-MM-dd}).";
+                var message = $"La fecha inicial no puede ser anterior al inicio del año en curso ({MinFechaInicia:yyyy-MM-dd}).";
                 ShowToast("Error", message, ToastRenderStyle.Danger);
                 return;
             }
@@ -201,14 +212,40 @@
 
     private static ConfiguracionPresupuestoEditDto CrearModeloNuevo(DateOnly fechaBase)
     {
+        var inicioAnio = new DateOnly(fechaBase.Year, 1, 1);
         return new ConfiguracionPresupuestoEditDto
         {
             EstadoAprobado = false,
             ValorGlobal = 0m,
             RangoPeriodo = 12,
-            FechaInicia = fechaBase,
-            FechaFinaliza = fechaBase
+            FechaInicia = inicioAnio,
+            FechaFinaliza = inicioAnio
         };
+    }
+
+    private async Task PrecargarValorGlobalPeriodoAnteriorAsync()
+    {
+        try
+        {
+            var configuraciones = await ConfiguracionPresupuestoClient.GetAsync(new ConfiguracionPresupuestoFilterDto());
+
+            // Mismo criterio que el copiado de detalle server-side: el presupuesto
+            // cuyo período termina antes del inicio del nuevo (el más reciente).
+            var anterior = configuraciones
+                .Where(x => x.FechaFinaliza < model.FechaInicia)
+                .OrderByDescending(x => x.FechaFinaliza)
+                .ThenByDescending(x => x.FechaInicia)
+                .FirstOrDefault();
+
+            if (anterior is not null && anterior.ValorGlobal > 0m)
+            {
+                model.ValorGlobal = anterior.ValorGlobal;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo precargar el valor global del período anterior.");
+        }
     }
 
     private async Task AsignarSiguienteIdAsync()

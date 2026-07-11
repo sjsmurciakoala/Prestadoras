@@ -259,9 +259,9 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
 
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $@"INSERT INTO public.prv_compromiso_hdr
-               (numero_orden, correlativo_proveedor, fecha, monto, concepto, cod_proveedor, flag_proveedor, cuenta_contable, cod_proyecto, rtn, pagar_a, status_transacc, nombre_proveedor)
+               (company_id, numero_orden, correlativo_proveedor, fecha, monto, concepto, cod_proveedor, flag_proveedor, cuenta_contable, cod_proyecto, rtn, pagar_a, status_transacc, nombre_proveedor)
                VALUES
-               ({numeroOrden}, {correlativoProveedor}, {preparedOrder.FechaCompromiso}, {preparedOrder.MontoTotal}, {preparedOrder.Concepto}, {preparedOrder.CodigoProveedor},
+               ({EnsureCompanyId()}, {numeroOrden}, {correlativoProveedor}, {preparedOrder.FechaCompromiso}, {preparedOrder.MontoTotal}, {preparedOrder.Concepto}, {preparedOrder.CodigoProveedor},
                 {preparedOrder.FlagProveedor}, {preparedOrder.CuentaContable}, {preparedOrder.CodigoProyecto}, {preparedOrder.Rtn}, {preparedOrder.PagarA}, {statusTransacc}, {preparedOrder.NombreProveedor})",
             ct);
 
@@ -346,6 +346,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
                    rtn = {preparedOrder.Rtn},
                    pagar_a = {preparedOrder.PagarA}
                WHERE numero_orden = {numeroOrden}
+                 AND company_id = {EnsureCompanyId()}
                  AND status_transacc IS DISTINCT FROM TRUE",
             ct);
 
@@ -356,7 +357,8 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
 
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $@"DELETE FROM public.prv_compromiso_dtl
-               WHERE numero_orden = {numeroOrden}",
+               WHERE numero_orden = {numeroOrden}
+                 AND company_id = {EnsureCompanyId()}",
             ct);
 
         foreach (var detalle in preparedOrder.Detalles)
@@ -398,12 +400,14 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
 
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $@"DELETE FROM public.prv_compromiso_dtl
-               WHERE numero_orden = {numeroOrden}",
+               WHERE numero_orden = {numeroOrden}
+                 AND company_id = {EnsureCompanyId()}",
             ct);
 
         var affectedRows = await _context.Database.ExecuteSqlInterpolatedAsync(
             $@"DELETE FROM public.prv_compromiso_hdr
                WHERE numero_orden = {numeroOrden}
+                 AND company_id = {EnsureCompanyId()}
                  AND status_transacc IS DISTINCT FROM TRUE",
             ct);
 
@@ -561,6 +565,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
             await UpdateCompromisoStatusTransaccAsync(
                 connection,
                 dbTransaction,
+                EnsureCompanyId(),
                 numeroOrden,
                 statusTransacc: true,
                 ct);
@@ -1016,6 +1021,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
     private static async Task UpdateCompromisoStatusTransaccAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
+        long companyId,
         int numeroOrden,
         bool? statusTransacc,
         CancellationToken ct)
@@ -1027,7 +1033,9 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
 UPDATE public.prv_compromiso_hdr
 SET status_transacc = @status_transacc
 WHERE numero_orden = @numero_orden
+  AND company_id = @company_id
   AND status_transacc IS DISTINCT FROM @status_transacc;";
+        command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
         command.Parameters.Add(new NpgsqlParameter("status_transacc", NpgsqlDbType.Boolean)
         {
             Value = statusTransacc.HasValue ? statusTransacc.Value : DBNull.Value
@@ -1544,7 +1552,7 @@ LIMIT 1;";
             }
         }
 
-        if (await TableExistsAsync(connection, transaction, "con_poliza", ct))
+        if (await TableExistsAsync(connection, transaction, "con_partida_hdr", ct))
         {
             return await TryResolvePartidaIdInConPolizaAsync(
                 connection,
@@ -1661,7 +1669,7 @@ LIMIT 1;";
     {
         const string sql = @"
 SELECT poliza_id
-FROM public.con_poliza
+FROM public.con_partida_hdr
 WHERE company_id = @company_id
   AND ""module"" = @module
   AND document_type = @document_type
@@ -1693,7 +1701,7 @@ LIMIT 1;";
 
         const string sqlSinUsuario = @"
 SELECT poliza_id
-FROM public.con_poliza
+FROM public.con_partida_hdr
 WHERE company_id = @company_id
   AND ""module"" = @module
   AND document_type = @document_type
@@ -1855,7 +1863,8 @@ LIMIT 1;";
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $@"UPDATE public.prv_compromiso_hdr
                   SET anulado = TRUE
-                WHERE numero_orden = {numeroOrden}",
+                WHERE numero_orden = {numeroOrden}
+                  AND company_id = {EnsureCompanyId()}",
             ct);
 
         await _context.SaveChangesAsync(ct);
@@ -2393,9 +2402,9 @@ SELECT EXISTS (
     {
         await _context.Database.ExecuteSqlInterpolatedAsync(
             $@"INSERT INTO public.prv_compromiso_dtl
-               (numero_orden, cod_presupuestario, programa, actividad, objeto_gasto, cuenta_gasto, descripcion, monto, conceptodtl)
+               (company_id, numero_orden, cod_presupuestario, programa, actividad, objeto_gasto, cuenta_gasto, descripcion, monto, conceptodtl)
                VALUES
-               ({numeroOrden}, {detalle.CodigoPresupuestario}, {detalle.Programa}, {detalle.Actividad}, {detalle.ObjetoGasto},
+               ({EnsureCompanyId()}, {numeroOrden}, {detalle.CodigoPresupuestario}, {detalle.Programa}, {detalle.Actividad}, {detalle.ObjetoGasto},
                {detalle.CuentaGasto}, {detalle.Descripcion}, {detalle.Monto}, {detalle.ConceptoDetalle})",
             ct);
     }
@@ -3109,7 +3118,7 @@ RETURNING ultimo_correlativo_compromiso;";
             }
         }
 
-        if (await TableExistsAsync("con_poliza", ct) && await TableExistsAsync("con_poliza_linea", ct))
+        if (await TableExistsAsync("con_partida_hdr", ct) && await TableExistsAsync("con_partida_dtl", ct))
         {
             var partidaConPoliza = await LoadPartidaContableFromConPolizaAsync(companyId, numeroOrden, ct);
             if (partidaConPoliza is not null)
@@ -3268,7 +3277,7 @@ SELECT h.poliza_id,
        h.poliza_number,
        h.poliza_date,
        h.description
-FROM public.con_poliza h
+FROM public.con_partida_hdr h
 WHERE h.company_id = @company_id
   AND h.""module"" = 'PROV'
   AND h.document_type = 'OPD'
@@ -3311,7 +3320,7 @@ SELECT COALESCE(a.code, ''),
        d.description,
        d.debit_amount,
        d.credit_amount
-FROM public.con_poliza_linea d
+FROM public.con_partida_dtl d
 LEFT JOIN public.con_plan_cuentas a
        ON a.company_id = d.company_id
       AND a.account_id = d.account_id
@@ -3319,7 +3328,7 @@ LEFT JOIN public.con_centro_costo cc
        ON cc.company_id = d.company_id
       AND cc.cost_center_id = d.cost_center_id
 WHERE d.company_id = @company_id
-  AND d.con_poliza_id = @poliza_id
+  AND d.poliza_id = @poliza_id
 ORDER BY d.line_number;";
             lineasCommand.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
             lineasCommand.Parameters.AddWithValue("poliza_id", NpgsqlDbType.Bigint, polizaId);

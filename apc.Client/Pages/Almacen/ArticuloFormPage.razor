@@ -1,0 +1,178 @@
+@page "/almacen/articulos/nuevo"
+@page "/almacen/articulos/{Id:int}/editar"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject ArticulosClient ArticulosClient
+@inject UnidadesMedidaClient UnidadesClient
+@inject TiposArticuloClient TiposClient
+@inject LineasCatalogoClient LineasClient
+@inject GruposClient GruposClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - @(EsEdicion ? "Editar" : "Nuevo") artículo</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ArticuloFormToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="@IconWrapperClass form-icon">
+                <i class="@IconClass"></i>
+            </div>
+            <div>
+                <h2 class="page-title">@Titulo</h2>
+                <p class="page-subtitle">@Subtitulo</p>
+            </div>
+        </div>
+        <div class="header-actions">
+            <DxButton Text="Volver al catálogo" Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card form-card d-flex justify-content-center py-5">
+            <DxLoadingPanel Visible="true" Text="Cargando artículo..." />
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(errorCarga))
+    {
+        <div class="alert alert-danger" role="alert">@errorCarga</div>
+    }
+    else
+    {
+        <div class="modern-card form-card">
+            <ArticuloForm Model="modelo"
+                          Unidades="unidades"
+                          Tipos="tipos"
+                          Lineas="lineas"
+                          Grupos="grupos"
+                          OnValidSubmit="GuardarAsync"
+                          OnCancel="Volver"
+                          IsBusy="guardando" />
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private bool EsEdicion => Id.HasValue;
+
+    private ArticuloEditDto modelo = new();
+    private List<UnidadMedidaLookupDto> unidades = new();
+    private List<TipoArticuloLookupDto> tipos = new();
+    private List<LineaLookupDto> lineas = new();
+    private List<GrupoLookupDto> grupos = new();
+
+    private bool cargando = true;
+    private bool guardando;
+    private string? errorCarga;
+
+    private string Titulo => EsEdicion ? "Editar artículo" : "Nuevo artículo";
+    private string Subtitulo => EsEdicion
+        ? "Actualice la información del artículo"
+        : "Complete el formulario de registro";
+    private string IconClass => EsEdicion ? "bi bi-pencil-square" : "bi bi-box-seam";
+    private string IconWrapperClass => EsEdicion
+        ? "bg-warning bg-opacity-10 text-warning rounded-circle d-flex align-items-center justify-content-center"
+        : "bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarLookupsAsync();
+
+        if (EsEdicion)
+        {
+            await CargarArticuloAsync(Id!.Value);
+        }
+        else
+        {
+            modelo = new ArticuloEditDto();
+        }
+
+        cargando = false;
+    }
+
+    private async Task CargarLookupsAsync()
+    {
+        try
+        {
+            unidades = await UnidadesClient.GetLookupAsync();
+            tipos = await TiposClient.GetLookupAsync();
+            lineas = await LineasClient.GetLookupAsync();
+            grupos = await GruposClient.GetLookupAsync();
+        }
+        catch
+        {
+            unidades = new List<UnidadMedidaLookupDto>();
+            tipos = new List<TipoArticuloLookupDto>();
+            lineas = new List<LineaLookupDto>();
+            grupos = new List<GrupoLookupDto>();
+        }
+    }
+
+    private async Task CargarArticuloAsync(int id)
+    {
+        try
+        {
+            var detalle = await ArticulosClient.GetByIdAsync(id);
+            if (detalle is null)
+            {
+                errorCarga = "No se encontró el artículo.";
+                return;
+            }
+
+            modelo = detalle;
+        }
+        catch (Exception ex)
+        {
+            errorCarga = $"Error al cargar el artículo: {ex.Message}";
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        guardando = true;
+
+        try
+        {
+            if (modelo.Id.HasValue)
+            {
+                await ArticulosClient.UpdateAsync(modelo.Id.Value, modelo);
+            }
+            else
+            {
+                await ArticulosClient.CreateAsync(modelo);
+            }
+
+            Navigation.NavigateTo("/almacen/articulos");
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Error",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger,
+                ProviderName = "ArticuloFormToast"
+            });
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/almacen/articulos");
+}

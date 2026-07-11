@@ -13,8 +13,13 @@
 
 <PageTitle>SIAD - Detalle de Presupuesto</PageTitle>
 
-<div class="page-container">
+<div class="page-container position-relative">
     <DxToastProvider Name="PresupuestoGestionToast" MaxToastCount="4" />
+
+    <DxLoadingPanel Visible="@IsBusy"
+                    IsContentBlocked="true"
+                    ApplyBackgroundShading="true"
+                    Text="Procesando..." />
 
     <div class="header-section">
         <div>
@@ -331,6 +336,13 @@
     private string? bloqueoRangoMessage;
     private decimal presupuestoHdr;
     private DateOnly currentServerDate = DateOnly.FromDateTime(DateTime.Today);
+
+    // Splash de página: visible mientras hay una llamada al servidor en curso.
+    private bool IsBusy =>
+        isSubmitting ||
+        isLoadingSolicitudes ||
+        isLoadingCuentasOrigen ||
+        isLoadingSaldosPresupuesto;
 
     private string PresupuestoDisplay => string.IsNullOrWhiteSpace(IdPresupuesto)
         ? "-"

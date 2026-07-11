@@ -1,0 +1,295 @@
+@page "/almacen/estantes"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject BodegasClient BodegasClient
+@inject EstanteriasClient EstanteriasClient
+@inject EstantesClient EstantesClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Estantes</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="EstantesToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Estantes</h2>
+            <p class="page-subtitle">Estantes por estantería</p>
+        </div>
+        <DxButton Text="Nuevo estante" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevo" Enabled="@(selectedEstanteriaId.HasValue)" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    @if (!selectedEstanteriaId.HasValue)
+    {
+        <div class="alert alert-info mb-3" role="alert">Seleccione una bodega y una estantería para ver sus estantes.</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@estantes" KeyFieldName="@nameof(EstanteListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxComboBox Data="@bodegasLookup" Value="@selectedBodegaId"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)"
+                                    TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Seleccione una bodega..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((int? v) => OnBodegaChanged(v))"
+                                    Style="min-width: 220px;" CssClass="me-1" />
+                        <DxComboBox Data="@estanteriasLookup" Value="@selectedEstanteriaId"
+                                    ValueFieldName="@nameof(EstanteriaLookupDto.Id)"
+                                    TextFieldName="@nameof(EstanteriaLookupDto.Display)"
+                                    NullText="Seleccione una estantería..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((int? v) => OnEstanteriaChanged(v))"
+                                    Enabled="@(selectedBodegaId.HasValue)"
+                                    Style="min-width: 220px;" CssClass="me-1" />
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar código o descripción..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 200px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activos</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@estantes.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(EstanteListItemDto.Codigo)" Caption="Código" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EstanteListItemDto item)
+                            { <span class="text-dark fw-semibold">@item.Codigo</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(EstanteListItemDto.Descripcion)" Caption="Descripción" MinWidth="240">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EstanteListItemDto item)
+                            { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Descripcion) ? "—" : item.Descripcion)</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EstanteListItemDto item)
+                            { <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVO" : "INACTIVO")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EstanteListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">No hay estantes para mostrar.</div></EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(680px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:80px"></div></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3"><div class="alert alert-danger" role="alert">@formError</div></div>
+        }
+        else
+        {
+            <EstanteForm Model="formModel" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar estante?</h5>
+            <p class="text-muted">El estante quedará inactivo y no aparecerá en los selectores.</p>
+            @if (paraDesactivar is not null) { <div class="fw-semibold">@paraDesactivar.Codigo - @paraDesactivar.Descripcion</div> }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarDesactivar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private const string GridLayoutStorageKey = "almacen-estantes-grid-layout";
+
+    private DxGrid? grid;
+    private List<EstanteListItemDto> estantes = new();
+    private List<BodegaLookupDto> bodegasLookup = new();
+    private List<EstanteriaLookupDto> estanteriasLookup = new();
+    private int? selectedBodegaId;
+    private int? selectedEstanteriaId;
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible, formLoading, isSaving;
+    private string? formError;
+    private EstanteEditDto formModel = new();
+
+    private bool confirmVisible;
+    private EstanteListItemDto? paraDesactivar;
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar estante" : "Nuevo estante";
+    private string PopupSubtitle => formModel.Id.HasValue ? "Actualice el estante" : "Registre un estante";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-list-ol";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync() => await CargarBodegasAsync();
+
+    private async Task CargarBodegasAsync()
+    {
+        try { bodegasLookup = await BodegasClient.GetLookupAsync(); }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar las bodegas: {ex.Message}"; }
+    }
+
+    private UbicacionFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Activo = soloActivos ? true : null,
+        EstanteriaId = selectedEstanteriaId
+    };
+
+    private async Task CargarAsync()
+    {
+        if (!selectedEstanteriaId.HasValue) { estantes = new(); return; }
+        try { isLoading = true; errorMessage = null; estantes = await EstantesClient.GetAsync(BuildFilter()); }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar los estantes: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBodegaChanged(int? v)
+    {
+        selectedBodegaId = v;
+        selectedEstanteriaId = null;
+        estanteriasLookup = new();
+        estantes = new();
+        if (v.HasValue)
+        {
+            try { estanteriasLookup = await EstanteriasClient.GetLookupAsync(v.Value); }
+            catch (Exception ex) { errorMessage = $"No se pudieron cargar las estanterías: {ex.Message}"; }
+        }
+    }
+
+    private async Task OnEstanteriaChanged(int? v) { selectedEstanteriaId = v; await CargarAsync(); }
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChanged(bool v) { soloActivos = v; await CargarAsync(); }
+
+    private void AbrirNuevo()
+    {
+        if (!selectedEstanteriaId.HasValue) return;
+        formError = null; formModel = new EstanteEditDto { EstanteriaId = selectedEstanteriaId.Value, Activo = true }; formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null; formLoading = true; formVisible = true;
+        try
+        {
+            var d = await EstantesClient.GetByIdAsync(id);
+            if (d is null) { formError = "No se encontró el estante."; formModel = new(); return; }
+            formModel = d;
+        }
+        catch (Exception ex) { formError = $"Error al cargar: {ex.Message}"; }
+        finally { formLoading = false; }
+    }
+
+    private void CerrarForm() { if (isSaving) return; formVisible = false; formError = null; formModel = new(); }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (formModel.Id.HasValue) { await EstantesClient.UpdateAsync(formModel.Id.Value, formModel); Toast("Éxito", "Estante actualizado.", ToastRenderStyle.Success); }
+            else { await EstantesClient.CreateAsync(formModel); Toast("Éxito", "Estante registrado.", ToastRenderStyle.Success); }
+            formVisible = false; formModel = new(); await CargarAsync();
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { isSaving = false; }
+    }
+
+    private void ConfirmarDesactivar(EstanteListItemDto e) { paraDesactivar = e; confirmVisible = true; }
+    private void CancelarDesactivar() { confirmVisible = false; paraDesactivar = null; }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (paraDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            var ok = await EstantesClient.DeactivateAsync(paraDesactivar.Id);
+            if (!ok) Toast("Error", "No se pudo desactivar.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Estante desactivado.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { confirmVisible = false; paraDesactivar = null; }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "EstantesToast" });
+}

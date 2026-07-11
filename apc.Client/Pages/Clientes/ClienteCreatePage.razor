@@ -1,19 +1,21 @@
 @page "/clientes/nuevo"
 @attribute [Authorize]
 @using SIAD.Core.DTOs.Clientes
+@using SIAD.Core.DTOs.Solicitudes
 @using apc.Client.Services.Clientes
+@using apc.Client.Services.Solicitudes
 @using apc.Client.Services.Tenant
 @using apc.Client.Pages.Clientes.Components
 
 @inject ClientesClient ClientesClient
+@inject SolicitudesClient SolicitudesClient
 @inject NavigationManager Navigation
-@inject IToastNotificationService ToastService
 @inject TenantState TenantState
 
 <PageTitle>SIAD - Nuevo Cliente</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="CreateClienteToast" MaxToastCount="4" />
+    <ErrorNotice @ref="_errorNotice" />
 
     <div class="header-section">
         <div>
@@ -21,6 +23,11 @@
             <p class="page-subtitle">Complete el formulario de registro</p>
         </div>
         <div class="header-actions">
+            <DxButton Text="Traer de solicitud" Click="AbrirSelectorSolicitudAsync"
+                      IconCssClass="bi bi-inbox"
+                      RenderStyle="ButtonRenderStyle.Info"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" />
             <DxButton Text="Cancelar" Click="Cancelar"
                       IconCssClass="bi bi-arrow-left"
                       RenderStyle="ButtonRenderStyle.Secondary"
@@ -29,6 +36,18 @@
         </div>
     </div>
 
+    @if (_solicitudOrigen is not null)
+    {
+        <div class="alert alert-info d-flex align-items-center gap-2 mb-3 shadow-sm">
+            <i class="bi bi-inbox-fill"></i>
+            <span>
+                Datos traídos de la solicitud <strong>#@_solicitudOrigen.Id</strong>
+                (@_solicitudOrigen.NombreCliente). Complete los campos faltantes:
+                código, barrio, ciclo, tipo de uso y servicio.
+            </span>
+        </div>
+    }
+
     <ClienteForm Modelo="@_modelo"
                  OnGuardar="GuardarAsync"
                  OnCancelar="Cancelar"
@@ -36,21 +55,170 @@
                  IsEditMode="false" />
 </div>
 
+<DxPopup @bind-Visible="_selectorVisible"
+         HeaderText="Traer datos de una solicitud"
+         Width="min(900px, 95vw)"
+         Scrollable="true"
+         CloseOnOutsideClick="true"
+         ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <DxLoadingPanel Visible="_selectorCargando" IsContentBlocked="true" Text="Cargando..." />
+
+            <div class="mb-3">
+                <DxTextBox @bind-Text="_filtroSolicitud"
+                           BindValueMode="BindValueMode.OnInput"
+                           NullText="Filtrar por nombre o identidad..."
+                           ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </div>
+
+            @if (!_selectorCargando && _solicitudesDisponibles.Count == 0)
+            {
+                <p class="text-muted text-center my-4">No hay solicitudes activas sin asignar.</p>
+            }
+            else
+            {
+                <DxGrid Data="@SolicitudesFiltradas" PageSize="10" CssClass="grid-modern">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.Id)" Caption="ID" Width="70px" TextAlignment="GridTextAlignment.Center" />
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.NombreCliente)" Caption="Cliente" MinWidth="200">
+                            <CellDisplayTemplate Context="cellContext">
+                                @{ var item = (SolicitudListDto)cellContext.DataItem; }
+                                <div class="d-flex flex-column">
+                                    <span class="fw-bold text-dark">@item.NombreCliente</span>
+                                    <span class="small text-muted">@item.IdentificacionCliente</span>
+                                </div>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.CategoriaServicioNombre)" Caption="Categoría" Width="160px" />
+                        <DxGridDataColumn FieldName="@nameof(SolicitudListDto.Fecha)" Caption="Fecha" Width="110px" DisplayFormat="d" />
+                        <DxGridDataColumn Caption="" Width="120px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cellContext">
+                                @{ var item = (SolicitudListDto)cellContext.DataItem; }
+                                <DxButton Text="Seleccionar" RenderStyle="ButtonRenderStyle.Primary"
+                                          SizeMode="SizeMode.Small"
+                                          Click="() => SeleccionarSolicitudAsync(item.Id)" />
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+            }
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
 @code {
     private ClienteCreateDto _modelo = new();
     private bool _saving;
+    private ErrorNotice _errorNotice = default!;
+    private SolicitudDetailDto? _solicitudOrigen;
+    private bool _selectorVisible;
+    private bool _selectorCargando;
+    private string _filtroSolicitud = string.Empty;
+    private List<SolicitudListDto> _solicitudesDisponibles = new();
 
-    protected override void OnInitialized()
+    [SupplyParameterFromQuery(Name = "solicitudId")]
+    public int? SolicitudId { get; set; }
+
+    private IEnumerable<SolicitudListDto> SolicitudesFiltradas =>
+        string.IsNullOrWhiteSpace(_filtroSolicitud)
+            ? _solicitudesDisponibles
+            : _solicitudesDisponibles.Where(s =>
+                s.NombreCliente.Contains(_filtroSolicitud, StringComparison.OrdinalIgnoreCase) ||
+                s.IdentificacionCliente.Contains(_filtroSolicitud, StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
     {
-        _modelo = new ClienteCreateDto
+        _modelo = NuevoModelo();
+        if (SolicitudId is int id)
         {
-            Activo = true,
-            FechaNacimiento = DateTime.Now.AddYears(-18),
-            TieneMedidor = false,
-            TieneContrato = false,
-            TieneConvenio = false,
-            ColorCasa = "Blanco"
-        };
+            await CargarDesdeSolicitudAsync(id);
+        }
+    }
+
+    private static ClienteCreateDto NuevoModelo() => new()
+    {
+        Activo = true,
+        FechaNacimiento = DateTime.Now.AddYears(-18),
+        TieneMedidor = false,
+        TieneContrato = false,
+        TieneConvenio = false,
+        ColorCasa = "Blanco"
+    };
+
+    private async Task CargarDesdeSolicitudAsync(int solicitudId)
+    {
+        try
+        {
+            var s = await SolicitudesClient.ObtenerPorIdAsync(solicitudId);
+            if (s is null)
+            {
+                _errorNotice.ShowError($"No se encontró la solicitud #{solicitudId}.");
+                return;
+            }
+
+            if (!s.Estado || s.Asignada)
+            {
+                _errorNotice.Show("Aviso",
+                    $"La solicitud #{solicitudId} está inactiva o ya fue asignada.",
+                    ToastRenderStyle.Warning);
+                return;
+            }
+
+            var m = NuevoModelo();
+            m.SolicitudId = s.Id;
+            m.Dni = s.IdentificacionCliente;
+            m.Nombre = s.NombreCliente;
+            m.Telefono = NullIfEmpty(s.Telefono);
+            m.TelefonoMovil = NullIfEmpty(s.Movil);
+            m.Email = NullIfEmpty(s.Correo);
+            m.Direccion = NullIfEmpty(s.Direccion);
+            m.Rtn = NullIfEmpty(s.Rtn);
+            m.FechaNacimiento = s.FechaNacimiento ?? m.FechaNacimiento;
+            m.ColorCasa = string.IsNullOrWhiteSpace(s.ColorCasa) ? m.ColorCasa : s.ColorCasa;
+            m.ClaveSure = NullIfEmpty(s.ClaveSure);
+            m.CategoriaServicioId = s.CategoriaServicioId > 0 ? s.CategoriaServicioId : null;
+            m.Observaciones = NullIfEmpty(s.Observacion);
+            m.EmpresaNombre = NullIfEmpty(s.EmpresaNombre);
+            m.EmpresaTelefono = NullIfEmpty(s.EmpresaTelefono);
+            m.EmpresaDireccion = NullIfEmpty(s.EmpresaDireccion);
+            m.ClaveCatastral = NullIfEmpty(s.NegocioClaveCatastral);
+
+            _modelo = m;
+            _solicitudOrigen = s;
+        }
+        catch (Exception ex)
+        {
+            _errorNotice.ShowError("No se pudo cargar la solicitud.", ex);
+        }
+    }
+
+    private static string? NullIfEmpty(string? v) => string.IsNullOrWhiteSpace(v) ? null : v;
+
+    private async Task AbrirSelectorSolicitudAsync()
+    {
+        _selectorVisible = true;
+        _selectorCargando = true;
+        try
+        {
+            var todas = await SolicitudesClient.ObtenerAsync();
+            _solicitudesDisponibles = todas.Where(s => s.Estado && !s.Asignada).ToList();
+        }
+        catch (Exception ex)
+        {
+            _selectorVisible = false;
+            _errorNotice.ShowError("No se pudieron cargar las solicitudes.", ex);
+        }
+        finally
+        {
+            _selectorCargando = false;
+        }
+    }
+
+    private async Task SeleccionarSolicitudAsync(int id)
+    {
+        _selectorVisible = false;
+        await CargarDesdeSolicitudAsync(id);
     }
 
     private async Task GuardarAsync()
@@ -63,13 +231,7 @@
         }
         catch (Exception ex)
         {
-            ToastService.ShowToast(new ToastOptions
-            {
-                Title = "Error",
-                Text = ex.Message,
-                RenderStyle = ToastRenderStyle.Danger,
-                ProviderName = "CreateClienteToast"
-            });
+            _errorNotice.ShowError("No se pudo crear el cliente.", ex);
         }
         finally
         {

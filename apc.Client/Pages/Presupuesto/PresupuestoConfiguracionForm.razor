@@ -167,7 +167,8 @@
     private void RecalcularFechaFinaliza()
     {
         var meses = Model.RangoPeriodo > 0 ? Model.RangoPeriodo : 1;
-        Model.FechaFinaliza = Model.FechaInicia.AddMonths(meses);
+        // El período termina el último día (ej. 12 meses desde 1-ene => 31-dic).
+        Model.FechaFinaliza = Model.FechaInicia.AddMonths(meses).AddDays(-1);
     }
 
     private sealed record RangoPeriodoOption(int Valor, string Texto);

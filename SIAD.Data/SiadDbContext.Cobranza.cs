@@ -5,7 +5,8 @@ namespace SIAD.Data;
 
 // Extensión parcial para entidades de cobranza nuevas (post-scaffold).
 // ConfigureCobranzaModel es llamado desde ConfigureSarComplianceModel
-// en SiadDbContext.SarCompliance.cs.
+// en SiadDbContext.SarCompliance.cs, y encadena a su vez ConfigureAlmacenModel
+// (SiadDbContext.Almacen.cs).
 public partial class SiadDbContext
 {
     public virtual DbSet<cln_llamada_cobranza> cln_llamada_cobranzas { get; set; } = null!;
@@ -134,5 +135,8 @@ public partial class SiadDbContext
             entity.Property(e => e.usuario).HasMaxLength(100);
             entity.Property(e => e.fecha).HasColumnType("timestamp without time zone");
         });
+
+        // Almacén (alm_) y Activo Fijo (af_) — migrado de MySQL (2026-07-01).
+        ConfigureAlmacenModel(modelBuilder);
     }
 }

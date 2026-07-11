@@ -49,7 +49,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             if (cuentaInfo is null)
             {
                 // LOG: Cuenta no encontrada
-                Console.WriteLine($"âŒ Cuenta {bancoCuentaId} no encontrada para company {companyId}");
+                Console.WriteLine($"❌ Cuenta {bancoCuentaId} no encontrada para company {companyId}");
                 return Array.Empty<BanTransaccionListDto>();
             }
 
@@ -59,8 +59,8 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
             if (bancoIdToUse <= 0)
             {
-                // LOG: Banco ID invÃ¡lido
-                Console.WriteLine($"âŒ BancoId invÃ¡lido: bancoId={bancoId}, ban_banco_id={cuentaInfo.ban_banco_id}");
+                // LOG: Banco ID inválido
+                Console.WriteLine($"❌ BancoId inválido: bancoId={bancoId}, ban_banco_id={cuentaInfo.ban_banco_id}");
                 return Array.Empty<BanTransaccionListDto>();
             }
 
@@ -68,7 +68,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             var fechaHastaValue = fechaHasta ?? GetLastDayOfCurrentMonth();
 
             // LOG: Llamada al SP
-            Console.WriteLine($"âœ… Llamando SP: banco={bancoIdToUse}, cuenta={cuentaInfo.banco_cuenta_id}, desde={fechaDesdeValue}, hasta={fechaHastaValue}");
+            Console.WriteLine($"✅ Llamando SP: banco={bancoIdToUse}, cuenta={cuentaInfo.banco_cuenta_id}, desde={fechaDesdeValue}, hasta={fechaHastaValue}");
 
             var transaccionesSp = await GetTransaccionesFromProcedureAsync(
                 bancoIdToUse,
@@ -80,7 +80,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             await CompletarCamposDesdeKardexAsync(companyId, transaccionesSp, ct);
 
             // LOG: Resultado del SP
-            Console.WriteLine($"ðŸ“Š SP retornÃ³ {transaccionesSp.Count} registros");
+            Console.WriteLine($"📊 SP retornó {transaccionesSp.Count} registros");
 
             var filtradas = AplicarFiltroFechas(transaccionesSp, fechaDesde, fechaHasta);
             if (incluirAnuladas)
@@ -273,7 +273,9 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
                             Descripcion = descripcion,
                             Referencia = referencia,
                             Monto = Math.Abs(monto),
-                            TasaCambio = tasaCambio <= 0m ? 1m : tasaCambio
+                            TasaCambio = tasaCambio <= 0m ? 1m : tasaCambio,
+                            // NULL cuando no existe partida contable para la transacción.
+                            PolizaId = reader.IsDBNull(8) ? null : reader.GetInt64(8)
                         };
                     }
 
@@ -328,6 +330,71 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         }
     }
 
+    public async Task<EstadoCuentaDto?> GetEstadoCuentaAsync(
+        long companyId,
+        long bancoCuentaId,
+        DateOnly? fechaDesde = null,
+        DateOnly? fechaHasta = null,
+        CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bancoCuentaId);
+
+        var cuenta = await context.ban_cuenta
+            .Where(c => c.company_id == companyId && c.banco_cuenta_id == bancoCuentaId)
+            .Select(c => new
+            {
+                c.nombre,
+                c.numero_cuenta,
+                c.currency_code,
+                BancoNombre = c.banco_nombre ?? (c.ban_banco != null ? c.ban_banco.nombre : null)
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (cuenta is null)
+        {
+            return null;
+        }
+
+        var desde = fechaDesde ?? GetFirstDayOfCurrentMonth();
+        var hasta = fechaHasta ?? GetLastDayOfCurrentMonth();
+
+        var movimientos = (await GetTransaccionesAsync(
+                companyId, null, bancoCuentaId, desde, hasta, incluirAnuladas: false, ct))
+            .OrderBy(m => m.FechaMovimiento)
+            .ThenBy(m => m.BanKardexId)
+            .ToList();
+
+        // Saldo corrido inmediatamente anterior al período (0 si no hay historial previo).
+        var saldoAnterior = await context.ban_kardex
+            .Where(k => k.company_id == companyId
+                        && k.banco_cuenta_id == bancoCuentaId
+                        && k.fecha_movimiento < desde)
+            .OrderByDescending(k => k.fecha_movimiento)
+            .ThenByDescending(k => k.ban_kardex_id)
+            .Select(k => (decimal?)k.saldo)
+            .FirstOrDefaultAsync(ct) ?? 0m;
+
+        var totalAbonos = movimientos.Where(m => m.Monto > 0m).Sum(m => m.Monto);
+        var totalCargos = movimientos.Where(m => m.Monto < 0m).Sum(m => -m.Monto);
+
+        return new EstadoCuentaDto
+        {
+            BancoCuentaId = bancoCuentaId,
+            BancoNombre = cuenta.BancoNombre,
+            CuentaNombre = cuenta.nombre,
+            NumeroCuenta = cuenta.numero_cuenta,
+            MonedaCodigo = cuenta.currency_code,
+            FechaDesde = desde,
+            FechaHasta = hasta,
+            SaldoAnterior = saldoAnterior,
+            TotalCargos = totalCargos,
+            TotalAbonos = totalAbonos,
+            SaldoFinal = saldoAnterior + totalAbonos - totalCargos,
+            Movimientos = movimientos
+        };
+    }
+
     public async Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoAsync(
         long bancoCuentaId,
         string idTipoTransaccion,
@@ -372,11 +439,11 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (contraLineas.Count == 0)
         {
-            throw new ArgumentException("Debe especificar al menos una contracuenta vÃ¡lida.", nameof(contraCuentas));
+            throw new ArgumentException("Debe especificar al menos una contracuenta válida.", nameof(contraCuentas));
         }
         if (contraLineas.Any(l => string.IsNullOrWhiteSpace(l.Descripcion)))
         {
-            throw new ArgumentException("La descripciÃ³n de la partida es obligatoria.", nameof(contraCuentas));
+            throw new ArgumentException("La descripción de la partida es obligatoria.", nameof(contraCuentas));
         }
         if (contraLineas.Any(l => string.IsNullOrWhiteSpace(l.SourceDocument)))
         {
@@ -473,7 +540,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
             if (kardexId <= 0)
             {
-                throw new InvalidOperationException("No fue posible registrar la transacciÃ³n bancaria.");
+                throw new InvalidOperationException("No fue posible registrar la transacción bancaria.");
             }
 
             if (partidaId.HasValue && partidaId.Value > 0)
@@ -553,7 +620,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (contraIds.Count == 0)
         {
-            throw new InvalidOperationException("Debe especificar al menos una contracuenta vÃ¡lida.");
+            throw new InvalidOperationException("Debe especificar al menos una contracuenta válida.");
         }
 
         var cuentasContra = await context.con_plan_cuentas
@@ -564,17 +631,17 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (cuentasContra.Count != contraIds.Count)
         {
-            throw new InvalidOperationException("Una o mÃ¡s contracuentas no existen en la empresa actual.");
+            throw new InvalidOperationException("Una o más contracuentas no existen en la empresa actual.");
         }
 
         if (cuentasContra.Any(c => !c.allows_posting))
         {
-            throw new InvalidOperationException("Una o mÃ¡s contracuentas no permiten movimientos.");
+            throw new InvalidOperationException("Una o más contracuentas no permiten movimientos.");
         }
 
         if (cuentasContra.Any(c => !IsCuentaActiva(c.status)))
         {
-            throw new InvalidOperationException("Una o mÃ¡s contracuentas estÃ¡n inactivas.");
+            throw new InvalidOperationException("Una o más contracuentas están inactivas.");
         }
 
         var cuentasContraLookup = cuentasContra.ToDictionary(c => c.account_id, c => (c.code, c.name));
@@ -587,7 +654,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (tipoInfo is null)
         {
-            throw new InvalidOperationException("El tipo de transacciÃ³n no estÃ¡ configurado.");
+            throw new InvalidOperationException("El tipo de transacción no está configurado.");
         }
 
         var entraSale = string.IsNullOrWhiteSpace(tipoInfo.entra_sale)
@@ -596,7 +663,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (entraSale != "E" && entraSale != "S")
         {
-            throw new InvalidOperationException("El tipo de transacciÃ³n no tiene configuraciÃ³n vÃ¡lida de entrada/salida.");
+            throw new InvalidOperationException("El tipo de transacción no tiene configuración válida de entrada/salida.");
         }
 
         var periodId = await ResolvePeriodoIdAsync(companyId, fechaMovimiento, ct);
@@ -612,7 +679,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         var amount = Math.Abs(monto);
         if (Math.Abs(amount - totalContra) > 0.01m)
         {
-            throw new InvalidOperationException("El monto de la transacciÃ³n no coincide con el total de las contracuentas.");
+            throw new InvalidOperationException("El monto de la transacción no coincide con el total de las contracuentas.");
         }
 
         var bankDebit = entraSale == "E" ? totalContra : 0m;
@@ -682,7 +749,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         if (lineas.Count < 2)
         {
-            throw new InvalidOperationException("La partida contable requiere al menos dos lÃ­neas.");
+            throw new InvalidOperationException("La partida contable requiere al menos dos líneas.");
         }
 
         var lineasSql = BuildLineasSql(lineas.Count);
@@ -963,7 +1030,7 @@ WHERE table_schema = 'public'
             }
         }
 
-        if (await TableExistsAsync(connection, transaction, "con_poliza", ct))
+        if (await TableExistsAsync(connection, transaction, "con_partida_hdr", ct))
         {
             var partidaId = await TryResolvePartidaIdInConPolizaAsync(
                 connection,
@@ -1014,7 +1081,7 @@ LIMIT 1;";
     {
         const string sql = @"
 SELECT poliza_id
- FROM public.con_poliza
+ FROM public.con_partida_hdr
 WHERE company_id = @company_id
   AND ""module"" = 'BANCOS'
   AND document_type = @document_type
@@ -1043,7 +1110,7 @@ LIMIT 1;";
 
         const string sqlSinUsuario = @"
 SELECT poliza_id
- FROM public.con_poliza
+ FROM public.con_partida_hdr
 WHERE company_id = @company_id
   AND ""module"" = 'BANCOS'
   AND document_type = @document_type
@@ -1207,13 +1274,13 @@ SELECT public.fn_pst_afectar_saldo_real_credito(
             if (estado == 0)
             {
                 throw new ArgumentException(
-                    $"La transacciÃ³n excede el saldo proyectado del presupuesto para la cuenta {cuentaDisplay}.");
+                    $"La transacción excede el saldo proyectado del presupuesto para la cuenta {cuentaDisplay}.");
             }
 
             if (estado == 2)
             {
                 throw new ArgumentException(
-                    $"No se puede registrar la transacciÃ³n porque el presupuesto de la cuenta {cuentaDisplay} no estÃ¡ aprobado.");
+                    $"No se puede registrar la transacción porque el presupuesto de la cuenta {cuentaDisplay} no está aprobado.");
             }
         }
     }
@@ -1293,7 +1360,7 @@ WHERE c.company_id = @p_company_id
 
         if (journalId <= 0)
         {
-            throw new InvalidOperationException("No se encontrÃ³ un diario contable activo para registrar la partida.");
+            throw new InvalidOperationException("No se encontró un diario contable activo para registrar la partida.");
         }
 
         return journalId;
@@ -1564,7 +1631,7 @@ WHERE company_id = @company_id
 
             if (kardexId <= 0)
             {
-                throw new InvalidOperationException("No fue posible anular la transacciÃ³n bancaria.");
+                throw new InvalidOperationException("No fue posible anular la transacción bancaria.");
             }
 
             if (partidaOriginal is not null)

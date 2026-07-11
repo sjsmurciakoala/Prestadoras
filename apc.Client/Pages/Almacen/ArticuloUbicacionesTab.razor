@@ -1,0 +1,399 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject ArticulosClient ArticulosClient
+@inject BodegasClient BodegasClient
+@inject EstanteriasClient EstanteriasClient
+@inject EstantesClient EstantesClient
+@inject IToastNotificationService ToastService
+
+<DxToastProvider Name="UbicacionesToast" MaxToastCount="4" />
+
+<div class="modern-card position-relative">
+    <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="text-muted small">
+            <i class="bi bi-geo-alt me-1"></i>
+            Bodegas donde se almacena este artículo. La estantería y el estante son opcionales.
+        </div>
+        <DxButton Text="Agregar ubicación" IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                  Click="AbrirNuevo" />
+    </div>
+
+    <div class="grid-wrapper">
+        <DxGrid Data="@ubicaciones" KeyFieldName="@nameof(ArticuloUbicacionDto.Id)"
+                ShowGroupPanel="false" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer">
+            <Columns>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.BodegaDisplay)" Caption="Bodega" MinWidth="200">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span class="text-dark fw-semibold">@item.BodegaDisplay</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.EstanteUbicacion)" Caption="Ubicación" MinWidth="160">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.EstanteUbicacion) ? "—" : item.EstanteUbicacion)</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Existencia)" Caption="Existencia" Width="120px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span class="fw-semibold">@item.Existencia.ToString("N2")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaMinima)" Caption="Mínimo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span class="text-muted">@item.ExistenciaMinima.ToString("N2")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Principal)" Caption="Principal" Width="110px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        {
+                            @if (item.Principal)
+                            { <span class="badge-status active"><i class="bi bi-check-lg me-1"></i>Sí</span> }
+                            else
+                            { <span class="text-muted">—</span> }
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        {
+                            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                <button type="button" class="btn-icon btn-edit" title="Editar"
+                                        @onclick="() => AbrirEditarAsync(item)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-pencil-square"></i>
+                                </button>
+                                <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                        @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+            <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">Este artículo aún no tiene ubicaciones asignadas.</div></EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(560px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Bodega, estantería y estante del artículo</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        <div class="p-1">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Bodega *</label>
+                <DxComboBox Data="@bodegas" Value="form.BodegaId"
+                            ValueChanged="@((int v) => OnBodegaChangedAsync(v))"
+                            ValueFieldName="@nameof(BodegaLookupDto.Id)"
+                            TextFieldName="@nameof(BodegaLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una bodega..."
+                            CssClass="w-100" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Estantería</label>
+                <DxComboBox Data="@estanteriasLookup" Value="form.EstanteriaId"
+                            ValueChanged="@((int? v) => OnEstanteriaChangedAsync(v))"
+                            ValueFieldName="@nameof(EstanteriaLookupDto.Id)"
+                            TextFieldName="@nameof(EstanteriaLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una estantería..."
+                            Enabled="@(form.BodegaId > 0)"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </div>
+
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Estante</label>
+                <DxComboBox Data="@estantesLookup" Value="form.EstanteId"
+                            ValueChanged="@((int? v) => OnEstanteChanged(v))"
+                            ValueFieldName="@nameof(EstanteLookupDto.Id)"
+                            TextFieldName="@nameof(EstanteLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione un estante (opcional)..."
+                            Enabled="@(form.EstanteriaId.HasValue)"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-6">
+                    <label class="form-label fw-semibold">Existencia</label>
+                    <DxSpinEdit @bind-Value="form.Existencia" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label fw-semibold">Existencia mínima</label>
+                    <DxSpinEdit @bind-Value="form.ExistenciaMinima" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <DxCheckBox @bind-Checked="form.Principal">Marcar como bodega principal</DxCheckBox>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!isSaving)" Click="CerrarForm" />
+                <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary"
+                          IconCssClass="bi bi-check-lg"
+                          Enabled="@(!isSaving)" Click="GuardarAsync" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-danger"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Eliminar ubicación?</h5>
+            <p class="text-muted">La ubicación dejará de estar asociada a este artículo.</p>
+            @if (paraEliminar is not null)
+            {
+                <div class="fw-semibold">@paraEliminar.BodegaDisplay</div>
+                @if (!string.IsNullOrWhiteSpace(paraEliminar.EstanteUbicacion))
+                { <div class="text-muted small">@paraEliminar.EstanteUbicacion</div> }
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarEliminar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, eliminar" Click="EliminarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-trash" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    [Parameter, EditorRequired]
+    public int ArticuloId { get; set; }
+
+    private List<ArticuloUbicacionDto> ubicaciones = new();
+    private List<BodegaLookupDto> bodegas = new();
+    private List<EstanteriaLookupDto> estanteriasLookup = new();
+    private List<EstanteLookupDto> estantesLookup = new();
+
+    private bool isLoading;
+
+    private bool formVisible;
+    private bool isSaving;
+    private ArticuloUbicacionDto form = new();
+
+    private bool confirmVisible;
+    private ArticuloUbicacionDto? paraEliminar;
+
+    private string PopupTitle => form.Id.HasValue ? "Editar ubicación" : "Nueva ubicación";
+    private string PopupIcon => form.Id.HasValue ? "bi bi-pencil-square" : "bi bi-geo-alt";
+    private string PopupIconWrapperClass => form.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            bodegas = await BodegasClient.GetLookupAsync();
+            ubicaciones = await ArticulosClient.GetUbicacionesAsync(ArticuloId);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar las ubicaciones: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            ubicaciones = await ArticulosClient.GetUbicacionesAsync(ArticuloId);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar las ubicaciones: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void AbrirNuevo()
+    {
+        form = new ArticuloUbicacionDto();
+        estanteriasLookup = new();
+        estantesLookup = new();
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(ArticuloUbicacionDto row)
+    {
+        form = new ArticuloUbicacionDto
+        {
+            Id = row.Id,
+            BodegaId = row.BodegaId,
+            EstanteriaId = row.EstanteriaId,
+            EstanteId = row.EstanteId,
+            Principal = row.Principal
+        };
+
+        estanteriasLookup = new();
+        estantesLookup = new();
+        formVisible = true;
+
+        try
+        {
+            if (form.BodegaId > 0)
+            {
+                estanteriasLookup = await EstanteriasClient.GetLookupAsync(form.BodegaId);
+            }
+            if (form.EstanteriaId.HasValue)
+            {
+                estantesLookup = await EstantesClient.GetLookupAsync(form.EstanteriaId.Value);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar las estanterías/estantes: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task OnBodegaChangedAsync(int value)
+    {
+        form.BodegaId = value;
+        form.EstanteriaId = null;
+        form.EstanteId = null;
+        estantesLookup = new();
+        estanteriasLookup = new();
+
+        if (value > 0)
+        {
+            try { estanteriasLookup = await EstanteriasClient.GetLookupAsync(value); }
+            catch (Exception ex) { Toast("Error", $"No se pudieron cargar las estanterías: {ex.Message}", ToastRenderStyle.Danger); }
+        }
+    }
+
+    private async Task OnEstanteriaChangedAsync(int? value)
+    {
+        form.EstanteriaId = value;
+        form.EstanteId = null;
+        estantesLookup = new();
+
+        if (value.HasValue)
+        {
+            try { estantesLookup = await EstantesClient.GetLookupAsync(value.Value); }
+            catch (Exception ex) { Toast("Error", $"No se pudieron cargar los estantes: {ex.Message}", ToastRenderStyle.Danger); }
+        }
+    }
+
+    private void OnEstanteChanged(int? value) => form.EstanteId = value;
+
+    private void CerrarForm()
+    {
+        if (isSaving) return;
+        formVisible = false;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (form.BodegaId <= 0)
+        {
+            Toast("Validación", "Seleccione una bodega.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            if (form.Id.HasValue)
+            {
+                await ArticulosClient.UpdateUbicacionAsync(ArticuloId, form.Id.Value, form);
+                Toast("Éxito", "Ubicación actualizada.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await ArticulosClient.AddUbicacionAsync(ArticuloId, form);
+                Toast("Éxito", "Ubicación agregada.", ToastRenderStyle.Success);
+            }
+
+            formVisible = false;
+            await CargarAsync();
+        }
+        catch (InvalidOperationException ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarEliminar(ArticuloUbicacionDto row)
+    {
+        paraEliminar = row;
+        confirmVisible = true;
+    }
+
+    private void CancelarEliminar()
+    {
+        confirmVisible = false;
+        paraEliminar = null;
+    }
+
+    private async Task EliminarConfirmadoAsync()
+    {
+        if (paraEliminar?.Id is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await ArticulosClient.DeleteUbicacionAsync(ArticuloId, paraEliminar.Id.Value);
+            if (!ok) Toast("Error", "No se pudo eliminar la ubicación.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Ubicación eliminada.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            paraEliminar = null;
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "UbicacionesToast" });
+}

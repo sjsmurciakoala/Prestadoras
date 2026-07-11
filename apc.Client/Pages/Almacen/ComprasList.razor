@@ -1,0 +1,327 @@
+@page "/almacen/compras"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject ComprasClient ComprasClient
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Compras de almacén</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Compras de almacén</h2>
+            <p class="page-subtitle">Registro de compras de artículos por proveedor</p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Compras</div>
+                <div class="summary-value">@totalCompras.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Monto total</div>
+                <div class="summary-value">@montoTotal.ToString("N2")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Proveedores</div>
+                <div class="summary-value">@proveedoresEnResultado.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Artículos distintos</div>
+                <div class="summary-value">@articulosEnResultado.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@compras" KeyFieldName="@nameof(CompraListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar proveedor, artículo, concepto..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@proveedores" Value="@filtroProveedor"
+                                    NullText="Todos los proveedores"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((string? v) => OnProveedorChanged(v))"
+                                    Style="min-width: 220px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@tiposCompra" Value="@tipoSeleccionado"
+                                    ValueChanged="@((TipoOpcion? t) => OnTipoChanged(t))"
+                                    TextFieldName="@nameof(TipoOpcion.Etiqueta)"
+                                    NullText="Todos los tipos"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 150px;" CssClass="me-1" />
+
+                        <DxDateEdit @bind-Date="fechaDesde" NullText="Desde" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+                        <DxDateEdit @bind-Date="fechaHasta" NullText="Hasta" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+
+                        <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalCompras.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.Fecha)" Caption="Fecha" Width="105px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span>@(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yyyy") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.NumeroFactura)" Caption="Factura" Width="100px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span class="text-muted">@(item.NumeroFactura.HasValue ? item.NumeroFactura.Value.ToString("0") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.Proveedor)" Caption="Proveedor" MinWidth="220">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold" title="@item.Proveedor">@(string.IsNullOrWhiteSpace(item.Proveedor) ? "—" : item.Proveedor)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.CodigoArticulo)" Caption="Artículo" Width="100px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.CodigoArticulo) ? "—" : item.CodigoArticulo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.Concepto)" Caption="Concepto" MinWidth="200">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span title="@item.Concepto">@(string.IsNullOrWhiteSpace(item.Concepto) ? "—" : item.Concepto)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.Cantidad)" Caption="Cant." Width="90px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span>@item.Cantidad.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.PrecioUnitario)" Caption="Precio unit." Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span class="text-muted">@item.PrecioUnitario.ToString("N4")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CompraListItemDto.Total)" Caption="Total" Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Total.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Tipo" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraListItemDto item)
+                            {
+                                <span class="badge-tipo @(item.TipoCompra == TipoCompra.Contado ? "tipo-contado" : "tipo-credito")">
+                                    @item.TipoCompraDescripcion@(item.TipoCompra != TipoCompra.Contado && item.PlazoDias > 0 ? $" {item.PlazoDias:0}d" : "")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay compras para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed class TipoOpcion
+    {
+        public short Codigo { get; init; }
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    private const string GridLayoutStorageKey = "almacen-compras-grid-layout";
+
+    private DxGrid? grid;
+    private List<CompraListItemDto> compras = new();
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private List<string> proveedores = new();
+
+    private readonly List<TipoOpcion> tiposCompra = new()
+    {
+        new TipoOpcion { Codigo = 0, Etiqueta = "Contado" },
+        new TipoOpcion { Codigo = 1, Etiqueta = "Crédito" },
+        new TipoOpcion { Codigo = 2, Etiqueta = "Crédito a plazo" }
+    };
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroProveedor;
+    private TipoOpcion? tipoSeleccionado;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private int totalCompras;
+    private decimal montoTotal;
+    private int proveedoresEnResultado;
+    private int articulosEnResultado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarProveedoresAsync();
+        await CargarAsync();
+    }
+
+    private CompraFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Proveedor = string.IsNullOrWhiteSpace(filtroProveedor) ? null : filtroProveedor,
+        TipoCompra = tipoSeleccionado?.Codigo,
+        FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+        FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null
+    };
+
+    private async Task CargarProveedoresAsync()
+    {
+        try
+        {
+            proveedores = await ComprasClient.GetProveedoresAsync();
+        }
+        catch
+        {
+            proveedores = new List<string>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            compras = await ComprasClient.GetAsync(BuildFilter());
+            RecalcularResumen();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las compras: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void RecalcularResumen()
+    {
+        totalCompras = compras.Count;
+        montoTotal = compras.Sum(c => c.Total);
+        proveedoresEnResultado = compras.Where(c => !string.IsNullOrWhiteSpace(c.Proveedor))
+            .Select(c => c.Proveedor).Distinct().Count();
+        articulosEnResultado = compras.Where(c => !string.IsNullOrWhiteSpace(c.CodigoArticulo))
+            .Select(c => c.CodigoArticulo).Distinct().Count();
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnProveedorChanged(string? valor)
+    {
+        filtroProveedor = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnTipoChanged(TipoOpcion? valor)
+    {
+        tipoSeleccionado = valor;
+        await CargarAsync();
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null)
+        {
+            return;
+        }
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"compras_almacen_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

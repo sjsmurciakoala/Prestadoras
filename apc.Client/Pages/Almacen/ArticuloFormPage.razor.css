@@ -1,0 +1,82 @@
+/* ArticuloFormPage.razor.css */
+
+.page-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+/* HEADER */
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-title {
+    font-weight: 800;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+/* Círculo con icono junto al título */
+.form-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+/* CARD */
+.modern-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.05);
+    border: 1px solid rgba(0,0,0,0.02);
+    padding: 1.5rem;
+}
+
+.form-card {
+    max-width: 960px;
+}
+
+/* BOTON */
+.btn-modern {
+    font-weight: 600;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: all 0.15s ease;
+}
+
+/* RESPONSIVE */
+@media (max-width: 768px) {
+    .page-container { padding: 1rem; }
+
+    .header-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .header-actions { width: 100%; }
+    .btn-modern { width: 100%; display: block; }
+    .modern-card { padding: 1rem; }
+}

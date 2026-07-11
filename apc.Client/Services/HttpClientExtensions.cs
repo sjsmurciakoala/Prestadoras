@@ -4,7 +4,7 @@ using System.Text.Json;
 namespace apc.Client.Services;
 
 /// <summary>
-/// Extensiones para HttpClient que manejan automÃ¡ticamente errores comunes como sesiones expiradas.
+/// Extensiones para HttpClient que manejan automáticamente errores comunes como sesiones expiradas.
 /// </summary>
 public static class HttpClientExtensions
 {
@@ -65,7 +65,7 @@ public static class HttpClientExtensions
     }
 
     /// <summary>
-    /// GET con manejo automÃ¡tico de autenticaciÃ³n expirada.
+    /// GET con manejo automático de autenticación expirada.
     /// </summary>
     public static async Task<T?> GetFromJsonAsyncWithAuthCheck<T>(
         this HttpClient httpClient,
@@ -77,7 +77,7 @@ public static class HttpClientExtensions
     }
 
     /// <summary>
-    /// POST con manejo automÃ¡tico de autenticaciÃ³n expirada.
+    /// POST con manejo automático de autenticación expirada.
     /// </summary>
     public static async Task<HttpResponseMessage> PostAsJsonAsyncWithAuthCheck<T>(
         this HttpClient httpClient,
@@ -87,17 +87,17 @@ public static class HttpClientExtensions
     {
         var response = await httpClient.PostAsJsonAsync(requestUri, value, cancellationToken);
         
-        // Solo verificar si es 401 o redirecciÃ³n al login, los demÃ¡s estados se manejan en el llamador
+        // Solo verificar si es 401 o redirección al login, los demás estados se manejan en el llamador
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized || EsRedireccionLogin(response))
         {
-            throw new UnauthorizedAccessException("Su sesiÃ³n ha expirado. Por favor, inicie sesiÃ³n nuevamente.");
+            throw new UnauthorizedAccessException("Su sesión ha expirado. Por favor, inicie sesión nuevamente.");
         }
 
         return response;
     }
 
     /// <summary>
-    /// PUT con manejo automÃ¡tico de autenticaciÃ³n expirada.
+    /// PUT con manejo automático de autenticación expirada.
     /// </summary>
     public static async Task<HttpResponseMessage> PutAsJsonAsyncWithAuthCheck<T>(
         this HttpClient httpClient,
@@ -107,10 +107,10 @@ public static class HttpClientExtensions
     {
         var response = await httpClient.PutAsJsonAsync(requestUri, value, cancellationToken);
         
-        // Solo verificar si es 401 o redirecciÃ³n al login, los demÃ¡s estados se manejan en el llamador
+        // Solo verificar si es 401 o redirección al login, los demás estados se manejan en el llamador
         if (response.StatusCode == System.Net.HttpStatusCode.Unauthorized || EsRedireccionLogin(response))
         {
-            throw new UnauthorizedAccessException("Su sesiÃ³n ha expirado. Por favor, inicie sesiÃ³n nuevamente.");
+            throw new UnauthorizedAccessException("Su sesión ha expirado. Por favor, inicie sesión nuevamente.");
         }
 
         return response;
@@ -173,7 +173,7 @@ public static class HttpClientExtensions
         }
         catch (JsonException)
         {
-            // Si no es JSON vÃ¡lido, devolver el contenido como estÃ¡
+            // Si no es JSON válido, devolver el contenido como está
             return contenido;
         }
 

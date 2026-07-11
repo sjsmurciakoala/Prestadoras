@@ -1726,10 +1726,13 @@ public partial class SiadDbContext : DbContext
 
         modelBuilder.Entity<prv_compromiso_dtl>(entity =>
         {
-            entity
-                .HasNoKey()
-                .ToTable("prv_compromiso_dtl");
+            entity.HasKey(e => e.compromiso_dtl_id).HasName("prv_compromiso_dtl_pkey");
 
+            entity.ToTable("prv_compromiso_dtl");
+
+            entity.HasIndex(e => new { e.company_id, e.numero_orden }, "ix_prv_compromiso_dtl_company_orden");
+
+            entity.Property(e => e.compromiso_dtl_id).ValueGeneratedOnAdd();
             entity.Property(e => e.actividad).HasMaxLength(2);
             entity.Property(e => e.cod_presupuestario).HasMaxLength(20);
             entity.Property(e => e.conceptodtl).HasMaxLength(100);
@@ -1742,13 +1745,14 @@ public partial class SiadDbContext : DbContext
 
         modelBuilder.Entity<prv_compromiso_hdr>(entity =>
         {
-            entity
-                .HasNoKey()
-                .ToTable("prv_compromiso_hdr");
+            entity.HasKey(e => new { e.company_id, e.numero_orden }).HasName("prv_compromiso_hdr_pkey");
 
-            entity.Property(e => e.cod_proveedor).HasMaxLength(7);
+            entity.ToTable("prv_compromiso_hdr");
+
+            entity.Property(e => e.numero_orden).ValueGeneratedNever();
+            entity.Property(e => e.cod_proveedor).HasMaxLength(20);
             entity.Property(e => e.cod_proyecto).HasMaxLength(20);
-            entity.Property(e => e.concepto).HasMaxLength(150);
+            entity.Property(e => e.concepto).HasMaxLength(500);
             entity.Property(e => e.correlativo_proveedor);
             entity.Property(e => e.cuenta_contable).HasMaxLength(20);
             entity.Property(e => e.fecha).HasColumnType("timestamp without time zone");

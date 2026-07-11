@@ -13,8 +13,13 @@
 
 <PageTitle>SIAD - Editar detalle de presupuesto</PageTitle>
 
-<div class="page-container">
+<div class="page-container position-relative">
     <DxToastProvider Name="PresupuestoDetalleEditToast" MaxToastCount="4" />
+
+    <DxLoadingPanel Visible="@IsBusy"
+                    IsContentBlocked="true"
+                    ApplyBackgroundShading="true"
+                    Text="Procesando..." />
 
     <div class="header-section">
         <div>
@@ -123,6 +128,9 @@
 
     private bool isLoading = true;
     private bool isSaving;
+
+    // Splash de página: visible mientras hay una llamada al servidor en curso.
+    private bool IsBusy => isLoading || isSaving;
     private ConfiguracionPresupuestoDetalleListItemDto? detalle;
     private DetalleEditForm form = new();
     private string? cuentaContableDisplay;

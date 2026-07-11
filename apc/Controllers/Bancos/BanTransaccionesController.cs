@@ -1,3 +1,4 @@
+using ClosedXML.Excel;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Npgsql;
@@ -473,6 +474,160 @@ public sealed class BanTransaccionesController : ControllerBase
                 "Error del Servidor",
                 $"No fue posible anular la transacción bancaria: {ex.Message}"));
         }
+    }
+
+    [HttpGet("estado-cuenta/excel")]
+    public async Task<IActionResult> ExportarEstadoCuentaExcel(
+        [FromQuery] long bancoCuentaId,
+        [FromQuery] DateOnly? fechaDesde = null,
+        [FromQuery] DateOnly? fechaHasta = null,
+        CancellationToken ct = default)
+    {
+        try
+        {
+            if (bancoCuentaId <= 0)
+            {
+                return BadRequest(CrearProblemDetalle(
+                    "Parámetro Inválido",
+                    "Debe indicar la cuenta bancaria."));
+            }
+
+            var companyId = currentCompanyService.GetCompanyId();
+            var estado = await transaccionesService.GetEstadoCuentaAsync(
+                companyId, bancoCuentaId, fechaDesde, fechaHasta, ct);
+
+            if (estado is null)
+            {
+                return NotFound(CrearProblemDetalle(
+                    "Cuenta no encontrada",
+                    "La cuenta bancaria no existe para la compañía actual."));
+            }
+
+            var content = ConstruirEstadoCuentaExcel(estado);
+            var fileName =
+                $"EstadoCuenta_{SanitizarNombreArchivo(estado.NumeroCuenta)}_{estado.FechaDesde:yyyyMMdd}-{estado.FechaHasta:yyyyMMdd}.xlsx";
+
+            return File(
+                content,
+                "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                fileName);
+        }
+        catch (PostgresException ex)
+        {
+            var detalle = string.IsNullOrWhiteSpace(ex.MessageText) ? ex.Message : ex.MessageText;
+            return BadRequest(CrearProblemDetalle("Error de Base de Datos", detalle));
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(500, CrearProblemDetalle(
+                "Error del Servidor",
+                $"No fue posible generar el estado de cuenta: {ex.Message}"));
+        }
+    }
+
+    private static byte[] ConstruirEstadoCuentaExcel(EstadoCuentaDto estado)
+    {
+        using var workbook = new XLWorkbook();
+        var ws = workbook.Worksheets.Add("Estado de Cuenta");
+
+        const int colFecha = 1, colTipo = 2, colDoc = 3, colDesc = 4, colCargo = 5, colAbono = 6, colSaldo = 7;
+        const string fmtMoneda = "#,##0.00";
+        const string fmtFecha = "dd/MM/yyyy";
+
+        ws.Cell(1, colFecha).Value = "ESTADO DE CUENTA";
+        ws.Range(1, colFecha, 1, colSaldo).Merge();
+        ws.Cell(1, colFecha).Style.Font.Bold = true;
+        ws.Cell(1, colFecha).Style.Font.FontSize = 14;
+        ws.Cell(1, colFecha).Style.Alignment.Horizontal = XLAlignmentHorizontalValues.Center;
+
+        ws.Cell(2, colFecha).Value = "Banco:";
+        ws.Cell(2, colTipo).Value = estado.BancoNombre ?? "";
+        ws.Cell(3, colFecha).Value = "Cuenta:";
+        ws.Cell(3, colTipo).Value = $"{estado.CuentaNombre} ({estado.NumeroCuenta})";
+        ws.Cell(4, colFecha).Value = "Moneda:";
+        ws.Cell(4, colTipo).Value = estado.MonedaCodigo ?? "";
+        ws.Cell(4, colDesc).Value = "Período:";
+        ws.Cell(4, colCargo).Value = $"{estado.FechaDesde:dd/MM/yyyy} al {estado.FechaHasta:dd/MM/yyyy}";
+        ws.Range(2, colFecha, 4, colFecha).Style.Font.Bold = true;
+        ws.Cell(4, colDesc).Style.Font.Bold = true;
+
+        var headerRow = 6;
+        ws.Cell(headerRow, colFecha).Value = "Fecha";
+        ws.Cell(headerRow, colTipo).Value = "Tipo";
+        ws.Cell(headerRow, colDoc).Value = "Documento";
+        ws.Cell(headerRow, colDesc).Value = "Descripción";
+        ws.Cell(headerRow, colCargo).Value = "Cargo";
+        ws.Cell(headerRow, colAbono).Value = "Abono";
+        ws.Cell(headerRow, colSaldo).Value = "Saldo";
+        var headerRange = ws.Range(headerRow, colFecha, headerRow, colSaldo);
+        headerRange.Style.Font.Bold = true;
+        headerRange.Style.Fill.BackgroundColor = XLColor.LightGray;
+        headerRange.Style.Border.BottomBorder = XLBorderStyleValues.Thin;
+
+        var row = headerRow + 1;
+        ws.Cell(row, colDesc).Value = "SALDO ANTERIOR";
+        ws.Cell(row, colDesc).Style.Font.Italic = true;
+        ws.Cell(row, colSaldo).Value = estado.SaldoAnterior;
+        ws.Cell(row, colSaldo).Style.NumberFormat.Format = fmtMoneda;
+        row++;
+
+        var saldoCorrido = estado.SaldoAnterior;
+        foreach (var m in estado.Movimientos)
+        {
+            saldoCorrido += m.Monto;
+            ws.Cell(row, colFecha).Value = m.FechaMovimiento.ToDateTime(TimeOnly.MinValue);
+            ws.Cell(row, colFecha).Style.NumberFormat.Format = fmtFecha;
+            ws.Cell(row, colTipo).Value = m.IdTipoTransaccion;
+            ws.Cell(row, colDoc).Value = m.Referencia ?? "";
+            ws.Cell(row, colDesc).Value = m.Descripcion;
+            if (m.Monto < 0m)
+            {
+                ws.Cell(row, colCargo).Value = -m.Monto;
+                ws.Cell(row, colCargo).Style.NumberFormat.Format = fmtMoneda;
+            }
+            else if (m.Monto > 0m)
+            {
+                ws.Cell(row, colAbono).Value = m.Monto;
+                ws.Cell(row, colAbono).Style.NumberFormat.Format = fmtMoneda;
+            }
+            ws.Cell(row, colSaldo).Value = saldoCorrido;
+            ws.Cell(row, colSaldo).Style.NumberFormat.Format = fmtMoneda;
+            row++;
+        }
+
+        var totalRow = row;
+        ws.Cell(totalRow, colDesc).Value = "TOTALES";
+        ws.Cell(totalRow, colCargo).Value = estado.TotalCargos;
+        ws.Cell(totalRow, colAbono).Value = estado.TotalAbonos;
+        var totalRange = ws.Range(totalRow, colFecha, totalRow, colSaldo);
+        totalRange.Style.Font.Bold = true;
+        totalRange.Style.Border.TopBorder = XLBorderStyleValues.Thin;
+        ws.Cell(totalRow, colCargo).Style.NumberFormat.Format = fmtMoneda;
+        ws.Cell(totalRow, colAbono).Style.NumberFormat.Format = fmtMoneda;
+
+        var finalRow = totalRow + 1;
+        ws.Cell(finalRow, colDesc).Value = "SALDO FINAL";
+        ws.Cell(finalRow, colSaldo).Value = estado.SaldoFinal;
+        ws.Cell(finalRow, colDesc).Style.Font.Bold = true;
+        ws.Cell(finalRow, colSaldo).Style.Font.Bold = true;
+        ws.Cell(finalRow, colSaldo).Style.NumberFormat.Format = fmtMoneda;
+
+        ws.Columns().AdjustToContents();
+        if (ws.Column(colDesc).Width > 50)
+        {
+            ws.Column(colDesc).Width = 50;
+        }
+
+        using var stream = new MemoryStream();
+        workbook.SaveAs(stream);
+        return stream.ToArray();
+    }
+
+    private static string SanitizarNombreArchivo(string valor)
+    {
+        var limpio = new string((valor ?? string.Empty)
+            .Select(c => char.IsLetterOrDigit(c) ? c : '-').ToArray());
+        return string.IsNullOrWhiteSpace(limpio) ? "cuenta" : limpio;
     }
 
     private ProblemDetails CrearProblemDetalle(string titulo, string detalle)

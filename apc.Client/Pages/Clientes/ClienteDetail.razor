@@ -28,6 +28,9 @@
             </div>
 
             <div class="header-actions">
+                <DxButton Text="Editar" Click="EditarCliente" IconCssClass="bi bi-pencil-square"
+                    RenderStyle="ButtonRenderStyle.Primary"
+                    CssClass="btn-modern" />
                 <DxButton Text="Volver" Click="BackToList" IconCssClass="bi bi-arrow-left"
                     RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
                     CssClass="btn-modern" />
@@ -520,6 +523,7 @@
     }
 
     void BackToList() => Navigation.NavigateTo("/clientes");
+    void EditarCliente() => Navigation.NavigateTo($"/clientes/{Id}/editar");
     void AbrirHistoricoConsumo() => mostrarHistoricoConsumoModal = true;
     void AbrirAbonoEspecial() => Navigation.NavigateTo($"/facturacion/captacion/abono-especial/{Id}");
     void AbrirServiciosTarifario() => Navigation.NavigateTo($"/tarifario/cliente-servicio-v3?clienteId={Id}");

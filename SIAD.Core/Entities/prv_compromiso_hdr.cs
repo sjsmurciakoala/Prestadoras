@@ -1,10 +1,13 @@
 ﻿using System;
 using System.Collections.Generic;
+using SIAD.Core.Tenancy;
 
 namespace SIAD.Core.Entities;
 
-public partial class prv_compromiso_hdr
+public partial class prv_compromiso_hdr : ICompanyScopedEntity
 {
+    public long company_id { get; set; }
+
     public int numero_orden { get; set; }
 
     public int? correlativo_proveedor { get; set; }
