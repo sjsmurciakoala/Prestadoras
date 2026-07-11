@@ -1,10 +1,15 @@
 ﻿using System;
 using System.Collections.Generic;
+using SIAD.Core.Tenancy;
 
 namespace SIAD.Core.Entities;
 
-public partial class prv_compromiso_dtl
+public partial class prv_compromiso_dtl : ICompanyScopedEntity
 {
+    public long compromiso_dtl_id { get; set; }
+
+    public long company_id { get; set; }
+
     public int numero_orden { get; set; }
 
     public string cod_presupuestario { get; set; } = null!;
