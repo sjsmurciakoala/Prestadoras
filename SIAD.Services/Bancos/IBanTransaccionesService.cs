@@ -23,6 +23,17 @@ public interface IBanTransaccionesService
         long companyId,
         CancellationToken ct = default);
 
+    /// <summary>
+    /// Arma el estado de cuenta de una cuenta bancaria para el período dado
+    /// (saldo anterior + movimientos + totales + saldo final). Devuelve null si la cuenta no existe.
+    /// </summary>
+    Task<EstadoCuentaDto?> GetEstadoCuentaAsync(
+        long companyId,
+        long bancoCuentaId,
+        DateOnly? fechaDesde = null,
+        DateOnly? fechaHasta = null,
+        CancellationToken ct = default);
+
     Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoAsync(
         long bancoCuentaId,
         string idTipoTransaccion,

@@ -18,5 +18,11 @@ public sealed class BanTransaccionDetalleDto
 
     public decimal TasaCambio { get; set; } = 1m;
 
+    /// <summary>
+    /// Id de la partida contable (con_partida_hdr.poliza_id) asociada a la transacción.
+    /// NULL cuando la transacción no tiene partida registrada (p.ej. movimientos migrados).
+    /// </summary>
+    public long? PolizaId { get; set; }
+
     public List<BanTransaccionContraLineaDto> ContraCuentas { get; set; } = new();
 }
