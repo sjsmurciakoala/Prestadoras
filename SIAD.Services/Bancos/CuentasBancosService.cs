@@ -32,7 +32,7 @@ public sealed class CuentasBancosService : ICuentasBancosService
         var currentCompanyId = EnsureCompanyId();
         if (companyId <= 0 || companyId != currentCompanyId)
         {
-            throw new InvalidOperationException("La empresa solicitada no es v�lida para el usuario actual.");
+            throw new InvalidOperationException("La empresa solicitada no es válida para el usuario actual.");
         }
 
         var planQuery = context.con_plan_cuentas
@@ -465,7 +465,7 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
 
         if (cuentaId <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es v�lida.");
+            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es válida.");
         }
 
         var companyId = EnsureCompanyId();
@@ -510,7 +510,7 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
     {
         if (cuentaId <= 0)
         {
-            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es v�lida.");
+            throw new ArgumentOutOfRangeException(nameof(cuentaId), "La cuenta bancaria no es válida.");
         }
 
         var companyId = EnsureCompanyId();
@@ -534,7 +534,7 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
 
         if (tieneTransitos)
         {
-            throw new InvalidOperationException("La cuenta tiene movimientos en tr�nsito y no puede eliminarse.");
+            throw new InvalidOperationException("La cuenta tiene movimientos en tránsito y no puede eliminarse.");
         }
 
         context.ban_cuenta.Remove(entity);
@@ -687,7 +687,7 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
 
         if (existe)
         {
-            throw new InvalidOperationException("Ya existe una cuenta con el mismo n�mero.");
+            throw new InvalidOperationException("Ya existe una cuenta con el mismo número.");
         }
     }
 

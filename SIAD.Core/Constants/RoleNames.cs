@@ -7,6 +7,7 @@ public static class RoleNames
     public const string Compras = "Compras";
     public const string Ventas = "Ventas";
     public const string Facturacion = "Facturacion";
+    public const string Cobranzas = "Cobranzas";
     public const string Bancos = "Bancos";
     public const string Configuracion = "Configuracion";
     public const string AdminContabilidad = "AdminContabilidad";

@@ -3,6 +3,7 @@
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services
 @using apc.Client.Services.Clientes
 @using apc.Client.Pages.Clientes.Components
 @using apc.Client.Pages.Clientes
@@ -10,6 +11,7 @@
 @inject ClientesClient ClientesClient
 @inject NavigationManager Navigation
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Clientes</PageTitle>
 
@@ -43,9 +45,11 @@
 
                     <DxFormLayoutItem Caption="Estado" ColSpanXs="12" ColSpanMd="3">
                         <Template>
-                            <div class="pt-md-4 pt-2">
+                            <div class="estado-filtro">
                                 <DxCheckBox Checked="@filtroSoloActivos" CheckedChanged="@((bool v) => OnEstadoChanged(v))"
-                                    LabelText="" CheckType="CheckType.Switch" />
+                                    CheckType="CheckType.Switch">
+                                    <span class="estado-filtro-label">@EstadoFiltroEtiqueta</span>
+                                </DxCheckBox>
                             </div>
                         </Template>
                     </DxFormLayoutItem>
@@ -72,10 +76,13 @@
     <!-- Grid -->
     <div class="modern-card">
         <div class="grid-wrapper">
-            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="Id" PageSize="50"
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="Id" PageSize="15"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                 PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
                 ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
-                ShowGroupPanel="false" CssClass="grid-solicitudes">
+                ShowGroupPanel="false" CssClass="grid-solicitudes"
+                LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
 
                 <ToolbarTemplate>
                     <div class="d-flex flex-wrap gap-2 align-items-center w-100">
@@ -267,6 +274,7 @@
 
     private string filtroBusqueda = "";
     private bool filtroSoloActivos = true;
+    private string EstadoFiltroEtiqueta => filtroSoloActivos ? "Clientes activos" : "Clientes inactivos";
 
     private int totalClientes = 0;
 
@@ -315,7 +323,15 @@
 
     private void RecargarGrid() => grid?.Reload();
     private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
-    
+
+    private const string GridLayoutStorageKey = "clientes-list-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
     private void NuevoCliente() => Navigation.NavigateTo("/clientes/nuevo");

@@ -321,7 +321,7 @@ public class CaptacionPagosController : ControllerBase
 
 
 
-    // ==================== POSTEO MISCEL�NEOS ====================
+    // ==================== POSTEO MISCELÁNEOS ====================
 
 
 

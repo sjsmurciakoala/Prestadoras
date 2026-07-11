@@ -1,6 +1,10 @@
 using Microsoft.AspNetCore.Authorization;
 
+using Microsoft.AspNetCore.Identity;
+
 using Microsoft.AspNetCore.Mvc;
+
+using apc.Data;
 
 using SIAD.Core.DTOs.Cobranza;
 
@@ -30,13 +34,19 @@ public class CobranzaController : ControllerBase
 
     private readonly ICobranzaService _service;
 
+    private readonly UserManager<ApplicationUser> _userManager;
 
 
-    public CobranzaController(ICobranzaService service)
+
+    public CobranzaController(
+        ICobranzaService service,
+        UserManager<ApplicationUser> userManager)
 
     {
 
         _service = service;
+
+        _userManager = userManager;
 
     }
 
@@ -229,11 +239,26 @@ public class CobranzaController : ControllerBase
     public async Task<IActionResult> BloquearDesbloquear(
         [FromBody] BloquearClienteRequest request, CancellationToken ct)
     {
+        if (string.IsNullOrWhiteSpace(request.Password))
+            return BadRequest(new { message = "La contraseña es obligatoria." });
+
         var username = User.Identity?.Name;
         if (string.IsNullOrWhiteSpace(username))
             return Unauthorized();
 
-        // TODO: agregar verificación de password cuando se confirme el namespace de ApplicationUser
+        var user = await _userManager.FindByNameAsync(username);
+        if (user is null)
+            return Unauthorized();
+
+        var tieneRolCobranzas = await _userManager.IsInRoleAsync(user, RoleNames.Cobranzas);
+        var esSuperAdmin = await _userManager.IsInRoleAsync(user, RoleNames.SuperAdministrador);
+        if (!tieneRolCobranzas && !esSuperAdmin)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "El usuario debe tener rol de Cobranzas para bloquear o desbloquear clientes." });
+
+        var passwordValida = await _userManager.CheckPasswordAsync(user, request.Password);
+        if (!passwordValida)
+            return BadRequest(new { message = "Contraseña incorrecta." });
+
         var usuario = username;
         await _service.BloquearDesbloquearAsync(
             request.ClienteClave, request.Bloquear, request.Motivo, usuario, ct);

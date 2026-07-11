@@ -194,8 +194,8 @@ public class CobranzaClient
 
     public async Task<bool> BloquearDesbloquearAsync(BloquearClienteRequest request, CancellationToken ct = default)
     {
-        var resp = await _http.PostAsJsonAsyncWithAuthCheck("api/cobranza/bloqueo", request);
-        resp.EnsureSuccessStatusCode();
+        var resp = await _http.PostAsJsonAsyncWithAuthCheck("api/cobranza/bloqueo", request, ct);
+        await resp.ReadFromJsonAsyncWithAuthCheck<object>(ct);
         return true;
     }
 
