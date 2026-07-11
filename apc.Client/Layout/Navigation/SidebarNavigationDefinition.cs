@@ -131,6 +131,103 @@ public static class SidebarNavigationDefinition
             ]
         },
 
+        // ===== ALMACÉN =====
+        new SidebarNavSection
+        {
+            Label = "Almacén",
+            Items =
+            [
+                new SidebarNavItem
+                {
+                    Id = "alm-articulos",
+                    Text = "Artículos",
+                    IconCssClass = "bi bi-box-seam",
+                    NavigateUrl = "/almacen/articulos",
+                    MatchPrefixes = ["/almacen/articulos"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-kardex",
+                    Text = "Kardex",
+                    IconCssClass = "bi bi-journal-arrow-down",
+                    NavigateUrl = "/almacen/kardex",
+                    MatchPrefixes = ["/almacen/kardex"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-alertas",
+                    Text = "Alertas de stock",
+                    IconCssClass = "bi bi-exclamation-triangle",
+                    NavigateUrl = "/almacen/alertas-stock",
+                    MatchPrefixes = ["/almacen/alertas-stock"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-compras",
+                    Text = "Compras",
+                    IconCssClass = "bi bi-cart-plus",
+                    NavigateUrl = "/almacen/compras",
+                    MatchPrefixes = ["/almacen/compras"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-requisiciones",
+                    Text = "Requisiciones",
+                    IconCssClass = "bi bi-clipboard-check",
+                    NavigateUrl = "/almacen/requisiciones",
+                    MatchPrefixes = ["/almacen/requisiciones"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-descargos",
+                    Text = "Descargos",
+                    IconCssClass = "bi bi-box-arrow-up",
+                    NavigateUrl = "/almacen/descargos",
+                    MatchPrefixes = ["/almacen/descargos"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-unidades",
+                    Text = "Unidades de medida",
+                    IconCssClass = "bi bi-rulers",
+                    NavigateUrl = "/almacen/unidades-medida",
+                    MatchPrefixes = ["/almacen/unidades-medida"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-tipos-articulo",
+                    Text = "Tipos de artículo",
+                    IconCssClass = "bi bi-tags",
+                    NavigateUrl = "/almacen/tipos-articulo",
+                    MatchPrefixes = ["/almacen/tipos-articulo"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-bodegas",
+                    Text = "Bodegas",
+                    IconCssClass = "bi bi-building",
+                    NavigateUrl = "/almacen/bodegas",
+                    MatchPrefixes = ["/almacen/bodegas"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-estanterias",
+                    Text = "Estanterías",
+                    IconCssClass = "bi bi-grid-3x3",
+                    NavigateUrl = "/almacen/estanterias",
+                    MatchPrefixes = ["/almacen/estanterias"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-estantes",
+                    Text = "Estantes",
+                    IconCssClass = "bi bi-list-ol",
+                    NavigateUrl = "/almacen/estantes",
+                    MatchPrefixes = ["/almacen/estantes"]
+                }
+            ]
+        },
+
         // ===== FACTURACIÓN =====
         new SidebarNavSection
         {

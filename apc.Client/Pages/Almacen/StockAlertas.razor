@@ -1,0 +1,345 @@
+@page "/almacen/alertas-stock"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject ArticulosClient ArticulosClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Alertas de stock</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Alertas de stock</h2>
+            <p class="page-subtitle">Artículos que requieren reposición, priorizados por urgencia y costo</p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-danger">
+                <div class="summary-label">Existencia negativa</div>
+                <div class="summary-value">@totalNegativa.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-danger">
+                <div class="summary-label">Sin stock</div>
+                <div class="summary-value">@totalSinStock.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-warning">
+                <div class="summary-label">Bajo mínimo</div>
+                <div class="summary-value">@totalBajoMinimo.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Costo estimado reposición</div>
+                <div class="summary-value">@totalReposicion.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@alertas" KeyFieldName="@nameof(AlertaStockDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar por código o descripción..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@severidades" Value="@severidadSeleccionada"
+                                    ValueChanged="@((SeveridadOpcion? s) => OnSeveridadChanged(s))"
+                                    TextFieldName="@nameof(SeveridadOpcion.Etiqueta)"
+                                    NullText="Todas las severidades"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 190px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@lineas" Value="@filtroLinea"
+                                    NullText="Todas las líneas"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((string? v) => OnLineaChanged(v))"
+                                    Style="min-width: 160px;" CssClass="me-1" />
+
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloConMinimo"
+                                        CheckedChanged="@((bool v) => OnSoloConMinimoChanged(v))"
+                                        CheckType="CheckType.Switch">Con mínimo definido</DxCheckBox>
+                        </div>
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@alertas.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn Caption="Severidad" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <span class="badge-sev @SevCss(item.Severidad)">@SevLabel(item.Severidad)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(AlertaStockDto.Codigo)" Caption="Código" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(AlertaStockDto.Descripcion)" Caption="Descripción" MinWidth="240" />
+
+                    <DxGridDataColumn FieldName="@nameof(AlertaStockDto.Existencia)" Caption="Existencia" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <span class="@(item.Existencia <= 0 ? "text-danger fw-bold" : "text-dark")">@item.Existencia.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(AlertaStockDto.ExistenciaMinima)" Caption="Mínimo" Width="100px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <span class="text-muted">@(item.ExistenciaMinima > 0 ? item.ExistenciaMinima.ToString("N2") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(AlertaStockDto.CantidadSugerida)" Caption="Sugerido" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <span class="@(item.CantidadSugerida > 0 ? "text-primary fw-bold" : "text-muted")">@(item.CantidadSugerida > 0 ? item.CantidadSugerida.ToString("N2") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(AlertaStockDto.UnidadMedida)" Caption="Unidad" Width="100px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.UnidadMedida) ? "—" : item.UnidadMedida)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(AlertaStockDto.ValorReposicion)" Caption="Costo reposición" Width="150px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <span class="text-dark fw-semibold">@(item.ValorReposicion > 0 ? item.ValorReposicion.ToString("N2") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="" Width="60px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is AlertaStockDto item)
+                            {
+                                <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
+                                        @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-journal-arrow-down"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay alertas de stock para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed class SeveridadOpcion
+    {
+        public string Codigo { get; init; } = string.Empty;
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    private const string GridLayoutStorageKey = "almacen-alertas-stock-grid-layout";
+
+    private DxGrid? grid;
+    private List<AlertaStockDto> alertas = new();
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private List<string> lineas = new();
+
+    private readonly List<SeveridadOpcion> severidades = new()
+    {
+        new SeveridadOpcion { Codigo = StockSeveridad.Negativa, Etiqueta = "Existencia negativa" },
+        new SeveridadOpcion { Codigo = StockSeveridad.SinStock, Etiqueta = "Sin stock" },
+        new SeveridadOpcion { Codigo = StockSeveridad.BajoMinimo, Etiqueta = "Bajo mínimo" }
+    };
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroLinea;
+    private SeveridadOpcion? severidadSeleccionada;
+    private bool soloConMinimo;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private int totalNegativa;
+    private int totalSinStock;
+    private int totalBajoMinimo;
+    private decimal totalReposicion;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarLineasAsync();
+        await CargarAsync();
+    }
+
+    private AlertaStockFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Linea = string.IsNullOrWhiteSpace(filtroLinea) ? null : filtroLinea,
+        Severidad = severidadSeleccionada?.Codigo,
+        SoloConMinimo = soloConMinimo ? true : null
+    };
+
+    private async Task CargarLineasAsync()
+    {
+        try
+        {
+            lineas = await ArticulosClient.GetLineasAsync();
+        }
+        catch
+        {
+            lineas = new List<string>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            alertas = await ArticulosClient.GetAlertasStockAsync(BuildFilter());
+            RecalcularResumen();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las alertas: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void RecalcularResumen()
+    {
+        totalNegativa = alertas.Count(a => a.Severidad == StockSeveridad.Negativa);
+        totalSinStock = alertas.Count(a => a.Severidad == StockSeveridad.SinStock);
+        totalBajoMinimo = alertas.Count(a => a.Severidad == StockSeveridad.BajoMinimo);
+        totalReposicion = alertas.Sum(a => a.ValorReposicion);
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnLineaChanged(string? valor)
+    {
+        filtroLinea = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnSeveridadChanged(SeveridadOpcion? valor)
+    {
+        severidadSeleccionada = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnSoloConMinimoChanged(bool valor)
+    {
+        soloConMinimo = valor;
+        await CargarAsync();
+    }
+
+    private void VerKardex(AlertaStockDto item)
+    {
+        Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(item.Codigo)}");
+    }
+
+    private static string SevCss(string severidad) => severidad switch
+    {
+        StockSeveridad.Negativa => "sev-negativa",
+        StockSeveridad.SinStock => "sev-sinstock",
+        StockSeveridad.BajoMinimo => "sev-bajominimo",
+        _ => "sev-otro"
+    };
+
+    private static string SevLabel(string severidad) => severidad switch
+    {
+        StockSeveridad.Negativa => "NEGATIVA",
+        StockSeveridad.SinStock => "SIN STOCK",
+        StockSeveridad.BajoMinimo => "BAJO MÍNIMO",
+        _ => severidad
+    };
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null)
+        {
+            return;
+        }
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"alertas_stock_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

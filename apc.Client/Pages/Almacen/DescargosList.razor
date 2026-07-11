@@ -1,0 +1,306 @@
+@page "/almacen/descargos"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject DescargosClient DescargosClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Descargos de almacén</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Descargos de almacén</h2>
+            <p class="page-subtitle">Salidas de materiales hacia departamentos</p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Descargos</div>
+                <div class="summary-value">@totalDescargos.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Monto total</div>
+                <div class="summary-value">@montoTotal.ToString("N2")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Departamentos</div>
+                <div class="summary-value">@departamentosEnResultado.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Artículos distintos</div>
+                <div class="summary-value">@articulosEnResultado.ToString("N0")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@descargos" KeyFieldName="@nameof(DescargoListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar artículo o comentario..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@departamentos" Value="@filtroDepartamento"
+                                    NullText="Todos los deptos."
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((string? v) => OnDepartamentoChanged(v))"
+                                    Style="min-width: 150px;" CssClass="me-1" />
+
+                        <DxDateEdit @bind-Date="fechaDesde" NullText="Desde" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+                        <DxDateEdit @bind-Date="fechaHasta" NullText="Hasta" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+
+                        <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalDescargos.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.Fecha)" Caption="Fecha" Width="105px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span>@(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yyyy") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.NumeroDocumento)" Caption="Doc." Width="85px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span class="text-muted">@(item.NumeroDocumento.HasValue ? item.NumeroDocumento.Value.ToString("0") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.NumeroRequisicion)" Caption="Req." Width="85px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span class="text-muted">@(item.NumeroRequisicion.HasValue ? item.NumeroRequisicion.Value.ToString("0") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.Departamento)" Caption="Depto." Width="80px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Departamento) ? "—" : item.Departamento)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.CodigoArticulo)" Caption="Artículo" Width="100px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@(string.IsNullOrWhiteSpace(item.CodigoArticulo) ? "—" : item.CodigoArticulo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.Comentario)" Caption="Comentario / destino" MinWidth="240">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span title="@item.Comentario">@(string.IsNullOrWhiteSpace(item.Comentario) ? "—" : item.Comentario)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.Cantidad)" Caption="Cant." Width="85px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span class="text-danger fw-semibold">@item.Cantidad.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DescargoListItemDto.Total)" Caption="Total" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Total.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="" Width="55px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DescargoListItemDto item && !string.IsNullOrWhiteSpace(item.CodigoArticulo))
+                            {
+                                <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
+                                        @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-journal-arrow-down"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay descargos para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private const string GridLayoutStorageKey = "almacen-descargos-grid-layout";
+
+    private DxGrid? grid;
+    private List<DescargoListItemDto> descargos = new();
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private List<string> departamentos = new();
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroDepartamento;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private int totalDescargos;
+    private decimal montoTotal;
+    private int departamentosEnResultado;
+    private int articulosEnResultado;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDepartamentosAsync();
+        await CargarAsync();
+    }
+
+    private DescargoFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Departamento = string.IsNullOrWhiteSpace(filtroDepartamento) ? null : filtroDepartamento,
+        FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+        FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null
+    };
+
+    private async Task CargarDepartamentosAsync()
+    {
+        try
+        {
+            departamentos = await DescargosClient.GetDepartamentosAsync();
+        }
+        catch
+        {
+            departamentos = new List<string>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            descargos = await DescargosClient.GetAsync(BuildFilter());
+            RecalcularResumen();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los descargos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void RecalcularResumen()
+    {
+        totalDescargos = descargos.Count;
+        montoTotal = descargos.Sum(d => d.Total);
+        departamentosEnResultado = descargos.Where(d => !string.IsNullOrWhiteSpace(d.Departamento))
+            .Select(d => d.Departamento).Distinct().Count();
+        articulosEnResultado = descargos.Where(d => !string.IsNullOrWhiteSpace(d.CodigoArticulo))
+            .Select(d => d.CodigoArticulo).Distinct().Count();
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnDepartamentoChanged(string? valor)
+    {
+        filtroDepartamento = valor;
+        await CargarAsync();
+    }
+
+    private void VerKardex(DescargoListItemDto item)
+    {
+        Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(item.CodigoArticulo!)}");
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null)
+        {
+            return;
+        }
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"descargos_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

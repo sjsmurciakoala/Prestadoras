@@ -1,0 +1,432 @@
+@page "/almacen/unidades-medida"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject UnidadesMedidaClient UnidadesClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Unidades de medida</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="UnidadesToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Unidades de medida</h2>
+            <p class="page-subtitle">Catálogo de unidades de almacén y sus conversiones</p>
+        </div>
+
+        <DxButton Text="Nueva unidad" IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@unidades" KeyFieldName="@nameof(UnidadMedidaListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar código, nombre..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 240px;" />
+
+                        <DxComboBox Data="@categorias" Value="@filtroCategoria"
+                                    NullText="Todas las categorías"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((string? v) => OnCategoriaChanged(v))"
+                                    Style="min-width: 180px;" CssClass="me-1" />
+
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivas" CheckedChanged="@((bool v) => OnSoloActivasChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activas</DxCheckBox>
+                        </div>
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@unidades.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(UnidadMedidaListItemDto.Codigo)" Caption="Código" Width="100px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UnidadMedidaListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(UnidadMedidaListItemDto.Nombre)" Caption="Nombre" MinWidth="160" />
+
+                    <DxGridDataColumn FieldName="@nameof(UnidadMedidaListItemDto.Abreviatura)" Caption="Abrev." Width="90px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UnidadMedidaListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Abreviatura) ? "—" : item.Abreviatura)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(UnidadMedidaListItemDto.Categoria)" Caption="Categoría" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UnidadMedidaListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Categoria) ? "—" : item.Categoria)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Conversión" MinWidth="180">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UnidadMedidaListItemDto item)
+                            {
+                                @if (item.EsBase)
+                                {
+                                    <span class="badge-base">BASE</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted">1 @item.Codigo = @item.FactorConversion.ToString("0.######") @item.UnidadBaseCodigo</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Decimales" Width="100px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UnidadMedidaListItemDto item)
+                            {
+                                <i class="bi @(item.PermiteDecimales ? "bi-check-circle-fill text-success" : "bi-dash-circle text-muted")"></i>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UnidadMedidaListItemDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVA" : "INACTIVA")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is UnidadMedidaListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay unidades para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(760px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4">
+                <DxLoadingPanel Visible="true" Text="Cargando unidad..." />
+                <div style="height:80px"></div>
+            </div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3"><div class="alert alert-danger" role="alert">@formError</div></div>
+        }
+        else
+        {
+            <UnidadMedidaForm Model="formModel" Bases="bases" Categorias="categorias"
+                              OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar unidad?</h5>
+            <p class="text-muted">La unidad quedará inactiva y no aparecerá en los selectores, pero no se elimina.</p>
+            @if (unidadParaDesactivar is not null)
+            {
+                <div class="fw-semibold">@unidadParaDesactivar.Codigo - @unidadParaDesactivar.Nombre</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarDesactivar"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private const string GridLayoutStorageKey = "almacen-unidades-medida-grid-layout";
+
+    private DxGrid? grid;
+    private List<UnidadMedidaListItemDto> unidades = new();
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private List<UnidadMedidaLookupDto> bases = new();
+    private List<string> categorias = new();
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroCategoria;
+    private bool soloActivas = true;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible;
+    private bool formLoading;
+    private bool isSaving;
+    private string? formError;
+    private UnidadMedidaEditDto formModel = new();
+
+    private bool confirmVisible;
+    private UnidadMedidaListItemDto? unidadParaDesactivar;
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar unidad" : "Nueva unidad";
+    private string PopupSubtitle => formModel.Id.HasValue ? "Actualice los datos de la unidad" : "Registre una unidad de medida";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-rulers";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCategoriasAsync();
+        await CargarAsync();
+    }
+
+    private UnidadMedidaFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Categoria = string.IsNullOrWhiteSpace(filtroCategoria) ? null : filtroCategoria,
+        Activo = soloActivas ? true : null
+    };
+
+    private async Task CargarCategoriasAsync()
+    {
+        try { categorias = await UnidadesClient.GetCategoriasAsync(); }
+        catch { categorias = new List<string>(); }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            unidades = await UnidadesClient.GetAsync(BuildFilter());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las unidades: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string valor) { filtroBusqueda = valor; await CargarAsync(); }
+    private async Task OnCategoriaChanged(string? valor) { filtroCategoria = valor; await CargarAsync(); }
+    private async Task OnSoloActivasChanged(bool valor) { soloActivas = valor; await CargarAsync(); }
+
+    private async Task AbrirNuevo()
+    {
+        formError = null;
+        formModel = new UnidadMedidaEditDto();
+        await CargarBasesAsync();
+        formVisible = true;
+    }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null;
+        formLoading = true;
+        formVisible = true;
+        await CargarBasesAsync();
+
+        try
+        {
+            var detalle = await UnidadesClient.GetByIdAsync(id);
+            if (detalle is null)
+            {
+                formError = "No se encontró la unidad.";
+                formModel = new UnidadMedidaEditDto();
+                return;
+            }
+            formModel = detalle;
+        }
+        catch (Exception ex)
+        {
+            formError = $"Error al cargar la unidad: {ex.Message}";
+        }
+        finally
+        {
+            formLoading = false;
+        }
+    }
+
+    private async Task CargarBasesAsync()
+    {
+        try { bases = await UnidadesClient.GetLookupAsync(); }
+        catch { bases = new List<UnidadMedidaLookupDto>(); }
+    }
+
+    private void CerrarForm()
+    {
+        if (isSaving) return;
+        formVisible = false;
+        formError = null;
+        formModel = new UnidadMedidaEditDto();
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (formModel.Id.HasValue)
+            {
+                await UnidadesClient.UpdateAsync(formModel.Id.Value, formModel);
+                MostrarToast("Éxito", "Unidad actualizada correctamente.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await UnidadesClient.CreateAsync(formModel);
+                MostrarToast("Éxito", "Unidad registrada correctamente.", ToastRenderStyle.Success);
+            }
+
+            formVisible = false;
+            formModel = new UnidadMedidaEditDto();
+            await CargarCategoriasAsync();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(UnidadMedidaListItemDto unidad)
+    {
+        unidadParaDesactivar = unidad;
+        confirmVisible = true;
+    }
+
+    private void CancelarDesactivar()
+    {
+        confirmVisible = false;
+        unidadParaDesactivar = null;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (unidadParaDesactivar is null) { confirmVisible = false; return; }
+
+        try
+        {
+            var ok = await UnidadesClient.DeactivateAsync(unidadParaDesactivar.Id);
+            if (!ok)
+            {
+                MostrarToast("Error", "No se pudo desactivar la unidad.", ToastRenderStyle.Danger);
+            }
+            else
+            {
+                MostrarToast("Éxito", "Unidad desactivada correctamente.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            unidadParaDesactivar = null;
+        }
+    }
+
+    private void MostrarToast(string title, string text, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "UnidadesToast"
+        });
+    }
+}

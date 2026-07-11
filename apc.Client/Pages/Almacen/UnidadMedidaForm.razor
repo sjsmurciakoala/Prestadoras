@@ -1,0 +1,144 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
+    <DataAnnotationsValidator />
+
+    @if (EditFormContext.GetValidationMessages().Any())
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atención</h6>
+            <DxValidationSummary />
+        </div>
+    }
+
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
+            <DxTextBox @bind-Text="Model.Codigo" NullText="Ej. UND, MTR..." MaxLength="10" />
+            <ValidationMessage For="() => Model.Codigo" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Nombre *" ColSpanMd="5">
+            <DxTextBox @bind-Text="Model.Nombre" NullText="Ej. Unidad, Metro..." MaxLength="60" />
+            <ValidationMessage For="() => Model.Nombre" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Abreviatura" ColSpanMd="3">
+            <DxTextBox @bind-Text="Model.Abreviatura" NullText="Ej. und, m" MaxLength="10" />
+            <ValidationMessage For="() => Model.Abreviatura" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Categoría" ColSpanMd="6">
+            <DxComboBox Data="@Categorias" @bind-Value="Model.Categoria"
+                        AllowUserInput="true"
+                        ValidationEnabled="false"
+                        NullText="Cantidad, Longitud, Peso..."
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            <ValidationMessage For="() => Model.Categoria" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Admite decimales" ColSpanMd="3">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.PermiteDecimales" CheckType="CheckType.Switch" LabelText="Sí" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Activa" ColSpanMd="3">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" LabelText="Activa" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Unidad base (conversión)" ColSpanMd="6">
+            <DxComboBox Data="@BasesDisponibles" Value="@Model.UnidadBaseId"
+                        ValueChanged="@((int? v) => OnBaseChanged(v))"
+                        ValueExpression="@(() => Model.UnidadBaseId)"
+                        ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
+                        TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
+                        FilteringMode="DataGridFilteringMode.Contains"
+                        ValidationEnabled="false"
+                        NullText="(Es unidad base)"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            <ValidationMessage For="() => Model.UnidadBaseId" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Factor a la base" ColSpanMd="6">
+            <DxSpinEdit @bind-Value="Model.FactorConversion"
+                        DisplayFormat="N6"
+                        MinValue="0"
+                        Enabled="@(Model.UnidadBaseId.HasValue)" />
+            <ValidationMessage For="() => Model.FactorConversion" />
+            <div class="form-hint text-muted small mt-1">
+                @if (Model.UnidadBaseId.HasValue)
+                {
+                    <span><i class="bi bi-info-circle me-1"></i>Cuántas unidades base equivale 1 de esta unidad (ej. 1 docena = 12).</span>
+                }
+                else
+                {
+                    <span><i class="bi bi-info-circle me-1"></i>Sin unidad base, esta es la base de su categoría (factor 1).</span>
+                }
+            </div>
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <ValidationSummary class="text-danger mb-3" />
+
+    <div class="d-flex justify-content-end gap-2">
+        <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar" SubmitFormOnClick="true" Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!IsBusy)" Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired]
+    public UnidadMedidaEditDto Model { get; set; } = default!;
+
+    [Parameter]
+    public IReadOnlyList<UnidadMedidaLookupDto> Bases { get; set; } = Array.Empty<UnidadMedidaLookupDto>();
+
+    [Parameter]
+    public IReadOnlyList<string> Categorias { get; set; } = Array.Empty<string>();
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    // No permitir que una unidad se seleccione a sí misma como base.
+    private IReadOnlyList<UnidadMedidaLookupDto> BasesDisponibles =>
+        Model.Id.HasValue ? Bases.Where(b => b.Id != Model.Id.Value).ToList() : Bases;
+
+    private void OnBaseChanged(int? value)
+    {
+        Model.UnidadBaseId = value;
+        if (!value.HasValue)
+        {
+            Model.FactorConversion = 1; // es base
+        }
+    }
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}
