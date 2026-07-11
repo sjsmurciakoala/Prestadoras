@@ -1200,11 +1200,11 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
             throw new ArgumentException("El rango de periodo debe ser mayor a cero.", nameof(dto.RangoPeriodo));
         }
 
-        var fechaActualServidor = DateOnly.FromDateTime(DateTime.Today);
-        if (dto.FechaInicia < fechaActualServidor)
+        var minFechaInicia = new DateOnly(DateTime.Today.Year, 1, 1);
+        if (dto.FechaInicia < minFechaInicia)
         {
             throw new ArgumentException(
-                $"La fecha inicia debe ser igual o mayor a la fecha actual del servidor ({fechaActualServidor:yyyy-MM-dd}).",
+                $"La fecha inicia no puede ser anterior al inicio del anio en curso ({minFechaInicia:yyyy-MM-dd}).",
                 nameof(dto.FechaInicia));
         }
 

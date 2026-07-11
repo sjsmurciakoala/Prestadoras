@@ -113,10 +113,17 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
-                        <DxGridDataColumn Caption="Acciones" Width="160px" TextAlignment="GridTextAlignment.Center">
+                        <DxGridDataColumn Caption="Acciones" Width="190px" TextAlignment="GridTextAlignment.Center">
                             <CellDisplayTemplate>
                                 @{ var item = (SolicitudListDto)context.DataItem; }
                                 <div class="d-flex justify-content-center gap-2">
+                                    @if (item.Estado && !item.Asignada)
+                                    {
+                                        <button class="btn-icon btn-view" title="Crear cliente"
+                                                @onclick="() => CrearClienteDesdeSolicitud(item.Id)">
+                                            <i class="bi bi-person-plus"></i>
+                                        </button>
+                                    }
                                     <button class="btn-icon btn-view" title="Ver" @onclick="() => AbrirDetalleAsync(item.Id)"><i class="bi bi-eye"></i></button>
                                     <button class="btn-icon btn-edit" title="Editar" @onclick="() => AbrirEdicionAsync(item.Id)"><i class="bi bi-pencil-square"></i></button>
                                     <button class="btn-icon btn-delete" title="Eliminar" @onclick="() => ConfirmarEliminacion(item.Id)"><i class="bi bi-trash"></i></button>
@@ -416,6 +423,9 @@
         idParaEliminar = id;
         deleteConfirmVisible = true;
     }
+
+    private void CrearClienteDesdeSolicitud(int solicitudId)
+        => NavigationManager.NavigateTo($"/clientes/nuevo?solicitudId={solicitudId}");
 
     private async Task ProcederEliminarAsync()
     {
