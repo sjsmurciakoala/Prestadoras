@@ -85,6 +85,20 @@
     padding: 8px 10px;
 }
 
+/* ===== Filtro de Estado (switch + etiqueta al mismo nivel que Búsqueda Rápida) ===== */
+.estado-filtro {
+    display: flex;
+    align-items: center;
+    /* mismo alto aproximado que el DxTextBox de Búsqueda Rápida para quedar al mismo nivel */
+    min-height: 32px;
+}
+
+.estado-filtro-label {
+    font-weight: 600;
+    color: #2c3e50;
+    white-space: nowrap;
+}
+
 /* ===== Chips / Badges iguales a Solicitudes ===== */
 
 

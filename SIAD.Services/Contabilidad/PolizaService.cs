@@ -510,10 +510,10 @@ public sealed class PolizaService : IPolizaService
 
         var diariosPorDefecto = diarios.Where(x => x.is_default_manual).ToList();
         if (diariosPorDefecto.Count == 0)
-            throw new InvalidOperationException("No existe un diario manual por defecto activo. Configure uno en el catÃ¡logo de diarios.");
+            throw new InvalidOperationException("No existe un diario manual por defecto activo. Configure uno en el catálogo de diarios.");
 
         if (diariosPorDefecto.Count > 1)
-            throw new InvalidOperationException("Existe mÃ¡s de un diario manual por defecto activo. Revise el catÃ¡logo de diarios.");
+            throw new InvalidOperationException("Existe más de un diario manual por defecto activo. Revise el catálogo de diarios.");
 
         return diariosPorDefecto[0];
     }

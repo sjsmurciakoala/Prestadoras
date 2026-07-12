@@ -1,0 +1,413 @@
+@page "/almacen/kardex"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject ArticulosClient ArticulosClient
+@inject KardexClient KardexClient
+@inject BodegasClient BodegasClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Kardex de almacén</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Kardex por artículo</h2>
+            <p class="page-subtitle">Histórico de entradas, salidas y saldo corrido</p>
+        </div>
+    </div>
+
+    <div class="modern-card mb-4">
+        <div class="d-flex flex-wrap gap-2 align-items-end">
+            <div style="min-width: 320px; flex: 1 1 320px;">
+                <label class="filter-label">Artículo</label>
+                <DxComboBox Data="@articulos"
+                            Value="@articuloSeleccionado"
+                            ValueChanged="@((ArticuloListItemDto? a) => OnArticuloChanged(a))"
+                            TextFieldName="@nameof(ArticuloListItemDto.Descripcion)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione o busque un artículo..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100">
+                    <ItemTemplate Context="art">
+                        <div class="d-flex flex-column">
+                            <span class="fw-semibold">@art.Codigo — @art.Descripcion</span>
+                            <span class="text-muted small">Existencia: @art.Existencia.ToString("N2") @art.UnidadMedida</span>
+                        </div>
+                    </ItemTemplate>
+                </DxComboBox>
+            </div>
+
+            <div style="min-width: 150px;">
+                <label class="filter-label">Desde</label>
+                <DxDateEdit @bind-Date="fechaDesde" NullText="Todas" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+            </div>
+
+            <div style="min-width: 150px;">
+                <label class="filter-label">Hasta</label>
+                <DxDateEdit @bind-Date="fechaHasta" NullText="Todas" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+            </div>
+
+            <div style="min-width: 160px;">
+                <label class="filter-label">Tipo de movimiento</label>
+                <DxComboBox Data="@tipos" Value="@tipoSeleccionado"
+                            ValueChanged="@((TipoMovimientoDto? t) => OnTipoChanged(t))"
+                            TextFieldName="@nameof(TipoMovimientoDto.Descripcion)"
+                            NullText="Todos"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </div>
+
+            <div style="min-width: 180px;">
+                <label class="filter-label">Bodega</label>
+                <DxComboBox Data="@bodegas" Value="@bodegaSeleccionada"
+                            ValueChanged="@((BodegaLookupDto? b) => OnBodegaChanged(b))"
+                            TextFieldName="@nameof(BodegaLookupDto.Display)"
+                            NullText="Todas"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </div>
+
+            <div>
+                <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                          RenderStyle="ButtonRenderStyle.Primary" Click="ConsultarAsync"
+                          Enabled="@(articuloSeleccionado is not null)" />
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    @if (kardex is not null)
+    {
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Existencia registrada</div>
+                    <div class="summary-value">@kardex.ExistenciaRegistrada.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card @(SaldoDescuadrado ? "summary-warning" : "")">
+                    <div class="summary-label">Saldo calculado (kardex)</div>
+                    <div class="summary-value">@kardex.SaldoCalculado.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Ingresos (período)</div>
+                    <div class="summary-value">@kardex.TotalIngresos.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Salidas (período)</div>
+                    <div class="summary-value">@kardex.TotalSalidas.ToString("N2")</div>
+                </div>
+            </div>
+        </div>
+
+        @if (SaldoDescuadrado)
+        {
+            <div class="alert alert-warning mb-3" role="alert">
+                El saldo calculado del kardex (@kardex.SaldoCalculado.ToString("N2")) no coincide con la
+                existencia registrada en el catálogo (@kardex.ExistenciaRegistrada.ToString("N2")).
+            </div>
+        }
+
+        <div class="modern-card position-relative">
+            <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+            <div class="grid-wrapper">
+                <DxGrid @ref="grid" Data="@kardex.Movimientos" KeyFieldName="@nameof(KardexMovimientoDto.Id)" PageSize="15"
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                        PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes"
+                        LayoutAutoSaving="OnLayoutAutoSaving"
+                        LayoutAutoLoading="OnLayoutAutoLoading">
+
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <span class="fw-bold">@kardex.Codigo — @kardex.Descripcion</span>
+                            <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="ms-auto" />
+                            <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" />
+                        </div>
+                    </ToolbarTemplate>
+
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Fecha)" Caption="Fecha" Width="110px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span>@(m.Fecha.HasValue ? m.Fecha.Value.ToString("dd/MM/yyyy") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.NumeroDocumento)" Caption="Doc." Width="90px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span class="text-muted">@(m.NumeroDocumento.HasValue ? m.NumeroDocumento.Value.ToString("0") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.TipoDescripcion)" Caption="Tipo" Width="110px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span class="badge-mov @TipoCssClass(m.TipoTransaccion)">@m.TipoDescripcion</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.BodegaCodigo)" Caption="Bodega" Width="100px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span class="text-muted" title="@m.BodegaNombre">@(string.IsNullOrWhiteSpace(m.BodegaCodigo) ? "—" : m.BodegaCodigo)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Descripcion)" Caption="Descripción / documento" MinWidth="220">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span title="@m.Descripcion">@(string.IsNullOrWhiteSpace(m.Descripcion) ? "—" : m.Descripcion)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Ingresos)" Caption="Entradas" Width="110px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span class="@(m.Ingresos > 0 ? "text-success fw-semibold" : "text-muted")">@(m.Ingresos > 0 ? m.Ingresos.ToString("N2") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Salidas)" Caption="Salidas" Width="110px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span class="@(m.Salidas > 0 ? "text-danger fw-semibold" : "text-muted")">@(m.Salidas > 0 ? m.Salidas.ToString("N2") : "—")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.ValorUnitario)" Caption="Valor unit." Width="110px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span class="text-muted">@m.ValorUnitario.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Saldo)" Caption="Saldo" Width="120px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">Este artículo no tiene movimientos en el período seleccionado.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        </div>
+    }
+    else if (!isLoading)
+    {
+        <div class="modern-card text-center text-muted p-5">
+            <i class="bi bi-journal-arrow-down" style="font-size: 2.5rem; opacity: 0.4;"></i>
+            <p class="mt-3 mb-0">Seleccione un artículo para ver su kardex.</p>
+        </div>
+    }
+</div>
+
+@code {
+    private const string GridLayoutStorageKey = "almacen-kardex-grid-layout";
+
+    private DxGrid? grid;
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private List<ArticuloListItemDto> articulos = new();
+    private List<TipoMovimientoDto> tipos = new();
+    private List<BodegaLookupDto> bodegas = new();
+
+    private ArticuloListItemDto? articuloSeleccionado;
+    private TipoMovimientoDto? tipoSeleccionado;
+    private BodegaLookupDto? bodegaSeleccionada;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private KardexArticuloDto? kardex;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool SaldoDescuadrado => kardex is not null && kardex.SaldoCalculado != kardex.ExistenciaRegistrada;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCatalogosAsync();
+
+        // Preselección por query string (?articulo=CODIGO), p. ej. desde el catálogo.
+        var codigoBuscado = LeerCodigoDeQuery();
+        if (!string.IsNullOrWhiteSpace(codigoBuscado))
+        {
+            articuloSeleccionado = articulos.FirstOrDefault(a =>
+                string.Equals(a.Codigo, codigoBuscado, StringComparison.OrdinalIgnoreCase));
+
+            if (articuloSeleccionado is not null)
+            {
+                await ConsultarAsync();
+            }
+        }
+    }
+
+    private string? LeerCodigoDeQuery()
+    {
+        var query = new Uri(Navigation.Uri).Query;
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            return null;
+        }
+
+        foreach (var par in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var partes = par.Split('=', 2);
+            if (partes.Length == 2 && partes[0].Equals("articulo", StringComparison.OrdinalIgnoreCase))
+            {
+                return Uri.UnescapeDataString(partes[1]);
+            }
+        }
+
+        return null;
+    }
+
+    private async Task CargarCatalogosAsync()
+    {
+        try
+        {
+            articulos = await ArticulosClient.GetAsync();
+            tipos = await KardexClient.GetTiposMovimientoAsync();
+            bodegas = await BodegasClient.GetLookupAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los catálogos: {ex.Message}";
+        }
+    }
+
+    private async Task OnArticuloChanged(ArticuloListItemDto? articulo)
+    {
+        articuloSeleccionado = articulo;
+        if (articulo is null)
+        {
+            kardex = null;
+            return;
+        }
+
+        await ConsultarAsync();
+    }
+
+    private async Task OnTipoChanged(TipoMovimientoDto? tipo)
+    {
+        tipoSeleccionado = tipo;
+        if (articuloSeleccionado is not null)
+        {
+            await ConsultarAsync();
+        }
+    }
+
+    private async Task OnBodegaChanged(BodegaLookupDto? bodega)
+    {
+        bodegaSeleccionada = bodega;
+        if (articuloSeleccionado is not null)
+        {
+            await ConsultarAsync();
+        }
+    }
+
+    private async Task ConsultarAsync()
+    {
+        if (articuloSeleccionado is null)
+        {
+            return;
+        }
+
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            var filtro = new KardexFilterDto
+            {
+                CodigoArticulo = articuloSeleccionado.Codigo,
+                FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+                FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null,
+                TipoTransaccion = tipoSeleccionado?.Codigo,
+                BodegaId = bodegaSeleccionada?.Id
+            };
+
+            kardex = await KardexClient.GetByArticuloAsync(filtro);
+            if (kardex is null)
+            {
+                errorMessage = "No se encontró el kardex del artículo seleccionado.";
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar el kardex: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private static string TipoCssClass(string? tipo) => tipo switch
+    {
+        "102" => "mov-entrada",
+        "103" => "mov-ajuste",
+        "202" => "mov-salida",
+        _ => "mov-otro"
+    };
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null || kardex is null)
+        {
+            return;
+        }
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"kardex_{kardex.Codigo}_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

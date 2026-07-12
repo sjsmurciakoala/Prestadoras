@@ -85,5 +85,8 @@ public sealed class ClienteCreateDto
     public string? Observaciones { get; set; }
 
     public bool Activo { get; set; } = true;
+
+    /// <summary>Solicitud de servicio de origen; al crear el cliente se marca como asignada (misma transacción).</summary>
+    public int? SolicitudId { get; set; }
 }
 

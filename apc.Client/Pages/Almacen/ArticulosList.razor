@@ -1,0 +1,471 @@
+@page "/almacen/articulos"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject IJSRuntime JS
+@inject ArticulosClient ArticulosClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - Artículos de almacén</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ArticulosToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Catálogo de artículos</h2>
+            <p class="page-subtitle">Mantenimiento de artículos de almacén y existencias</p>
+        </div>
+
+        <DxButton Text="Nuevo artículo"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="AbrirNuevo" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Artículos</div>
+                <div class="summary-value">@totalArticulos.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Con existencia</div>
+                <div class="summary-value">@conStock.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-warning">
+                <div class="summary-label">Bajo mínimo</div>
+                <div class="summary-value">@bajoMinimo.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Valor inventario</div>
+                <div class="summary-value">@valorInventario.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@articulos" KeyFieldName="@nameof(ArticuloListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar por código o descripción..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@lineas" Value="@filtroLinea"
+                                    NullText="Todas las líneas"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((string? v) => OnLineaChanged(v))"
+                                    Style="min-width: 170px;" CssClass="me-1" />
+
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@filtroSoloBajoMinimo"
+                                        CheckedChanged="@((bool v) => OnBajoMinimoChanged(v))"
+                                        CheckType="CheckType.Switch">Sólo bajo mínimo</DxCheckBox>
+                        </div>
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@totalArticulos.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Codigo)" Caption="Código" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Descripcion)" Caption="Descripción" MinWidth="260">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <div class="articulo-cell">
+                                    <div class="articulo-title" title="@item.Descripcion">@item.Descripcion</div>
+                                    <div class="articulo-sub">
+                                        <i class="bi bi-rulers"></i>
+                                        <span>@(string.IsNullOrWhiteSpace(item.Diametro) ? "—" : item.Diametro)</span>
+                                    </div>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UnidadMedidaDisplay)" Caption="Unidad" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted">@item.UnidadMedidaDisplay</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.LineaDisplay)" Caption="Línea" MinWidth="150">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted" title="@item.LineaDisplay">@item.LineaDisplay</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.GrupoDisplay)" Caption="Grupo" MinWidth="150">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted" title="@item.GrupoDisplay">@item.GrupoDisplay</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.TipoArticuloNombre)" Caption="Tipo" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                @if (string.IsNullOrWhiteSpace(item.TipoArticuloNombre))
+                                {
+                                    <span class="text-muted">—</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-tipo-art">@item.TipoArticuloNombre</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Existencia)" Caption="Existencia" Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="@(item.BajoMinimo ? "text-danger fw-bold" : "text-dark")">@item.Existencia.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ExistenciaMinima)" Caption="Mínimo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted">@item.ExistenciaMinima.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorUnitario)" Caption="Valor unit." Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted">@item.ValorUnitario.ToString("N4")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorTotal)" Caption="Valor total" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.ValorTotal.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                @if (item.Existencia <= 0)
+                                {
+                                    <span class="badge-status inactive">SIN STOCK</span>
+                                }
+                                else if (item.BajoMinimo)
+                                {
+                                    <span class="badge-status warning">BAJO MÍNIMO</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status active">OK</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
+                                            @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-journal-arrow-down"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => EditarArticulo(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay artículos para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-danger"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Eliminar artículo?</h5>
+            <p class="text-muted">Esta acción no se puede deshacer. Sólo se permite si el artículo no tiene movimientos de kardex.</p>
+            @if (articuloParaEliminar is not null)
+            {
+                <div class="fw-semibold">@articuloParaEliminar.Codigo - @articuloParaEliminar.Descripcion</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="CancelarEliminar"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, eliminar"
+                          Click="EliminarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-trash" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<ArticuloListItemDto> articulos = new();
+    private List<string> lineas = new();
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroLinea;
+    private bool filtroSoloBajoMinimo;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private int totalArticulos;
+    private int conStock;
+    private int bajoMinimo;
+    private decimal valorInventario;
+
+    private bool confirmVisible;
+    private ArticuloListItemDto? articuloParaEliminar;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarLineasAsync();
+        await CargarAsync();
+    }
+
+    private ArticuloFilterDto BuildFilter()
+    {
+        return new ArticuloFilterDto
+        {
+            Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+            Linea = string.IsNullOrWhiteSpace(filtroLinea) ? null : filtroLinea,
+            SoloBajoMinimo = filtroSoloBajoMinimo ? true : null
+        };
+    }
+
+    private async Task CargarLineasAsync()
+    {
+        try
+        {
+            lineas = await ArticulosClient.GetLineasAsync();
+        }
+        catch
+        {
+            lineas = new List<string>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            articulos = await ArticulosClient.GetAsync(BuildFilter());
+            RecalcularResumen();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los artículos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void RecalcularResumen()
+    {
+        totalArticulos = articulos.Count;
+        conStock = articulos.Count(a => a.Existencia > 0);
+        bajoMinimo = articulos.Count(a => a.BajoMinimo);
+        valorInventario = articulos.Sum(a => a.ValorTotal);
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnLineaChanged(string? valor)
+    {
+        filtroLinea = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnBajoMinimoChanged(bool valor)
+    {
+        filtroSoloBajoMinimo = valor;
+        await CargarAsync();
+    }
+
+    private async Task RecargarGrid() => await CargarAsync();
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private const string GridLayoutStorageKey = "almacen-articulos-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void AbrirNuevo() => Navigation.NavigateTo("/almacen/articulos/nuevo");
+
+    private void EditarArticulo(int id) => Navigation.NavigateTo($"/almacen/articulos/{id}/editar");
+
+    private void VerKardex(ArticuloListItemDto articulo)
+    {
+        Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(articulo.Codigo)}");
+    }
+
+    private void ConfirmarEliminar(ArticuloListItemDto articulo)
+    {
+        articuloParaEliminar = articulo;
+        confirmVisible = true;
+    }
+
+    private void CancelarEliminar()
+    {
+        confirmVisible = false;
+        articuloParaEliminar = null;
+    }
+
+    private async Task EliminarConfirmadoAsync()
+    {
+        if (articuloParaEliminar is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await ArticulosClient.DeleteAsync(articuloParaEliminar.Id);
+            if (!ok)
+            {
+                MostrarToast("Error", "No se pudo eliminar el artículo.", ToastRenderStyle.Danger);
+            }
+            else
+            {
+                MostrarToast("Éxito", "Artículo eliminado correctamente.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            articuloParaEliminar = null;
+        }
+    }
+
+    private void MostrarToast(string title, string text, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "ArticulosToast"
+        });
+    }
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null)
+        {
+            return;
+        }
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"articulos_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

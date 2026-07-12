@@ -1,0 +1,226 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
+    <DataAnnotationsValidator />
+
+    <DxTabs @bind-ActiveTabIndex="activeTab" CssClass="mb-3">
+        <DxTabPage Text="Datos del artículo">
+            <ContentTemplate>
+                <DxFormLayout>
+        <DxFormLayoutGroup Caption="Datos generales" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
+                <DxTextBox @bind-Text="Model.Codigo"
+                           NullText="Código del artículo"
+                           MaxLength="20"
+                           Enabled="@(!Model.Id.HasValue)" />
+                <ValidationMessage For="() => Model.Codigo" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Descripción *" ColSpanMd="8">
+                <DxTextBox @bind-Text="Model.Descripcion"
+                           NullText="Descripción del artículo"
+                           MaxLength="120" />
+                <ValidationMessage For="() => Model.Descripcion" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Unidad de medida" ColSpanMd="4">
+                <DxComboBox Data="@Unidades" @bind-Value="Model.UnidadMedidaId"
+                            ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
+                            TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una unidad..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.UnidadMedidaId" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Unidad de almacenaje" ColSpanMd="4">
+                <DxComboBox Data="@Unidades" @bind-Value="Model.UnidadAlmacenajeId"
+                            ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
+                            TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Unidad de almacenaje..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.UnidadAlmacenajeId" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Unidad de salidas" ColSpanMd="4">
+                <DxComboBox Data="@Unidades" @bind-Value="Model.UnidadSalidaId"
+                            ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
+                            TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Unidad de salidas..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.UnidadSalidaId" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+
+        <DxFormLayoutGroup Caption="Clasificación" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Tipo de artículo" ColSpanMd="4">
+                <DxComboBox Data="@Tipos" @bind-Value="Model.TipoArticuloId"
+                            ValueFieldName="@nameof(TipoArticuloLookupDto.Id)"
+                            TextFieldName="@nameof(TipoArticuloLookupDto.Display)"
+                            NullText="Operativo, mantenimiento..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.TipoArticuloId" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Línea" ColSpanMd="4">
+                <DxComboBox Data="@Lineas" @bind-Value="Model.LineaId"
+                            ValueFieldName="@nameof(LineaLookupDto.Id)"
+                            TextFieldName="@nameof(LineaLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una línea..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.LineaId" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Grupo" ColSpanMd="4">
+                <DxComboBox Data="@GruposFiltrados" @bind-Value="Model.GrupoId"
+                            ValueFieldName="@nameof(GrupoLookupDto.Id)"
+                            TextFieldName="@nameof(GrupoLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione un grupo..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.GrupoId" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Diámetro" ColSpanMd="6">
+                <DxTextBox @bind-Text="Model.Diametro"
+                           NullText="Diámetro / especificación"
+                           MaxLength="80" />
+                <ValidationMessage For="() => Model.Diametro" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+
+        <DxFormLayoutGroup Caption="Contabilidad y costos" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="6">
+                <DxTextBox @bind-Text="Model.CuentaContable"
+                           NullText="Cuenta contable"
+                           MaxLength="20" />
+                <ValidationMessage For="() => Model.CuentaContable" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Valor unitario" ColSpanMd="6">
+                <DxSpinEdit @bind-Value="Model.ValorUnitario"
+                            DisplayFormat="N4"
+                            MinValue="0" />
+                <ValidationMessage For="() => Model.ValorUnitario" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+
+        <DxFormLayoutGroup Caption="Inventario / Existencias" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Existencia mínima" ColSpanMd="6">
+                <DxSpinEdit @bind-Value="Model.ExistenciaMinima"
+                            DisplayFormat="N2"
+                            MinValue="0"
+                            ReadOnly="@Model.Id.HasValue" />
+                <ValidationMessage For="() => Model.ExistenciaMinima" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="@ExistenciaCaption" ColSpanMd="6">
+                <DxSpinEdit @bind-Value="Model.Existencia"
+                            DisplayFormat="N2"
+                            MinValue="0"
+                            ReadOnly="@Model.Id.HasValue" />
+                <ValidationMessage For="() => Model.Existencia" />
+            </DxFormLayoutItem>
+
+            @if (Model.Id.HasValue)
+            {
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="form-hint text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            La existencia y el mínimo son el total del artículo (suma de todas las bodegas).
+                            Se administran por bodega en la pestaña <strong>Ubicación</strong>.
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            }
+        </DxFormLayoutGroup>
+                </DxFormLayout>
+            </ContentTemplate>
+        </DxTabPage>
+        @if (Model.Id.HasValue)
+        {
+            <DxTabPage Text="Ubicación">
+                <ContentTemplate>
+                    <ArticuloUbicacionesTab ArticuloId="@Model.Id.Value" />
+                </ContentTemplate>
+            </DxTabPage>
+        }
+    </DxTabs>
+
+    @if (EditFormContext.GetValidationMessages().Any())
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atención</h6>
+            <DxValidationSummary />
+        </div>
+    }
+
+    <ValidationSummary class="text-danger mb-3" />
+
+    <div class="d-flex justify-content-end gap-2">
+        <DxButton ButtonType="ButtonType.Submit"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar"
+                  SubmitFormOnClick="true"
+                  Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal"
+                  Text="Cancelar"
+                  Enabled="@(!IsBusy)"
+                  Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    private int activeTab;
+
+    [Parameter, EditorRequired]
+    public ArticuloEditDto Model { get; set; } = default!;
+
+    [Parameter]
+    public IReadOnlyList<UnidadMedidaLookupDto> Unidades { get; set; } = Array.Empty<UnidadMedidaLookupDto>();
+
+    [Parameter]
+    public IReadOnlyList<TipoArticuloLookupDto> Tipos { get; set; } = Array.Empty<TipoArticuloLookupDto>();
+
+    [Parameter]
+    public IReadOnlyList<LineaLookupDto> Lineas { get; set; } = Array.Empty<LineaLookupDto>();
+
+    [Parameter]
+    public IReadOnlyList<GrupoLookupDto> Grupos { get; set; } = Array.Empty<GrupoLookupDto>();
+
+    // Si hay línea seleccionada, mostrar sólo sus grupos; si no, todos.
+    private IReadOnlyList<GrupoLookupDto> GruposFiltrados =>
+        Model.LineaId.HasValue ? Grupos.Where(g => g.LineaId == Model.LineaId.Value).ToList() : Grupos;
+
+    [Parameter]
+    public EventCallback OnValidSubmit { get; set; }
+
+    [Parameter]
+    public EventCallback OnCancel { get; set; }
+
+    [Parameter]
+    public bool IsBusy { get; set; }
+
+    private string ExistenciaCaption => Model.Id.HasValue ? "Existencia" : "Existencia inicial";
+
+    private async Task HandleValidSubmit()
+    {
+        if (OnValidSubmit.HasDelegate)
+        {
+            await OnValidSubmit.InvokeAsync();
+        }
+    }
+
+    private async Task Cancel()
+    {
+        if (OnCancel.HasDelegate)
+        {
+            await OnCancel.InvokeAsync();
+        }
+    }
+}

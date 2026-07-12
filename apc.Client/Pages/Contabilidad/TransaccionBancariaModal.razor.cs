@@ -72,6 +72,7 @@ public partial class TransaccionBancariaModal : IDisposable
     private bool isDisposed;
     private bool detalleInicializado;
     private long? detalleKardexId;
+    private long? partidaContableId;
     private string? defaultsSignatureApplied;
     private CancellationTokenSource? loadCts;
 
@@ -101,6 +102,12 @@ public partial class TransaccionBancariaModal : IDisposable
            ?? new List<BanTransaccionContraLineaDto>();
 
     private decimal TotalContra => ContraLineasValidas.Sum(l => l.Monto);
+
+    /// <summary>
+    /// True sólo si la transacción tiene una partida contable real registrada
+    /// (con_partida_hdr). Los movimientos migrados no la tienen.
+    /// </summary>
+    private bool TienePartidaContable => partidaContableId.HasValue;
     private decimal DiferenciaMonto => NuevaTransaccion.Monto - TotalContra;
     private string DiferenciaAlertClass => DiferenciaMonto == 0m ? "alert-success" : "alert-warning";
     private string MensajeAlertClass => MensajeEsAdvertencia ? "alert alert-warning mt-3" : "alert alert-danger mt-3";
@@ -675,6 +682,7 @@ public partial class TransaccionBancariaModal : IDisposable
         };
 
         fecha = detalle.FechaMovimiento.ToDateTime(TimeOnly.MinValue);
+        partidaContableId = detalle.PolizaId;
 
         detalleInicializado = true;
     }

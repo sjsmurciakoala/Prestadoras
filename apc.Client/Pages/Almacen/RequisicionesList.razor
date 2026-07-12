@@ -1,0 +1,355 @@
+@page "/almacen/requisiciones"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject RequisicionesClient RequisicionesClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Requisiciones de almacén</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Requisiciones de almacén</h2>
+            <p class="page-subtitle">Solicitudes internas de materiales por departamento</p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Requisiciones</div>
+                <div class="summary-value">@requisicionesDistintas.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Líneas</div>
+                <div class="summary-value">@totalLineas.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-warning">
+                <div class="summary-label">Pendientes</div>
+                <div class="summary-value">@totalPendientes.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Monto total</div>
+                <div class="summary-value">@montoTotal.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@requisiciones" KeyFieldName="@nameof(RequisicionListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar solicitante, artículo, aplicación..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@estados" Value="@estadoSeleccionado"
+                                    ValueChanged="@((EstadoOpcion? e) => OnEstadoChanged(e))"
+                                    TextFieldName="@nameof(EstadoOpcion.Etiqueta)"
+                                    NullText="Todos los estados"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 160px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@departamentos" Value="@filtroDepartamento"
+                                    NullText="Todos los deptos."
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((string? v) => OnDepartamentoChanged(v))"
+                                    Style="min-width: 150px;" CssClass="me-1" />
+
+                        <DxDateEdit @bind-Date="fechaDesde" NullText="Desde" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+                        <DxDateEdit @bind-Date="fechaHasta" NullText="Hasta" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+
+                        <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Líneas: <span class="fw-bold">@totalLineas.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.Numero)" Caption="N°" Width="90px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Numero.ToString("0")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.FechaRequisicion)" Caption="Fecha" Width="105px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span>@(item.FechaRequisicion.HasValue ? item.FechaRequisicion.Value.ToString("dd/MM/yyyy") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.Solicitante)" Caption="Solicitante" MinWidth="160">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span title="@item.Solicitante">@(string.IsNullOrWhiteSpace(item.Solicitante) ? "—" : item.Solicitante)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.Departamento)" Caption="Depto." Width="80px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Departamento) ? "—" : item.Departamento)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.CodigoArticulo)" Caption="Artículo" Width="100px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.CodigoArticulo) ? "—" : item.CodigoArticulo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.Descripcion)" Caption="Descripción / aplicación" MinWidth="200">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <div class="articulo-cell">
+                                    <div class="articulo-title" title="@item.Descripcion">@(string.IsNullOrWhiteSpace(item.Descripcion) ? "—" : item.Descripcion)</div>
+                                    @if (!string.IsNullOrWhiteSpace(item.Aplicacion))
+                                    {
+                                        <div class="articulo-sub"><i class="bi bi-arrow-return-right"></i><span class="text-truncate" title="@item.Aplicacion">@item.Aplicacion</span></div>
+                                    }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.Cantidad)" Caption="Cant." Width="85px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span>@item.Cantidad.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RequisicionListItemDto.Total)" Caption="Total" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Total.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item)
+                            {
+                                <span class="badge-estado @EstadoCss(item.Estatus)">@item.EstadoDescripcion</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="" Width="55px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RequisicionListItemDto item && !string.IsNullOrWhiteSpace(item.CodigoArticulo))
+                            {
+                                <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
+                                        @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-journal-arrow-down"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay requisiciones para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private sealed class EstadoOpcion
+    {
+        public string Codigo { get; init; } = string.Empty;
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    private const string GridLayoutStorageKey = "almacen-requisiciones-grid-layout";
+
+    private DxGrid? grid;
+    private List<RequisicionListItemDto> requisiciones = new();
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private List<string> departamentos = new();
+
+    private readonly List<EstadoOpcion> estados = new()
+    {
+        new EstadoOpcion { Codigo = EstadoRequisicion.Pendiente, Etiqueta = "Pendiente" },
+        new EstadoOpcion { Codigo = EstadoRequisicion.Entregada, Etiqueta = "Entregada" },
+        new EstadoOpcion { Codigo = EstadoRequisicion.Anulada, Etiqueta = "Anulada" }
+    };
+
+    private string filtroBusqueda = string.Empty;
+    private EstadoOpcion? estadoSeleccionado;
+    private string? filtroDepartamento;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private int requisicionesDistintas;
+    private int totalLineas;
+    private int totalPendientes;
+    private decimal montoTotal;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarDepartamentosAsync();
+        await CargarAsync();
+    }
+
+    private RequisicionFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Estatus = estadoSeleccionado?.Codigo,
+        Departamento = string.IsNullOrWhiteSpace(filtroDepartamento) ? null : filtroDepartamento,
+        FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+        FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null
+    };
+
+    private async Task CargarDepartamentosAsync()
+    {
+        try
+        {
+            departamentos = await RequisicionesClient.GetDepartamentosAsync();
+        }
+        catch
+        {
+            departamentos = new List<string>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            requisiciones = await RequisicionesClient.GetAsync(BuildFilter());
+            RecalcularResumen();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las requisiciones: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void RecalcularResumen()
+    {
+        totalLineas = requisiciones.Count;
+        requisicionesDistintas = requisiciones.Select(r => r.Numero).Distinct().Count();
+        totalPendientes = requisiciones.Count(r => r.Estatus == EstadoRequisicion.Pendiente);
+        montoTotal = requisiciones.Sum(r => r.Total);
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnEstadoChanged(EstadoOpcion? valor)
+    {
+        estadoSeleccionado = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnDepartamentoChanged(string? valor)
+    {
+        filtroDepartamento = valor;
+        await CargarAsync();
+    }
+
+    private void VerKardex(RequisicionListItemDto item)
+    {
+        Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(item.CodigoArticulo!)}");
+    }
+
+    private static string EstadoCss(string? estatus) => estatus switch
+    {
+        EstadoRequisicion.Entregada => "estado-entregada",
+        EstadoRequisicion.Pendiente => "estado-pendiente",
+        EstadoRequisicion.Anulada => "estado-anulada",
+        _ => "estado-otro"
+    };
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null)
+        {
+            return;
+        }
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"requisiciones_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

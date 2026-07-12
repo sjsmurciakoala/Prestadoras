@@ -10,6 +10,7 @@
 @using apc.Client.Services.Presupuesto
 
 @inject ConfiguracionPresupuestoClient ConfiguracionPresupuestoClient
+@inject PresupuestoSelectionState SelectionState
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
@@ -17,8 +18,13 @@
 
 <PageTitle>SIAD - Presupuesto</PageTitle>
 
-<div class="page-container">
+<div class="page-container position-relative">
     <DxToastProvider Name="PresupuestoToast" MaxToastCount="4" />
+
+    <DxLoadingPanel Visible="@IsBusy"
+                    IsContentBlocked="true"
+                    ApplyBackgroundShading="true"
+                    Text="Procesando..." />
 
     <div class="header-section">
         <div>
@@ -459,6 +465,13 @@
     private ConfiguracionPresupuestoListItemDto? presupuestoPendienteAprobacion;
     private int detallesConProyeccionCero;
 
+    // Splash de página: visible mientras hay una llamada al servidor en curso.
+    private bool IsBusy =>
+        validandoNuevaConfiguracion ||
+        isLoadingDetalles ||
+        !string.IsNullOrWhiteSpace(aprobandoPresupuestoId) ||
+        !string.IsNullOrWhiteSpace(validandoAprobacionPresupuestoId);
+
     protected override void OnInitialized()
     {
         dataSource = new PresupuestoConfiguracionesGridDataSource(ConfiguracionPresupuestoClient, OnGridStateChanged);
@@ -470,6 +483,9 @@
         await Task.WhenAll(
             EvaluarPermisosAprobacionAsync(),
             CargarFechaServidorActualAsync());
+
+        // Restaura el presupuesto seleccionado al regresar de nuevo/gestión/edición.
+        await RestaurarSeleccionAsync();
     }
 
     private void OnGridStateChanged()
@@ -509,6 +525,10 @@
     private async Task OnSelectedHeaderChangedAsync(ConfiguracionPresupuestoListItemDto? item)
     {
         selectedHeader = item;
+        SelectionState.SelectedPresupuestoId =
+            string.IsNullOrWhiteSpace(selectedHeader?.IdPresupuesto)
+                ? null
+                : selectedHeader.IdPresupuesto.Trim();
         selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
         detalleErrorMessage = null;
         detalleFormVisible = false;
@@ -527,6 +547,7 @@
     private void ClearDetalleSelection()
     {
         selectedHeader = null;
+        SelectionState.SelectedPresupuestoId = null;
         selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
         isLoadingDetalles = false;
         detalleErrorMessage = null;
@@ -535,6 +556,35 @@
         detalleSaving = false;
         detalleForm = new ConfiguracionPresupuestoDetalleEditDto();
         cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
+    }
+
+    private async Task RestaurarSeleccionAsync()
+    {
+        var savedId = SelectionState.SelectedPresupuestoId?.Trim();
+        if (string.IsNullOrWhiteSpace(savedId))
+        {
+            return;
+        }
+
+        try
+        {
+            var configuraciones = await ConfiguracionPresupuestoClient.GetAsync(new ConfiguracionPresupuestoFilterDto());
+            var item = configuraciones.FirstOrDefault(x =>
+                string.Equals(x.IdPresupuesto?.Trim(), savedId, StringComparison.OrdinalIgnoreCase));
+
+            if (item is null)
+            {
+                // El presupuesto recordado ya no existe (p. ej. se eliminó): limpiar.
+                SelectionState.SelectedPresupuestoId = null;
+                return;
+            }
+
+            await OnSelectedHeaderChangedAsync(item);
+        }
+        catch
+        {
+            // No bloquear la carga de la lista si falla la restauración de selección.
+        }
     }
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();

@@ -3,12 +3,14 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza
 @using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services
 @using apc.Client.Services.CaptacionPagos
 @inject CobranzaClient CobranzaClient
 @inject NotasCreditoDebitoClient NotasClient
 @inject CaptacionPagosClient CaptacionClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Cobranza</PageTitle>
 
@@ -208,11 +210,16 @@
                     else
                     {
                         <div class="grid-wrapper">
-                            <DxGrid Data="@PlanesFiltrados"
+                            <DxGrid @ref="planesGrid"
+                                    Data="@PlanesFiltrados"
                                     PageSize="15"
+                                    PageSizeSelectorVisible="true"
+                                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                                     ShowGroupPanel="false"
                                     ShowFilterRow="false"
-                                    CssClass="grid-solicitudes">
+                                    CssClass="grid-solicitudes"
+                                    LayoutAutoSaving="OnLayoutAutoSaving"
+                                    LayoutAutoLoading="OnLayoutAutoLoading">
                                 <ToolbarTemplate>
                                     <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                                         <DxTextBox Text="@planesBusqueda"
@@ -226,6 +233,9 @@
 
                                         <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
                                                   RenderStyle="ButtonRenderStyle.Secondary" Click="CargarPlanesAsync" CssClass="me-1" />
+
+                                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
 
                                         <div class="ms-auto text-muted small">
                                             Total: <span class="fw-bold">@totalPlanes.ToString("N0")</span>
@@ -404,6 +414,18 @@
 
 @code {
     private const string ToastName = "cobranza-plan";
+    private const string GridLayoutStorageKey = "cobranza-planes-grid-layout";
+
+    private DxGrid? planesGrid;
+
+    private void MostrarColumnChooser() => planesGrid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
     private int tabActivo;
     private string? usuarioActual;
 

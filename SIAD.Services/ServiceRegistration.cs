@@ -20,6 +20,7 @@ using SIAD.Services.Contabilidad;
 using SIAD.Services.Tenancy;
 using SIAD.Services.Catalogos;
 using SIAD.Services.Abogados;
+using SIAD.Services.Almacen;
 using SIAD.Services.Ciclos;
 using SIAD.Services.Caja;
 // [Sprint1/FaseC 2026-05-05] Removidos namespaces Letras, TarifasBase, TarifasContador (legacy).
@@ -101,7 +102,22 @@ public static class ServiceRegistration
 
         // abogados
         services.AddScoped<IAbogadosService, AbogadosService>();
-        
+
+        // almacén / inventario
+        services.AddScoped<IArticulosService, ArticulosService>();
+        services.AddScoped<IKardexService, KardexService>();
+        services.AddScoped<IComprasService, ComprasService>();
+        services.AddScoped<IRequisicionesService, RequisicionesService>();
+        services.AddScoped<IDescargosService, DescargosService>();
+        services.AddScoped<IUnidadesMedidaService, UnidadesMedidaService>();
+        services.AddScoped<ITipoArticuloService, TipoArticuloService>();
+        services.AddScoped<IBodegaService, BodegaService>();
+        services.AddScoped<IEstanteriaService, EstanteriaService>();
+        services.AddScoped<IEstanteService, EstanteService>();
+        services.AddScoped<IArticuloUbicacionService, ArticuloUbicacionService>();
+        services.AddScoped<ILineaService, LineaService>();
+        services.AddScoped<IGrupoService, GrupoService>();
+
         // ciclos
         services.AddScoped<ICiclosService, CiclosService>();
 

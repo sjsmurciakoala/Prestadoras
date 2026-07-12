@@ -42,6 +42,12 @@
                       RenderStyle="ButtonRenderStyle.Success"
                       CssClass="btn-modern shadow-sm"
                       Enabled="@(!isLoading && transaccionesFiltradas.Count > 0)" />
+            <DxButton Text="Estado de Cuenta"
+                      Click="ExportarEstadoCuenta"
+                      IconCssClass="bi bi-file-earmark-spreadsheet"
+                      RenderStyle="ButtonRenderStyle.Info"
+                      CssClass="btn-modern shadow-sm"
+                      Enabled="@(!isLoading && filtroSeleccionadoCuentaId.HasValue)" />
             @if (!isLoading && transaccionesFiltradas.Count > 0)
             {
                 <a class="btn btn-secondary btn-modern shadow-sm d-inline-flex align-items-center gap-2"
@@ -726,6 +732,28 @@
         {
             MostrarAlerta($"Error al exportar a Excel: {ex.Message}");
         }
+    }
+
+    private void ExportarEstadoCuenta()
+    {
+        if (!filtroSeleccionadoCuentaId.HasValue)
+        {
+            MostrarAlerta("Seleccione una cuenta bancaria para generar el estado de cuenta.");
+            return;
+        }
+
+        var query = new List<string> { $"bancoCuentaId={filtroSeleccionadoCuentaId.Value}" };
+        if (filtroFechaDesde.HasValue)
+        {
+            query.Add($"fechaDesde={filtroFechaDesde.Value:yyyy-MM-dd}");
+        }
+        if (filtroFechaHasta.HasValue)
+        {
+            query.Add($"fechaHasta={filtroFechaHasta.Value:yyyy-MM-dd}");
+        }
+
+        var url = "api/bancos/transacciones/estado-cuenta/excel?" + string.Join("&", query);
+        NavigationManager.NavigateTo(url, forceLoad: true);
     }
 
     private async Task AbrirFormularioAsync()

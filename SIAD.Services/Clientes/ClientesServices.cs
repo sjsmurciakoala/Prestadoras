@@ -117,6 +117,27 @@ public class ClientesService : IClientesService
         maestro.cliente_detalles.Add(detalle);
         _context.cliente_maestros.Add(maestro);
 
+        if (dto.SolicitudId is int solicitudId)
+        {
+            var solicitud = await _context.solicitud_servicios
+                .FirstOrDefaultAsync(s => s.solicitud_servicio_id == solicitudId, ct)
+                ?? throw new InvalidOperationException($"Solicitud con ID {solicitudId} no encontrada.");
+
+            if (!solicitud.estado)
+            {
+                throw new InvalidOperationException($"La solicitud {solicitudId} está inactiva.");
+            }
+
+            if (solicitud.asiginada == true)
+            {
+                throw new InvalidOperationException($"La solicitud {solicitudId} ya fue asignada a un cliente.");
+            }
+
+            solicitud.asiginada = true;
+            solicitud.usuariomodificacion = usuarioCreacion;
+            solicitud.fechamodificacion = ahora;
+        }
+
         try
         {
             await _context.SaveChangesAsync(ct);
@@ -282,10 +303,8 @@ public class ClientesService : IClientesService
             clientes = clientes.Where(c => c.barrio_codigo != null && EF.Functions.ILike(c.barrio_codigo, patron));
         }
 
-        if (filtro.SoloActivos)
-        {
-            clientes = clientes.Where(c => c.estado);
-        }
+        // Toggle binario de estado: true = solo activos, false = solo inactivos.
+        clientes = clientes.Where(c => c.estado == filtro.SoloActivos);
 
         return await clientes
             .Select(c => new ClienteListItemDto(
@@ -314,10 +333,8 @@ public class ClientesService : IClientesService
                 (c.barrio_codigo != null && EF.Functions.ILike(c.barrio_codigo, patron)));
         }
 
-        if (soloActivos)
-        {
-            query = query.Where(c => c.estado);
-        }
+        // Toggle binario de estado: true = solo activos, false = solo inactivos.
+        query = query.Where(c => c.estado == soloActivos);
 
         var totalCount = await query.CountAsync(cancellationToken);
 

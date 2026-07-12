@@ -148,6 +148,14 @@
                         {
                             <div class="text-muted small mt-1">No hay cuentas contables disponibles.</div>
                         }
+                        else if (ReadOnly && !TienePartidaContable)
+                        {
+                            @* Sin partida en con_partida_hdr: no se muestra ningún detalle contable
+                               (antes se fabricaba la línea del banco y un total descuadrado). *@
+                            <div class="text-muted small mt-1">
+                                Esta transacción no tiene partida contable registrada.
+                            </div>
+                        }
                         else
                         {
                         <div class="table-responsive">
