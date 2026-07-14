@@ -15,6 +15,12 @@ public static class ReportesWebConstants
     public const string CodigoReporteEstadoResultados = "estado-resultados";
     public const string CodigoDatasetEstadoResultados = "estado-resultados";
     public const string OrigenDatasetEstadoResultados = "public.rep_estado_resultados";
+    public const string CodigoReporteEstadoFlujoEfectivo = "estado-flujo-efectivo";
+    public const string CodigoDatasetEstadoFlujoEfectivo = "estado-flujo-efectivo";
+    public const string OrigenDatasetEstadoFlujoEfectivo = "public.rep_estado_flujo_efectivo";
+    public const string CodigoReporteEstadoCambiosPatrimonio = "estado-cambios-patrimonio";
+    public const string CodigoDatasetEstadoCambiosPatrimonio = "estado-cambios-patrimonio";
+    public const string OrigenDatasetEstadoCambiosPatrimonio = "public.rep_estado_cambios_patrimonio";
     public const string CodigoReporteTransaccionesPeriodo = "transacciones-periodo";
     public const string CodigoDatasetTransaccionesPeriodo = "transacciones-periodo";
     public const string OrigenDatasetTransaccionesPeriodo = "public.rep_transacciones_periodo";
