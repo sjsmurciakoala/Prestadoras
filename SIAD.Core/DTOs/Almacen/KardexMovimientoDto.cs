@@ -19,6 +19,12 @@ public sealed class KardexMovimientoDto
     public decimal ValorUnitario { get; init; }
     public decimal Total { get; init; }
 
+    /// <summary>Usuario que registró el movimiento (alm_kardex.usuariocreacion).</summary>
+    public string? UsuarioCreacion { get; init; }
+
+    /// <summary>Fecha y hora de registro del movimiento (hora local, alm_kardex.fechacreacion).</summary>
+    public DateTime? FechaCreacion { get; init; }
+
     /// <summary>Saldo corrido (Σ ingresos − Σ salidas hasta este movimiento).</summary>
     public decimal Saldo { get; set; }
 }

@@ -1,5 +1,6 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Contabilidad
 
 <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
     <DataAnnotationsValidator />
@@ -28,6 +29,68 @@
             <ValidationMessage For="() => Model.Descripcion" />
         </DxFormLayoutItem>
 
+        <DxFormLayoutGroup Caption="Cuentas contables" ColSpanMd="12">
+            <DxFormLayoutItem Caption="De inventario" ColSpanMd="6">
+                <DxComboBox Data="@CuentasContables" TData="CuentaContableLookupDto" TValue="string"
+                            @bind-Value="Model.CuentaInventario"
+                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una cuenta..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(CuentasContables.Count > 0)" />
+                <ValidationMessage For="() => Model.CuentaInventario" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="De costo de ventas" ColSpanMd="6">
+                <DxComboBox Data="@CuentasContables" TData="CuentaContableLookupDto" TValue="string"
+                            @bind-Value="Model.CuentaCostoVentas"
+                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una cuenta..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(CuentasContables.Count > 0)" />
+                <ValidationMessage For="() => Model.CuentaCostoVentas" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="De ventas" ColSpanMd="6">
+                <DxComboBox Data="@CuentasContables" TData="CuentaContableLookupDto" TValue="string"
+                            @bind-Value="Model.CuentaVentas"
+                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una cuenta..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(CuentasContables.Count > 0)" />
+                <ValidationMessage For="() => Model.CuentaVentas" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="De ajustes" ColSpanMd="6">
+                <DxComboBox Data="@CuentasContables" TData="CuentaContableLookupDto" TValue="string"
+                            @bind-Value="Model.CuentaAjustes"
+                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una cuenta..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(CuentasContables.Count > 0)" />
+                <ValidationMessage For="() => Model.CuentaAjustes" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="De devoluciones" ColSpanMd="6">
+                <DxComboBox Data="@CuentasContables" TData="CuentaContableLookupDto" TValue="string"
+                            @bind-Value="Model.CuentaDevoluciones"
+                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una cuenta..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(CuentasContables.Count > 0)" />
+                <ValidationMessage For="() => Model.CuentaDevoluciones" />
+            </DxFormLayoutItem>
+        </DxFormLayoutGroup>
+
         <DxFormLayoutItem Caption="Activo" ColSpanMd="4">
             <Template>
                 <div class="pt-2">
@@ -48,6 +111,7 @@
 
 @code {
     [Parameter, EditorRequired] public TipoArticuloEditDto Model { get; set; } = default!;
+    [Parameter] public IReadOnlyList<CuentaContableLookupDto> CuentasContables { get; set; } = Array.Empty<CuentaContableLookupDto>();
     [Parameter] public EventCallback OnValidSubmit { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public bool IsBusy { get; set; }

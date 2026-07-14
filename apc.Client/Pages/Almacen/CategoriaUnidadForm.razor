@@ -1,0 +1,52 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
+    <DataAnnotationsValidator />
+
+    @if (EditFormContext.GetValidationMessages().Any())
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atención</h6>
+            <DxValidationSummary />
+        </div>
+    }
+
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Nombre *" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Nombre" NullText="Ej. Peso, Volumen, Longitud..." MaxLength="30" />
+            <ValidationMessage For="() => Model.Nombre" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Descripcion" NullText="Descripción opcional" MaxLength="100" />
+            <ValidationMessage For="() => Model.Descripcion" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Activa" ColSpanMd="12">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" LabelText="Activa" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <ValidationSummary class="text-danger mb-3" />
+
+    <div class="d-flex justify-content-end gap-2">
+        <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar" SubmitFormOnClick="true" Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!IsBusy)" Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public CategoriaUnidadEditDto Model { get; set; } = default!;
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+
+    private async Task HandleValidSubmit() { if (OnValidSubmit.HasDelegate) await OnValidSubmit.InvokeAsync(); }
+    private async Task Cancel() { if (OnCancel.HasDelegate) await OnCancel.InvokeAsync(); }
+}

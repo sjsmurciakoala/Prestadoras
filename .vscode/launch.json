@@ -1,0 +1,73 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "apc: Debug web app",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-apc",
+      "program": "${workspaceFolder}/apc/bin/Debug/net9.0/apc.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/apc",
+      "stopAtEntry": false,
+      "launchSettingsProfile": "",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:5000"
+      },
+      "console": "internalConsole"
+    },
+    {
+      "name": "apc.MobileApi: Debug API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-mobile-api",
+      "program": "${workspaceFolder}/apc.MobileApi/bin/Debug/net9.0/apc.MobileApi.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/apc.MobileApi",
+      "stopAtEntry": false,
+      "launchSettingsProfile": "",
+      "serverReadyAction": {
+        "action": "openExternally",
+        "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
+        "uriFormat": "%s/swagger"
+      },
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:8088"
+      },
+      "console": "internalConsole"
+    },
+    {
+      "name": "apc.BancosWs: Debug API",
+      "type": "coreclr",
+      "request": "launch",
+      "preLaunchTask": "build-bancos-ws",
+      "program": "${workspaceFolder}/apc.BancosWs/bin/Debug/net9.0/apc.BancosWs.dll",
+      "args": [],
+      "cwd": "${workspaceFolder}/apc.BancosWs",
+      "stopAtEntry": false,
+      "launchSettingsProfile": "",
+      "env": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "ASPNETCORE_URLS": "http://localhost:8087"
+      },
+      "console": "internalConsole"
+    }
+  ],
+  "compounds": [
+    {
+      "name": "Debug apc + APIs",
+      "configurations": [
+        "apc: Debug web app",
+        "apc.MobileApi: Debug API",
+        "apc.BancosWs: Debug API"
+      ],
+      "stopAll": true
+    }
+  ]
+}

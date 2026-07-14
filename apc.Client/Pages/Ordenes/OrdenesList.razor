@@ -3,7 +3,9 @@
 @inject apc.Client.Services.Ordenes.OrdenesClient OrdenesClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 @using DevExpress.Blazor
+@using apc.Client.Services
 
 <PageTitle>SIAD - Órdenes de Trabajo</PageTitle>
 
@@ -125,11 +127,21 @@
 
         <div class="modern-card position-relative" style="min-height: 300px;">
             <div class="grid-wrapper">
-                <DxGrid Data="@ordenes" @bind-SelectedDataItems="seleccionadasObjetos"
+                <DxGrid @ref="grid" Data="@ordenes" @bind-SelectedDataItems="seleccionadasObjetos"
                         SelectionMode="GridSelectionMode.Multiple"
                         KeyboardNavigationEnabled="true"
                         PageSize="15"
-                        CssClass="grid-modern">
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                        CssClass="grid-modern"
+                        LayoutAutoSaving="OnLayoutAutoSaving"
+                        LayoutAutoLoading="OnLayoutAutoLoading">
+                    <ToolbarTemplate>
+                        <div class="d-flex w-100">
+                            <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" />
+                        </div>
+                    </ToolbarTemplate>
                     <Columns>
                         <DxGridSelectionColumn Width="45px" />
                         <DxGridDataColumn FieldName="@nameof(OrdenTrabajoListItemDto.Numero)" Caption="Orden">
@@ -338,6 +350,17 @@
 
 @code {
     private const string ToastProviderName = "OrdenesToast";
+    private const string GridLayoutStorageKey = "ordenes-list-grid-layout";
+
+    private DxGrid? grid;
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
 
     private readonly OrdenTrabajoFilterDto filtro = new();
     private IReadOnlyList<OrdenTrabajoListItemDto> ordenes = Array.Empty<OrdenTrabajoListItemDto>();

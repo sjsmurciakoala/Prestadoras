@@ -4,6 +4,7 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Medidores
 @using apc.Client.Pages.Medidores
+@using apc.Client.Services
 @using apc.Client.Services.Medidores
 
 @inject MedidoresClient MedidoresClient
@@ -11,6 +12,7 @@
 @using apc.Client.Services.Catalogos
 @inject CatalogosClient CatalogosClient
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Medidores</PageTitle>
 
@@ -106,8 +108,12 @@
     <div class="modern-card position-relative">
         <div class="grid-wrapper">
             <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(MedidorListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                     PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
                     ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading"
                     ShowGroupPanel="false" CssClass="grid-solicitudes">
 
                 <ToolbarTemplate>
@@ -437,6 +443,14 @@
 
     private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private const string GridLayoutStorageKey = "medidores-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
 
     private void AbrirNuevo()
     {

@@ -40,8 +40,8 @@ public sealed class ArticuloListItemDto
     public decimal ExistenciaMinima { get; init; }
     public decimal ValorUnitario { get; init; }
 
-    /// <summary>Existencia × valor unitario (valorización de la línea).</summary>
-    public decimal ValorTotal => Existencia * ValorUnitario;
+    /// <summary>Suma de la existencia de todas las ubicaciones (bodegas) del artículo.</summary>
+    public decimal ValorTotal { get; init; }
 
     /// <summary>true si hay mínimo definido y la existencia cayó por debajo.</summary>
     public bool BajoMinimo => ExistenciaMinima > 0 && Existencia < ExistenciaMinima;

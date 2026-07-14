@@ -7,6 +7,7 @@ namespace SIAD.Core.Entities;
 /// <summary>
 /// Catálogo de unidades de medida de almacén, con conversión entre unidades de
 /// la misma categoría. Reemplaza el texto libre legacy de almacen.unidad.
+/// La categoría es una FK a alm_categoria_unidad (catálogo controlado).
 /// </summary>
 public partial class alm_unidad_medida : ICompanyScopedEntity
 {
@@ -17,7 +18,7 @@ public partial class alm_unidad_medida : ICompanyScopedEntity
     public string? abreviatura { get; set; }
     public bool permite_decimales { get; set; }
     public bool activo { get; set; }
-    public string? categoria { get; set; }
+    public int? categoria_id { get; set; }
     public int? unidad_base_id { get; set; }
     public decimal factor_conversion { get; set; }
     public string? usuariocreacion { get; set; }
@@ -25,6 +26,7 @@ public partial class alm_unidad_medida : ICompanyScopedEntity
     public string? usuariomodificacion { get; set; }
     public DateTime? fechamodificacion { get; set; }
 
+    public virtual alm_categoria_unidad? categoria_ref { get; set; }
     public virtual alm_unidad_medida? unidad_base { get; set; }
     public virtual ICollection<alm_unidad_medida> unidades_derivadas { get; set; } = new List<alm_unidad_medida>();
 }

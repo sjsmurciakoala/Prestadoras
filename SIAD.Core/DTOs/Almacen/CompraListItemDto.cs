@@ -5,6 +5,7 @@ namespace SIAD.Core.DTOs.Almacen;
 public sealed class CompraListItemDto
 {
     public int Id { get; init; }
+    public int? ArticuloId { get; init; }
     public DateOnly? Fecha { get; init; }
     public DateOnly? FechaFactura { get; init; }
     public string? Proveedor { get; init; }

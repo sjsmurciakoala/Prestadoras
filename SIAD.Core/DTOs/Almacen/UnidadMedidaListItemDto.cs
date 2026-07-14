@@ -6,6 +6,7 @@ public sealed class UnidadMedidaListItemDto
     public string Codigo { get; init; } = string.Empty;
     public string Nombre { get; init; } = string.Empty;
     public string? Abreviatura { get; init; }
+    public int? CategoriaId { get; init; }
     public string? Categoria { get; init; }
     public bool PermiteDecimales { get; init; }
     public bool Activo { get; init; }

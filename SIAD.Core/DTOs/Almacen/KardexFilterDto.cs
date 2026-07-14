@@ -4,7 +4,10 @@ namespace SIAD.Core.DTOs.Almacen;
 
 public sealed class KardexFilterDto
 {
-    /// <summary>Código de artículo a consultar (obligatorio).</summary>
+    /// <summary>Artículo a consultar (por id/PK). Filtro preferente.</summary>
+    public int? ArticuloId { get; set; }
+
+    /// <summary>Código de artículo a consultar (compatibilidad; se usa si no hay ArticuloId).</summary>
     public string CodigoArticulo { get; set; } = string.Empty;
     public DateOnly? FechaDesde { get; set; }
     public DateOnly? FechaHasta { get; set; }

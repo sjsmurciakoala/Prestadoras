@@ -60,18 +60,6 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         return bodega.id;
     }
 
-    private async Task<int> SeedEstanteAsync(int bodegaId, string estanteriaCodigo, string estanteCodigo)
-    {
-        var estanteria = new alm_estanteria { bodega_id = bodegaId, codigo = estanteriaCodigo, activo = true };
-        _context!.alm_estanterias.Add(estanteria);
-        await _context.SaveChangesAsync();
-
-        var estante = new alm_estante { estanteria_id = estanteria.id, codigo = estanteCodigo, activo = true };
-        _context.alm_estantes.Add(estante);
-        await _context.SaveChangesAsync();
-        return estante.id;
-    }
-
     [SkippableFact]
     public async Task Add_UbicacionValida_Persiste()
     {
@@ -103,33 +91,43 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task Add_EstanteDeOtraBodega_Lanza()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        var articuloId = await SeedArticuloAsync("ART3");
-        var bodegaA = await SeedBodegaAsync("BA");
-        var bodegaB = await SeedBodegaAsync("BB");
-        var estanteDeB = await SeedEstanteAsync(bodegaB, "E1", "1");
-
-        await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaA, EstanteId = estanteDeB }, "tester"));
-    }
-
-    [SkippableFact]
-    public async Task Add_ConEstanteDeLaBodega_GuardaUbicacionCompuesta()
+    public async Task Add_ConUbicacionManual_PersisteYSeMuestra()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var articuloId = await SeedArticuloAsync("ART4");
         var bodegaId = await SeedBodegaAsync("BOD");
-        var estanteId = await SeedEstanteAsync(bodegaId, "EST", "1");
 
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId, EstanteId = estanteId }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto
+        {
+            BodegaId = bodegaId,
+            Ubicacion1 = "Pasillo A",
+            Ubicacion3 = "Nivel 2"
+        }, "tester");
 
         var item = Assert.Single(await _service.GetAsync(articuloId));
-        Assert.Equal("BOD-EST-1", item.EstanteUbicacion);
-        Assert.Equal(estanteId, item.EstanteId);
+        Assert.Equal("Pasillo A", item.Ubicacion1);
+        Assert.Null(item.Ubicacion2);
+        Assert.Equal("Nivel 2", item.Ubicacion3);
+        Assert.Equal("Pasillo A · Nivel 2", item.UbicacionDisplay);
+    }
+
+    [SkippableFact]
+    public async Task Add_UbicacionMayorA20_SeTrunca()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ART7");
+        var bodegaId = await SeedBodegaAsync("BODT");
+
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto
+        {
+            BodegaId = bodegaId,
+            Ubicacion1 = new string('X', 40)
+        }, "tester");
+
+        var item = Assert.Single(await _service.GetAsync(articuloId));
+        Assert.Equal(20, item.Ubicacion1!.Length);
     }
 
     [SkippableFact]
@@ -150,17 +148,132 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task Delete_Quita()
+    public async Task Deshabilitar_MarcaInactivaYConservaHistorico()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var articuloId = await SeedArticuloAsync("ART6");
-        var bodegaId = await SeedBodegaAsync("B1");
-        var creado = await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId }, "tester");
+        var bA = await SeedBodegaAsync("B1");
+        var bB = await SeedBodegaAsync("B2");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Principal = true }, "tester");
+        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB }, "tester");
 
-        var ok = await _service.DeleteAsync(articuloId, creado.Id!.Value);
+        var ok = await _service.DeshabilitarAsync(articuloId, enB.Id!.Value, "tester");
         Assert.True(ok);
-        Assert.Empty(await _service.GetAsync(articuloId));
+
+        var activas = await _service.GetAsync(articuloId);
+        Assert.Single(activas);
+        Assert.Equal(bA, activas[0].BodegaId);
+
+        var todas = await _service.GetAsync(articuloId, incluirInactivas: true);
+        Assert.Equal(2, todas.Count);
+        Assert.False(todas.Single(u => u.BodegaId == bB).Activo);
+    }
+
+    [SkippableFact]
+    public async Task Deshabilitar_Principal_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ARTP");
+        var bA = await SeedBodegaAsync("PA");
+        var bB = await SeedBodegaAsync("PB");
+        var enA = await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Principal = true }, "tester");
+        await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB }, "tester");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.DeshabilitarAsync(articuloId, enA.Id!.Value, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Deshabilitar_UltimaActiva_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ARTU");
+        var bA = await SeedBodegaAsync("UA");
+        var enA = await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA }, "tester");
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.DeshabilitarAsync(articuloId, enA.Id!.Value, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Reactivar_VuelveActiva()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ARTR");
+        var bA = await SeedBodegaAsync("RA");
+        var bB = await SeedBodegaAsync("RB");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Principal = true }, "tester");
+        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB }, "tester");
+        await _service.DeshabilitarAsync(articuloId, enB.Id!.Value, "tester");
+
+        var ok = await _service.ReactivarAsync(articuloId, enB.Id!.Value, "tester");
+        Assert.True(ok);
+        Assert.Equal(2, (await _service.GetAsync(articuloId)).Count);
+    }
+
+    [SkippableFact]
+    public async Task Add_BodegaDeshabilitada_Reactiva()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ARTRE");
+        var bA = await SeedBodegaAsync("REA");
+        var bB = await SeedBodegaAsync("REB");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Principal = true }, "tester");
+        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB }, "tester");
+        await _service.DeshabilitarAsync(articuloId, enB.Id!.Value, "tester");
+
+        // Re-agregar la misma bodega reactiva la fila existente (no lanza, no duplica).
+        var reAdd = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB, Ubicacion1 = "Rack 9" }, "tester");
+        Assert.Equal(enB.Id, reAdd.Id);
+        Assert.True(reAdd.Activo);
+
+        var todas = await _service.GetAsync(articuloId, incluirInactivas: true);
+        Assert.Equal(2, todas.Count);
+        Assert.Equal("Rack 9", todas.Single(u => u.BodegaId == bB).Ubicacion1);
+    }
+
+    [SkippableFact]
+    public async Task Create_SinUbicaciones_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            articulos.CreateAsync(new ArticuloEditDto { Codigo = "ZZCRE1", Descripcion = "Sin bodega" }, "tester"));
+    }
+
+    [SkippableFact]
+    public async Task Create_ConUbicaciones_PrimeraPrincipalYSumaExistencia()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var bA = await SeedBodegaAsync("CRA");
+        var bB = await SeedBodegaAsync("CRB");
+        var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
+
+        var creado = await articulos.CreateAsync(new ArticuloEditDto
+        {
+            Codigo = "ZZCRE2",
+            Descripcion = "Con bodegas",
+            Ubicaciones =
+            {
+                new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, ExistenciaMinima = 3 },
+                new ArticuloUbicacionDto { BodegaId = bB, Existencia = 5, ExistenciaMinima = 2 }
+            }
+        }, "tester");
+
+        var art = await _context!.alm_articulos.AsNoTracking().FirstAsync(a => a.id == creado.Id!.Value);
+        Assert.Equal(15m, art.existencia);
+        Assert.Equal(5m, art.existencia_minima);
+
+        var ubic = await _service!.GetAsync(creado.Id!.Value);
+        Assert.Equal(2, ubic.Count);
+        Assert.Equal(bA, ubic.Single(u => u.Principal).BodegaId);
     }
 
     [SkippableFact]
@@ -179,7 +292,7 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(15m, art.existencia);
         Assert.Equal(5m, art.existencia_minima);
 
-        await _service.DeleteAsync(articuloId, enB.Id!.Value);
+        await _service.DeshabilitarAsync(articuloId, enB.Id!.Value, "tester");
 
         var art2 = await _context.alm_articulos.AsNoTracking().FirstAsync(a => a.id == articuloId);
         Assert.Equal(10m, art2.existencia);
@@ -195,7 +308,7 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var bodegaId = await SeedBodegaAsync("ZZALRT");
         await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId, Existencia = 2, ExistenciaMinima = 5 }, "tester");
 
-        var articulos = new ArticulosService(_context!);
+        var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
         var alertas = await articulos.GetAlertasStockAsync(new AlertaStockFilterDto { Search = "ZZALERTA1" });
 
         var alerta = Assert.Single(alertas);

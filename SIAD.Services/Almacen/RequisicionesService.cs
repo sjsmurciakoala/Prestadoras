@@ -75,6 +75,7 @@ public sealed class RequisicionesService : IRequisicionesService
             .Select(r => new RequisicionListItemDto
             {
                 Id = r.id,
+                ArticuloId = r.articulo_id,
                 Numero = r.numero,
                 FechaRequisicion = r.fecha_requisicion,
                 FechaEntrega = r.fecha_entrega,

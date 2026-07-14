@@ -1,0 +1,229 @@
+@page "/almacen/categorias-unidad"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject CategoriasUnidadClient CategoriasClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Categorías de unidad</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CategoriasUnidadToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Categorías de unidad</h2>
+            <p class="page-subtitle">Tipos de unidad de medida (Peso, Volumen, Longitud...)</p>
+        </div>
+        <DxButton Text="Nueva categoría" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@categorias" KeyFieldName="@nameof(CategoriaUnidadListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar nombre..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivas" CheckedChanged="@((bool v) => OnSoloActivasChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activas</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@categorias.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(CategoriaUnidadListItemDto.Nombre)" Caption="Nombre" MinWidth="180">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CategoriaUnidadListItemDto item)
+                            { <span class="text-dark fw-semibold">@item.Nombre</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CategoriaUnidadListItemDto.Descripcion)" Caption="Descripción" MinWidth="240">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CategoriaUnidadListItemDto item)
+                            { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Descripcion) ? "—" : item.Descripcion)</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CategoriaUnidadListItemDto item)
+                            { <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVA" : "INACTIVA")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CategoriaUnidadListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">No hay categorías para mostrar.</div></EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(560px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:80px"></div></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3"><div class="alert alert-danger" role="alert">@formError</div></div>
+        }
+        else
+        {
+            <CategoriaUnidadForm Model="formModel" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar categoría?</h5>
+            <p class="text-muted">La categoría quedará inactiva y no aparecerá en los selectores.</p>
+            @if (paraDesactivar is not null) { <div class="fw-semibold">@paraDesactivar.Nombre</div> }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarDesactivar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<CategoriaUnidadListItemDto> categorias = new();
+
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivas = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible, formLoading, isSaving;
+    private string? formError;
+    private CategoriaUnidadEditDto formModel = new();
+
+    private bool confirmVisible;
+    private CategoriaUnidadListItemDto? paraDesactivar;
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar categoría" : "Nueva categoría";
+    private string PopupSubtitle => formModel.Id.HasValue ? "Actualice la categoría" : "Registre una categoría de unidad";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-diagram-2";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private ClasificacionFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Activo = soloActivas ? true : null
+    };
+
+    private async Task CargarAsync()
+    {
+        try { isLoading = true; errorMessage = null; categorias = await CategoriasClient.GetAsync(BuildFilter()); }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar las categorías: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivasChanged(bool v) { soloActivas = v; await CargarAsync(); }
+
+    private void AbrirNuevo() { formError = null; formModel = new CategoriaUnidadEditDto(); formVisible = true; }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null; formLoading = true; formVisible = true;
+        try
+        {
+            var d = await CategoriasClient.GetByIdAsync(id);
+            if (d is null) { formError = "No se encontró la categoría."; formModel = new(); return; }
+            formModel = d;
+        }
+        catch (Exception ex) { formError = $"Error al cargar: {ex.Message}"; }
+        finally { formLoading = false; }
+    }
+
+    private void CerrarForm() { if (isSaving) return; formVisible = false; formError = null; formModel = new(); }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (formModel.Id.HasValue) { await CategoriasClient.UpdateAsync(formModel.Id.Value, formModel); Toast("Éxito", "Categoría actualizada.", ToastRenderStyle.Success); }
+            else { await CategoriasClient.CreateAsync(formModel); Toast("Éxito", "Categoría registrada.", ToastRenderStyle.Success); }
+            formVisible = false; formModel = new(); await CargarAsync();
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { isSaving = false; }
+    }
+
+    private void ConfirmarDesactivar(CategoriaUnidadListItemDto c) { paraDesactivar = c; confirmVisible = true; }
+    private void CancelarDesactivar() { confirmVisible = false; paraDesactivar = null; }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (paraDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            var ok = await CategoriasClient.DeactivateAsync(paraDesactivar.Id);
+            if (!ok) Toast("Error", "No se pudo desactivar.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Categoría desactivada.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { confirmVisible = false; paraDesactivar = null; }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "CategoriasUnidadToast" });
+}

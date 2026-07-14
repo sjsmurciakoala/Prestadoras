@@ -24,6 +24,10 @@ public partial class alm_articulo : ICompanyScopedEntity
     public string? unidad_medida { get; set; }
     public string? diametro { get; set; }
     public string? cuenta_contable { get; set; }
+    public string? usuariocreacion { get; set; }
+    public DateTime? fechacreacion { get; set; }
+    public string? usuariomodificacion { get; set; }
+    public DateTime? fechamodificacion { get; set; }
 
     /// <summary>FK opcional al catálogo alm_unidad_medida (convive con el texto libre unidad_medida).</summary>
     public int? unidad_medida_id { get; set; }
@@ -51,4 +55,7 @@ public partial class alm_articulo : ICompanyScopedEntity
 
     /// <summary>Ubicaciones del artículo por bodega (bodega + estante + principal). Una fila por bodega.</summary>
     public virtual ICollection<alm_articulo_bodega> ubicaciones { get; set; } = new List<alm_articulo_bodega>();
+
+    /// <summary>Proveedores que suministran el artículo ("UPC"). Una fila por proveedor.</summary>
+    public virtual ICollection<alm_articulo_proveedor> proveedores { get; set; } = new List<alm_articulo_proveedor>();
 }

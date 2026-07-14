@@ -7,6 +7,7 @@
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Presupuesto
 @using apc.Client.Pages.Presupuesto
+@using apc.Client.Services
 @using apc.Client.Services.Presupuesto
 
 @inject ConfiguracionPresupuestoClient ConfiguracionPresupuestoClient
@@ -15,6 +16,7 @@
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IAuthorizationService AuthorizationService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Presupuesto</PageTitle>
 
@@ -49,11 +51,15 @@
         <div class="grid-wrapper">
             <DxGrid @ref="grid" Data="@dataSource" TData="ConfiguracionPresupuestoListItemDto"
                     KeyFieldName="@nameof(ConfiguracionPresupuestoListItemDto.IdPresupuesto)" PageSize="5"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                     PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
                     ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
                     SelectionMode="GridSelectionMode.Single" AllowSelectRowByClick="true"
                     SelectedDataItem="@selectedHeader"
                     SelectedDataItemChanged="@(item => OnSelectedHeaderChangedAsync((ConfiguracionPresupuestoListItemDto?)item))"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading"
                     ShowGroupPanel="false" CssClass="grid-solicitudes">
 
                 <ToolbarTemplate>
@@ -588,6 +594,14 @@
     }
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private const string GridLayoutStorageKey = "presupuesto-configuraciones-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
 
     private async Task AbrirNuevoAsync()
     {
