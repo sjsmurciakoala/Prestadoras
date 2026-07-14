@@ -1,4 +1,4 @@
-﻿{
+{
   "version": "2.0.0",
   "tasks": [
     {
@@ -7,7 +7,10 @@
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/apc/apc.csproj"
+        "${workspaceFolder}/apc/apc.csproj",
+        "--configuration",
+        "Debug",
+        "--nologo"
       ],
       "problemMatcher": "$msCompile",
       "group": {
@@ -21,7 +24,10 @@
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/apc.MobileApi/apc.MobileApi.csproj"
+        "${workspaceFolder}/apc.MobileApi/apc.MobileApi.csproj",
+        "--configuration",
+        "Debug",
+        "--nologo"
       ],
       "problemMatcher": "$msCompile",
       "group": "build"
@@ -32,7 +38,10 @@
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/apc.BancosWs/apc.BancosWs.csproj"
+        "${workspaceFolder}/apc.BancosWs/apc.BancosWs.csproj",
+        "--configuration",
+        "Debug",
+        "--nologo"
       ],
       "problemMatcher": "$msCompile",
       "group": "build"
@@ -43,7 +52,10 @@
       "command": "dotnet",
       "args": [
         "build",
-        "${workspaceFolder}/HODSOFT_DEVEXPRESS.sln"
+        "${workspaceFolder}/HODSOFT_DEVEXPRESS.sln",
+        "--configuration",
+        "Debug",
+        "--nologo"
       ],
       "problemMatcher": "$msCompile",
       "group": "build"
@@ -57,7 +69,7 @@
         "--project",
         "${workspaceFolder}/apc/apc.csproj",
         "--launch-profile",
-        "https"
+        "http"
       ],
       "problemMatcher": "$msCompile"
     },

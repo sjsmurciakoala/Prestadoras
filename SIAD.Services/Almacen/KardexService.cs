@@ -24,29 +24,37 @@ public sealed class KardexService : IKardexService
     {
         ArgumentNullException.ThrowIfNull(filtro);
 
-        var codigo = filtro.CodigoArticulo?.Trim();
-        if (string.IsNullOrWhiteSpace(codigo))
-        {
-            return null;
-        }
+        // Resolver el artículo por id (preferente) o por código (compatibilidad).
+        var articuloQuery = _context.alm_articulos.AsNoTracking();
+        var codigoFiltro = filtro.CodigoArticulo?.Trim();
 
-        var articulo = await _context.alm_articulos
-            .AsNoTracking()
-            .Where(a => a.codigo_articulo == codigo)
-            .Select(a => new { a.codigo_articulo, a.descripcion, a.unidad_medida, a.existencia })
-            .FirstOrDefaultAsync(ct);
+        var articulo = filtro.ArticuloId.HasValue
+            ? await articuloQuery.Where(a => a.id == filtro.ArticuloId.Value)
+                .Select(a => new { a.id, a.codigo_articulo, a.descripcion, a.unidad_medida, a.existencia })
+                .FirstOrDefaultAsync(ct)
+            : !string.IsNullOrWhiteSpace(codigoFiltro)
+                ? await articuloQuery.Where(a => a.codigo_articulo == codigoFiltro)
+                    .Select(a => new { a.id, a.codigo_articulo, a.descripcion, a.unidad_medida, a.existencia })
+                    .FirstOrDefaultAsync(ct)
+                : null;
 
         if (articulo is null)
         {
             return null;
         }
 
-        // Universo del kardex: movimientos del artículo, opcionalmente acotados a
-        // una bodega. La bodega delimita el saldo corrido (a diferencia de los
-        // filtros de fecha/tipo, que sólo recortan la presentación más abajo).
+        var articuloId = articulo.id;
+        var codigoRef = articulo.codigo_articulo;
+        var tieneCodigo = !string.IsNullOrWhiteSpace(codigoRef);
+
+        // Universo del kardex: movimientos del artículo por articulo_id, con fallback
+        // al código para los movimientos aún no re-enlazados (transición/huérfanos).
+        // Opcionalmente acotados a una bodega, que delimita el saldo corrido (a
+        // diferencia de los filtros de fecha/tipo, que sólo recortan la presentación).
         var query = _context.alm_kardexs
             .AsNoTracking()
-            .Where(k => k.codigo_articulo == codigo);
+            .Where(k => k.articulo_id == articuloId
+                     || (tieneCodigo && k.articulo_id == null && k.codigo_articulo == codigoRef));
 
         if (filtro.BodegaId.HasValue)
         {
@@ -71,7 +79,9 @@ public sealed class KardexService : IKardexService
                 Ingresos = k.ingresos,
                 Salidas = k.salidas,
                 ValorUnitario = k.valor_unitario,
-                Total = k.total
+                Total = k.total,
+                UsuarioCreacion = k.usuariocreacion,
+                FechaCreacion = k.fechacreacion
             })
             .ToListAsync(ct);
 

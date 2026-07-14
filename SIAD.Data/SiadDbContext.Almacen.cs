@@ -18,13 +18,13 @@ public partial class SiadDbContext
     public virtual DbSet<af_activo_fijo> af_activo_fijos { get; set; } = null!;
     public virtual DbSet<af_activo_fijo_depreciacion> af_activo_fijo_depreciacions { get; set; } = null!;
     public virtual DbSet<alm_unidad_medida> alm_unidad_medidas { get; set; } = null!;
+    public virtual DbSet<alm_categoria_unidad> alm_categoria_unidads { get; set; } = null!;
     public virtual DbSet<alm_tipo_articulo> alm_tipo_articulos { get; set; } = null!;
     public virtual DbSet<alm_linea> alm_lineas { get; set; } = null!;
     public virtual DbSet<alm_grupo> alm_grupos { get; set; } = null!;
     public virtual DbSet<alm_bodega> alm_bodegas { get; set; } = null!;
-    public virtual DbSet<alm_estanteria> alm_estanterias { get; set; } = null!;
-    public virtual DbSet<alm_estante> alm_estantes { get; set; } = null!;
     public virtual DbSet<alm_articulo_bodega> alm_articulo_bodegas { get; set; } = null!;
+    public virtual DbSet<alm_articulo_proveedor> alm_articulo_proveedors { get; set; } = null!;
 
     private void ConfigureAlmacenModel(ModelBuilder modelBuilder)
     {
@@ -33,7 +33,8 @@ public partial class SiadDbContext
             entity.HasKey(e => e.id).HasName("alm_articulo_pkey");
             entity.ToTable("alm_articulo", "public");
             entity.HasIndex(e => new { e.company_id, e.codigo_articulo },
-                "uq_alm_articulo_company_codigo").IsUnique();
+                "uq_alm_articulo_company_codigo").IsUnique()
+                .HasFilter("codigo_articulo IS NOT NULL AND codigo_articulo <> ''");
             entity.HasIndex(e => e.company_id, "ix_alm_articulo_company");
 
             entity.Property(e => e.codigo_articulo).HasMaxLength(20);
@@ -48,6 +49,10 @@ public partial class SiadDbContext
             entity.Property(e => e.unidad_medida).HasMaxLength(40);
             entity.Property(e => e.diametro).HasMaxLength(80);
             entity.Property(e => e.cuenta_contable).HasMaxLength(20);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
 
             entity.HasIndex(e => e.unidad_medida_id, "ix_alm_articulo_unidad_medida");
             entity.HasOne(e => e.unidad_medida_ref).WithMany()
@@ -88,19 +93,28 @@ public partial class SiadDbContext
             entity.HasIndex(e => e.codigo_articulo, "ix_alm_kardex_codigo_articulo");
             entity.HasIndex(e => e.fecha, "ix_alm_kardex_fecha");
             entity.HasIndex(e => e.bodega_id, "ix_alm_kardex_bodega");
+            entity.HasIndex(e => e.articulo_id, "ix_alm_kardex_articulo");
+            entity.HasIndex(e => new { e.company_id, e.uuid },
+                "uq_alm_kardex_company_uuid").IsUnique()
+                .HasFilter("uuid IS NOT NULL");
+            entity.HasIndex(e => new { e.company_id, e.documento_tipo, e.documento_id },
+                "ix_alm_kardex_documento");
+            entity.HasIndex(e => new { e.company_id, e.articulo_id, e.bodega_id, e.fecha, e.id },
+                "ix_alm_kardex_saldo");
+            entity.HasIndex(e => e.bodega_destino_id, "ix_alm_kardex_bodega_destino");
 
             entity.Property(e => e.numero_documento).HasPrecision(11, 0);
             entity.Property(e => e.tipo_transaccion).HasMaxLength(20);
             entity.Property(e => e.fecha).HasColumnType("date");
             entity.Property(e => e.codigo_articulo).HasMaxLength(20);
-            entity.Property(e => e.cantidad).HasPrecision(11, 2).HasDefaultValue(0m);
+            entity.Property(e => e.cantidad).HasPrecision(15, 2).HasDefaultValue(0m);
             entity.Property(e => e.bodega).HasMaxLength(2);
-            entity.Property(e => e.ingresos).HasPrecision(11, 2).HasDefaultValue(0m);
-            entity.Property(e => e.salidas).HasPrecision(11, 2).HasDefaultValue(0m);
-            entity.Property(e => e.valor_unitario).HasPrecision(11, 2).HasDefaultValue(0m);
-            entity.Property(e => e.total).HasPrecision(11, 2).HasDefaultValue(0m);
-            entity.Property(e => e.debe).HasPrecision(11, 2).HasDefaultValue(0m);
-            entity.Property(e => e.haber).HasPrecision(11, 2).HasDefaultValue(0m);
+            entity.Property(e => e.ingresos).HasPrecision(15, 2).HasDefaultValue(0m);
+            entity.Property(e => e.salidas).HasPrecision(15, 2).HasDefaultValue(0m);
+            entity.Property(e => e.valor_unitario).HasPrecision(14, 4).HasDefaultValue(0m);
+            entity.Property(e => e.total).HasPrecision(17, 4).HasDefaultValue(0m);
+            entity.Property(e => e.debe).HasPrecision(17, 4).HasDefaultValue(0m);
+            entity.Property(e => e.haber).HasPrecision(17, 4).HasDefaultValue(0m);
             entity.Property(e => e.cuenta_contable).HasMaxLength(25);
             entity.Property(e => e.departamento).HasMaxLength(3);
             entity.Property(e => e.departamento_desc).HasMaxLength(100);
@@ -110,9 +124,26 @@ public partial class SiadDbContext
             entity.Property(e => e.es_ajuste).HasDefaultValue(false);
             entity.Property(e => e.descripcion).HasMaxLength(120);
             entity.Property(e => e.observacion).HasMaxLength(254);
+            entity.Property(e => e.documento_tipo).HasMaxLength(20);
+            entity.Property(e => e.existencia_resultante).HasPrecision(15, 2);
+            entity.Property(e => e.costo_promedio_resultante).HasPrecision(12, 4);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
 
             entity.HasOne(e => e.bodega_ref).WithMany()
                 .HasForeignKey(e => e.bodega_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasOne(e => e.bodega_destino_ref).WithMany()
+                .HasForeignKey(e => e.bodega_destino_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            // RESTRICT, no SetNull: alm_kardex es un libro mayor. Borrar un artículo con
+            // asientos debe ser imposible, no anular la referencia (ver
+            // Database/2026-07-14_alm_kardex_fk_articulo_restrict.sql). Con SetNull, EF
+            // intentaría un UPDATE sobre el kardex que además choca con trg_alm_kardex_inmutable.
+            entity.HasOne(e => e.articulo_ref).WithMany()
+                .HasForeignKey(e => e.articulo_id)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 
@@ -147,6 +178,28 @@ public partial class SiadDbContext
             entity.Property(e => e.cuenta_por_pagar_anterior).HasMaxLength(30);
             entity.Property(e => e.codigo_compra).HasMaxLength(20);
             entity.Property(e => e.concepto).HasMaxLength(254);
+            entity.Property(e => e.posteado).HasDefaultValue(false);
+            entity.Property(e => e.fecha_posteo).HasColumnType("timestamp without time zone");
+            // origen NO lleva HasDefaultValue: la columna no tiene DEFAULT en la BD (a
+            // propósito, ver Database/2026-07-14_alm_documentos_bodega_posteo.sql). El
+            // inicializador de la entidad (= OrigenDocumento.Siad) hace que EF siempre
+            // lo mande explícito en el INSERT.
+            entity.Property(e => e.origen).HasMaxLength(10);
+
+            entity.HasIndex(e => e.articulo_id, "ix_alm_compra_articulo");
+            entity.HasOne(e => e.articulo_ref).WithMany()
+                .HasForeignKey(e => e.articulo_id)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.company_id, e.uuid },
+                "uq_alm_compra_company_uuid").IsUnique()
+                .HasFilter("uuid IS NOT NULL");
+            entity.HasIndex(e => e.company_id, "ix_alm_compra_pendiente")
+                .HasFilter("origen = 'SIAD' AND posteado = false");
+            entity.HasIndex(e => e.bodega_id, "ix_alm_compra_bodega");
+            entity.HasOne(e => e.bodega_ref).WithMany()
+                .HasForeignKey(e => e.bodega_id)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<alm_requisicion>(entity =>
@@ -188,6 +241,25 @@ public partial class SiadDbContext
             entity.Property(e => e.descargado).HasDefaultValue(false);
             entity.Property(e => e.estatus).HasMaxLength(1);
             entity.Property(e => e.observacion).HasMaxLength(300);
+            entity.Property(e => e.posteado).HasDefaultValue(false);
+            entity.Property(e => e.fecha_posteo).HasColumnType("timestamp without time zone");
+            // origen sin HasDefaultValue: la columna no tiene DEFAULT en la BD (ver script).
+            entity.Property(e => e.origen).HasMaxLength(10);
+
+            entity.HasIndex(e => e.articulo_id, "ix_alm_requisicion_articulo");
+            entity.HasOne(e => e.articulo_ref).WithMany()
+                .HasForeignKey(e => e.articulo_id)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.company_id, e.uuid },
+                "uq_alm_requisicion_company_uuid").IsUnique()
+                .HasFilter("uuid IS NOT NULL");
+            entity.HasIndex(e => e.company_id, "ix_alm_requisicion_pendiente")
+                .HasFilter("origen = 'SIAD' AND posteado = false");
+            entity.HasIndex(e => e.bodega_id, "ix_alm_requisicion_bodega");
+            entity.HasOne(e => e.bodega_ref).WithMany()
+                .HasForeignKey(e => e.bodega_id)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<alm_descargo>(entity =>
@@ -213,6 +285,25 @@ public partial class SiadDbContext
             entity.Property(e => e.cuenta_contable_2).HasMaxLength(30);
             entity.Property(e => e.cuenta_contable_2_detalle).HasMaxLength(30);
             entity.Property(e => e.comentario).HasMaxLength(254);
+            entity.Property(e => e.posteado).HasDefaultValue(false);
+            entity.Property(e => e.fecha_posteo).HasColumnType("timestamp without time zone");
+            // origen sin HasDefaultValue: la columna no tiene DEFAULT en la BD (ver script).
+            entity.Property(e => e.origen).HasMaxLength(10);
+
+            entity.HasIndex(e => e.articulo_id, "ix_alm_descargo_articulo");
+            entity.HasOne(e => e.articulo_ref).WithMany()
+                .HasForeignKey(e => e.articulo_id)
+                .OnDelete(DeleteBehavior.SetNull);
+
+            entity.HasIndex(e => new { e.company_id, e.uuid },
+                "uq_alm_descargo_company_uuid").IsUnique()
+                .HasFilter("uuid IS NOT NULL");
+            entity.HasIndex(e => e.company_id, "ix_alm_descargo_pendiente")
+                .HasFilter("origen = 'SIAD' AND posteado = false");
+            entity.HasIndex(e => e.bodega_id, "ix_alm_descargo_bodega");
+            entity.HasOne(e => e.bodega_ref).WithMany()
+                .HasForeignKey(e => e.bodega_id)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<af_activo_fijo>(entity =>
@@ -304,16 +395,36 @@ public partial class SiadDbContext
             entity.Property(e => e.abreviatura).HasMaxLength(10);
             entity.Property(e => e.permite_decimales).HasDefaultValue(true);
             entity.Property(e => e.activo).HasDefaultValue(true);
-            entity.Property(e => e.categoria).HasMaxLength(30);
             entity.Property(e => e.factor_conversion).HasPrecision(18, 6).HasDefaultValue(1m);
             entity.Property(e => e.usuariocreacion).HasMaxLength(100);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
 
+            entity.HasIndex(e => e.categoria_id, "ix_alm_unidad_medida_categoria");
+
+            entity.HasOne(e => e.categoria_ref).WithMany(p => p.unidades)
+                .HasForeignKey(e => e.categoria_id)
+                .OnDelete(DeleteBehavior.SetNull);
+
             entity.HasOne(e => e.unidad_base).WithMany(p => p.unidades_derivadas)
                 .HasForeignKey(e => e.unidad_base_id)
                 .OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<alm_categoria_unidad>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_categoria_unidad_pkey");
+            entity.ToTable("alm_categoria_unidad", "public");
+            entity.HasIndex(e => new { e.company_id, e.nombre }, "uq_alm_categoria_unidad_company_nombre").IsUnique();
+            entity.HasIndex(e => e.company_id, "ix_alm_categoria_unidad_company");
+            entity.Property(e => e.nombre).HasMaxLength(30);
+            entity.Property(e => e.descripcion).HasMaxLength(100);
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
         });
 
         modelBuilder.Entity<alm_tipo_articulo>(entity =>
@@ -327,6 +438,11 @@ public partial class SiadDbContext
             entity.Property(e => e.codigo).HasMaxLength(10);
             entity.Property(e => e.nombre).HasMaxLength(60);
             entity.Property(e => e.descripcion).HasMaxLength(200);
+            entity.Property(e => e.cuenta_inventario).HasMaxLength(20);
+            entity.Property(e => e.cuenta_costo_ventas).HasMaxLength(20);
+            entity.Property(e => e.cuenta_ventas).HasMaxLength(20);
+            entity.Property(e => e.cuenta_ajustes).HasMaxLength(20);
+            entity.Property(e => e.cuenta_devoluciones).HasMaxLength(20);
             entity.Property(e => e.activo).HasDefaultValue(true);
             entity.Property(e => e.usuariocreacion).HasMaxLength(100);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
@@ -393,42 +509,6 @@ public partial class SiadDbContext
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
         });
 
-        modelBuilder.Entity<alm_estanteria>(entity =>
-        {
-            entity.HasKey(e => e.id).HasName("alm_estanteria_pkey");
-            entity.ToTable("alm_estanteria", "public");
-            entity.HasIndex(e => new { e.company_id, e.bodega_id, e.codigo }, "uq_alm_estanteria_company_bodega_codigo").IsUnique();
-            entity.HasIndex(e => e.company_id, "ix_alm_estanteria_company");
-            entity.HasIndex(e => e.bodega_id, "ix_alm_estanteria_bodega");
-            entity.Property(e => e.codigo).HasMaxLength(10);
-            entity.Property(e => e.nombre).HasMaxLength(100);
-            entity.Property(e => e.activo).HasDefaultValue(true);
-            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
-            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
-            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
-            entity.HasOne(e => e.bodega).WithMany(p => p.estanterias)
-                .HasForeignKey(e => e.bodega_id).OnDelete(DeleteBehavior.Cascade);
-        });
-
-        modelBuilder.Entity<alm_estante>(entity =>
-        {
-            entity.HasKey(e => e.id).HasName("alm_estante_pkey");
-            entity.ToTable("alm_estante", "public");
-            entity.HasIndex(e => new { e.company_id, e.estanteria_id, e.codigo }, "uq_alm_estante_company_estanteria_codigo").IsUnique();
-            entity.HasIndex(e => e.company_id, "ix_alm_estante_company");
-            entity.HasIndex(e => e.estanteria_id, "ix_alm_estante_estanteria");
-            entity.Property(e => e.codigo).HasMaxLength(10);
-            entity.Property(e => e.descripcion).HasMaxLength(150);
-            entity.Property(e => e.activo).HasDefaultValue(true);
-            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
-            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
-            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
-            entity.HasOne(e => e.estanteria).WithMany(p => p.estantes)
-                .HasForeignKey(e => e.estanteria_id).OnDelete(DeleteBehavior.Cascade);
-        });
-
         modelBuilder.Entity<alm_articulo_bodega>(entity =>
         {
             entity.HasKey(e => e.id).HasName("alm_articulo_bodega_pkey");
@@ -437,10 +517,20 @@ public partial class SiadDbContext
             entity.HasIndex(e => e.company_id, "ix_alm_articulo_bodega_company");
             entity.HasIndex(e => e.articulo_id, "ix_alm_articulo_bodega_articulo");
             entity.HasIndex(e => e.bodega_id, "ix_alm_articulo_bodega_bodega");
-            entity.HasIndex(e => e.estante_id, "ix_alm_articulo_bodega_estante");
+            entity.Property(e => e.ubicacion1).HasMaxLength(20);
+            entity.Property(e => e.ubicacion2).HasMaxLength(20);
+            entity.Property(e => e.ubicacion3).HasMaxLength(20);
+            entity.Property(e => e.ubicacion4).HasMaxLength(20);
+            entity.Property(e => e.ubicacion5).HasMaxLength(20);
             entity.Property(e => e.existencia).HasPrecision(15, 2).HasDefaultValue(0m);
             entity.Property(e => e.existencia_minima).HasPrecision(11, 2).HasDefaultValue(0m);
+            entity.Property(e => e.existencia_maxima).HasPrecision(11, 2).HasDefaultValue(0m);
+            entity.Property(e => e.existencia_comprometida).HasPrecision(15, 2).HasDefaultValue(0m);
+            entity.Property(e => e.existencia_transito).HasPrecision(15, 2).HasDefaultValue(0m);
+            entity.Property(e => e.costo_promedio).HasPrecision(12, 4).HasDefaultValue(0m);
+            entity.Property(e => e.ultimo_costo).HasPrecision(12, 4).HasDefaultValue(0m);
             entity.Property(e => e.principal).HasDefaultValue(false);
+            entity.Property(e => e.activo).HasDefaultValue(true);
             entity.Property(e => e.usuariocreacion).HasMaxLength(100);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
@@ -450,8 +540,28 @@ public partial class SiadDbContext
                 .HasForeignKey(e => e.articulo_id).OnDelete(DeleteBehavior.Cascade);
             entity.HasOne(e => e.bodega).WithMany()
                 .HasForeignKey(e => e.bodega_id).OnDelete(DeleteBehavior.Restrict);
-            entity.HasOne(e => e.estante).WithMany()
-                .HasForeignKey(e => e.estante_id).OnDelete(DeleteBehavior.SetNull);
+        });
+
+        modelBuilder.Entity<alm_articulo_proveedor>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_articulo_proveedor_pkey");
+            entity.ToTable("alm_articulo_proveedor", "public");
+            entity.HasIndex(e => new { e.company_id, e.articulo_id, e.cod_proveedor }, "uq_alm_articulo_proveedor").IsUnique();
+            entity.HasIndex(e => e.company_id, "ix_alm_articulo_proveedor_company");
+            entity.HasIndex(e => e.articulo_id, "ix_alm_articulo_proveedor_articulo");
+            entity.HasIndex(e => e.cod_proveedor, "ix_alm_articulo_proveedor_proveedor");
+            entity.Property(e => e.cod_proveedor).HasMaxLength(20);
+            entity.Property(e => e.codigo_upc).HasMaxLength(40);
+            entity.Property(e => e.costo).HasPrecision(12, 4).HasDefaultValue(0m);
+            entity.Property(e => e.principal).HasDefaultValue(false);
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            entity.HasOne(e => e.articulo).WithMany(p => p.proveedores)
+                .HasForeignKey(e => e.articulo_id).OnDelete(DeleteBehavior.Cascade);
         });
     }
 }

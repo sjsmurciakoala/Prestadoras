@@ -74,6 +74,7 @@ public sealed class ComprasService : IComprasService
             .Select(c => new CompraListItemDto
             {
                 Id = c.id,
+                ArticuloId = c.articulo_id,
                 Fecha = c.fecha,
                 FechaFactura = c.fecha_factura,
                 Proveedor = c.proveedor,

@@ -36,8 +36,8 @@
                             CssClass="w-100">
                     <ItemTemplate Context="art">
                         <div class="d-flex flex-column">
-                            <span class="fw-semibold">@art.Codigo — @art.Descripcion</span>
-                            <span class="text-muted small">Existencia: @art.Existencia.ToString("N2") @art.UnidadMedida</span>
+                            <span class="fw-semibold">#@art.Id — @art.Descripcion</span>
+                            <span class="text-muted small">@(string.IsNullOrWhiteSpace(art.Codigo) ? "—" : art.Codigo) · Existencia: @art.Existencia.ToString("N2") @art.UnidadMedida</span>
                         </div>
                     </ItemTemplate>
                 </DxComboBox>
@@ -277,21 +277,33 @@
     {
         await CargarCatalogosAsync();
 
-        // Preselección por query string (?articulo=CODIGO), p. ej. desde el catálogo.
-        var codigoBuscado = LeerCodigoDeQuery();
-        if (!string.IsNullOrWhiteSpace(codigoBuscado))
+        // Preselección por query string: ?articuloId=ID (preferente) o ?articulo=CODIGO
+        // (compat, mientras otras pantallas todavía enlazan por código).
+        var articuloIdBuscado = LeerArticuloIdDeQuery();
+        if (articuloIdBuscado.HasValue)
         {
-            articuloSeleccionado = articulos.FirstOrDefault(a =>
-                string.Equals(a.Codigo, codigoBuscado, StringComparison.OrdinalIgnoreCase));
-
-            if (articuloSeleccionado is not null)
+            articuloSeleccionado = articulos.FirstOrDefault(a => a.Id == articuloIdBuscado.Value);
+        }
+        else
+        {
+            var codigoBuscado = LeerParametroDeQuery("articulo");
+            if (!string.IsNullOrWhiteSpace(codigoBuscado))
             {
-                await ConsultarAsync();
+                articuloSeleccionado = articulos.FirstOrDefault(a =>
+                    string.Equals(a.Codigo, codigoBuscado, StringComparison.OrdinalIgnoreCase));
             }
+        }
+
+        if (articuloSeleccionado is not null)
+        {
+            await ConsultarAsync();
         }
     }
 
-    private string? LeerCodigoDeQuery()
+    private int? LeerArticuloIdDeQuery()
+        => int.TryParse(LeerParametroDeQuery("articuloId"), out var id) ? id : null;
+
+    private string? LeerParametroDeQuery(string nombre)
     {
         var query = new Uri(Navigation.Uri).Query;
         if (string.IsNullOrWhiteSpace(query))
@@ -302,7 +314,7 @@
         foreach (var par in query.TrimStart('?').Split('&', StringSplitOptions.RemoveEmptyEntries))
         {
             var partes = par.Split('=', 2);
-            if (partes.Length == 2 && partes[0].Equals("articulo", StringComparison.OrdinalIgnoreCase))
+            if (partes.Length == 2 && partes[0].Equals(nombre, StringComparison.OrdinalIgnoreCase))
             {
                 return Uri.UnescapeDataString(partes[1]);
             }
@@ -369,7 +381,7 @@
 
             var filtro = new KardexFilterDto
             {
-                CodigoArticulo = articuloSeleccionado.Codigo,
+                ArticuloId = articuloSeleccionado.Id,
                 FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
                 FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null,
                 TipoTransaccion = tipoSeleccionado?.Codigo,

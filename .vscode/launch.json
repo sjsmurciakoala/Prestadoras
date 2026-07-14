@@ -1,4 +1,4 @@
-﻿{
+{
   "version": "0.2.0",
   "configurations": [
     {
@@ -10,15 +10,16 @@
       "args": [],
       "cwd": "${workspaceFolder}/apc",
       "stopAtEntry": false,
+      "launchSettingsProfile": "",
       "serverReadyAction": {
         "action": "openExternally",
         "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
       },
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
-        "ASPNETCORE_URLS": "https://localhost:5002;http://localhost:5000"
+        "ASPNETCORE_URLS": "http://localhost:5000"
       },
-      "inspectUri": "{wsProtocol}://{url.hostname}:{url.port}/_framework/debug/ws-proxy?browser={browserInspectUri}"
+      "console": "internalConsole"
     },
     {
       "name": "apc.MobileApi: Debug API",
@@ -29,6 +30,7 @@
       "args": [],
       "cwd": "${workspaceFolder}/apc.MobileApi",
       "stopAtEntry": false,
+      "launchSettingsProfile": "",
       "serverReadyAction": {
         "action": "openExternally",
         "pattern": "\\bNow listening on:\\s+(https?://\\S+)",
@@ -37,7 +39,8 @@
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_URLS": "http://localhost:8088"
-      }
+      },
+      "console": "internalConsole"
     },
     {
       "name": "apc.BancosWs: Debug API",
@@ -48,14 +51,12 @@
       "args": [],
       "cwd": "${workspaceFolder}/apc.BancosWs",
       "stopAtEntry": false,
-      "serverReadyAction": {
-        "action": "openExternally",
-        "pattern": "\\bNow listening on:\\s+(https?://\\S+)"
-      },
+      "launchSettingsProfile": "",
       "env": {
         "ASPNETCORE_ENVIRONMENT": "Development",
         "ASPNETCORE_URLS": "http://localhost:8087"
-      }
+      },
+      "console": "internalConsole"
     }
   ],
   "compounds": [

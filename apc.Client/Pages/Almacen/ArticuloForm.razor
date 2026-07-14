@@ -1,5 +1,6 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Contabilidad
 
 <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
     <DataAnnotationsValidator />
@@ -9,15 +10,20 @@
             <ContentTemplate>
                 <DxFormLayout>
         <DxFormLayoutGroup Caption="Datos generales" ColSpanXs="12">
-            <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
-                <DxTextBox @bind-Text="Model.Codigo"
-                           NullText="Código del artículo"
-                           MaxLength="20"
-                           Enabled="@(!Model.Id.HasValue)" />
-                <ValidationMessage For="() => Model.Codigo" />
-            </DxFormLayoutItem>
+            @if (Model.Id.HasValue)
+            {
+                <DxFormLayoutItem Caption="ID" ColSpanMd="4">
+                    <Template>
+                        <div class="pt-2"><span class="fw-semibold fs-6">@Model.Id</span></div>
+                    </Template>
+                </DxFormLayoutItem>
 
-            <DxFormLayoutItem Caption="Descripción *" ColSpanMd="8">
+                <DxFormLayoutItem Caption="Código (SIMAFI)" ColSpanMd="8">
+                    <DxTextBox @bind-Text="Model.Codigo" ReadOnly="true" NullText="—" MaxLength="20" />
+                </DxFormLayoutItem>
+            }
+
+            <DxFormLayoutItem Caption="Descripción *" ColSpanMd="12">
                 <DxTextBox @bind-Text="Model.Descripcion"
                            NullText="Descripción del artículo"
                            MaxLength="120" />
@@ -25,7 +31,9 @@
             </DxFormLayoutItem>
 
             <DxFormLayoutItem Caption="Unidad de medida" ColSpanMd="4">
-                <DxComboBox Data="@Unidades" @bind-Value="Model.UnidadMedidaId"
+                <DxComboBox Data="@UnidadesConCategoria" Value="Model.UnidadMedidaId"
+                            ValueChanged="@((int? v) => OnUnidadMedidaChanged(v))"
+                            ValueExpression="@(() => Model.UnidadMedidaId)"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
                             TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
                             FilteringMode="DataGridFilteringMode.Contains"
@@ -35,24 +43,38 @@
             </DxFormLayoutItem>
 
             <DxFormLayoutItem Caption="Unidad de almacenaje" ColSpanMd="4">
-                <DxComboBox Data="@Unidades" @bind-Value="Model.UnidadAlmacenajeId"
+                <DxComboBox Data="@UnidadesCompatibles" @bind-Value="Model.UnidadAlmacenajeId"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
                             TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
                             FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Unidad de almacenaje..."
+                            Enabled="@(CategoriaIdSeleccionada.HasValue)"
+                            NullText="@(!CategoriaIdSeleccionada.HasValue ? "Elija primero la unidad de medida" : "Unidad de almacenaje...")"
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                 <ValidationMessage For="() => Model.UnidadAlmacenajeId" />
             </DxFormLayoutItem>
 
             <DxFormLayoutItem Caption="Unidad de salidas" ColSpanMd="4">
-                <DxComboBox Data="@Unidades" @bind-Value="Model.UnidadSalidaId"
+                <DxComboBox Data="@UnidadesCompatibles" @bind-Value="Model.UnidadSalidaId"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
                             TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
                             FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Unidad de salidas..."
+                            Enabled="@(CategoriaIdSeleccionada.HasValue)"
+                            NullText="@(!CategoriaIdSeleccionada.HasValue ? "Elija primero la unidad de medida" : "Unidad de salidas...")"
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                 <ValidationMessage For="() => Model.UnidadSalidaId" />
             </DxFormLayoutItem>
+
+            @if (!string.IsNullOrWhiteSpace(CategoriaNombreSeleccionada))
+            {
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="form-hint text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Al elegir la unidad de medida, almacenaje y salida toman la misma unidad (categoría <strong>@CategoriaNombreSeleccionada</strong>). Puedes cambiarlas por otra de la misma categoría.
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            }
         </DxFormLayoutGroup>
 
         <DxFormLayoutGroup Caption="Clasificación" ColSpanXs="12">
@@ -65,75 +87,68 @@
                 <ValidationMessage For="() => Model.TipoArticuloId" />
             </DxFormLayoutItem>
 
-            <DxFormLayoutItem Caption="Línea" ColSpanMd="4">
+            <DxFormLayoutItem Caption="Grupo" ColSpanMd="4">
                 <DxComboBox Data="@Lineas" @bind-Value="Model.LineaId"
                             ValueFieldName="@nameof(LineaLookupDto.Id)"
                             TextFieldName="@nameof(LineaLookupDto.Display)"
                             FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Seleccione una línea..."
+                            NullText="Seleccione un grupo..."
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                 <ValidationMessage For="() => Model.LineaId" />
             </DxFormLayoutItem>
 
-            <DxFormLayoutItem Caption="Grupo" ColSpanMd="4">
+            <DxFormLayoutItem Caption="Categoría" ColSpanMd="4">
                 <DxComboBox Data="@GruposFiltrados" @bind-Value="Model.GrupoId"
                             ValueFieldName="@nameof(GrupoLookupDto.Id)"
                             TextFieldName="@nameof(GrupoLookupDto.Display)"
                             FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Seleccione un grupo..."
+                            NullText="Seleccione una categoría..."
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                 <ValidationMessage For="() => Model.GrupoId" />
             </DxFormLayoutItem>
-
-            <DxFormLayoutItem Caption="Diámetro" ColSpanMd="6">
-                <DxTextBox @bind-Text="Model.Diametro"
-                           NullText="Diámetro / especificación"
-                           MaxLength="80" />
-                <ValidationMessage For="() => Model.Diametro" />
-            </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
-        <DxFormLayoutGroup Caption="Contabilidad y costos" ColSpanXs="12">
-            <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="6">
-                <DxTextBox @bind-Text="Model.CuentaContable"
-                           NullText="Cuenta contable"
-                           MaxLength="20" />
+        <DxFormLayoutGroup Caption="Contabilidad" ColSpanXs="12">
+            <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="12">
+                <DxComboBox Data="@CuentasContables"
+                            TData="CuentaContableLookupDto"
+                            TValue="string"
+                            @bind-Value="Model.CuentaContable"
+                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione una cuenta contable..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(CuentasContables.Count > 0)" />
                 <ValidationMessage For="() => Model.CuentaContable" />
-            </DxFormLayoutItem>
-
-            <DxFormLayoutItem Caption="Valor unitario" ColSpanMd="6">
-                <DxSpinEdit @bind-Value="Model.ValorUnitario"
-                            DisplayFormat="N4"
-                            MinValue="0" />
-                <ValidationMessage For="() => Model.ValorUnitario" />
             </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
         <DxFormLayoutGroup Caption="Inventario / Existencias" ColSpanXs="12">
-            <DxFormLayoutItem Caption="Existencia mínima" ColSpanMd="6">
-                <DxSpinEdit @bind-Value="Model.ExistenciaMinima"
-                            DisplayFormat="N2"
-                            MinValue="0"
-                            ReadOnly="@Model.Id.HasValue" />
-                <ValidationMessage For="() => Model.ExistenciaMinima" />
-            </DxFormLayoutItem>
-
-            <DxFormLayoutItem Caption="@ExistenciaCaption" ColSpanMd="6">
-                <DxSpinEdit @bind-Value="Model.Existencia"
-                            DisplayFormat="N2"
-                            MinValue="0"
-                            ReadOnly="@Model.Id.HasValue" />
-                <ValidationMessage For="() => Model.Existencia" />
-            </DxFormLayoutItem>
-
             @if (Model.Id.HasValue)
+            {
+                <DxFormLayoutItem Caption="Existencia" ColSpanMd="6">
+                    <DxSpinEdit @bind-Value="Model.Existencia" DisplayFormat="N2" MinValue="0" ReadOnly="true" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="form-hint text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            La existencia es el total del artículo: la <strong>suma de la existencia de cada bodega</strong>.
+                            Se administra (junto con el mínimo y el valor unitario) por bodega en la pestaña <strong>Ubicación</strong>.
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            }
+            else
             {
                 <DxFormLayoutItem ColSpanMd="12">
                     <Template>
                         <div class="form-hint text-muted small">
                             <i class="bi bi-info-circle me-1"></i>
-                            La existencia y el mínimo son el total del artículo (suma de todas las bodegas).
-                            Se administran por bodega en la pestaña <strong>Ubicación</strong>.
+                            La existencia, el mínimo y el valor unitario se definen <strong>por bodega</strong> en la pestaña
+                            <strong>Ubicación</strong>. Debe asignar al menos una bodega para poder guardar.
                         </div>
                     </Template>
                 </DxFormLayoutItem>
@@ -142,14 +157,30 @@
                 </DxFormLayout>
             </ContentTemplate>
         </DxTabPage>
-        @if (Model.Id.HasValue)
-        {
-            <DxTabPage Text="Ubicación">
-                <ContentTemplate>
+        <DxTabPage Text="Ubicación">
+            <ContentTemplate>
+                @if (Model.Id.HasValue)
+                {
                     <ArticuloUbicacionesTab ArticuloId="@Model.Id.Value" />
-                </ContentTemplate>
-            </DxTabPage>
-        }
+                }
+                else
+                {
+                    <ArticuloUbicacionesTab @bind-Ubicaciones="Model.Ubicaciones" />
+                }
+            </ContentTemplate>
+        </DxTabPage>
+        <DxTabPage Text="Proveedores (UPC)">
+            <ContentTemplate>
+                @if (Model.Id.HasValue)
+                {
+                    <ArticuloProveedoresTab ArticuloId="@Model.Id.Value" />
+                }
+                else
+                {
+                    <ArticuloProveedoresTab @bind-Proveedores="Model.Proveedores" />
+                }
+            </ContentTemplate>
+        </DxTabPage>
     </DxTabs>
 
     @if (EditFormContext.GetValidationMessages().Any())
@@ -161,6 +192,14 @@
     }
 
     <ValidationSummary class="text-danger mb-3" />
+
+    @if (faltanUbicaciones)
+    {
+        <div class="alert alert-warning mb-3 shadow-sm">
+            <i class="bi bi-exclamation-triangle-fill me-2"></i>
+            Debe asignar al menos una bodega en la pestaña <strong>Ubicación</strong> antes de guardar el artículo.
+        </div>
+    }
 
     <div class="d-flex justify-content-end gap-2">
         <DxButton ButtonType="ButtonType.Submit"
@@ -193,9 +232,41 @@
     [Parameter]
     public IReadOnlyList<GrupoLookupDto> Grupos { get; set; } = Array.Empty<GrupoLookupDto>();
 
+    [Parameter]
+    public IReadOnlyList<CuentaContableLookupDto> CuentasContables { get; set; } = Array.Empty<CuentaContableLookupDto>();
+
     // Si hay línea seleccionada, mostrar sólo sus grupos; si no, todos.
     private IReadOnlyList<GrupoLookupDto> GruposFiltrados =>
         Model.LineaId.HasValue ? Grupos.Where(g => g.LineaId == Model.LineaId.Value).ToList() : Grupos;
+
+    // ── Unidades de medida: las tres (medida/almacenaje/salida) deben ser de la
+    //    misma categoría. La unidad de medida es el ancla y define la categoría.
+    private UnidadMedidaLookupDto? UnidadMedidaSeleccionada =>
+        Unidades.FirstOrDefault(u => u.Id == Model.UnidadMedidaId);
+
+    private int? CategoriaIdSeleccionada => UnidadMedidaSeleccionada?.CategoriaId;
+    private string? CategoriaNombreSeleccionada => UnidadMedidaSeleccionada?.CategoriaNombre;
+
+    // Sólo se ofrecen unidades con categoría definida (las sin categoría no se usan).
+    private IReadOnlyList<UnidadMedidaLookupDto> UnidadesConCategoria =>
+        Unidades.Where(u => u.CategoriaId.HasValue).ToList();
+
+    // Almacenaje y salida se filtran a la categoría de la unidad de medida.
+    private IReadOnlyList<UnidadMedidaLookupDto> UnidadesCompatibles =>
+        CategoriaIdSeleccionada.HasValue
+            ? Unidades.Where(u => u.CategoriaId == CategoriaIdSeleccionada).ToList()
+            : Array.Empty<UnidadMedidaLookupDto>();
+
+    private void OnUnidadMedidaChanged(int? value)
+    {
+        Model.UnidadMedidaId = value;
+
+        // Al asignar la unidad de medida, almacenaje y salida toman la MISMA unidad.
+        // (Quedan editables: el usuario puede cambiarlas por otra de la misma categoría.)
+        // Si se limpia la unidad de medida (value = null), las otras dos también se limpian.
+        Model.UnidadAlmacenajeId = value;
+        Model.UnidadSalidaId = value;
+    }
 
     [Parameter]
     public EventCallback OnValidSubmit { get; set; }
@@ -206,10 +277,19 @@
     [Parameter]
     public bool IsBusy { get; set; }
 
-    private string ExistenciaCaption => Model.Id.HasValue ? "Existencia" : "Existencia inicial";
+    private bool faltanUbicaciones;
 
     private async Task HandleValidSubmit()
     {
+        // Al crear, el artículo debe nacer con al menos una bodega (ubicación).
+        if (!Model.Id.HasValue && (Model.Ubicaciones is null || Model.Ubicaciones.Count == 0))
+        {
+            faltanUbicaciones = true;
+            activeTab = 1; // salta a la pestaña "Ubicación"
+            return;
+        }
+
+        faltanUbicaciones = false;
         if (OnValidSubmit.HasDelegate)
         {
             await OnValidSubmit.InvokeAsync();

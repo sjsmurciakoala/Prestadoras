@@ -13,20 +13,20 @@
     }
 
     <DxFormLayout>
-        <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
-            <DxTextBox @bind-Text="Model.Codigo" NullText="Ej. A, B, 01" MaxLength="10" />
-            <ValidationMessage For="() => Model.Codigo" />
-        </DxFormLayoutItem>
-
-        <DxFormLayoutItem Caption="Nombre" ColSpanMd="8">
-            <DxTextBox @bind-Text="Model.Nombre" NullText="Nombre o referencia" MaxLength="100" />
+        <DxFormLayoutItem Caption="Nombre *" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Nombre" NullText="Ej. Peso, Volumen, Longitud..." MaxLength="30" />
             <ValidationMessage For="() => Model.Nombre" />
         </DxFormLayoutItem>
 
-        <DxFormLayoutItem Caption="Activo" ColSpanMd="4">
+        <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Descripcion" NullText="Descripción opcional" MaxLength="100" />
+            <ValidationMessage For="() => Model.Descripcion" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Activa" ColSpanMd="12">
             <Template>
                 <div class="pt-2">
-                    <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" LabelText="Activo" />
+                    <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" LabelText="Activa" />
                 </div>
             </Template>
         </DxFormLayoutItem>
@@ -42,7 +42,7 @@
 </EditForm>
 
 @code {
-    [Parameter, EditorRequired] public EstanteriaEditDto Model { get; set; } = default!;
+    [Parameter, EditorRequired] public CategoriaUnidadEditDto Model { get; set; } = default!;
     [Parameter] public EventCallback OnValidSubmit { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public bool IsBusy { get; set; }

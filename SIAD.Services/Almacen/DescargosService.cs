@@ -72,6 +72,7 @@ public sealed class DescargosService : IDescargosService
             .Select(d => new DescargoListItemDto
             {
                 Id = d.id,
+                ArticuloId = d.articulo_id,
                 Fecha = d.fecha,
                 CodigoArticulo = d.codigo_articulo,
                 Cantidad = d.cantidad,

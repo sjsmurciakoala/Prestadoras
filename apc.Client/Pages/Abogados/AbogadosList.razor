@@ -3,10 +3,12 @@
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Abogados
+@using apc.Client.Services
 @using apc.Client.Services.Abogados
 
 @inject AbogadosClient AbogadosClient
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Abogados</PageTitle>
 
@@ -77,8 +79,12 @@
 
         <div class="grid-wrapper">
             <DxGrid @ref="grid" Data="@abogados" KeyFieldName="@nameof(AbogadoListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                     PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
                     ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading"
                     ShowGroupPanel="false" CssClass="grid-solicitudes">
 
                 <ToolbarTemplate>
@@ -364,6 +370,14 @@
     private async Task RecargarGrid() => await CargarAsync();
     private void ToggleFiltros() => mostrarFiltros = !mostrarFiltros;
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private const string GridLayoutStorageKey = "abogados-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
 
     private void AbrirNuevo()
     {

@@ -14,6 +14,14 @@ public partial class alm_tipo_articulo : ICompanyScopedEntity
     public string codigo { get; set; } = null!;
     public string nombre { get; set; } = null!;
     public string? descripcion { get; set; }
+
+    /// <summary>Cuentas contables (código del plan de cuentas) asociadas al tipo de artículo.</summary>
+    public string? cuenta_inventario { get; set; }
+    public string? cuenta_costo_ventas { get; set; }
+    public string? cuenta_ventas { get; set; }
+    public string? cuenta_ajustes { get; set; }
+    public string? cuenta_devoluciones { get; set; }
+
     public bool activo { get; set; }
     public string? usuariocreacion { get; set; }
     public DateTime? fechacreacion { get; set; }

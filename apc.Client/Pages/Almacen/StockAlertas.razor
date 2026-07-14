@@ -313,7 +313,7 @@
 
     private void VerKardex(AlertaStockDto item)
     {
-        Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(item.Codigo)}");
+        Navigation.NavigateTo($"/almacen/kardex?articuloId={item.Id}");
     }
 
     private static string SevCss(string severidad) => severidad switch

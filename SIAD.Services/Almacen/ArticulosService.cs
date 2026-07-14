@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
+using SIAD.Core.Tenancy;
 using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
@@ -12,10 +13,12 @@ namespace SIAD.Services.Almacen;
 public sealed class ArticulosService : IArticulosService
 {
     private readonly SiadDbContext _context;
+    private readonly ICurrentCompanyService _company;
 
-    public ArticulosService(SiadDbContext context)
+    public ArticulosService(SiadDbContext context, ICurrentCompanyService company)
     {
         _context = context;
+        _company = company;
     }
 
     public async Task<IReadOnlyList<ArticuloListItemDto>> GetAsync(ArticuloFilterDto? filtro, CancellationToken ct = default)
@@ -76,7 +79,8 @@ public sealed class ArticulosService : IArticulosService
                 CuentaContable = a.cuenta_contable,
                 Existencia = a.existencia,
                 ExistenciaMinima = a.existencia_minima,
-                ValorUnitario = a.valor_unitario
+                ValorUnitario = a.valor_unitario,
+                ValorTotal = a.ubicaciones.Sum(u => u.existencia)
             })
             .ToListAsync(ct);
     }
@@ -88,6 +92,7 @@ public sealed class ArticulosService : IArticulosService
         // La existencia y el mínimo son POR BODEGA: una alerta es una fila
         // (artículo, bodega) sin stock (o negativa) o por debajo de su mínimo.
         var query = _context.alm_articulo_bodegas.AsNoTracking()
+            .Where(u => u.activo)
             .Where(u => u.existencia <= 0
                      || (u.existencia_minima > 0 && u.existencia < u.existencia_minima));
 
@@ -207,6 +212,50 @@ public sealed class ArticulosService : IArticulosService
         }
     }
 
+    /// <summary>
+    /// Las unidades de medida, almacenaje y salida asignadas al artículo deben tener
+    /// categoría (tipo) definida y pertenecer todas a la misma categoría (p. ej. todas
+    /// de Peso, o todas de Volumen). No aplica si el artículo no tiene unidades asignadas.
+    /// </summary>
+    private async Task ValidarCategoriaUnidadesAsync(int? medidaId, int? almacenajeId, int? salidaId, CancellationToken ct)
+    {
+        var asignadas = new[] { medidaId, almacenajeId, salidaId }
+            .Where(id => id.HasValue)
+            .Select(id => id!.Value)
+            .ToList();
+
+        if (asignadas.Count == 0)
+        {
+            return;
+        }
+
+        // La unidad de medida es el ancla: define la categoría. No se permite asignar
+        // almacenaje o salida sin haber elegido la unidad de medida.
+        if (!medidaId.HasValue && (almacenajeId.HasValue || salidaId.HasValue))
+        {
+            throw new InvalidOperationException("Debe seleccionar la unidad de medida (es la que define la categoría) antes de asignar las unidades de almacenaje o salida.");
+        }
+
+        var categoriaPorUnidad = await _context.alm_unidad_medidas.AsNoTracking()
+            .Where(u => asignadas.Contains(u.id))
+            .Select(u => new { u.id, u.categoria_id })
+            .ToListAsync(ct);
+
+        var categorias = asignadas
+            .Select(id => categoriaPorUnidad.FirstOrDefault(u => u.id == id)?.categoria_id)
+            .ToList();
+
+        if (categorias.Any(c => c is null))
+        {
+            throw new InvalidOperationException("Las unidades de medida, almacenaje y salida deben tener una categoría (tipo) definida en el catálogo.");
+        }
+
+        if (categorias.Distinct().Count() > 1)
+        {
+            throw new InvalidOperationException("Las unidades de medida, almacenaje y salida deben pertenecer a la misma categoría (por ejemplo, todas de Peso, o todas de Volumen).");
+        }
+    }
+
     private static int SeveridadRank(string severidad) => severidad switch
     {
         StockSeveridad.Negativa => 0,
@@ -240,7 +289,8 @@ public sealed class ArticulosService : IArticulosService
                 CuentaContable = a.cuenta_contable,
                 ExistenciaMinima = a.existencia_minima,
                 ValorUnitario = a.valor_unitario,
-                Existencia = a.existencia
+                // La existencia mostrada es el total real: la suma de la existencia de cada ubicación (bodega).
+                Existencia = a.ubicaciones.Sum(u => u.existencia)
             })
             .FirstOrDefaultAsync(ct);
     }
@@ -260,21 +310,60 @@ public sealed class ArticulosService : IArticulosService
     {
         ArgumentNullException.ThrowIfNull(dto);
 
-        var codigo = NormalizeRequired(dto.Codigo, 20, "código", uppercase: true);
+        var codigo = NormalizeOptional(dto.Codigo, 20, uppercase: true) ?? string.Empty;
         var descripcion = NormalizeRequired(dto.Descripcion, 120, "descripción");
 
-        var exists = await _context.alm_articulos
-            .AsNoTracking()
-            .AnyAsync(a => a.codigo_articulo == codigo, ct);
-
-        if (exists)
+        // El artículo debe nacer con al menos una bodega (ubicación) elegida por el usuario.
+        var ubicaciones = dto.Ubicaciones ?? new List<ArticuloUbicacionDto>();
+        if (ubicaciones.Count == 0)
         {
-            throw new InvalidOperationException($"Ya existe un artículo con el código {codigo}.");
+            throw new InvalidOperationException("Debe asignar al menos una bodega (ubicación) al artículo antes de guardarlo.");
+        }
+
+        if (ubicaciones.Any(u => u.BodegaId <= 0))
+        {
+            throw new InvalidOperationException("Todas las ubicaciones deben tener una bodega seleccionada.");
+        }
+
+        if (ubicaciones.GroupBy(u => u.BodegaId).Any(g => g.Count() > 1))
+        {
+            throw new InvalidOperationException("No puede repetir la misma bodega en las ubicaciones del artículo.");
+        }
+
+        if (!string.IsNullOrWhiteSpace(codigo))
+        {
+            var exists = await _context.alm_articulos
+                .AsNoTracking()
+                .AnyAsync(a => a.codigo_articulo == codigo, ct);
+
+            if (exists)
+            {
+                throw new InvalidOperationException($"Ya existe un artículo con el código {codigo}.");
+            }
         }
 
         await ValidarUnidadMedidaAsync(dto.UnidadMedidaId, ct);
         await ValidarUnidadMedidaAsync(dto.UnidadAlmacenajeId, ct);
         await ValidarUnidadMedidaAsync(dto.UnidadSalidaId, ct);
+        await ValidarCategoriaUnidadesAsync(dto.UnidadMedidaId, dto.UnidadAlmacenajeId, dto.UnidadSalidaId, ct);
+
+        // Todas las bodegas deben existir y estar activas.
+        var bodegaIds = ubicaciones.Select(u => u.BodegaId).Distinct().ToList();
+        var bodegasValidas = await _context.alm_bodegas.AsNoTracking()
+            .Where(b => bodegaIds.Contains(b.id) && b.activo)
+            .Select(b => b.id)
+            .ToListAsync(ct);
+        if (bodegasValidas.Count != bodegaIds.Count)
+        {
+            throw new InvalidOperationException("Una o más bodegas seleccionadas no existen o están inactivas.");
+        }
+
+        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var usuario = ClasificacionNormalizer.Usuario(user);
+
+        // Exactamente una principal: la que venga marcada, o la primera si ninguna.
+        var indexPrincipal = ubicaciones.FindIndex(u => u.Principal);
+        if (indexPrincipal < 0) indexPrincipal = 0;
 
         var entity = new alm_articulo
         {
@@ -288,54 +377,101 @@ public sealed class ArticulosService : IArticulosService
             grupo_id = dto.GrupoId,
             diametro = NormalizeOptional(dto.Diametro, 80),
             cuenta_contable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true),
-            existencia_minima = dto.ExistenciaMinima,
             valor_unitario = dto.ValorUnitario,
-            existencia = dto.Existencia,
-            cantidad = dto.Existencia,
-            fecha_registro = DateOnly.FromDateTime(DateTime.Today)
+            // Existencia y mínimo son el rollup: suma de las filas por bodega.
+            existencia = ubicaciones.Sum(u => u.Existencia),
+            existencia_minima = ubicaciones.Sum(u => u.ExistenciaMinima),
+            cantidad = ubicaciones.Sum(u => u.Existencia),
+            fecha_registro = DateOnly.FromDateTime(DateTime.Today),
+            usuariocreacion = usuario,
+            fechacreacion = ahora
         };
 
-        _context.alm_articulos.Add(entity);
-        await _context.SaveChangesAsync(ct);
-
-        // Fase 2: todo artículo nace con una fila en la bodega por defecto (PRIN),
-        // que porta la existencia/mínimo inicial. alm_articulo.existencia es el rollup.
-        var bodegaPrincipalId = await GetOrCreateBodegaPrincipalAsync(user, ct);
-        _context.alm_articulo_bodegas.Add(new alm_articulo_bodega
+        for (var i = 0; i < ubicaciones.Count; i++)
         {
-            articulo_id = entity.id,
-            bodega_id = bodegaPrincipalId,
-            existencia = dto.Existencia,
-            existencia_minima = dto.ExistenciaMinima,
-            principal = true,
-            usuariocreacion = ClasificacionNormalizer.Usuario(user),
-            fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
-        });
+            var u = ubicaciones[i];
+            // Insertado por navegación → artículo + filas en una sola transacción (SaveChanges).
+            entity.ubicaciones.Add(new alm_articulo_bodega
+            {
+                bodega_id = u.BodegaId,
+                ubicacion1 = ClasificacionNormalizer.Opcional(u.Ubicacion1, 20),
+                ubicacion2 = ClasificacionNormalizer.Opcional(u.Ubicacion2, 20),
+                ubicacion3 = ClasificacionNormalizer.Opcional(u.Ubicacion3, 20),
+                ubicacion4 = ClasificacionNormalizer.Opcional(u.Ubicacion4, 20),
+                ubicacion5 = ClasificacionNormalizer.Opcional(u.Ubicacion5, 20),
+                existencia = u.Existencia,
+                existencia_minima = u.ExistenciaMinima,
+                existencia_maxima = u.ExistenciaMaxima,
+                principal = i == indexPrincipal,
+                activo = true,
+                usuariocreacion = usuario,
+                fechacreacion = ahora
+            });
+        }
+
+        // Proveedores ("UPC") opcionales: se insertan junto con el artículo.
+        await AgregarProveedoresIniciales(entity, dto.Proveedores, usuario, ahora, ct);
+
+        _context.alm_articulos.Add(entity);
         await _context.SaveChangesAsync(ct);
 
         dto.Id = entity.id;
         return dto;
     }
 
-    private async Task<int> GetOrCreateBodegaPrincipalAsync(string user, CancellationToken ct)
+    /// <summary>
+    /// Adjunta (por navegación) los proveedores capturados al crear el artículo. Valida que
+    /// no se repitan, que existan/activos en la empresa, y que a lo sumo uno sea principal.
+    /// </summary>
+    private async Task AgregarProveedoresIniciales(
+        alm_articulo entity, List<ArticuloProveedorDto>? proveedores, string usuario, DateTime ahora, CancellationToken ct)
     {
-        var existente = await _context.alm_bodegas.AsNoTracking().FirstOrDefaultAsync(b => b.codigo == "PRIN", ct);
-        if (existente is not null)
+        proveedores ??= new List<ArticuloProveedorDto>();
+        var items = proveedores
+            .Select(p => new { Dto = p, Cod = (p.CodProveedor ?? string.Empty).Trim() })
+            .Where(x => x.Cod.Length > 0)
+            .ToList();
+
+        if (items.Count == 0)
         {
-            return existente.id;
+            return;
         }
 
-        var bodega = new alm_bodega
+        var cods = items.Select(x => x.Cod).ToList();
+        if (cods.Distinct().Count() != cods.Count)
         {
-            codigo = "PRIN",
-            nombre = "Bodega principal",
-            activo = true,
-            usuariocreacion = ClasificacionNormalizer.Usuario(user),
-            fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
-        };
-        _context.alm_bodegas.Add(bodega);
-        await _context.SaveChangesAsync(ct);
-        return bodega.id;
+            throw new InvalidOperationException("No puede repetir el mismo proveedor en el artículo.");
+        }
+
+        var companyId = _company.GetCompanyId();
+        var validos = await _context.prv_proveedores.AsNoTracking()
+            .Where(p => p.company_id == companyId && cods.Contains(p.cod_proveedor) && (p.status == null || p.status == true))
+            .Select(p => p.cod_proveedor)
+            .ToListAsync(ct);
+
+        var invalidos = cods.Where(c => !validos.Contains(c)).ToList();
+        if (invalidos.Count > 0)
+        {
+            throw new InvalidOperationException($"Uno o más proveedores no existen o están inactivos: {string.Join(", ", invalidos)}.");
+        }
+
+        // A lo sumo un principal: el primero marcado.
+        var indexPrincipal = items.FindIndex(x => x.Dto.Principal);
+
+        for (var i = 0; i < items.Count; i++)
+        {
+            var x = items[i];
+            entity.proveedores.Add(new alm_articulo_proveedor
+            {
+                cod_proveedor = x.Cod,
+                codigo_upc = ClasificacionNormalizer.Opcional(x.Dto.CodigoUpc, 40),
+                costo = x.Dto.Costo,
+                principal = i == indexPrincipal,
+                activo = true,
+                usuariocreacion = usuario,
+                fechacreacion = ahora
+            });
+        }
     }
 
     public async Task<ArticuloEditDto> UpdateAsync(int id, ArticuloEditDto dto, string user, CancellationToken ct = default)
@@ -353,21 +489,25 @@ public sealed class ArticulosService : IArticulosService
             throw new KeyNotFoundException("El artículo no existe.");
         }
 
-        var codigo = NormalizeRequired(dto.Codigo, 20, "código", uppercase: true);
+        var codigo = NormalizeOptional(dto.Codigo, 20, uppercase: true) ?? string.Empty;
         var descripcion = NormalizeRequired(dto.Descripcion, 120, "descripción");
 
-        var exists = await _context.alm_articulos
-            .AsNoTracking()
-            .AnyAsync(a => a.codigo_articulo == codigo && a.id != id, ct);
-
-        if (exists)
+        if (!string.IsNullOrWhiteSpace(codigo))
         {
-            throw new InvalidOperationException($"Ya existe un artículo con el código {codigo}.");
+            var exists = await _context.alm_articulos
+                .AsNoTracking()
+                .AnyAsync(a => a.codigo_articulo == codigo && a.id != id, ct);
+
+            if (exists)
+            {
+                throw new InvalidOperationException($"Ya existe un artículo con el código {codigo}.");
+            }
         }
 
         await ValidarUnidadMedidaAsync(dto.UnidadMedidaId, ct);
         await ValidarUnidadMedidaAsync(dto.UnidadAlmacenajeId, ct);
         await ValidarUnidadMedidaAsync(dto.UnidadSalidaId, ct);
+        await ValidarCategoriaUnidadesAsync(dto.UnidadMedidaId, dto.UnidadAlmacenajeId, dto.UnidadSalidaId, ct);
 
         entity.codigo_articulo = codigo;
         entity.descripcion = descripcion;
@@ -380,6 +520,8 @@ public sealed class ArticulosService : IArticulosService
         entity.diametro = NormalizeOptional(dto.Diametro, 80);
         entity.cuenta_contable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true);
         entity.valor_unitario = dto.ValorUnitario;
+        entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         // La existencia y el mínimo son rollup de alm_articulo_bodega (se administran
         // por bodega en la pestaña Ubicación); no se sobrescriben desde el form.
 
@@ -404,9 +546,12 @@ public sealed class ArticulosService : IArticulosService
 
         // No permitir borrar si el artículo tiene movimientos de kardex: se
         // perdería la trazabilidad de existencias.
+        // Se valida por articulo_id (la FK real), NO por codigo_articulo: el código
+        // es opcional desde 2026-07-13 y los artículos nuevos lo llevan en blanco,
+        // con lo que la comparación por código no encontraría sus movimientos.
         var tieneMovimientos = await _context.alm_kardexs
             .AsNoTracking()
-            .AnyAsync(k => k.codigo_articulo == entity.codigo_articulo, ct);
+            .AnyAsync(k => k.articulo_id == id, ct);
 
         if (tieneMovimientos)
         {

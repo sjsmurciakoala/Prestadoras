@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using apc.Client.Services;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Contabilidad;
 
 namespace apc.Client.Services.Almacen;
 
@@ -52,5 +53,29 @@ public sealed class TiposArticuloClient
         if (r.StatusCode == System.Net.HttpStatusCode.NotFound) return false;
         await r.ReadFromJsonAsyncWithAuthCheck<object>(ct);
         return r.IsSuccessStatusCode;
+    }
+
+    /// <summary>
+    /// Cuentas contables del catálogo (plan de cuentas) para los desplegables del tipo:
+    /// sólo cuentas de detalle (imputables) y activas, ordenadas por código.
+    /// </summary>
+    public async Task<List<CuentaContableLookupDto>> GetCuentasContablesAsync(CancellationToken ct = default)
+    {
+        var cuentas = await _http.GetFromJsonAsyncWithAuthCheck<PlanCuentaDto[]>(
+            "api/contabilidad/catalogos/plan-cuentas", ct) ?? Array.Empty<PlanCuentaDto>();
+
+        return cuentas
+            .Where(c => c.AllowsPosting
+                && (string.IsNullOrWhiteSpace(c.Status)
+                    || string.Equals(c.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase)
+                    || string.Equals(c.Status, "ACTIVO", StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new CuentaContableLookupDto
+            {
+                AccountId = c.AccountId,
+                Code = c.Code ?? string.Empty,
+                Description = c.Name ?? string.Empty
+            })
+            .ToList();
     }
 }

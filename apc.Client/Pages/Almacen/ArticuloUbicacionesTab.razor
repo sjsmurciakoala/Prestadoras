@@ -5,8 +5,6 @@
 
 @inject ArticulosClient ArticulosClient
 @inject BodegasClient BodegasClient
-@inject EstanteriasClient EstanteriasClient
-@inject EstantesClient EstantesClient
 @inject IToastNotificationService ToastService
 
 <DxToastProvider Name="UbicacionesToast" MaxToastCount="4" />
@@ -17,11 +15,27 @@
     <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
         <div class="text-muted small">
             <i class="bi bi-geo-alt me-1"></i>
-            Bodegas donde se almacena este artículo. La estantería y el estante son opcionales.
+            @if (EnMemoria)
+            {
+                <text>Asigne las bodegas donde se almacenará el artículo. La primera es la principal. La ubicación física (5 campos) es manual y opcional.</text>
+            }
+            else
+            {
+                <text>Bodegas donde se almacena este artículo. Las ubicaciones no se eliminan: se deshabilitan y quedan en el histórico.</text>
+            }
         </div>
-        <DxButton Text="Agregar ubicación" IconCssClass="bi bi-plus-lg"
-                  RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
-                  Click="AbrirNuevo" />
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            @if (!EnMemoria)
+            {
+                <DxCheckBox Checked="verInactivas" CheckedExpression="@(() => verInactivas)"
+                            CheckedChanged="@((bool v) => OnToggleInactivasAsync(v))">
+                    Ver histórico
+                </DxCheckBox>
+            }
+            <DxButton Text="Agregar ubicación" IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                      Click="AbrirNuevo" />
+        </div>
     </div>
 
     <div class="grid-wrapper">
@@ -31,13 +45,15 @@
                 <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.BodegaDisplay)" Caption="Bodega" MinWidth="200">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
-                        { <span class="text-dark fw-semibold">@item.BodegaDisplay</span> }
+                        {
+                            <span class="@(item.Activo ? "text-dark fw-semibold" : "text-muted text-decoration-line-through")">@item.BodegaDisplay</span>
+                        }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.EstanteUbicacion)" Caption="Ubicación" MinWidth="160">
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.UbicacionDisplay)" Caption="Ubicación" MinWidth="160">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
-                        { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.EstanteUbicacion) ? "—" : item.EstanteUbicacion)</span> }
+                        { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.UbicacionDisplay) ? "—" : item.UbicacionDisplay)</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
                 <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Existencia)" Caption="Existencia" Width="120px" TextAlignment="GridTextAlignment.Right">
@@ -52,6 +68,12 @@
                         { <span class="text-muted">@item.ExistenciaMinima.ToString("N2")</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaMaxima)" Caption="Máximo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span class="text-muted">@item.ExistenciaMaxima.ToString("N2")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
                 <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Principal)" Caption="Principal" Width="110px" TextAlignment="GridTextAlignment.Center">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
@@ -63,25 +85,59 @@
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                @if (!EnMemoria)
+                {
+                    <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Activo)" Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloUbicacionDto item)
+                            {
+                                @if (item.Activo)
+                                { <span class="badge-status active">Activa</span> }
+                                else
+                                { <span class="badge bg-secondary">Deshabilitada</span> }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                }
+                <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
                         {
                             <div class="d-flex justify-content-center gap-2 flex-wrap">
-                                <button type="button" class="btn-icon btn-edit" title="Editar"
-                                        @onclick="() => AbrirEditarAsync(item)" @onclick:stopPropagation="true">
-                                    <i class="bi bi-pencil-square"></i>
-                                </button>
-                                <button type="button" class="btn-icon btn-delete" title="Eliminar"
-                                        @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
-                                    <i class="bi bi-trash"></i>
-                                </button>
+                                @if (item.Activo)
+                                {
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    @if (EnMemoria)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Quitar"
+                                                @onclick="() => QuitarEnMemoriaAsync(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Deshabilitar"
+                                                @onclick="() => ConfirmarDeshabilitar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-slash-circle"></i>
+                                        </button>
+                                    }
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn-icon btn-edit" title="Reactivar"
+                                            @onclick="() => ReactivarAsync(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                }
                             </div>
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
             </Columns>
-            <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">Este artículo aún no tiene ubicaciones asignadas.</div></EmptyDataAreaTemplate>
+            <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">@(EnMemoria ? "Agregue al menos una bodega para poder guardar el artículo." : "Este artículo aún no tiene ubicaciones asignadas.")</div></EmptyDataAreaTemplate>
         </DxGrid>
     </div>
 </div>
@@ -93,7 +149,7 @@
             <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
             <div>
                 <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
-                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Bodega, estantería y estante del artículo</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Bodega y ubicación manual del artículo</div>
             </div>
         </div>
     </HeaderContentTemplate>
@@ -102,7 +158,8 @@
             <div class="mb-3">
                 <label class="form-label fw-semibold">Bodega *</label>
                 <DxComboBox Data="@bodegas" Value="form.BodegaId"
-                            ValueChanged="@((int v) => OnBodegaChangedAsync(v))"
+                            ValueChanged="@((int v) => OnBodegaChanged(v))"
+                            ValueExpression="@(() => form.BodegaId)"
                             ValueFieldName="@nameof(BodegaLookupDto.Id)"
                             TextFieldName="@nameof(BodegaLookupDto.Display)"
                             FilteringMode="DataGridFilteringMode.Contains"
@@ -110,40 +167,45 @@
                             CssClass="w-100" />
             </div>
 
-            <div class="mb-3">
-                <label class="form-label fw-semibold">Estantería</label>
-                <DxComboBox Data="@estanteriasLookup" Value="form.EstanteriaId"
-                            ValueChanged="@((int? v) => OnEstanteriaChangedAsync(v))"
-                            ValueFieldName="@nameof(EstanteriaLookupDto.Id)"
-                            TextFieldName="@nameof(EstanteriaLookupDto.Display)"
-                            FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Seleccione una estantería..."
-                            Enabled="@(form.BodegaId > 0)"
-                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                            CssClass="w-100" />
+            <div class="mb-2">
+                <label class="form-label fw-semibold mb-1">Ubicación (manual)</label>
+                <div class="text-muted small mb-2">Hasta 20 caracteres por campo. Todos son opcionales.</div>
+                <div class="row g-3">
+                    <div class="col-12 col-md-6">
+                        <label class="form-label small text-muted">Ubicación 1</label>
+                        <DxTextBox @bind-Text="form.Ubicacion1" MaxLength="20" NullText="—" CssClass="w-100" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label small text-muted">Ubicación 2</label>
+                        <DxTextBox @bind-Text="form.Ubicacion2" MaxLength="20" NullText="—" CssClass="w-100" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label small text-muted">Ubicación 3</label>
+                        <DxTextBox @bind-Text="form.Ubicacion3" MaxLength="20" NullText="—" CssClass="w-100" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label small text-muted">Ubicación 4</label>
+                        <DxTextBox @bind-Text="form.Ubicacion4" MaxLength="20" NullText="—" CssClass="w-100" />
+                    </div>
+                    <div class="col-12 col-md-6">
+                        <label class="form-label small text-muted">Ubicación 5</label>
+                        <DxTextBox @bind-Text="form.Ubicacion5" MaxLength="20" NullText="—" CssClass="w-100" />
+                    </div>
+                </div>
             </div>
 
-            <div class="mb-3">
-                <label class="form-label fw-semibold">Estante</label>
-                <DxComboBox Data="@estantesLookup" Value="form.EstanteId"
-                            ValueChanged="@((int? v) => OnEstanteChanged(v))"
-                            ValueFieldName="@nameof(EstanteLookupDto.Id)"
-                            TextFieldName="@nameof(EstanteLookupDto.Display)"
-                            FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Seleccione un estante (opcional)..."
-                            Enabled="@(form.EstanteriaId.HasValue)"
-                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                            CssClass="w-100" />
-            </div>
-
-            <div class="row g-3 mb-3">
-                <div class="col-6">
+            <div class="row g-3 mb-3 mt-1">
+                <div class="col-12 col-md-4">
                     <label class="form-label fw-semibold">Existencia</label>
                     <DxSpinEdit @bind-Value="form.Existencia" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
                 </div>
-                <div class="col-6">
+                <div class="col-12 col-md-4">
                     <label class="form-label fw-semibold">Existencia mínima</label>
                     <DxSpinEdit @bind-Value="form.ExistenciaMinima" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">Existencia máxima</label>
+                    <DxSpinEdit @bind-Value="form.ExistenciaMaxima" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
                 </div>
             </div>
 
@@ -166,40 +228,47 @@
 <DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
     <BodyTemplate>
         <div class="text-center p-4">
-            <div class="mb-3 text-danger"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
-            <h5 class="fw-bold">¿Eliminar ubicación?</h5>
-            <p class="text-muted">La ubicación dejará de estar asociada a este artículo.</p>
-            @if (paraEliminar is not null)
+            <div class="mb-3 text-warning"><i class="bi bi-slash-circle" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Deshabilitar ubicación?</h5>
+            <p class="text-muted">La ubicación se deshabilita pero se conserva en el histórico del artículo. Podrá reactivarla después.</p>
+            @if (paraDeshabilitar is not null)
             {
-                <div class="fw-semibold">@paraEliminar.BodegaDisplay</div>
-                @if (!string.IsNullOrWhiteSpace(paraEliminar.EstanteUbicacion))
-                { <div class="text-muted small">@paraEliminar.EstanteUbicacion</div> }
+                <div class="fw-semibold">@paraDeshabilitar.BodegaDisplay</div>
+                @if (!string.IsNullOrWhiteSpace(paraDeshabilitar.UbicacionDisplay))
+                { <div class="text-muted small">@paraDeshabilitar.UbicacionDisplay</div> }
             }
             <div class="d-flex justify-content-center gap-3 mt-4">
-                <DxButton Text="Cancelar" Click="CancelarEliminar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
-                <DxButton Text="Sí, eliminar" Click="EliminarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-trash" />
+                <DxButton Text="Cancelar" Click="CancelarDeshabilitar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, deshabilitar" Click="DeshabilitarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Warning" IconCssClass="bi bi-slash-circle" />
             </div>
         </div>
     </BodyTemplate>
 </DxPopup>
 
 @code {
-    [Parameter, EditorRequired]
-    public int ArticuloId { get; set; }
+    /// <summary>Modo HTTP (edición): id del artículo existente. Null = modo en memoria (alta).</summary>
+    [Parameter] public int? ArticuloId { get; set; }
+
+    /// <summary>Modo en memoria (alta): lista de ubicaciones enlazada al formulario del artículo.</summary>
+    [Parameter] public List<ArticuloUbicacionDto>? Ubicaciones { get; set; }
+
+    [Parameter] public EventCallback<List<ArticuloUbicacionDto>> UbicacionesChanged { get; set; }
+
+    private bool EnMemoria => !ArticuloId.HasValue;
 
     private List<ArticuloUbicacionDto> ubicaciones = new();
     private List<BodegaLookupDto> bodegas = new();
-    private List<EstanteriaLookupDto> estanteriasLookup = new();
-    private List<EstanteLookupDto> estantesLookup = new();
 
     private bool isLoading;
+    private bool verInactivas;
+    private int tempIdSeq;
 
     private bool formVisible;
     private bool isSaving;
     private ArticuloUbicacionDto form = new();
 
     private bool confirmVisible;
-    private ArticuloUbicacionDto? paraEliminar;
+    private ArticuloUbicacionDto? paraDeshabilitar;
 
     private string PopupTitle => form.Id.HasValue ? "Editar ubicación" : "Nueva ubicación";
     private string PopupIcon => form.Id.HasValue ? "bi bi-pencil-square" : "bi bi-geo-alt";
@@ -213,7 +282,20 @@
         {
             isLoading = true;
             bodegas = await BodegasClient.GetLookupAsync();
-            ubicaciones = await ArticulosClient.GetUbicacionesAsync(ArticuloId);
+
+            if (EnMemoria)
+            {
+                ubicaciones = Ubicaciones ?? new();
+                // Asegura una clave única (id temporal negativo) a las filas en memoria.
+                foreach (var u in ubicaciones.Where(u => !u.Id.HasValue))
+                {
+                    u.Id = --tempIdSeq;
+                }
+            }
+            else
+            {
+                await CargarAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -227,10 +309,11 @@
 
     private async Task CargarAsync()
     {
+        if (EnMemoria) return;
         try
         {
             isLoading = true;
-            ubicaciones = await ArticulosClient.GetUbicacionesAsync(ArticuloId);
+            ubicaciones = await ArticulosClient.GetUbicacionesAsync(ArticuloId!.Value, verInactivas);
         }
         catch (Exception ex)
         {
@@ -242,75 +325,40 @@
         }
     }
 
+    private async Task OnToggleInactivasAsync(bool value)
+    {
+        verInactivas = value;
+        await CargarAsync();
+    }
+
     private void AbrirNuevo()
     {
-        form = new ArticuloUbicacionDto();
-        estanteriasLookup = new();
-        estantesLookup = new();
+        var hayActivas = ubicaciones.Any(u => u.Activo);
+        form = new ArticuloUbicacionDto { Principal = !hayActivas };
         formVisible = true;
     }
 
-    private async Task AbrirEditarAsync(ArticuloUbicacionDto row)
+    private void AbrirEditar(ArticuloUbicacionDto row)
     {
         form = new ArticuloUbicacionDto
         {
             Id = row.Id,
             BodegaId = row.BodegaId,
-            EstanteriaId = row.EstanteriaId,
-            EstanteId = row.EstanteId,
-            Principal = row.Principal
+            BodegaDisplay = row.BodegaDisplay,
+            Ubicacion1 = row.Ubicacion1,
+            Ubicacion2 = row.Ubicacion2,
+            Ubicacion3 = row.Ubicacion3,
+            Ubicacion4 = row.Ubicacion4,
+            Ubicacion5 = row.Ubicacion5,
+            Existencia = row.Existencia,
+            ExistenciaMinima = row.ExistenciaMinima,
+            Principal = row.Principal,
+            Activo = row.Activo
         };
-
-        estanteriasLookup = new();
-        estantesLookup = new();
         formVisible = true;
-
-        try
-        {
-            if (form.BodegaId > 0)
-            {
-                estanteriasLookup = await EstanteriasClient.GetLookupAsync(form.BodegaId);
-            }
-            if (form.EstanteriaId.HasValue)
-            {
-                estantesLookup = await EstantesClient.GetLookupAsync(form.EstanteriaId.Value);
-            }
-        }
-        catch (Exception ex)
-        {
-            Toast("Error", $"No se pudieron cargar las estanterías/estantes: {ex.Message}", ToastRenderStyle.Danger);
-        }
     }
 
-    private async Task OnBodegaChangedAsync(int value)
-    {
-        form.BodegaId = value;
-        form.EstanteriaId = null;
-        form.EstanteId = null;
-        estantesLookup = new();
-        estanteriasLookup = new();
-
-        if (value > 0)
-        {
-            try { estanteriasLookup = await EstanteriasClient.GetLookupAsync(value); }
-            catch (Exception ex) { Toast("Error", $"No se pudieron cargar las estanterías: {ex.Message}", ToastRenderStyle.Danger); }
-        }
-    }
-
-    private async Task OnEstanteriaChangedAsync(int? value)
-    {
-        form.EstanteriaId = value;
-        form.EstanteId = null;
-        estantesLookup = new();
-
-        if (value.HasValue)
-        {
-            try { estantesLookup = await EstantesClient.GetLookupAsync(value.Value); }
-            catch (Exception ex) { Toast("Error", $"No se pudieron cargar los estantes: {ex.Message}", ToastRenderStyle.Danger); }
-        }
-    }
-
-    private void OnEstanteChanged(int? value) => form.EstanteId = value;
+    private void OnBodegaChanged(int value) => form.BodegaId = value;
 
     private void CerrarForm()
     {
@@ -329,19 +377,15 @@
         isSaving = true;
         try
         {
-            if (form.Id.HasValue)
+            if (EnMemoria)
             {
-                await ArticulosClient.UpdateUbicacionAsync(ArticuloId, form.Id.Value, form);
-                Toast("Éxito", "Ubicación actualizada.", ToastRenderStyle.Success);
+                await GuardarEnMemoriaAsync();
             }
             else
             {
-                await ArticulosClient.AddUbicacionAsync(ArticuloId, form);
-                Toast("Éxito", "Ubicación agregada.", ToastRenderStyle.Success);
+                await GuardarHttpAsync();
             }
-
             formVisible = false;
-            await CargarAsync();
         }
         catch (InvalidOperationException ex)
         {
@@ -357,21 +401,90 @@
         }
     }
 
-    private void ConfirmarEliminar(ArticuloUbicacionDto row)
+    private async Task GuardarEnMemoriaAsync()
     {
-        paraEliminar = row;
+        if (ubicaciones.Any(u => u.BodegaId == form.BodegaId && u.Id != form.Id))
+        {
+            throw new InvalidOperationException("Ya agregó esa bodega al artículo.");
+        }
+
+        form.BodegaDisplay = bodegas.FirstOrDefault(b => b.Id == form.BodegaId)?.Display;
+        form.Activo = true;
+
+        if (form.Id.HasValue)
+        {
+            var idx = ubicaciones.FindIndex(u => u.Id == form.Id);
+            if (idx >= 0) ubicaciones[idx] = form;
+        }
+        else
+        {
+            form.Id = --tempIdSeq;
+            ubicaciones.Add(form);
+        }
+
+        if (form.Principal)
+        {
+            foreach (var u in ubicaciones.Where(u => u.Id != form.Id))
+            {
+                u.Principal = false;
+            }
+        }
+
+        await SincronizarMemoriaAsync();
+        Toast("Éxito", "Ubicación agregada.", ToastRenderStyle.Success);
+    }
+
+    private async Task GuardarHttpAsync()
+    {
+        if (form.Id.HasValue)
+        {
+            await ArticulosClient.UpdateUbicacionAsync(ArticuloId!.Value, form.Id.Value, form);
+            Toast("Éxito", "Ubicación actualizada.", ToastRenderStyle.Success);
+        }
+        else
+        {
+            await ArticulosClient.AddUbicacionAsync(ArticuloId!.Value, form);
+            Toast("Éxito", "Ubicación agregada.", ToastRenderStyle.Success);
+        }
+        await CargarAsync();
+    }
+
+    private async Task QuitarEnMemoriaAsync(ArticuloUbicacionDto row)
+    {
+        ubicaciones.RemoveAll(u => u.Id == row.Id);
+        await SincronizarMemoriaAsync();
+    }
+
+    /// <summary>Garantiza exactamente una principal y refresca la referencia del grid + el binding al padre.</summary>
+    private async Task SincronizarMemoriaAsync()
+    {
+        if (ubicaciones.Count > 0 && !ubicaciones.Any(u => u.Principal))
+        {
+            ubicaciones[0].Principal = true;
+        }
+
+        ubicaciones = ubicaciones.ToList();
+        if (UbicacionesChanged.HasDelegate)
+        {
+            await UbicacionesChanged.InvokeAsync(ubicaciones);
+        }
+    }
+
+    private void ConfirmarDeshabilitar(ArticuloUbicacionDto row)
+    {
+        paraDeshabilitar = row;
         confirmVisible = true;
     }
 
-    private void CancelarEliminar()
+    private void CancelarDeshabilitar()
     {
         confirmVisible = false;
-        paraEliminar = null;
+        paraDeshabilitar = null;
     }
 
-    private async Task EliminarConfirmadoAsync()
+    private async Task DeshabilitarConfirmadoAsync()
     {
-        if (paraEliminar?.Id is null)
+        if (paraDeshabilitar?.Id is null)
         {
             confirmVisible = false;
             return;
@@ -379,9 +492,9 @@
 
         try
         {
-            var ok = await ArticulosClient.DeleteUbicacionAsync(ArticuloId, paraEliminar.Id.Value);
-            if (!ok) Toast("Error", "No se pudo eliminar la ubicación.", ToastRenderStyle.Danger);
-            else { Toast("Éxito", "Ubicación eliminada.", ToastRenderStyle.Success); await CargarAsync(); }
+            var ok = await ArticulosClient.DeshabilitarUbicacionAsync(ArticuloId!.Value, paraDeshabilitar.Id.Value);
+            if (!ok) Toast("Error", "No se pudo deshabilitar la ubicación.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Ubicación deshabilitada.", ToastRenderStyle.Success); await CargarAsync(); }
         }
         catch (Exception ex)
         {
@@ -390,7 +503,22 @@
         finally
         {
             confirmVisible = false;
-            paraEliminar = null;
+            paraDeshabilitar = null;
+        }
+    }
+
+    private async Task ReactivarAsync(ArticuloUbicacionDto row)
+    {
+        if (row.Id is null) return;
+        try
+        {
+            var ok = await ArticulosClient.ReactivarUbicacionAsync(ArticuloId!.Value, row.Id.Value);
+            if (!ok) Toast("Error", "No se pudo reactivar la ubicación.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Ubicación reactivada.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
         }
     }
 

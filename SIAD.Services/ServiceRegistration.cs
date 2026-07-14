@@ -110,11 +110,11 @@ public static class ServiceRegistration
         services.AddScoped<IRequisicionesService, RequisicionesService>();
         services.AddScoped<IDescargosService, DescargosService>();
         services.AddScoped<IUnidadesMedidaService, UnidadesMedidaService>();
+        services.AddScoped<ICategoriaUnidadService, CategoriaUnidadService>();
         services.AddScoped<ITipoArticuloService, TipoArticuloService>();
         services.AddScoped<IBodegaService, BodegaService>();
-        services.AddScoped<IEstanteriaService, EstanteriaService>();
-        services.AddScoped<IEstanteService, EstanteService>();
         services.AddScoped<IArticuloUbicacionService, ArticuloUbicacionService>();
+        services.AddScoped<IArticuloProveedorService, ArticuloProveedorService>();
         services.AddScoped<ILineaService, LineaService>();
         services.AddScoped<IGrupoService, GrupoService>();
 

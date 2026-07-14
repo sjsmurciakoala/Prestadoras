@@ -16,15 +16,20 @@ public sealed class KardexClient
     {
         ArgumentNullException.ThrowIfNull(filtro);
 
-        if (string.IsNullOrWhiteSpace(filtro.CodigoArticulo))
+        if (!filtro.ArticuloId.HasValue && string.IsNullOrWhiteSpace(filtro.CodigoArticulo))
         {
             return null;
         }
 
-        var parameters = new List<string>
+        var parameters = new List<string>();
+        if (filtro.ArticuloId.HasValue)
         {
-            $"codigoArticulo={Uri.EscapeDataString(filtro.CodigoArticulo)}"
-        };
+            parameters.Add($"articuloId={filtro.ArticuloId.Value}");
+        }
+        else
+        {
+            parameters.Add($"codigoArticulo={Uri.EscapeDataString(filtro.CodigoArticulo)}");
+        }
 
         if (filtro.FechaDesde.HasValue)
         {

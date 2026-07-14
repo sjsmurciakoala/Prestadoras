@@ -32,7 +32,7 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
         if (!string.IsNullOrWhiteSpace(filtro.Categoria))
         {
             var categoria = filtro.Categoria.Trim();
-            query = query.Where(u => u.categoria == categoria);
+            query = query.Where(u => u.categoria_ref != null && u.categoria_ref.nombre == categoria);
         }
 
         if (!string.IsNullOrWhiteSpace(filtro.Search))
@@ -58,7 +58,7 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
         }
 
         return await query
-            .OrderBy(u => u.categoria)
+            .OrderBy(u => u.categoria_ref != null ? u.categoria_ref.nombre : string.Empty)
             .ThenByDescending(u => u.factor_conversion)
             .ThenBy(u => u.codigo)
             .Select(u => new UnidadMedidaListItemDto
@@ -67,7 +67,8 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
                 Codigo = u.codigo,
                 Nombre = u.nombre,
                 Abreviatura = u.abreviatura,
-                Categoria = u.categoria,
+                CategoriaId = u.categoria_id,
+                Categoria = u.categoria_ref != null ? u.categoria_ref.nombre : null,
                 PermiteDecimales = u.permite_decimales,
                 Activo = u.activo,
                 UnidadBaseId = u.unidad_base_id,
@@ -93,7 +94,7 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
                 Codigo = u.codigo,
                 Nombre = u.nombre,
                 Abreviatura = u.abreviatura,
-                Categoria = u.categoria,
+                CategoriaId = u.categoria_id,
                 PermiteDecimales = u.permite_decimales,
                 Activo = u.activo,
                 UnidadBaseId = u.unidad_base_id,
@@ -113,19 +114,20 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
                 Id = u.id,
                 Codigo = u.codigo,
                 Nombre = u.nombre,
-                Abreviatura = u.abreviatura
+                Abreviatura = u.abreviatura,
+                CategoriaId = u.categoria_id,
+                CategoriaNombre = u.categoria_ref != null ? u.categoria_ref.nombre : null
             })
             .ToListAsync(ct);
     }
 
     public async Task<IReadOnlyList<string>> GetCategoriasAsync(CancellationToken ct = default)
     {
-        return await _context.alm_unidad_medidas
+        return await _context.alm_categoria_unidads
             .AsNoTracking()
-            .Where(u => u.categoria != null && u.categoria != "")
-            .Select(u => u.categoria!)
-            .Distinct()
-            .OrderBy(c => c)
+            .Where(c => c.activo)
+            .OrderBy(c => c.nombre)
+            .Select(c => c.nombre)
             .ToListAsync(ct);
     }
 
@@ -145,6 +147,7 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
             throw new InvalidOperationException($"Ya existe una unidad con el código {codigo}.");
         }
 
+        await ValidarCategoriaAsync(dto.CategoriaId, ct);
         var (baseId, factor) = await ResolverConversionAsync(dto, id: null, ct);
 
         var now = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -153,7 +156,7 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
             codigo = codigo,
             nombre = nombre,
             abreviatura = NormalizeOptional(dto.Abreviatura, 10),
-            categoria = NormalizeOptional(dto.Categoria, 30),
+            categoria_id = dto.CategoriaId,
             permite_decimales = dto.PermiteDecimales,
             activo = dto.Activo,
             unidad_base_id = baseId,
@@ -196,12 +199,13 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
             throw new InvalidOperationException($"Ya existe una unidad con el código {codigo}.");
         }
 
+        await ValidarCategoriaAsync(dto.CategoriaId, ct);
         var (baseId, factor) = await ResolverConversionAsync(dto, id, ct);
 
         entity.codigo = codigo;
         entity.nombre = nombre;
         entity.abreviatura = NormalizeOptional(dto.Abreviatura, 10);
-        entity.categoria = NormalizeOptional(dto.Categoria, 30);
+        entity.categoria_id = dto.CategoriaId;
         entity.permite_decimales = dto.PermiteDecimales;
         entity.activo = dto.Activo;
         entity.unidad_base_id = baseId;
@@ -239,6 +243,22 @@ public sealed class UnidadesMedidaService : IUnidadesMedidaService
 
         await _context.SaveChangesAsync(ct);
         return true;
+    }
+
+    private async Task ValidarCategoriaAsync(int? categoriaId, CancellationToken ct)
+    {
+        if (!categoriaId.HasValue)
+        {
+            return;
+        }
+
+        var existe = await _context.alm_categoria_unidads.AsNoTracking()
+            .AnyAsync(c => c.id == categoriaId.Value && c.activo, ct);
+
+        if (!existe)
+        {
+            throw new InvalidOperationException("La categoría seleccionada no existe o está inactiva.");
+        }
     }
 
     /// <summary>

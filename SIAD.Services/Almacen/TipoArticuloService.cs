@@ -58,6 +58,11 @@ public sealed class TipoArticuloService : ITipoArticuloService
                 Codigo = t.codigo,
                 Nombre = t.nombre,
                 Descripcion = t.descripcion,
+                CuentaInventario = t.cuenta_inventario,
+                CuentaCostoVentas = t.cuenta_costo_ventas,
+                CuentaVentas = t.cuenta_ventas,
+                CuentaAjustes = t.cuenta_ajustes,
+                CuentaDevoluciones = t.cuenta_devoluciones,
                 Activo = t.activo
             })
             .FirstOrDefaultAsync(ct);
@@ -88,6 +93,11 @@ public sealed class TipoArticuloService : ITipoArticuloService
             codigo = codigo,
             nombre = nombre,
             descripcion = ClasificacionNormalizer.Opcional(dto.Descripcion, 200),
+            cuenta_inventario = ClasificacionNormalizer.Opcional(dto.CuentaInventario, 20),
+            cuenta_costo_ventas = ClasificacionNormalizer.Opcional(dto.CuentaCostoVentas, 20),
+            cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 20),
+            cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 20),
+            cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 20),
             activo = dto.Activo,
             usuariocreacion = ClasificacionNormalizer.Usuario(user),
             fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
@@ -117,6 +127,11 @@ public sealed class TipoArticuloService : ITipoArticuloService
         entity.codigo = codigo;
         entity.nombre = nombre;
         entity.descripcion = ClasificacionNormalizer.Opcional(dto.Descripcion, 200);
+        entity.cuenta_inventario = ClasificacionNormalizer.Opcional(dto.CuentaInventario, 20);
+        entity.cuenta_costo_ventas = ClasificacionNormalizer.Opcional(dto.CuentaCostoVentas, 20);
+        entity.cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 20);
+        entity.cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 20);
+        entity.cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 20);
         entity.activo = dto.Activo;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);

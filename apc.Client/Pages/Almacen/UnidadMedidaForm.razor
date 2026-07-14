@@ -29,12 +29,14 @@
         </DxFormLayoutItem>
 
         <DxFormLayoutItem Caption="Categoría" ColSpanMd="6">
-            <DxComboBox Data="@Categorias" @bind-Value="Model.Categoria"
-                        AllowUserInput="true"
+            <DxComboBox Data="@Categorias" @bind-Value="Model.CategoriaId"
+                        ValueFieldName="@nameof(CategoriaUnidadLookupDto.Id)"
+                        TextFieldName="@nameof(CategoriaUnidadLookupDto.Nombre)"
+                        FilteringMode="DataGridFilteringMode.Contains"
                         ValidationEnabled="false"
-                        NullText="Cantidad, Longitud, Peso..."
+                        NullText="Seleccione una categoría..."
                         ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-            <ValidationMessage For="() => Model.Categoria" />
+            <ValidationMessage For="() => Model.CategoriaId" />
         </DxFormLayoutItem>
 
         <DxFormLayoutItem Caption="Admite decimales" ColSpanMd="3">
@@ -102,7 +104,7 @@
     public IReadOnlyList<UnidadMedidaLookupDto> Bases { get; set; } = Array.Empty<UnidadMedidaLookupDto>();
 
     [Parameter]
-    public IReadOnlyList<string> Categorias { get; set; } = Array.Empty<string>();
+    public IReadOnlyList<CategoriaUnidadLookupDto> Categorias { get; set; } = Array.Empty<CategoriaUnidadLookupDto>();
 
     [Parameter]
     public EventCallback OnValidSubmit { get; set; }

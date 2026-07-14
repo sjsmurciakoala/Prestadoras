@@ -5,6 +5,7 @@ namespace SIAD.Core.DTOs.Almacen;
 public sealed class RequisicionListItemDto
 {
     public int Id { get; init; }
+    public int? ArticuloId { get; init; }
     public decimal Numero { get; init; }
     public DateOnly? FechaRequisicion { get; init; }
     public DateOnly? FechaEntrega { get; init; }

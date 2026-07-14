@@ -83,7 +83,7 @@
                                    Style="min-width: 260px;" />
 
                         <DxComboBox Data="@lineas" Value="@filtroLinea"
-                                    NullText="Todas las líneas"
+                                    NullText="Todos los grupos"
                                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
                                     ValueChanged="@((string? v) => OnLineaChanged(v))"
                                     Style="min-width: 170px;" CssClass="me-1" />
@@ -110,11 +110,20 @@
                 </ToolbarTemplate>
 
                 <Columns>
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Codigo)" Caption="Código" Width="120px">
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Id)" Caption="ID" Width="80px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
-                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                                <span class="text-dark fw-semibold">@item.Id</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Codigo)" Caption="Código (SIMAFI)" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Codigo) ? "—" : item.Codigo)</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -134,45 +143,11 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UnidadMedidaDisplay)" Caption="Unidad" Width="110px">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is ArticuloListItemDto item)
-                            {
-                                <span class="text-muted">@item.UnidadMedidaDisplay</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.LineaDisplay)" Caption="Línea" MinWidth="150">
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.LineaDisplay)" Caption="Grupo" MinWidth="150">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
                                 <span class="text-muted" title="@item.LineaDisplay">@item.LineaDisplay</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.GrupoDisplay)" Caption="Grupo" MinWidth="150">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is ArticuloListItemDto item)
-                            {
-                                <span class="text-muted" title="@item.GrupoDisplay">@item.GrupoDisplay</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.TipoArticuloNombre)" Caption="Tipo" Width="120px" TextAlignment="GridTextAlignment.Center">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is ArticuloListItemDto item)
-                            {
-                                @if (string.IsNullOrWhiteSpace(item.TipoArticuloNombre))
-                                {
-                                    <span class="text-muted">—</span>
-                                }
-                                else
-                                {
-                                    <span class="badge-tipo-art">@item.TipoArticuloNombre</span>
-                                }
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -182,24 +157,6 @@
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
                                 <span class="@(item.BajoMinimo ? "text-danger fw-bold" : "text-dark")">@item.Existencia.ToString("N2")</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ExistenciaMinima)" Caption="Mínimo" Width="110px" TextAlignment="GridTextAlignment.Right">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is ArticuloListItemDto item)
-                            {
-                                <span class="text-muted">@item.ExistenciaMinima.ToString("N2")</span>
-                            }
-                        </CellDisplayTemplate>
-                    </DxGridDataColumn>
-
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorUnitario)" Caption="Valor unit." Width="120px" TextAlignment="GridTextAlignment.Right">
-                        <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is ArticuloListItemDto item)
-                            {
-                                <span class="text-muted">@item.ValorUnitario.ToString("N4")</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -362,7 +319,7 @@
         totalArticulos = articulos.Count;
         conStock = articulos.Count(a => a.Existencia > 0);
         bajoMinimo = articulos.Count(a => a.BajoMinimo);
-        valorInventario = articulos.Sum(a => a.ValorTotal);
+        valorInventario = articulos.Sum(a => a.Existencia * a.ValorUnitario);
     }
 
     private async Task OnBusquedaChanged(string valor)
@@ -400,7 +357,7 @@
 
     private void VerKardex(ArticuloListItemDto articulo)
     {
-        Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(articulo.Codigo)}");
+        Navigation.NavigateTo($"/almacen/kardex?articuloId={articulo.Id}");
     }
 
     private void ConfirmarEliminar(ArticuloListItemDto articulo)

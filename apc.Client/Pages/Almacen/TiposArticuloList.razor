@@ -3,6 +3,7 @@
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Contabilidad
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
 
@@ -123,7 +124,7 @@
         }
         else
         {
-            <TipoArticuloForm Model="formModel" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+            <TipoArticuloForm Model="formModel" CuentasContables="cuentasContables" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
         }
     </BodyContentTemplate>
 </DxPopup>
@@ -148,6 +149,7 @@
 
     private DxGrid? grid;
     private List<TipoArticuloListItemDto> tipos = new();
+    private List<CuentaContableLookupDto> cuentasContables = new();
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
@@ -175,7 +177,17 @@
         ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
         : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
 
-    protected override async Task OnInitializedAsync() => await CargarAsync();
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCuentasAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarCuentasAsync()
+    {
+        try { cuentasContables = await TiposClient.GetCuentasContablesAsync(); }
+        catch { cuentasContables = new(); }
+    }
 
     private ClasificacionFilterDto BuildFilter() => new()
     {

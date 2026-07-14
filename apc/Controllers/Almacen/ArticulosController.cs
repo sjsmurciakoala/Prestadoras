@@ -13,11 +13,13 @@ public sealed class ArticulosController : ControllerBase
 {
     private readonly IArticulosService _service;
     private readonly IArticuloUbicacionService _ubicaciones;
+    private readonly IArticuloProveedorService _proveedores;
 
-    public ArticulosController(IArticulosService service, IArticuloUbicacionService ubicaciones)
+    public ArticulosController(IArticulosService service, IArticuloUbicacionService ubicaciones, IArticuloProveedorService proveedores)
     {
         _service = service;
         _ubicaciones = ubicaciones;
+        _proveedores = proveedores;
     }
 
     [HttpGet]
@@ -57,8 +59,15 @@ public sealed class ArticulosController : ControllerBase
         }
 
         var usuario = User?.Identity?.Name ?? "system";
-        var creado = await _service.CreateAsync(dto, usuario, ct);
-        return CreatedAtAction(nameof(GetById), new { id = creado.Id }, creado);
+        try
+        {
+            var creado = await _service.CreateAsync(dto, usuario, ct);
+            return CreatedAtAction(nameof(GetById), new { id = creado.Id }, creado);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     [HttpPut("{id:int}")]
@@ -84,28 +93,128 @@ public sealed class ArticulosController : ControllerBase
     // ── Ubicaciones del artículo por bodega ──────────────────────────────────
 
     [HttpGet("{articuloId:int}/ubicaciones")]
-    public async Task<IActionResult> GetUbicaciones(int articuloId, CancellationToken ct)
-        => Ok(await _ubicaciones.GetAsync(articuloId, ct));
+    public async Task<IActionResult> GetUbicaciones(int articuloId, [FromQuery] bool incluirInactivas, CancellationToken ct)
+        => Ok(await _ubicaciones.GetAsync(articuloId, incluirInactivas, ct));
 
     [HttpPost("{articuloId:int}/ubicaciones")]
     public async Task<IActionResult> AddUbicacion(int articuloId, [FromBody] ArticuloUbicacionDto dto, CancellationToken ct)
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
-        var creado = await _ubicaciones.AddAsync(articuloId, dto, User?.Identity?.Name ?? "system", ct);
-        return Ok(creado);
+        try
+        {
+            var creado = await _ubicaciones.AddAsync(articuloId, dto, User?.Identity?.Name ?? "system", ct);
+            return Ok(creado);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     [HttpPut("{articuloId:int}/ubicaciones/{id:int}")]
     public async Task<IActionResult> UpdateUbicacion(int articuloId, int id, [FromBody] ArticuloUbicacionDto dto, CancellationToken ct)
     {
         if (!ModelState.IsValid) return ValidationProblem(ModelState);
-        return Ok(await _ubicaciones.UpdateAsync(articuloId, id, dto, User?.Identity?.Name ?? "system", ct));
+        try
+        {
+            return Ok(await _ubicaciones.UpdateAsync(articuloId, id, dto, User?.Identity?.Name ?? "system", ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
+    // DELETE = deshabilitar (soft-delete): la ubicación se conserva para histórico.
     [HttpDelete("{articuloId:int}/ubicaciones/{id:int}")]
-    public async Task<IActionResult> DeleteUbicacion(int articuloId, int id, CancellationToken ct)
+    public async Task<IActionResult> DeshabilitarUbicacion(int articuloId, int id, CancellationToken ct)
     {
-        var ok = await _ubicaciones.DeleteAsync(articuloId, id, ct);
-        return ok ? Ok(new { success = true }) : NotFound();
+        try
+        {
+            var ok = await _ubicaciones.DeshabilitarAsync(articuloId, id, User?.Identity?.Name ?? "system", ct);
+            return ok ? Ok(new { success = true }) : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    [HttpPost("{articuloId:int}/ubicaciones/{id:int}/reactivar")]
+    public async Task<IActionResult> ReactivarUbicacion(int articuloId, int id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _ubicaciones.ReactivarAsync(articuloId, id, User?.Identity?.Name ?? "system", ct);
+            return ok ? Ok(new { success = true }) : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    // ── Proveedores del artículo ("UPC") ──────────────────────────────────────
+
+    [HttpGet("{articuloId:int}/proveedores")]
+    public async Task<IActionResult> GetProveedores(int articuloId, [FromQuery] bool incluirInactivas, CancellationToken ct)
+        => Ok(await _proveedores.GetAsync(articuloId, incluirInactivas, ct));
+
+    [HttpPost("{articuloId:int}/proveedores")]
+    public async Task<IActionResult> AddProveedor(int articuloId, [FromBody] ArticuloProveedorDto dto, CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+        try
+        {
+            var creado = await _proveedores.AddAsync(articuloId, dto, User?.Identity?.Name ?? "system", ct);
+            return Ok(creado);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    [HttpPut("{articuloId:int}/proveedores/{id:int}")]
+    public async Task<IActionResult> UpdateProveedor(int articuloId, int id, [FromBody] ArticuloProveedorDto dto, CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+        try
+        {
+            return Ok(await _proveedores.UpdateAsync(articuloId, id, dto, User?.Identity?.Name ?? "system", ct));
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    // DELETE = deshabilitar (soft-delete): la relación se conserva para histórico.
+    [HttpDelete("{articuloId:int}/proveedores/{id:int}")]
+    public async Task<IActionResult> DeshabilitarProveedor(int articuloId, int id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _proveedores.DeshabilitarAsync(articuloId, id, User?.Identity?.Name ?? "system", ct);
+            return ok ? Ok(new { success = true }) : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    [HttpPost("{articuloId:int}/proveedores/{id:int}/reactivar")]
+    public async Task<IActionResult> ReactivarProveedor(int articuloId, int id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _proveedores.ReactivarAsync(articuloId, id, User?.Identity?.Name ?? "system", ct);
+            return ok ? Ok(new { success = true }) : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 }

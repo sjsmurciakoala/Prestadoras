@@ -21,9 +21,9 @@ public sealed class KardexController : ControllerBase
     [HttpGet]
     public async Task<IActionResult> Get([FromQuery] KardexFilterDto filtro, CancellationToken ct)
     {
-        if (string.IsNullOrWhiteSpace(filtro.CodigoArticulo))
+        if (!filtro.ArticuloId.HasValue && string.IsNullOrWhiteSpace(filtro.CodigoArticulo))
         {
-            return BadRequest(new { message = "Debe indicar el código del artículo." });
+            return BadRequest(new { message = "Debe indicar el artículo." });
         }
 
         var kardex = await _service.GetByArticuloAsync(filtro, ct);

@@ -3,9 +3,11 @@
 
 @using SIAD.Core.DTOs.Tarifario
 @using SIAD.Core.DTOs.Common
+@using apc.Client.Services
 @using apc.Client.Services.Tarifario
 
 @inject CuadroTarifarioClient Client
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Cuadros Tarifarios</PageTitle>
 
@@ -73,13 +75,22 @@
                 KeyFieldName="@nameof(CuadroTarifarioListDto.CuadroTarifarioId)"
                 ShowFilterRow="true"
                 ShowPager="true"
-                PageSize="20"
+                PagerPosition="GridPagerPosition.Bottom"
+                PageSize="15"
                 PageSizeSelectorVisible="true"
-                PageSizeSelectorItems="new int[] { 10, 20, 50, 100 }"
+                PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                 SizeMode="SizeMode.Medium"
                 ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
                 DetailRowDisplayMode="GridDetailRowDisplayMode.Auto"
+                LayoutAutoSaving="OnLayoutAutoSaving"
+                LayoutAutoLoading="OnLayoutAutoLoading"
                 CssClass="border-0">
+            <ToolbarTemplate>
+                <div class="d-flex w-100">
+                    <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" />
+                </div>
+            </ToolbarTemplate>
             <Columns>
                 <DxGridCommandColumn Caption="Acciones" Width="100px"
                                      NewButtonVisible="false" EditButtonVisible="false" DeleteButtonVisible="false"
@@ -432,4 +443,14 @@
         statusMessageRenderStyle = style;
         statusMessageVisible = true;
     }
+
+    void MostrarColumnChooser() => gridCuadros.ShowColumnChooser();
+
+    const string GridLayoutStorageKey = "tarifario-cuadros-grid-layout";
+
+    Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
 }
