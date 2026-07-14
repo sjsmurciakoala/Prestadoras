@@ -53,7 +53,7 @@
     else
     {
         <div class="row g-3">
-            <div class="@(EsEdicion ? "col-12 col-xl-7" : "col-12")">
+            <div class="@(MostrarPanelMovimientos ? "col-12 col-xl-7" : "col-12")">
                 <div class="modern-card form-card">
                     <ArticuloForm Model="modelo"
                                   Unidades="unidades"
@@ -63,11 +63,13 @@
                                   CuentasContables="cuentasContables"
                                   OnValidSubmit="GuardarAsync"
                                   OnCancel="Volver"
+                                  OnTipoArticuloChanged="StateHasChanged"
                                   IsBusy="guardando" />
                 </div>
             </div>
 
-            @if (EsEdicion)
+            @* Un artículo de tipo sin inventario (ej. Servicios) no tiene kardex: no hay panel que mostrar. *@
+            @if (MostrarPanelMovimientos)
             {
                 <div class="col-12 col-xl-5">
                     <ArticuloMovimientosPanel ArticuloId="@Id!.Value" />
@@ -81,6 +83,13 @@
     [Parameter] public int? Id { get; set; }
 
     private bool EsEdicion => Id.HasValue;
+
+    /// <summary>
+    /// El panel de últimos movimientos (kardex) sólo aplica en edición y sólo si el tipo del
+    /// artículo maneja inventario. Sin tipo se asume que sí (tipo_articulo_id es nullable).
+    /// </summary>
+    private bool MostrarPanelMovimientos =>
+        EsEdicion && (tipos.FirstOrDefault(t => t.Id == modelo.TipoArticuloId)?.ManejaInventario ?? true);
 
     private ArticuloEditDto modelo = new();
     private List<UnidadMedidaLookupDto> unidades = new();

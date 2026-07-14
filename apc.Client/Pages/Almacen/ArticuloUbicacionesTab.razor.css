@@ -1,0 +1,8 @@
+/* La grilla de existencias por bodega es ancha (existencia, comprometida, tránsito,
+   punto de reorden, mínimo, máximo, costo promedio y último costo): si no cabe en el
+   ancho del contenedor, se desplaza horizontalmente en lugar de romper el layout. */
+.grid-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}

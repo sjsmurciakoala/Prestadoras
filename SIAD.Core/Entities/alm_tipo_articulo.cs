@@ -22,6 +22,13 @@ public partial class alm_tipo_articulo : ICompanyScopedEntity
     public string? cuenta_ajustes { get; set; }
     public string? cuenta_devoluciones { get; set; }
 
+    /// <summary>
+    /// false = los artículos de este tipo NO llevan existencias (p. ej. "Servicios"):
+    /// sin bodega, sin ubicación y sin kardex. La regla se aplica en la capa de servicio
+    /// (ArticulosService), no en la BD.
+    /// </summary>
+    public bool maneja_inventario { get; set; } = true;
+
     public bool activo { get; set; }
     public string? usuariocreacion { get; set; }
     public DateTime? fechacreacion { get; set; }

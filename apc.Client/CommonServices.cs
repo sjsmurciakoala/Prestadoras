@@ -18,6 +18,7 @@ using apc.Client.Services.Bancos;
 using apc.Client.Services.Catalogos;
 using apc.Client.Services.Abogados;
 using apc.Client.Services.Almacen;
+using apc.Client.Services.Impuestos;
 using apc.Client.Services.Ciclos;
 using apc.Client.Services.AppLectores;
 using apc.Client.Services.Tarifario;
@@ -107,6 +108,9 @@ namespace apc.Client
 
             // tipos de documento fiscal (catalogo SAR Acuerdo 481-2017)
             services.AddScoped<apc.Client.Services.TiposDocumentoFiscal.TiposDocumentoFiscalClient>();
+
+            // impuestos y tasas con vigencia (catalogo global SAR; ISV Honduras)
+            services.AddScoped<ImpuestosClient>();
 
             services.AddScoped<ITenantProvider, TenantProvider>();
             services.AddScoped<TenantState>();

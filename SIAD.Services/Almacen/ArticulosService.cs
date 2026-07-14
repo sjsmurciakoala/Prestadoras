@@ -195,6 +195,27 @@ public sealed class ArticulosService : IArticulosService
             .ToList();
     }
 
+    /// <summary>
+    /// ¿Los artículos de este tipo llevan existencias? Lo dice alm_tipo_articulo.maneja_inventario.
+    /// Si el artículo no tiene tipo (tipo_articulo_id es nullable) se asume que SÍ maneja
+    /// inventario: es el comportamiento histórico y no debe romperse.
+    /// </summary>
+    private async Task<bool> ManejaInventarioAsync(int? tipoArticuloId, CancellationToken ct)
+    {
+        if (!tipoArticuloId.HasValue)
+        {
+            return true;
+        }
+
+        var tipo = await _context.alm_tipo_articulos.AsNoTracking()
+            .Where(t => t.id == tipoArticuloId.Value)
+            .Select(t => (bool?)t.maneja_inventario)
+            .FirstOrDefaultAsync(ct);
+
+        // Tipo inexistente (o de otra empresa): no lo inventamos, se comporta como el caso sin tipo.
+        return tipo ?? true;
+    }
+
     private async Task ValidarUnidadMedidaAsync(int? unidadMedidaId, CancellationToken ct)
     {
         if (!unidadMedidaId.HasValue)
@@ -313,21 +334,40 @@ public sealed class ArticulosService : IArticulosService
         var codigo = NormalizeOptional(dto.Codigo, 20, uppercase: true) ?? string.Empty;
         var descripcion = NormalizeRequired(dto.Descripcion, 120, "descripción");
 
-        // El artículo debe nacer con al menos una bodega (ubicación) elegida por el usuario.
+        // ¿El tipo de artículo lleva existencias? Si el tipo tiene maneja_inventario=false
+        // (p. ej. "Servicios"), el artículo NO lleva bodega, ni ubicación, ni kardex.
+        // La regla vive aquí (capa de servicio), no en la BD: un POST directo a la API
+        // saltándose la UI también queda rechazado.
+        var manejaInventario = await ManejaInventarioAsync(dto.TipoArticuloId, ct);
+
         var ubicaciones = dto.Ubicaciones ?? new List<ArticuloUbicacionDto>();
-        if (ubicaciones.Count == 0)
-        {
-            throw new InvalidOperationException("Debe asignar al menos una bodega (ubicación) al artículo antes de guardarlo.");
-        }
 
-        if (ubicaciones.Any(u => u.BodegaId <= 0))
+        if (!manejaInventario)
         {
-            throw new InvalidOperationException("Todas las ubicaciones deben tener una bodega seleccionada.");
+            // Un servicio no puede tener bodega: se rechaza en vez de ignorar en silencio.
+            if (ubicaciones.Count > 0)
+            {
+                throw new InvalidOperationException(
+                    "El tipo de artículo seleccionado no maneja inventario (ej. Servicios): el artículo no puede tener bodegas ni ubicaciones.");
+            }
         }
-
-        if (ubicaciones.GroupBy(u => u.BodegaId).Any(g => g.Count() > 1))
+        else
         {
-            throw new InvalidOperationException("No puede repetir la misma bodega en las ubicaciones del artículo.");
+            // El artículo debe nacer con al menos una bodega (ubicación) elegida por el usuario.
+            if (ubicaciones.Count == 0)
+            {
+                throw new InvalidOperationException("Debe asignar al menos una bodega (ubicación) al artículo antes de guardarlo.");
+            }
+
+            if (ubicaciones.Any(u => u.BodegaId <= 0))
+            {
+                throw new InvalidOperationException("Todas las ubicaciones deben tener una bodega seleccionada.");
+            }
+
+            if (ubicaciones.GroupBy(u => u.BodegaId).Any(g => g.Count() > 1))
+            {
+                throw new InvalidOperationException("No puede repetir la misma bodega en las ubicaciones del artículo.");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(codigo))
@@ -347,15 +387,18 @@ public sealed class ArticulosService : IArticulosService
         await ValidarUnidadMedidaAsync(dto.UnidadSalidaId, ct);
         await ValidarCategoriaUnidadesAsync(dto.UnidadMedidaId, dto.UnidadAlmacenajeId, dto.UnidadSalidaId, ct);
 
-        // Todas las bodegas deben existir y estar activas.
-        var bodegaIds = ubicaciones.Select(u => u.BodegaId).Distinct().ToList();
-        var bodegasValidas = await _context.alm_bodegas.AsNoTracking()
-            .Where(b => bodegaIds.Contains(b.id) && b.activo)
-            .Select(b => b.id)
-            .ToListAsync(ct);
-        if (bodegasValidas.Count != bodegaIds.Count)
+        // Todas las bodegas deben existir y estar activas. (Sin inventario no hay bodegas que validar.)
+        if (manejaInventario)
         {
-            throw new InvalidOperationException("Una o más bodegas seleccionadas no existen o están inactivas.");
+            var bodegaIds = ubicaciones.Select(u => u.BodegaId).Distinct().ToList();
+            var bodegasValidas = await _context.alm_bodegas.AsNoTracking()
+                .Where(b => bodegaIds.Contains(b.id) && b.activo)
+                .Select(b => b.id)
+                .ToListAsync(ct);
+            if (bodegasValidas.Count != bodegaIds.Count)
+            {
+                throw new InvalidOperationException("Una o más bodegas seleccionadas no existen o están inactivas.");
+            }
         }
 
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -387,6 +430,7 @@ public sealed class ArticulosService : IArticulosService
             fechacreacion = ahora
         };
 
+        // Sin inventario la lista está vacía (ya se rechazó arriba si venía con filas).
         for (var i = 0; i < ubicaciones.Count; i++)
         {
             var u = ubicaciones[i];
@@ -402,6 +446,9 @@ public sealed class ArticulosService : IArticulosService
                 existencia = u.Existencia,
                 existencia_minima = u.ExistenciaMinima,
                 existencia_maxima = u.ExistenciaMaxima,
+                punto_reorden = u.PuntoReorden,
+                // comprometida / tránsito / costo promedio / último costo: los mueve el motor
+                // de posteo, nunca el DTO. Nacen en 0 por DEFAULT.
                 principal = i == indexPrincipal,
                 activo = true,
                 usuariocreacion = usuario,
@@ -465,7 +512,8 @@ public sealed class ArticulosService : IArticulosService
             {
                 cod_proveedor = x.Cod,
                 codigo_upc = ClasificacionNormalizer.Opcional(x.Dto.CodigoUpc, 40),
-                costo = x.Dto.Costo,
+                // El costo ya no se captura por proveedor (se lleva en Existencias); la
+                // columna alm_articulo_proveedor.costo sigue en la BD pero no se escribe.
                 principal = i == indexPrincipal,
                 activo = true,
                 usuariocreacion = usuario,
@@ -508,6 +556,25 @@ public sealed class ArticulosService : IArticulosService
         await ValidarUnidadMedidaAsync(dto.UnidadAlmacenajeId, ct);
         await ValidarUnidadMedidaAsync(dto.UnidadSalidaId, ct);
         await ValidarCategoriaUnidadesAsync(dto.UnidadMedidaId, dto.UnidadAlmacenajeId, dto.UnidadSalidaId, ct);
+
+        // Cambiar el tipo a uno SIN inventario sólo es válido si el artículo no tiene rastro
+        // de existencias: si ya tiene bodegas asignadas o movimientos de kardex, convertirlo
+        // en "servicio" dejaría filas y asientos huérfanos. Se rechaza y se le dice al usuario
+        // qué debe hacer primero.
+        if (!await ManejaInventarioAsync(dto.TipoArticuloId, ct))
+        {
+            if (await _context.alm_articulo_bodegas.AsNoTracking().AnyAsync(u => u.articulo_id == id, ct))
+            {
+                throw new InvalidOperationException(
+                    "No se puede cambiar el artículo a un tipo que no maneja inventario: todavía tiene bodegas asignadas. Elimine sus ubicaciones primero.");
+            }
+
+            if (await _context.alm_kardexs.AsNoTracking().AnyAsync(k => k.articulo_id == id, ct))
+            {
+                throw new InvalidOperationException(
+                    "No se puede cambiar el artículo a un tipo que no maneja inventario: ya tiene movimientos de kardex registrados.");
+            }
+        }
 
         entity.codigo_articulo = codigo;
         entity.descripcion = descripcion;

@@ -23,6 +23,9 @@ public partial class alm_articulo_bodega : ICompanyScopedEntity
     public decimal existencia_minima { get; set; }
     public decimal existencia_maxima { get; set; }
 
+    /// <summary>Nivel de existencia al que conviene reponer (disparador de compra). Es configuración: lo teclea el usuario.</summary>
+    public decimal punto_reorden { get; set; }
+
     /// <summary>Stock reservado por requisiciones aprobadas sin despachar. Lo mantiene el servicio (kardex), no se edita a mano.</summary>
     public decimal existencia_comprometida { get; set; }
 

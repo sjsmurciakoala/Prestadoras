@@ -42,6 +42,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
                 Codigo = t.codigo,
                 Nombre = t.nombre,
                 Descripcion = t.descripcion,
+                ManejaInventario = t.maneja_inventario,
                 Activo = t.activo
             })
             .ToListAsync(ct);
@@ -63,6 +64,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
                 CuentaVentas = t.cuenta_ventas,
                 CuentaAjustes = t.cuenta_ajustes,
                 CuentaDevoluciones = t.cuenta_devoluciones,
+                ManejaInventario = t.maneja_inventario,
                 Activo = t.activo
             })
             .FirstOrDefaultAsync(ct);
@@ -73,7 +75,14 @@ public sealed class TipoArticuloService : ITipoArticuloService
         return await _context.alm_tipo_articulos.AsNoTracking()
             .Where(t => t.activo)
             .OrderBy(t => t.codigo)
-            .Select(t => new TipoArticuloLookupDto { Id = t.id, Codigo = t.codigo, Nombre = t.nombre })
+            .Select(t => new TipoArticuloLookupDto
+            {
+                Id = t.id,
+                Codigo = t.codigo,
+                Nombre = t.nombre,
+                // El formulario del artículo lo usa para bloquear la pestaña Existencias.
+                ManejaInventario = t.maneja_inventario
+            })
             .ToListAsync(ct);
     }
 
@@ -98,6 +107,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
             cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 20),
             cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 20),
             cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 20),
+            maneja_inventario = dto.ManejaInventario,
             activo = dto.Activo,
             usuariocreacion = ClasificacionNormalizer.Usuario(user),
             fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
@@ -132,6 +142,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
         entity.cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 20);
         entity.cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 20);
         entity.cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 20);
+        entity.maneja_inventario = dto.ManejaInventario;
         entity.activo = dto.Activo;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);

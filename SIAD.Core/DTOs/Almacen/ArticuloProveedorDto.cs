@@ -25,9 +25,10 @@ public sealed class ArticuloProveedorDto
     [StringLength(40, ErrorMessage = "El código UPC no puede superar 40 caracteres.")]
     public string? CodigoUpc { get; set; }
 
-    /// <summary>Costo de compra del artículo con ese proveedor.</summary>
-    [Range(0, 99_999_999d, ErrorMessage = "El costo no puede ser negativo.")]
-    public decimal Costo { get; set; }
+    // NOTA: el costo ya no se maneja aquí. El costo del artículo vive en Existencias
+    // (alm_articulo_bodega.costo_promedio / ultimo_costo), que lo mantiene el motor de
+    // movimientos. La columna alm_articulo_proveedor.costo sigue existiendo en la BD
+    // (no se borró, para no perder el histórico), pero no se expone ni se escribe.
 
     /// <summary>Proveedor principal/preferido (a lo sumo uno por artículo).</summary>
     public bool Principal { get; set; }

@@ -1,0 +1,25 @@
+/* Las tasas ya cerradas (o inactivas) son histórico: se atenúan para que quede claro
+   que no operan, pero NO se ocultan — son las que permiten reconstruir el impuesto de
+   un documento pasado. */
+::deep .tasa-cerrada > td {
+    opacity: 0.55;
+    font-style: italic;
+}
+
+::deep .tasa-cerrada:hover > td {
+    opacity: 0.8;
+}
+
+/* Botón de "cambiar tasa (nuevo decreto)": mismo tamaño que los otros btn-icon del
+   repo, en ámbar, para distinguirlo visualmente de "editar". */
+.btn-decreto {
+    color: #b45309;
+    border-color: rgba(180, 83, 9, 0.25);
+    background-color: rgba(180, 83, 9, 0.08);
+}
+
+.btn-decreto:hover {
+    color: #fff;
+    background-color: #b45309;
+    border-color: #b45309;
+}

@@ -91,6 +91,20 @@
             </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
+        <DxFormLayoutItem Caption="Maneja inventario" ColSpanMd="8">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.ManejaInventario" CheckType="CheckType.Switch"
+                                LabelText="Maneja inventario" />
+                    <div class="form-hint text-muted small mt-1">
+                        <i class="bi bi-info-circle me-1"></i>
+                        Desactívalo para tipos que no llevan existencias (ej. Servicios): sus artículos
+                        no tendrán bodega ni kardex.
+                    </div>
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
         <DxFormLayoutItem Caption="Activo" ColSpanMd="4">
             <Template>
                 <div class="pt-2">

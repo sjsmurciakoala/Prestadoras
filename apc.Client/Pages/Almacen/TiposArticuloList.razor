@@ -71,6 +71,17 @@
                             { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Descripcion) ? "—" : item.Descripcion)</span> }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(TipoArticuloListItemDto.ManejaInventario)" Caption="Inventario" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TipoArticuloListItemDto item)
+                            {
+                                @if (item.ManejaInventario)
+                                { <span class="badge-status active" title="Sus artículos llevan bodega y kardex">Sí</span> }
+                                else
+                                { <span class="badge bg-secondary" title="Sus artículos no llevan bodega ni kardex (ej. Servicios)">No maneja</span> }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
                     <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is TipoArticuloListItemDto item)

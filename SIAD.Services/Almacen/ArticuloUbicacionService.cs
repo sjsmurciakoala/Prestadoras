@@ -53,6 +53,12 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
                 Existencia = u.existencia,
                 ExistenciaMinima = u.existencia_minima,
                 ExistenciaMaxima = u.existencia_maxima,
+                PuntoReorden = u.punto_reorden,
+                // Campos del motor de movimientos: se leen para mostrarlos, nunca se escriben desde el DTO.
+                ExistenciaComprometida = u.existencia_comprometida,
+                ExistenciaTransito = u.existencia_transito,
+                CostoPromedio = u.costo_promedio,
+                UltimoCosto = u.ultimo_costo,
                 Principal = u.principal,
                 Activo = u.activo
             })
@@ -94,6 +100,10 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
             existente.existencia = dto.Existencia;
             existente.existencia_minima = dto.ExistenciaMinima;
             existente.existencia_maxima = dto.ExistenciaMaxima;
+            existente.punto_reorden = dto.PuntoReorden;
+            // existencia_comprometida, existencia_transito, costo_promedio y ultimo_costo
+            // NO se escriben desde el DTO: los mantiene el motor de posteo (Fase 2). Se
+            // conserva lo que ya tiene la fila.
             existente.principal = dto.Principal;
             existente.usuariomodificacion = usuario;
             existente.fechamodificacion = ahora;
@@ -101,6 +111,7 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
             await RecomputeArticuloAsync(articuloId, ct);
             dto.Id = existente.id;
             dto.Activo = true;
+            CopiarCamposDelMotor(existente, dto);
             return dto;
         }
 
@@ -116,6 +127,9 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
             existencia = dto.Existencia,
             existencia_minima = dto.ExistenciaMinima,
             existencia_maxima = dto.ExistenciaMaxima,
+            punto_reorden = dto.PuntoReorden,
+            // Los 4 campos del motor (comprometida, tránsito, costo promedio, último costo)
+            // nacen en 0 por DEFAULT y sólo los mueve el motor de posteo: no se toman del DTO.
             principal = dto.Principal,
             activo = true,
             usuariocreacion = usuario,
@@ -126,6 +140,7 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         await RecomputeArticuloAsync(articuloId, ct);
         dto.Id = entity.id;
         dto.Activo = true;
+        CopiarCamposDelMotor(entity, dto);
         return dto;
     }
 
@@ -165,6 +180,9 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         entity.existencia = dto.Existencia;
         entity.existencia_minima = dto.ExistenciaMinima;
         entity.existencia_maxima = dto.ExistenciaMaxima;
+        entity.punto_reorden = dto.PuntoReorden;
+        // existencia_comprometida, existencia_transito, costo_promedio y ultimo_costo NO se
+        // escriben desde el DTO (aunque el cliente los mande): son del motor de posteo.
         entity.principal = dto.Principal;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -172,7 +190,20 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         await RecomputeArticuloAsync(articuloId, ct);
         dto.Id = entity.id;
         dto.Activo = true;
+        CopiarCamposDelMotor(entity, dto);
         return dto;
+    }
+
+    /// <summary>
+    /// Devuelve al cliente los 4 campos del motor con el valor REAL de la fila, para que la
+    /// respuesta no le refleje de vuelta lo que él haya mandado (que se ignora al escribir).
+    /// </summary>
+    private static void CopiarCamposDelMotor(alm_articulo_bodega entity, ArticuloUbicacionDto dto)
+    {
+        dto.ExistenciaComprometida = entity.existencia_comprometida;
+        dto.ExistenciaTransito = entity.existencia_transito;
+        dto.CostoPromedio = entity.costo_promedio;
+        dto.UltimoCosto = entity.ultimo_costo;
     }
 
     public async Task<bool> DeshabilitarAsync(int articuloId, int id, string user, CancellationToken ct = default)

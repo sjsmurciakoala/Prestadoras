@@ -48,6 +48,31 @@ public sealed class ArticuloUbicacionDto
     [Range(0, 9_999_999_999_999d, ErrorMessage = "La existencia máxima no puede ser negativa.")]
     public decimal ExistenciaMaxima { get; set; }
 
+    /// <summary>
+    /// Nivel al que conviene reponer (disparador de compra). EDITABLE: es configuración
+    /// que teclea el usuario, igual que el mínimo/máximo.
+    /// </summary>
+    [Range(0, 9_999_999_999_999d, ErrorMessage = "El punto de reorden no puede ser negativo.")]
+    public decimal PuntoReorden { get; set; }
+
+    // ── Campos del motor de movimientos (Fase 2): SOLO LECTURA ────────────────────
+    // Se exponen para mostrarlos en la grilla, pero el servicio NUNCA los persiste
+    // desde este DTO: los mantiene el motor de posteo (kardex). Si se escribieran
+    // desde aquí, un usuario podría teclear un costo promedio o un comprometido
+    // inventado y desalinear el inventario.
+
+    /// <summary>Solo lectura: stock reservado por requisiciones aprobadas sin despachar.</summary>
+    public decimal ExistenciaComprometida { get; set; }
+
+    /// <summary>Solo lectura: cantidad en camino a la bodega (orden de compra o traslado).</summary>
+    public decimal ExistenciaTransito { get; set; }
+
+    /// <summary>Solo lectura: costo promedio ponderado en la bodega; lo recalcula el motor en cada ingreso.</summary>
+    public decimal CostoPromedio { get; set; }
+
+    /// <summary>Solo lectura: precio unitario de la última compra registrada en la bodega.</summary>
+    public decimal UltimoCosto { get; set; }
+
     public bool Principal { get; set; }
 
     /// <summary>

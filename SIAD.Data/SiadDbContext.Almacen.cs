@@ -443,6 +443,7 @@ public partial class SiadDbContext
             entity.Property(e => e.cuenta_ventas).HasMaxLength(20);
             entity.Property(e => e.cuenta_ajustes).HasMaxLength(20);
             entity.Property(e => e.cuenta_devoluciones).HasMaxLength(20);
+            entity.Property(e => e.maneja_inventario).HasDefaultValue(true);
             entity.Property(e => e.activo).HasDefaultValue(true);
             entity.Property(e => e.usuariocreacion).HasMaxLength(100);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
@@ -525,6 +526,7 @@ public partial class SiadDbContext
             entity.Property(e => e.existencia).HasPrecision(15, 2).HasDefaultValue(0m);
             entity.Property(e => e.existencia_minima).HasPrecision(11, 2).HasDefaultValue(0m);
             entity.Property(e => e.existencia_maxima).HasPrecision(11, 2).HasDefaultValue(0m);
+            entity.Property(e => e.punto_reorden).HasPrecision(15, 2).HasDefaultValue(0m);
             entity.Property(e => e.existencia_comprometida).HasPrecision(15, 2).HasDefaultValue(0m);
             entity.Property(e => e.existencia_transito).HasPrecision(15, 2).HasDefaultValue(0m);
             entity.Property(e => e.costo_promedio).HasPrecision(12, 4).HasDefaultValue(0m);

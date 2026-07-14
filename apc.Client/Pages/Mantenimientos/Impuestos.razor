@@ -1,0 +1,927 @@
+@page "/mantenimientos/impuestos"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Impuestos
+@using apc.Client.Services
+@using apc.Client.Services.Impuestos
+
+@inject ImpuestosClient ImpuestosClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Impuestos</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ImpuestosToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Impuestos</h2>
+            <p class="page-subtitle">Catálogo de impuestos (SAR) y sus tasas con vigencia</p>
+        </div>
+        <DxButton Text="Nuevo impuesto" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevoImpuesto" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    @* ------------------------------------------------------------------ maestro *@
+    <div class="modern-card position-relative mb-3">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid Data="@impuestos" KeyFieldName="@nameof(ImpuestoListItemDto.Id)" PageSize="10"
+                    SelectionMode="GridSelectionMode.Single"
+                    AllowSelectRowByClick="true"
+                    SelectedDataItem="@impuestoSeleccionado"
+                    SelectedDataItemChanged="@((object item) => OnImpuestoSeleccionadoAsync(item as ImpuestoListItemDto))"
+                    HighlightRowOnHover="true"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChangedAsync(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar código o nombre..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChangedAsync(v))"
+                                        CheckType="CheckType.Switch">Solo activos</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@impuestos.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ImpuestoListItemDto.Codigo)" Caption="Código" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ImpuestoListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ImpuestoListItemDto.Nombre)" Caption="Nombre" MinWidth="180" />
+                    <DxGridDataColumn FieldName="@nameof(ImpuestoListItemDto.Descripcion)" Caption="Descripción" MinWidth="240">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ImpuestoListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.Descripcion) ? "—" : item.Descripcion)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ImpuestoListItemDto.TasasVigentes)" Caption="Tasas vigentes"
+                                      Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ImpuestoListItemDto item)
+                            {
+                                <span class="badge bg-light text-dark border" title="@($"{item.TasasVigentes} vigentes de {item.TotalTasas} registradas")">
+                                    @item.TasasVigentes / @item.TotalTasas
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ImpuestoListItemDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVO" : "INACTIVO")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ImpuestoListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarImpuestoAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivarImpuesto(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay impuestos para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+
+    @* ------------------------------------------------------------------- detalle *@
+    <div class="modern-card position-relative">
+        @if (impuestoSeleccionado is null)
+        {
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-arrow-up-circle me-1"></i>
+                Seleccione un impuesto arriba para ver y administrar sus tasas.
+            </div>
+        }
+        else
+        {
+            <DxLoadingPanel Visible="isLoadingTasas" IsContentBlocked="true" Text="Cargando tasas..." />
+
+            <div class="d-flex flex-wrap align-items-center gap-2 p-3 border-bottom">
+                <div>
+                    <div class="fw-bold">Tasas de @impuestoSeleccionado.Codigo — @impuestoSeleccionado.Nombre</div>
+                    <div class="small text-muted">Histórico completo: las tasas cerradas se conservan para reconstruir documentos pasados.</div>
+                </div>
+                <div class="ms-auto d-flex gap-2">
+                    <DxButton Text="Nueva tasa" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="AbrirNuevaTasa" />
+                </div>
+            </div>
+
+            <div class="alert alert-info m-3" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                <strong>Las tasas no se editan cuando cambian por decreto.</strong>
+                Si el SAR sube el ISV, no cambie el porcentaje de la tasa vigente: use
+                <em>«Cambiar tasa (nuevo decreto)»</em>. Esa acción cierra la vigencia de la tasa actual y crea
+                una nueva a partir del día siguiente. Si editara la tasa en sitio, al reimprimir una factura
+                del año pasado saldría el impuesto de hoy — un error fiscal grave.
+                Edite una tasa <u>solo para corregir una errata</u> (un nombre mal escrito).
+            </div>
+
+            <div class="grid-wrapper">
+                <DxGrid Data="@tasas" KeyFieldName="@nameof(ImpuestoTasaDto.Id)" PageSize="10"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        CustomizeElement="OnTasasCustomizeElement"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(ImpuestoTasaDto.Codigo)" Caption="Código" Width="120px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ImpuestoTasaDto t)
+                                {
+                                    <span class="fw-semibold">@t.Codigo</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ImpuestoTasaDto.Nombre)" Caption="Nombre" MinWidth="180" />
+                        <DxGridDataColumn FieldName="@nameof(ImpuestoTasaDto.Tipo)" Caption="Tipo" Width="130px"
+                                          TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ImpuestoTasaDto t)
+                                {
+                                    <span class="badge @TipoBadgeClass(t.Tipo)">@t.Tipo</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ImpuestoTasaDto.Porcentaje)" Caption="Porcentaje" Width="110px"
+                                          TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ImpuestoTasaDto t)
+                                {
+                                    <span class="fw-semibold">@t.Porcentaje.ToString("0.##")%</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ImpuestoTasaDto.VigenciaDesde)" Caption="Vigente desde" Width="140px"
+                                          TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ImpuestoTasaDto t)
+                                {
+                                    <span>@t.VigenciaDesde.ToString("dd/MM/yyyy")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ImpuestoTasaDto.VigenciaHasta)" Caption="Vigente hasta" Width="150px"
+                                          TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ImpuestoTasaDto t)
+                                {
+                                    @if (t.VigenciaHasta is null)
+                                    {
+                                        <span class="badge-status active" title="Sigue rigiendo: no se ha cerrado por decreto">(vigente)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">@t.VigenciaHasta.Value.ToString("dd/MM/yyyy")</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ImpuestoTasaDto t)
+                                {
+                                    <span class="badge-status @(t.Activo ? "active" : "inactive")">@(t.Activo ? "ACTIVA" : "INACTIVA")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="190px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ImpuestoTasaDto t)
+                                {
+                                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                        @if (t.EsAbierta && t.Activo)
+                                        {
+                                            <button type="button" class="btn-icon btn-decreto" title="Cambiar tasa (nuevo decreto)"
+                                                    @onclick="() => AbrirCambiarTasa(t)" @onclick:stopPropagation="true">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                        }
+                                        <button type="button" class="btn-icon btn-edit" title="Editar (solo para corregir erratas)"
+                                                @onclick="() => AbrirEditarTasa(t)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                                disabled="@(!t.Activo)"
+                                                @onclick="() => ConfirmarDesactivarTasa(t)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-slash-circle"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">Este impuesto todavía no tiene tasas.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+@* ============================================================ modal: impuesto *@
+<DxPopup @bind-Visible="impuestoFormVisible" Width="min(620px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-percent"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">
+                    @(impuestoModel.Id.HasValue ? "Editar impuesto" : "Nuevo impuesto")
+                </div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    El impuesto es global: lo fija la ley, no la empresa.
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="popupCtx">
+        <EditForm Model="impuestoModel" OnValidSubmit="GuardarImpuestoAsync" Context="impCtx">
+            <DataAnnotationsValidator />
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
+                    <DxTextBox @bind-Text="impuestoModel.Codigo" NullText="Ej. ISV" MaxLength="10" />
+                    <ValidationMessage For="() => impuestoModel.Codigo" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Nombre *" ColSpanMd="8">
+                    <DxTextBox @bind-Text="impuestoModel.Nombre" NullText="Ej. Impuesto Sobre Ventas" MaxLength="80" />
+                    <ValidationMessage For="() => impuestoModel.Nombre" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <DxTextBox @bind-Text="impuestoModel.Descripcion" NullText="Descripción del impuesto" MaxLength="250" />
+                    <ValidationMessage For="() => impuestoModel.Descripcion" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
+                    <Template Context="tpl">
+                        <div class="pt-2">
+                            <DxCheckBox @bind-Checked="impuestoModel.Activo" CheckType="CheckType.Switch" LabelText="Activo" />
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <ValidationSummary class="text-danger mb-3" />
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                          Text="Guardar" SubmitFormOnClick="true" Enabled="@(!isSaving)" />
+                <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!isSaving)" Click="CerrarImpuestoForm" />
+            </div>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ================================================================ modal: tasa *@
+<DxPopup @bind-Visible="tasaFormVisible" Width="min(720px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-percent"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">
+                    @(tasaModel.Id.HasValue ? "Editar tasa" : "Nueva tasa")
+                </div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    @(impuestoSeleccionado is null ? string.Empty : $"{impuestoSeleccionado.Codigo} — {impuestoSeleccionado.Nombre}")
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="popupCtx">
+        @if (tasaModel.Id.HasValue)
+        {
+            <div class="alert alert-warning" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                Está editando una tasa existente. Esto es para <strong>corregir erratas</strong>.
+                Si esta tasa ya se usó en documentos y lo que cambió fue el porcentaje por decreto,
+                <strong>cierre esta tasa y cree una nueva</strong> con «Cambiar tasa (nuevo decreto)»:
+                de lo contrario reescribirá el impuesto de facturas ya emitidas.
+            </div>
+        }
+
+        <EditForm Model="tasaModel" OnValidSubmit="GuardarTasaAsync" Context="tasaCtx">
+            <DataAnnotationsValidator />
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
+                    <DxTextBox @bind-Text="tasaModel.Codigo" NullText="Ej. ISV15" MaxLength="20" />
+                    <ValidationMessage For="() => tasaModel.Codigo" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Nombre *" ColSpanMd="8">
+                    <DxTextBox @bind-Text="tasaModel.Nombre" NullText="Ej. ISV 15% (general)" MaxLength="80" />
+                    <ValidationMessage For="() => tasaModel.Nombre" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Tipo *" ColSpanMd="6">
+                    <DxComboBox Data="@TipoImpuestoTasa.Todos" TData="string" TValue="string"
+                                Value="@tasaModel.Tipo"
+                                ValueChanged="@((string v) => OnTipoTasaChanged(v))"
+                                ValueExpression="@(() => tasaModel.Tipo)"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+                    <div class="form-hint text-muted small mt-1">
+                        GRAVADO paga impuesto. EXENTO no paga por ley. EXONERADO pagaría, pero hay resolución del SAR.
+                        El SAR los declara por separado.
+                    </div>
+                    <ValidationMessage For="() => tasaModel.Tipo" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Porcentaje *" ColSpanMd="6">
+                    <DxSpinEdit @bind-Value="tasaModel.Porcentaje" DisplayFormat="N2" MinValue="0" MaxValue="100"
+                                Enabled="@ExigePorcentaje" CssClass="w-100" />
+                    @if (!ExigePorcentaje)
+                    {
+                        <div class="form-hint text-muted small mt-1">
+                            <i class="bi bi-lock-fill me-1"></i>
+                            Una tasa @tasaModel.Tipo no paga impuesto: el porcentaje queda en 0.
+                        </div>
+                    }
+                    <ValidationMessage For="() => tasaModel.Porcentaje" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Vigente desde *" ColSpanMd="6">
+                    <DxDateEdit @bind-Date="tasaModel.VigenciaDesde" DisplayFormat="dd/MM/yyyy" CssClass="w-100" />
+                    <ValidationMessage For="() => tasaModel.VigenciaDesde" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Vigente hasta" ColSpanMd="6">
+                    <DxDateEdit @bind-Date="tasaModel.VigenciaHasta" DisplayFormat="dd/MM/yyyy"
+                                NullText="(vigente, sin cierre)"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                    <div class="form-hint text-muted small mt-1">
+                        Vacío = sigue rigiendo. Normalmente se deja vacío y se cierra con «Cambiar tasa».
+                    </div>
+                    <ValidationMessage For="() => tasaModel.VigenciaHasta" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <DxTextBox @bind-Text="tasaModel.Descripcion" NullText="Base legal, decreto, notas..." MaxLength="250" />
+                    <ValidationMessage For="() => tasaModel.Descripcion" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Activa" ColSpanMd="12">
+                    <Template Context="tpl">
+                        <div class="pt-2">
+                            <DxCheckBox @bind-Checked="tasaModel.Activo" CheckType="CheckType.Switch" LabelText="Activa" />
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <ValidationSummary class="text-danger mb-3" />
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                          Text="Guardar" SubmitFormOnClick="true" Enabled="@(!isSaving)" />
+                <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!isSaving)" Click="CerrarTasaForm" />
+            </div>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ====================================================== modal: cambiar tasa *@
+<DxPopup @bind-Visible="cambioVisible" Width="min(680px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-arrow-repeat"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Cambiar tasa (nuevo decreto)</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    Cierra la tasa vigente y abre la nueva. El histórico queda intacto.
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="popupCtx">
+        @if (tasaACambiar is not null)
+        {
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                Esto <strong>no edita</strong> la tasa actual: le pone fecha de cierre y crea una tasa nueva con el
+                mismo código (<strong>@tasaACambiar.Codigo</strong>) y el mismo tipo (<strong>@tasaACambiar.Tipo</strong>),
+                vigente a partir del día siguiente. Así, al reimprimir una factura vieja el sistema sigue aplicando
+                la tasa que regía ese día.
+            </div>
+
+            <EditForm Model="cambioModel" OnValidSubmit="CambiarTasaAsync" Context="cambioCtx">
+                <DataAnnotationsValidator />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Tasa actual" ColSpanMd="12">
+                        <Template Context="tpl">
+                            <div class="pt-2">
+                                <span class="badge @TipoBadgeClass(tasaACambiar.Tipo) me-2">@tasaACambiar.Tipo</span>
+                                <strong>@tasaACambiar.Codigo — @tasaACambiar.Nombre</strong>
+                                <span class="ms-2">@tasaACambiar.Porcentaje.ToString("0.##")%</span>
+                                <span class="text-muted ms-2">
+                                    (vigente desde @tasaACambiar.VigenciaDesde.ToString("dd/MM/yyyy"))
+                                </span>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Último día de la tasa actual *" ColSpanMd="6">
+                        <DxDateEdit @bind-Date="cambioModel.VigenciaHasta" DisplayFormat="dd/MM/yyyy"
+                                    MinDate="@tasaACambiar.VigenciaDesde.ToDateTime(TimeOnly.MinValue)"
+                                    CssClass="w-100" />
+                        <div class="form-hint text-muted small mt-1">
+                            La tasa nueva empezará el <strong>@cambioModel.VigenciaHasta.AddDays(1).ToString("dd/MM/yyyy")</strong>.
+                        </div>
+                        <ValidationMessage For="() => cambioModel.VigenciaHasta" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Nuevo porcentaje *" ColSpanMd="6">
+                        <DxSpinEdit @bind-Value="cambioModel.NuevoPorcentaje" DisplayFormat="N2" MinValue="0" MaxValue="100"
+                                    Enabled="@(TipoImpuestoTasa.ExigePorcentaje(tasaACambiar.Tipo))" CssClass="w-100" />
+                        @if (!TipoImpuestoTasa.ExigePorcentaje(tasaACambiar.Tipo))
+                        {
+                            <div class="form-hint text-muted small mt-1">
+                                <i class="bi bi-lock-fill me-1"></i>
+                                Una tasa @tasaACambiar.Tipo no paga impuesto: el porcentaje queda en 0.
+                            </div>
+                        }
+                        <ValidationMessage For="() => cambioModel.NuevoPorcentaje" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Nuevo nombre" ColSpanMd="12">
+                        <DxTextBox @bind-Text="cambioModel.NuevoNombre" MaxLength="80"
+                                   NullText="@($"(se hereda: {tasaACambiar.Nombre})")" />
+                        <ValidationMessage For="() => cambioModel.NuevoNombre" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Decreto / motivo" ColSpanMd="12">
+                        <DxTextBox @bind-Text="cambioModel.NuevaDescripcion" MaxLength="250"
+                                   NullText="Ej. Decreto 000-2026, vigente a partir de..." />
+                        <ValidationMessage For="() => cambioModel.NuevaDescripcion" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                @if (!string.IsNullOrWhiteSpace(cambioError))
+                {
+                    <div class="alert alert-danger" role="alert">@cambioError</div>
+                }
+
+                <ValidationSummary class="text-danger mb-3" />
+
+                <div class="d-flex justify-content-end gap-2">
+                    <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Warning"
+                              Text="Cerrar vigente y crear nueva" SubmitFormOnClick="true" Enabled="@(!isSaving)" />
+                    <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!isSaving)" Click="CerrarCambioForm" />
+                </div>
+            </EditForm>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ========================================================= modal: desactivar *@
+<DxPopup @bind-Visible="confirmVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">@confirmTitulo</h5>
+            <p class="text-muted">@confirmMensaje</p>
+            @if (!string.IsNullOrWhiteSpace(confirmDetalle))
+            {
+                <div class="fw-semibold">@confirmDetalle</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarConfirmacion"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="EjecutarDesactivacionAsync"
+                          RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    // ------------------------------------------------------------------ estado
+    private List<ImpuestoListItemDto> impuestos = new();
+    private List<ImpuestoTasaDto> tasas = new();
+
+    private ImpuestoListItemDto? impuestoSeleccionado;
+
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private bool isLoadingTasas;
+    private bool isSaving;
+    private string? errorMessage;
+
+    private bool impuestoFormVisible;
+    private ImpuestoEditDto impuestoModel = new();
+
+    private bool tasaFormVisible;
+    private ImpuestoTasaDto tasaModel = new();
+
+    private bool cambioVisible;
+    private ImpuestoTasaDto? tasaACambiar;
+    private CambiarTasaDto cambioModel = new();
+    private string? cambioError;
+
+    private bool confirmVisible;
+    private string confirmTitulo = string.Empty;
+    private string confirmMensaje = string.Empty;
+    private string? confirmDetalle;
+    private Func<Task>? confirmAccion;
+
+    /// <summary>El porcentaje solo se habilita en GRAVADO: EXENTO/EXONERADO son 0 por definición.</summary>
+    private bool ExigePorcentaje => TipoImpuestoTasa.ExigePorcentaje(tasaModel.Tipo);
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    // ---------------------------------------------------------------- maestro
+    private ImpuestoFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Activo = soloActivos ? true : null
+    };
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            impuestos = await ImpuestosClient.GetAsync(BuildFilter());
+
+            // Refrescar la selección si el impuesto sigue en la lista.
+            if (impuestoSeleccionado is not null)
+            {
+                var vigente = impuestos.FirstOrDefault(i => i.Id == impuestoSeleccionado.Id);
+                impuestoSeleccionado = vigente;
+                if (vigente is null) tasas = new();
+                else await CargarTasasAsync(vigente.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los impuestos: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChangedAsync(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChangedAsync(bool v) { soloActivos = v; await CargarAsync(); }
+
+    private async Task OnImpuestoSeleccionadoAsync(ImpuestoListItemDto? item)
+    {
+        impuestoSeleccionado = item;
+        if (item is null) { tasas = new(); return; }
+        await CargarTasasAsync(item.Id);
+    }
+
+    private async Task CargarTasasAsync(int impuestoId)
+    {
+        try
+        {
+            isLoadingTasas = true;
+            tasas = await ImpuestosClient.GetTasasAsync(impuestoId);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar las tasas: {ex.Message}", ToastRenderStyle.Danger);
+            tasas = new();
+        }
+        finally
+        {
+            isLoadingTasas = false;
+        }
+    }
+
+    private void AbrirNuevoImpuesto()
+    {
+        impuestoModel = new ImpuestoEditDto();
+        impuestoFormVisible = true;
+    }
+
+    private async Task AbrirEditarImpuestoAsync(int id)
+    {
+        try
+        {
+            var d = await ImpuestosClient.GetByIdAsync(id);
+            if (d is null) { Toast("Error", "No se encontró el impuesto.", ToastRenderStyle.Danger); return; }
+            impuestoModel = d;
+            impuestoFormVisible = true;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void CerrarImpuestoForm()
+    {
+        if (isSaving) return;
+        impuestoFormVisible = false;
+        impuestoModel = new();
+    }
+
+    private async Task GuardarImpuestoAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (impuestoModel.Id.HasValue)
+            {
+                await ImpuestosClient.UpdateAsync(impuestoModel.Id.Value, impuestoModel);
+                Toast("Éxito", "Impuesto actualizado.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await ImpuestosClient.CreateAsync(impuestoModel);
+                Toast("Éxito", "Impuesto registrado.", ToastRenderStyle.Success);
+            }
+
+            impuestoFormVisible = false;
+            impuestoModel = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ------------------------------------------------------------------ tasas
+    private void AbrirNuevaTasa()
+    {
+        if (impuestoSeleccionado is null) return;
+
+        tasaModel = new ImpuestoTasaDto
+        {
+            ImpuestoId = impuestoSeleccionado.Id,
+            Tipo = TipoImpuestoTasa.Gravado,
+            VigenciaDesde = DateOnly.FromDateTime(DateTime.Today),
+            Activo = true
+        };
+        tasaFormVisible = true;
+    }
+
+    private void AbrirEditarTasa(ImpuestoTasaDto t)
+    {
+        // Copia: no mutar la fila de la grilla si el usuario cancela.
+        tasaModel = new ImpuestoTasaDto
+        {
+            Id = t.Id,
+            ImpuestoId = t.ImpuestoId,
+            Codigo = t.Codigo,
+            Nombre = t.Nombre,
+            Tipo = t.Tipo,
+            Porcentaje = t.Porcentaje,
+            VigenciaDesde = t.VigenciaDesde,
+            VigenciaHasta = t.VigenciaHasta,
+            Descripcion = t.Descripcion,
+            Activo = t.Activo
+        };
+        tasaFormVisible = true;
+    }
+
+    /// <summary>
+    /// EXENTO/EXONERADO fuerzan porcentaje 0 y deshabilitan el campo. La BD lo exige igual
+    /// (ck_cfg_impuesto_tasa_coherencia), pero el usuario no debería descubrirlo por un error.
+    /// </summary>
+    private void OnTipoTasaChanged(string? nuevoTipo)
+    {
+        tasaModel.Tipo = nuevoTipo ?? TipoImpuestoTasa.Gravado;
+        if (!TipoImpuestoTasa.ExigePorcentaje(tasaModel.Tipo))
+        {
+            tasaModel.Porcentaje = 0m;
+        }
+    }
+
+    private void CerrarTasaForm()
+    {
+        if (isSaving) return;
+        tasaFormVisible = false;
+        tasaModel = new();
+    }
+
+    private async Task GuardarTasaAsync()
+    {
+        if (impuestoSeleccionado is null) return;
+
+        isSaving = true;
+        try
+        {
+            if (tasaModel.Id.HasValue)
+            {
+                await ImpuestosClient.UpdateTasaAsync(tasaModel.Id.Value, tasaModel);
+                Toast("Éxito", "Tasa actualizada.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                tasaModel.ImpuestoId = impuestoSeleccionado.Id;
+                await ImpuestosClient.CreateTasaAsync(tasaModel);
+                Toast("Éxito", "Tasa registrada.", ToastRenderStyle.Success);
+            }
+
+            tasaFormVisible = false;
+            tasaModel = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ---------------------------------------------------------- cambiar tasa
+    private void AbrirCambiarTasa(ImpuestoTasaDto t)
+    {
+        tasaACambiar = t;
+        cambioError = null;
+        cambioModel = new CambiarTasaDto
+        {
+            TasaId = t.Id ?? 0,
+            VigenciaHasta = DateOnly.FromDateTime(DateTime.Today),
+            NuevoPorcentaje = TipoImpuestoTasa.ExigePorcentaje(t.Tipo) ? t.Porcentaje : 0m
+        };
+        cambioVisible = true;
+    }
+
+    private void CerrarCambioForm()
+    {
+        if (isSaving) return;
+        cambioVisible = false;
+        tasaACambiar = null;
+        cambioError = null;
+        cambioModel = new();
+    }
+
+    private async Task CambiarTasaAsync()
+    {
+        if (tasaACambiar is null) return;
+
+        // El CHECK de la BD lo exige igual, pero el usuario no debería descubrirlo por un error.
+        if (TipoImpuestoTasa.ExigePorcentaje(tasaACambiar.Tipo) && cambioModel.NuevoPorcentaje <= 0)
+        {
+            cambioError = "Una tasa GRAVADA debe tener un porcentaje mayor que cero.";
+            return;
+        }
+
+        if (cambioModel.VigenciaHasta < tasaACambiar.VigenciaDesde)
+        {
+            cambioError = $"El cierre no puede ser anterior al inicio de vigencia de la tasa actual " +
+                          $"({tasaACambiar.VigenciaDesde:dd/MM/yyyy}).";
+            return;
+        }
+
+        isSaving = true;
+        cambioError = null;
+        try
+        {
+            await ImpuestosClient.CambiarTasaAsync(cambioModel);
+            Toast("Éxito", "Tasa cerrada y nueva tasa creada.", ToastRenderStyle.Success);
+
+            cambioVisible = false;
+            tasaACambiar = null;
+            cambioModel = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            // Se muestra dentro del modal: el usuario no debe perder lo que escribió.
+            cambioError = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ------------------------------------------------------------ desactivar
+    private void ConfirmarDesactivarImpuesto(ImpuestoListItemDto i)
+    {
+        confirmTitulo = "¿Desactivar impuesto?";
+        confirmMensaje = "El impuesto quedará inactivo y no aparecerá en los selectores. Sus tasas se conservan.";
+        confirmDetalle = $"{i.Codigo} - {i.Nombre}";
+        confirmAccion = async () =>
+        {
+            var ok = await ImpuestosClient.DeactivateAsync(i.Id);
+            if (!ok) Toast("Error", "No se pudo desactivar.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Impuesto desactivado.", ToastRenderStyle.Success); await CargarAsync(); }
+        };
+        confirmVisible = true;
+    }
+
+    private void ConfirmarDesactivarTasa(ImpuestoTasaDto t)
+    {
+        confirmTitulo = "¿Desactivar tasa?";
+        confirmMensaje = "La tasa deja de estar disponible para documentos nuevos. No se borra: el histórico se conserva.";
+        confirmDetalle = $"{t.Codigo} - {t.Nombre} ({t.Porcentaje:0.##}%)";
+        confirmAccion = async () =>
+        {
+            if (t.Id is null) return;
+            var ok = await ImpuestosClient.DeactivateTasaAsync(t.Id.Value);
+            if (!ok) Toast("Error", "No se pudo desactivar la tasa.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Tasa desactivada.", ToastRenderStyle.Success); await CargarAsync(); }
+        };
+        confirmVisible = true;
+    }
+
+    private void CancelarConfirmacion()
+    {
+        confirmVisible = false;
+        confirmAccion = null;
+        confirmDetalle = null;
+    }
+
+    private async Task EjecutarDesactivacionAsync()
+    {
+        var accion = confirmAccion;
+        confirmVisible = false;
+        confirmAccion = null;
+
+        if (accion is null) return;
+
+        try { await accion(); }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { confirmDetalle = null; }
+    }
+
+    // --------------------------------------------------------------- estilos
+    /// <summary>Las tasas cerradas se atenúan: son histórico, no operan.</summary>
+    private void OnTasasCustomizeElement(GridCustomizeElementEventArgs e)
+    {
+        if (e.ElementType != GridElementType.DataRow) return;
+
+        if (e.Grid.GetDataItem(e.VisibleIndex) is ImpuestoTasaDto t && (!t.EsAbierta || !t.Activo))
+        {
+            e.CssClass = "tasa-cerrada";
+        }
+    }
+
+    private static string TipoBadgeClass(string? tipo) => tipo switch
+    {
+        TipoImpuestoTasa.Gravado => "bg-primary",
+        TipoImpuestoTasa.Exento => "bg-secondary",
+        TipoImpuestoTasa.Exonerado => "bg-info text-dark",
+        _ => "bg-light text-dark border"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "ImpuestosToast"
+        });
+}

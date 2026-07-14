@@ -58,12 +58,6 @@
                         { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.CodigoUpc) ? "—" : item.CodigoUpc)</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(ArticuloProveedorDto.Costo)" Caption="Costo" Width="120px" TextAlignment="GridTextAlignment.Right">
-                    <CellDisplayTemplate Context="cell">
-                        @if (cell.DataItem is ArticuloProveedorDto item)
-                        { <span class="fw-semibold">@item.Costo.ToString("N4")</span> }
-                    </CellDisplayTemplate>
-                </DxGridDataColumn>
                 <DxGridDataColumn FieldName="@nameof(ArticuloProveedorDto.Principal)" Caption="Principal" Width="110px" TextAlignment="GridTextAlignment.Center">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloProveedorDto item)
@@ -158,14 +152,11 @@
                             CssClass="w-100" />
             </div>
 
+            @* El costo ya no se captura por proveedor: se maneja en la pestaña Existencias. *@
             <div class="row g-3 mb-3">
-                <div class="col-12 col-md-6">
+                <div class="col-12">
                     <label class="form-label fw-semibold">Código UPC</label>
                     <DxTextBox @bind-Text="form.CodigoUpc" MaxLength="40" NullText="Código del proveedor" CssClass="w-100" />
-                </div>
-                <div class="col-12 col-md-6">
-                    <label class="form-label fw-semibold">Costo</label>
-                    <DxSpinEdit @bind-Value="form.Costo" DisplayFormat="N4" MinValue="0" CssClass="w-100" />
                 </div>
             </div>
 
@@ -313,7 +304,6 @@
             CodProveedor = row.CodProveedor,
             ProveedorNombre = row.ProveedorNombre,
             CodigoUpc = row.CodigoUpc,
-            Costo = row.Costo,
             Principal = row.Principal,
             Activo = row.Activo
         };

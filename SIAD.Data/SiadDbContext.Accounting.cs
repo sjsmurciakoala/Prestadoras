@@ -1026,6 +1026,9 @@ public partial class SiadDbContext
 
         // Condiciones de lectura administrables por empresa (2026-07-06, app_lectores)
         ConfigureCondicionesLecturaModel(modelBuilder);
+
+        // Catálogo global de impuestos y sus tasas con vigencia (2026-07-14)
+        ConfigureImpuestosModel(modelBuilder);
     }
 }
 

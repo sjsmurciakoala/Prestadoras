@@ -56,25 +56,57 @@
                         { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.UbicacionDisplay) ? "—" : item.UbicacionDisplay)</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Existencia)" Caption="Existencia" Width="120px" TextAlignment="GridTextAlignment.Right">
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Existencia)" Caption="Existencia" Width="105px" TextAlignment="GridTextAlignment.Right">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
                         { <span class="fw-semibold">@item.Existencia.ToString("N2")</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaMinima)" Caption="Mínimo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                @* Comprometida, tránsito, costo promedio y último costo los mantiene el motor de
+                   movimientos: se muestran atenuados porque NO se editan desde aquí. *@
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaComprometida)" Caption="Comprometida" Width="115px" TextAlignment="GridTextAlignment.Right">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
-                        { <span class="text-muted">@item.ExistenciaMinima.ToString("N2")</span> }
+                        { <span class="text-muted" title="La mantiene el motor de movimientos (solo lectura)">@item.ExistenciaComprometida.ToString("N2")</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaMaxima)" Caption="Máximo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaTransito)" Caption="Tránsito" Width="100px" TextAlignment="GridTextAlignment.Right">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
-                        { <span class="text-muted">@item.ExistenciaMaxima.ToString("N2")</span> }
+                        { <span class="text-muted" title="La mantiene el motor de movimientos (solo lectura)">@item.ExistenciaTransito.ToString("N2")</span> }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
-                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Principal)" Caption="Principal" Width="110px" TextAlignment="GridTextAlignment.Center">
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.PuntoReorden)" Caption="Punto reorden" Width="115px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span>@item.PuntoReorden.ToString("N2")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaMinima)" Caption="Mínimo" Width="100px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span>@item.ExistenciaMinima.ToString("N2")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.ExistenciaMaxima)" Caption="Máximo" Width="100px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span>@item.ExistenciaMaxima.ToString("N2")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.CostoPromedio)" Caption="Costo prom." Width="110px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span class="text-muted" title="Lo recalcula el motor de movimientos (solo lectura)">@item.CostoPromedio.ToString("N4")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.UltimoCosto)" Caption="Último costo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloUbicacionDto item)
+                        { <span class="text-muted" title="Lo registra el motor de movimientos (solo lectura)">@item.UltimoCosto.ToString("N4")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.Principal)" Caption="Principal" Width="100px" TextAlignment="GridTextAlignment.Center">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is ArticuloUbicacionDto item)
                         {
@@ -194,18 +226,25 @@
                 </div>
             </div>
 
+            @* Comprometida, tránsito, costo promedio y último costo NO van en el modal: los
+               mantiene el motor de movimientos y no hay nada que teclear. *@
             <div class="row g-3 mb-3 mt-1">
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-3">
                     <label class="form-label fw-semibold">Existencia</label>
                     <DxSpinEdit @bind-Value="form.Existencia" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-3">
                     <label class="form-label fw-semibold">Existencia mínima</label>
                     <DxSpinEdit @bind-Value="form.ExistenciaMinima" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-3">
                     <label class="form-label fw-semibold">Existencia máxima</label>
                     <DxSpinEdit @bind-Value="form.ExistenciaMaxima" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Punto de reorden</label>
+                    <DxSpinEdit @bind-Value="form.PuntoReorden" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                    <div class="form-text small text-muted">Existencia a la que conviene reponer.</div>
                 </div>
             </div>
 
@@ -352,6 +391,14 @@
             Ubicacion5 = row.Ubicacion5,
             Existencia = row.Existencia,
             ExistenciaMinima = row.ExistenciaMinima,
+            ExistenciaMaxima = row.ExistenciaMaxima,
+            PuntoReorden = row.PuntoReorden,
+            // Los 4 campos del motor se arrastran tal cual para no perderlos en la fila en
+            // memoria; el servicio los ignora al escribir (los mantiene el motor de posteo).
+            ExistenciaComprometida = row.ExistenciaComprometida,
+            ExistenciaTransito = row.ExistenciaTransito,
+            CostoPromedio = row.CostoPromedio,
+            UltimoCosto = row.UltimoCosto,
             Principal = row.Principal,
             Activo = row.Activo
         };

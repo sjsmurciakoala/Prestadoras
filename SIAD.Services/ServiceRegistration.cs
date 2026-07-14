@@ -21,6 +21,7 @@ using SIAD.Services.Tenancy;
 using SIAD.Services.Catalogos;
 using SIAD.Services.Abogados;
 using SIAD.Services.Almacen;
+using SIAD.Services.Impuestos;
 using SIAD.Services.Ciclos;
 using SIAD.Services.Caja;
 // [Sprint1/FaseC 2026-05-05] Removidos namespaces Letras, TarifasBase, TarifasContador (legacy).
@@ -132,6 +133,9 @@ public static class ServiceRegistration
         // tipos de documento fiscal (catalogo SAR Acuerdo 481-2017)
         services.AddScoped<SIAD.Services.TiposDocumentoFiscal.ITiposDocumentoFiscalService,
                            SIAD.Services.TiposDocumentoFiscal.TiposDocumentoFiscalService>();
+
+        // impuestos y sus tasas con vigencia (catalogo global SAR; ISV Honduras)
+        services.AddScoped<IImpuestosService, ImpuestosService>();
 
         services.AddScoped<ICuentasBancosService, CuentasBancosService>();
         services.AddScoped<IBanMonedasService, BanMonedasService>();

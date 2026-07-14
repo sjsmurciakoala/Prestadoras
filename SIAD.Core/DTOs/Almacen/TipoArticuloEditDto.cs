@@ -33,5 +33,11 @@ public sealed class TipoArticuloEditDto
     [StringLength(20, ErrorMessage = "La cuenta de devoluciones no puede superar 20 caracteres.")]
     public string? CuentaDevoluciones { get; set; }
 
+    /// <summary>
+    /// false = los artículos de este tipo no llevan existencias (ej. Servicios): sin
+    /// bodega, sin ubicación y sin kardex. Por defecto true.
+    /// </summary>
+    public bool ManejaInventario { get; set; } = true;
+
     public bool Activo { get; set; } = true;
 }

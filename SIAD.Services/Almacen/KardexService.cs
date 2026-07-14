@@ -30,11 +30,33 @@ public sealed class KardexService : IKardexService
 
         var articulo = filtro.ArticuloId.HasValue
             ? await articuloQuery.Where(a => a.id == filtro.ArticuloId.Value)
-                .Select(a => new { a.id, a.codigo_articulo, a.descripcion, a.unidad_medida, a.existencia })
+                .Select(a => new
+                {
+                    a.id,
+                    a.codigo_articulo,
+                    a.descripcion,
+                    a.unidad_medida,
+                    // La unidad real vive en el catálogo (unidad_medida_id). La columna
+                    // de texto unidad_medida es legacy SIMAFI y viene NULL en los
+                    // artículos nuevos, así que se usa solo como respaldo.
+                    UnidadCodigo = a.unidad_medida_ref != null ? a.unidad_medida_ref.codigo : null,
+                    a.existencia
+                })
                 .FirstOrDefaultAsync(ct)
             : !string.IsNullOrWhiteSpace(codigoFiltro)
                 ? await articuloQuery.Where(a => a.codigo_articulo == codigoFiltro)
-                    .Select(a => new { a.id, a.codigo_articulo, a.descripcion, a.unidad_medida, a.existencia })
+                    .Select(a => new
+                {
+                    a.id,
+                    a.codigo_articulo,
+                    a.descripcion,
+                    a.unidad_medida,
+                    // La unidad real vive en el catálogo (unidad_medida_id). La columna
+                    // de texto unidad_medida es legacy SIMAFI y viene NULL en los
+                    // artículos nuevos, así que se usa solo como respaldo.
+                    UnidadCodigo = a.unidad_medida_ref != null ? a.unidad_medida_ref.codigo : null,
+                    a.existencia
+                })
                     .FirstOrDefaultAsync(ct)
                 : null;
 
@@ -120,7 +142,7 @@ public sealed class KardexService : IKardexService
         {
             Codigo = articulo.codigo_articulo,
             Descripcion = articulo.descripcion,
-            UnidadMedida = articulo.unidad_medida,
+            UnidadMedida = articulo.UnidadCodigo ?? articulo.unidad_medida,
             ExistenciaRegistrada = articulo.existencia,
             SaldoCalculado = saldoCalculado,
             TotalIngresos = lista.Sum(m => m.Ingresos),

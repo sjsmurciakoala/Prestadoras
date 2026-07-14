@@ -48,7 +48,6 @@ public sealed class ArticuloProveedorService : IArticuloProveedorService
                 Id = p.id,
                 CodProveedor = p.cod_proveedor,
                 CodigoUpc = p.codigo_upc,
-                Costo = p.costo,
                 Principal = p.principal,
                 Activo = p.activo
             })
@@ -88,7 +87,8 @@ public sealed class ArticuloProveedorService : IArticuloProveedorService
         {
             existente.activo = true;
             existente.codigo_upc = ClasificacionNormalizer.Opcional(dto.CodigoUpc, 40);
-            existente.costo = dto.Costo;
+            // El costo ya no se maneja por proveedor (se lleva en Existencias): la columna
+            // alm_articulo_proveedor.costo sigue en la BD pero no se toca.
             existente.principal = dto.Principal;
             existente.usuariomodificacion = usuario;
             existente.fechamodificacion = ahora;
@@ -105,7 +105,6 @@ public sealed class ArticuloProveedorService : IArticuloProveedorService
             articulo_id = articuloId,
             cod_proveedor = cod,
             codigo_upc = ClasificacionNormalizer.Opcional(dto.CodigoUpc, 40),
-            costo = dto.Costo,
             principal = dto.Principal,
             activo = true,
             usuariocreacion = usuario,
@@ -150,7 +149,7 @@ public sealed class ArticuloProveedorService : IArticuloProveedorService
 
         entity.cod_proveedor = cod;
         entity.codigo_upc = ClasificacionNormalizer.Opcional(dto.CodigoUpc, 40);
-        entity.costo = dto.Costo;
+        // El costo ya no se maneja por proveedor (se lleva en Existencias).
         entity.principal = dto.Principal;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);

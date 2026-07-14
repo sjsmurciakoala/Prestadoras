@@ -33,7 +33,7 @@
     {
         <div class="text-muted small mb-2">
             Saldo del kardex@(bodegaSeleccionada is not null ? " (bodega)" : ""):
-            <span class="fw-semibold text-dark">@kardex.SaldoCalculado.ToString("N2")</span>
+            <span class="fw-semibold text-dark">@kardex.SaldoCalculado.ToString("N2")</span>@UnidadSufijo()
         </div>
     }
 
@@ -88,29 +88,46 @@
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
-                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Ingresos)" Caption="Entradas" Width="85px" TextAlignment="GridTextAlignment.Right">
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Ingresos)" Caption="Entradas" Width="105px" TextAlignment="GridTextAlignment.Right">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is KardexMovimientoDto m)
                         {
-                            <span class="@(m.Ingresos > 0 ? "text-success fw-semibold" : "text-muted")">@(m.Ingresos > 0 ? m.Ingresos.ToString("N2") : "—")</span>
+                            @if (m.Ingresos > 0)
+                            {
+                                <span class="text-success fw-semibold">@m.Ingresos.ToString("N2")</span>
+                                @UnidadSufijo()
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
-                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Salidas)" Caption="Salidas" Width="85px" TextAlignment="GridTextAlignment.Right">
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Salidas)" Caption="Salidas" Width="105px" TextAlignment="GridTextAlignment.Right">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is KardexMovimientoDto m)
                         {
-                            <span class="@(m.Salidas > 0 ? "text-danger fw-semibold" : "text-muted")">@(m.Salidas > 0 ? m.Salidas.ToString("N2") : "—")</span>
+                            @if (m.Salidas > 0)
+                            {
+                                <span class="text-danger fw-semibold">@m.Salidas.ToString("N2")</span>
+                                @UnidadSufijo()
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
 
-                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Saldo)" Caption="Saldo" Width="95px" TextAlignment="GridTextAlignment.Right">
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Saldo)" Caption="Saldo" Width="115px" TextAlignment="GridTextAlignment.Right">
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is KardexMovimientoDto m)
                         {
                             <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
+                            @UnidadSufijo()
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>
@@ -145,6 +162,20 @@
 
     /// <summary>Movimiento más reciente de los mostrados (la lista viene ordenada de más nuevo a más viejo).</summary>
     private KardexMovimientoDto? UltimoMovimiento => movimientos.FirstOrDefault();
+
+    /// <summary>
+    /// Unidad de medida del artículo (KardexArticuloDto.UnidadMedida): es la misma para todos
+    /// los movimientos, por eso se toma de la cabecera y no de cada fila.
+    /// </summary>
+    private string? UnidadMedida => kardex?.UnidadMedida;
+
+    /// <summary>
+    /// Sufijo atenuado con la unidad de medida ("50.00 UND"). Si el artículo no tiene unidad
+    /// registrada, no se pinta nada y queda sólo el número.
+    /// </summary>
+    private RenderFragment? UnidadSufijo() => string.IsNullOrWhiteSpace(UnidadMedida)
+        ? null
+        : @<span class="text-muted small ms-1">@UnidadMedida</span>;
 
     protected override async Task OnParametersSetAsync()
     {
