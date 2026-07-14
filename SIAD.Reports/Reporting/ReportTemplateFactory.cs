@@ -57,6 +57,7 @@ public sealed class ReportTemplateFactory
             ReportesWebConstants.CodigoReporteEstadoSituacionFinanciera => CreateEstadoSituacionFinancieraTemplate(reportCode, displayName, description, BuildDefaultEstadoSituacionFinancieraDataset()),
             ReportesWebConstants.CodigoReporteEstadoResultados => CreateEstadoResultadosTemplate(reportCode, displayName, description, BuildDefaultEstadoResultadosDataset()),
             ReportesWebConstants.CodigoReporteEstadoFlujoEfectivo => CreateEstadoFlujoEfectivoTemplate(reportCode, displayName, description, BuildDefaultEstadoFlujoEfectivoDataset()),
+            ReportesWebConstants.CodigoReporteEstadoCambiosPatrimonio => CreateEstadoCambiosPatrimonioTemplate(reportCode, displayName, description, BuildDefaultEstadoCambiosPatrimonioDataset()),
             ReportesWebConstants.CodigoReporteTransaccionesPeriodo => CreateTransaccionesPeriodoTemplate(reportCode, displayName, description, BuildDefaultTransaccionesPeriodoDataset()),
             ReportesWebConstants.CodigoReporteSaldosAguaPotableCiclo => CreateSaldosAguaPotableCicloTemplate(reportCode, displayName, description, BuildDefaultSaldosAguaPotableCicloDataset()),
             ReportesWebConstants.CodigoReporteSaldosAlcantarilladoSanitarioCiclo => CreateSaldosAguaPotableCicloTemplate(reportCode, displayName, description, BuildDefaultSaldosAlcantarilladoSanitarioCicloDataset()),
@@ -116,6 +117,14 @@ public sealed class ReportTemplateFactory
                 or ReportesWebConstants.DatasetSourceType.Sql)
         {
             return CreateEstadoFlujoEfectivoTemplate(reportCode, displayName, description, dataset);
+        }
+
+        if (IsEstadoCambiosPatrimonioTemplate(reportCode, dataset) &&
+            dataset.SourceType is ReportesWebConstants.DatasetSourceType.StoredProcedure
+                or ReportesWebConstants.DatasetSourceType.View
+                or ReportesWebConstants.DatasetSourceType.Sql)
+        {
+            return CreateEstadoCambiosPatrimonioTemplate(reportCode, displayName, description, dataset);
         }
 
         if (IsTransaccionesPeriodoTemplate(reportCode, dataset) &&
@@ -425,6 +434,7 @@ public sealed class ReportTemplateFactory
                 ReportesWebConstants.CodigoDatasetEstadoSituacionFinanciera => BuildDefaultEstadoSituacionFinancieraDataset(),
                 ReportesWebConstants.CodigoDatasetEstadoResultados => BuildDefaultEstadoResultadosDataset(),
                 ReportesWebConstants.CodigoDatasetEstadoFlujoEfectivo => BuildDefaultEstadoFlujoEfectivoDataset(),
+                ReportesWebConstants.CodigoDatasetEstadoCambiosPatrimonio => BuildDefaultEstadoCambiosPatrimonioDataset(),
                 ReportesWebConstants.CodigoDatasetTransaccionesPeriodo => BuildDefaultTransaccionesPeriodoDataset(),
                 ReportesWebConstants.CodigoDatasetSaldoClientesCategoria => BuildDefaultSaldoClientesCategoriaDataset(),
                 ReportesWebConstants.CodigoDatasetDesgloseFacturacion => BuildDefaultDesgloseFacturacionDataset(),
@@ -693,6 +703,53 @@ public sealed class ReportTemplateFactory
             BuildDefaultEstadoFlujoEfectivoDatasetParameters());
 
     private static IReadOnlyList<DatasetParameterDefinition> BuildDefaultEstadoFlujoEfectivoDatasetParameters()
+        => [
+            new(
+                "CompanyId",
+                "p_company_id",
+                "Empresa actual",
+                ReportesWebConstants.DatasetParameterDataType.Int64,
+                ReportesWebConstants.DatasetParameterValueSource.CurrentCompany,
+                null,
+                false,
+                false,
+                true,
+                0),
+            new(
+                "FechaDesde",
+                "p_fecha_desde",
+                "Fecha desde",
+                ReportesWebConstants.DatasetParameterDataType.Date,
+                ReportesWebConstants.DatasetParameterValueSource.Report,
+                null,
+                true,
+                false,
+                true,
+                10),
+            new(
+                "FechaHasta",
+                "p_fecha_hasta",
+                "Fecha hasta",
+                ReportesWebConstants.DatasetParameterDataType.Date,
+                ReportesWebConstants.DatasetParameterValueSource.Report,
+                null,
+                true,
+                false,
+                true,
+                20)
+        ];
+
+    private static DatasetDefinition BuildDefaultEstadoCambiosPatrimonioDataset()
+        => new(
+            ReportesWebConstants.CodigoDatasetEstadoCambiosPatrimonio,
+            "Dataset estado de cambios en el patrimonio",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetEstadoCambiosPatrimonio,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            BuildDefaultEstadoCambiosPatrimonioDatasetParameters());
+
+    private static IReadOnlyList<DatasetParameterDefinition> BuildDefaultEstadoCambiosPatrimonioDatasetParameters()
         => [
             new(
                 "CompanyId",
@@ -1592,6 +1649,10 @@ public sealed class ReportTemplateFactory
     private static bool IsEstadoFlujoEfectivoTemplate(string reportCode, DatasetDefinition dataset)
         => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteEstadoFlujoEfectivo, StringComparison.OrdinalIgnoreCase)
            || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetEstadoFlujoEfectivo, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsEstadoCambiosPatrimonioTemplate(string reportCode, DatasetDefinition dataset)
+        => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteEstadoCambiosPatrimonio, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetEstadoCambiosPatrimonio, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsTransaccionesPeriodoTemplate(string reportCode, DatasetDefinition dataset)
         => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteTransaccionesPeriodo, StringComparison.OrdinalIgnoreCase)
@@ -2678,6 +2739,145 @@ public sealed class ReportTemplateFactory
         return report;
     }
 
+    private XtraReport CreateEstadoCambiosPatrimonioTemplate(string reportCode, string displayName, string? description, DatasetDefinition dataset)
+    {
+        var report = CreateBaseReport(reportCode, displayName);
+        report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
+        report.Margins = new DXMargins(50, 50, 35, 35);
+        report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
+
+        foreach (var parameter in dataset.Parameters)
+        {
+            var reportParameter = CreateReportParameter(parameter);
+            ApplyEstadoCambiosPatrimonioTemplateDefaults(reportParameter);
+            report.Parameters.Add(reportParameter);
+        }
+
+        var queryName = string.IsNullOrWhiteSpace(dataset.Code) ? "MainQuery" : dataset.Code.Replace('-', '_');
+        var dataSource = CreateRelationalDataSource(dataset, queryName);
+        report.ComponentStorage.AddRange([dataSource]);
+        report.DataSource = dataSource;
+        report.DataMember = queryName;
+
+        const float contentWidth = 750f;
+        const float componentWidth = 270f;
+        const float amountWidth = 120f;
+
+        var reportHeader = new ReportHeaderBand { HeightF = 92f };
+        var pageHeader = new PageHeaderBand { HeightF = 30f };
+        var detailBand = new DetailBand { HeightF = 24f };
+        var pageFooter = new PageFooterBand { HeightF = 24f };
+
+        var companyLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 0f, contentWidth, 20f),
+            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleCenter
+        };
+        companyLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_nombre]"));
+
+        var titleLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 24f, contentWidth, 24f),
+            Font = new DXFont("Arial", 12f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        titleLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('ESTADO DE CAMBIOS EN EL PATRIMONIO DEL {0:dd/MM/yyyy} AL {1:dd/MM/yyyy}', ?FechaDesde, ?FechaHasta)"));
+
+        var infoLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 50f, contentWidth, 16f),
+            Font = new DXFont("Arial", 8f),
+            ForeColor = Color.DimGray,
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        infoLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('{0} | RTN: {1} | Tel: {2} | Email: {3}', [empresa_nombre_legal], [empresa_rtn], [empresa_telefono], [empresa_email])"));
+
+        var addressLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 66f, contentWidth, 16f),
+            Font = new DXFont("Arial", 8f),
+            ForeColor = Color.DimGray,
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        addressLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_direccion]"));
+
+        reportHeader.Controls.AddRange([companyLabel, titleLabel, infoLabel, addressLabel]);
+
+        var headerTable = new XRTable
+        {
+            BoundsF = new RectangleF(0f, 0f, contentWidth, 28f),
+            BorderWidth = 0f,
+            BackColor = Color.Gainsboro,
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleCenter
+        };
+        var headerRow = new XRTableRow();
+        headerRow.Cells.AddRange(
+        [
+            new XRTableCell { Text = "Componente", WidthF = componentWidth, Weight = componentWidth, TextAlignment = TextAlignment.MiddleLeft, Padding = new PaddingInfo(6, 0, 0, 0) },
+            new XRTableCell { Text = "Saldo Inicial", WidthF = amountWidth, Weight = amountWidth },
+            new XRTableCell { Text = "Aumentos", WidthF = amountWidth, Weight = amountWidth },
+            new XRTableCell { Text = "Disminuciones", WidthF = amountWidth, Weight = amountWidth },
+            new XRTableCell { Text = "Saldo Final", WidthF = amountWidth, Weight = amountWidth }
+        ]);
+        headerTable.Rows.Add(headerRow);
+        pageHeader.Controls.Add(headerTable);
+
+        var detailTable = new XRTable
+        {
+            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
+            BorderWidth = 0f,
+            Font = new DXFont("Arial", 8.5f)
+        };
+        var detailRow = new XRTableRow();
+        detailRow.Cells.AddRange(
+        [
+            new XRTableCell
+            {
+                WidthF = componentWidth,
+                Weight = componentWidth,
+                Padding = new PaddingInfo(0, 8, 0, 0),
+                TextAlignment = TextAlignment.MiddleLeft
+            },
+            CreateFinancialStatementAmountCell("[saldo_inicial]", amountWidth),
+            CreateFinancialStatementAmountCell("[aumentos]", amountWidth),
+            CreateFinancialStatementAmountCell("[disminuciones]", amountWidth),
+            CreateFinancialStatementAmountCell("[saldo_final]", amountWidth)
+        ]);
+        detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[componente]"));
+        foreach (XRTableCell cell in detailRow.Cells)
+        {
+            cell.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Font.Bold", "[es_total]"));
+        }
+
+        detailTable.Rows.Add(detailRow);
+        detailBand.Controls.Add(detailTable);
+
+        pageFooter.Controls.AddRange(
+        [
+            new XRPageInfo
+            {
+                BoundsF = new RectangleF(0f, 0f, 260f, 20f),
+                Font = new DXFont("Arial", 8f),
+                PageInfo = PageInfo.DateTime,
+                TextAlignment = TextAlignment.MiddleLeft,
+                TextFormatString = "Generado: {0:dd/MM/yyyy HH:mm}"
+            },
+            new XRPageInfo
+            {
+                BoundsF = new RectangleF(550f, 0f, 200f, 20f),
+                Font = new DXFont("Arial", 8f),
+                PageInfo = PageInfo.NumberOfTotal,
+                TextAlignment = TextAlignment.MiddleRight,
+                TextFormatString = "Pagina {0} de {1}"
+            }
+        ]);
+
+        report.Bands.AddRange([reportHeader, pageHeader, detailBand, pageFooter]);
+        return report;
+    }
+
     private static void ApplyBancosTemplateDefaults(Parameter parameter)
     {
         parameter.Value = parameter.Name switch
@@ -2720,6 +2920,16 @@ public sealed class ReportTemplateFactory
     }
 
     private static void ApplyEstadoFlujoEfectivoTemplateDefaults(Parameter parameter)
+    {
+        parameter.Value = parameter.Name switch
+        {
+            "FechaDesde" => new DateTime(DateTime.Today.Year, 1, 1),
+            "FechaHasta" => DateTime.Today,
+            _ => parameter.Value
+        };
+    }
+
+    private static void ApplyEstadoCambiosPatrimonioTemplateDefaults(Parameter parameter)
     {
         parameter.Value = parameter.Name switch
         {
