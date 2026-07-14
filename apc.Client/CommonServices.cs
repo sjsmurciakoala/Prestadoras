@@ -86,12 +86,11 @@ namespace apc.Client
             services.AddScoped<RequisicionesClient>();
             services.AddScoped<DescargosClient>();
             services.AddScoped<UnidadesMedidaClient>();
+            services.AddScoped<CategoriasUnidadClient>();
             services.AddScoped<TiposArticuloClient>();
             services.AddScoped<LineasCatalogoClient>();
             services.AddScoped<GruposClient>();
             services.AddScoped<BodegasClient>();
-            services.AddScoped<EstanteriasClient>();
-            services.AddScoped<EstantesClient>();
             services.AddScoped<CiclosClient>();
             services.AddScoped<InformesClient>();
             // presupuesto (de Combinacio_E_J_1.0; TarifasBase/TarifasContador retirados como legacy)

@@ -1,3 +1,4 @@
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 
 namespace SIAD.Core.DTOs.Almacen;
@@ -6,9 +7,12 @@ public sealed class ArticuloEditDto
 {
     public int? Id { get; set; }
 
-    [Required(ErrorMessage = "El código es obligatorio.")]
+    /// <summary>
+    /// Código del sistema anterior (SIMAFI). OPCIONAL: los artículos nuevos no lo usan
+    /// (queda en blanco); el identificador es el Id. Solo referencia en los migrados.
+    /// </summary>
     [StringLength(20, ErrorMessage = "El código no puede superar los 20 caracteres.")]
-    public string Codigo { get; set; } = string.Empty;
+    public string? Codigo { get; set; }
 
     [Required(ErrorMessage = "La descripción es obligatoria.")]
     [StringLength(120, ErrorMessage = "La descripción no puede superar los 120 caracteres.")]
@@ -45,9 +49,24 @@ public sealed class ArticuloEditDto
     public decimal ValorUnitario { get; set; }
 
     /// <summary>
-    /// Existencia física. Editable sólo al crear (existencia inicial); en
-    /// edición se conserva porque debe ajustarse por movimientos de kardex.
+    /// Existencia física. En edición es el rollup (suma de bodegas) y se conserva.
+    /// Al crear ya no se captura aquí: la existencia entra por bodega en <see cref="Ubicaciones"/>.
     /// </summary>
     [Range(0, 9_999_999_999_999d, ErrorMessage = "La existencia no puede ser negativa.")]
     public decimal Existencia { get; set; }
+
+    /// <summary>
+    /// Ubicaciones (bodegas) del artículo. SOLO se usa al CREAR: el artículo debe
+    /// nacer con al menos una bodega, y su existencia/mínimo salen de la suma de estas
+    /// filas. En edición las ubicaciones se administran por endpoints propios y esta
+    /// lista se ignora.
+    /// </summary>
+    public List<ArticuloUbicacionDto> Ubicaciones { get; set; } = new();
+
+    /// <summary>
+    /// Proveedores que suministran el artículo ("UPC"). SOLO se usa al CREAR: se
+    /// insertan junto con el artículo. En edición se administran por endpoints propios
+    /// y esta lista se ignora.
+    /// </summary>
+    public List<ArticuloProveedorDto> Proveedores { get; set; } = new();
 }

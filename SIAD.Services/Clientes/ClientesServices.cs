@@ -563,27 +563,59 @@ public class ClientesService : IClientesService
 
         decimal? consumoPromedio = consumos.Length > 0 ? consumos.Average() : 0m;
 
-        // Desglose por servicio usando saldo_detalle del movimiento más reciente por tipo_servicio.
-        // JOIN con adm_servicio para obtener el nombre amigable y el orden visual del catálogo.
-        const string sqlDesglose =
-            "SELECT " +
-            "  COALESCE(s.nombre, sub.tipo_servicio, 'Sin servicio') AS servicio, " +
-            "  COALESCE(sub.saldo_detalle, 0)                        AS saldo, " +
-            "  0                                                      AS meses_pendientes " +
-            "FROM ( " +
-            "  SELECT DISTINCT ON (ta.tipo_servicio) " +
-            "    ta.tipo_servicio, ta.saldo_detalle " +
-            "  FROM transaccion_abonado ta " +
-            "  WHERE ta.company_id  = @CompanyId " +
-            "    AND ta.cliente_clave = @Clave " +
-            "    AND ta.tipo_servicio IS NOT NULL " +
-            "    AND ta.estado = 'A' " +
-            "  ORDER BY ta.tipo_servicio, ta.ide DESC " +
-            ") sub " +
-            "LEFT JOIN adm_servicio s " +
-            "       ON s.codigo      = sub.tipo_servicio " +
-            "      AND s.company_id  = @CompanyId " +
-            "ORDER BY COALESCE(s.orden_visual, 999), servicio";
+        // Desglose por servicio: se suma (debitos - creditos) de los movimientos activos en vez de
+        // leer saldo_detalle del ultimo movimiento. saldo_detalle solo acumula por servicio en las
+        // facturas: los pagos se registran con tipo_servicio 'E' y las NC/ND sin tipo_servicio, y
+        // ninguno de los dos descuenta el saldo_detalle de los servicios facturados. La suma de
+        // todos los movimientos activos si coincide con sp_obtener_cliente_saldo, de modo que el
+        // TOTAL de la tabla cuadra con el saldo actual del resumen.
+        //
+        // Los servicios recurrentes del catalogo (facturable_app o genera_por_regla) se listan
+        // siempre, aunque el cliente no tenga movimientos, con saldo 0. Lo que no corresponde a un
+        // servicio del catalogo (saldo migrado de SIMAFI, pagos, NC/ND) va en filas propias para no
+        // perderlo del total.
+        const string sqlDesglose = @"
+WITH mov AS (
+    SELECT ta.tipo_servicio,
+           ta.tipotransaccion,
+           COALESCE(ta.debitos, 0) - COALESCE(ta.creditos, 0) AS importe
+    FROM transaccion_abonado ta
+    WHERE ta.company_id    = @CompanyId
+      AND ta.cliente_clave = @Clave
+      AND ta.estado        = 'A'
+),
+cat AS (
+    SELECT s.codigo,
+           s.nombre,
+           s.orden_visual,
+           (s.facturable_app OR s.genera_por_regla) AS es_recurrente
+    FROM adm_servicio s
+    WHERE s.company_id = @CompanyId
+      AND s.status_id  = 1
+),
+servicios AS (
+    SELECT c.nombre                    AS servicio,
+           COALESCE(SUM(m.importe), 0) AS saldo,
+           c.orden_visual              AS orden
+    FROM cat c
+    LEFT JOIN mov m ON m.tipo_servicio = c.codigo
+    GROUP BY c.codigo, c.nombre, c.orden_visual, c.es_recurrente
+    HAVING c.es_recurrente OR COUNT(m.tipo_servicio) > 0
+),
+otros AS (
+    SELECT CASE WHEN m.tipotransaccion = 'SALDO_ANTERIOR' THEN 'Saldo anterior'
+                ELSE 'Pagos y ajustes' END AS servicio,
+           SUM(m.importe)                  AS saldo,
+           CASE WHEN m.tipotransaccion = 'SALDO_ANTERIOR' THEN 9000 ELSE 9001 END AS orden
+    FROM mov m
+    WHERE NOT EXISTS (SELECT 1 FROM cat c WHERE c.codigo = m.tipo_servicio)
+    GROUP BY 1, 3
+)
+SELECT servicio,
+       saldo,
+       0 AS meses_pendientes
+FROM (SELECT * FROM servicios UNION ALL SELECT * FROM otros) t
+ORDER BY orden, servicio";
 
         var desgloseRows = await connection.QueryAsync<SaldoServicioRow>(
             new CommandDefinition(sqlDesglose,

@@ -196,7 +196,7 @@
 
                     <DxGridDataColumn Caption="" Width="55px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is RequisicionListItemDto item && !string.IsNullOrWhiteSpace(item.CodigoArticulo))
+                            @if (cell.DataItem is RequisicionListItemDto item && (item.ArticuloId.HasValue || !string.IsNullOrWhiteSpace(item.CodigoArticulo)))
                             {
                                 <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
                                         @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
@@ -331,7 +331,14 @@
 
     private void VerKardex(RequisicionListItemDto item)
     {
-        Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(item.CodigoArticulo!)}");
+        if (item.ArticuloId.HasValue)
+        {
+            Navigation.NavigateTo($"/almacen/kardex?articuloId={item.ArticuloId.Value}");
+        }
+        else if (!string.IsNullOrWhiteSpace(item.CodigoArticulo))
+        {
+            Navigation.NavigateTo($"/almacen/kardex?articulo={Uri.EscapeDataString(item.CodigoArticulo)}");
+        }
     }
 
     private static string EstadoCss(string? estatus) => estatus switch

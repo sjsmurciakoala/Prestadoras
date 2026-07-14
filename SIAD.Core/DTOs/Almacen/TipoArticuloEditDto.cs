@@ -17,5 +17,21 @@ public sealed class TipoArticuloEditDto
     [StringLength(200, ErrorMessage = "La descripción no puede superar los 200 caracteres.")]
     public string? Descripcion { get; set; }
 
+    /// <summary>Cuentas contables (código del plan de cuentas). Opcionales.</summary>
+    [StringLength(20, ErrorMessage = "La cuenta de inventario no puede superar 20 caracteres.")]
+    public string? CuentaInventario { get; set; }
+
+    [StringLength(20, ErrorMessage = "La cuenta de costo de ventas no puede superar 20 caracteres.")]
+    public string? CuentaCostoVentas { get; set; }
+
+    [StringLength(20, ErrorMessage = "La cuenta de ventas no puede superar 20 caracteres.")]
+    public string? CuentaVentas { get; set; }
+
+    [StringLength(20, ErrorMessage = "La cuenta de ajustes no puede superar 20 caracteres.")]
+    public string? CuentaAjustes { get; set; }
+
+    [StringLength(20, ErrorMessage = "La cuenta de devoluciones no puede superar 20 caracteres.")]
+    public string? CuentaDevoluciones { get; set; }
+
     public bool Activo { get; set; } = true;
 }

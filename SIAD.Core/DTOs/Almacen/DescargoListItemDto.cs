@@ -5,6 +5,7 @@ namespace SIAD.Core.DTOs.Almacen;
 public sealed class DescargoListItemDto
 {
     public int Id { get; init; }
+    public int? ArticuloId { get; init; }
     public DateOnly? Fecha { get; init; }
     public string? CodigoArticulo { get; init; }
     public decimal Cantidad { get; init; }

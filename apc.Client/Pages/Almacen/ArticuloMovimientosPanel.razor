@@ -1,0 +1,227 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject KardexClient KardexClient
+@inject BodegasClient BodegasClient
+@inject NavigationManager Navigation
+
+<div class="modern-card position-relative movimientos-panel">
+    <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando movimientos..." />
+
+    <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+        <h6 class="mb-0 fw-bold"><i class="bi bi-journal-arrow-down me-1"></i>Últimos movimientos</h6>
+        <DxButton Text="Ver kardex completo" IconCssClass="bi bi-box-arrow-up-right"
+                  RenderStyle="ButtonRenderStyle.Secondary"
+                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                  Click="VerKardexCompleto" />
+    </div>
+
+    <div class="mb-2">
+        <label class="filter-label">Bodega</label>
+        <DxComboBox Data="@bodegas" Value="@bodegaSeleccionada"
+                    ValueChanged="@((BodegaLookupDto? b) => OnBodegaChanged(b))"
+                    TextFieldName="@nameof(BodegaLookupDto.Display)"
+                    FilteringMode="DataGridFilteringMode.Contains"
+                    NullText="Todas las bodegas"
+                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                    CssClass="w-100" />
+    </div>
+
+    @if (kardex is not null)
+    {
+        <div class="text-muted small mb-2">
+            Saldo del kardex@(bodegaSeleccionada is not null ? " (bodega)" : ""):
+            <span class="fw-semibold text-dark">@kardex.SaldoCalculado.ToString("N2")</span>
+        </div>
+    }
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-2" role="alert">@errorMessage</div>
+    }
+
+    @if (UltimoMovimiento is { } ultimo)
+    {
+        <div class="ultimo-mov">
+            <span class="ultimo-mov-titulo"><i class="bi bi-clock-history me-1"></i>Último movimiento</span>
+            <span class="ultimo-mov-dato" title="Usuario que registró el movimiento">
+                <i class="bi bi-person me-1"></i>@UsuarioTexto(ultimo)
+            </span>
+            <span class="ultimo-mov-dato" title="Fecha y hora de registro">
+                <i class="bi bi-calendar-event me-1"></i>@FechaHoraTexto(ultimo)
+            </span>
+        </div>
+    }
+
+    <div class="grid-wrapper">
+        <DxGrid Data="@movimientos" KeyFieldName="@nameof(KardexMovimientoDto.Id)"
+                ShowAllRows="true"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                ShowGroupPanel="false" CssClass="grid-solicitudes">
+            <Columns>
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Fecha)" Caption="Fecha" Width="95px">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span>@(m.Fecha.HasValue ? m.Fecha.Value.ToString("dd/MM/yyyy") : "—")</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.TipoDescripcion)" Caption="Tipo" Width="95px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span class="badge-mov @TipoCssClass(m.TipoTransaccion)">@m.TipoDescripcion</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.BodegaCodigo)" Caption="Bodega" Width="85px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span class="text-muted" title="@m.BodegaNombre">@(string.IsNullOrWhiteSpace(m.BodegaCodigo) ? "—" : m.BodegaCodigo)</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Ingresos)" Caption="Entradas" Width="85px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span class="@(m.Ingresos > 0 ? "text-success fw-semibold" : "text-muted")">@(m.Ingresos > 0 ? m.Ingresos.ToString("N2") : "—")</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Salidas)" Caption="Salidas" Width="85px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span class="@(m.Salidas > 0 ? "text-danger fw-semibold" : "text-muted")">@(m.Salidas > 0 ? m.Salidas.ToString("N2") : "—")</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+
+                <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Saldo)" Caption="Saldo" Width="95px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is KardexMovimientoDto m)
+                        {
+                            <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+
+            <EmptyDataAreaTemplate>
+                <div class="p-4 text-center text-muted">
+                    @(bodegaSeleccionada is null
+                        ? "Este artículo aún no tiene movimientos de kardex."
+                        : "No hay movimientos en la bodega seleccionada.")
+                </div>
+            </EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
+</div>
+
+@code {
+    [Parameter, EditorRequired]
+    public int ArticuloId { get; set; }
+
+    /// <summary>Tope de movimientos a mostrar en el panel (los más recientes).</summary>
+    private const int MaxMovimientos = 15;
+
+    private KardexArticuloDto? kardex;
+    private List<KardexMovimientoDto> movimientos = new();
+    private List<BodegaLookupDto> bodegas = new();
+    private BodegaLookupDto? bodegaSeleccionada;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private int _loadedArticuloId;
+
+    /// <summary>Movimiento más reciente de los mostrados (la lista viene ordenada de más nuevo a más viejo).</summary>
+    private KardexMovimientoDto? UltimoMovimiento => movimientos.FirstOrDefault();
+
+    protected override async Task OnParametersSetAsync()
+    {
+        // Cargar sólo cuando cambia el artículo (evita recargas por re-render).
+        if (ArticuloId > 0 && ArticuloId != _loadedArticuloId)
+        {
+            _loadedArticuloId = ArticuloId;
+            bodegaSeleccionada = null;
+            await CargarBodegasAsync();
+            await CargarAsync();
+        }
+    }
+
+    private async Task CargarBodegasAsync()
+    {
+        try { bodegas = await BodegasClient.GetLookupAsync(); }
+        catch { bodegas = new List<BodegaLookupDto>(); }
+    }
+
+    private async Task OnBodegaChanged(BodegaLookupDto? bodega)
+    {
+        bodegaSeleccionada = bodega;
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            var filtro = new KardexFilterDto
+            {
+                ArticuloId = ArticuloId,
+                BodegaId = bodegaSeleccionada?.Id
+            };
+
+            kardex = await KardexClient.GetByArticuloAsync(filtro);
+
+            // El servicio devuelve los movimientos en orden cronológico ascendente con el
+            // saldo corrido ya calculado; los invertimos (más recientes primero) y nos
+            // quedamos sólo con los últimos 15.
+            movimientos = kardex is null
+                ? new List<KardexMovimientoDto>()
+                : kardex.Movimientos.Reverse().Take(MaxMovimientos).ToList();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar los movimientos: {ex.Message}";
+            movimientos = new List<KardexMovimientoDto>();
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void VerKardexCompleto() => Navigation.NavigateTo($"/almacen/kardex?articuloId={ArticuloId}");
+
+    private static string UsuarioTexto(KardexMovimientoDto m)
+        => string.IsNullOrWhiteSpace(m.UsuarioCreacion) ? "Usuario no registrado" : m.UsuarioCreacion!;
+
+    // La hora sólo existe en fechacreacion (timestamp del registro); los movimientos
+    // migrados de SIMAFI no la tienen y caen al campo fecha, que es sólo día.
+    private static string FechaHoraTexto(KardexMovimientoDto m)
+        => m.FechaCreacion.HasValue
+            ? m.FechaCreacion.Value.ToString("dd/MM/yyyy HH:mm")
+            : m.Fecha.HasValue
+                ? $"{m.Fecha.Value:dd/MM/yyyy} (sin hora)"
+                : "Sin fecha";
+
+    private static string TipoCssClass(string? tipo) => tipo switch
+    {
+        "102" => "mov-entrada",
+        "103" => "mov-ajuste",
+        "202" => "mov-salida",
+        _ => "mov-otro"
+    };
+}

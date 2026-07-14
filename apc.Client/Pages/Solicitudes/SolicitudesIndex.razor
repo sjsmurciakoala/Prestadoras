@@ -1,10 +1,12 @@
 ﻿@page "/solicitudes"
 @attribute [Authorize]
 @using SIAD.Core.DTOs.Solicitudes
+@using apc.Client.Services
 @using apc.Client.Services.Solicitudes
 @inject SolicitudesClient SolicitudesClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Solicitudes</PageTitle>
 
@@ -70,14 +72,22 @@
         else
         {
             <div class="grid-wrapper">
-                <DxGrid Data="@solicitudes"
+                <DxGrid @ref="grid" Data="@solicitudes"
                         PageSize="15"
                         PagerPosition="GridPagerPosition.Bottom"
                         PageSizeSelectorVisible="true"
-                        PageSizeSelectorItems="@(new int[] { 10, 15, 20, 50 })"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                         ShowFilterRow="true"
                         ColumnResizeMode="GridColumnResizeMode.NextColumn"
+                        LayoutAutoSaving="OnLayoutAutoSaving"
+                        LayoutAutoLoading="OnLayoutAutoLoading"
                         CssClass="grid-modern">
+                    <ToolbarTemplate>
+                        <div class="d-flex w-100">
+                            <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" />
+                        </div>
+                    </ToolbarTemplate>
                     <Columns>
                         <DxGridDataColumn FieldName="@nameof(SolicitudListDto.Id)" Caption="ID" Width="80px" TextAlignment="GridTextAlignment.Center" />
 
@@ -312,6 +322,7 @@
 </DxPopup>
 
 @code {
+    private DxGrid? grid;
     private List<SolicitudListDto> solicitudes = new();
     private List<SolicitudCategoriaDto> categorias = new();
     private SolicitudDetailDto? solicitudActual;
@@ -333,6 +344,16 @@
         await CargarCategoriasAsync();
         await CargarSolicitudesAsync();
     }
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private const string GridLayoutStorageKey = "solicitudes-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
 
     private async Task CargarSolicitudesAsync()
     {

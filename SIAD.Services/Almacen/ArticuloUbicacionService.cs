@@ -6,7 +6,10 @@ using SIAD.Data;
 namespace SIAD.Services.Almacen;
 
 /// <summary>
-/// Ubicaciones físicas de un artículo por bodega (bodega + estante + principal).
+/// Ubicaciones físicas de un artículo por bodega (bodega + ubicación manual + principal).
+/// La ubicación es texto libre: cinco campos de 20 caracteres (ubicacion1..5).
+/// Las ubicaciones no se eliminan: se DESHABILITAN (activo=false) para conservar el
+/// histórico. El rollup de existencia del artículo suma solo las filas activas.
 /// Multiempresa: el filtro y el estampado de company_id los aplica SiadDbContext.
 /// </summary>
 public sealed class ArticuloUbicacionService : IArticuloUbicacionService
@@ -18,30 +21,40 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         _context = context;
     }
 
-    public async Task<IReadOnlyList<ArticuloUbicacionDto>> GetAsync(int articuloId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<ArticuloUbicacionDto>> GetAsync(int articuloId, bool incluirInactivas = false, CancellationToken ct = default)
     {
         if (articuloId <= 0)
         {
             return Array.Empty<ArticuloUbicacionDto>();
         }
 
-        return await _context.alm_articulo_bodegas.AsNoTracking()
-            .Where(u => u.articulo_id == articuloId)
-            .OrderByDescending(u => u.principal)
+        var query = _context.alm_articulo_bodegas.AsNoTracking()
+            .Where(u => u.articulo_id == articuloId);
+
+        if (!incluirInactivas)
+        {
+            query = query.Where(u => u.activo);
+        }
+
+        return await query
+            .OrderByDescending(u => u.activo)
+            .ThenByDescending(u => u.principal)
             .ThenBy(u => u.bodega != null ? u.bodega.codigo : string.Empty)
             .Select(u => new ArticuloUbicacionDto
             {
                 Id = u.id,
                 BodegaId = u.bodega_id,
                 BodegaDisplay = u.bodega != null ? u.bodega.codigo + " — " + u.bodega.nombre : null,
-                EstanteriaId = u.estante != null ? u.estante.estanteria_id : (int?)null,
-                EstanteId = u.estante_id,
-                EstanteUbicacion = u.estante != null && u.estante.estanteria != null && u.estante.estanteria.bodega != null
-                    ? u.estante.estanteria.bodega.codigo + "-" + u.estante.estanteria.codigo + "-" + u.estante.codigo
-                    : null,
+                Ubicacion1 = u.ubicacion1,
+                Ubicacion2 = u.ubicacion2,
+                Ubicacion3 = u.ubicacion3,
+                Ubicacion4 = u.ubicacion4,
+                Ubicacion5 = u.ubicacion5,
                 Existencia = u.existencia,
                 ExistenciaMinima = u.existencia_minima,
-                Principal = u.principal
+                ExistenciaMaxima = u.existencia_maxima,
+                Principal = u.principal,
+                Activo = u.activo
             })
             .ToListAsync(ct);
     }
@@ -51,34 +64,68 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         ArgumentNullException.ThrowIfNull(dto);
         await ValidarArticuloAsync(articuloId, ct);
         await ValidarBodegaAsync(dto.BodegaId, ct);
-        await ValidarEstanteEnBodegaAsync(dto.EstanteId, dto.BodegaId, ct);
 
-        if (await _context.alm_articulo_bodegas.AsNoTracking()
-                .AnyAsync(u => u.articulo_id == articuloId && u.bodega_id == dto.BodegaId, ct))
+        // Si ya existe una fila para esa bodega: si está activa es un duplicado;
+        // si está deshabilitada, se reactiva (respeta el único (company, articulo, bodega)).
+        var existente = await _context.alm_articulo_bodegas
+            .FirstOrDefaultAsync(u => u.articulo_id == articuloId && u.bodega_id == dto.BodegaId, ct);
+
+        if (existente is not null && existente.activo)
         {
-            throw new InvalidOperationException("El artículo ya tiene una ubicación en esa bodega.");
+            throw new InvalidOperationException("El artículo ya tiene una ubicación activa en esa bodega.");
         }
 
         if (dto.Principal)
         {
-            await DesmarcarPrincipalAsync(articuloId, null, ct);
+            await DesmarcarPrincipalAsync(articuloId, existente?.id, ct);
+        }
+
+        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        var usuario = ClasificacionNormalizer.Usuario(user);
+
+        if (existente is not null)
+        {
+            existente.activo = true;
+            existente.ubicacion1 = ClasificacionNormalizer.Opcional(dto.Ubicacion1, 20);
+            existente.ubicacion2 = ClasificacionNormalizer.Opcional(dto.Ubicacion2, 20);
+            existente.ubicacion3 = ClasificacionNormalizer.Opcional(dto.Ubicacion3, 20);
+            existente.ubicacion4 = ClasificacionNormalizer.Opcional(dto.Ubicacion4, 20);
+            existente.ubicacion5 = ClasificacionNormalizer.Opcional(dto.Ubicacion5, 20);
+            existente.existencia = dto.Existencia;
+            existente.existencia_minima = dto.ExistenciaMinima;
+            existente.existencia_maxima = dto.ExistenciaMaxima;
+            existente.principal = dto.Principal;
+            existente.usuariomodificacion = usuario;
+            existente.fechamodificacion = ahora;
+            await _context.SaveChangesAsync(ct);
+            await RecomputeArticuloAsync(articuloId, ct);
+            dto.Id = existente.id;
+            dto.Activo = true;
+            return dto;
         }
 
         var entity = new alm_articulo_bodega
         {
             articulo_id = articuloId,
             bodega_id = dto.BodegaId,
-            estante_id = dto.EstanteId,
+            ubicacion1 = ClasificacionNormalizer.Opcional(dto.Ubicacion1, 20),
+            ubicacion2 = ClasificacionNormalizer.Opcional(dto.Ubicacion2, 20),
+            ubicacion3 = ClasificacionNormalizer.Opcional(dto.Ubicacion3, 20),
+            ubicacion4 = ClasificacionNormalizer.Opcional(dto.Ubicacion4, 20),
+            ubicacion5 = ClasificacionNormalizer.Opcional(dto.Ubicacion5, 20),
             existencia = dto.Existencia,
             existencia_minima = dto.ExistenciaMinima,
+            existencia_maxima = dto.ExistenciaMaxima,
             principal = dto.Principal,
-            usuariocreacion = ClasificacionNormalizer.Usuario(user),
-            fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
+            activo = true,
+            usuariocreacion = usuario,
+            fechacreacion = ahora
         };
         _context.alm_articulo_bodegas.Add(entity);
         await _context.SaveChangesAsync(ct);
         await RecomputeArticuloAsync(articuloId, ct);
         dto.Id = entity.id;
+        dto.Activo = true;
         return dto;
     }
 
@@ -91,8 +138,12 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         var entity = await _context.alm_articulo_bodegas.FirstOrDefaultAsync(u => u.id == id && u.articulo_id == articuloId, ct)
                      ?? throw new KeyNotFoundException("La ubicación no existe.");
 
+        if (!entity.activo)
+        {
+            throw new InvalidOperationException("No se puede editar una ubicación deshabilitada. Reactívela primero.");
+        }
+
         await ValidarBodegaAsync(dto.BodegaId, ct);
-        await ValidarEstanteEnBodegaAsync(dto.EstanteId, dto.BodegaId, ct);
 
         if (await _context.alm_articulo_bodegas.AsNoTracking()
                 .AnyAsync(u => u.articulo_id == articuloId && u.bodega_id == dto.BodegaId && u.id != id, ct))
@@ -106,25 +157,66 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         }
 
         entity.bodega_id = dto.BodegaId;
-        entity.estante_id = dto.EstanteId;
+        entity.ubicacion1 = ClasificacionNormalizer.Opcional(dto.Ubicacion1, 20);
+        entity.ubicacion2 = ClasificacionNormalizer.Opcional(dto.Ubicacion2, 20);
+        entity.ubicacion3 = ClasificacionNormalizer.Opcional(dto.Ubicacion3, 20);
+        entity.ubicacion4 = ClasificacionNormalizer.Opcional(dto.Ubicacion4, 20);
+        entity.ubicacion5 = ClasificacionNormalizer.Opcional(dto.Ubicacion5, 20);
         entity.existencia = dto.Existencia;
         entity.existencia_minima = dto.ExistenciaMinima;
+        entity.existencia_maxima = dto.ExistenciaMaxima;
         entity.principal = dto.Principal;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);
         await RecomputeArticuloAsync(articuloId, ct);
         dto.Id = entity.id;
+        dto.Activo = true;
         return dto;
     }
 
-    public async Task<bool> DeleteAsync(int articuloId, int id, CancellationToken ct = default)
+    public async Task<bool> DeshabilitarAsync(int articuloId, int id, string user, CancellationToken ct = default)
     {
         if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
         var entity = await _context.alm_articulo_bodegas.FirstOrDefaultAsync(u => u.id == id && u.articulo_id == articuloId, ct);
         if (entity is null) return false;
+        if (!entity.activo) return true;
 
-        _context.alm_articulo_bodegas.Remove(entity);
+        if (entity.principal)
+        {
+            throw new InvalidOperationException("No se puede deshabilitar la bodega principal. Marque otra bodega como principal primero.");
+        }
+
+        var otrasActivas = await _context.alm_articulo_bodegas.AsNoTracking()
+            .CountAsync(u => u.articulo_id == articuloId && u.activo && u.id != id, ct);
+        if (otrasActivas == 0)
+        {
+            throw new InvalidOperationException("El artículo debe conservar al menos una bodega activa.");
+        }
+
+        entity.activo = false;
+        entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        await _context.SaveChangesAsync(ct);
+        await RecomputeArticuloAsync(articuloId, ct);
+        return true;
+    }
+
+    public async Task<bool> ReactivarAsync(int articuloId, int id, string user, CancellationToken ct = default)
+    {
+        if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+        var entity = await _context.alm_articulo_bodegas.FirstOrDefaultAsync(u => u.id == id && u.articulo_id == articuloId, ct);
+        if (entity is null) return false;
+        if (entity.activo) return true;
+
+        if (!await _context.alm_bodegas.AsNoTracking().AnyAsync(b => b.id == entity.bodega_id && b.activo, ct))
+        {
+            throw new InvalidOperationException("No se puede reactivar: la bodega está inactiva.");
+        }
+
+        entity.activo = true;
+        entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);
         await RecomputeArticuloAsync(articuloId, ct);
         return true;
@@ -132,12 +224,12 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
 
     /// <summary>
     /// Recalcula el rollup de existencia y mínimo del artículo como la suma de sus
-    /// filas por bodega. alm_articulo.existencia deja de ser fuente de verdad.
+    /// filas por bodega ACTIVAS. alm_articulo.existencia deja de ser fuente de verdad.
     /// </summary>
     private async Task RecomputeArticuloAsync(int articuloId, CancellationToken ct)
     {
         var totales = await _context.alm_articulo_bodegas.AsNoTracking()
-            .Where(u => u.articulo_id == articuloId)
+            .Where(u => u.articulo_id == articuloId && u.activo)
             .GroupBy(u => u.articulo_id)
             .Select(g => new { Existencia = g.Sum(x => x.existencia), Minima = g.Sum(x => x.existencia_minima) })
             .FirstOrDefaultAsync(ct);
@@ -167,29 +259,6 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         if (!await _context.alm_bodegas.AsNoTracking().AnyAsync(b => b.id == bodegaId && b.activo, ct))
         {
             throw new InvalidOperationException("La bodega seleccionada no existe o está inactiva.");
-        }
-    }
-
-    private async Task ValidarEstanteEnBodegaAsync(int? estanteId, int bodegaId, CancellationToken ct)
-    {
-        if (!estanteId.HasValue)
-        {
-            return;
-        }
-
-        var est = await _context.alm_estantes.AsNoTracking()
-            .Where(e => e.id == estanteId.Value)
-            .Select(e => new { BodegaId = e.estanteria != null ? e.estanteria.bodega_id : 0 })
-            .FirstOrDefaultAsync(ct);
-
-        if (est is null)
-        {
-            throw new InvalidOperationException("El estante seleccionado no existe.");
-        }
-
-        if (est.BodegaId != bodegaId)
-        {
-            throw new InvalidOperationException("El estante seleccionado no pertenece a la bodega indicada.");
         }
     }
 

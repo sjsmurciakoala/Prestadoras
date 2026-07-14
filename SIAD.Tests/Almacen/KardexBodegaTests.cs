@@ -48,10 +48,12 @@ public class KardexBodegaTests : IntegrationTestBase, IAsyncLifetime
         return base.DisposeAsync();
     }
 
-    private async Task SeedArticuloAsync(string codigo)
+    private async Task<int> SeedArticuloAsync(string codigo)
     {
-        _context!.alm_articulos.Add(new alm_articulo { codigo_articulo = codigo, descripcion = $"Artículo {codigo}" });
+        var art = new alm_articulo { codigo_articulo = codigo, descripcion = $"Artículo {codigo}" };
+        _context!.alm_articulos.Add(art);
         await _context.SaveChangesAsync();
+        return art.id;
     }
 
     private async Task<int> SeedBodegaAsync(string codigo)
@@ -62,11 +64,12 @@ public class KardexBodegaTests : IntegrationTestBase, IAsyncLifetime
         return bodega.id;
     }
 
-    private async Task SeedMovimientoAsync(string codigoArticulo, int bodegaId, DateOnly fecha, decimal ingresos, decimal salidas)
+    private async Task SeedMovimientoAsync(string codigoArticulo, int bodegaId, DateOnly fecha, decimal ingresos, decimal salidas, int? articuloId = null)
     {
         _context!.alm_kardexs.Add(new alm_kardex
         {
             codigo_articulo = codigoArticulo,
+            articulo_id = articuloId,
             bodega_id = bodegaId,
             fecha = fecha,
             ingresos = ingresos,
@@ -129,6 +132,23 @@ public class KardexBodegaTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(b1, mov.BodegaId);
         Assert.Equal("ZZK9", mov.BodegaCodigo);
         Assert.Equal("Bodega ZZK9", mov.BodegaNombre);
+    }
+
+    [SkippableFact]
+    public async Task PorArticuloId_FiltraPorArticuloId()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var artId = await SeedArticuloAsync("ZZKDXID");
+        var b1 = await SeedBodegaAsync("ZZKID");
+        await SeedMovimientoAsync("ZZKDXID", b1, new DateOnly(2026, 1, 1), 10, 0, articuloId: artId);
+        await SeedMovimientoAsync("ZZKDXID", b1, new DateOnly(2026, 1, 2), 0, 4, articuloId: artId);
+
+        var kardex = await _service!.GetByArticuloAsync(new KardexFilterDto { ArticuloId = artId });
+
+        Assert.NotNull(kardex);
+        Assert.Equal(6m, kardex!.SaldoCalculado); // 10 - 4
+        Assert.Equal(2, kardex.Movimientos.Count);
     }
 
     private class TestCurrentCompanyService : ICurrentCompanyService

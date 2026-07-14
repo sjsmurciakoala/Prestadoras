@@ -4,6 +4,7 @@
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Contabilidad
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
 
@@ -51,15 +52,27 @@
     }
     else
     {
-        <div class="modern-card form-card">
-            <ArticuloForm Model="modelo"
-                          Unidades="unidades"
-                          Tipos="tipos"
-                          Lineas="lineas"
-                          Grupos="grupos"
-                          OnValidSubmit="GuardarAsync"
-                          OnCancel="Volver"
-                          IsBusy="guardando" />
+        <div class="row g-3">
+            <div class="@(EsEdicion ? "col-12 col-xl-7" : "col-12")">
+                <div class="modern-card form-card">
+                    <ArticuloForm Model="modelo"
+                                  Unidades="unidades"
+                                  Tipos="tipos"
+                                  Lineas="lineas"
+                                  Grupos="grupos"
+                                  CuentasContables="cuentasContables"
+                                  OnValidSubmit="GuardarAsync"
+                                  OnCancel="Volver"
+                                  IsBusy="guardando" />
+                </div>
+            </div>
+
+            @if (EsEdicion)
+            {
+                <div class="col-12 col-xl-5">
+                    <ArticuloMovimientosPanel ArticuloId="@Id!.Value" />
+                </div>
+            }
         </div>
     }
 </div>
@@ -74,6 +87,7 @@
     private List<TipoArticuloLookupDto> tipos = new();
     private List<LineaLookupDto> lineas = new();
     private List<GrupoLookupDto> grupos = new();
+    private List<CuentaContableLookupDto> cuentasContables = new();
 
     private bool cargando = true;
     private bool guardando;
@@ -112,6 +126,7 @@
             tipos = await TiposClient.GetLookupAsync();
             lineas = await LineasClient.GetLookupAsync();
             grupos = await GruposClient.GetLookupAsync();
+            cuentasContables = await ArticulosClient.GetCuentasContablesAsync();
         }
         catch
         {
@@ -119,6 +134,7 @@
             tipos = new List<TipoArticuloLookupDto>();
             lineas = new List<LineaLookupDto>();
             grupos = new List<GrupoLookupDto>();
+            cuentasContables = new List<CuentaContableLookupDto>();
         }
     }
 

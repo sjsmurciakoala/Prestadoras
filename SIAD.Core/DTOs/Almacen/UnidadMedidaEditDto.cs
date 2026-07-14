@@ -17,8 +17,8 @@ public sealed class UnidadMedidaEditDto
     [StringLength(10, ErrorMessage = "La abreviatura no puede superar los 10 caracteres.")]
     public string? Abreviatura { get; set; }
 
-    [StringLength(30, ErrorMessage = "La categoría no puede superar los 30 caracteres.")]
-    public string? Categoria { get; set; }
+    /// <summary>Categoría (tipo) de la unidad: FK al catálogo alm_categoria_unidad.</summary>
+    public int? CategoriaId { get; set; }
 
     public bool PermiteDecimales { get; set; } = true;
     public bool Activo { get; set; } = true;

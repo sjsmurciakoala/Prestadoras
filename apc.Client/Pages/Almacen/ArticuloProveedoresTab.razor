@@ -1,0 +1,495 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject ArticulosClient ArticulosClient
+@inject ProveedoresClient ProveedoresClient
+@inject IToastNotificationService ToastService
+
+<DxToastProvider Name="ProveedoresUpcToast" MaxToastCount="4" />
+
+<div class="modern-card position-relative">
+    <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+        <div class="text-muted small">
+            <i class="bi bi-truck me-1"></i>
+            @if (EnMemoria)
+            {
+                <text>Indique qué proveedores suministran el artículo. Puede marcar uno como principal. Se guardan al crear el artículo.</text>
+            }
+            else
+            {
+                <text>Proveedores que suministran este artículo. No se eliminan: se deshabilitan y quedan en el histórico.</text>
+            }
+        </div>
+        <div class="d-flex align-items-center gap-3 flex-wrap">
+            @if (!EnMemoria)
+            {
+                <DxCheckBox Checked="verInactivas" CheckedExpression="@(() => verInactivas)"
+                            CheckedChanged="@((bool v) => OnToggleInactivasAsync(v))">
+                    Ver histórico
+                </DxCheckBox>
+            }
+            <DxButton Text="Agregar proveedor" IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                      Click="AbrirNuevo" />
+        </div>
+    </div>
+
+    <div class="grid-wrapper">
+        <DxGrid Data="@proveedores" KeyFieldName="@nameof(ArticuloProveedorDto.Id)"
+                ShowGroupPanel="false" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer">
+            <Columns>
+                <DxGridDataColumn FieldName="@nameof(ArticuloProveedorDto.ProveedorDisplay)" Caption="Proveedor" MinWidth="220">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloProveedorDto item)
+                        {
+                            <span class="@(item.Activo ? "text-dark fw-semibold" : "text-muted text-decoration-line-through")">@item.ProveedorDisplay</span>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloProveedorDto.CodigoUpc)" Caption="Código UPC" Width="140">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloProveedorDto item)
+                        { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.CodigoUpc) ? "—" : item.CodigoUpc)</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloProveedorDto.Costo)" Caption="Costo" Width="120px" TextAlignment="GridTextAlignment.Right">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloProveedorDto item)
+                        { <span class="fw-semibold">@item.Costo.ToString("N4")</span> }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                <DxGridDataColumn FieldName="@nameof(ArticuloProveedorDto.Principal)" Caption="Principal" Width="110px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloProveedorDto item)
+                        {
+                            @if (item.Principal)
+                            { <span class="badge-status active"><i class="bi bi-check-lg me-1"></i>Sí</span> }
+                            else
+                            { <span class="text-muted">—</span> }
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+                @if (!EnMemoria)
+                {
+                    <DxGridDataColumn FieldName="@nameof(ArticuloProveedorDto.Activo)" Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloProveedorDto item)
+                            {
+                                @if (item.Activo)
+                                { <span class="badge-status active">Activo</span> }
+                                else
+                                { <span class="badge bg-secondary">Deshabilitado</span> }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                }
+                <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is ArticuloProveedorDto item)
+                        {
+                            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                @if (item.Activo)
+                                {
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    @if (EnMemoria)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Quitar"
+                                                @onclick="() => QuitarEnMemoriaAsync(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Deshabilitar"
+                                                @onclick="() => ConfirmarDeshabilitar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-slash-circle"></i>
+                                        </button>
+                                    }
+                                }
+                                else
+                                {
+                                    <button type="button" class="btn-icon btn-edit" title="Reactivar"
+                                            @onclick="() => ReactivarAsync(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-arrow-counterclockwise"></i>
+                                    </button>
+                                }
+                            </div>
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
+            </Columns>
+            <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">@(EnMemoria ? "Agregue los proveedores que suministran el artículo (opcional)." : "Este artículo aún no tiene proveedores asignados.")</div></EmptyDataAreaTemplate>
+        </DxGrid>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(520px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Proveedor que suministra el artículo (UPC)</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        <div class="p-1">
+            <div class="mb-3">
+                <label class="form-label fw-semibold">Proveedor *</label>
+                <DxComboBox Data="@proveedoresLookup" Value="form.CodProveedor"
+                            ValueChanged="@((string? v) => OnProveedorChanged(v))"
+                            ValueExpression="@(() => form.CodProveedor)"
+                            ValueFieldName="@nameof(ProveedorComboItem.Codigo)"
+                            TextFieldName="@nameof(ProveedorComboItem.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione o busque un proveedor..."
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </div>
+
+            <div class="row g-3 mb-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Código UPC</label>
+                    <DxTextBox @bind-Text="form.CodigoUpc" MaxLength="40" NullText="Código del proveedor" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Costo</label>
+                    <DxSpinEdit @bind-Value="form.Costo" DisplayFormat="N4" MinValue="0" CssClass="w-100" />
+                </div>
+            </div>
+
+            <div class="mb-3">
+                <DxCheckBox @bind-Checked="form.Principal">Marcar como proveedor principal</DxCheckBox>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!isSaving)" Click="CerrarForm" />
+                <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary"
+                          IconCssClass="bi bi-check-lg"
+                          Enabled="@(!isSaving)" Click="GuardarAsync" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-slash-circle" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Deshabilitar proveedor?</h5>
+            <p class="text-muted">La relación se deshabilita pero se conserva en el histórico del artículo. Podrá reactivarla después.</p>
+            @if (paraDeshabilitar is not null)
+            {
+                <div class="fw-semibold">@paraDeshabilitar.ProveedorDisplay</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarDeshabilitar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, deshabilitar" Click="DeshabilitarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Warning" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    /// <summary>Modo HTTP (edición): id del artículo existente. Null = modo en memoria (alta).</summary>
+    [Parameter] public int? ArticuloId { get; set; }
+
+    /// <summary>Modo en memoria (alta): lista de proveedores enlazada al formulario del artículo.</summary>
+    [Parameter] public List<ArticuloProveedorDto>? Proveedores { get; set; }
+
+    [Parameter] public EventCallback<List<ArticuloProveedorDto>> ProveedoresChanged { get; set; }
+
+    private bool EnMemoria => !ArticuloId.HasValue;
+
+    private List<ArticuloProveedorDto> proveedores = new();
+    private List<ProveedorComboItem> proveedoresLookup = new();
+
+    private bool isLoading;
+    private bool verInactivas;
+    private int tempIdSeq;
+
+    private bool formVisible;
+    private bool isSaving;
+    private ArticuloProveedorDto form = new();
+
+    private bool confirmVisible;
+    private ArticuloProveedorDto? paraDeshabilitar;
+
+    private string PopupTitle => form.Id.HasValue ? "Editar proveedor" : "Nuevo proveedor";
+    private string PopupIcon => form.Id.HasValue ? "bi bi-pencil-square" : "bi bi-truck";
+    private string PopupIconWrapperClass => form.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            isLoading = true;
+            await CargarProveedoresLookupAsync();
+
+            if (EnMemoria)
+            {
+                proveedores = Proveedores ?? new();
+                foreach (var p in proveedores.Where(p => !p.Id.HasValue))
+                {
+                    p.Id = --tempIdSeq;
+                    RellenarNombre(p);
+                }
+            }
+            else
+            {
+                await CargarAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar los proveedores: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarProveedoresLookupAsync()
+    {
+        var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+        proveedoresLookup = lista
+            .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+            .OrderBy(p => p.Codigo)
+            .ToList();
+    }
+
+    private async Task CargarAsync()
+    {
+        if (EnMemoria) return;
+        try
+        {
+            isLoading = true;
+            proveedores = await ArticulosClient.GetProveedoresAsync(ArticuloId!.Value, verInactivas);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar los proveedores: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnToggleInactivasAsync(bool value)
+    {
+        verInactivas = value;
+        await CargarAsync();
+    }
+
+    private void AbrirNuevo()
+    {
+        var hayActivos = proveedores.Any(p => p.Activo);
+        form = new ArticuloProveedorDto { Principal = !hayActivos };
+        formVisible = true;
+    }
+
+    private void AbrirEditar(ArticuloProveedorDto row)
+    {
+        form = new ArticuloProveedorDto
+        {
+            Id = row.Id,
+            CodProveedor = row.CodProveedor,
+            ProveedorNombre = row.ProveedorNombre,
+            CodigoUpc = row.CodigoUpc,
+            Costo = row.Costo,
+            Principal = row.Principal,
+            Activo = row.Activo
+        };
+        formVisible = true;
+    }
+
+    private void OnProveedorChanged(string? value)
+    {
+        form.CodProveedor = value ?? string.Empty;
+        RellenarNombre(form);
+    }
+
+    private void RellenarNombre(ArticuloProveedorDto dto)
+        => dto.ProveedorNombre = proveedoresLookup.FirstOrDefault(p => p.Codigo == dto.CodProveedor)?.Nombre;
+
+    private void CerrarForm()
+    {
+        if (isSaving) return;
+        formVisible = false;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(form.CodProveedor))
+        {
+            Toast("Validación", "Seleccione un proveedor.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            if (EnMemoria)
+            {
+                await GuardarEnMemoriaAsync();
+            }
+            else
+            {
+                await GuardarHttpAsync();
+            }
+            formVisible = false;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task GuardarEnMemoriaAsync()
+    {
+        if (proveedores.Any(p => p.CodProveedor == form.CodProveedor && p.Id != form.Id))
+        {
+            throw new InvalidOperationException("Ya agregó ese proveedor al artículo.");
+        }
+
+        RellenarNombre(form);
+        form.Activo = true;
+
+        if (form.Id.HasValue)
+        {
+            var idx = proveedores.FindIndex(p => p.Id == form.Id);
+            if (idx >= 0) proveedores[idx] = form;
+        }
+        else
+        {
+            form.Id = --tempIdSeq;
+            proveedores.Add(form);
+        }
+
+        if (form.Principal)
+        {
+            foreach (var p in proveedores.Where(p => p.Id != form.Id))
+            {
+                p.Principal = false;
+            }
+        }
+
+        await SincronizarMemoriaAsync();
+        Toast("Éxito", "Proveedor agregado.", ToastRenderStyle.Success);
+    }
+
+    private async Task GuardarHttpAsync()
+    {
+        if (form.Id.HasValue)
+        {
+            await ArticulosClient.UpdateProveedorAsync(ArticuloId!.Value, form.Id.Value, form);
+            Toast("Éxito", "Proveedor actualizado.", ToastRenderStyle.Success);
+        }
+        else
+        {
+            await ArticulosClient.AddProveedorAsync(ArticuloId!.Value, form);
+            Toast("Éxito", "Proveedor agregado.", ToastRenderStyle.Success);
+        }
+        await CargarAsync();
+    }
+
+    private async Task QuitarEnMemoriaAsync(ArticuloProveedorDto row)
+    {
+        proveedores.RemoveAll(p => p.Id == row.Id);
+        await SincronizarMemoriaAsync();
+    }
+
+    /// <summary>Garantiza a lo sumo un principal y refresca la referencia del grid + el binding al padre.</summary>
+    private async Task SincronizarMemoriaAsync()
+    {
+        proveedores = proveedores.ToList();
+        if (ProveedoresChanged.HasDelegate)
+        {
+            await ProveedoresChanged.InvokeAsync(proveedores);
+        }
+    }
+
+    private void ConfirmarDeshabilitar(ArticuloProveedorDto row)
+    {
+        paraDeshabilitar = row;
+        confirmVisible = true;
+    }
+
+    private void CancelarDeshabilitar()
+    {
+        confirmVisible = false;
+        paraDeshabilitar = null;
+    }
+
+    private async Task DeshabilitarConfirmadoAsync()
+    {
+        if (paraDeshabilitar?.Id is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await ArticulosClient.DeshabilitarProveedorAsync(ArticuloId!.Value, paraDeshabilitar.Id.Value);
+            if (!ok) Toast("Error", "No se pudo deshabilitar el proveedor.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Proveedor deshabilitado.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            paraDeshabilitar = null;
+        }
+    }
+
+    private async Task ReactivarAsync(ArticuloProveedorDto row)
+    {
+        if (row.Id is null) return;
+        try
+        {
+            var ok = await ArticulosClient.ReactivarProveedorAsync(ArticuloId!.Value, row.Id.Value);
+            if (!ok) Toast("Error", "No se pudo reactivar el proveedor.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Proveedor reactivado.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "ProveedoresUpcToast" });
+
+    /// <summary>Item del combo de proveedores: código + display "código — nombre" (para buscar por ambos).</summary>
+    private sealed class ProveedorComboItem
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Display => $"{Codigo} — {Nombre}";
+    }
+}

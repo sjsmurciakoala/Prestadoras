@@ -7,6 +7,7 @@
 @using apc.Client.Services.Almacen
 
 @inject UnidadesMedidaClient UnidadesClient
+@inject CategoriasUnidadClient CategoriasClient
 @inject IToastNotificationService ToastService
 @inject IJSRuntime JS
 
@@ -192,7 +193,7 @@
         }
         else
         {
-            <UnidadMedidaForm Model="formModel" Bases="bases" Categorias="categorias"
+            <UnidadMedidaForm Model="formModel" Bases="bases" Categorias="categoriasLookup"
                               OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
         }
     </BodyContentTemplate>
@@ -233,6 +234,7 @@
         => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
     private List<UnidadMedidaLookupDto> bases = new();
     private List<string> categorias = new();
+    private List<CategoriaUnidadLookupDto> categoriasLookup = new();
 
     private string filtroBusqueda = string.Empty;
     private string? filtroCategoria;
@@ -274,6 +276,8 @@
     {
         try { categorias = await UnidadesClient.GetCategoriasAsync(); }
         catch { categorias = new List<string>(); }
+        try { categoriasLookup = await CategoriasClient.GetLookupAsync(); }
+        catch { categoriasLookup = new List<CategoriaUnidadLookupDto>(); }
     }
 
     private async Task CargarAsync()

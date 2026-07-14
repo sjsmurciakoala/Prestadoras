@@ -187,43 +187,17 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "alm-unidades",
-                    Text = "Unidades de medida",
-                    IconCssClass = "bi bi-rulers",
-                    NavigateUrl = "/almacen/unidades-medida",
-                    MatchPrefixes = ["/almacen/unidades-medida"]
-                },
-                new SidebarNavItem
-                {
-                    Id = "alm-tipos-articulo",
-                    Text = "Tipos de artículo",
-                    IconCssClass = "bi bi-tags",
-                    NavigateUrl = "/almacen/tipos-articulo",
-                    MatchPrefixes = ["/almacen/tipos-articulo"]
-                },
-                new SidebarNavItem
-                {
-                    Id = "alm-bodegas",
-                    Text = "Bodegas",
-                    IconCssClass = "bi bi-building",
-                    NavigateUrl = "/almacen/bodegas",
-                    MatchPrefixes = ["/almacen/bodegas"]
-                },
-                new SidebarNavItem
-                {
-                    Id = "alm-estanterias",
-                    Text = "Estanterías",
-                    IconCssClass = "bi bi-grid-3x3",
-                    NavigateUrl = "/almacen/estanterias",
-                    MatchPrefixes = ["/almacen/estanterias"]
-                },
-                new SidebarNavItem
-                {
-                    Id = "alm-estantes",
-                    Text = "Estantes",
-                    IconCssClass = "bi bi-list-ol",
-                    NavigateUrl = "/almacen/estantes",
-                    MatchPrefixes = ["/almacen/estantes"]
+                    Id = "alm-mantenimientos",
+                    Text = "Mantenimientos",
+                    IconCssClass = "bi bi-tools",
+                    MatchPrefixes = ["/almacen/bodegas", "/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "alm-bodegas", Text = "Bodega", NavigateUrl = "/almacen/bodegas", MatchPrefixes = ["/almacen/bodegas"], IconCssClass = "bi bi-building" },
+                        new SidebarNavItem { Id = "alm-tipos-articulo", Text = "Tipos de artículos", NavigateUrl = "/almacen/tipos-articulo", MatchPrefixes = ["/almacen/tipos-articulo"], IconCssClass = "bi bi-tags" },
+                        new SidebarNavItem { Id = "alm-categorias-unidad", Text = "Categorías por unidad", NavigateUrl = "/almacen/categorias-unidad", MatchPrefixes = ["/almacen/categorias-unidad"], IconCssClass = "bi bi-diagram-2" },
+                        new SidebarNavItem { Id = "alm-unidades", Text = "Unidades de medida", NavigateUrl = "/almacen/unidades-medida", MatchPrefixes = ["/almacen/unidades-medida"], IconCssClass = "bi bi-rulers" }
+                    ]
                 }
             ]
         },
