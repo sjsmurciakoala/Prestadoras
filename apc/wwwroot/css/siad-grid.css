@@ -1,0 +1,303 @@
+/* =============================================================================
+   siad-grid.css — Estándar visual de las vistas con grid (DxGrid).
+
+   Referencia: apc.Client/Pages/Clientes/ClientesList.razor (maestro de clientes).
+
+   Esta hoja es el PISO de estilos: define las clases del estándar una sola vez
+   para todo el portal. Una página que declare su propio .razor.css sigue
+   mandando sobre esta hoja, porque el CSS aislado de Blazor añade el atributo
+   [b-xxxxx] al selector y gana por especificidad. Es decir:
+
+     - Página sin .razor.css  -> hereda el estándar completo desde aquí.
+     - Página con .razor.css  -> sus reglas pisan a las de aquí, y sólo necesita
+                                 declarar lo que le es propio.
+
+   Por eso el !important se usa únicamente donde hay que pisar los estilos
+   internos de DevExpress (.dxg-*, .dxbs-*), nunca en las clases propias: si se
+   usara en éstas, esta hoja le ganaría al CSS aislado de las páginas e
+   invertiría la precedencia.
+
+   Estructura de una vista con grid:
+
+     <div class="page-container">
+       <div class="header-section"> h2.page-title + p.page-subtitle + acción </div>
+       <div class="modern-card">
+         <div class="grid-wrapper">
+           <DxGrid CssClass="grid-solicitudes" ... />
+         </div>
+       </div>
+     </div>
+
+   NOTA: "grid-solicitudes" es un nombre heredado de la pantalla Solicitudes,
+   donde nació el estilo. Se conserva porque lo usan todos los grids del portal.
+   ============================================================================= */
+
+
+/* ===== Página ============================================================== */
+
+.page-container {
+    padding: 1.5rem;
+    background-color: #f8f9fa;
+    min-height: 100vh;
+}
+
+.header-section {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 2rem;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.page-title {
+    font-weight: 800;
+    color: #2c3e50;
+    letter-spacing: -0.5px;
+    margin-bottom: 0.2rem;
+    line-height: 1.2;
+}
+
+.page-subtitle {
+    color: #7f8c8d;
+    margin-bottom: 0;
+    font-size: 0.95rem;
+}
+
+
+/* ===== Tarjetas ============================================================ */
+
+.modern-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+    border: 1px solid rgba(0, 0, 0, 0.02);
+    padding: 1.5rem;
+}
+
+/* Tarjetas de KPI que algunas vistas colocan entre el header y el grid. */
+.summary-card {
+    padding: 1rem 1.25rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.summary-label {
+    color: #7f8c8d;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+}
+
+.summary-value {
+    font-size: 1.6rem;
+    font-weight: 800;
+    color: #2c3e50;
+    line-height: 1.1;
+}
+
+.summary-warning .summary-value {
+    color: #b8860b;
+}
+
+
+/* ===== Botones ============================================================= */
+
+/* Acción principal del header (Nuevo cliente, Nuevo artículo...). */
+.btn-modern {
+    font-weight: 600;
+    padding: 0.6rem 1.2rem;
+    border-radius: 8px;
+    box-shadow: 0 4px 6px rgba(50, 50, 93, 0.11), 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: all 0.15s ease;
+}
+
+/* Botones circulares de la columna Acciones. */
+.btn-icon {
+    border: none;
+    background: transparent;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+    font-size: 1.1rem;
+    cursor: pointer;
+}
+
+.btn-view      { color: #0dcaf0; background: rgba(13, 202, 240, 0.10); }
+.btn-view:hover      { background: #0dcaf0; color: white; transform: scale(1.1); }
+
+.btn-edit      { color: #ffc107; background: rgba(255, 193, 7, 0.10); }
+.btn-edit:hover      { background: #ffc107; color: white; transform: scale(1.1); }
+
+.btn-delete    { color: #dc3545; background: rgba(220, 53, 69, 0.10); }
+.btn-delete:hover    { background: #dc3545; color: white; transform: scale(1.1); }
+
+.btn-estado    { color: #0d6efd; background: rgba(13, 110, 253, 0.10); }
+.btn-estado:hover    { background: #0d6efd; color: white; transform: scale(1.1); }
+
+.btn-kardex    { color: #0d6efd; background: rgba(13, 110, 253, 0.10); }
+.btn-kardex:hover    { background: #0d6efd; color: white; transform: scale(1.1); }
+
+.btn-medidores { color: #20c997; background: rgba(32, 201, 151, 0.12); }
+.btn-medidores:hover { background: #20c997; color: white; transform: scale(1.1); }
+
+.btn-tarifas   { color: #fd7e14; background: rgba(253, 126, 20, 0.12); }
+.btn-tarifas:hover   { background: #fd7e14; color: white; transform: scale(1.1); }
+
+.btn-consumo   { color: #6f42c1; background: rgba(111, 66, 193, 0.12); }
+.btn-consumo:hover   { background: #6f42c1; color: white; transform: scale(1.1); }
+
+.btn-icon:disabled,
+.btn-icon[disabled] {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+
+/* ===== Insignias de estado ================================================= */
+
+.badge-status {
+    padding: 5px 12px;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    display: inline-block;
+}
+
+.badge-status.active   { background-color: #d1e7dd; color: #0f5132; }
+.badge-status.inactive { background-color: #e2e3e5; color: #41464b; }
+.badge-status.warning  { background-color: #fff3cd; color: #664d03; }
+
+
+/* ===== Panel de filtros colapsable ========================================= */
+
+.filters-actions {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 1rem;
+    width: 100%;
+}
+
+.filters-btn {
+    min-width: 220px;
+    border-radius: 8px;
+    font-weight: 700;
+}
+
+.filters-btn-primary {
+    background: #dee2e6 !important;
+    border-color: #dee2e6 !important;
+    color: #212529 !important;
+}
+
+.filters-link {
+    background: transparent;
+    border: none;
+    color: #212529;
+    font-weight: 500;
+    cursor: pointer;
+    padding: 8px 10px;
+}
+
+
+/* ===== Grid ================================================================ */
+
+/* El wrapper permite scroll horizontal cuando hay muchas columnas, sin que la
+   página entera se desplace. */
+.grid-wrapper {
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+}
+
+.grid-solicitudes {
+    border: 1px solid rgba(0, 0, 0, 0.10);
+    border-radius: 10px;
+    overflow: hidden;
+}
+
+/* Encabezado gris claro. */
+.grid-solicitudes .dxg-headerrow,
+.grid-solicitudes .dxbs-grid-header-row {
+    background: #f1f3f5 !important;
+}
+
+.grid-solicitudes th,
+.grid-solicitudes .dxg-headerrow td {
+    font-weight: 700;
+    color: #2c3e50;
+    border-bottom: 1px solid rgba(0, 0, 0, 0.10) !important;
+}
+
+/* Líneas finas entre filas. */
+.grid-solicitudes td {
+    border-bottom: 1px solid rgba(0, 0, 0, 0.08) !important;
+}
+
+/* Sin el azul de selección/foco de DevExpress. */
+.grid-solicitudes .dxg-selected-row,
+.grid-solicitudes .dxg-focused-row,
+.grid-solicitudes .dxbs-table-row-selected {
+    background: transparent !important;
+}
+
+/* Hover azul muy suave. */
+.grid-solicitudes .dxg-data-row:hover,
+.grid-solicitudes .dxbs-table-row:hover {
+    background: rgba(13, 110, 253, 0.04) !important;
+}
+
+.grid-solicitudes .dxg-pager,
+.grid-solicitudes .dxbs-grid-pager {
+    border-top: 1px solid rgba(0, 0, 0, 0.08);
+    padding: 10px 12px;
+}
+
+
+/* ===== Popups ============================================================== */
+
+.custom-popup {
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 10px 40px rgba(0, 0, 0, 0.2);
+}
+
+.custom-popup .dx-popup-header {
+    background: #fff;
+    border-bottom: 1px solid #f0f0f0;
+    padding: 1.25rem 1.5rem;
+}
+
+.custom-popup .dx-popup-content {
+    padding: 0 !important;
+    background-color: #fff;
+}
+
+
+/* ===== Responsive ========================================================== */
+
+@media (max-width: 768px) {
+    .page-container { padding: 1rem; }
+
+    .header-section {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1.5rem;
+    }
+
+    .btn-modern { width: 100%; display: block; }
+    .modern-card { padding: 1rem; }
+
+    .filters-actions { gap: 0.75rem; }
+    .filters-btn { width: 100%; min-width: 0; }
+}

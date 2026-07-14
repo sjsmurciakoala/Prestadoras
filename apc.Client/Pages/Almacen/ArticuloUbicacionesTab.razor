@@ -6,6 +6,7 @@
 @inject ArticulosClient ArticulosClient
 @inject BodegasClient BodegasClient
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <DxToastProvider Name="UbicacionesToast" MaxToastCount="4" />
 
@@ -39,8 +40,26 @@
     </div>
 
     <div class="grid-wrapper">
-        <DxGrid Data="@ubicaciones" KeyFieldName="@nameof(ArticuloUbicacionDto.Id)"
-                ShowGroupPanel="false" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer">
+        <DxGrid @ref="grid" Data="@ubicaciones" KeyFieldName="@nameof(ArticuloUbicacionDto.Id)" PageSize="15"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                PagerPosition="GridPagerPosition.Bottom"
+                ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                ShowGroupPanel="false" CssClass="grid-solicitudes"
+                LayoutAutoSaving="OnLayoutAutoSaving"
+                LayoutAutoLoading="OnLayoutAutoLoading">
+
+            <ToolbarTemplate>
+                <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                    <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                    <div class="ms-auto text-muted small">
+                        Total: <span class="fw-bold">@ubicaciones.Count.ToString("N0")</span>
+                    </div>
+                </div>
+            </ToolbarTemplate>
+
             <Columns>
                 <DxGridDataColumn FieldName="@nameof(ArticuloUbicacionDto.BodegaDisplay)" Caption="Bodega" MinWidth="200">
                     <CellDisplayTemplate Context="cell">
@@ -294,6 +313,23 @@
     [Parameter] public EventCallback<List<ArticuloUbicacionDto>> UbicacionesChanged { get; set; }
 
     private bool EnMemoria => !ArticuloId.HasValue;
+
+    private DxGrid? grid;
+
+    // La columna "Estado" sólo existe en edición, así que la colección de columnas difiere
+    // entre ambos modos. Se usan claves distintas para que el grid no descarte el layout
+    // guardado al no coincidir con las columnas declaradas.
+    private string GridLayoutStorageKey => EnMemoria
+        ? "almacen-articulo-ubicaciones-alta-grid-layout"
+        : "almacen-articulo-ubicaciones-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
     private List<ArticuloUbicacionDto> ubicaciones = new();
     private List<BodegaLookupDto> bodegas = new();

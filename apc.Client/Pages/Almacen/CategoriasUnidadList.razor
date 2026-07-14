@@ -8,6 +8,7 @@
 
 @inject CategoriasUnidadClient CategoriasClient
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Categorías de unidad</PageTitle>
 
@@ -35,7 +36,9 @@
                     PageSizeSelectorVisible="true"
                     PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                     PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
-                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
                 <ToolbarTemplate>
                     <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                         <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
@@ -48,6 +51,8 @@
                         </div>
                         <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
                                   RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
                         <div class="ms-auto text-muted small">Total: <span class="fw-bold">@categorias.Count.ToString("N0")</span></div>
                     </div>
                 </ToolbarTemplate>
@@ -152,6 +157,16 @@
 
     private bool confirmVisible;
     private CategoriaUnidadListItemDto? paraDesactivar;
+
+    private const string GridLayoutStorageKey = "almacen-categorias-unidad-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
     private string PopupTitle => formModel.Id.HasValue ? "Editar categoría" : "Nueva categoría";
     private string PopupSubtitle => formModel.Id.HasValue ? "Actualice la categoría" : "Registre una categoría de unidad";

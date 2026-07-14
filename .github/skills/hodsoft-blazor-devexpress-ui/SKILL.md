@@ -17,6 +17,7 @@ Usa esta skill para trabajar sobre la capa UI sin romper el flujo real del proye
 
 ## Reglas de implementacion
 
+- **Toda vista con `DxGrid` sigue la normativa de `references/grid-standard.md`.** Leela antes de crear o modificar una pantalla con grid: cubre estructura de pagina, atributos obligatorios del grid, persistencia de layout y por que el CSS del estandar NO se copia a cada `.razor.css`.
 - Para datos scoped por empresa, resuelve `TenantState.EnsureCompanyAsync()` antes de cargar informacion.
 - Reutiliza `ReadFromJsonAsyncWithAuthCheck`, `PostAsJsonAsyncWithAuthCheck`, `PutAsJsonAsyncWithAuthCheck` y `ObtenerMensajeErrorAsync`.
 - Conserva la separacion existente entre `.razor`, `.razor.cs` y `.razor.css` si el modulo ya la usa.

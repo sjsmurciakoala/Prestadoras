@@ -6,6 +6,7 @@
 @inject KardexClient KardexClient
 @inject BodegasClient BodegasClient
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <div class="modern-card position-relative movimientos-panel">
     <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando movimientos..." />
@@ -56,10 +57,26 @@
     }
 
     <div class="grid-wrapper">
-        <DxGrid Data="@movimientos" KeyFieldName="@nameof(KardexMovimientoDto.Id)"
-                ShowAllRows="true"
+        <DxGrid @ref="grid" Data="@movimientos" KeyFieldName="@nameof(KardexMovimientoDto.Id)" PageSize="15"
+                PageSizeSelectorVisible="true"
+                PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                PagerPosition="GridPagerPosition.Bottom"
                 ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
-                ShowGroupPanel="false" CssClass="grid-solicitudes">
+                ShowGroupPanel="false" CssClass="grid-solicitudes"
+                LayoutAutoSaving="OnLayoutAutoSaving"
+                LayoutAutoLoading="OnLayoutAutoLoading">
+
+            <ToolbarTemplate>
+                <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                    <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                    <div class="ms-auto text-muted small">
+                        Total: <span class="fw-bold">@movimientos.Count.ToString("N0")</span>
+                    </div>
+                </div>
+            </ToolbarTemplate>
+
             <Columns>
                 <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Fecha)" Caption="Fecha" Width="95px">
                     <CellDisplayTemplate Context="cell">
@@ -150,6 +167,18 @@
 
     /// <summary>Tope de movimientos a mostrar en el panel (los más recientes).</summary>
     private const int MaxMovimientos = 15;
+
+    private DxGrid? grid;
+
+    private const string GridLayoutStorageKey = "almacen-articulo-movimientos-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
     private KardexArticuloDto? kardex;
     private List<KardexMovimientoDto> movimientos = new();

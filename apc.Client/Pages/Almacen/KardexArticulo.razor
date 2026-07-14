@@ -139,9 +139,13 @@
                         <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                             <span class="fw-bold">@kardex.Codigo — @kardex.Descripcion</span>
                             <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
-                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="ms-auto" />
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="ms-auto me-1" />
                             <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
-                                      RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" />
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-3" />
+
+                            <div class="text-muted small">
+                                Total: <span class="fw-bold">@kardex.Movimientos.Count.ToString("N0")</span>
+                            </div>
                         </div>
                     </ToolbarTemplate>
 

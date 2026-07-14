@@ -16,6 +16,9 @@
     @DxResourceManager.RegisterTheme(ThemesService.ActiveTheme)
     @DxResourceManager.RegisterScripts()
     <link href=@AppendVersion("css/site.css") rel="stylesheet" />
+    @* Estándar visual de las vistas con grid. Va antes de apc.styles.css (CSS aislado),
+       que lo pisa cuando una página declara sus propias reglas. *@
+    <link href=@AppendVersion("css/siad-grid.css") rel="stylesheet" />
     <link href=@AppendVersion("apc.styles.css") rel="stylesheet" />
     <link href=@AppendVersion("lib/bootstrap-icons/font/bootstrap-icons.min.css") rel="stylesheet" />
 
