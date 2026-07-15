@@ -1,0 +1,698 @@
+@page "/facturacion/calendario-facturacion"
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
+
+@using DevExpress.Blazor
+@using apc.Client.Services.Facturacion
+@using apc.Client.Services.Tenant
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Facturacion
+
+@inject CalendarioFacturacionClient CalendarioClient
+@inject TenantState TenantState
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Calendario de facturación</PageTitle>
+
+<DxMessageBox @bind-Visible="deleteConfirmVisible"
+              Type="MessageBoxType.Confirmation"
+              Title="Eliminar fila del calendario"
+              Text="@deleteConfirmText"
+              RenderStyle="MessageBoxRenderStyle.Danger"
+              OkButtonText="Sí, eliminar"
+              CancelButtonText="Cancelar"
+              ShowCloseButton="false"
+              CloseOnOutsideClick="false"
+              Closed="OnDeleteConfirmClosed" />
+
+<div class="calfac-page" id="calendario-facturacion-view">
+
+    <div class="d-flex align-items-start flex-wrap gap-3 mb-3">
+        <div class="flex-grow-1">
+            <h4 class="mb-1 fw-bold text-secondary">
+                <i class="bi bi-calendar-week me-2 text-primary"></i>Calendario de facturación
+            </h4>
+            <p class="text-muted mb-0">
+                Fechas de <strong>lectura</strong>, <strong>facturación</strong> y <strong>vencimiento</strong> de cada
+                ciclo por mes. Clic en un día para agregar; clic en un evento para editar su ciclo.
+            </p>
+        </div>
+        <div class="d-flex flex-wrap align-items-center gap-2 flex-shrink-0">
+            <DxComboBox Data="@anios" TData="int" TValue="int"
+                        Value="@anioSeleccionado"
+                        ValueChanged="@((int a) => CambiarAnioAsync(a))"
+                        CssClass="calfac-anio-combo"
+                        DropDownStyle="DropDownStyle.DropDownList" />
+            <DxButton Text="Recargar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      Click="@RecargarAsync"
+                      Enabled="@(!cargando)" />
+            <DxButton Text="Copiar año..."
+                      RenderStyle="ButtonRenderStyle.Info"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-files"
+                      Click="@(() => copiarPopupVisible = true)"
+                      Enabled="@(!cargando && filas.Count > 0)" />
+            <DxButton Text="Nueva fila"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      IconCssClass="bi bi-plus-lg"
+                      Click="@(() => AbrirNuevaFila(null))"
+                      Enabled="@(!cargando)" />
+            <DxButton Text="Guardar cambios"
+                      RenderStyle="ButtonRenderStyle.Primary"
+                      IconCssClass="bi bi-check-lg"
+                      Click="@GuardarAsync"
+                      Enabled="@(!cargando && hayCambios)" />
+        </div>
+    </div>
+
+    @if (hayCambios)
+    {
+        <div class="alert alert-warning py-2 px-3 mb-3 d-flex align-items-center gap-2">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span>Hay cambios sin guardar. Presione <strong>Guardar cambios</strong> para persistirlos.</span>
+        </div>
+    }
+
+    @if (!cargando && filas.Count == 0)
+    {
+        <div class="alert alert-info py-2 px-3 mb-3 d-flex align-items-center gap-2">
+            <i class="bi bi-info-circle-fill"></i>
+            <span>
+                El año @anioSeleccionado no tiene calendario. Haga clic en un día, use <strong>Nueva fila</strong> o
+                <strong>Copiar año...</strong> desde un año ya cargado. Sin calendario, las facturas del período
+                salen <strong>sin fecha de vencimiento</strong>.
+            </span>
+        </div>
+    }
+
+    @* ---------------- Calendario ---------------- *@
+    <div class="card shadow-sm">
+        <div class="card-header d-flex flex-wrap justify-content-between align-items-center py-2">
+            <div class="d-flex align-items-center gap-2">
+                <i class="bi bi-calendar3 text-primary"></i>
+                <strong>@anioSeleccionado</strong>
+                <small class="text-muted">— @filas.Count fila(s); navegue con las flechas o cambie de vista</small>
+            </div>
+            <div class="d-flex align-items-center gap-3 small">
+                <span><span class="calfac-dot calfac-dot-lectura"></span> Lectura</span>
+                <span><span class="calfac-dot calfac-dot-factura"></span> Facturación</span>
+                <span><span class="calfac-dot calfac-dot-vence"></span> Vencimiento</span>
+            </div>
+        </div>
+        <div class="card-body p-0 calfac-scheduler-wrap">
+            @* Tipo Google Calendar: el intento nativo de crear cita se cancela
+               (AppointmentCreating) y se abre NUESTRO popup de fila con la fecha
+               clickeada; el clic en un evento abre la edición de su ciclo. *@
+            <DxScheduler @bind-StartDate="@fechaScheduler"
+                         DataStorage="@dataStorage"
+                         ActiveViewType="SchedulerViewType.Month"
+                         AllowCreateAppointment="true"
+                         AppointmentCreating="OnSchedulerCreando"
+                         SelectedAppointment="@apptSeleccionado"
+                         SelectedAppointmentChanged="OnSchedulerSeleccion"
+                         AllowEditAppointment="false"
+                         AllowDeleteAppointment="false"
+                         AllowDragAppointment="false"
+                         AllowResizeAppointment="false"
+                         CssClass="calfac-scheduler">
+                <Views>
+                    <DxSchedulerMonthView MonthCount="1" CellMinWidth="70" />
+                    <DxSchedulerTimelineView Duration="@TimeSpan.FromDays(14)" CellMinWidth="70">
+                        <Scales>
+                            <DxSchedulerTimeScale Unit="SchedulerTimeScaleUnit.Month" UnitCount="1" />
+                            <DxSchedulerTimeScale Unit="SchedulerTimeScaleUnit.Day" UnitCount="1" />
+                        </Scales>
+                    </DxSchedulerTimelineView>
+                    <DxSchedulerWeekView />
+                </Views>
+            </DxScheduler>
+        </div>
+    </div>
+
+    @* ---------------- Popup nueva/editar fila ---------------- *@
+    <DxPopup @bind-Visible="filaPopupVisible"
+             Width="640px"
+             ShowCloseButton="true"
+             CloseOnOutsideClick="false"
+             ShowFooter="true">
+        <HeaderContentTemplate>
+            <div class="d-flex align-items-center gap-2 p-1">
+                <i class="bi @(filaEnEdicion is null ? "bi-plus-circle text-primary" : "bi-pencil-square text-info") fs-4"></i>
+                <strong>@filaPopupTitulo</strong>
+            </div>
+        </HeaderContentTemplate>
+        <BodyContentTemplate Context="filaBody">
+            <div class="p-3">
+                <DxFormLayout SizeMode="SizeMode.Medium" CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem Caption="Mes" ColSpanMd="6" ColSpanSm="12">
+                        <DxComboBox Data="@meses" TData="MesOption" TValue="int"
+                                    ValueFieldName="@nameof(MesOption.Numero)"
+                                    TextFieldName="@nameof(MesOption.Nombre)"
+                                    @bind-Value="filaModel.Mes"
+                                    DropDownStyle="DropDownStyle.DropDownList" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Ciclo" ColSpanMd="6" ColSpanSm="12">
+                        <DxTextBox @bind-Text="filaModel.Ciclo" NullText="Ej. 01" MaxLength="10" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Fecha de lectura" ColSpanMd="4" ColSpanSm="12">
+                        <DxDateEdit @bind-Date="filaModel.FechaLectura" NullText="—"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Fecha de facturación" ColSpanMd="4" ColSpanSm="12">
+                        <DxDateEdit @bind-Date="filaModel.FechaFacturacion" NullText="—"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Fecha de vencimiento" ColSpanMd="4" ColSpanSm="12">
+                        <DxDateEdit @bind-Date="filaModel.FechaVencimiento" NullText="—"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Plazo (días)" ColSpanMd="4" ColSpanSm="12">
+                        <DxSpinEdit @bind-Value="filaModel.DiasVencimiento" MinValue="0" MaxValue="99" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Corte &quot;al&quot; (opcional)" ColSpanMd="4" ColSpanSm="12">
+                        <DxDateEdit @bind-Date="filaModel.FechaAl" NullText="—"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Refacturación (opcional)" ColSpanMd="4" ColSpanSm="12">
+                        <DxDateEdit @bind-Date="filaModel.FechaRefacturacion" NullText="—"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate Context="filaFooter">
+            <div class="p-2 d-flex justify-content-between align-items-center">
+                <div>
+                    @if (filaEnEdicion is not null)
+                    {
+                        <DxButton RenderStyle="ButtonRenderStyle.Danger"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                  Text="Eliminar"
+                                  IconCssClass="bi bi-trash"
+                                  Click="@AbrirConfirmacionEliminar" />
+                    }
+                </div>
+                <div class="d-flex gap-2">
+                    <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Cancelar"
+                              Click="@filaFooter.CloseCallback" />
+                    <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Aceptar"
+                              IconCssClass="bi bi-check-lg"
+                              Click="@AceptarFilaPopup" />
+                </div>
+            </div>
+        </FooterContentTemplate>
+    </DxPopup>
+
+    @* ---------------- Popup copiar año ---------------- *@
+    <DxPopup @bind-Visible="copiarPopupVisible"
+             Width="420px"
+             ShowCloseButton="true"
+             CloseOnOutsideClick="false"
+             ShowFooter="true">
+        <HeaderContentTemplate>
+            <div class="d-flex align-items-center gap-2 p-1">
+                <i class="bi bi-files fs-4 text-info"></i>
+                <strong>Copiar calendario de año</strong>
+            </div>
+        </HeaderContentTemplate>
+        <BodyContentTemplate Context="copiarBody">
+            <div class="p-3">
+                <p class="text-muted small">
+                    Copia todas las filas del año origen al destino conservando día y mes de cada fecha.
+                    El destino no debe tener calendario cargado.
+                </p>
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem Caption="Año origen" ColSpanMd="6">
+                        <DxComboBox Data="@anios" TData="int" TValue="int"
+                                    @bind-Value="copiarOrigen"
+                                    DropDownStyle="DropDownStyle.DropDownList" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Año destino" ColSpanMd="6">
+                        <DxSpinEdit @bind-Value="copiarDestino" MinValue="2000" MaxValue="2100" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate Context="copiarFooter">
+            <div class="p-2 d-flex justify-content-end gap-2">
+                <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Cancelar" Click="@copiarFooter.CloseCallback" />
+                <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Copiar"
+                          IconCssClass="bi bi-files"
+                          Enabled="@(!cargando)"
+                          Click="@CopiarAnioAsync" />
+            </div>
+        </FooterContentTemplate>
+    </DxPopup>
+
+    <DxLoadingPanel Visible="@cargando"
+                    PositionTarget="#calendario-facturacion-view"
+                    CssClass="w-100"
+                    ApplyBackgroundShading="true"
+                    IsContentBlocked="true"
+                    Text="Procesando..." />
+</div>
+
+@code {
+    private long companyId;
+    private bool cargando;
+    private bool hayCambios;
+    private int tempIdSeq = -1;
+
+    private List<int> anios = [];
+    private int anioSeleccionado = DateTime.Today.Year;
+    private List<CalendarioCicloDto> filas = [];
+
+    private DateTime fechaScheduler = DateTime.Today;
+    private DxSchedulerDataStorage dataStorage = new();
+    private readonly Dictionary<int, CalendarioCicloDto> eventoAFila = new();
+    private DxSchedulerAppointmentItem? apptSeleccionado;
+
+    private bool filaPopupVisible;
+    private string filaPopupTitulo = "Fila del calendario";
+    private FilaEditModel filaModel = new();
+    private CalendarioCicloDto? filaEnEdicion;
+
+    private bool deleteConfirmVisible;
+    private string deleteConfirmText = string.Empty;
+
+    private bool copiarPopupVisible;
+    private int copiarOrigen = DateTime.Today.Year;
+    private int copiarDestino = DateTime.Today.Year + 1;
+
+    private sealed record MesOption(int Numero, string Nombre);
+    private static readonly IReadOnlyList<MesOption> meses =
+        Enumerable.Range(1, 12).Select(m => new MesOption(m, CalendarioFacturacionReglas.NombreMes(m))).ToList();
+
+    protected override async Task OnInitializedAsync()
+    {
+        cargando = true;
+        try
+        {
+            companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0)
+            {
+                MostrarError("Su sesión no tiene una empresa activa; vuelva a iniciar sesión.");
+                return;
+            }
+
+            anios = (await CalendarioClient.ListarAniosAsync(companyId)).ToList();
+            if (!anios.Contains(DateTime.Today.Year))
+            {
+                anios.Insert(0, DateTime.Today.Year);
+                anios = anios.OrderByDescending(a => a).ToList();
+            }
+
+            anioSeleccionado = anios.Contains(DateTime.Today.Year) ? DateTime.Today.Year : anios.First();
+            copiarOrigen = anioSeleccionado;
+            copiarDestino = anioSeleccionado + 1;
+            await CargarAnioCoreAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible cargar la pantalla: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task RecargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            await CargarAnioCoreAsync();
+            hayCambios = false;
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible recargar: {ex.Message}");
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CambiarAnioAsync(int anio)
+    {
+        if (hayCambios)
+        {
+            MostrarAviso("Hay cambios sin guardar; guárdelos o recargue antes de cambiar de año.");
+            return;
+        }
+
+        anioSeleccionado = anio;
+        copiarOrigen = anio;
+        copiarDestino = anio + 1;
+        await RecargarAsync();
+    }
+
+    private async Task CargarAnioCoreAsync()
+    {
+        var dto = await CalendarioClient.ObtenerAnioAsync(companyId, anioSeleccionado);
+        filas = dto.Filas;
+        ReconstruirScheduler(irAlPrimerMesConDatos: true);
+    }
+
+    private void ReconstruirScheduler(bool irAlPrimerMesConDatos = false)
+    {
+        // La cita seleccionada pertenece al storage viejo; mantenerla tras el
+        // rebuild dejaría al tooltip apuntando a un item huérfano (NRE).
+        apptSeleccionado = null;
+        dataStorage = CrearStorage(filas, eventoAFila);
+
+        if (irAlPrimerMesConDatos)
+        {
+            var hoy = DateTime.Today;
+            if (anioSeleccionado == hoy.Year)
+            {
+                fechaScheduler = new DateTime(hoy.Year, hoy.Month, 1);
+            }
+            else
+            {
+                var primerMes = filas.Count > 0 ? filas.Min(f => f.Mes) : 1;
+                fechaScheduler = new DateTime(anioSeleccionado, primerMes, 1);
+            }
+        }
+    }
+
+    // Cada fila produce hasta 3 eventos de día completo: Lectura, Facturación
+    // (solo si difiere de la lectura, en SIMAFI suelen coincidir) y Vencimiento.
+    // LabelId usa las etiquetas estándar del storage (colores por defecto).
+    // eventoAFila mapea el Id del evento a su fila para la edición por clic.
+    private static DxSchedulerDataStorage CrearStorage(IReadOnlyList<CalendarioCicloDto> filas,
+        Dictionary<int, CalendarioCicloDto> eventoAFila)
+    {
+        var eventos = new List<EventoCalendario>();
+        eventoAFila.Clear();
+        var id = 1;
+
+        void Agregar(CalendarioCicloDto fila, string titulo, DateTime fecha, int etiqueta)
+        {
+            eventos.Add(new EventoCalendario
+            {
+                Id = id,
+                Titulo = titulo,
+                Inicio = fecha.Date,
+                Fin = fecha.Date.AddDays(1),
+                Etiqueta = etiqueta,
+            });
+            eventoAFila[id] = fila;
+            id++;
+        }
+
+        foreach (var f in filas)
+        {
+            if (f.FechaLectura is not null)
+            {
+                Agregar(f, $"C{f.Ciclo} · Lectura", f.FechaLectura.Value, 4);
+            }
+
+            if (f.FechaFacturacion is not null && f.FechaFacturacion != f.FechaLectura)
+            {
+                Agregar(f, $"C{f.Ciclo} · Facturación", f.FechaFacturacion.Value, 2);
+            }
+
+            if (f.FechaVencimiento is not null)
+            {
+                Agregar(f, $"C{f.Ciclo} · Vence", f.FechaVencimiento.Value, 1);
+            }
+        }
+
+        return new DxSchedulerDataStorage
+        {
+            AppointmentsSource = eventos,
+            AppointmentMappings = new DxSchedulerAppointmentMappings
+            {
+                Id = nameof(EventoCalendario.Id),
+                Start = nameof(EventoCalendario.Inicio),
+                End = nameof(EventoCalendario.Fin),
+                Subject = nameof(EventoCalendario.Titulo),
+                AllDay = nameof(EventoCalendario.TodoElDia),
+                LabelId = nameof(EventoCalendario.Etiqueta),
+            }
+        };
+    }
+
+    // DxSchedulerDataStorage exige constructor sin parámetros y propiedades
+    // con set en el tipo fuente de los appointments.
+    private sealed class EventoCalendario
+    {
+        public int Id { get; set; }
+        public string Titulo { get; set; } = string.Empty;
+        public DateTime Inicio { get; set; }
+        public DateTime Fin { get; set; }
+        public bool TodoElDia { get; set; } = true;
+        public int Etiqueta { get; set; }
+    }
+
+    // ---------------- Interacción del calendario ----------------
+
+    // Clic/arrastre en un día vacío: se cancela el formulario nativo de citas
+    // y se abre nuestro popup "Nueva fila" con la fecha clickeada precargada.
+    private void OnSchedulerCreando(SchedulerAppointmentOperationEventArgs e)
+    {
+        e.Cancel = true;
+
+        var fecha = e.Appointment.Start.Date;
+        if (fecha.Year != anioSeleccionado)
+        {
+            MostrarAviso($"Está viendo el año {anioSeleccionado}; cambie de año para agregar en {fecha.Year}.");
+            return;
+        }
+
+        AbrirNuevaFila(fecha);
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // Clic en un evento: además del tooltip nativo se abre la edición de la
+    // fila (ciclo) a la que pertenece. OJO: la selección NO se anula aquí —
+    // el tooltip se está renderizando con esa cita y quitársela a mitad de
+    // render provoca NRE en AppointmentToolTip.GetAppointmentLabel (visto
+    // 2026-07-14); se limpia al reconstruir el storage.
+    private void OnSchedulerSeleccion(DxSchedulerAppointmentItem? item)
+    {
+        apptSeleccionado = item;
+
+        if (item?.Id is not int eventoId || !eventoAFila.TryGetValue(eventoId, out var fila))
+        {
+            return;
+        }
+
+        AbrirEdicion(fila);
+        _ = InvokeAsync(StateHasChanged);
+    }
+
+    // ---------------- Popup de fila ----------------
+
+    private void AbrirNuevaFila(DateTime? fecha)
+    {
+        var ultimo = filas.OrderByDescending(f => f.Mes).ThenByDescending(f => f.Ciclo).FirstOrDefault();
+        var dias = ultimo?.DiasVencimiento ?? 5;
+
+        filaEnEdicion = null;
+        filaPopupTitulo = fecha is null
+            ? $"Nueva fila — {anioSeleccionado}"
+            : $"Nueva fila — {fecha:dd/MM/yyyy}";
+        filaModel = new FilaEditModel
+        {
+            Mes = fecha?.Month ?? ultimo?.Mes ?? DateTime.Today.Month,
+            DiasVencimiento = dias,
+            FechaLectura = fecha,
+            FechaFacturacion = fecha,
+            FechaVencimiento = fecha?.AddDays(dias),
+        };
+        filaPopupVisible = true;
+    }
+
+    private void AbrirEdicion(CalendarioCicloDto fila)
+    {
+        filaEnEdicion = fila;
+        filaPopupTitulo = $"Editar {NombreMes(fila.Mes)} · ciclo {fila.Ciclo}";
+        filaModel = new FilaEditModel
+        {
+            Mes = fila.Mes,
+            Ciclo = fila.Ciclo,
+            FechaAl = fila.FechaAl,
+            FechaLectura = fila.FechaLectura,
+            FechaFacturacion = fila.FechaFacturacion,
+            FechaRefacturacion = fila.FechaRefacturacion,
+            FechaVencimiento = fila.FechaVencimiento,
+            DiasVencimiento = fila.DiasVencimiento ?? 0,
+        };
+        filaPopupVisible = true;
+    }
+
+    private void AceptarFilaPopup(MouseEventArgs e)
+    {
+        // Validación con las MISMAS reglas que aplica el servidor
+        // (CalendarioFacturacionReglas, SIAD.Core) — nunca divergen.
+        var candidata = new CalendarioCicloDto
+        {
+            Anio = anioSeleccionado,
+            Mes = filaModel.Mes,
+            Ciclo = filaModel.Ciclo,
+            FechaAl = filaModel.FechaAl,
+            FechaLectura = filaModel.FechaLectura,
+            FechaFacturacion = filaModel.FechaFacturacion,
+            FechaRefacturacion = filaModel.FechaRefacturacion,
+            FechaVencimiento = filaModel.FechaVencimiento,
+            DiasVencimiento = filaModel.DiasVencimiento,
+        };
+
+        var error = CalendarioFacturacionReglas.ValidarFila(candidata)
+            ?? CalendarioFacturacionReglas.ValidarDuplicado(filas, candidata, filaEnEdicion);
+        if (error is not null)
+        {
+            MostrarError(error);
+            return;
+        }
+
+        var destino = filaEnEdicion;
+        if (destino is null)
+        {
+            destino = new CalendarioCicloDto { Ide = tempIdSeq--, Anio = anioSeleccionado };
+            filas.Add(destino);
+        }
+
+        destino.Mes = candidata.Mes;
+        destino.Ciclo = CalendarioFacturacionReglas.NormalizarCiclo(candidata.Ciclo);
+        destino.FechaAl = candidata.FechaAl;
+        destino.FechaLectura = candidata.FechaLectura;
+        destino.FechaFacturacion = candidata.FechaFacturacion;
+        destino.FechaRefacturacion = candidata.FechaRefacturacion;
+        destino.FechaVencimiento = candidata.FechaVencimiento;
+        destino.DiasVencimiento = candidata.DiasVencimiento;
+
+        filas = filas.OrderBy(f => f.Mes).ThenBy(f => f.Ciclo).ToList();
+        hayCambios = true;
+        filaPopupVisible = false;
+        filaEnEdicion = null;
+        ReconstruirScheduler();
+    }
+
+    private void AbrirConfirmacionEliminar(MouseEventArgs e)
+    {
+        if (filaEnEdicion is null)
+        {
+            return;
+        }
+
+        deleteConfirmText = $"Se eliminará la fila {NombreMes(filaEnEdicion.Mes)} · ciclo {filaEnEdicion.Ciclo}. Se aplicará al guardar los cambios.";
+        deleteConfirmVisible = true;
+    }
+
+    private void OnDeleteConfirmClosed(bool confirmed)
+    {
+        deleteConfirmText = string.Empty;
+
+        if (!confirmed || filaEnEdicion is null)
+        {
+            return;
+        }
+
+        filas.Remove(filaEnEdicion);
+        filaEnEdicion = null;
+        filaPopupVisible = false;
+        hayCambios = true;
+        ReconstruirScheduler();
+    }
+
+    // ---------------- Persistencia ----------------
+
+    private async Task GuardarAsync(MouseEventArgs e)
+    {
+        if (companyId <= 0)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var dto = await CalendarioClient.GuardarAnioAsync(companyId, anioSeleccionado, filas);
+            filas = dto.Filas;
+            hayCambios = false;
+            ReconstruirScheduler();
+            ToastService.ShowToast(new ToastOptions { Title = "Calendario de facturación", Text = "Cambios guardados correctamente.", RenderStyle = ToastRenderStyle.Success });
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex.Message);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task CopiarAnioAsync(MouseEventArgs e)
+    {
+        if (companyId <= 0)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var dto = await CalendarioClient.CopiarAnioAsync(companyId, copiarOrigen, copiarDestino);
+            copiarPopupVisible = false;
+
+            if (!anios.Contains(copiarDestino))
+            {
+                anios = anios.Append(copiarDestino).OrderByDescending(a => a).ToList();
+            }
+
+            anioSeleccionado = copiarDestino;
+            filas = dto.Filas;
+            hayCambios = false;
+            ReconstruirScheduler(irAlPrimerMesConDatos: true);
+            ToastService.ShowToast(new ToastOptions { Title = "Calendario de facturación", Text = $"Calendario {copiarOrigen} copiado a {copiarDestino}.", RenderStyle = ToastRenderStyle.Success });
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex.Message);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    // ---------------- Utilitarios ----------------
+
+    private static string NombreMes(int mes) => CalendarioFacturacionReglas.NombreMes(mes);
+
+    private void MostrarError(string texto)
+        => ToastService.ShowToast(new ToastOptions { Title = "Calendario de facturación", Text = texto, RenderStyle = ToastRenderStyle.Danger });
+
+    private void MostrarAviso(string texto)
+        => ToastService.ShowToast(new ToastOptions { Title = "Calendario de facturación", Text = texto, RenderStyle = ToastRenderStyle.Warning });
+
+    private sealed class FilaEditModel
+    {
+        public int Mes { get; set; }
+        public string Ciclo { get; set; } = string.Empty;
+        public DateTime? FechaAl { get; set; }
+        public DateTime? FechaLectura { get; set; }
+        public DateTime? FechaFacturacion { get; set; }
+        public DateTime? FechaRefacturacion { get; set; }
+        public DateTime? FechaVencimiento { get; set; }
+        public int DiasVencimiento { get; set; }
+    }
+}

@@ -448,6 +448,38 @@ public static class PermissionEndpointCatalog
             Action: PermissionAction.Create,
             HttpMethod: "POST",
             Route: "api/ventas/condiciones-lectura/{companyId}"),
+
+        // Calendario de facturación (Fase A apertura-ciclo-único 2026-07-14):
+        // fechas por año/mes/ciclo (calendariopro). GET años/año; POST guarda
+        // el año o copia un año a otro.
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.CalendarioFacturacion,
+            Resource: "calendario_facturacion__ventas_calendario_facturacion_companyid_anios",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/calendario-facturacion/{companyId}/anios"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.CalendarioFacturacion,
+            Resource: "calendario_facturacion__ventas_calendario_facturacion_companyid_anio",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/calendario-facturacion/{companyId}/{anio}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.CalendarioFacturacion,
+            Resource: "calendario_facturacion__ventas_calendario_facturacion_companyid_anio",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/ventas/calendario-facturacion/{companyId}/{anio}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.CalendarioFacturacion,
+            Resource: "calendario_facturacion__ventas_calendario_facturacion_companyid_copiar",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/ventas/calendario-facturacion/{companyId}/copiar"),
     ];
 
     public static readonly EndpointPermissionDefinition[] Contabilidad =

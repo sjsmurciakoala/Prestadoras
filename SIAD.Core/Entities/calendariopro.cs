@@ -1,17 +1,20 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
+using SIAD.Core.Tenancy;
 
 namespace SIAD.Core.Entities;
 
-public partial class calendariopro
+public partial class calendariopro : ICompanyScopedEntity
 {
     public int ide { get; set; }
 
-    public int? ano { get; set; }
+    public long company_id { get; set; }
 
-    public int? mes { get; set; }
+    public int ano { get; set; }
 
-    public string? ciclo { get; set; }
+    public int mes { get; set; }
+
+    public string ciclo { get; set; } = null!;
 
     public DateOnly? fechaal { get; set; }
 
