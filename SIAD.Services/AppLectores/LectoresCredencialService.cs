@@ -97,6 +97,8 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         }
 
         await EnsureCodigoLibreAsync(codigo, null, ct);
+        var ruta = NormalizeOptional(dto.Ruta, 20, "ruta");
+        await EnsureRutaEnCatalogoAsync(ruta, ct);
 
         var conn = _context.Database.GetDbConnection();
         var id = await conn.ExecuteScalarAsync<long>(new CommandDefinition(
@@ -111,7 +113,7 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
                 codigo,
                 clave,
                 nombre = NormalizeOptional(dto.Nombre, 100, "nombre"),
-                ruta = NormalizeOptional(dto.Ruta, 20, "ruta"),
+                ruta,
                 codciclo = dto.CodCiclo,
                 activo = dto.Activo,
                 user = string.IsNullOrWhiteSpace(user) ? "system" : user
@@ -127,6 +129,8 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         ArgumentNullException.ThrowIfNull(dto);
         var codigo = NormalizeRequired(dto.Codigo, 50, "código");
         await EnsureCodigoLibreAsync(codigo, id, ct);
+        var ruta = NormalizeOptional(dto.Ruta, 20, "ruta");
+        await EnsureRutaEnCatalogoAsync(ruta, ct);
 
         var clave = (dto.Clave ?? string.Empty).Trim();
         var cambiaClave = clave.Length > 0;
@@ -149,7 +153,7 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
                 id,
                 codigo,
                 nombre = NormalizeOptional(dto.Nombre, 100, "nombre"),
-                ruta = NormalizeOptional(dto.Ruta, 20, "ruta"),
+                ruta,
                 codciclo = dto.CodCiclo,
                 activo = dto.Activo,
                 clave,
@@ -164,6 +168,31 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         dto.Id = id;
         dto.Clave = null;
         return dto;
+    }
+
+    // Fase E apertura-ciclo-único (2026-07-15): la ruta del lector debe existir
+    // ACTIVA en el catálogo de rutas — antes era texto libre y un error de dedo
+    // dejaba al lector sin libro que descargar en la app.
+    private async Task EnsureRutaEnCatalogoAsync(string? ruta, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(ruta))
+        {
+            return; // lector sin ruta asignada: permitido (p.ej. supervisor)
+        }
+
+        var conn = _context.Database.GetDbConnection();
+        var existe = await conn.ExecuteScalarAsync<bool>(new CommandDefinition(
+            @"SELECT EXISTS (
+                  SELECT 1 FROM public.rutas r
+                  WHERE r.estado = true
+                    AND upper(btrim(r.codruta)) = upper(@ruta))",
+            new { ruta }, cancellationToken: ct));
+
+        if (!existe)
+        {
+            throw new ArgumentException(
+                $"La ruta '{ruta}' no existe en el catálogo de rutas activas. Selecciónela de la lista.");
+        }
     }
 
     public async Task<bool> DeactivateAsync(long id, string user, CancellationToken ct = default)
