@@ -4,9 +4,12 @@
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.AppLectores
+@using SIAD.Core.DTOs.Rutas
 @using apc.Client.Services.AppLectores
+@using apc.Client.Services.Rutas
 
 @inject LectoresCredencialClient LectoresClient
+@inject RutasClient RutasClient
 @inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Lectores (app móvil)</PageTitle>
@@ -104,10 +107,21 @@
                 <DxFormLayoutItem Caption="Nombre" ColSpanMd="12">
                     <DxTextBox @bind-Text="formModel.Nombre" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Ruta (libro, ej. 00L4)" ColSpanMd="6">
-                    <DxTextBox @bind-Text="formModel.Ruta" />
+                <DxFormLayoutItem Caption="Ruta (libro)" ColSpanMd="6">
+                    @* Fase E apertura-ciclo-único: la ruta se elige del catálogo
+                       (antes era texto libre y un error de dedo dejaba al lector
+                       sin libro en la app). Al elegirla se autollena el ciclo. *@
+                    <DxComboBox Data="@rutasOptions" TData="RutaOption" TValue="string"
+                                Value="@formModel.Ruta"
+                                ValueChanged="@((string? v) => OnRutaSeleccionada(v))"
+                                ValueExpression="@(() => formModel.Ruta)"
+                                ValueFieldName="@nameof(RutaOption.Codigo)"
+                                TextFieldName="@nameof(RutaOption.Etiqueta)"
+                                SearchMode="ListSearchMode.AutoSearch"
+                                NullText="Seleccione la ruta..."
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Ciclo" ColSpanMd="6">
+                <DxFormLayoutItem Caption="Ciclo (de la ruta)" ColSpanMd="6">
                     <DxSpinEdit @bind-Value="formModel.CodCiclo" MinValue="0" MaxValue="99" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
@@ -159,7 +173,47 @@
     private bool confirmVisible;
     private LectorCredencialListItemDto? lectorParaDesactivar;
 
-    protected override async Task OnInitializedAsync() => await CargarAsync();
+    private sealed record RutaOption(string Codigo, string Etiqueta, int CodCiclo);
+    private List<RutaOption> rutasOptions = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAsync();
+        await CargarRutasAsync();
+    }
+
+    private async Task CargarRutasAsync()
+    {
+        try
+        {
+            var rutas = await RutasClient.GetAsync();
+            rutasOptions = rutas
+                .Where(r => r.Activo)
+                .OrderBy(r => r.CodRuta)
+                .Select(r => new RutaOption(
+                    r.CodRuta.Trim(),
+                    string.IsNullOrWhiteSpace(r.Descripcion)
+                        ? r.CodRuta.Trim()
+                        : $"{r.CodRuta.Trim()} - {r.Descripcion!.Trim()}",
+                    r.CodCiclo))
+                .ToList();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudo cargar el catálogo de rutas: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void OnRutaSeleccionada(string? codigo)
+    {
+        formModel.Ruta = codigo;
+        var ruta = rutasOptions.FirstOrDefault(r => r.Codigo == codigo);
+        if (ruta is not null)
+        {
+            // El ciclo del lector es el de su ruta: se autollena al elegirla.
+            formModel.CodCiclo = ruta.CodCiclo;
+        }
+    }
 
     private async Task CargarAsync()
     {
