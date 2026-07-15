@@ -187,6 +187,46 @@ public sealed class PeriodoComercialService : IPeriodoComercialService
               ?? new DeshacerAperturaResultadoDto();
     }
 
+    public async Task<IReadOnlyList<PlanillaCicloFilaDto>> PlanillaCicloAsync(long companyId, long periodoCicloId,
+        CancellationToken ct = default)
+    {
+        ValidarCompanyId(companyId);
+
+        var conn = _context.Database.GetDbConnection();
+        // Mismo criterio de match de ciclo que los SP de apertura/deshacer
+        // (fn_adm_ciclo_norm tolera '1' vs '01' en datos legacy).
+        var filas = await conn.QueryAsync<PlanillaCicloFilaDto>(
+            new CommandDefinition(@"
+                SELECT btrim(h.clave)          AS Clave,
+                       h.propietario           AS Cliente,
+                       btrim(h.ruta)           AS Ruta,
+                       btrim(h.contador)       AS Contador,
+                       btrim(h.secuencia)      AS Secuencia,
+                       h.lect_ant              AS LecturaAnterior,
+                       h.lect_act              AS LecturaActual,
+                       h.consumo               AS Consumo,
+                       btrim(h.condicion)      AS Condicion,
+                       h.fecha_lect_act        AS FechaLectura,
+                       NULLIF(btrim(h.usuario), '')       AS Usuario,
+                       NULLIF(btrim(h.numerofactura), '') AS NumeroFactura
+                FROM public.adm_periodo_comercial_ciclo pc
+                JOIN public.adm_periodo_comercial p
+                  ON p.company_id = pc.company_id
+                 AND p.periodo_comercial_id = pc.periodo_comercial_id
+                JOIN public.historicomedicion h
+                  ON h.company_id = pc.company_id
+                 AND h.ano = p.anio
+                 AND h.mes = p.mes
+                 AND public.fn_adm_ciclo_norm(h.ciclo) = pc.ciclo_codigo
+                WHERE pc.company_id = @companyId
+                  AND pc.periodo_ciclo_id = @periodoCicloId
+                ORDER BY h.ruta, h.secuencia, h.clave",
+                new { companyId, periodoCicloId },
+                cancellationToken: ct));
+
+        return filas.ToList();
+    }
+
     private static AperturaCicloResumenDto DeserializarResumen(string? json)
     {
         if (string.IsNullOrWhiteSpace(json))

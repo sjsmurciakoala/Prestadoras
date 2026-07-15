@@ -440,6 +440,15 @@ public static class PermissionEndpointCatalog
             Action: PermissionAction.Create,
             HttpMethod: "POST",
             Route: "api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/deshacer"),
+        // Fase C: planilla del ciclo (reemplaza la consulta del Auxiliar de
+        // Lectura eliminado).
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_periodocicloid_planilla",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/planilla"),
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.PeriodosComerciales,

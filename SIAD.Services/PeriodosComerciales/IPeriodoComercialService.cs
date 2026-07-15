@@ -34,6 +34,12 @@ public interface IPeriodoComercialService
     /// <summary>Deshace una apertura (borra planilla+ciclo) si no hay lecturas ni facturas.</summary>
     Task<DeshacerAperturaResultadoDto> DeshacerAperturaAsync(long companyId, long periodoCicloId, string usuario, CancellationToken ct = default);
 
+    /// <summary>
+    /// Planilla de lectura del ciclo (historicomedicion del año/mes/ciclo).
+    /// Fase C: reemplaza la consulta del Auxiliar de Lectura eliminado.
+    /// </summary>
+    Task<IReadOnlyList<PlanillaCicloFilaDto>> PlanillaCicloAsync(long companyId, long periodoCicloId, CancellationToken ct = default);
+
     /// <summary>Cierra un ciclo; sin forzar exige cero rutas pendientes.</summary>
     Task CerrarCicloAsync(long companyId, long periodoCicloId, string usuario, bool forzar, CancellationToken ct = default);
 

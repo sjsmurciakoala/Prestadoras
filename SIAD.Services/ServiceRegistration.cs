@@ -1,4 +1,4 @@
-using Microsoft.Extensions.DependencyInjection;
+﻿using Microsoft.Extensions.DependencyInjection;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Services;
@@ -6,7 +6,6 @@ using SIAD.Services.Clientes;
 using SIAD.Services.Proveedores;
 using SIAD.Services.Solicitudes;
 using SIAD.Services.Medidores;
-using SIAD.Services.AuxiliarLectura;
 using SIAD.Services.Branding;
 using SIAD.Services.Ordenes;
 using SIAD.Services.Rutas;
@@ -49,9 +48,6 @@ public static class ServiceRegistration
         //medidores
         services.AddScoped<IMedidoresService, MedidoresService>();
         
-        //auxiliar de lectura
-        services.AddScoped<IAuxiliarLecturaService, AuxiliarLecturaService>();
-
         // Branding
         services.AddScoped<IBrandingService, BrandingService>();
         

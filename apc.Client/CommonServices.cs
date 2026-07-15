@@ -1,4 +1,4 @@
-using apc.Client.Services;
+﻿using apc.Client.Services;
 using apc.Client.Services.Ordenes;
 using apc.Client.Services.Parametros;
 using apc.Client.Services.Rutas;
@@ -7,7 +7,6 @@ using apc.Client.Services.Clientes;
 using apc.Client.Services.Proveedores;
 using apc.Client.Services.Solicitudes;
 using apc.Client.Services.Medidores;
-using apc.Client.Services.AuxiliarLectura;
 using apc.Services;
 using apc.Client.Services.CaptacionPagos;
 using apc.Client.Services.Facturacion;
@@ -79,7 +78,6 @@ namespace apc.Client
             services.AddScoped<ProveedoresClient>();
             services.AddScoped<SolicitudesClient>();
             services.AddScoped<MedidoresClient>();
-            services.AddScoped<AuxiliarLecturaClient>();
             services.AddScoped<CatalogosClient>();
             services.AddScoped<AbogadosClient>();
             services.AddScoped<ArticulosClient>();

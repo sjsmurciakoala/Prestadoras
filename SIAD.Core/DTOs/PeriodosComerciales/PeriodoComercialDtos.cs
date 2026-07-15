@@ -113,6 +113,28 @@ public sealed class DeshacerAperturaResultadoDto
     public bool PeriodoEliminado { get; set; }
 }
 
+/// <summary>
+/// Fila de la planilla de lectura de un ciclo (historicomedicion). Fase C:
+/// reemplaza la consulta de la pantalla Auxiliar de Lectura eliminada.
+/// Pendiente = sin usuario (la app aún no tomó la lectura).
+/// </summary>
+public sealed class PlanillaCicloFilaDto
+{
+    public string Clave { get; set; } = string.Empty;
+    public string? Cliente { get; set; }
+    public string? Ruta { get; set; }
+    public string? Contador { get; set; }
+    public string? Secuencia { get; set; }
+    public decimal? LecturaAnterior { get; set; }
+    public decimal? LecturaActual { get; set; }
+    public decimal? Consumo { get; set; }
+    public string? Condicion { get; set; }
+    public DateTime? FechaLectura { get; set; }
+    public string? Usuario { get; set; }
+    public string? NumeroFactura { get; set; }
+    public bool Pendiente => string.IsNullOrWhiteSpace(Usuario);
+}
+
 /// <summary>Aviso de períodos para el banner del portal (F7).</summary>
 public sealed class AvisoPeriodoDto
 {
