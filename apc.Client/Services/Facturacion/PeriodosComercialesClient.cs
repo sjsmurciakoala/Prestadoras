@@ -41,14 +41,47 @@ public sealed class PeriodosComercialesClient
         return resultado ?? Array.Empty<ChecklistCierreItemDto>();
     }
 
-    public async Task AbrirAsync(long companyId, AbrirPeriodoComercialRequest request, CancellationToken ct = default)
+    /// <summary>Apertura integral (Fase B): devuelve el resumen con avisos.</summary>
+    public async Task<AperturaCicloResumenDto> AbrirAsync(long companyId, AbrirPeriodoComercialRequest request,
+        CancellationToken ct = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);
         ArgumentNullException.ThrowIfNull(request);
 
         var response = await http.PostAsJsonAsyncWithAuthCheck(
             $"api/ventas/periodos-comerciales/{companyId}/abrir", request, ct);
-        await LanzarSiErrorAsync(response, ct);
+        var resumen = await response.ReadFromJsonAsyncWithAuthCheck<AperturaCicloResumenDto>(ct);
+        return resumen ?? new AperturaCicloResumenDto();
+    }
+
+    /// <summary>Preview de la apertura (sin escribir): bloqueos + avisos.</summary>
+    public async Task<AperturaCicloResumenDto> PreviewAperturaAsync(long companyId, int anio, int mes,
+        string? ciclo, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);
+        var resultado = await http.GetFromJsonAsyncWithAuthCheck<AperturaCicloResumenDto>(
+            $"api/ventas/periodos-comerciales/{companyId}/abrir/preview?anio={anio}&mes={mes}&ciclo={Uri.EscapeDataString(ciclo ?? string.Empty)}", ct);
+        return resultado ?? new AperturaCicloResumenDto();
+    }
+
+    /// <summary>Próximo ciclo según el calendario de facturación (null si no hay).</summary>
+    public async Task<SugerenciaAperturaDto?> SugerenciaAperturaAsync(long companyId, CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);
+        return await http.GetFromJsonAsyncWithAuthCheck<SugerenciaAperturaDto?>(
+            $"api/ventas/periodos-comerciales/{companyId}/abrir/sugerencia", ct);
+    }
+
+    /// <summary>Deshace una apertura de ciclo (el servidor la rechaza si hay lecturas/facturas).</summary>
+    public async Task<DeshacerAperturaResultadoDto> DeshacerAperturaAsync(long companyId, long periodoCicloId,
+        CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);
+
+        var response = await http.PostAsJsonAsyncWithAuthCheck(
+            $"api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/deshacer", new { }, ct);
+        var resultado = await response.ReadFromJsonAsyncWithAuthCheck<DeshacerAperturaResultadoDto>(ct);
+        return resultado ?? new DeshacerAperturaResultadoDto();
     }
 
     public async Task CerrarCicloAsync(long companyId, long periodoCicloId, bool forzar,

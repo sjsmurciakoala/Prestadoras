@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dapper;
 using Npgsql;
 using SIAD.Tests.Infrastructure;
@@ -15,10 +16,17 @@ public sealed class PeriodoCierreF7Tests : IntegrationTestBase
 {
     public PeriodoCierreF7Tests(PostgresFixture fixture) : base(fixture) { }
 
-    private Task<long> AbrirComercialAsync(int anio, int mes, string ciclo, bool validarSecuencia = true) =>
-        Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
-            SELECT public.sp_adm_periodo_comercial_abrir(@CompanyId, @Anio, @Mes, @Ciclo, 'test-f7', @Validar)",
-            new { CompanyId, Anio = anio, Mes = mes, Ciclo = ciclo, Validar = validarSecuencia }, Transaction));
+    // Fase B (2026-07-15): la apertura vive en sp_adm_periodo_ciclo_abrir
+    // (integral, sin bypass de secuencia; devuelve resumen jsonb). Los meses
+    // fabricados aquí no son consecutivos, así que la secuencia no bloquea.
+    private async Task<long> AbrirComercialAsync(int anio, int mes, string ciclo)
+    {
+        var json = await Connection.ExecuteScalarAsync<string>(new CommandDefinition(@"
+            SELECT public.sp_adm_periodo_ciclo_abrir(@CompanyId, @Anio, @Mes, @Ciclo, 'test-f7')::text",
+            new { CompanyId, Anio = anio, Mes = mes, Ciclo = ciclo }, Transaction));
+        using var doc = JsonDocument.Parse(json!);
+        return doc.RootElement.GetProperty("periodo_comercial_id").GetInt64();
+    }
 
     private Task<long> CicloIdAsync(long periodoId, string ciclo) =>
         Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
@@ -357,7 +365,7 @@ public sealed class PeriodoCierreF7Tests : IntegrationTestBase
         // Mes comercial viejísimo abierto (vencido) + otro futuro (desfase) y
         // un período contable abierto como contraparte.
         await AbrirComercialAsync(2001, 1, "99");
-        await AbrirComercialAsync(2099, 12, "99", validarSecuencia: false);
+        await AbrirComercialAsync(2099, 12, "99");
         await InsertarPeriodoContableAsync("F7T9AV", new DateTime(2098, 1, 1), new DateTime(2098, 1, 31));
 
         var avisos = (await Connection.QueryAsync<(string tipo, string severidad, string mensaje, long cantidad)>(

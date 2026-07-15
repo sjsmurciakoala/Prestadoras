@@ -38,13 +38,14 @@
             <div class="p-4">
                 <div class="alert alert-info mb-3" role="alert">
                     <i class="bi bi-info-circle-fill me-2"></i>
-                    El <strong>cierre de un ciclo</strong> valida que sus rutas activas tengan facturas de lectura emitidas
-                    en el mes (no contra el histórico de lecturas). El <strong>cierre del mes</strong> exige todos los ciclos
-                    cerrados y habilita abrir el mes siguiente. Los cierres no se reabren desde esta pantalla.
+                    <strong>Abrir ciclo</strong> hace todo el trabajo: valida la secuencia, crea el período y
+                    <strong>genera la planilla de lectura</strong> (la fecha límite sale del calendario de facturación).
+                    El <strong>cierre de un ciclo</strong> valida que sus rutas tengan facturas emitidas; el
+                    <strong>cierre del mes</strong> exige todos los ciclos cerrados y habilita el mes siguiente.
                 </div>
 
-                @* ---------------- Abrir mes ---------------- *@
-                <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" CaptionPosition="CaptionPosition.Vertical" CssClass="mb-3">
+                @* ---------------- Abrir ciclo (Fase B: apertura integral) ---------------- *@
+                <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" CaptionPosition="CaptionPosition.Vertical" CssClass="mb-1">
                     <DxFormLayoutItem Caption="Año" ColSpanMd="2" ColSpanSm="12">
                         <DxSpinEdit @bind-Value="nuevoAnio" MinValue="2000" MaxValue="2100" />
                     </DxFormLayoutItem>
@@ -59,13 +60,29 @@
                         <DxTextBox @bind-Text="nuevoCiclo" NullText="01" />
                     </DxFormLayoutItem>
                     <DxFormLayoutItem ColSpanMd="3" ColSpanSm="12" Caption=" ">
-                        <DxButton Text="Abrir mes / ciclo"
+                        <DxButton Text="Abrir ciclo..."
                                   IconCssClass="bi bi-calendar-plus"
                                   RenderStyle="ButtonRenderStyle.Primary"
                                   Enabled="@(!cargando && empresaId > 0)"
-                                  Click="@AbrirMesAsync" />
+                                  Click="@AbrirPreviewAperturaAsync" />
                     </DxFormLayoutItem>
                 </DxFormLayout>
+                @if (sugerencia is not null)
+                {
+                    <div class="mb-3">
+                        <small class="text-muted">
+                            <i class="bi bi-lightbulb me-1"></i>
+                            Según el calendario, el próximo ciclo es
+                            <a href="" @onclick="UsarSugerencia" @onclick:preventDefault>
+                                <strong>@NombreMes((short)sugerencia.Mes) @sugerencia.Anio · ciclo @sugerencia.Ciclo</strong>
+                            </a>
+                            @if (sugerencia.FechaLectura is not null)
+                            {
+                                <span> (lectura el @sugerencia.FechaLectura?.ToString("dd/MM/yyyy"))</span>
+                            }
+                        </small>
+                    </div>
+                }
 
                 @* ---------------- Períodos ---------------- *@
                 @if (periodos.Count == 0 && !cargando)
@@ -132,12 +149,21 @@
                                                     <td class="text-end">
                                                         @if (ciclo.StatusId == EstadoPeriodoComercial.Abierto)
                                                         {
-                                                            <DxButton Text="Cerrar ciclo"
-                                                                      IconCssClass="bi bi-check2-circle"
-                                                                      RenderStyle="ButtonRenderStyle.Secondary"
-                                                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                                                      Enabled="@(!cargando)"
-                                                                      Click="@(() => AbrirCierreCicloAsync(periodo, ciclo))" />
+                                                            <div class="d-inline-flex gap-2">
+                                                                <DxButton Text="Deshacer"
+                                                                          IconCssClass="bi bi-arrow-counterclockwise"
+                                                                          RenderStyle="ButtonRenderStyle.Danger"
+                                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                                          Enabled="@(!cargando)"
+                                                                          title="Deshacer la apertura (solo si el ciclo no tiene lecturas ni facturas)"
+                                                                          Click="@(() => PedirDeshacerApertura(periodo, ciclo))" />
+                                                                <DxButton Text="Cerrar ciclo"
+                                                                          IconCssClass="bi bi-check2-circle"
+                                                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                                          Enabled="@(!cargando)"
+                                                                          Click="@(() => AbrirCierreCicloAsync(periodo, ciclo))" />
+                                                            </div>
                                                         }
                                                     </td>
                                                 </tr>
@@ -158,6 +184,124 @@
                     ApplyBackgroundShading="false"
                     IsContentBlocked="true"
                     Text="Procesando..." />
+
+    <DxMessageBox @bind-Visible="deshacerConfirmVisible"
+                  Type="MessageBoxType.Confirmation"
+                  Title="Deshacer apertura"
+                  Text="@deshacerConfirmTexto"
+                  RenderStyle="MessageBoxRenderStyle.Danger"
+                  OkButtonText="Sí, deshacer"
+                  CancelButtonText="Cancelar"
+                  ShowCloseButton="false"
+                  CloseOnOutsideClick="false"
+                  Closed="OnDeshacerConfirmClosed" />
+
+    @* ---------------- Popup apertura integral (Fase B) ---------------- *@
+    <DxPopup @bind-Visible="aperturaVisible"
+             Width="680px"
+             MaxWidth="95vw"
+             Scrollable="true"
+             CloseOnEscape="true"
+             CloseOnOutsideClick="false"
+             ShowFooter="true">
+        <HeaderContentTemplate>
+            <div class="d-flex align-items-center gap-2 p-1">
+                <i class="bi bi-calendar-plus fs-4 text-primary"></i>
+                <strong>Abrir ciclo @previewApertura?.Ciclo — @NombreMes((short)(previewApertura?.Mes ?? 0)) @previewApertura?.Anio</strong>
+            </div>
+        </HeaderContentTemplate>
+        <BodyContentTemplate>
+            <div class="p-3">
+                @if (previewApertura is null)
+                {
+                    <div class="text-muted">Calculando...</div>
+                }
+                else
+                {
+                    @if (previewApertura.Bloqueo is not null)
+                    {
+                        <div class="alert alert-danger">
+                            <i class="bi bi-x-circle-fill me-2"></i>@EtiquetaBloqueo(previewApertura.Bloqueo)
+                        </div>
+                    }
+
+                    <div class="row g-3 mb-3">
+                        <div class="col-md-4">
+                            <div class="border rounded p-2 h-100">
+                                <small class="text-muted d-block">Planilla de lectura</small>
+                                <strong>@previewApertura.ClientesPlanilla cliente(s)</strong>
+                                <small class="d-block text-muted">@DescripcionOrigen(previewApertura.OrigenPlanilla)</small>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border rounded p-2 h-100">
+                                <small class="text-muted d-block">Fecha límite (calendario)</small>
+                                <strong>@(previewApertura.FechaLimite?.ToString("dd/MM/yyyy") ?? "—")</strong>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="border rounded p-2 h-100">
+                                <small class="text-muted d-block">Rutas del ciclo</small>
+                                <strong>@previewApertura.Rutas.Count</strong>
+                                @if (previewApertura.RutasSinLector > 0)
+                                {
+                                    <small class="d-block text-danger">@previewApertura.RutasSinLector sin lector</small>
+                                }
+                                else if (previewApertura.Rutas.Count > 0)
+                                {
+                                    <small class="d-block text-success">todas con lector</small>
+                                }
+                            </div>
+                        </div>
+                    </div>
+
+                    @if (previewApertura.Rutas.Count > 0)
+                    {
+                        <table class="table table-sm mb-3">
+                            <thead>
+                                <tr class="text-muted small"><th style="width:140px">Ruta</th><th>Lector asignado</th></tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var r in previewApertura.Rutas)
+                                {
+                                    <tr>
+                                        <td><strong>@r.Ruta</strong></td>
+                                        <td>
+                                            @if (string.IsNullOrWhiteSpace(r.Lector))
+                                            {
+                                                <span class="badge text-bg-danger">Sin lector</span>
+                                            }
+                                            else
+                                            {
+                                                @r.Lector
+                                            }
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    }
+
+                    @foreach (var aviso in previewApertura.Avisos)
+                    {
+                        <div class="alert alert-warning py-2 mb-2">
+                            <i class="bi bi-exclamation-triangle-fill me-2"></i>@EtiquetaAviso(aviso)
+                        </div>
+                    }
+                }
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate Context="aperturaFooter">
+            <div class="p-2 d-flex justify-content-end gap-2">
+                <DxButton RenderStyle="ButtonRenderStyle.Secondary" Text="Cancelar"
+                          Click="@aperturaFooter.CloseCallback" />
+                <DxButton RenderStyle="ButtonRenderStyle.Primary" Text="Abrir ciclo"
+                          IconCssClass="bi bi-calendar-plus"
+                          Enabled="@(!cargando && previewApertura is not null && previewApertura.Bloqueo is null)"
+                          Click="@ConfirmarAperturaAsync" />
+            </div>
+        </FooterContentTemplate>
+    </DxPopup>
 
     @* ---------------- Popup cierre de ciclo (rutas) ---------------- *@
     <DxPopup @bind-Visible="cierreCicloVisible"
@@ -300,6 +444,12 @@
 
     private bool cierreCicloVisible;
     private bool cierreMesVisible;
+    private bool aperturaVisible;
+    private AperturaCicloResumenDto? previewApertura;
+    private SugerenciaAperturaDto? sugerencia;
+    private bool deshacerConfirmVisible;
+    private string deshacerConfirmTexto = string.Empty;
+    private PeriodoComercialCicloDto? cicloADeshacer;
     private PeriodoComercialDto? periodoSeleccionado;
     private PeriodoComercialCicloDto? cicloSeleccionado;
     private IReadOnlyList<RutaCicloDto> rutasCiclo = Array.Empty<RutaCicloDto>();
@@ -325,6 +475,7 @@
             if (empresaId > 0)
             {
                 await CargarPeriodosCoreAsync();
+                await CargarSugerenciaAsync();
             }
             else
             {
@@ -365,7 +516,31 @@
         periodos = await PeriodosClient.ListarAsync(empresaId);
     }
 
-    private async Task AbrirMesAsync()
+    private async Task CargarSugerenciaAsync()
+    {
+        try
+        {
+            sugerencia = await PeriodosClient.SugerenciaAperturaAsync(empresaId);
+            UsarSugerencia();
+        }
+        catch
+        {
+            // La sugerencia es informativa: sin calendario simplemente no hay.
+            sugerencia = null;
+        }
+    }
+
+    private void UsarSugerencia()
+    {
+        if (sugerencia is not null)
+        {
+            nuevoAnio = sugerencia.Anio;
+            nuevoMes = sugerencia.Mes;
+            nuevoCiclo = sugerencia.Ciclo;
+        }
+    }
+
+    private async Task AbrirPreviewAperturaAsync()
     {
         if (empresaId <= 0)
         {
@@ -375,14 +550,8 @@
         cargando = true;
         try
         {
-            await PeriodosClient.AbrirAsync(empresaId, new AbrirPeriodoComercialRequest(nuevoAnio, nuevoMes, nuevoCiclo));
-            ToastService.ShowToast(new ToastOptions
-            {
-                Title = "Períodos comerciales",
-                Text = $"Período {NombreMes((short)nuevoMes)} {nuevoAnio} (ciclo {nuevoCiclo}) abierto.",
-                RenderStyle = ToastRenderStyle.Success
-            });
-            await CargarPeriodosCoreAsync();
+            previewApertura = await PeriodosClient.PreviewAperturaAsync(empresaId, nuevoAnio, nuevoMes, nuevoCiclo);
+            aperturaVisible = true;
         }
         catch (Exception ex)
         {
@@ -394,6 +563,119 @@
             StateHasChanged();
         }
     }
+
+    private async Task ConfirmarAperturaAsync()
+    {
+        if (empresaId <= 0 || previewApertura is null)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var resumen = await PeriodosClient.AbrirAsync(empresaId,
+                new AbrirPeriodoComercialRequest(nuevoAnio, nuevoMes, nuevoCiclo));
+            aperturaVisible = false;
+
+            var detalle = resumen.OrigenPlanilla switch
+            {
+                "ROLL_OVER" => $"planilla de {resumen.ClientesPlanilla} lectura(s) generada desde el mes anterior",
+                "DESDE_CLIENTES" => $"planilla de {resumen.ClientesPlanilla} cliente(s) generada desde el maestro",
+                "EXISTENTE" => $"la planilla ya existía ({resumen.ClientesPlanilla} fila(s))",
+                _ => "sin planilla (no se encontraron clientes)"
+            };
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Períodos comerciales",
+                Text = $"Ciclo {resumen.Ciclo} de {NombreMes((short)resumen.Mes)} {resumen.Anio} abierto: {detalle}.",
+                RenderStyle = resumen.Avisos.Count > 0 ? ToastRenderStyle.Warning : ToastRenderStyle.Success
+            });
+            await CargarPeriodosCoreAsync();
+            await CargarSugerenciaAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex.Message);
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private void PedirDeshacerApertura(PeriodoComercialDto periodo, PeriodoComercialCicloDto ciclo)
+    {
+        cicloADeshacer = ciclo;
+        deshacerConfirmTexto = $"Se deshará la apertura del ciclo {ciclo.CicloCodigo} de {NombreMes(periodo.Mes)} {periodo.Anio}: " +
+            "se elimina su planilla de lectura y el ciclo (y el período si queda vacío). " +
+            "Solo procede si el ciclo no tiene lecturas registradas ni facturas.";
+        deshacerConfirmVisible = true;
+    }
+
+    private async Task OnDeshacerConfirmClosed(bool confirmed)
+    {
+        var ciclo = cicloADeshacer;
+        cicloADeshacer = null;
+        deshacerConfirmTexto = string.Empty;
+
+        if (!confirmed || ciclo is null)
+        {
+            return;
+        }
+
+        cargando = true;
+        try
+        {
+            var resultado = await PeriodosClient.DeshacerAperturaAsync(empresaId, ciclo.PeriodoCicloId);
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Períodos comerciales",
+                Text = $"Apertura del ciclo {ciclo.CicloCodigo} deshecha ({resultado.PlanillaEliminada} fila(s) de planilla eliminadas).",
+                RenderStyle = ToastRenderStyle.Success
+            });
+            await CargarPeriodosCoreAsync();
+            await CargarSugerenciaAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex.Message);
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private static string EtiquetaBloqueo(string bloqueo) => bloqueo switch
+    {
+        "PERIODO_ANTERIOR_ABIERTO" => "El mes comercial anterior sigue abierto: ciérrelo antes de abrir este ciclo.",
+        "PERIODO_CERRADO" => "El período de este mes ya fue cerrado y no se reabre.",
+        "CICLO_CERRADO" => "Este ciclo ya fue cerrado y no se reabre.",
+        _ => bloqueo
+    };
+
+    private static string EtiquetaAviso(string aviso) => aviso switch
+    {
+        "SIN_CALENDARIO" => "El calendario de facturación no tiene fechas para este período: la fecha límite será el fin de mes. Cargue el calendario en Facturación → Calendario de facturación.",
+        "PLANILLA_EXISTENTE" => "El período ya tiene planilla de lectura; no se generará de nuevo.",
+        "SIN_CLIENTES" => "No se encontraron clientes para generar la planilla (revise el catálogo de ciclos y los clientes activos).",
+        "RUTAS_SIN_LECTOR" => "Hay rutas del ciclo sin lector asignado: esos libros no podrán descargarse en la app. Asigne lectores en la pantalla Lectores.",
+        "OTRO_CICLO_ABIERTO" => "Hay otros ciclos abiertos; recuerde cerrarlos cuando terminen de facturar.",
+        "CICLO_YA_ABIERTO" => "El ciclo ya estaba abierto; la operación es idempotente.",
+        _ => aviso
+    };
+
+    private static string DescripcionOrigen(string origen) => origen switch
+    {
+        "ROLL_OVER" => "roll-over del mes anterior",
+        "DESDE_CLIENTES" => "desde el maestro de clientes",
+        "EXISTENTE" => "planilla ya existente",
+        "VACIA" => "sin clientes",
+        _ => origen
+    };
 
     private async Task AbrirCierreCicloAsync(PeriodoComercialDto periodo, PeriodoComercialCicloDto ciclo)
     {

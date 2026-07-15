@@ -3,9 +3,10 @@ using SIAD.Core.DTOs.PeriodosComerciales;
 namespace SIAD.Services.PeriodosComerciales;
 
 /// <summary>
-/// Períodos comerciales (F7): listado, apertura secuencial y cierres con
-/// checklist. Las transiciones de estado viven en SPs de BD
-/// (sp_adm_periodo_comercial_abrir/cerrar, sp_adm_periodo_ciclo_cerrar).
+/// Períodos comerciales (F7 + Fase B apertura-ciclo-único): listado, apertura
+/// integral y cierres con checklist. Las transiciones de estado viven en SPs
+/// de BD (sp_adm_periodo_ciclo_abrir/deshacer, sp_adm_periodo_comercial_cerrar,
+/// sp_adm_periodo_ciclo_cerrar).
 /// </summary>
 public interface IPeriodoComercialService
 {
@@ -18,10 +19,20 @@ public interface IPeriodoComercialService
     Task<IReadOnlyList<ChecklistCierreItemDto>> ChecklistCierreAsync(long companyId, long periodoComercialId, CancellationToken ct = default);
 
     /// <summary>
-    /// Abre el período del mes (y su ciclo). Exige que el período del mes
-    /// calendario anterior, si existe, esté cerrado.
+    /// Apertura integral (Fase B): valida secuencia, crea período+ciclo con
+    /// fecha límite del calendario de facturación, genera la planilla de
+    /// lectura y devuelve el resumen con avisos.
     /// </summary>
-    Task<long> AbrirAsync(long companyId, int anio, int mes, string? ciclo, string usuario, CancellationToken ct = default);
+    Task<AperturaCicloResumenDto> AbrirAsync(long companyId, int anio, int mes, string? ciclo, string usuario, CancellationToken ct = default);
+
+    /// <summary>Qué pasaría al abrir (sin escribir): mismos avisos + bloqueos.</summary>
+    Task<AperturaCicloResumenDto> PreviewAperturaAsync(long companyId, int anio, int mes, string? ciclo, CancellationToken ct = default);
+
+    /// <summary>Próximo ciclo a abrir según el calendario de facturación (null si no hay).</summary>
+    Task<SugerenciaAperturaDto?> SugerenciaAperturaAsync(long companyId, CancellationToken ct = default);
+
+    /// <summary>Deshace una apertura (borra planilla+ciclo) si no hay lecturas ni facturas.</summary>
+    Task<DeshacerAperturaResultadoDto> DeshacerAperturaAsync(long companyId, long periodoCicloId, string usuario, CancellationToken ct = default);
 
     /// <summary>Cierra un ciclo; sin forzar exige cero rutas pendientes.</summary>
     Task CerrarCicloAsync(long companyId, long periodoCicloId, string usuario, bool forzar, CancellationToken ct = default);

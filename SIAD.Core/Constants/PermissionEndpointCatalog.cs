@@ -417,6 +417,29 @@ public static class PermissionEndpointCatalog
             Action: PermissionAction.Create,
             HttpMethod: "POST",
             Route: "api/ventas/periodos-comerciales/{companyId}/abrir"),
+        // Fase B apertura-ciclo-único (2026-07-15): preview/sugerencia de la
+        // apertura integral y deshacer apertura.
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_abrir_preview",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/periodos-comerciales/{companyId}/abrir/preview"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_abrir_sugerencia",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/ventas/periodos-comerciales/{companyId}/abrir/sugerencia"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.PeriodosComerciales,
+            Resource: "periodos_comerciales__ventas_periodos_comerciales_companyid_ciclos_periodocicloid_deshacer",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/deshacer"),
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.PeriodosComerciales,
