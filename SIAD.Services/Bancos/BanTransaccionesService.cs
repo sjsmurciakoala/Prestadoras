@@ -874,6 +874,10 @@ CALL public.sp_registrar_partida_contable(
                 partidaId.Value,
                 usuario,
                 ct);
+
+            // Sin commit explícito el using hace rollback y la partida desaparece,
+            // dejando el kardex apuntando a una póliza inexistente (fk_ban_kardex_poliza).
+            await dbTransaction.CommitAsync(ct);
         }
         finally
         {

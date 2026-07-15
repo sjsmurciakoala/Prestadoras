@@ -206,6 +206,9 @@
                     DetalleAguaId = item.DetalleAguaId,
                     DetalleAlcantarilladoId = item.DetalleAlcantarilladoId,
                     DetalleOtrosId = item.DetalleOtrosId,
+                    DetallesAgua = item.DetallesAgua,
+                    DetallesAlcantarillado = item.DetallesAlcantarillado,
+                    DetallesOtros = item.DetallesOtros,
                     DistribucionAguaEditable = item.DistribucionAgua,
                     DistribucionAlcantarilladoEditable = item.DistribucionAlcantarillado,
                     DistribucionOtrosEditable = item.DistribucionOtros
@@ -274,13 +277,13 @@
         }
 
         var distribuciones = new List<PagoManualDistribucionDto>();
-        if (!TryAgregarDistribucion(seleccionado.DetalleAguaId, distAgua, "Agua", distribuciones))
+        if (!TryAgregarDistribucion(seleccionado.DetallesAgua, seleccionado.DetalleAguaId, distAgua, "Agua", distribuciones))
             return;
 
-        if (!TryAgregarDistribucion(seleccionado.DetalleAlcantarilladoId, distAlc, "Alcantarillado", distribuciones))
+        if (!TryAgregarDistribucion(seleccionado.DetallesAlcantarillado, seleccionado.DetalleAlcantarilladoId, distAlc, "Alcantarillado", distribuciones))
             return;
 
-        if (!TryAgregarDistribucion(seleccionado.DetalleOtrosId, distOtros, "Otros", distribuciones))
+        if (!TryAgregarDistribucion(seleccionado.DetallesOtros, seleccionado.DetalleOtrosId, distOtros, "Otros", distribuciones))
             return;
 
         if (distribuciones.Count == 0)
@@ -399,22 +402,55 @@
         }
     }
 
-    private bool TryAgregarDistribucion(long? detalleId, decimal monto, string etiqueta, List<PagoManualDistribucionDto> distribuciones)
+    private bool TryAgregarDistribucion(
+        List<PagoManualDistribucionDto> detalles,
+        long? detalleFallbackId,
+        decimal monto,
+        string etiqueta,
+        List<PagoManualDistribucionDto> distribuciones)
     {
         if (monto <= 0)
             return true;
 
-        if (detalleId is null || detalleId <= 0)
+        // Un bucket puede agrupar varios factura_detalle (p. ej. "Otros" = tasas);
+        // el monto se reparte detalle a detalle sin exceder el saldo de cada uno.
+        var fuentes = detalles.Count > 0
+            ? detalles
+            : detalleFallbackId is > 0
+                ? new List<PagoManualDistribucionDto> { new() { Id = detalleFallbackId.Value, ValorDistribuido = monto } }
+                : new List<PagoManualDistribucionDto>();
+
+        if (fuentes.Count == 0)
         {
             ShowValidation($"No se encontro el detalle de {etiqueta} para acreditar.", ToastRenderStyle.Danger);
             return false;
         }
 
-        distribuciones.Add(new PagoManualDistribucionDto
+        var restante = monto;
+        foreach (var fuente in fuentes)
         {
-            Id = detalleId.Value,
-            ValorDistribuido = monto
-        });
+            if (restante <= 0)
+                break;
+
+            var aplicar = Math.Min(restante, fuente.ValorDistribuido);
+            if (aplicar <= 0)
+                continue;
+
+            distribuciones.Add(new PagoManualDistribucionDto
+            {
+                Id = fuente.Id,
+                ValorDistribuido = aplicar
+            });
+            restante -= aplicar;
+        }
+
+        if (restante > 0.009m)
+        {
+            ShowValidation(
+                $"El monto de {etiqueta} ({monto:C2}) excede el saldo disponible ({monto - restante:C2}) de esos detalles.",
+                ToastRenderStyle.Danger);
+            return false;
+        }
 
         return true;
     }
@@ -484,12 +520,13 @@
 
     private void ShowToast(string message, ToastRenderStyle style)
     {
+        // Sin ProviderName: lo muestra el DxToastProvider global (sin nombre) de
+        // MainLayout. No existe ningún provider llamado "GlobalToast".
         ToastService.ShowToast(new ToastOptions
         {
             Title = "Posteo Manual",
             Text = message,
-            RenderStyle = style,
-            ProviderName = "GlobalToast"
+            RenderStyle = style
         });
     }
 

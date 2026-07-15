@@ -128,6 +128,12 @@ public class SaldoPosteoManualDto
     public long? DetalleAguaId { get; set; }
     public long? DetalleAlcantarilladoId { get; set; }
     public long? DetalleOtrosId { get; set; }
+
+    // Un bucket (p. ej. "Otros") puede agrupar varios factura_detalle; el pago
+    // debe distribuirse por detalle sin exceder el saldo individual de cada uno.
+    public List<PagoManualDistribucionDto> DetallesAgua { get; set; } = new();
+    public List<PagoManualDistribucionDto> DetallesAlcantarillado { get; set; } = new();
+    public List<PagoManualDistribucionDto> DetallesOtros { get; set; } = new();
 }
 
 public class PagoManualDistribucionDto

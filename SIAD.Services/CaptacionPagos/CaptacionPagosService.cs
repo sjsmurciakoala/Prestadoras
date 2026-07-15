@@ -873,14 +873,17 @@ public class CaptacionPagosService : ICaptacionPagosService
                     case "AGUA":
                         item.DistribucionAgua += monto;
                         item.DetalleAguaId ??= row.Ide;
+                        AgregarDetalleBucket(item.DetallesAgua, row.Ide, monto);
                         break;
                     case "ALCANTARILLADO":
                         item.DistribucionAlcantarillado += monto;
                         item.DetalleAlcantarilladoId ??= row.Ide;
+                        AgregarDetalleBucket(item.DetallesAlcantarillado, row.Ide, monto);
                         break;
                     default:
                         item.DistribucionOtros += monto;
                         item.DetalleOtrosId ??= row.Ide;
+                        AgregarDetalleBucket(item.DetallesOtros, row.Ide, monto);
                         break;
                 }
             }
@@ -891,6 +894,16 @@ public class CaptacionPagosService : ICaptacionPagosService
         }
 
         return result;
+    }
+
+    private static void AgregarDetalleBucket(List<PagoManualDistribucionDto> detalles, long? ide, decimal saldo)
+    {
+        if (ide is not > 0 || saldo <= 0)
+        {
+            return;
+        }
+
+        detalles.Add(new PagoManualDistribucionDto { Id = ide.Value, ValorDistribuido = saldo });
     }
 
     public async Task<ResponseModelDto> RegistrarPagoManualAsync(PagoManualCrearDto dto, CancellationToken ct = default)
