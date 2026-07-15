@@ -97,8 +97,9 @@ public sealed class PeriodosComercialesController : ControllerBase
     }
 
     /// <summary>
-    /// Abre el período del mes y su ciclo. Requiere que el período del mes
-    /// calendario anterior, si existe, esté cerrado.
+    /// Apertura integral (Fase B): valida secuencia, crea período+ciclo con la
+    /// fecha límite del calendario de facturación, genera la planilla de
+    /// lectura y devuelve el resumen con avisos.
     /// </summary>
     [HttpPost("{companyId:long}/abrir")]
     public async Task<IActionResult> Abrir(long companyId, [FromBody] AbrirPeriodoComercialRequest request,
@@ -113,19 +114,93 @@ public sealed class PeriodosComercialesController : ControllerBase
 
         try
         {
-            var periodoId = await periodoService.AbrirAsync(companyId, request.Anio, request.Mes,
-                request.Ciclo, usuario, ct);
-            return Ok(new { periodoComercialId = periodoId });
+            return Ok(await periodoService.AbrirAsync(companyId, request.Anio, request.Mes,
+                request.Ciclo, usuario, ct));
         }
         catch (PostgresException ex)
         {
-            // sp_adm_periodo_comercial_abrir valida secuencia/estados con RAISE EXCEPTION
+            // sp_adm_periodo_ciclo_abrir valida secuencia/estados con RAISE EXCEPTION
             return BadRequest(new { detail = ex.MessageText });
         }
         catch (Exception ex)
         {
             return StatusCode(StatusCodes.Status500InternalServerError,
-                new { detail = $"Error al abrir el período comercial: {ex.Message}" });
+                new { detail = $"Error al abrir el ciclo: {ex.Message}" });
+        }
+    }
+
+    /// <summary>Preview de la apertura: qué pasaría, sin escribir nada.</summary>
+    [HttpGet("{companyId:long}/abrir/preview")]
+    public async Task<IActionResult> PreviewApertura(long companyId, [FromQuery] int anio, [FromQuery] int mes,
+        [FromQuery] string? ciclo, CancellationToken ct)
+    {
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            return Ok(await periodoService.PreviewAperturaAsync(companyId, anio, mes, ciclo, ct));
+        }
+        catch (PostgresException ex)
+        {
+            return BadRequest(new { detail = ex.MessageText });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { detail = $"Error al calcular el preview de apertura: {ex.Message}" });
+        }
+    }
+
+    /// <summary>Próximo ciclo a abrir según el calendario de facturación (204 si no hay).</summary>
+    [HttpGet("{companyId:long}/abrir/sugerencia")]
+    public async Task<IActionResult> SugerenciaApertura(long companyId, CancellationToken ct)
+    {
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            var sugerencia = await periodoService.SugerenciaAperturaAsync(companyId, ct);
+            return sugerencia is null ? NoContent() : Ok(sugerencia);
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { detail = $"Error al calcular la sugerencia de apertura: {ex.Message}" });
+        }
+    }
+
+    /// <summary>
+    /// Deshace una apertura de ciclo (borra planilla + ciclo, y el período si
+    /// queda vacío). El SP lo rechaza si ya hay lecturas o facturas.
+    /// </summary>
+    [HttpPost("{companyId:long}/ciclos/{periodoCicloId:long}/deshacer")]
+    public async Task<IActionResult> DeshacerApertura(long companyId, long periodoCicloId, CancellationToken ct)
+    {
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
+        {
+            return Forbid();
+        }
+
+        var usuario = User?.Identity?.Name ?? "system";
+
+        try
+        {
+            return Ok(await periodoService.DeshacerAperturaAsync(companyId, periodoCicloId, usuario, ct));
+        }
+        catch (PostgresException ex)
+        {
+            return BadRequest(new { detail = ex.MessageText });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { detail = $"Error al deshacer la apertura: {ex.Message}" });
         }
     }
 

@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.PeriodosComerciales;
@@ -6,12 +7,19 @@ using SIAD.Data;
 namespace SIAD.Services.PeriodosComerciales;
 
 /// <summary>
-/// Implementación de períodos comerciales (F7). El listado se lee vía EF
-/// (filtro global de tenant); las transiciones de estado delegan en los SPs
+/// Implementación de períodos comerciales (F7 + Fase B). El listado se lee vía
+/// EF (filtro global de tenant); las transiciones de estado delegan en los SPs
 /// de BD, que validan checklist y sincronizan el espejo historialmes.
 /// </summary>
 public sealed class PeriodoComercialService : IPeriodoComercialService
 {
+    // Los SP de apertura devuelven jsonb con claves snake_case.
+    private static readonly JsonSerializerOptions JsonSnakeCase = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.SnakeCaseLower,
+        PropertyNameCaseInsensitive = true,
+    };
+
     private readonly SiadDbContext _context;
 
     public PeriodoComercialService(SiadDbContext context)
@@ -104,18 +112,90 @@ public sealed class PeriodoComercialService : IPeriodoComercialService
             .ToList();
     }
 
-    public async Task<long> AbrirAsync(long companyId, int anio, int mes, string? ciclo, string usuario,
-        CancellationToken ct = default)
+    public async Task<AperturaCicloResumenDto> AbrirAsync(long companyId, int anio, int mes, string? ciclo,
+        string usuario, CancellationToken ct = default)
     {
         ValidarCompanyId(companyId);
         usuario = NormalizarUsuario(usuario);
 
         var conn = _context.Database.GetDbConnection();
-        return await conn.ExecuteScalarAsync<long>(
+        var json = await conn.ExecuteScalarAsync<string>(
             new CommandDefinition(@"
-                SELECT public.sp_adm_periodo_comercial_abrir(@companyId, @anio, @mes, @ciclo, @usuario)",
+                SELECT public.sp_adm_periodo_ciclo_abrir(@companyId, @anio, @mes, @ciclo, @usuario)::text",
                 new { companyId, anio, mes, ciclo, usuario },
                 cancellationToken: ct));
+
+        return DeserializarResumen(json);
+    }
+
+    public async Task<AperturaCicloResumenDto> PreviewAperturaAsync(long companyId, int anio, int mes,
+        string? ciclo, CancellationToken ct = default)
+    {
+        ValidarCompanyId(companyId);
+
+        var conn = _context.Database.GetDbConnection();
+        var json = await conn.ExecuteScalarAsync<string>(
+            new CommandDefinition(@"
+                SELECT public.fn_adm_periodo_ciclo_preview(@companyId, @anio, @mes, @ciclo)::text",
+                new { companyId, anio, mes, ciclo },
+                cancellationToken: ct));
+
+        return DeserializarResumen(json);
+    }
+
+    public async Task<SugerenciaAperturaDto?> SugerenciaAperturaAsync(long companyId, CancellationToken ct = default)
+    {
+        ValidarCompanyId(companyId);
+
+        var conn = _context.Database.GetDbConnection();
+        var fila = await conn.QueryFirstOrDefaultAsync<(int anio, int mes, string ciclo, DateTime? fecha_lectura)?>(
+            new CommandDefinition(@"
+                SELECT anio, mes, ciclo, fecha_lectura
+                FROM public.fn_adm_periodo_ciclo_sugerido(@companyId)",
+                new { companyId },
+                cancellationToken: ct));
+
+        return fila is null
+            ? null
+            : new SugerenciaAperturaDto
+            {
+                Anio = fila.Value.anio,
+                Mes = fila.Value.mes,
+                Ciclo = fila.Value.ciclo,
+                FechaLectura = fila.Value.fecha_lectura is null
+                    ? null
+                    : DateOnly.FromDateTime(fila.Value.fecha_lectura.Value),
+            };
+    }
+
+    public async Task<DeshacerAperturaResultadoDto> DeshacerAperturaAsync(long companyId, long periodoCicloId,
+        string usuario, CancellationToken ct = default)
+    {
+        ValidarCompanyId(companyId);
+        usuario = NormalizarUsuario(usuario);
+
+        var conn = _context.Database.GetDbConnection();
+        var json = await conn.ExecuteScalarAsync<string>(
+            new CommandDefinition(@"
+                SELECT public.sp_adm_periodo_ciclo_deshacer(@companyId, @periodoCicloId, @usuario)::text",
+                new { companyId, periodoCicloId, usuario },
+                cancellationToken: ct));
+
+        return string.IsNullOrWhiteSpace(json)
+            ? new DeshacerAperturaResultadoDto()
+            : JsonSerializer.Deserialize<DeshacerAperturaResultadoDto>(json, JsonSnakeCase)
+              ?? new DeshacerAperturaResultadoDto();
+    }
+
+    private static AperturaCicloResumenDto DeserializarResumen(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json))
+        {
+            throw new InvalidOperationException("El SP de apertura no devolvió resumen.");
+        }
+
+        return JsonSerializer.Deserialize<AperturaCicloResumenDto>(json, JsonSnakeCase)
+               ?? throw new InvalidOperationException("No se pudo interpretar el resumen de apertura.");
     }
 
     public async Task CerrarCicloAsync(long companyId, long periodoCicloId, string usuario, bool forzar,

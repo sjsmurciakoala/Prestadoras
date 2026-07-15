@@ -53,6 +53,66 @@ public sealed record AbrirPeriodoComercialRequest(int Anio, int Mes, string? Cic
 
 public sealed record CerrarCicloRequest(bool Forzar);
 
+/// <summary>
+/// Resumen de la apertura integral de ciclo (Fase B apertura-ciclo-único):
+/// mapea el jsonb de sp_adm_periodo_ciclo_abrir / fn_adm_periodo_ciclo_preview
+/// (propiedades snake_case en el JSON).
+/// </summary>
+public sealed class AperturaCicloResumenDto
+{
+    public long? PeriodoComercialId { get; set; }
+    public long? PeriodoCicloId { get; set; }
+    public int Anio { get; set; }
+    public int Mes { get; set; }
+    public string Ciclo { get; set; } = string.Empty;
+
+    /// <summary>Solo en preview: motivo que impediría abrir (PERIODO_ANTERIOR_ABIERTO, PERIODO_CERRADO, CICLO_CERRADO).</summary>
+    public string? Bloqueo { get; set; }
+
+    public DateOnly? FechaLimite { get; set; }
+
+    /// <summary>EXISTENTE | ROLL_OVER | DESDE_CLIENTES | VACIA.</summary>
+    public string OrigenPlanilla { get; set; } = string.Empty;
+
+    public long ClientesPlanilla { get; set; }
+    public IReadOnlyList<RutaLectorDto> Rutas { get; set; } = Array.Empty<RutaLectorDto>();
+    public long RutasSinLector { get; set; }
+    public IReadOnlyList<CicloAbiertoRefDto> OtrosCiclosAbiertos { get; set; } = Array.Empty<CicloAbiertoRefDto>();
+    public IReadOnlyList<string> Avisos { get; set; } = Array.Empty<string>();
+}
+
+/// <summary>Ruta del ciclo con su lector asignado (null = sin lector).</summary>
+public sealed class RutaLectorDto
+{
+    public string Ruta { get; set; } = string.Empty;
+    public string? Lector { get; set; }
+}
+
+/// <summary>Referencia corta a otro ciclo abierto (aviso OTRO_CICLO_ABIERTO).</summary>
+public sealed class CicloAbiertoRefDto
+{
+    public int Anio { get; set; }
+    public int Mes { get; set; }
+    public string Ciclo { get; set; } = string.Empty;
+}
+
+/// <summary>Próximo ciclo a abrir según el calendario de facturación.</summary>
+public sealed class SugerenciaAperturaDto
+{
+    public int Anio { get; set; }
+    public int Mes { get; set; }
+    public string Ciclo { get; set; } = string.Empty;
+    public DateOnly? FechaLectura { get; set; }
+}
+
+/// <summary>Resultado de deshacer una apertura de ciclo.</summary>
+public sealed class DeshacerAperturaResultadoDto
+{
+    public long PlanillaEliminada { get; set; }
+    public bool CicloEliminado { get; set; }
+    public bool PeriodoEliminado { get; set; }
+}
+
 /// <summary>Aviso de períodos para el banner del portal (F7).</summary>
 public sealed class AvisoPeriodoDto
 {
