@@ -239,10 +239,11 @@
                 <DxTextBox @bind-Text="nuevo.Personas" />
             </DxFormLayoutItem>
             <DxFormLayoutItem Caption="Empleado">
+                @* Guarda el USUARIO de la cuadrilla (la app filtra por él). *@
                 <DxComboBox TData="UsuarioMiOrdenDto"
                             TValue="string"
                             Data="usuarios"
-                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
+                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Usuario)"
                             TextFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
                             DropDownStyle="DropDownStyle.DropDown"
                             AllowUserInput="true"
@@ -314,10 +315,12 @@
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
             </DxFormLayoutItem>
             <DxFormLayoutItem Caption="Empleado">
+                @* orden_trabajo.empleado debe llevar el USUARIO de la cuadrilla
+                   (no el nombre): la app filtra empleado = usuario del login. *@
                 <DxComboBox TData="UsuarioMiOrdenDto"
                             TValue="string"
                             Data="usuarios"
-                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
+                            ValueFieldName="@nameof(UsuarioMiOrdenDto.Usuario)"
                             TextFieldName="@nameof(UsuarioMiOrdenDto.Nombre)"
                             DropDownStyle="DropDownStyle.DropDown"
                             AllowUserInput="true"
