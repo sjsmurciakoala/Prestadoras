@@ -26,7 +26,7 @@ public interface ILectoresMobileService
     /// <summary>Revoca la sesión del token (logout). No falla si el token no existe.</summary>
     Task LogoutAsync(string? token, CancellationToken ct = default);
 
-    /// <summary>Ciclo pendiente de la ruta (CTE V3 + fallback sp_informacion_ciclo).</summary>
+    /// <summary>Ciclo pendiente de la ruta (períodos abiertos de adm_periodo_comercial, Fase D).</summary>
     Task<InformacionCicloDto> GetCicloAsync(string ruta, CancellationToken ct = default);
 
     /// <summary>Medidores de la ruta para el ciclo/período (sp_medidores_por_ruta_ws).</summary>

@@ -142,7 +142,10 @@ public sealed class LectoresMobileService : ILectoresMobileService
     }
 
     // -------------------------------------------------------------------------
-    // Ciclo (paridad GetCiclo: CTE V3 + fallback sp_informacion_ciclo)
+    // Ciclo (paridad GetCiclo). Fase D apertura-ciclo-único (2026-07-15): los
+    // períodos abiertos se leen de adm_periodo_comercial(_ciclo) — la fuente
+    // de verdad desde F7. Se retiran el espejo historialmes y el fallback
+    // sp_informacion_ciclo (el WS WCF viejo ya no existe en el servidor).
     // -------------------------------------------------------------------------
 
     public async Task<InformacionCicloDto> GetCicloAsync(string ruta, CancellationToken ct = default)
@@ -164,10 +167,13 @@ public sealed class LectoresMobileService : ILectoresMobileService
                       )
             ),
             periodos_abiertos as (
-                select hm.ano, hm.mes, btrim(hm.ciclo) as ciclo,
-                       coalesce(hm.fechaperiodo, hm.fecha::date, now()::date) as fecha_periodo
-                from historialmes hm
-                where hm.cerrarperiodo = 'P' and hm.cerrado = 'A'
+                select p.anio as ano, p.mes, pc.ciclo_codigo as ciclo,
+                       coalesce(pc.fecha_limite, (pc.fecha_apertura at time zone 'UTC')::date) as fecha_periodo
+                from public.adm_periodo_comercial_ciclo pc
+                join public.adm_periodo_comercial p
+                  on p.company_id = pc.company_id
+                 and p.periodo_comercial_id = pc.periodo_comercial_id
+                where p.status_id = 1 and pc.status_id = 1
             )
             select pa.ano as r_ano, pa.mes as r_mes, pa.ciclo as r_ciclo
             from periodos_abiertos pa
@@ -183,14 +189,6 @@ public sealed class LectoresMobileService : ILectoresMobileService
 
         var row = await conn.QueryFirstOrDefaultAsync<CicloRow>(
             new CommandDefinition(sqlV3, new { p_ruta = rutaNorm }, cancellationToken: ct));
-
-        if (row is null)
-        {
-            // Fallback legacy: sp_informacion_ciclo(ruta).
-            row = await conn.QueryFirstOrDefaultAsync<CicloRow>(new CommandDefinition(
-                "select r_ciclo, r_ano, r_mes from public.sp_informacion_ciclo(@p_ruta);",
-                new { p_ruta = rutaNorm }, cancellationToken: ct));
-        }
 
         if (row is null)
         {
