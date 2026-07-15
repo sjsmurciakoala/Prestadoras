@@ -209,8 +209,7 @@ else
             { 
                 Title = "Éxito", 
                 Text = "Caja abierta correctamente.", 
-                RenderStyle = ToastRenderStyle.Success, 
-                ProviderName = "GlobalToast" 
+                RenderStyle = ToastRenderStyle.Success
             });
             await CargarEstadoAsync();
         }
@@ -220,8 +219,7 @@ else
             { 
                 Title = "Error", 
                 Text = result?.Message ?? "Error al abrir caja.", 
-                RenderStyle = ToastRenderStyle.Danger, 
-                ProviderName = "GlobalToast" 
+                RenderStyle = ToastRenderStyle.Danger
             });
         }
     }
@@ -239,8 +237,7 @@ else
             { 
                 Title = "Éxito", 
                 Text = "Caja cerrada correctamente.", 
-                RenderStyle = ToastRenderStyle.Success, 
-                ProviderName = "GlobalToast" 
+                RenderStyle = ToastRenderStyle.Success
             });
             _resumen = null;
             _observacionCierre = null;
@@ -252,8 +249,7 @@ else
             { 
                 Title = "Error", 
                 Text = result?.Message ?? "Error al cerrar caja.", 
-                RenderStyle = ToastRenderStyle.Danger, 
-                ProviderName = "GlobalToast" 
+                RenderStyle = ToastRenderStyle.Danger
             });
         }
     }

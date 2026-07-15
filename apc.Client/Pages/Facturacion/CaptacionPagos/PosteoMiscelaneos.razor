@@ -277,7 +277,7 @@
             if (respuesta.Success)
             {
                 var mensaje = BuildSuccessMessage("Pago registrado exitosamente.", TryGetPolizaId(respuesta.Data));
-                ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = mensaje, RenderStyle = ToastRenderStyle.Success, ProviderName = "GlobalToast" });
+                ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = mensaje, RenderStyle = ToastRenderStyle.Success });
                 await BuscarRecibosAsync();
                 Limpiar();
             }
@@ -320,7 +320,7 @@
             if (respuesta.Success)
             {
                 var mensaje = BuildSuccessMessage("Pago reversado exitosamente.", TryGetPolizaId(respuesta.Data));
-                ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = mensaje, RenderStyle = ToastRenderStyle.Success, ProviderName = "GlobalToast" });
+                ToastService.ShowToast(new ToastOptions { Title = "Éxito", Text = mensaje, RenderStyle = ToastRenderStyle.Success });
                 await BuscarRecibosAsync();
                 Limpiar();
             }
