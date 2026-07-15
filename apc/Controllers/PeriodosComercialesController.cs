@@ -72,6 +72,33 @@ public sealed class PeriodosComercialesController : ControllerBase
         }
     }
 
+    /// <summary>
+    /// Planilla de lectura del ciclo (Fase C: reemplaza la consulta del
+    /// Auxiliar de Lectura eliminado).
+    /// </summary>
+    [HttpGet("{companyId:long}/ciclos/{periodoCicloId:long}/planilla")]
+    public async Task<IActionResult> PlanillaCiclo(long companyId, long periodoCicloId, CancellationToken ct)
+    {
+        if (!await accessValidator.ValidarAccesoAsync(companyId, ct))
+        {
+            return Forbid();
+        }
+
+        try
+        {
+            return Ok(await periodoService.PlanillaCicloAsync(companyId, periodoCicloId, ct));
+        }
+        catch (PostgresException ex)
+        {
+            return BadRequest(new { detail = ex.MessageText });
+        }
+        catch (Exception ex)
+        {
+            return StatusCode(StatusCodes.Status500InternalServerError,
+                new { detail = $"Error al cargar la planilla del ciclo: {ex.Message}" });
+        }
+    }
+
     /// <summary>Checklist del cierre del mes comercial.</summary>
     [HttpGet("{companyId:long}/{periodoComercialId:long}/checklist")]
     public async Task<IActionResult> Checklist(long companyId, long periodoComercialId, CancellationToken ct)

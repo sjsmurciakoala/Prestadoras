@@ -105,6 +105,16 @@ public sealed class PeriodosComercialesClient
         await LanzarSiErrorAsync(response, ct);
     }
 
+    /// <summary>Planilla de lectura del ciclo (Fase C, ex-Auxiliar de Lectura).</summary>
+    public async Task<IReadOnlyList<PlanillaCicloFilaDto>> PlanillaCicloAsync(long companyId, long periodoCicloId,
+        CancellationToken ct = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);
+        var resultado = await http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<PlanillaCicloFilaDto>>(
+            $"api/ventas/periodos-comerciales/{companyId}/ciclos/{periodoCicloId}/planilla", ct);
+        return resultado ?? Array.Empty<PlanillaCicloFilaDto>();
+    }
+
     public async Task<IReadOnlyList<AvisoPeriodoDto>> AvisosAsync(long companyId, CancellationToken ct = default)
     {
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(companyId);

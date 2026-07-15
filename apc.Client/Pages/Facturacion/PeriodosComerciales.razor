@@ -147,24 +147,31 @@
                                                         }
                                                     </td>
                                                     <td class="text-end">
+                                                        <div class="d-inline-flex gap-2">
+                                                        <DxButton Text="Planilla"
+                                                                  IconCssClass="bi bi-list-ol"
+                                                                  RenderStyle="ButtonRenderStyle.Info"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                                  Enabled="@(!cargando)"
+                                                                  title="Ver la planilla de lectura del ciclo"
+                                                                  Click="@(() => AbrirPlanillaAsync(periodo, ciclo))" />
                                                         @if (ciclo.StatusId == EstadoPeriodoComercial.Abierto)
                                                         {
-                                                            <div class="d-inline-flex gap-2">
-                                                                <DxButton Text="Deshacer"
-                                                                          IconCssClass="bi bi-arrow-counterclockwise"
-                                                                          RenderStyle="ButtonRenderStyle.Danger"
-                                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                                                          Enabled="@(!cargando)"
-                                                                          title="Deshacer la apertura (solo si el ciclo no tiene lecturas ni facturas)"
-                                                                          Click="@(() => PedirDeshacerApertura(periodo, ciclo))" />
-                                                                <DxButton Text="Cerrar ciclo"
-                                                                          IconCssClass="bi bi-check2-circle"
-                                                                          RenderStyle="ButtonRenderStyle.Secondary"
-                                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                                                          Enabled="@(!cargando)"
-                                                                          Click="@(() => AbrirCierreCicloAsync(periodo, ciclo))" />
-                                                            </div>
+                                                            <DxButton Text="Deshacer"
+                                                                      IconCssClass="bi bi-arrow-counterclockwise"
+                                                                      RenderStyle="ButtonRenderStyle.Danger"
+                                                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                                      Enabled="@(!cargando)"
+                                                                      title="Deshacer la apertura (solo si el ciclo no tiene lecturas ni facturas)"
+                                                                      Click="@(() => PedirDeshacerApertura(periodo, ciclo))" />
+                                                            <DxButton Text="Cerrar ciclo"
+                                                                      IconCssClass="bi bi-check2-circle"
+                                                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                                      Enabled="@(!cargando)"
+                                                                      Click="@(() => AbrirCierreCicloAsync(periodo, ciclo))" />
                                                         }
+                                                        </div>
                                                     </td>
                                                 </tr>
                                             }
@@ -195,6 +202,71 @@
                   ShowCloseButton="false"
                   CloseOnOutsideClick="false"
                   Closed="OnDeshacerConfirmClosed" />
+
+    @* ---------------- Popup planilla del ciclo (Fase C) ---------------- *@
+    <DxPopup @bind-Visible="planillaVisible"
+             Width="900px"
+             MaxWidth="95vw"
+             Scrollable="true"
+             CloseOnEscape="true"
+             CloseOnOutsideClick="true"
+             ShowFooter="false">
+        <HeaderContentTemplate>
+            <div class="d-flex flex-wrap align-items-center gap-3 p-1 w-100">
+                <div class="d-flex align-items-center gap-2">
+                    <i class="bi bi-list-ol fs-4 text-info"></i>
+                    <strong>Planilla ciclo @cicloPlanilla?.CicloCodigo — @NombreMes(periodoPlanilla?.Mes ?? 0) @periodoPlanilla?.Anio</strong>
+                </div>
+                <span class="badge text-bg-secondary">@planilla.Count fila(s)</span>
+                <span class="badge @(PlanillaPendientes > 0 ? "text-bg-danger" : "text-bg-success")">
+                    @PlanillaPendientes pendiente(s)
+                </span>
+                <DxCheckBox @bind-Checked="planillaSoloPendientes" CheckType="CheckType.Switch">
+                    Solo pendientes
+                </DxCheckBox>
+            </div>
+        </HeaderContentTemplate>
+        <BodyContentTemplate>
+            <div class="p-3">
+                @if (planilla.Count == 0)
+                {
+                    <div class="alert alert-info mb-0">El ciclo no tiene planilla de lectura.</div>
+                }
+                else
+                {
+                    <DxGrid Data="@PlanillaFiltrada" PageSize="15" ShowSearchBox="true" CssClass="border-0">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.Ruta)" Caption="Ruta" Width="90px" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.Secuencia)" Caption="Sec." Width="70px" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.Clave)" Caption="Clave" Width="110px" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.Cliente)" Caption="Cliente" MinWidth="160" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.Contador)" Caption="Medidor" Width="110px" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.LecturaAnterior)" Caption="Lect. ant." Width="95px" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.LecturaActual)" Caption="Lect. act." Width="95px" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.Consumo)" Caption="Consumo" Width="95px" />
+                            <DxGridDataColumn FieldName="@nameof(PlanillaCicloFilaDto.Usuario)" Caption="Estado" Width="130px">
+                                <CellDisplayTemplate Context="cell">
+                                    @{ var fila = (PlanillaCicloFilaDto)cell.DataItem; }
+                                    @if (fila.Pendiente)
+                                    {
+                                        <span class="badge text-bg-danger">Pendiente</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge text-bg-success" title="@fila.Usuario">Leída</span>
+                                        @if (fila.NumeroFactura is not null)
+                                        {
+                                            <i class="bi bi-receipt ms-1 text-muted" title="Factura @fila.NumeroFactura"></i>
+                                        }
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                }
+            </div>
+        </BodyContentTemplate>
+    </DxPopup>
 
     @* ---------------- Popup apertura integral (Fase B) ---------------- *@
     <DxPopup @bind-Visible="aperturaVisible"
@@ -450,6 +522,15 @@
     private bool deshacerConfirmVisible;
     private string deshacerConfirmTexto = string.Empty;
     private PeriodoComercialCicloDto? cicloADeshacer;
+    private bool planillaVisible;
+    private bool planillaSoloPendientes;
+    private PeriodoComercialDto? periodoPlanilla;
+    private PeriodoComercialCicloDto? cicloPlanilla;
+    private IReadOnlyList<PlanillaCicloFilaDto> planilla = Array.Empty<PlanillaCicloFilaDto>();
+
+    private int PlanillaPendientes => planilla.Count(f => f.Pendiente);
+    private IEnumerable<PlanillaCicloFilaDto> PlanillaFiltrada =>
+        planillaSoloPendientes ? planilla.Where(f => f.Pendiente) : planilla;
     private PeriodoComercialDto? periodoSeleccionado;
     private PeriodoComercialCicloDto? cicloSeleccionado;
     private IReadOnlyList<RutaCicloDto> rutasCiclo = Array.Empty<RutaCicloDto>();
@@ -597,6 +678,28 @@
         catch (Exception ex)
         {
             MostrarError(ex.Message);
+        }
+        finally
+        {
+            cargando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task AbrirPlanillaAsync(PeriodoComercialDto periodo, PeriodoComercialCicloDto ciclo)
+    {
+        periodoPlanilla = periodo;
+        cicloPlanilla = ciclo;
+        cargando = true;
+        try
+        {
+            planilla = await PeriodosClient.PlanillaCicloAsync(empresaId, ciclo.PeriodoCicloId);
+            planillaSoloPendientes = false;
+            planillaVisible = true;
+        }
+        catch (Exception ex)
+        {
+            MostrarError($"No fue posible cargar la planilla: {ex.Message}");
         }
         finally
         {

@@ -94,17 +94,9 @@ public static class SidebarNavigationDefinition
                     NavigateUrl = "/medidores",
                     MatchPrefixes = ["/medidores"]
                 },
-                new SidebarNavItem
-                {
-                    Id = "auxiliares",
-                    Text = "Auxiliares",
-                    IconCssClass = "bi bi-file-earmark-text",
-                    MatchPrefixes = ["/auxiliares"],
-                    Children =
-                    [
-                        new SidebarNavItem { Id = "aux-lectura", Text = "Auxiliar de Lectura", NavigateUrl = "/auxiliares/auxiliar-lectura", MatchPrefixes = ["/auxiliares/auxiliar-lectura"], IconCssClass = "bi bi-pencil-square" }
-                    ]
-                },
+                // "Auxiliares" (Auxiliar de Lectura) eliminado en la Fase C del
+                // plan apertura-ciclo-único (2026-07-15): la apertura integral
+                // genera la planilla y su consulta vive en Períodos comerciales.
                 new SidebarNavItem
                 {
                     Id = "tarifario-v3",
