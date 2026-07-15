@@ -1,4 +1,4 @@
-@page "/clientes/{Id:int}"
+﻿@page "/clientes/{Id:int}"
 @attribute [Authorize]
 
 @using Microsoft.AspNetCore.Components
@@ -117,28 +117,28 @@
                 <div class="d-flex flex-wrap gap-2">
                     <DxButton Text="Estado de cuenta" Click="AbrirEstadoCuenta"
                         IconCssClass="bi bi-receipt" RenderStyle="ButtonRenderStyle.Primary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                     <DxButton Text="Historial de consumo" Click="AbrirHistoricoConsumo"
                         IconCssClass="bi bi-bar-chart-line" RenderStyle="ButtonRenderStyle.Secondary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                     <DxButton Text="Configuración tarifaria" Click="AbrirServiciosTarifario"
                         IconCssClass="bi bi-diagram-3" RenderStyle="ButtonRenderStyle.Primary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                     <DxButton Text="Prueba de cálculo" Click="AbrirPruebaCalculo"
                         IconCssClass="bi bi-calculator" RenderStyle="ButtonRenderStyle.Primary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                     <DxButton Text="Foto medidor" Click="AbrirFotoMedidor"
                         IconCssClass="bi bi-camera" RenderStyle="ButtonRenderStyle.Secondary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                     <DxButton Text="Abono especial" Click="AbrirAbonoEspecial"
                         IconCssClass="bi bi-coin" RenderStyle="ButtonRenderStyle.Secondary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                     <DxButton Text="Acción cobranza" Click="AbrirAccionesCobranza"
                         IconCssClass="bi bi-journal-text" RenderStyle="ButtonRenderStyle.Primary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                     <DxButton Text="Bitácora Estado" Click="AbrirEstadoLog"
                         IconCssClass="bi bi-clock-history" RenderStyle="ButtonRenderStyle.Secondary"
-                        RenderStyleMode="ButtonRenderStyleMode.Outline" CssClass="btn-modern" />
+                        RenderStyleMode="ButtonRenderStyleMode.Outline" />
                 </div>
             </div>
 
