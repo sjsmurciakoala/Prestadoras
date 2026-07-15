@@ -19,12 +19,16 @@ public class OrdenesService : IOrdenesService
     private sealed record CatalogoItem(string Codigo, string Descripcion);
     private sealed record EstadoFallback(string Codigo, string Nombre, bool PermiteAsignacion);
 
+    // Semántica del canal legacy (app Mi Orden de Trabajo, backend 8086): la app
+    // solo descarga órdenes con estado 'P' Y empleado estampado. 'A' NO significa
+    // "asignada" sino atendida — una orden en 'A' desaparece de la app. Por eso
+    // el único estado válido al asignar es 'P'.
     private static readonly EstadoFallback[] EstadosFallback =
     {
-        new("P", "Pendiente", false),
-        new("A", "Asignada", true),
-        new("E", "Ejecutada", true),
-        new("C", "Cancelada", true)
+        new("P", "Pendiente", true),
+        new("A", "Atendida", false),
+        new("E", "Ejecutada", false),
+        new("C", "Cancelada", false)
     };
 
     public OrdenesService(SiadDbContext context)
@@ -432,10 +436,9 @@ public class OrdenesService : IOrdenesService
                 orden.empleado = dto.Usuario;
             }
 
-            if (!string.IsNullOrWhiteSpace(dto.Estado))
-            {
-                orden.estado = dto.Estado;
-            }
+            // El canal de la app exige estado 'P' + empleado para que la orden
+            // se descargue; sin estado explícito la asignación queda en 'P'.
+            orden.estado = string.IsNullOrWhiteSpace(dto.Estado) ? "P" : dto.Estado.Trim();
         }
 
         await _context.SaveChangesAsync(cancellationToken);
@@ -691,7 +694,7 @@ public class OrdenesService : IOrdenesService
         return codigo switch
         {
             "P" => "Pendiente",
-            "A" => "Asignada",
+            "A" => "Atendida",
             "E" => "Ejecutada",
             "C" => "Cancelada",
             _ => string.IsNullOrWhiteSpace(codigo) ? "Sin estado" : codigo
