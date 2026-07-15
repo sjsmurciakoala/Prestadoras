@@ -1,8 +1,35 @@
 # Plan — Apertura única de ciclo + calendario de facturación + retiro del legacy
 
-**Fecha:** 2026-07-14 · **Estado:** aprobado, pendiente de ejecución
+**Fecha:** 2026-07-14 · **Estado:** EJECUTADO (5 de 5 fases implementadas, 2026-07-15)
 **Contexto previo:** F7 (períodos comercial/contable, PR #8), app lectores L3 (apc.MobileApi, PR #10),
 deploy completo a 172.16.0.9 (2026-07-08).
+
+## 0. Estado de ejecución (2026-07-15)
+
+| Fase | PR | Rama | Estado |
+|---|---|---|---|
+| A — Calendario de facturación | #22 | feat/calendario-facturacion | ✔ implementada; carga real de SIMAFI (2,541 filas) incluida |
+| B — Apertura única e integral | #23 | feat/apertura-ciclo-integral | ✔ implementada; validada por el usuario en pantalla y con la copia de 0.9 |
+| C — Eliminar Auxiliar de Lectura | #24 | feat/eliminar-auxiliar-lectura | ✔ implementada (−1,959 líneas); planilla vive en Períodos comerciales |
+| E — Rutas por catálogo en Lectores | #25 | feat/lectores-ruta-catalogo | ✔ implementada |
+| D — Retiro del legacy | #26 | feat/retiro-legacy-historialmes | ✔ implementada (ver hallazgos abajo) |
+
+**Ramas apiladas: mergear en orden #22 → #23 → #24 → #25 → #26.**
+Los 5 DDL (2 de A, 1 de B, 1 de D + el de Almacén de julio) van a 172.16.0.9 en la
+próxima ventana de deploy, junto con el publish del portal y de apc.MobileApi.
+
+**Hallazgos del gate D0 (2026-07-15, IIS de AGUAST140/172.16.0.9):**
+- El WS WCF viejo (APCService.svc, app Java) **no está publicado** en 0.9 — el gate
+  de "tráfico cero" quedó resuelto por inexistencia: nadie lee `historialmes`.
+- Sitios reales: portal:80, apc.BancosWs:8087, apc.MobileApi.Lectores:44817 (la API
+  nueva, swagger verificado) y apc.MobileApi:8086 = **backend de la app de órdenes de
+  trabajo** (apc-AppMiTrabajo, com.apc.ordenes_trabajo_apc) — ajeno a este plan, no se toca.
+- `usuarioapc` quedó **fuera** del DDL de la Fase D a propósito: se retira en la
+  ventana de ops SOLO tras confirmar que el backend de órdenes de trabajo no la usa.
+- Validación integral con copia real de 0.9 (`siad_v3_copia09` local): cierre de junio +
+  `sp_adm_periodo_ciclo_abrir(2026,7,'19')` → roll-over de 473 clientes, 5 rutas todas
+  con lector, fecha límite 27-jul del calendario. Backup completo:
+  `Database/Backups/siad_v3_09_2026-07-15.backup`.
 
 ---
 

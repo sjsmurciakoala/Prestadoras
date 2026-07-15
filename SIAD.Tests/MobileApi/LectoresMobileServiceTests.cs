@@ -125,12 +125,17 @@ public sealed class LectoresMobileServiceTests : IntegrationTestBase, IDisposabl
         var ciclo = await servicio.GetCicloAsync(Ruta);
 
         Skip.IfNot(ciclo.Encontrado, "La ruta de prueba no tiene ciclo abierto en esta BD.");
-        // Debe coincidir con historialmes (la misma fuente que el CTE del WS).
+        // Fase D: la fuente de verdad es adm_periodo_comercial(_ciclo), la
+        // misma que ahora consulta el CTE del servicio.
         var esperado = await Connection.QueryFirstOrDefaultAsync<(int ano, int mes, string ciclo)>(new CommandDefinition(@"
-            select hm.ano, hm.mes, btrim(hm.ciclo)::int as ciclo
-            from historialmes hm
-            where hm.cerrarperiodo = 'P' and hm.cerrado = 'A'
-            order by hm.ano desc, hm.mes desc, coalesce(hm.fechaperiodo, hm.fecha::date, now()::date) desc
+            select p.anio as ano, p.mes, pc.ciclo_codigo::int as ciclo
+            from public.adm_periodo_comercial_ciclo pc
+            join public.adm_periodo_comercial p
+              on p.company_id = pc.company_id
+             and p.periodo_comercial_id = pc.periodo_comercial_id
+            where p.status_id = 1 and pc.status_id = 1
+            order by p.anio desc, p.mes desc,
+                     coalesce(pc.fecha_limite, (pc.fecha_apertura at time zone 'UTC')::date) desc
             limit 1;", transaction: Transaction));
         Assert.Equal(esperado.ano, ciclo.Anio);
         Assert.Equal(esperado.mes, ciclo.Mes);

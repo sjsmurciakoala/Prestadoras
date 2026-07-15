@@ -54,33 +54,9 @@ public sealed class PeriodoCierreF7Tests : IntegrationTestBase
             RETURNING period_id",
             new { CompanyId, Code = code, Desde = desde, Hasta = hasta, Status = statusId }, Transaction));
 
-    // ── Migración y funciones de consulta ──────────────────────────────────
-
-    [SkippableFact]
-    public async Task Migracion_replica_cada_fila_de_historialmes_con_estado_equivalente()
-    {
-        var filasLegacy = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT count(*) FROM public.historialmes", transaction: Transaction));
-        Skip.If(filasLegacy == 0, "historialmes está vacía en la BD de pruebas.");
-
-        var sinReplica = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
-            SELECT count(*)
-            FROM public.historialmes hm
-            WHERE NOT EXISTS (
-                SELECT 1
-                FROM public.adm_periodo_comercial p
-                JOIN public.adm_periodo_comercial_ciclo pc
-                  ON pc.company_id = p.company_id
-                 AND pc.periodo_comercial_id = p.periodo_comercial_id
-                WHERE p.company_id = @CompanyId
-                  AND p.anio = hm.ano::int
-                  AND p.mes = hm.mes::int
-                  AND pc.ciclo_codigo = btrim(hm.ciclo)
-                  AND pc.status_id = CASE WHEN COALESCE(hm.cerrarperiodo, 'P') = 'P' THEN 1 ELSE 2 END)",
-            new { CompanyId }, Transaction));
-
-        Assert.Equal(0, sinReplica);
-    }
+    // ── Funciones de consulta ───────────────────────────────────────────────
+    // (El test de la migración historialmes→modelo nuevo se retiró junto con
+    //  la tabla y el espejo en la Fase D del plan apertura-ciclo-único.)
 
     [SkippableFact]
     public async Task Fn_periodo_actual_devuelve_el_abierto_mas_reciente()
@@ -122,29 +98,18 @@ public sealed class PeriodoCierreF7Tests : IntegrationTestBase
         Assert.False(mesInexistente);
     }
 
-    // ── Ciclo de vida comercial + espejo historialmes ──────────────────────
+    // ── Ciclo de vida comercial ─────────────────────────────────────────────
+    // (Los asserts del espejo historialmes se retiraron en la Fase D.)
 
     [Fact]
-    public async Task Flujo_comercial_completo_abre_cierra_y_sincroniza_el_espejo()
+    public async Task Flujo_comercial_completo_abre_y_cierra_ciclo_y_mes()
     {
         var periodoId = await AbrirComercialAsync(2099, 1, "99");
-
-        // Espejo: la fila legacy nace abierta con la convención del WS (A/P)
-        var espejo = await Connection.QueryFirstAsync<(string cerrado, string cerrarperiodo)>(new CommandDefinition(@"
-            SELECT cerrado::text, cerrarperiodo::text FROM public.historialmes
-            WHERE ano = 2099 AND mes = 1 AND ciclo = '99'", transaction: Transaction));
-        Assert.Equal("A", espejo.cerrado);
-        Assert.Equal("P", espejo.cerrarperiodo);
+        Assert.True(periodoId > 0);
 
         // Ciclo '99' no existe en el catálogo → sin rutas que validar → cierra sin forzar
         var cicloId = await CicloIdAsync(periodoId, "99");
         await CerrarCicloAsync(cicloId);
-
-        espejo = await Connection.QueryFirstAsync<(string cerrado, string cerrarperiodo)>(new CommandDefinition(@"
-            SELECT cerrado::text, cerrarperiodo::text FROM public.historialmes
-            WHERE ano = 2099 AND mes = 1 AND ciclo = '99'", transaction: Transaction));
-        Assert.Equal("C", espejo.cerrado);
-        Assert.Equal("C", espejo.cerrarperiodo);
 
         // Con todos los ciclos cerrados el checklist queda en verde y el mes cierra
         var fallas = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
@@ -198,20 +163,24 @@ public sealed class PeriodoCierreF7Tests : IntegrationTestBase
         Assert.Contains("PERIODO_CERRADO", ex.MessageText);
     }
 
-    [Fact]
-    public async Task Espejo_elimina_la_fila_legacy_al_borrar_el_ciclo()
+    // Fase D apertura-ciclo-único (2026-07-15): historialmes, sus triggers
+    // espejo y sp_informacion_ciclo quedaron retirados de la BD.
+    [SkippableFact]
+    public async Task Legacy_historialmes_y_su_espejo_quedaron_retirados()
     {
-        var periodoId = await AbrirComercialAsync(2099, 10, "99");
+        Skip.IfNot(Fixture.Available, "BD de pruebas no disponible.");
 
-        await Connection.ExecuteAsync(new CommandDefinition(@"
-            DELETE FROM public.adm_periodo_comercial_ciclo
-            WHERE company_id = @CompanyId AND periodo_comercial_id = @PeriodoId",
-            new { CompanyId, PeriodoId = periodoId }, Transaction));
-
-        var existe = await Connection.ExecuteScalarAsync<bool>(new CommandDefinition(
-            "SELECT EXISTS (SELECT 1 FROM public.historialmes WHERE ano = 2099 AND mes = 10 AND ciclo = '99')",
+        var restos = await Connection.QueryFirstAsync<(bool tabla, bool espejo, bool spinfo)>(new CommandDefinition(@"
+            SELECT to_regclass('public.historialmes') IS NOT NULL AS tabla,
+                   EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                           WHERE n.nspname = 'public' AND p.proname LIKE 'fn_adm_periodo%espejo%') AS espejo,
+                   EXISTS (SELECT 1 FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+                           WHERE n.nspname = 'public' AND p.proname = 'sp_informacion_ciclo') AS spinfo",
             transaction: Transaction));
-        Assert.False(existe);
+
+        Assert.False(restos.tabla, "historialmes debía retirarse en la Fase D.");
+        Assert.False(restos.espejo, "Las funciones espejo debían retirarse en la Fase D.");
+        Assert.False(restos.spinfo, "sp_informacion_ciclo debía retirarse en la Fase D.");
     }
 
     // ── Regresión del motor tarifario (riesgo mayor de la fase) ────────────

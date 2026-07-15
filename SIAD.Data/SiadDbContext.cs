@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Entities;
@@ -138,8 +138,6 @@ public partial class SiadDbContext : DbContext
     public virtual DbSet<grupoestado> grupoestados { get; set; }
 
     public virtual DbSet<grupoestadodetalle> grupoestadodetalles { get; set; }
-
-    public virtual DbSet<historialme> historialmes { get; set; }
 
     public virtual DbSet<historicomedicion> historicomedicions { get; set; }
 
@@ -990,46 +988,6 @@ public partial class SiadDbContext : DbContext
                 .HasForeignKey(d => d.idgrupo)
                 .OnDelete(DeleteBehavior.ClientSetNull)
                 .HasConstraintName("fk_idgrupo");
-        });
-
-        modelBuilder.Entity<historialme>(entity =>
-        {
-            entity.HasKey(e => new { e.ano, e.mes, e.ciclo }).HasName("historialmes_pkey");
-
-            entity.Property(e => e.ano).HasPrecision(4);
-            entity.Property(e => e.mes).HasPrecision(2);
-            entity.Property(e => e.ciclo)
-                .HasMaxLength(10)
-                .IsFixedLength();
-            entity.Property(e => e._2_Sep)
-                .HasMaxLength(32767)
-                .HasColumnName("2-Sep");
-            entity.Property(e => e.cerrado)
-                .HasMaxLength(1)
-                .HasDefaultValueSql("NULL::bpchar");
-            entity.Property(e => e.cerrarperiodo)
-                .HasMaxLength(1)
-                .HasDefaultValueSql("'P'::bpchar");
-            entity.Property(e => e.fecha).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.fechaperiodo).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.ruta)
-                .HasMaxLength(10)
-                .HasDefaultValueSql("NULL::bpchar")
-                .IsFixedLength();
-            entity.Property(e => e.sep)
-                .HasPrecision(1)
-                .HasDefaultValueSql("NULL::numeric");
-            entity.Property(e => e.sep2)
-                .HasPrecision(1)
-                .HasDefaultValueSql("'0'::numeric");
-            entity.Property(e => e.usuarioapertura)
-                .HasMaxLength(150)
-                .HasDefaultValueSql("NULL::bpchar")
-                .IsFixedLength();
-            entity.Property(e => e.usuariocierre)
-                .HasMaxLength(20)
-                .HasDefaultValueSql("NULL::bpchar")
-                .IsFixedLength();
         });
 
         modelBuilder.Entity<historicomedicion>(entity =>

@@ -5,8 +5,9 @@ namespace SIAD.Data;
 
 // Período comercial — Fase 7 (plan 2026-07-02).
 // Esquema en Database/ddl_v3/20260704_ci_fase7_periodo_cierre.sql.
-// adm_periodo_comercial(_ciclo) reemplazan a historialmes como fuente de
-// verdad del mes comercial; el espejo → historialmes lo mantiene un trigger
+// adm_periodo_comercial(_ciclo) son la fuente de verdad del mes comercial.
+// (El espejo → historialmes de la transición F7 se retiró en la Fase D del
+// plan apertura-ciclo-único, 2026-07-15, junto con la tabla; lo mantenía un trigger
 // de BD durante la transición (el WS de lectores la lee inline y no cambia).
 public partial class SiadDbContext
 {
