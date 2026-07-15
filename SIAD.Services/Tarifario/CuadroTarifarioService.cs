@@ -285,16 +285,18 @@ public class CuadroTarifarioService : ICuadroTarifarioService
         }
         else
         {
+            // regla_tarifaria_id es identity: lo genera la base (la secuencia
+            // adm_regla_tarifaria_seq nunca existió — mismo bug que el cuadro).
             const string sqlInsert = @"
                 INSERT INTO adm_regla_tarifaria (
-                    regla_tarifaria_id, company_id, cuadro_tarifario_id,
+                    company_id, cuadro_tarifario_id,
                     tipo_regla_tarifaria_id, orden,
                     consumo_minimo, consumo_maximo,
                     monto_fijo, monto_unitario, porcentaje,
                     servicio_referencia_id, parametros,
                     status_id, created_by
                 ) VALUES (
-                    nextval('adm_regla_tarifaria_seq'), @companyId, @cuadroId,
+                    @companyId, @cuadroId,
                     @tipoReglaId, @orden,
                     @consumoMin, @consumoMax,
                     @montoFijo, @montoUnitario, @porcentaje,
