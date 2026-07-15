@@ -1,0 +1,52 @@
+/* Solo lo específico de esta página; el look de grids vive en siad-grid.css. */
+
+.calfac-page ::deep .calfac-anio-combo {
+    width: 110px;
+}
+
+/* El contenedor scrollea en horizontal cuando la vista (mes/timeline) no cabe
+   — pantallas chicas incluidas; el body de la página nunca scrollea de lado. */
+.calfac-scheduler-wrap {
+    overflow-x: auto;
+}
+
+.calfac-page ::deep .calfac-scheduler {
+    height: 620px;
+    min-width: 640px;
+}
+
+/* Tablet/móvil: menos alto para que el grid quede a un scroll corto. */
+@media (max-width: 991.98px) {
+    .calfac-page ::deep .calfac-scheduler {
+        height: 480px;
+    }
+}
+
+@media (max-width: 575.98px) {
+    .calfac-page ::deep .calfac-scheduler {
+        height: 420px;
+    }
+}
+
+.calfac-dot {
+    display: inline-block;
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    margin-right: 4px;
+    vertical-align: baseline;
+}
+
+/* Colores alineados a las etiquetas estándar del scheduler usadas en la página
+   (4 = verde lectura, 2 = naranja facturación, 1 = rojo vencimiento). */
+.calfac-dot-lectura {
+    background: #2e8b57;
+}
+
+.calfac-dot-factura {
+    background: #e8a33d;
+}
+
+.calfac-dot-vence {
+    background: #c74a4a;
+}

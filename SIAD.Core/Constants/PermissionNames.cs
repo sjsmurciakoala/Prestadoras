@@ -45,6 +45,11 @@ public static class PermissionResources
         // Condiciones de lectura (app_lectores 2026-07-06): catálogo por empresa
         // que administra el portal y consume la app; recurso propio.
         public const string CondicionesLectura = "condiciones_lectura";
+
+        // Calendario de facturación (Fase A apertura-ciclo-único 2026-07-14):
+        // fechas de lectura/facturación/vencimiento por año/mes/ciclo
+        // (calendariopro). Recurso propio: editarlo mueve vencimientos reales.
+        public const string CalendarioFacturacion = "calendario_facturacion";
     }
 
     public static class Contabilidad

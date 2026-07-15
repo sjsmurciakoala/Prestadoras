@@ -331,6 +331,14 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
+                    Id = "fact-calendario-facturacion",
+                    Text = "Calendario de facturación",
+                    IconCssClass = "bi bi-calendar-week",
+                    NavigateUrl = "/facturacion/calendario-facturacion",
+                    MatchPrefixes = ["/facturacion/calendario-facturacion"]
+                },
+                new SidebarNavItem
+                {
                     Id = "fact-condiciones-lectura",
                     Text = "Condiciones de lectura",
                     IconCssClass = "bi bi-list-check",
