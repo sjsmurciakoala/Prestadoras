@@ -194,11 +194,14 @@ public sealed class PeriodoComercialService : IPeriodoComercialService
 
         var conn = _context.Database.GetDbConnection();
         // Mismo criterio de match de ciclo que los SP de apertura/deshacer
-        // (fn_adm_ciclo_norm tolera '1' vs '01' en datos legacy).
+        // (fn_adm_ciclo_norm tolera '1' vs '01' en datos legacy). El nombre
+        // del cliente cae a cliente_maestro cuando la fila de planilla trae
+        // propietario vacío (datos migrados de SIMAFI) — mismo fallback que
+        // tenía el Auxiliar de Lectura retirado.
         var filas = await conn.QueryAsync<PlanillaCicloFilaDto>(
             new CommandDefinition(@"
                 SELECT btrim(h.clave)          AS Clave,
-                       h.propietario           AS Cliente,
+                       COALESCE(NULLIF(btrim(h.propietario), ''), cm.maestro_cliente_nombre) AS Cliente,
                        btrim(h.ruta)           AS Ruta,
                        btrim(h.contador)       AS Contador,
                        btrim(h.secuencia)      AS Secuencia,
@@ -218,6 +221,9 @@ public sealed class PeriodoComercialService : IPeriodoComercialService
                  AND h.ano = p.anio
                  AND h.mes = p.mes
                  AND public.fn_adm_ciclo_norm(h.ciclo) = pc.ciclo_codigo
+                LEFT JOIN public.cliente_maestro cm
+                  ON cm.company_id = h.company_id
+                 AND cm.maestro_cliente_clave = btrim(h.clave)
                 WHERE pc.company_id = @companyId
                   AND pc.periodo_ciclo_id = @periodoCicloId
                 ORDER BY h.ruta, h.secuencia, h.clave",
