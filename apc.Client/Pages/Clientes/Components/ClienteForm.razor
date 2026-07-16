@@ -48,7 +48,7 @@
                     <div class="p-3">
                         <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
                             <DxFormLayoutGroup Caption="Identificación" ColSpanMd="12">
-                                <DxFormLayoutItem Caption="@(codigoAutomatico && !IsEditMode ? "Código Sistema" : "Código Sistema *")" ColSpanMd="3">
+                                <DxFormLayoutItem Caption="@(codigoAutomatico && !IsEditMode ? "Código Sistema" : "Código Sistema *")" ColSpanMd="4">
                                     <DxTextBox @bind-Text="Modelo.Clave"
                                                NullText="@codigoNullText" />
                                     <ValidationMessage For="() => Modelo.Clave" />
@@ -57,12 +57,22 @@
                                         <div class="text-muted small mt-1">Vacío = automático al guardar (siguiente: @proximoCodigo).</div>
                                     }
                                 </DxFormLayoutItem>
+                                @* Máscaras con dígitos OPCIONALES (metacaracter 9): con '0' obligatorio
+                                   DevExpress valida el campo aunque el modelo no lo exija, y los datos
+                                   migrados de SIMAFI (RTN/teléfonos vacíos o con otro formato) bloqueaban
+                                   el guardado con mensajes genéricos en inglés. La obligatoriedad real la
+                                   ponen los DataAnnotations del DTO; el texto del error de formato es el
+                                   InvalidInputNotificationText (dxdocs: Masked Editor Validation). *@
                                 <DxFormLayoutItem Caption="DNI / Identidad" ColSpanMd="4">
-                                    <DxMaskedInput @bind-Value="Modelo.Dni" Mask="0000-0000-00000" NullText="0000-0000-00000" />
+                                    <DxMaskedInput @bind-Value="Modelo.Dni" Mask="9999-9999-99999" NullText="0000-0000-00000">
+                                        <DxTextMaskProperties InvalidInputNotificationText="El DNI debe tener 13 dígitos (formato 0000-0000-00000)." />
+                                    </DxMaskedInput>
                                     <ValidationMessage For="() => Modelo.Dni" />
                                 </DxFormLayoutItem>
-                                <DxFormLayoutItem Caption="RTN Personal" ColSpanMd="5">
-                                    <DxMaskedInput @bind-Value="Modelo.Rtn" Mask="00000000000000" NullText="14 Dígitos" />
+                                <DxFormLayoutItem Caption="RTN Personal" ColSpanMd="4">
+                                    <DxMaskedInput @bind-Value="Modelo.Rtn" Mask="99999999999999" NullText="14 dígitos (opcional)">
+                                        <DxTextMaskProperties InvalidInputNotificationText="El RTN debe tener 14 dígitos." />
+                                    </DxMaskedInput>
                                 </DxFormLayoutItem>
 
                                 <DxFormLayoutItem Caption="Nombres *" ColSpanMd="6">
@@ -87,10 +97,14 @@
 
                             <DxFormLayoutGroup Caption="Contacto y Dirección" ColSpanMd="12" CssClass="mt-3">
                                 <DxFormLayoutItem Caption="Teléfono Fijo" ColSpanMd="3">
-                                    <DxMaskedInput @bind-Value="Modelo.Telefono" Mask="(000) 0000-0000" />
+                                    <DxMaskedInput @bind-Value="Modelo.Telefono" Mask="(999) 9999-9999">
+                                        <DxTextMaskProperties InvalidInputNotificationText="El teléfono debe tener el formato (000) 0000-0000." />
+                                    </DxMaskedInput>
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Celular" ColSpanMd="3">
-                                    <DxMaskedInput @bind-Value="Modelo.TelefonoMovil" Mask="(000) 0000-0000" />
+                                    <DxMaskedInput @bind-Value="Modelo.TelefonoMovil" Mask="(999) 9999-9999">
+                                        <DxTextMaskProperties InvalidInputNotificationText="El celular debe tener el formato (000) 0000-0000." />
+                                    </DxMaskedInput>
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Correo Electrónico" ColSpanMd="6">
                                     <DxTextBox @bind-Text="Modelo.Email" NullText="correo@ejemplo.com" />
@@ -198,7 +212,7 @@
                                 <DxFormLayoutItem Caption="Indicativo ruta" ColSpanMd="12">
                                     <Template>
                                         <div class="indicativo-preview">@IndicativoRutaPreview</div>
-                                        <div class="text-muted small mt-1">Formado por: Ciclo-Barrio-Ruta/Libreta-Secuencia. Si no hay secuencia, se usa "----".</div>
+                                        <div class="text-muted small mt-1">Formado por: Ciclo-Barrio-Libreta-Secuencia. Si no hay secuencia, se usa "----".</div>
                                     </Template>
                                 </DxFormLayoutItem>
 
@@ -313,10 +327,14 @@
                                     <DxTextBox @bind-Text="Modelo.EmpresaNombre" NullText="Nombre legal de la empresa" />
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="RTN Empresa" ColSpanMd="4">
-                                    <DxMaskedInput @bind-Value="Modelo.EmpresaRtn" Mask="00000000000000" NullText="14 Dígitos" />
+                                    <DxMaskedInput @bind-Value="Modelo.EmpresaRtn" Mask="99999999999999" NullText="14 dígitos (opcional)">
+                                        <DxTextMaskProperties InvalidInputNotificationText="El RTN de la empresa debe tener 14 dígitos." />
+                                    </DxMaskedInput>
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Teléfono Empresa" ColSpanMd="4">
-                                    <DxMaskedInput @bind-Value="Modelo.EmpresaTelefono" Mask="(000) 0000-0000" />
+                                    <DxMaskedInput @bind-Value="Modelo.EmpresaTelefono" Mask="(999) 9999-9999">
+                                        <DxTextMaskProperties InvalidInputNotificationText="El teléfono de la empresa debe tener el formato (000) 0000-0000." />
+                                    </DxMaskedInput>
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Dirección Fiscal" ColSpanMd="8">
                                     <DxTextBox @bind-Text="Modelo.EmpresaDireccion" />

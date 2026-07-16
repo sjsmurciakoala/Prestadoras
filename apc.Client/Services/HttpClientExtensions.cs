@@ -151,6 +151,33 @@ public static class HttpClientExtensions
             using var document = JsonDocument.Parse(contenido);
             var root = document.RootElement;
 
+            // ValidationProblemDetails (400 de ModelState): el título genérico
+            // ("One or more validation errors occurred.") no le dice nada al
+            // usuario — se listan los mensajes reales por campo.
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+            {
+                var mensajes = new List<string>();
+                foreach (var campo in errors.EnumerateObject())
+                {
+                    if (campo.Value.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var msg in campo.Value.EnumerateArray())
+                        {
+                            var texto = msg.GetString();
+                            if (!string.IsNullOrWhiteSpace(texto))
+                            {
+                                mensajes.Add(texto);
+                            }
+                        }
+                    }
+                }
+
+                if (mensajes.Count > 0)
+                {
+                    return string.Join(" ", mensajes.Distinct());
+                }
+            }
+
             if (root.TryGetProperty("detail", out var detail))
             {
                 return detail.GetString();
