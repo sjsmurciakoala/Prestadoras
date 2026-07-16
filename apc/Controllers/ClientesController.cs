@@ -48,6 +48,40 @@ public class ClientesController : ControllerBase
     }
 
 
+    // ── Código de cliente automático y secuencia sugerida (2026-07-16) ────────
+
+    [HttpGet("codigo-config")]
+    public async Task<IActionResult> GetCodigoConfig(CancellationToken cancellationToken)
+    {
+        return Ok(await _clientesService.ObtenerCodigoConfigAsync(cancellationToken));
+    }
+
+    [HttpPut("codigo-config")]
+    public async Task<IActionResult> PutCodigoConfig([FromBody] CodigoClienteConfigDto dto, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return ValidationProblem(ModelState);
+        }
+
+        try
+        {
+            var usuario = User?.Identity?.Name ?? "system";
+            return Ok(await _clientesService.GuardarCodigoConfigAsync(dto, usuario, cancellationToken));
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("siguiente-secuencia")]
+    public async Task<IActionResult> GetSiguienteSecuencia([FromQuery] int cicloId, [FromQuery] string libreta, CancellationToken cancellationToken)
+    {
+        var secuencia = await _clientesService.SugerirSecuenciaAsync(cicloId, libreta, cancellationToken);
+        return Ok(new { secuencia });
+    }
+
     [HttpGet("{id:int}/foto-medidor/header")]
 
     public async Task<IActionResult> GetFotoMedidorHeader(int id, CancellationToken cancellationToken)

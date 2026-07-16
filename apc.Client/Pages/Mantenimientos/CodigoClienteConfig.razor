@@ -1,0 +1,137 @@
+@page "/mantenimientos/codigo-cliente"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Clientes
+@using apc.Client.Services.Clientes
+@inject ClientesClient ClientesClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Código de cliente</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CodigoClienteToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Código de cliente automático</h2>
+            <p class="page-subtitle">Generador del código del sistema al crear clientes (directo o desde solicitud)</p>
+        </div>
+    </div>
+
+    <div class="alert alert-secondary border-0 d-flex align-items-center mb-3">
+        <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+        <div>
+            El código se arma como <strong>prefijo + correlativo</strong> rellenado con ceros hasta la longitud total
+            (ej. <code>09</code> + 7 dígitos = <code>090809488</code>, el esquema heredado de SIMAFI). Solo actúa cuando
+            el campo "Código Sistema" se deja <strong>vacío</strong> al crear; digitar un código manual sigue permitido.
+        </div>
+    </div>
+
+    <div class="modern-card" style="max-width: 720px;">
+        <EditForm Model="@config" OnValidSubmit="GuardarAsync" Context="CodigoFormContext">
+            <DataAnnotationsValidator />
+            <div class="p-3">
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem ColSpanMd="12" Context="cc0">
+                        <DxCheckBox @bind-Checked="config.Activo" CheckType="CheckType.Switch">
+                            Generación automática habilitada
+                        </DxCheckBox>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Prefijo" ColSpanMd="3" Context="cc1">
+                        <DxTextBox @bind-Text="config.Prefijo" NullText="09" MaxLength="5" />
+                        <ValidationMessage For="() => config.Prefijo" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Longitud total" ColSpanMd="3" Context="cc2">
+                        <DxSpinEdit @bind-Value="config.Longitud" MinValue="@((short)4)" MaxValue="@((short)20)" />
+                        <ValidationMessage For="() => config.Longitud" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Próximo correlativo" ColSpanMd="6" Context="cc3">
+                        <DxSpinEdit @bind-Value="config.Siguiente" MinValue="@(1L)" />
+                        <ValidationMessage For="() => config.Siguiente" />
+                        <div class="text-muted small mt-1">
+                            Si un código generado ya existiera (datos migrados), el generador salta solo al máximo existente + 1.
+                        </div>
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Próximo código que saldrá" ColSpanMd="12" Context="cc4">
+                        <div class="indicativo-preview fw-bold">@PreviewCodigo</div>
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                <ValidationSummary />
+
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="@(isSaving ? "Guardando..." : "Guardar")"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              SubmitFormOnClick="true"
+                              Enabled="!isSaving" />
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+@code {
+    private CodigoClienteConfigDto config = new();
+    private bool isSaving;
+
+    private string PreviewCodigo
+    {
+        get
+        {
+            var prefijo = (config.Prefijo ?? string.Empty).Trim().ToUpperInvariant();
+            var ancho = Math.Max(1, config.Longitud - prefijo.Length);
+            return config.Activo
+                ? prefijo + config.Siguiente.ToString().PadLeft(ancho, '0')
+                : "(generación desactivada — el código será manual y obligatorio)";
+        }
+    }
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var actual = await ClientesClient.ObtenerCodigoConfigAsync();
+            if (actual is not null && actual.Configurado)
+            {
+                config = actual;
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast($"No se pudo cargar la configuración: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            isSaving = true;
+            var guardada = await ClientesClient.GuardarCodigoConfigAsync(config);
+            if (guardada is not null)
+            {
+                config = guardada;
+            }
+
+            Toast("Configuración guardada.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast(ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Toast(string texto, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Código de cliente",
+            Text = texto,
+            RenderStyle = estilo,
+            ProviderName = "CodigoClienteToast"
+        });
+}

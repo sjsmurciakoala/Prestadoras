@@ -1032,6 +1032,9 @@ public partial class SiadDbContext
 
         // Libretas globales — libro del lector, sin ciclo (2026-07-16)
         ConfigureLibretasModel(modelBuilder);
+
+        // Generador del código de cliente por empresa (2026-07-16)
+        ConfigureCodigoClienteModel(modelBuilder);
     }
 }
 

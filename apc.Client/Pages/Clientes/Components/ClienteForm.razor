@@ -48,10 +48,14 @@
                     <div class="p-3">
                         <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
                             <DxFormLayoutGroup Caption="Identificación" ColSpanMd="12">
-                                <DxFormLayoutItem Caption="Código Sistema *" ColSpanMd="3">
+                                <DxFormLayoutItem Caption="@(codigoAutomatico && !IsEditMode ? "Código Sistema" : "Código Sistema *")" ColSpanMd="3">
                                     <DxTextBox @bind-Text="Modelo.Clave"
-                                               NullText="Ingrese el código" />
+                                               NullText="@codigoNullText" />
                                     <ValidationMessage For="() => Modelo.Clave" />
+                                    @if (codigoAutomatico && !IsEditMode && string.IsNullOrWhiteSpace(Modelo.Clave))
+                                    {
+                                        <div class="text-muted small mt-1">Vacío = automático al guardar (siguiente: @proximoCodigo).</div>
+                                    }
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="DNI / Identidad" ColSpanMd="4">
                                     <DxMaskedInput @bind-Value="Modelo.Dni" Mask="0000-0000-00000" NullText="0000-0000-00000" />
@@ -179,7 +183,16 @@
                                     }
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Secuencia" ColSpanMd="4">
-                                    <DxTextBox @bind-Text="Modelo.Secuencia" />
+                                    <div class="d-flex gap-2 align-items-start">
+                                        <DxTextBox @bind-Text="Modelo.Secuencia" CssClass="flex-grow-1" />
+                                        <DxButton Text="Sugerir"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  Enabled="@(Modelo.CicloId.HasValue && !string.IsNullOrWhiteSpace(Modelo.Libreta))"
+                                                  Click="SugerirSecuenciaAsync"
+                                                  title="Siguiente número de caminata (+10) en esta libreta y ciclo" />
+                                    </div>
+                                    <div class="text-muted small mt-1">Orden de caminata, de 10 en 10 (los huecos permiten intercalar).</div>
                                 </DxFormLayoutItem>
 
                                 <DxFormLayoutItem Caption="Indicativo ruta" ColSpanMd="12">
@@ -477,6 +490,9 @@
     private List<int> categoriasPermitidas = new();
 
     private string IndicativoRutaPreview => ConstruirIndicativoPreview();
+    private bool codigoAutomatico;
+    private string? proximoCodigo;
+    private string codigoNullText = "Ingrese el código";
     private int? medidorIdCargado;
     private string? tipoUsoCargado;
     private int? categoriaCargada;
@@ -541,7 +557,8 @@
             CargarServicios(),
             CargarTiposUso(),
             CargarAbogados(),
-            CargarBarrios()
+            CargarBarrios(),
+            CargarCodigoConfigAsync()
         };
 
         await Task.WhenAll(tareas);
@@ -603,6 +620,54 @@
         try { ciclos = await RutasClient.GetCiclosAsync(); }
         catch { ciclos = new(); }
     }
+    private async Task CargarCodigoConfigAsync()
+    {
+        if (IsEditMode)
+        {
+            return; // el código nunca se regenera en edición
+        }
+
+        try
+        {
+            var config = await ClientesClient.ObtenerCodigoConfigAsync();
+            codigoAutomatico = config?.Configurado == true && config.Activo;
+            proximoCodigo = config?.ProximoCodigo;
+            codigoNullText = codigoAutomatico
+                ? $"Automático ({proximoCodigo})"
+                : "Ingrese el código";
+        }
+        catch
+        {
+            codigoAutomatico = false;
+        }
+    }
+
+    private async Task SugerirSecuenciaAsync()
+    {
+        if (!Modelo.CicloId.HasValue || string.IsNullOrWhiteSpace(Modelo.Libreta))
+        {
+            return;
+        }
+
+        try
+        {
+            var sugerida = await ClientesClient.SugerirSecuenciaAsync(Modelo.CicloId.Value, Modelo.Libreta);
+            if (!string.IsNullOrWhiteSpace(sugerida))
+            {
+                Modelo.Secuencia = sugerida;
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                Title = "Secuencia",
+                Text = $"No se pudo sugerir la secuencia: {ex.Message}",
+                RenderStyle = ToastRenderStyle.Danger
+            });
+        }
+    }
+
     private async Task CargarLibretasAsync()
     {
         try
