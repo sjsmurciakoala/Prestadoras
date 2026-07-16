@@ -1029,6 +1029,9 @@ public partial class SiadDbContext
 
         // Catálogo global de impuestos y sus tasas con vigencia (2026-07-14)
         ConfigureImpuestosModel(modelBuilder);
+
+        // Libretas globales — libro del lector, sin ciclo (2026-07-16)
+        ConfigureLibretasModel(modelBuilder);
     }
 }
 

@@ -64,6 +64,7 @@ public class ClientesService : IClientesService
         }
 
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        await ValidarLibretaCatalogoAsync(dto.Libreta, ct);
         var indicativoRuta = ConstruirIndicativoRuta(dto.CicloId, dto.BarrioCodigo, dto.Libreta, dto.Secuencia);
 
         var maestro = new cliente_maestro
@@ -208,6 +209,7 @@ public class ClientesService : IClientesService
         }
 
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        await ValidarLibretaCatalogoAsync(dto.Libreta, ct);
         var indicativoRuta = ConstruirIndicativoRuta(dto.CicloId, dto.BarrioCodigo, dto.Libreta, dto.Secuencia);
         var numeroConvenio = dto.TieneConvenio == true ? dto.NumeroConvenio : null;
         var numeroContrato = dto.TieneContrato == true ? dto.NumeroContrato : null;
@@ -1256,10 +1258,12 @@ ORDER BY orden, servicio";
     }
 
     /// <summary>
-    /// Construye el codigo de ruta de 5 digitos = ciclo (2d) + libreta (3d).
-    /// Por regla de negocio: prefijo siempre coincide con el ciclo. La "libreta"
-    /// son los 3 digitos finales (1..999) que el usuario tipea para identificar
-    /// la subruta dentro del ciclo.
+    /// Segmento ruta/libreta del indicativo (posición 3 de ciclo-barrio-libreta-secuencia).
+    /// Libretas globales (2026-07-16): la libreta viene del catálogo adm_libreta
+    /// (códigos alfanuméricos como 00L1..00L5, espejo SIMAFI) y se usa TAL CUAL
+    /// en mayúsculas — el ciclo ya viaja en el segmento 1, no se prefija.
+    /// Compatibilidad: una libreta SOLO dígitos conserva la derivación legacy
+    /// CC+LLL (ciclo 2d + libreta 3d, o la ruta completa de 5 dígitos).
     /// Devuelve null si no hay datos suficientes.
     /// Lanza ArgumentException si los inputs estan fuera de rango.
     /// </summary>
@@ -1294,9 +1298,16 @@ ORDER BY orden, servicio";
 
         if (!libretaLimpia.All(char.IsDigit))
         {
-            throw new ArgumentException(
-                $"La libreta '{libreta}' debe contener solo digitos.",
-                nameof(libreta));
+            // Libreta de catálogo (00L1..00L5): mayúsculas, solo letras/dígitos
+            // — el indicativo se separa por '-' y un guion rompería el split.
+            if (!libretaLimpia.All(char.IsLetterOrDigit))
+            {
+                throw new ArgumentException(
+                    $"La libreta '{libreta}' admite solo letras y números.",
+                    nameof(libreta));
+            }
+
+            return libretaLimpia.ToUpperInvariant();
         }
 
         var cicloStr = cicloId.Value.ToString().PadLeft(CicloLongitud, '0');
@@ -1324,6 +1335,29 @@ ORDER BY orden, servicio";
 
         var libretaStr = libretaLimpia.PadLeft(LibretaLongitud, '0');
         return cicloStr + libretaStr;
+    }
+
+    /// <summary>
+    /// Una libreta alfanumérica debe existir ACTIVA en adm_libreta. El combo del
+    /// formulario solo ofrece catálogo; esto cubre llamadas directas a la API.
+    /// Vacía o solo dígitos (esquema legacy CC+LLL) no pasa por catálogo.
+    /// </summary>
+    private async Task ValidarLibretaCatalogoAsync(string? libreta, CancellationToken ct)
+    {
+        var limpia = Limpiar(libreta);
+        if (string.IsNullOrWhiteSpace(limpia) || limpia.All(char.IsDigit))
+        {
+            return;
+        }
+
+        var codigo = limpia.ToUpperInvariant();
+        var existe = await _context.adm_libretas
+            .AsNoTracking()
+            .AnyAsync(l => l.activo && l.codigo == codigo, ct);
+        if (!existe)
+        {
+            throw new ArgumentException($"La libreta '{codigo}' no existe en el catálogo o está inactiva.");
+        }
     }
 
     private static string? ExtraerLibreta(string? indicativoRuta)

@@ -14,6 +14,7 @@
 @inject CobranzaClient CobranzaClient
 @inject MedidoresClient MedidoresClient
 @inject RutasClient RutasClient
+@inject apc.Client.Services.Libretas.LibretasClient LibretasClient
 @inject SolicitudesClient SolicitudesClient
 @inject ILogger<ClienteForm> Logger
 @inject IToastNotificationService ToastService
@@ -27,7 +28,10 @@
         {
             <div class="alert alert-danger mb-3 shadow-sm">
                 <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atención</h6>
-                <DxValidationSummary />
+                @* DxValidationSummary no existe en DevExpress Blazor: el tag se
+                   renderizaba como HTML desconocido vacío y la alerta salía muda.
+                   El componente correcto es el ValidationSummary estándar. *@
+                <ValidationSummary />
             </div>
         }
 
@@ -152,27 +156,26 @@
                                 <DxFormLayoutItem Caption="Ciclo de lectura" ColSpanMd="4">
                                     <DxComboBox Data="@ciclos"
                                                 @bind-Value="Modelo.CicloId"
-                                                @bind-Value:after="OnCicloChanged"
                                                 ValueFieldName="Id"
                                                 TextFieldName="Descripcion"
                                                 NullText="Seleccione Ciclo" />
                                 </DxFormLayoutItem>
 
-                                <DxFormLayoutItem Caption="Ruta / Libreta" ColSpanMd="4">
-                                    <DxComboBox Data="@rutas"
+                                <DxFormLayoutItem Caption="Libreta" ColSpanMd="4">
+                                    <DxComboBox Data="@libretas"
                                                 @bind-Value="Modelo.Libreta"
                                                 ValueFieldName="Codigo"
                                                 TextFieldName="Display"
-                                                NullText="Seleccione ruta"
-                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                                Enabled="@(Modelo.CicloId.HasValue)" />
-                                    @if (!Modelo.CicloId.HasValue)
+                                                NullText="Seleccione libreta"
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                    <ValidationMessage For="() => Modelo.Libreta" />
+                                    @if (libretas.Count == 0)
                                     {
-                                        <div class="text-muted small mt-1">Seleccione un ciclo para cargar rutas.</div>
+                                        <div class="text-muted small mt-1">No hay libretas en el catálogo (menú Libretas).</div>
                                     }
-                                    else if (rutas.Count == 0)
+                                    else if (!string.IsNullOrWhiteSpace(Modelo.Libreta) && !Modelo.CicloId.HasValue)
                                     {
-                                        <div class="text-muted small mt-1">No hay rutas disponibles para el ciclo seleccionado.</div>
+                                        <div class="text-warning small mt-1">Seleccione también el ciclo: la libreta se lee dentro de un ciclo.</div>
                                     }
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Secuencia" ColSpanMd="4">
@@ -465,7 +468,7 @@
     private List<SolicitudCategoriaDto> categorias = new();
     private List<SolicitudCategoriaDto> categoriasTodas = new();
     private List<CicloLookupDto> ciclos = new();
-    private List<RutaOption> rutas = new();
+    private List<RutaOption> libretas = new();
     private List<ServicioLookupDto> servicios = new();
     private List<TipoUsoLookupDto> tiposUso = new();
     private List<AbogadoLookupDto> abogados = new();
@@ -475,7 +478,6 @@
 
     private string IndicativoRutaPreview => ConstruirIndicativoPreview();
     private int? medidorIdCargado;
-    private int? cicloCargado;
     private string? tipoUsoCargado;
     private int? categoriaCargada;
     private bool PuedeGuardar => true;
@@ -513,11 +515,9 @@
             await CargarCategoriasPorTipoAsync();
         }
 
-        if (Modelo.CicloId != cicloCargado)
-        {
-            cicloCargado = Modelo.CicloId;
-            await CargarRutasAsync();
-        }
+        // Libretas globales (2026-07-16): el catálogo no depende del ciclo,
+        // solo hay que garantizar que la libreta ya guardada aparezca en el combo.
+        EnsureLibretaSeleccionada();
     }
 
     protected override async Task OnInitializedAsync()
@@ -537,6 +537,7 @@
             CargarMedidoresAsync(),
             CargarCategorias(),
             CargarCiclos(),
+            CargarLibretasAsync(),
             CargarServicios(),
             CargarTiposUso(),
             CargarAbogados(),
@@ -544,7 +545,7 @@
         };
 
         await Task.WhenAll(tareas);
-        await CargarRutasAsync();
+        EnsureLibretaSeleccionada();
     }
 
     private async Task CargarMedidoresAsync()
@@ -602,29 +603,21 @@
         try { ciclos = await RutasClient.GetCiclosAsync(); }
         catch { ciclos = new(); }
     }
-    private async Task CargarRutasAsync()
+    private async Task CargarLibretasAsync()
     {
-        if (!Modelo.CicloId.HasValue)
-        {
-            rutas = new();
-            EnsureRutaSeleccionada();
-            return;
-        }
-
         try
         {
-            var lista = await RutasClient.GetAsync(new RutaFilterDto { CodCiclo = Modelo.CicloId });
-            rutas = lista
-                .Where(r => r.Activo)
-                .Select(r => new RutaOption(r.CodRuta, BuildRutaDisplay(r)))
+            var lista = await LibretasClient.GetActivasAsync();
+            libretas = lista
+                .Select(l => new RutaOption(
+                    l.Codigo,
+                    string.IsNullOrWhiteSpace(l.Descripcion) ? l.Codigo : $"{l.Codigo} - {l.Descripcion}"))
                 .ToList();
         }
         catch
         {
-            rutas = new();
+            libretas = new();
         }
-
-        EnsureRutaSeleccionada();
     }
     private async Task CargarServicios()
     {
@@ -693,11 +686,6 @@
         await CargarCategoriasPorTipoAsync();
     }
 
-    private async Task OnCicloChanged()
-    {
-        await CargarRutasAsync();
-    }
-
     private string ConstruirIndicativoPreview()
     {
         var ciclo = Modelo.CicloId?.ToString()?.Trim() ?? string.Empty;
@@ -732,23 +720,18 @@
             ? (limpio.Length > longitud ? limpio[^longitud..] : limpio.PadLeft(longitud, relleno))
             : (limpio.Length > longitud ? limpio[..longitud] : limpio.PadRight(longitud, relleno));
     }
-    private void EnsureRutaSeleccionada()
+    private void EnsureLibretaSeleccionada()
     {
+        // Libretas legacy (códigos numéricos viejos) o inactivas: se agregan
+        // como opción visible para que el combo muestre lo que el cliente tiene
+        // guardado, aunque ya no se ofrezcan para clientes nuevos.
         if (string.IsNullOrWhiteSpace(Modelo.Libreta))
             return;
 
-        if (rutas.Any(r => r.Codigo == Modelo.Libreta))
+        if (libretas.Any(l => l.Codigo == Modelo.Libreta))
             return;
 
-        rutas.Insert(0, new RutaOption(Modelo.Libreta, Modelo.Libreta));
-    }
-
-    private static string BuildRutaDisplay(RutaListItemDto ruta)
-    {
-        if (string.IsNullOrWhiteSpace(ruta.Descripcion))
-            return ruta.CodRuta;
-
-        return $"{ruta.CodRuta} - {ruta.Descripcion}";
+        libretas.Insert(0, new RutaOption(Modelo.Libreta, Modelo.Libreta));
     }
 
     private sealed record RutaOption(string Codigo, string Display);

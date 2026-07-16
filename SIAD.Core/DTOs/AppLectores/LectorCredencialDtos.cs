@@ -19,7 +19,6 @@ public record LectorCredencialListItemDto(
     string Codigo,
     string? Nombre,
     string? Ruta,
-    int? CodCiclo,
     bool Activo);
 
 public sealed class LectorCredencialEditDto
@@ -41,7 +40,9 @@ public sealed class LectorCredencialEditDto
     [StringLength(20, ErrorMessage = "La ruta no puede superar los 20 caracteres.")]
     public string? Ruta { get; set; }
 
-    public int? CodCiclo { get; set; }
+    // Libretas globales (2026-07-16): el lector NO lleva ciclo — su libreta
+    // atraviesa todos los ciclos y el ciclo pendiente lo resuelve GetCiclo por
+    // períodos abiertos (igual que usuarioapc en SIMAFI).
 
     public bool Activo { get; set; } = true;
 }

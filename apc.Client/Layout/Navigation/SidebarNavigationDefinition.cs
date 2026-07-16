@@ -64,11 +64,11 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "rutas",
-                    Text = "Rutas",
-                    IconCssClass = "bi bi-map",
-                    NavigateUrl = "/rutas",
-                    MatchPrefixes = ["/rutas"]
+                    Id = "libretas",
+                    Text = "Libretas",
+                    IconCssClass = "bi bi-journal-bookmark",
+                    NavigateUrl = "/libretas",
+                    MatchPrefixes = ["/libretas"]
                 },
                 new SidebarNavItem
                 {
