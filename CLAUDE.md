@@ -10,7 +10,7 @@ The current code and `HODSOFT_DEVEXPRESS.sln` are authoritative. `readme.md` and
 
 - Solution build: `dotnet build HODSOFT_DEVEXPRESS.sln` (the only VS Code task is `dotnet-build-solution`).
 - Run portal locally: `dotnet run --project apc/apc.csproj` (hosts the WASM client at `apc.Client` as a static asset and exposes the API).
-- On-prem publish: `./publish-onprem.ps1` (defaults to publishing the portal; `-Solo portal|ws|todos`, `-Output <path>`). Targets `win-x64`, framework-dependent, ReadyToRun.
+- On-prem publish: `./publish-onprem.ps1` (`-Solo portal|ws|bancosws|mobileapi|todos`, default `todos`; `-Output <path>`). Targets `win-x64`, framework-dependent, ReadyToRun. For a real deploy follow [docs/RUNBOOK_DEPLOY_2026-07.md](docs/RUNBOOK_DEPLOY_2026-07.md) and publish each host explicitly rather than relying on `-Solo todos`.
 - Connection string lives in `apc/appsettings.json` under `ConnectionStrings:DefaultConnection` (Npgsql/Azure Postgres). Identity migrations write to schema `identity` (`__IdentityMigrationsHistory`). The SIAD functional DB does **not** use EF migrations — see Database section.
 - Default culture is forced to `es-HN` in `apc/Program.cs`; preserve it.
 - Run tests: `$env:SIAD_TEST_DB = '<connection string>'; dotnet test SIAD.Tests/SIAD.Tests.csproj` (without `SIAD_TEST_DB` the integration tests are `Skipped`). Optional `$env:SIAD_TEST_COMPANY_ID` (default `2`). Each test wraps its work in `BEGIN ... ROLLBACK` so the target DB stays clean.
@@ -21,21 +21,21 @@ Tests: see `SIAD.Tests/` (xUnit integration tests against a real Postgres). No l
 
 ## Solution layout
 
-Seven projects, all .NET 9:
+Nine projects, all .NET 9:
 
 | Project        | Role                                                                            |
 |----------------|---------------------------------------------------------------------------------|
 | `apc`          | ASP.NET Core host. Identity, controllers, DevExpress Reporting, PDF Viewer. Razor Components with **InteractiveServer** render mode and the WASM client mounted as `AdditionalAssemblies`. |
 | `apc.Client`   | Blazor WebAssembly. `DevExpress.Blazor`, PDF viewer, Skia PDF renderer. Pages and HTTP clients live here. |
 | `SIAD.Core`    | Entities (scaffolded from Postgres), DTOs, constants (`PermissionNames`, `RoleNames`, `PermissionEndpointCatalog`), tenancy contracts. |
-| `SIAD.Data`    | `SiadDbContext` (partial across `SiadDbContext.cs`, `*.Tenancy.cs`, `*.Accounting.cs`, `*.Cobranza.cs`, `*.Mantenimientos.cs`, `*.NotasCreditoDebito.cs`, `*.SarCompliance.cs`), Npgsql config. |
+| `SIAD.Data`    | `SiadDbContext`, partial across one file per module (`SiadDbContext.cs` plus `*.Tenancy.cs`, `*.Accounting.cs`, `*.Almacen.cs`, `*.BancosWs.cs`, `*.Cobranza.cs`, `*.CodigoCliente.cs`, `*.CondicionesLectura.cs`, `*.Impuestos.cs`, `*.IntegracionContable.cs`, `*.Libretas.cs`, `*.Mantenimientos.cs`, `*.NotasCreditoDebito.cs`, `*.PeriodoComercial.cs`, `*.SarCompliance.cs`), Npgsql config. New module tables go in a new/matching partial, not in the scaffolded body. |
 | `SIAD.Services`| Per-module domain services (Clientes, Cobranza, Contabilidad, Bancos, Tarifario, etc.), AutoMapper profiles (assembly-scanned), DI in `ServiceRegistration.cs`. |
 | `SIAD.Reports` | DevExpress Reporting bootstrap, per-company `ReportStorageWebExtension`, SQL validation, templates. |
-| `SIAD.Tests`   | xUnit integration tests using Npgsql + Dapper. Each test runs inside `BEGIN ... ROLLBACK` so the DB stays clean. Requires the `SIAD_TEST_DB` env var with a Postgres connection string; without it the tests are marked `Skipped`. Covers idempotency (UUID), double emission, NC/ND V3, mora, tercera edad with monthly cap, CAI correlative advancement, validation, SAR catalogs. |
+| `SIAD.Tests`   | xUnit integration tests using Npgsql + Dapper. Each test runs inside `BEGIN ... ROLLBACK` so the DB stays clean. Requires the `SIAD_TEST_DB` env var with a Postgres connection string; without it the tests are marked `Skipped`. Covers billing V3 (emission, idempotency, mora, tercera edad, CAI), NC/ND, integración contable (asientos, lote, saldos oficiales, periodos/cierres F7), WS bancario (golden files), apertura de ciclo, condiciones de lectura, snapshots offline, SAR. |
+| `apc.BancosWs` | Standalone net9 WS host (WS bancario SIMAFI, F8). No Identity/Blazor; own auth middleware and credential-based `ICurrentCompanyService`. Deployed separately (`publish-onprem.ps1 -Solo bancosws`). |
+| `apc.MobileApi`| Standalone net9 WS host (REST API for the Flutter reader app, L3). Same pattern as `apc.BancosWs`: auth via `adm_lector_credencial`/`adm_lector_sesion`, deployed with `-Solo mobileapi`. |
 
 The Identity DbContext is `apc.Data.ApplicationDbContext` and is separate from `SiadDbContext`. Identity migrations are in `apc/Migrations/`; **do not put functional DB changes there**.
-
-`apc.BancosWs/` (WS bancario SIMAFI, F8) and `apc.MobileApi/` (API móvil de la app de lectores, L3) are standalone **net9 WS hosts** in the solution — sin Identity/Blazor, con su propio middleware de auth y `ICurrentCompanyService` que resuelve el tenant por credencial. Se despliegan aparte del portal (`publish-onprem.ps1 -Solo bancosws` / `-Solo mobileapi`).
 
 Other directories in this folder (`apc.Client.Tests/`, `VerificadorUsuarios/`, `tools/`, `temp_excel_*`, `publish_*`, `artifacts/`, `*.log`) are untracked scratch/publish leftovers — they are **not** part of the solution; do not edit or reference them.
 
@@ -70,9 +70,9 @@ Rules:
 
 ## Authorization
 
-Permission catalog lives in [SIAD.Core/Constants/](SIAD.Core/Constants/):
+Permission catalog lives in [SIAD.Core/Constants/PermissionNames.cs](SIAD.Core/Constants/PermissionNames.cs) (all three classes in one file):
 
-- `PermissionModules` — top-level modules (`ventas`, `bancos`, `compras`, `contabilidad`, `reporteria`, `configuracion`, `inventario`).
+- `PermissionModules` — top-level modules (`ventas`, `bancos`, `compras`, `proveedores`, `inventario`, `contabilidad`, `reporteria`, `configuracion`).
 - `PermissionResources` — submodules per module.
 - `PermissionNames` — string constants like `"module.ventas.clientes.edit"` plus a `Policies` table consumed by `AddAuthorization` in both `apc/Program.cs` and `apc.Client/Program.cs`.
 - `PermissionEndpointCatalog` — endpoint → resource mapping used by `ModuleAuthorize` to derive a resource from the route pattern.
@@ -82,9 +82,13 @@ On controllers/actions use `[ModuleAuthorize(module)]`, `[ModuleAuthorize(module
 
 When adding a new endpoint, register its permission name in `PermissionNames` and (if endpoint-specific) in `PermissionEndpointCatalog`.
 
+## Statuses and codes
+
+String-based statuses are being migrated to numeric lookups — see [SIAD.Core/Constants/EstadosNumericos.cs](SIAD.Core/Constants/EstadosNumericos.cs). Do not introduce new string-state columns or compare against magic status strings; use the numeric constants.
+
 ## Blazor / DevExpress UI conventions
 
-- DevExpress version is **25.1.7** on .NET 9. Configured size mode: `Small`.
+- DevExpress version is **25.2.4** on .NET 9 (check the csproj, not docs — it gets bumped). Configured size mode: `Small`.
 - Pages live in `apc.Client/Pages/<Modulo>/`. Honor existing `.razor` / `.razor.cs` / `.razor.css` / `*GridDataSource.cs` separation when a module already uses it.
 - For HTTP, use the auth-aware extensions in [apc.Client/Services/HttpClientExtensions.cs](apc.Client/Services/HttpClientExtensions.cs): `ReadFromJsonAsyncWithAuthCheck`, `GetFromJsonAsyncWithAuthCheck`, `PostAsJsonAsyncWithAuthCheck`, `PutAsJsonAsyncWithAuthCheck`, and `ObtenerMensajeErrorAsync`. They throw `UnauthorizedAccessException` on 401 / login redirects.
 - Keep business rules in services, not pages — pages orchestrate state and HTTP.
@@ -100,6 +104,7 @@ DevExpress Web Designer + Web Viewer + PDF Viewer are bootstrapped in [apc/Progr
 - Per-company report storage: `CompanyReportStorageWebExtension`.
 - Connection string providers: `ReportingConnectionProviderFactory` / `ReportingConnectionProviderService`.
 - Catalog tables `rep_catalogo_informes`, `rep_catalogo_datasets`, `rep_reporte_layouts` are tenant-scoped — preserve `company_id` on any change.
+- Register new catalog datasets/reports with timestamped SQL scripts in `Database/`, **not** in C# seed code.
 - Do not serialize connection params into the persisted layout XML.
 
 ## Database / scaffold
