@@ -202,7 +202,8 @@ public sealed class LecturaV3Request
     public int Mes { get; init; }
     public string? Contador { get; init; }
     public DateTime? FechaLecturaActual { get; init; }
-    public string? Usuario { get; init; }
+    /// <summary>Lector que registra; si no viene, el controller lo llena con el código de la sesión.</summary>
+    public string? Usuario { get; set; }
     public decimal LecturaActual { get; init; }
     public string? Ser3 { get; init; }
     public string? Ser4 { get; init; }

@@ -37,6 +37,14 @@ public sealed class LecturasController : ControllerBase
             return BadRequest(new { codigo = "REQUEST_INVALIDO", mensaje = "El cuerpo de la lectura es obligatorio." });
         }
 
+        // Si el payload no trae usuario, la factura quedaría firmada como "mobileapi"
+        // (el fallback del servicio). El lector autenticado de la sesión es la
+        // identidad real — igual que el tenant, no depende del payload (A6).
+        if (string.IsNullOrWhiteSpace(request.Usuario))
+        {
+            request.Usuario = _requestContext.Sesion?.Codigo;
+        }
+
         try
         {
             var respuesta = await _service.ActualizarLecturaAsync(request, _requestContext.CompanyId, ct);
