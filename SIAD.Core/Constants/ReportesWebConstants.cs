@@ -78,6 +78,10 @@ public static class ReportesWebConstants
     public const string CodigoDatasetSumarialTarifasNoMedido = "sumarial-tarifas-no-medido";
     public const string OrigenDatasetSumarialTarifasNoMedido = "public.rep_sumarial_tarifario_nomedido";
 
+    public const string CodigoReporteFacturaTicket = "factura-ticket";
+    public const string CodigoDatasetFacturaTicket = "factura-ticket";
+    public const string OrigenDatasetFacturaTicket = "public.rep_factura_ticket";
+
     public const string DefaultReportingConnectionName = "DefaultConnection";
 
     public static class LayoutStatus

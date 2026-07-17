@@ -51,7 +51,7 @@
         }
         else if (detalle is not null && detalle.TieneLayoutPublicado)
         {
-            <DxDocumentViewer ReportName="@detalle.ViewerReportName"
+            <DxDocumentViewer ReportName="@BuildReportName(detalle.ViewerReportName)"
                               Height="calc(100vh - 260px)"
                               Width="100%" />
         }
@@ -67,6 +67,25 @@
 @code {
     [Parameter]
     public string Codigo { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Reenvía el query string de la página al nombre del reporte
+    /// (p. ej. /viewer?FacturaId=165 → 'factura-ticket?mode=published&FacturaId=165'):
+    /// el storage aplica esos valores a los parámetros del layout y los oculta,
+    /// lo que permite deep-links desde otras vistas del portal.
+    /// </summary>
+    private string BuildReportName(string viewerReportName)
+    {
+        var query = NavigationManager.ToAbsoluteUri(NavigationManager.Uri).Query.TrimStart('?');
+        if (string.IsNullOrEmpty(query))
+        {
+            return viewerReportName;
+        }
+
+        return viewerReportName.Contains('?')
+            ? $"{viewerReportName}&{query}"
+            : $"{viewerReportName}?{query}";
+    }
 
     private bool isLoading;
     private ReporteDisenoDetalleDto? detalle;

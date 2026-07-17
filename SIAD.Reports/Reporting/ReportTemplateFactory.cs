@@ -73,6 +73,7 @@ public sealed class ReportTemplateFactory
             ReportesWebConstants.CodigoReporteAnalisisAntiguedadCobros => CreateRelationalBackedTemplate(reportCode, displayName, description, BuildDefaultAnalisisAntiguedadCobrosDataset()),
             ReportesWebConstants.CodigoReporteRecaudacion => CreateRelationalBackedTemplate(reportCode, displayName, description, BuildDefaultRecaudacionDataset()),
             ReportesWebConstants.CodigoReporteSaldoClientesCategoriaDetalle => CreateRelationalBackedTemplate(reportCode, displayName, description, BuildDefaultSaldoClientesCategoriaDetalleDataset()),
+            ReportesWebConstants.CodigoReporteFacturaTicket => CreateFacturaTicketTemplate(reportCode, displayName, description, BuildDefaultFacturaTicketDataset()),
             _ => CreateBlankTemplate(reportCode, displayName, description)
         };
     }
@@ -173,6 +174,14 @@ public sealed class ReportTemplateFactory
                 or ReportesWebConstants.DatasetSourceType.Sql)
         {
             return CreateSaldoClientesCategoriaCobranzaTemplate(reportCode, displayName, description, dataset);
+        }
+
+        if (IsFacturaTicketTemplate(reportCode, dataset) &&
+            dataset.SourceType is ReportesWebConstants.DatasetSourceType.StoredProcedure
+                or ReportesWebConstants.DatasetSourceType.View
+                or ReportesWebConstants.DatasetSourceType.Sql)
+        {
+            return CreateFacturaTicketTemplate(reportCode, displayName, description, dataset);
         }
 
         return dataset.SourceType switch
@@ -451,6 +460,7 @@ public sealed class ReportTemplateFactory
                 ReportesWebConstants.CodigoDatasetSaldosAlcantarilladoSanitarioCiclo => BuildDefaultSaldosAlcantarilladoSanitarioCicloDataset(),
                 ReportesWebConstants.CodigoDatasetSumarialTarifarioMedicion => BuildDefaultSumarialTarifarioMedicionDataset(),
                 ReportesWebConstants.CodigoDatasetSumarialTarifasNoMedido => BuildDefaultSumarialTarifasNoMedidoDataset(),
+                ReportesWebConstants.CodigoDatasetFacturaTicket => BuildDefaultFacturaTicketDataset(),
                 _ => null
             };
         }
@@ -1669,6 +1679,10 @@ public sealed class ReportTemplateFactory
     private static bool IsSaldoClientesCategoriaCobranzaTemplate(string reportCode, DatasetDefinition dataset)
         => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteSaldoClientesCategoriaCobranza, StringComparison.OrdinalIgnoreCase)
            || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetSaldoClientesCategoriaCobranza, StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsFacturaTicketTemplate(string reportCode, DatasetDefinition dataset)
+        => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteFacturaTicket, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetFacturaTicket, StringComparison.OrdinalIgnoreCase);
 
     private static string BuildUnsupportedDatasetDescription(string? originalDescription, DatasetDefinition dataset)
         => string.IsNullOrWhiteSpace(originalDescription)
@@ -3722,6 +3736,249 @@ public sealed class ReportTemplateFactory
         reportFooter.Controls.Add(footerTable);
 
         report.Bands.AddRange([reportHeader, pageHeader, detailBand, reportFooter]);
+        return report;
+    }
+
+    private static DatasetDefinition BuildDefaultFacturaTicketDataset()
+        => new(
+            ReportesWebConstants.CodigoDatasetFacturaTicket,
+            "Dataset factura (ticket)",
+            ReportesWebConstants.DatasetSourceType.StoredProcedure,
+            ReportesWebConstants.OrigenDatasetFacturaTicket,
+            null,
+            ReportesWebConstants.DefaultReportingConnectionName,
+            BuildDefaultFacturaTicketDatasetParameters());
+
+    private static IReadOnlyList<DatasetParameterDefinition> BuildDefaultFacturaTicketDatasetParameters()
+        => [
+            new(
+                "CompanyId",
+                "p_company_id",
+                "Empresa actual",
+                ReportesWebConstants.DatasetParameterDataType.Int64,
+                ReportesWebConstants.DatasetParameterValueSource.CurrentCompany,
+                null,
+                false,
+                false,
+                true,
+                0),
+            new(
+                "FacturaId",
+                "p_factura_id",
+                "Factura (id interno)",
+                ReportesWebConstants.DatasetParameterDataType.Int64,
+                ReportesWebConstants.DatasetParameterValueSource.Report,
+                null,
+                true,
+                false,
+                true,
+                10)
+        ];
+
+    /// <summary>
+    /// Plantilla inicial del formato de factura en ticket (ancho 315, estilo del
+    /// ticket de la app de lectores y del recibo de caja). Como el resto de
+    /// plantillas, es solo el borrador de arranque: el diseño se edita en el
+    /// designer web y la versión publicada vive en rep_reporte_layout.
+    /// </summary>
+    private XtraReport CreateFacturaTicketTemplate(string reportCode, string displayName, string? description, DatasetDefinition dataset)
+    {
+        const float contentWidth = 275f;
+
+        var report = CreateBaseReport(reportCode, displayName);
+        report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Custom;
+        report.PageWidth = 315;
+        report.PageHeight = 2000;
+        report.Margins = new DXMargins(20, 20, 10, 10);
+        report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
+
+        foreach (var parameter in dataset.Parameters)
+        {
+            report.Parameters.Add(CreateReportParameter(parameter));
+        }
+
+        var queryName = dataset.Code.Replace('-', '_');
+        var dataSource = CreateRelationalDataSource(dataset, queryName);
+        report.ComponentStorage.AddRange([dataSource]);
+        report.DataSource = dataSource;
+        report.DataMember = queryName;
+
+        static XRLabel TicketCentered(string expression, float y, float fontSize, bool bold = false, float height = 14f)
+        {
+            var label = new XRLabel
+            {
+                BoundsF = new RectangleF(0f, y, contentWidth, height),
+                Font = new DXFont("Courier New", fontSize, bold ? DXFontStyle.Bold : DXFontStyle.Regular),
+                TextAlignment = TextAlignment.MiddleCenter,
+                WordWrap = true,
+                Multiline = true,
+                CanGrow = true
+            };
+            label.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", expression));
+            return label;
+        }
+
+        static XRLine TicketDashed(float y)
+            => new()
+            {
+                BoundsF = new RectangleF(0f, y, contentWidth, 4f),
+                LineStyle = DevExpress.Drawing.DXDashStyle.Dash,
+                ForeColor = Color.Gray
+            };
+
+        static float TicketRow(Band band, string label, string valueExpression, float y)
+        {
+            band.Controls.Add(new XRLabel
+            {
+                BoundsF = new RectangleF(0f, y, 112f, 14f),
+                Font = new DXFont("Courier New", 8f),
+                Text = label,
+                ForeColor = Color.DimGray
+            });
+            var value = new XRLabel
+            {
+                BoundsF = new RectangleF(114f, y, 161f, 14f),
+                Font = new DXFont("Courier New", 8f, DXFontStyle.Bold),
+                TextAlignment = TextAlignment.MiddleRight,
+                WordWrap = true,
+                Multiline = true,
+                CanGrow = true
+            };
+            value.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", valueExpression));
+            band.Controls.Add(value);
+            return y + 14f;
+        }
+
+        // Cabecera: emisor + bloque fiscal SAR + cliente + lectura.
+        var header = new ReportHeaderBand();
+        float y = 4f;
+
+        header.Controls.Add(TicketCentered("[empresa_nombre]", y, 10f, bold: true)); y += 16f;
+        header.Controls.Add(TicketCentered("Concat('RTN: ', [empresa_rtn])", y, 8f)); y += 14f;
+        header.Controls.Add(TicketCentered("[empresa_direccion]", y, 7f, height: 24f)); y += 26f;
+        header.Controls.Add(TicketCentered("Iif(IsNullOrEmpty([empresa_telefono]), '', Concat('Tel: ', [empresa_telefono]))", y, 7f)); y += 12f;
+
+        header.Controls.Add(TicketDashed(y)); y += 10f;
+        var tituloFactura = TicketCentered("'FACTURA'", y, 11f, bold: true); y += 18f;
+        header.Controls.Add(tituloFactura);
+        header.Controls.Add(TicketCentered("[numero_factura]", y, 10f, bold: true)); y += 16f;
+
+        header.Controls.Add(TicketCentered("Iif(IsNullOrEmpty([codigo_cai]), '', Concat('CAI: ', [codigo_cai]))", y, 7f, height: 24f)); y += 26f;
+        header.Controls.Add(TicketCentered("Iif(IsNullOrEmpty([rango_autorizado]), '', Concat('Rango autorizado: ', [rango_autorizado]))", y, 7f, height: 24f)); y += 26f;
+        header.Controls.Add(TicketCentered("Iif(IsNull([fecha_limite_emision]), '', FormatString('Fecha limite de emision: {0:dd/MM/yyyy}', [fecha_limite_emision]))", y, 7f)); y += 12f;
+
+        header.Controls.Add(TicketDashed(y)); y += 10f;
+
+        y = TicketRow(header, "Fecha Emision:", "FormatString('{0:dd/MM/yyyy}', [fecha_emision])", y);
+        y = TicketRow(header, "Fecha Vence :", "FormatString('{0:dd/MM/yyyy}', [fecha_vence])", y);
+        y = TicketRow(header, "Periodo     :", "[periodo]", y);
+        y = TicketRow(header, "Cuenta No.  :", "[cliente_clave]", y);
+        y = TicketRow(header, "Cliente     :", "[cliente_nombre]", y);
+        y = TicketRow(header, "RTN Cliente :", "[cliente_rtn]", y);
+
+        var direccionCliente = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, y, contentWidth, 26f),
+            Font = new DXFont("Courier New", 8f),
+            WordWrap = true,
+            Multiline = true,
+            CanGrow = true
+        };
+        direccionCliente.ExpressionBindings.Add(new ExpressionBinding(
+            "BeforePrint", "Text",
+            "Iif(IsNullOrEmpty([cliente_direccion]), '', Concat('Direccion: ', [cliente_direccion]))"));
+        header.Controls.Add(direccionCliente);
+        y += 30f;
+
+        header.Controls.Add(TicketDashed(y)); y += 10f;
+
+        y = TicketRow(header, "Medidor     :", "[medidor]", y);
+        y = TicketRow(header, "Lect. Anter.:", "FormatString('{0:n2}', [lectura_anterior])", y);
+        y = TicketRow(header, "Lect. Actual:", "FormatString('{0:n2}', [lectura_actual])", y);
+        y = TicketRow(header, "Consumo m3  :", "FormatString('{0:n2}', [consumo])", y);
+        y = TicketRow(header, "Condicion   :", "[condicion]", y);
+        y = TicketRow(header, "Fecha Lect. :", "FormatString('{0:dd/MM/yyyy}', [fecha_lectura])", y);
+
+        header.Controls.Add(TicketDashed(y)); y += 10f;
+        header.HeightF = y;
+
+        // Detalle: una fila por linea de servicio.
+        var detailBand = new DetailBand { HeightF = 20f };
+        var detailTable = new XRTable { BoundsF = new RectangleF(0f, 0f, contentWidth, 20f) };
+        detailTable.BeginInit();
+        var detailRow = new XRTableRow();
+
+        var celdaDescripcion = new XRTableCell
+        {
+            WidthF = 150f,
+            TextAlignment = TextAlignment.MiddleLeft,
+            Font = new DXFont("Courier New", 8f),
+            Borders = BorderSide.All,
+            BorderWidth = 0.5f,
+            BorderColor = Color.LightGray
+        };
+        celdaDescripcion.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[linea_descripcion]"));
+
+        var celdaMoneda = new XRTableCell
+        {
+            WidthF = 30f,
+            TextAlignment = TextAlignment.MiddleCenter,
+            Font = new DXFont("Courier New", 8f),
+            Borders = BorderSide.All,
+            BorderWidth = 0.5f,
+            BorderColor = Color.LightGray
+        };
+        celdaMoneda.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[linea_moneda]"));
+
+        var celdaMonto = new XRTableCell
+        {
+            WidthF = 95f,
+            TextAlignment = TextAlignment.MiddleRight,
+            Font = new DXFont("Courier New", 8f),
+            TextFormatString = "{0:n2}",
+            Borders = BorderSide.All,
+            BorderWidth = 0.5f,
+            BorderColor = Color.LightGray
+        };
+        celdaMonto.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[linea_monto]"));
+
+        detailRow.Cells.AddRange([celdaDescripcion, celdaMoneda, celdaMonto]);
+        detailTable.Rows.Add(detailRow);
+        detailTable.EndInit();
+        detailBand.Controls.Add(detailTable);
+
+        // Pie: total y leyendas.
+        var footer = new ReportFooterBand();
+        float fy = 0f;
+
+        footer.Controls.Add(new XRLabel
+        {
+            BoundsF = new RectangleF(0f, fy, 180f, 18f),
+            Font = new DXFont("Courier New", 9f, DXFontStyle.Bold),
+            Text = "Total L.:",
+            TextAlignment = TextAlignment.MiddleRight
+        });
+        var totalLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(180f, fy, 95f, 18f),
+            Font = new DXFont("Courier New", 9f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleRight
+        };
+        totalLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('{0:n2}', [total])"));
+        footer.Controls.Add(totalLabel);
+        fy += 22f;
+
+        footer.Controls.Add(TicketDashed(fy)); fy += 10f;
+        fy = TicketRow(footer, "Lector      :", "[lector]", fy) + 2f;
+        footer.Controls.Add(TicketDashed(fy)); fy += 10f;
+
+        var leyenda1 = TicketCentered("'La factura es beneficio de todos.'", fy, 8f, bold: true); fy += 14f;
+        var leyenda2 = TicketCentered("'¡Exijala!'", fy, 8f, bold: true); fy += 16f;
+        var leyenda3 = TicketCentered("'Original: Cliente'", fy, 7f); fy += 14f;
+        footer.Controls.AddRange([leyenda1, leyenda2, leyenda3]);
+        footer.HeightF = fy + 4f;
+
+        report.Bands.AddRange([header, detailBand, footer]);
         return report;
     }
 
