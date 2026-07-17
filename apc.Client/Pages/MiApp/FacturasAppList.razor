@@ -1,0 +1,265 @@
+@page "/mi-app/facturas"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.AppLectores
+@using apc.Client.Services
+@using apc.Client.Services.AppLectores
+
+@inject FacturasAppClient FacturasClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Facturas de la app móvil</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="FacturasAppToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Facturas de la app móvil</h2>
+            <p class="page-subtitle">Facturas emitidas por la sincronización de la app de lectores V3 — filtre por cualquier columna con la fila de filtros</p>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@facturas" KeyFieldName="@nameof(FacturaAppListItemDto.FacturaId)"
+                    PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" ShowFilterRow="true"
+                    CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxComboBox Data="@aniosOptions" TData="int?" TValue="int?"
+                                    Value="@filtroAnio" ValueChanged="@((int? v) => OnAnioChanged(v))"
+                                    ValueExpression="@(() => filtroAnio)"
+                                    NullText="Año: todos"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="width: 130px;" />
+                        <DxComboBox Data="@mesesOptions" TData="MesOption" TValue="int?"
+                                    Value="@filtroMes" ValueChanged="@((int? v) => OnMesChanged(v))"
+                                    ValueExpression="@(() => filtroMes)"
+                                    ValueFieldName="@nameof(MesOption.Numero)"
+                                    TextFieldName="@nameof(MesOption.Nombre)"
+                                    NullText="Mes: todos"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="width: 150px;" />
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar factura, clave, cliente, lector o UUID..." InputDelay="500"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   Style="min-width: 280px;" />
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarAsync" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@facturas.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.FechaSubida)" Caption="Subida"
+                                      DisplayFormat="dd/MM/yyyy HH:mm" Width="140px" SortIndex="0"
+                                      SortOrder="GridColumnSortOrder.Descending" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.NumeroFactura)" Caption="No. factura" Width="150px" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.ClienteClave)" Caption="Código" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.ClienteNombre)" Caption="Cliente" MinWidth="200" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Condicion)" Caption="Condición" Width="110px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FacturaAppListItemDto item && !string.IsNullOrWhiteSpace(item.Condicion))
+                            {
+                                <span title="@item.CondicionNombre">@item.Condicion</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.CondicionNombre)" Caption="Condición (nombre)"
+                                      Width="170px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.LecturaActual)" Caption="Lectura"
+                                      DisplayFormat="n2" Width="100px" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.LecturaAnterior)" Caption="Lect. anterior"
+                                      DisplayFormat="n2" Width="110px" TextAlignment="GridTextAlignment.Right" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Consumo)" Caption="Consumo"
+                                      DisplayFormat="n2" Width="100px" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Total)" Caption="Total"
+                                      DisplayFormat="n2" Width="110px" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Lector)" Caption="Lector" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Ciclo)" Caption="Ciclo" Width="90px" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Ruta)" Caption="Libreta" Width="100px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Secuencia)" Caption="Secuencia" Width="100px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Contador)" Caption="Medidor" Width="120px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.ConMedicion)" Caption="Con medición" Width="110px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Categoria)" Caption="Categoría" Width="100px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.FechaLectura)" Caption="Fecha lectura"
+                                      DisplayFormat="dd/MM/yyyy" Width="120px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.FechaEmision)" Caption="Emisión"
+                                      DisplayFormat="dd/MM/yyyy" Width="110px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.FechaVence)" Caption="Vence"
+                                      DisplayFormat="dd/MM/yyyy" Width="110px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Anio)" Caption="Año" Width="80px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Mes)" Caption="Mes" Width="80px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.NumRecibo)" Caption="Recibo" Width="100px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.EstadoFactura)" Caption="Estado factura" Width="120px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.CorrelativoCai)" Caption="Correlativo CAI" Width="120px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.Observacion)" Caption="Observación" MinWidth="160" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.LecturaUuid)" Caption="UUID" Width="220px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.EstadoSync)" Caption="Sync" Width="130px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FacturaAppListItemDto item)
+                            {
+                                <span class="badge-status @EstadoSyncCss(item.EstadoSync)" title="@item.DetalleConflicto">
+                                    @EstadoSyncTexto(item.EstadoSync)
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.FechaConfirmacion)" Caption="Confirmada"
+                                      DisplayFormat="dd/MM/yyyy HH:mm" Width="140px" Visible="false" />
+                    <DxGridDataColumn FieldName="@nameof(FacturaAppListItemDto.DetalleConflicto)" Caption="Detalle conflicto"
+                                      MinWidth="180" Visible="false" />
+                    <DxGridDataColumn Caption="Factura" Width="90px" TextAlignment="GridTextAlignment.Center"
+                                      AllowSort="false" FilterRowEditorVisible="false">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FacturaAppListItemDto item)
+                            {
+                                <button type="button" class="btn-icon btn-edit" title="Ver / imprimir factura"
+                                        @onclick="() => VerFacturaAsync(item.FacturaId)">
+                                    <i class="bi bi-printer"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay facturas sincronizadas desde la app para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DxGrid? grid;
+    private List<FacturaAppListItemDto> facturas = new();
+    private bool isLoading;
+
+    private int? filtroAnio;
+    private int? filtroMes;
+    private string filtroBusqueda = string.Empty;
+
+    private const string GridLayoutStorageKey = "mi-app-facturas-grid-layout";
+
+    private sealed record MesOption(int? Numero, string Nombre);
+
+    private List<int?> aniosOptions = new();
+    private static readonly List<MesOption> mesesOptions = new()
+    {
+        new(1, "Enero"), new(2, "Febrero"), new(3, "Marzo"), new(4, "Abril"),
+        new(5, "Mayo"), new(6, "Junio"), new(7, "Julio"), new(8, "Agosto"),
+        new(9, "Septiembre"), new(10, "Octubre"), new(11, "Noviembre"), new(12, "Diciembre"),
+    };
+
+    protected override async Task OnInitializedAsync()
+    {
+        var anioActual = DateTime.Today.Year;
+        aniosOptions = Enumerable.Range(anioActual - 5, 6).Reverse().Select(a => (int?)a).ToList();
+        filtroAnio = anioActual;
+        filtroMes = DateTime.Today.Month;
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        try
+        {
+            var filtro = new FacturaAppFilterDto
+            {
+                Anio = filtroAnio,
+                Mes = filtroMes,
+                Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+            };
+            facturas = await FacturasClient.GetAsync(filtro);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar las facturas: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnAnioChanged(int? valor)
+    {
+        filtroAnio = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnMesChanged(int? valor)
+    {
+        filtroMes = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task RecargarAsync()
+    {
+        await CargarAsync();
+        grid?.Reload();
+    }
+
+    private static string EstadoSyncCss(string estado) => estado switch
+    {
+        "CONFIRMADO" => "active",
+        "SYNC_CONFLICT" => "conflict",
+        _ => "warning",
+    };
+
+    private static string EstadoSyncTexto(string estado) => estado switch
+    {
+        "CONFIRMADO" => "CONFIRMADA",
+        "SYNC_CONFLICT" => "CONFLICTO",
+        "PENDING_SYNC" => "PEND. SYNC",
+        "PENDIENTE" or "PENDING_OFFLINE" => "PENDIENTE",
+        _ => estado,
+    };
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    // Abre el informe 'factura-ticket' del catálogo web con la factura preseleccionada
+    // (el visor reenvía FacturaId al layout publicado en rep_reporte_layout).
+    private async Task VerFacturaAsync(long facturaId)
+        => await JS.InvokeVoidAsync("open", $"/informes/reportes/factura-ticket/viewer?FacturaId={facturaId}", "_blank");
+
+    private void Toast(string title, string text, ToastRenderStyle style) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title, Text = text, RenderStyle = style, ProviderName = "FacturasAppToast"
+        });
+}

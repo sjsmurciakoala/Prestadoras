@@ -128,6 +128,9 @@ public static class ServiceRegistration
         // Reemplaza al viejo usuarioapc/IUsuariosAppService (app Java retirada).
         services.AddScoped<ILectoresCredencialService, LectoresCredencialService>();
 
+        // app lectores V3: consulta de facturas subidas por la sincronización de la app
+        services.AddScoped<IFacturasAppService, FacturasAppService>();
+
         // tipos de documento fiscal (catalogo SAR Acuerdo 481-2017)
         services.AddScoped<SIAD.Services.TiposDocumentoFiscal.ITiposDocumentoFiscalService,
                            SIAD.Services.TiposDocumentoFiscal.TiposDocumentoFiscalService>();

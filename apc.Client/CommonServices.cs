@@ -99,6 +99,7 @@ namespace apc.Client
             services.AddScoped<PresupuestoSelectionState>();
             services.AddScoped<OrdenesPagoDirectoClient>();
             services.AddScoped<LectoresCredencialClient>();
+            services.AddScoped<FacturasAppClient>();
             services.AddScoped<ClienteServicioTarifarioClient>();
             services.AddScoped<PruebaCalculoClient>();
             services.AddScoped<CuadroTarifarioClient>();

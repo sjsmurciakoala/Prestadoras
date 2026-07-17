@@ -1,0 +1,6 @@
+/* Variante de badge propia de esta vista: conflicto de sincronización (rojo).
+   Las variantes estándar (active/inactive/warning) viven en siad-grid.css. */
+::deep .badge-status.conflict {
+    background-color: #f8d7da;
+    color: #842029;
+}

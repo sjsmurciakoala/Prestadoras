@@ -300,6 +300,11 @@
                         IconCssClass="bi bi-phone"
                         CssClass="@ActiveClass("/mi-app/usuarios")"
                         Attributes="@ItemAttrs("Lectores App")" />
+            <DxMenuItem NavigateUrl="/mi-app/facturas"
+                        Text="Facturas App"
+                        IconCssClass="bi bi-receipt"
+                        CssClass="@ActiveClass("/mi-app/facturas")"
+                        Attributes="@ItemAttrs("Facturas App")" />
             <AuthorizeView Context="authContext">
                 <Authorized>
                     <DxMenuItem NavigateUrl="Account/Manage"
