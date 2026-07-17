@@ -16,7 +16,7 @@ namespace SIAD.Services.AppLectores;
 public sealed class LectoresCredencialService : ILectoresCredencialService
 {
     private static readonly HashSet<string> Sortables =
-        new(StringComparer.OrdinalIgnoreCase) { "codigo", "nombre", "ruta", "codciclo", "activo" };
+        new(StringComparer.OrdinalIgnoreCase) { "codigo", "nombre", "ruta", "activo" };
 
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _company;
@@ -36,7 +36,7 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         var conn = _context.Database.GetDbConnection();
         var rows = await conn.QueryAsync<LectorCredencialListItemDto>(new CommandDefinition(
             $@"SELECT credencial_id AS CredencialId, codigo AS Codigo, lector_nombre AS Nombre,
-                      ruta AS Ruta, codciclo AS CodCiclo, activo AS Activo
+                      ruta AS Ruta, activo AS Activo
                FROM public.adm_lector_credencial
                WHERE {where}
                ORDER BY codigo",
@@ -65,7 +65,7 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
 
         var rows = await conn.QueryAsync<LectorCredencialListItemDto>(new CommandDefinition(
             $@"SELECT credencial_id AS CredencialId, codigo AS Codigo, lector_nombre AS Nombre,
-                      ruta AS Ruta, codciclo AS CodCiclo, activo AS Activo
+                      ruta AS Ruta, activo AS Activo
                FROM public.adm_lector_credencial
                WHERE {where}
                ORDER BY {orderBy}
@@ -80,7 +80,7 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         var conn = _context.Database.GetDbConnection();
         return await conn.QueryFirstOrDefaultAsync<LectorCredencialEditDto>(new CommandDefinition(
             @"SELECT credencial_id AS Id, codigo AS Codigo, lector_nombre AS Nombre,
-                     ruta AS Ruta, codciclo AS CodCiclo, activo AS Activo
+                     ruta AS Ruta, activo AS Activo
               FROM public.adm_lector_credencial
               WHERE company_id = @co AND credencial_id = @id",
             new { co = CompanyId, id }, cancellationToken: ct));
@@ -103,9 +103,9 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         var conn = _context.Database.GetDbConnection();
         var id = await conn.ExecuteScalarAsync<long>(new CommandDefinition(
             @"INSERT INTO public.adm_lector_credencial
-                (company_id, codigo, clave_hash, lector_nombre, ruta, codciclo, activo, created_by, created_at)
+                (company_id, codigo, clave_hash, lector_nombre, ruta, activo, created_by, created_at)
               VALUES
-                (@co, @codigo, crypt(@clave, gen_salt('bf')), @nombre, @ruta, @codciclo, @activo, @user, now())
+                (@co, @codigo, crypt(@clave, gen_salt('bf')), @nombre, @ruta, @activo, @user, now())
               RETURNING credencial_id",
             new
             {
@@ -114,7 +114,6 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
                 clave,
                 nombre = NormalizeOptional(dto.Nombre, 100, "nombre"),
                 ruta,
-                codciclo = dto.CodCiclo,
                 activo = dto.Activo,
                 user = string.IsNullOrWhiteSpace(user) ? "system" : user
             }, cancellationToken: ct));
@@ -141,7 +140,6 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
                SET codigo = @codigo,
                    lector_nombre = @nombre,
                    ruta = @ruta,
-                   codciclo = @codciclo,
                    activo = @activo,
                    {(cambiaClave ? "clave_hash = crypt(@clave, gen_salt('bf'))," : string.Empty)}
                    updated_by = @user,
@@ -154,7 +152,6 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
                 codigo,
                 nombre = NormalizeOptional(dto.Nombre, 100, "nombre"),
                 ruta,
-                codciclo = dto.CodCiclo,
                 activo = dto.Activo,
                 clave,
                 user = string.IsNullOrWhiteSpace(user) ? "system" : user
@@ -170,28 +167,29 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         return dto;
     }
 
-    // Fase E apertura-ciclo-único (2026-07-15): la ruta del lector debe existir
-    // ACTIVA en el catálogo de rutas — antes era texto libre y un error de dedo
-    // dejaba al lector sin libro que descargar en la app.
+    // Libretas globales (2026-07-16): la libreta del lector debe existir ACTIVA
+    // en adm_libreta — antes validaba contra rutas-por-ciclo. Sigue sin ser
+    // texto libre: un error de dedo dejaba al lector sin libro en la app.
     private async Task EnsureRutaEnCatalogoAsync(string? ruta, CancellationToken ct)
     {
         if (string.IsNullOrWhiteSpace(ruta))
         {
-            return; // lector sin ruta asignada: permitido (p.ej. supervisor)
+            return; // lector sin libreta asignada: permitido (p.ej. supervisor)
         }
 
         var conn = _context.Database.GetDbConnection();
         var existe = await conn.ExecuteScalarAsync<bool>(new CommandDefinition(
             @"SELECT EXISTS (
-                  SELECT 1 FROM public.rutas r
-                  WHERE r.estado = true
-                    AND upper(btrim(r.codruta)) = upper(@ruta))",
-            new { ruta }, cancellationToken: ct));
+                  SELECT 1 FROM public.adm_libreta l
+                  WHERE l.company_id = @co
+                    AND l.activo
+                    AND l.codigo = upper(btrim(@ruta)))",
+            new { co = CompanyId, ruta }, cancellationToken: ct));
 
         if (!existe)
         {
             throw new ArgumentException(
-                $"La ruta '{ruta}' no existe en el catálogo de rutas activas. Selecciónela de la lista.");
+                $"La libreta '{ruta}' no existe en el catálogo de libretas activas. Selecciónela de la lista.");
         }
     }
 
@@ -274,7 +272,6 @@ public sealed class LectoresCredencialService : ILectoresCredencialService
         {
             "nombre" => "lector_nombre",
             "ruta" => "ruta",
-            "codciclo" => "codciclo",
             "activo" => "activo",
             _ => "codigo"
         };

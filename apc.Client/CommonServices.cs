@@ -47,6 +47,7 @@ namespace apc.Client
             services.AddScoped<MapClient>();
             services.AddScoped<OrdenesClient>();
             services.AddScoped<RutasClient>();
+            services.AddScoped<apc.Client.Services.Libretas.LibretasClient>();
             services.AddScoped<CaptacionPagosClient>();
             services.AddScoped<CajaClient>();
             services.AddScoped<AbonoClient>();

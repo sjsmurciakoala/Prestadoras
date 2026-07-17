@@ -1,0 +1,365 @@
+@page "/libretas"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Libretas
+@inject apc.Client.Services.Libretas.LibretasClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Libretas</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="LibretasToast" MaxToastCount="4" />
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Libretas de lectura</h2>
+            <p class="page-subtitle">Libro de cada lector — catálogo global, vale para todos los ciclos</p>
+        </div>
+
+        <DxButton Text="Nueva libreta"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="@(() => AbrirForm(null))" />
+    </div>
+
+    <div class="alert alert-secondary border-0 d-flex align-items-center mb-3">
+        <i class="bi bi-info-circle-fill me-2 fs-5"></i>
+        <div>
+            La libreta identifica el <strong>libro del lector</strong> (00L1..00L5) y atraviesa todos los ciclos:
+            al cliente se le asigna ciclo + libreta + secuencia, y al lector solo su libreta.
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@libretas" KeyFieldName="Id" PageSize="15"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@libretas.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(LibretaDto.Codigo)" Caption="Codigo" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LibretaDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(LibretaDto.Descripcion)" Caption="Descripcion" MinWidth="260">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LibretaDto item)
+                            {
+                                <div class="text-truncate" title="@item.Descripcion">@item.Descripcion</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LibretaDto item)
+                            {
+                                if (item.Activo)
+                                {
+                                    <span class="badge-status active">ACTIVO</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">INACTIVO</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is LibretaDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirForm(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay libretas para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible"
+         Width="min(520px, 95vw)"
+         Height="auto"
+         Scrollable="true"
+         CssClass="custom-popup"
+         CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;">
+                <i class="@PopupIcon"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    @PopupSubtitle
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+
+    <BodyContentTemplate>
+        <EditForm Model="@libretaEdit" OnValidSubmit="GuardarAsync" Context="LibretaFormContext">
+            <DataAnnotationsValidator />
+            <div class="p-3">
+                @if (editandoConClientes)
+                {
+                    <div class="alert alert-warning small mb-3">
+                        Esta libreta tiene clientes asignados: el código no se puede renombrar
+                        (viaja dentro del indicativo de cada cliente).
+                    </div>
+                }
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem Caption="Código *" ColSpanMd="5" Context="lf1">
+                        <DxTextBox @bind-Text="libretaEdit.Codigo"
+                                   NullText="Ej. 00L6"
+                                   Enabled="@(!editandoConClientes)"
+                                   MaxLength="10" />
+                        <ValidationMessage For="() => libretaEdit.Codigo" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Descripción *" ColSpanMd="7" Context="lf2">
+                        <DxTextBox @bind-Text="libretaEdit.Descripcion"
+                                   NullText="Ej. LIBRO 006"
+                                   MaxLength="100" />
+                        <ValidationMessage For="() => libretaEdit.Descripcion" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem ColSpanMd="12" Context="lf3">
+                        <DxCheckBox @bind-Checked="libretaEdit.Activo">Activa</DxCheckBox>
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="CerrarForm"
+                              Enabled="!isSaving" />
+                    <DxButton Text="@(editId.HasValue ? "Actualizar" : "Guardar")"
+                              RenderStyle="ButtonRenderStyle.Primary"
+                              SubmitFormOnClick="true"
+                              Enabled="!isSaving" />
+                </div>
+            </div>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar accion" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">Desactivar libreta?</h5>
+            <p class="text-muted">La libreta dejará de ofrecerse al asignar clientes, pero no se eliminará.</p>
+            @if (libretaParaDesactivar is not null)
+            {
+                <div class="fw-semibold">@libretaParaDesactivar.Codigo - @libretaParaDesactivar.Descripcion</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar"
+                          Click="@(() => { confirmVisible = false; libretaParaDesactivar = null; })"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Si, desactivar"
+                          Click="DesactivarConfirmadoAsync"
+                          RenderStyle="ButtonRenderStyle.Danger"
+                          IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<LibretaDto> libretas = new();
+
+    private LibretaUpsertDto libretaEdit = new();
+    private long? editId;
+    private bool editandoConClientes;
+    private bool formVisible;
+    private bool isSaving;
+
+    private string? errorMessage;
+
+    private bool confirmVisible;
+    private LibretaDto? libretaParaDesactivar;
+
+    private string PopupTitle => editId.HasValue ? "Editar libreta" : "Nueva libreta";
+    private string PopupSubtitle => editId.HasValue
+        ? "Actualice la información de la libreta"
+        : "El código se usará en el indicativo de los clientes";
+    private string PopupIcon => editId.HasValue ? "bi bi-pencil-square" : "bi bi-journal-bookmark";
+    private string PopupIconWrapperClass => editId.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            errorMessage = null;
+            libretas = await Client.GetAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las libretas: {ex.Message}";
+        }
+    }
+
+    private void AbrirForm(LibretaDto? libreta)
+    {
+        if (libreta is null)
+        {
+            editId = null;
+            editandoConClientes = false;
+            libretaEdit = new LibretaUpsertDto { Activo = true };
+        }
+        else
+        {
+            editId = libreta.Id;
+            // El servidor rechaza renombrar códigos en uso; la UI bloquea el
+            // campo siempre en edición para no invitar al error.
+            editandoConClientes = true;
+            libretaEdit = new LibretaUpsertDto
+            {
+                Codigo = libreta.Codigo,
+                Descripcion = libreta.Descripcion ?? string.Empty,
+                Activo = libreta.Activo
+            };
+        }
+
+        formVisible = true;
+    }
+
+    private void CerrarForm()
+    {
+        if (isSaving)
+        {
+            return;
+        }
+
+        formVisible = false;
+        editId = null;
+        libretaEdit = new LibretaUpsertDto();
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            isSaving = true;
+            if (editId.HasValue)
+            {
+                await Client.UpdateAsync(editId.Value, libretaEdit);
+                MostrarToast("Libreta actualizada correctamente.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await Client.CreateAsync(libretaEdit);
+                MostrarToast("Libreta registrada correctamente.", ToastRenderStyle.Success);
+            }
+
+            formVisible = false;
+            editId = null;
+            libretaEdit = new LibretaUpsertDto();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarToast(ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void ConfirmarDesactivar(LibretaDto libreta)
+    {
+        libretaParaDesactivar = libreta;
+        confirmVisible = true;
+    }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (libretaParaDesactivar is null)
+        {
+            confirmVisible = false;
+            return;
+        }
+
+        try
+        {
+            var ok = await Client.DeactivateAsync(libretaParaDesactivar.Id);
+            if (ok)
+            {
+                MostrarToast("Libreta desactivada correctamente.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+            else
+            {
+                MostrarToast("No se pudo desactivar la libreta.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarToast(ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            confirmVisible = false;
+            libretaParaDesactivar = null;
+        }
+    }
+
+    private void MostrarToast(string texto, ToastRenderStyle estilo)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = "Libretas",
+            Text = texto,
+            RenderStyle = estilo,
+            ProviderName = "LibretasToast"
+        });
+    }
+}

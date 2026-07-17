@@ -56,6 +56,7 @@ public static class ServiceRegistration
         
         // rutas
         services.AddScoped<IRutasService, RutasService>();
+        services.AddScoped<Libretas.ILibretasService, Libretas.LibretasService>();
         
         // captación de pagos
         services.AddScoped<ICaptacionPagosService, CaptacionPagosService>();

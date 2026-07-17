@@ -146,6 +146,14 @@ public sealed class LectoresMobileService : ILectoresMobileService
     // períodos abiertos se leen de adm_periodo_comercial(_ciclo) — la fuente
     // de verdad desde F7. Se retiran el espejo historialmes y el fallback
     // sp_informacion_ciclo (el WS WCF viejo ya no existe en el servidor).
+    //
+    // Orden FIFO (2026-07-16, libretas globales): con varios ciclos abiertos a
+    // la vez (operación normal: el ciclo N factura mientras el N+1 se lee), se
+    // ofrece primero el MÁS VIEJO que aún tenga clientes de la libreta sin
+    // facturar — así los ciclos se terminan en orden y una re-descarga no
+    // "salta" al más nuevo dejando inalcanzable el pendiente. Si la libreta ya
+    // no debe nada, cae al abierto más reciente (la app mostrará que no hay
+    // datos que descargar, porque los medidores excluyen facturados).
     // -------------------------------------------------------------------------
 
     public async Task<InformacionCicloDto> GetCicloAsync(string ruta, CancellationToken ct = default)
@@ -155,7 +163,8 @@ public sealed class LectoresMobileService : ILectoresMobileService
 
         const string sqlV3 = @"
             with ruta_clientes as (
-                select distinct
+                select
+                    cm.maestro_cliente_clave,
                     cm.ciclos_id,
                     coalesce(nullif(btrim(c.ciclos_codigo), ''), lpad(cm.ciclos_id::text, 2, '0')) as ciclo_codigo
                 from cliente_maestro cm
@@ -174,17 +183,39 @@ public sealed class LectoresMobileService : ILectoresMobileService
                   on p.company_id = pc.company_id
                  and p.periodo_comercial_id = pc.periodo_comercial_id
                 where p.status_id = 1 and pc.status_id = 1
+            ),
+            candidatos as (
+                select pa.ano, pa.mes, pa.ciclo, pa.fecha_periodo,
+                       count(*) filter (
+                           where not exists (
+                               select 1
+                               from public.factura f
+                               where btrim(f.clientecodigo) = btrim(rc.maestro_cliente_clave)
+                                 and f.tipofacturacion = 'S'
+                                 and f.tipofactura = 'F'
+                                 and coalesce(f.estado_id, 1) <> 3
+                                 and coalesce(f.estado, 'A') <> 'N'
+                                 and btrim(f.ano) ~ '^[0-9]+$' and btrim(f.ano)::int = pa.ano
+                                 and btrim(f.mes) ~ '^[0-9]+$' and btrim(f.mes)::int = pa.mes
+                           )
+                       ) as pendientes
+                from periodos_abiertos pa
+                inner join ruta_clientes rc
+                    on (
+                        pa.ciclo = rc.ciclo_codigo
+                        or pa.ciclo = ltrim(rc.ciclo_codigo, '0')
+                        or lpad(pa.ciclo, 2, '0') = rc.ciclo_codigo
+                        or (pa.ciclo ~ '^[0-9]+$' and rc.ciclos_id is not null and pa.ciclo::int = rc.ciclos_id)
+                    )
+                group by pa.ano, pa.mes, pa.ciclo, pa.fecha_periodo
             )
-            select pa.ano as r_ano, pa.mes as r_mes, pa.ciclo as r_ciclo
-            from periodos_abiertos pa
-            inner join ruta_clientes rc
-                on (
-                    pa.ciclo = rc.ciclo_codigo
-                    or pa.ciclo = ltrim(rc.ciclo_codigo, '0')
-                    or lpad(pa.ciclo, 2, '0') = rc.ciclo_codigo
-                    or (pa.ciclo ~ '^[0-9]+$' and rc.ciclos_id is not null and pa.ciclo::int = rc.ciclos_id)
-                )
-            order by pa.ano desc, pa.mes desc, pa.fecha_periodo desc
+            select ano as r_ano, mes as r_mes, ciclo as r_ciclo
+            from candidatos
+            order by (pendientes > 0) desc,
+                     case when pendientes > 0 then make_date(ano, mes, 1) end asc nulls last,
+                     case when pendientes > 0 then fecha_periodo end asc nulls last,
+                     make_date(ano, mes, 1) desc,
+                     fecha_periodo desc
             limit 1;";
 
         var row = await conn.QueryFirstOrDefaultAsync<CicloRow>(

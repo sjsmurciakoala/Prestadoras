@@ -4,12 +4,10 @@
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.AppLectores
-@using SIAD.Core.DTOs.Rutas
 @using apc.Client.Services.AppLectores
-@using apc.Client.Services.Rutas
 
 @inject LectoresCredencialClient LectoresClient
-@inject RutasClient RutasClient
+@inject apc.Client.Services.Libretas.LibretasClient LibretasClient
 @inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Lectores (app móvil)</PageTitle>
@@ -51,8 +49,7 @@
                 <Columns>
                     <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.Codigo)" Caption="Código" Width="160px" />
                     <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.Nombre)" Caption="Nombre" MinWidth="220" />
-                    <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.Ruta)" Caption="Ruta (libro)" Width="140px" />
-                    <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.CodCiclo)" Caption="Ciclo" Width="100px" />
+                    <DxGridDataColumn FieldName="@nameof(LectorCredencialListItemDto.Ruta)" Caption="Libreta (libro)" Width="160px" />
                     <DxGridDataColumn Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is LectorCredencialListItemDto item)
@@ -107,22 +104,18 @@
                 <DxFormLayoutItem Caption="Nombre" ColSpanMd="12">
                     <DxTextBox @bind-Text="formModel.Nombre" />
                 </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Ruta (libro)" ColSpanMd="6">
-                    @* Fase E apertura-ciclo-único: la ruta se elige del catálogo
-                       (antes era texto libre y un error de dedo dejaba al lector
-                       sin libro en la app). Al elegirla se autollena el ciclo. *@
-                    <DxComboBox Data="@rutasOptions" TData="RutaOption" TValue="string"
-                                Value="@formModel.Ruta"
-                                ValueChanged="@((string? v) => OnRutaSeleccionada(v))"
-                                ValueExpression="@(() => formModel.Ruta)"
-                                ValueFieldName="@nameof(RutaOption.Codigo)"
-                                TextFieldName="@nameof(RutaOption.Etiqueta)"
+                <DxFormLayoutItem Caption="Libreta (libro)" ColSpanMd="6">
+                    @* Libretas globales (2026-07-16): la libreta se elige del
+                       catálogo adm_libreta y NO lleva ciclo — atraviesa todos
+                       los ciclos; el ciclo pendiente lo resuelve el servidor
+                       por períodos abiertos, igual que en SIMAFI. *@
+                    <DxComboBox Data="@libretasOptions" TData="LibretaOption" TValue="string"
+                                @bind-Value="formModel.Ruta"
+                                ValueFieldName="@nameof(LibretaOption.Codigo)"
+                                TextFieldName="@nameof(LibretaOption.Etiqueta)"
                                 SearchMode="ListSearchMode.AutoSearch"
-                                NullText="Seleccione la ruta..."
+                                NullText="Seleccione la libreta..."
                                 ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-                </DxFormLayoutItem>
-                <DxFormLayoutItem Caption="Ciclo (de la ruta)" ColSpanMd="6">
-                    <DxSpinEdit @bind-Value="formModel.CodCiclo" MinValue="0" MaxValue="99" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
                     <DxCheckBox @bind-Checked="formModel.Activo" CheckType="CheckType.Switch" />
@@ -173,45 +166,29 @@
     private bool confirmVisible;
     private LectorCredencialListItemDto? lectorParaDesactivar;
 
-    private sealed record RutaOption(string Codigo, string Etiqueta, int CodCiclo);
-    private List<RutaOption> rutasOptions = new();
+    private sealed record LibretaOption(string Codigo, string Etiqueta);
+    private List<LibretaOption> libretasOptions = new();
 
     protected override async Task OnInitializedAsync()
     {
         await CargarAsync();
-        await CargarRutasAsync();
+        await CargarLibretasAsync();
     }
 
-    private async Task CargarRutasAsync()
+    private async Task CargarLibretasAsync()
     {
         try
         {
-            var rutas = await RutasClient.GetAsync();
-            rutasOptions = rutas
-                .Where(r => r.Activo)
-                .OrderBy(r => r.CodRuta)
-                .Select(r => new RutaOption(
-                    r.CodRuta.Trim(),
-                    string.IsNullOrWhiteSpace(r.Descripcion)
-                        ? r.CodRuta.Trim()
-                        : $"{r.CodRuta.Trim()} - {r.Descripcion!.Trim()}",
-                    r.CodCiclo))
+            var lista = await LibretasClient.GetActivasAsync();
+            libretasOptions = lista
+                .Select(l => new LibretaOption(
+                    l.Codigo,
+                    string.IsNullOrWhiteSpace(l.Descripcion) ? l.Codigo : $"{l.Codigo} - {l.Descripcion}"))
                 .ToList();
         }
         catch (Exception ex)
         {
-            Toast("Error", $"No se pudo cargar el catálogo de rutas: {ex.Message}", ToastRenderStyle.Danger);
-        }
-    }
-
-    private void OnRutaSeleccionada(string? codigo)
-    {
-        formModel.Ruta = codigo;
-        var ruta = rutasOptions.FirstOrDefault(r => r.Codigo == codigo);
-        if (ruta is not null)
-        {
-            // El ciclo del lector es el de su ruta: se autollena al elegirla.
-            formModel.CodCiclo = ruta.CodCiclo;
+            Toast("Error", $"No se pudo cargar el catálogo de libretas: {ex.Message}", ToastRenderStyle.Danger);
         }
     }
 
