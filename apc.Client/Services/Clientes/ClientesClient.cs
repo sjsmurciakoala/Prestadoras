@@ -15,6 +15,36 @@ public sealed class ClientesClient
 
     public ClientesClient(HttpClient http) => this.http = http;
 
+    // ── Código de cliente automático y secuencia sugerida (2026-07-16) ────────
+
+    public async Task<CodigoClienteConfigDto?> ObtenerCodigoConfigAsync(CancellationToken ct = default)
+    {
+        var response = await http.GetAsync("api/clientes/codigo-config", ct);
+        return await response.ReadFromJsonAsyncWithAuthCheck<CodigoClienteConfigDto>(ct);
+    }
+
+    public async Task<CodigoClienteConfigDto?> GuardarCodigoConfigAsync(CodigoClienteConfigDto dto, CancellationToken ct = default)
+    {
+        var response = await http.PutAsJsonAsync("api/clientes/codigo-config", dto, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new InvalidOperationException(
+                await HttpClientExtensions.ObtenerMensajeErrorAsync(response, ct) ?? "No se pudo guardar la configuración.");
+        }
+
+        return await response.ReadFromJsonAsyncWithAuthCheck<CodigoClienteConfigDto>(ct);
+    }
+
+    public async Task<string?> SugerirSecuenciaAsync(int cicloId, string libreta, CancellationToken ct = default)
+    {
+        var response = await http.GetAsync(
+            $"api/clientes/siguiente-secuencia?cicloId={cicloId}&libreta={Uri.EscapeDataString(libreta)}", ct);
+        var payload = await response.ReadFromJsonAsyncWithAuthCheck<SecuenciaSugeridaResponse>(ct);
+        return payload?.Secuencia;
+    }
+
+    private sealed record SecuenciaSugeridaResponse(string? Secuencia);
+
     public async Task<ClienteCreateResponseDto> CrearAsync(ClienteCreateDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);

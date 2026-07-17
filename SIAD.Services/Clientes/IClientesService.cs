@@ -32,5 +32,13 @@ public interface IClientesService
     Task<byte[]?> GetFotoMedidorImagenAsync(int ide, CancellationToken ct = default);
 
     Task SetNoCortableAsync(string clave, bool valor, string usuario, string? motivo = null, CancellationToken ct = default);
+
+    /// <summary>Configuración del generador de código de cliente (con preview del próximo).</summary>
+    Task<CodigoClienteConfigDto> ObtenerCodigoConfigAsync(CancellationToken ct = default);
+
+    Task<CodigoClienteConfigDto> GuardarCodigoConfigAsync(CodigoClienteConfigDto dto, string usuario, CancellationToken ct = default);
+
+    /// <summary>Siguiente secuencia de caminata sugerida (max+10) para ciclo+libreta; solo sugiere, no consume.</summary>
+    Task<string?> SugerirSecuenciaAsync(int cicloId, string libreta, CancellationToken ct = default);
     Task<IReadOnlyList<ClienteEstadoLogItemDto>> GetEstadoLogAsync(string clave, CancellationToken ct = default);
 }

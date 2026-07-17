@@ -52,10 +52,20 @@ public class ClientesService : IClientesService
             throw new InvalidOperationException($"Ya existe un cliente con el DNI {identidad}.");
         }
 
+        // Código automático (2026-07-16): clave vacía => la genera el
+        // correlativo por empresa (fn_adm_siguiente_codigo_cliente, atómico).
+        // Cubre igual el alta directa y la creada desde solicitud. La clave
+        // manual sigue permitida (se valida duplicado abajo).
         var clave = Limpiar(dto.Clave);
         if (string.IsNullOrWhiteSpace(clave))
         {
-            throw new ArgumentException("El código del sistema es obligatorio.", nameof(dto.Clave));
+            clave = await GenerarCodigoClienteAsync(companyId, ct);
+            if (string.IsNullOrWhiteSpace(clave))
+            {
+                throw new ArgumentException(
+                    "El código del sistema es obligatorio (la empresa no tiene generador automático configurado).",
+                    nameof(dto.Clave));
+            }
         }
 
         if (await _context.cliente_maestros.AnyAsync(c => c.maestro_cliente_clave == clave, ct))
@@ -1335,6 +1345,97 @@ ORDER BY orden, servicio";
 
         var libretaStr = libretaLimpia.PadLeft(LibretaLongitud, '0');
         return cicloStr + libretaStr;
+    }
+
+    // ── Código de cliente automático y secuencia sugerida (2026-07-16) ────────
+
+    /// <summary>Consume atómicamente el siguiente código del generador; null si no hay config activa.</summary>
+    private async Task<string?> GenerarCodigoClienteAsync(long companyId, CancellationToken ct)
+    {
+        var conn = _context.Database.GetDbConnection();
+        return await conn.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT public.fn_adm_siguiente_codigo_cliente(@co)",
+            new { co = companyId }, cancellationToken: ct));
+    }
+
+    public async Task<CodigoClienteConfigDto> ObtenerCodigoConfigAsync(CancellationToken ct = default)
+    {
+        var config = await _context.adm_codigo_cliente_configs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(ct);
+
+        if (config is null)
+        {
+            return new CodigoClienteConfigDto { Configurado = false, Activo = false };
+        }
+
+        return new CodigoClienteConfigDto
+        {
+            Configurado = true,
+            Activo = config.activo,
+            Prefijo = config.prefijo,
+            Longitud = config.longitud,
+            Siguiente = config.siguiente,
+            ProximoCodigo = ConstruirCodigoPreview(config.prefijo, config.longitud, config.siguiente),
+        };
+    }
+
+    public async Task<CodigoClienteConfigDto> GuardarCodigoConfigAsync(CodigoClienteConfigDto dto, string usuario, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        var prefijo = (dto.Prefijo ?? string.Empty).Trim().ToUpperInvariant();
+        if (prefijo.Length > 5 || !prefijo.All(char.IsLetterOrDigit) && prefijo.Length > 0)
+        {
+            throw new ArgumentException("El prefijo admite solo letras y números (máximo 5).");
+        }
+
+        if (dto.Longitud is < 4 or > 20 || dto.Longitud <= prefijo.Length)
+        {
+            throw new ArgumentException("La longitud total debe estar entre 4 y 20 y ser mayor que el prefijo.");
+        }
+
+        if (dto.Siguiente < 1)
+        {
+            throw new ArgumentException("El correlativo debe ser mayor que cero.");
+        }
+
+        var config = await _context.adm_codigo_cliente_configs.FirstOrDefaultAsync(ct);
+        if (config is null)
+        {
+            config = new adm_codigo_cliente_config();
+            _context.adm_codigo_cliente_configs.Add(config);
+        }
+
+        config.activo = dto.Activo;
+        config.prefijo = prefijo;
+        config.longitud = dto.Longitud;
+        config.siguiente = dto.Siguiente;
+        config.updated_by = string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim();
+        config.updated_at = DateTime.UtcNow;
+
+        await _context.SaveChangesAsync(ct);
+        return await ObtenerCodigoConfigAsync(ct);
+    }
+
+    public async Task<string?> SugerirSecuenciaAsync(int cicloId, string libreta, CancellationToken ct = default)
+    {
+        if (cicloId <= 0 || string.IsNullOrWhiteSpace(libreta))
+        {
+            return null;
+        }
+
+        var companyId = _currentCompanyService.GetCompanyId();
+        var conn = _context.Database.GetDbConnection();
+        return await conn.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT public.fn_adm_siguiente_secuencia(@co, @ciclo, @libreta)",
+            new { co = companyId, ciclo = cicloId, libreta = libreta.Trim() }, cancellationToken: ct));
+    }
+
+    private static string ConstruirCodigoPreview(string prefijo, short longitud, long siguiente)
+    {
+        var ancho = Math.Max(1, longitud - prefijo.Length);
+        return prefijo + siguiente.ToString().PadLeft(ancho, '0');
     }
 
     /// <summary>

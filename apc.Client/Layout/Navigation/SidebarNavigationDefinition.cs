@@ -382,6 +382,14 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
+                    Id = "mant-codigo-cliente",
+                    Text = "Código de cliente",
+                    NavigateUrl = "/mantenimientos/codigo-cliente",
+                    MatchPrefixes = ["/mantenimientos/codigo-cliente"],
+                    IconCssClass = "bi bi-123"
+                },
+                new SidebarNavItem
+                {
                     Id = "mant-clases-medidor",
                     Text = "Clases de medidor",
                     NavigateUrl = "/mantenimientos/clases-medidor",
