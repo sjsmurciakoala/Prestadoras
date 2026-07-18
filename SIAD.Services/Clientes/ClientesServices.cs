@@ -522,10 +522,12 @@ public class ClientesService : IClientesService
             return new ClienteEstadoCuentaDto(null, null, null, null, null, Array.Empty<SaldoServicioDto>());
         }
 
-        // Saldo total acumulado: SP es la unica fuente de verdad (ORDER BY ide DESC
-        // sobre transaccion_abonado activo). El query EF anterior usaba fecha_docu DESC
-        // que es ambiguo cuando una factura V3 inserta 4 rows (uno por servicio) con
-        // misma fecha — devolvia un saldo parcial en lugar del total.
+        // Saldo total acumulado: SP es la unica fuente de verdad. Desde el fix de
+        // vigencia (2026-07-16) suma (debitos - creditos) de los movimientos vigentes
+        // de vw_transaccion_abonado_vigente: la columna saldo corrido quedo corrupta
+        // para los abonos (se calculaba con el propio SP roto) y la convencion de
+        // estado esta invertida entre modulos (facturacion: 'A' = activo; caja/WS:
+        // vigente = 'C', anulado = 'A').
         var connection = _context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
         {
@@ -538,12 +540,17 @@ public class ClientesService : IClientesService
                 new { CompanyId = companyId, Clave = clave },
                 cancellationToken: ct)) ?? 0m;
 
+        // Ultimo pago: los migrados de SIMAFI llevan tipotransaccion 'PAGO...'; los de
+        // caja/posteos/WS llevan '201'/'202' y solo son vigentes con estado 'C' (con
+        // estado 'A' estan reversados — convencion invertida de caja).
         var ultimoPago = await _context.transaccion_abonados
             .AsNoTracking()
             .Where(t => t.company_id == companyId
                         && t.cliente_clave == clave
                         && t.tipotransaccion != null
-                        && EF.Functions.ILike(t.tipotransaccion, "%PAGO%"))
+                        && (EF.Functions.ILike(t.tipotransaccion, "%PAGO%")
+                            || ((t.tipotransaccion == "201" || t.tipotransaccion == "202")
+                                && t.estado == "C")))
             .OrderByDescending(t => t.ide)
             .Select(t => new { t.fecha_docu, t.creditos, t.debitos })
             .FirstOrDefaultAsync(ct);
@@ -563,26 +570,54 @@ public class ClientesService : IClientesService
 
         decimal? consumoPromedio = consumos.Length > 0 ? consumos.Average() : 0m;
 
-        // Desglose por servicio: se suma (debitos - creditos) de los movimientos activos en vez de
-        // leer saldo_detalle del ultimo movimiento. saldo_detalle solo acumula por servicio en las
-        // facturas: los pagos se registran con tipo_servicio 'E' y las NC/ND sin tipo_servicio, y
-        // ninguno de los dos descuenta el saldo_detalle de los servicios facturados. La suma de
-        // todos los movimientos activos si coincide con sp_obtener_cliente_saldo, de modo que el
-        // TOTAL de la tabla cuadra con el saldo actual del resumen.
-        //
-        // Los servicios recurrentes del catalogo (facturable_app o genera_por_regla) se listan
-        // siempre, aunque el cliente no tenga movimientos, con saldo 0. Lo que no corresponde a un
-        // servicio del catalogo (saldo migrado de SIMAFI, pagos, NC/ND) va en filas propias para no
-        // perderlo del total.
+        var saldoPorServicio = await GetDesglosePorServicioAsync(clave, ct);
+
+        return new ClienteEstadoCuentaDto(
+            saldoActual,
+            fechaPago,
+            montoPago,
+            consumoPromedio,
+            null,
+            saldoPorServicio);
+    }
+
+    // Desglose por servicio: se suma (debitos - creditos) de los movimientos VIGENTES
+    // (vw_transaccion_abonado_vigente absorbe la convencion invertida de estados entre
+    // facturacion y caja) en vez de leer saldo_detalle del ultimo movimiento, que solo
+    // acumula por servicio en las facturas. La suma de todos los movimientos vigentes
+    // coincide con sp_obtener_cliente_saldo, de modo que el TOTAL de la tabla cuadra
+    // con el saldo actual del resumen.
+    //
+    // Los servicios recurrentes del catalogo (facturable_app o genera_por_regla) se listan
+    // siempre, aunque el cliente no tenga movimientos, con saldo 0. Lo que no corresponde a
+    // un servicio del catalogo se clasifica en SALDO_ANTERIOR (migrado de SIMAFI), PAGOS
+    // (abonos '201'/'202', tipo_servicio 'E' o 'PAGO...' migrado) y AJUSTES (NC/ND y resto):
+    // los PAGOS se reparten entre los items segun adm_desglose_abono_porcentaje
+    // (DesgloseAbonoDistribuidor) y lo no distribuible queda en "Pagos y ajustes".
+    // Lo consumen el estado de cuenta del cliente y el recibo de abono (AbonoService).
+    public async Task<IReadOnlyList<SaldoServicioDto>> GetDesglosePorServicioAsync(
+        string clienteClave, CancellationToken ct = default)
+    {
+        var companyId = _currentCompanyService.GetCompanyId();
+        if (companyId <= 0)
+        {
+            throw new InvalidOperationException("No se pudo determinar la empresa (tenant) actual.");
+        }
+
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != ConnectionState.Open)
+        {
+            await connection.OpenAsync(ct);
+        }
+
         const string sqlDesglose = @"
 WITH mov AS (
     SELECT ta.tipo_servicio,
            ta.tipotransaccion,
            COALESCE(ta.debitos, 0) - COALESCE(ta.creditos, 0) AS importe
-    FROM transaccion_abonado ta
+    FROM public.vw_transaccion_abonado_vigente ta
     WHERE ta.company_id    = @CompanyId
       AND ta.cliente_clave = @Clave
-      AND ta.estado        = 'A'
 ),
 cat AS (
     SELECT s.codigo,
@@ -594,53 +629,80 @@ cat AS (
       AND s.status_id  = 1
 ),
 servicios AS (
-    SELECT c.nombre                    AS servicio,
-           COALESCE(SUM(m.importe), 0) AS saldo,
-           c.orden_visual              AS orden
+    SELECT 'SERVICIO'                          AS categoria,
+           c.codigo                            AS codigo,
+           c.nombre                            AS servicio,
+           COALESCE(SUM(m.importe), 0)         AS saldo,
+           COALESCE(c.orden_visual, 0)::int    AS orden
     FROM cat c
     LEFT JOIN mov m ON m.tipo_servicio = c.codigo
     GROUP BY c.codigo, c.nombre, c.orden_visual, c.es_recurrente
     HAVING c.es_recurrente OR COUNT(m.tipo_servicio) > 0
 ),
 otros AS (
-    SELECT CASE WHEN m.tipotransaccion = 'SALDO_ANTERIOR' THEN 'Saldo anterior'
-                ELSE 'Pagos y ajustes' END AS servicio,
-           SUM(m.importe)                  AS saldo,
-           CASE WHEN m.tipotransaccion = 'SALDO_ANTERIOR' THEN 9000 ELSE 9001 END AS orden
+    SELECT CASE WHEN m.tipotransaccion = 'SALDO_ANTERIOR' THEN 'SALDO_ANTERIOR'
+                WHEN m.tipotransaccion IN ('201', '202')
+                     OR m.tipo_servicio = 'E'
+                     OR m.tipotransaccion ILIKE '%PAGO%' THEN 'PAGOS'
+                ELSE 'AJUSTES' END AS categoria,
+           NULL::varchar           AS codigo,
+           NULL::varchar           AS servicio,
+           SUM(m.importe)          AS saldo,
+           9000                    AS orden
     FROM mov m
     WHERE NOT EXISTS (SELECT 1 FROM cat c WHERE c.codigo = m.tipo_servicio)
-    GROUP BY 1, 3
+    GROUP BY 1
 )
-SELECT servicio,
-       saldo,
-       0 AS meses_pendientes
+SELECT categoria, codigo, servicio, saldo, orden
 FROM (SELECT * FROM servicios UNION ALL SELECT * FROM otros) t
 ORDER BY orden, servicio";
 
-        var desgloseRows = await connection.QueryAsync<SaldoServicioRow>(
+        var desgloseRows = (await connection.QueryAsync<DesgloseServicioRow>(
             new CommandDefinition(sqlDesglose,
-                new { CompanyId = companyId, Clave = clave },
-                cancellationToken: ct));
+                new { CompanyId = companyId, Clave = clienteClave },
+                cancellationToken: ct))).ToList();
 
-        var saldoPorServicio = desgloseRows
-            .Select(r => new SaldoServicioDto(r.Servicio, r.Saldo, (int)r.MesesPendientes))
-            .ToList()
-            .AsReadOnly();
+        var porcentajes = (await connection.QueryAsync<DesglosePorcentajeRow>(
+            new CommandDefinition(
+                "SELECT item_codigo, porcentaje FROM public.adm_desglose_abono_porcentaje WHERE company_id = @CompanyId",
+                new { CompanyId = companyId },
+                cancellationToken: ct)))
+            .ToDictionary(p => p.item_codigo, p => p.porcentaje);
 
-        return new ClienteEstadoCuentaDto(
-            saldoActual,
-            fechaPago,
-            montoPago,
-            consumoPromedio,
-            null,
-            saldoPorServicio);
+        var items = desgloseRows
+            .Where(r => r.Categoria == "SERVICIO")
+            .Select(r => new DesgloseAbonoDistribuidor.ItemDesglose(
+                r.Codigo ?? string.Empty, r.Servicio ?? string.Empty, r.Saldo, r.Orden))
+            .ToList();
+
+        var saldoAnterior = desgloseRows.FirstOrDefault(r => r.Categoria == "SALDO_ANTERIOR");
+        if (saldoAnterior is not null)
+        {
+            items.Add(new DesgloseAbonoDistribuidor.ItemDesglose(
+                DesgloseAbonoDistribuidor.CodigoSaldoAnterior, "Saldo anterior", saldoAnterior.Saldo, 9000));
+        }
+
+        var pagos = desgloseRows.FirstOrDefault(r => r.Categoria == "PAGOS")?.Saldo ?? 0m;
+        var ajustes = desgloseRows.FirstOrDefault(r => r.Categoria == "AJUSTES")?.Saldo ?? 0m;
+
+        return DesgloseAbonoDistribuidor.Distribuir(items, pagos, ajustes, porcentajes);
     }
 
-    private sealed class SaldoServicioRow
+    private sealed class DesgloseServicioRow
     {
-        public string Servicio { get; init; } = string.Empty;
+        public string Categoria { get; init; } = string.Empty;
+        public string? Codigo { get; init; }
+        public string? Servicio { get; init; }
         public decimal Saldo { get; init; }
-        public long MesesPendientes { get; init; }
+        public int Orden { get; init; }
+    }
+
+    private sealed class DesglosePorcentajeRow
+    {
+#pragma warning disable IDE1006 // nombres = columnas de Postgres para el mapeo de Dapper
+        public string item_codigo { get; init; } = string.Empty;
+        public decimal porcentaje { get; init; }
+#pragma warning restore IDE1006
     }
 
     public async Task<IReadOnlyList<ClienteMovimientoDto>> GetMovimientosAsync(int clienteId, CancellationToken ct = default)
@@ -656,23 +718,19 @@ ORDER BY orden, servicio";
             return Array.Empty<ClienteMovimientoDto>();
         }
 
-        return await _context.transaccion_abonados
-            .AsNoTracking()
-            .Where(t => t.cliente_clave == clave)
-            .OrderByDescending(t => t.ide)
-            .Select(t => new ClienteMovimientoDto(
-                t.ide,
-                t.fecha_docu.HasValue ? t.fecha_docu.Value.ToDateTime(TimeOnly.MinValue) : DateTime.MinValue,
-                t.tipotransaccion ?? string.Empty,
-                t.descripcion,
-                (t.creditos ?? 0) - (t.debitos ?? 0),
-                t.saldo ?? 0,
-                t.recibo,
-                _context.facturas
-                    .Where(f => f.numrecibo == t.recibo && f.clientecodigo == t.cliente_clave)
-                    .Select(f => f.numfactura)
-                    .FirstOrDefault()))
-            .ToListAsync(ct);
+        var movimientos = await CargarMovimientosConSaldoAsync(clave, ct);
+
+        // Contrato historico de este metodo: del mas reciente al mas antiguo.
+        var ordenados = movimientos
+            .OrderByDescending(m => m.Fecha)
+            .ThenByDescending(m => m.Ide)
+            .ToList();
+
+        var numFacturaPorRecibo = await ResolverNumFacturaPorReciboAsync(clave, ordenados, ct);
+
+        return ordenados
+            .Select(m => ProyectarMovimiento(m, numFacturaPorRecibo))
+            .ToList();
     }
 
     public async Task<PagedResult<ClienteMovimientoDto>> GetMovimientosPagedAsync(
@@ -694,12 +752,8 @@ ORDER BY orden, servicio";
             return new PagedResult<ClienteMovimientoDto>(Array.Empty<ClienteMovimientoDto>(), 0);
         }
 
-        var query = _context.transaccion_abonados
-            .AsNoTracking()
-            .Where(t => t.cliente_clave == clave);
-
-        var totalCount = await query.CountAsync(ct);
-        query = ApplyMovimientosSort(query, sortField, sortDesc);
+        var movimientos = await CargarMovimientosConSaldoAsync(clave, ct);
+        var totalCount = movimientos.Count;
 
         if (skip < 0)
         {
@@ -711,22 +765,16 @@ ORDER BY orden, servicio";
             take = 50;
         }
 
-        var items = await query
+        var pagina = OrdenarMovimientos(movimientos, sortField, sortDesc)
             .Skip(skip)
             .Take(take)
-            .Select(t => new ClienteMovimientoDto(
-                t.ide,
-                t.fecha_docu.HasValue ? t.fecha_docu.Value.ToDateTime(TimeOnly.MinValue) : DateTime.MinValue,
-                t.tipotransaccion ?? string.Empty,
-                t.descripcion,
-                (t.creditos ?? 0) - (t.debitos ?? 0),
-                t.saldo ?? 0,
-                t.recibo,
-                _context.facturas
-                    .Where(f => (decimal?)f.numrecibo == t.recibo && f.clientecodigo == t.cliente_clave)
-                    .Select(f => f.numfactura)
-                    .FirstOrDefault()))
-            .ToListAsync(ct);
+            .ToList();
+
+        var numFacturaPorRecibo = await ResolverNumFacturaPorReciboAsync(clave, pagina, ct);
+
+        var items = pagina
+            .Select(m => ProyectarMovimiento(m, numFacturaPorRecibo))
+            .ToList();
 
         return new PagedResult<ClienteMovimientoDto>(items, totalCount);
     }
@@ -1451,33 +1499,159 @@ ORDER BY orden, servicio";
         return ordered;
     }
 
-    private static IQueryable<transaccion_abonado> ApplyMovimientosSort(
-        IQueryable<transaccion_abonado> query,
+    // El saldo corrido (running) se reconstruye SIEMPRE en orden cronologico y solo
+    // con los movimientos vigentes, misma fuente de verdad que sp_obtener_cliente_saldo
+    // (2 args) / vw_transaccion_abonado_vigente. La columna persistida
+    // transaccion_abonado.saldo quedo corrupta para los abonos (se grababa con el SP de
+    // 1 arg que ignora los abonos vigentes 'C'), por eso NO se usa aqui.
+    private async Task<List<MovimientoCalculado>> CargarMovimientosConSaldoAsync(string clave, CancellationToken ct)
+    {
+        var raw = await _context.transaccion_abonados
+            .AsNoTracking()
+            .Where(t => t.cliente_clave == clave)
+            .OrderBy(t => t.fecha_docu)
+            .ThenBy(t => t.ide)
+            .Select(t => new
+            {
+                t.ide,
+                t.fecha_docu,
+                t.tipotransaccion,
+                t.descripcion,
+                t.debitos,
+                t.creditos,
+                t.estado,
+                t.recibo
+            })
+            .ToListAsync(ct);
+
+        var result = new List<MovimientoCalculado>(raw.Count);
+        decimal saldoCorrido = 0m;
+        foreach (var t in raw)
+        {
+            // El saldo (deuda) sube con los debitos (cargos) y baja con los creditos
+            // (abonos); solo los movimientos vigentes lo mueven.
+            if (EsMovimientoVigente(t.estado, t.tipotransaccion))
+            {
+                saldoCorrido += (t.debitos ?? 0m) - (t.creditos ?? 0m);
+            }
+
+            result.Add(new MovimientoCalculado(
+                t.ide,
+                t.fecha_docu,
+                t.tipotransaccion ?? string.Empty,
+                t.descripcion,
+                (t.creditos ?? 0m) - (t.debitos ?? 0m),
+                saldoCorrido,
+                t.recibo));
+        }
+
+        return result;
+    }
+
+    // Regla de vigencia unica (vw_transaccion_abonado_vigente, fix 2026-07-16): fuera
+    // 'N'/'R'/'P' y los pagos 201/202 con estado 'A' (caja/WS marcan 'A' al anular).
+    private static bool EsMovimientoVigente(string? estado, string? tipotransaccion)
+    {
+        var e = estado ?? string.Empty;
+        if (e is "N" or "R" or "P")
+        {
+            return false;
+        }
+
+        var tipo = tipotransaccion ?? string.Empty;
+        if (e == "A" && (tipo == "201" || tipo == "202"))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    // Resuelve numfactura por recibo para el conjunto dado en una sola consulta.
+    private async Task<Dictionary<long, string>> ResolverNumFacturaPorReciboAsync(
+        string clave,
+        IEnumerable<MovimientoCalculado> movimientos,
+        CancellationToken ct)
+    {
+        var recibos = movimientos
+            .Where(m => m.Recibo.HasValue)
+            .Select(m => (int)m.Recibo!.Value)
+            .Distinct()
+            .ToList();
+
+        if (recibos.Count == 0)
+        {
+            return new Dictionary<long, string>();
+        }
+
+        var facturas = await _context.facturas
+            .AsNoTracking()
+            .Where(f => f.clientecodigo == clave && recibos.Contains(f.numrecibo) && f.numfactura != null)
+            .Select(f => new { f.numrecibo, f.numfactura })
+            .ToListAsync(ct);
+
+        return facturas
+            .GroupBy(f => (long)f.numrecibo)
+            .ToDictionary(g => g.Key, g => g.First().numfactura!);
+    }
+
+    private static ClienteMovimientoDto ProyectarMovimiento(
+        MovimientoCalculado m,
+        IReadOnlyDictionary<long, string> numFacturaPorRecibo)
+    {
+        string? numFactura = null;
+        if (m.Recibo.HasValue && numFacturaPorRecibo.TryGetValue((long)m.Recibo.Value, out var nf))
+        {
+            numFactura = nf;
+        }
+
+        return new ClienteMovimientoDto(
+            m.Ide,
+            m.Fecha.HasValue ? m.Fecha.Value.ToDateTime(TimeOnly.MinValue) : DateTime.MinValue,
+            m.Tipo,
+            m.Descripcion,
+            m.Monto,
+            m.SaldoCorrido,
+            m.Recibo,
+            numFactura);
+    }
+
+    // Ordena en memoria; el saldo corrido ya viene calculado en orden cronologico, de
+    // modo que reordenar por otra columna no altera el saldo mostrado en cada fila.
+    private static IEnumerable<MovimientoCalculado> OrdenarMovimientos(
+        List<MovimientoCalculado> movimientos,
         string? sortField,
         bool sortDesc)
     {
-        IOrderedQueryable<transaccion_abonado> ordered = sortField switch
+        return sortField switch
         {
             "Fecha" => sortDesc
-                ? query.OrderByDescending(t => t.fecha_docu).ThenByDescending(t => t.ide)
-                : query.OrderBy(t => t.fecha_docu).ThenBy(t => t.ide),
+                ? movimientos.OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Ide)
+                : movimientos.OrderBy(m => m.Fecha).ThenBy(m => m.Ide),
             "Tipo" => sortDesc
-                ? query.OrderByDescending(t => t.tipotransaccion).ThenByDescending(t => t.ide)
-                : query.OrderBy(t => t.tipotransaccion).ThenBy(t => t.ide),
+                ? movimientos.OrderByDescending(m => m.Tipo).ThenByDescending(m => m.Ide)
+                : movimientos.OrderBy(m => m.Tipo).ThenBy(m => m.Ide),
             "Descripcion" => sortDesc
-                ? query.OrderByDescending(t => t.descripcion).ThenByDescending(t => t.ide)
-                : query.OrderBy(t => t.descripcion).ThenBy(t => t.ide),
+                ? movimientos.OrderByDescending(m => m.Descripcion).ThenByDescending(m => m.Ide)
+                : movimientos.OrderBy(m => m.Descripcion).ThenBy(m => m.Ide),
             "Monto" => sortDesc
-                ? query.OrderByDescending(t => (t.creditos ?? 0) - (t.debitos ?? 0)).ThenByDescending(t => t.ide)
-                : query.OrderBy(t => (t.creditos ?? 0) - (t.debitos ?? 0)).ThenBy(t => t.ide),
+                ? movimientos.OrderByDescending(m => m.Monto).ThenByDescending(m => m.Ide)
+                : movimientos.OrderBy(m => m.Monto).ThenBy(m => m.Ide),
             "Saldo" => sortDesc
-                ? query.OrderByDescending(t => t.saldo).ThenByDescending(t => t.ide)
-                : query.OrderBy(t => t.saldo).ThenBy(t => t.ide),
+                ? movimientos.OrderByDescending(m => m.SaldoCorrido).ThenByDescending(m => m.Ide)
+                : movimientos.OrderBy(m => m.SaldoCorrido).ThenBy(m => m.Ide),
             _ => sortDesc
-                ? query.OrderByDescending(t => t.fecha_docu).ThenByDescending(t => t.ide)
-                : query.OrderBy(t => t.fecha_docu).ThenBy(t => t.ide)
+                ? movimientos.OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Ide)
+                : movimientos.OrderBy(m => m.Fecha).ThenBy(m => m.Ide)
         };
-
-        return ordered;
     }
+
+    private sealed record MovimientoCalculado(
+        int Ide,
+        DateOnly? Fecha,
+        string Tipo,
+        string? Descripcion,
+        decimal Monto,
+        decimal SaldoCorrido,
+        decimal? Recibo);
 }

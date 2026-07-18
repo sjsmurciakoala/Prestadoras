@@ -20,7 +20,6 @@ public partial class SiadDbContext
     public virtual DbSet<alm_unidad_medida> alm_unidad_medidas { get; set; } = null!;
     public virtual DbSet<alm_categoria_unidad> alm_categoria_unidads { get; set; } = null!;
     public virtual DbSet<alm_tipo_articulo> alm_tipo_articulos { get; set; } = null!;
-    public virtual DbSet<alm_linea> alm_lineas { get; set; } = null!;
     public virtual DbSet<alm_grupo> alm_grupos { get; set; } = null!;
     public virtual DbSet<alm_bodega> alm_bodegas { get; set; } = null!;
     public virtual DbSet<alm_articulo_bodega> alm_articulo_bodegas { get; set; } = null!;
@@ -74,11 +73,8 @@ public partial class SiadDbContext
                 .HasForeignKey(e => e.tipo_articulo_id)
                 .OnDelete(DeleteBehavior.SetNull);
 
-            entity.HasIndex(e => e.linea_id, "ix_alm_articulo_linea_id");
-            entity.HasOne(e => e.linea_ref).WithMany()
-                .HasForeignKey(e => e.linea_id)
-                .OnDelete(DeleteBehavior.SetNull);
-
+            // linea_id (FK legacy a alm_linea) sigue en la BD pero ya no se mapea:
+            // se elimina en la Fase 3 de la unificación línea→tipo (2026-07-16).
             entity.HasIndex(e => e.grupo_id, "ix_alm_articulo_grupo_id");
             entity.HasOne(e => e.grupo_ref).WithMany()
                 .HasForeignKey(e => e.grupo_id)
@@ -436,33 +432,14 @@ public partial class SiadDbContext
             entity.HasIndex(e => e.company_id, "ix_alm_tipo_articulo_company");
 
             entity.Property(e => e.codigo).HasMaxLength(10);
-            entity.Property(e => e.nombre).HasMaxLength(60);
-            entity.Property(e => e.descripcion).HasMaxLength(200);
-            entity.Property(e => e.cuenta_inventario).HasMaxLength(20);
-            entity.Property(e => e.cuenta_costo_ventas).HasMaxLength(20);
-            entity.Property(e => e.cuenta_ventas).HasMaxLength(20);
-            entity.Property(e => e.cuenta_ajustes).HasMaxLength(20);
-            entity.Property(e => e.cuenta_devoluciones).HasMaxLength(20);
-            entity.Property(e => e.maneja_inventario).HasDefaultValue(true);
-            entity.Property(e => e.activo).HasDefaultValue(true);
-            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
-            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
-            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
-            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
-        });
-
-        modelBuilder.Entity<alm_linea>(entity =>
-        {
-            entity.HasKey(e => e.id).HasName("alm_linea_pkey");
-            entity.ToTable("alm_linea", "public");
-            entity.HasIndex(e => new { e.company_id, e.codigo },
-                "uq_alm_linea_company_codigo").IsUnique();
-            entity.HasIndex(e => e.company_id, "ix_alm_linea_company");
-
-            entity.Property(e => e.codigo).HasMaxLength(2);
             entity.Property(e => e.nombre).HasMaxLength(100);
-            entity.Property(e => e.cuenta_contable).HasMaxLength(25);
-            entity.Property(e => e.cuenta_contable_anterior).HasMaxLength(30);
+            entity.Property(e => e.descripcion).HasMaxLength(200);
+            entity.Property(e => e.cuenta_inventario).HasMaxLength(25);
+            entity.Property(e => e.cuenta_costo_ventas).HasMaxLength(25);
+            entity.Property(e => e.cuenta_ventas).HasMaxLength(25);
+            entity.Property(e => e.cuenta_ajustes).HasMaxLength(25);
+            entity.Property(e => e.cuenta_devoluciones).HasMaxLength(25);
+            entity.Property(e => e.maneja_inventario).HasDefaultValue(true);
             entity.Property(e => e.activo).HasDefaultValue(true);
             entity.Property(e => e.usuariocreacion).HasMaxLength(100);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
@@ -477,19 +454,20 @@ public partial class SiadDbContext
             entity.HasIndex(e => new { e.company_id, e.codigo },
                 "uq_alm_grupo_company_codigo").IsUnique();
             entity.HasIndex(e => e.company_id, "ix_alm_grupo_company");
-            entity.HasIndex(e => e.linea_id, "ix_alm_grupo_linea");
+            entity.HasIndex(e => e.tipo_articulo_id, "ix_alm_grupo_tipo_articulo");
 
             entity.Property(e => e.codigo).HasMaxLength(6);
             entity.Property(e => e.nombre).HasMaxLength(100);
-            entity.Property(e => e.linea_codigo).HasMaxLength(2);
             entity.Property(e => e.activo).HasDefaultValue(true);
             entity.Property(e => e.usuariocreacion).HasMaxLength(100);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
 
-            entity.HasOne(e => e.linea).WithMany(p => p.grupos)
-                .HasForeignKey(e => e.linea_id)
+            // Unificación 2026-07-16: la categoría cuelga del tipo de artículo.
+            // linea_id/linea_codigo (legacy) siguen en la BD sin mapear hasta la Fase 3.
+            entity.HasOne(e => e.tipo_articulo).WithMany(p => p.grupos)
+                .HasForeignKey(e => e.tipo_articulo_id)
                 .OnDelete(DeleteBehavior.SetNull);
         });
 

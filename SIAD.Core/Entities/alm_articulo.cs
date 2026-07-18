@@ -41,15 +41,15 @@ public partial class alm_articulo : ICompanyScopedEntity
     public int? unidad_salida_id { get; set; }
     public virtual alm_unidad_medida? unidad_salida_ref { get; set; }
 
-    /// <summary>FK opcional a la clasificación por uso (operativo/mantenimiento/consumo).</summary>
+    /// <summary>
+    /// FK al tipo de artículo: la clasificación única desde la unificación línea→tipo
+    /// (2026-07-16). Nullable en BD por los datos históricos; el servicio la exige al
+    /// crear/editar. La columna legacy linea_id sigue en la BD (sin mapear) hasta la Fase 3.
+    /// </summary>
     public int? tipo_articulo_id { get; set; }
     public virtual alm_tipo_articulo? tipo_articulo_ref { get; set; }
 
-    /// <summary>FK opcional a la línea de inventario (convive con el código legacy linea).</summary>
-    public int? linea_id { get; set; }
-    public virtual alm_linea? linea_ref { get; set; }
-
-    /// <summary>FK opcional al grupo de producto (convive con el código legacy grupo).</summary>
+    /// <summary>FK opcional a la categoría (alm_grupo); debe pertenecer al tipo del artículo.</summary>
     public int? grupo_id { get; set; }
     public virtual alm_grupo? grupo_ref { get; set; }
 

@@ -5,7 +5,11 @@ using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
 
-/// <summary>Mantenimiento del catálogo de grupos de producto (alm_grupo).</summary>
+/// <summary>
+/// Mantenimiento del catálogo de categorías de artículo (alm_grupo). Desde la
+/// unificación línea→tipo (2026-07-16) cada categoría cuelga de un tipo de
+/// artículo (alm_tipo_articulo).
+/// </summary>
 public sealed class GrupoService : IGrupoService
 {
     private readonly SiadDbContext _context;
@@ -41,8 +45,8 @@ public sealed class GrupoService : IGrupoService
                 Id = g.id,
                 Codigo = g.codigo,
                 Nombre = g.nombre,
-                LineaId = g.linea_id,
-                LineaNombre = g.linea != null ? g.linea.nombre : null,
+                TipoArticuloId = g.tipo_articulo_id,
+                TipoArticuloNombre = g.tipo_articulo != null ? g.tipo_articulo.nombre : null,
                 Activo = g.activo
             })
             .ToListAsync(ct);
@@ -58,7 +62,7 @@ public sealed class GrupoService : IGrupoService
                 Id = g.id,
                 Codigo = g.codigo,
                 Nombre = g.nombre,
-                LineaId = g.linea_id,
+                TipoArticuloId = g.tipo_articulo_id,
                 Activo = g.activo
             })
             .FirstOrDefaultAsync(ct);
@@ -69,7 +73,7 @@ public sealed class GrupoService : IGrupoService
         return await _context.alm_grupos.AsNoTracking()
             .Where(g => g.activo)
             .OrderBy(g => g.codigo)
-            .Select(g => new GrupoLookupDto { Id = g.id, Codigo = g.codigo, Nombre = g.nombre, LineaId = g.linea_id })
+            .Select(g => new GrupoLookupDto { Id = g.id, Codigo = g.codigo, Nombre = g.nombre, TipoArticuloId = g.tipo_articulo_id })
             .ToListAsync(ct);
     }
 
@@ -81,17 +85,16 @@ public sealed class GrupoService : IGrupoService
 
         if (await _context.alm_grupos.AsNoTracking().AnyAsync(g => g.codigo == codigo, ct))
         {
-            throw new InvalidOperationException($"Ya existe un grupo con el código {codigo}.");
+            throw new InvalidOperationException($"Ya existe una categoría con el código {codigo}.");
         }
 
-        var lineaCodigo = await ResolverLineaCodigoAsync(dto.LineaId, ct);
+        await ValidarTipoArticuloAsync(dto.TipoArticuloId, ct);
 
         var entity = new alm_grupo
         {
             codigo = codigo,
             nombre = nombre,
-            linea_id = dto.LineaId,
-            linea_codigo = lineaCodigo,
+            tipo_articulo_id = dto.TipoArticuloId,
             activo = dto.Activo,
             usuariocreacion = ClasificacionNormalizer.Usuario(user),
             fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
@@ -108,20 +111,21 @@ public sealed class GrupoService : IGrupoService
         if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
 
         var entity = await _context.alm_grupos.FirstOrDefaultAsync(g => g.id == id, ct)
-                     ?? throw new KeyNotFoundException("El grupo no existe.");
+                     ?? throw new KeyNotFoundException("La categoría no existe.");
 
         var codigo = ClasificacionNormalizer.Requerido(dto.Codigo, 6, "código", mayus: true);
         var nombre = ClasificacionNormalizer.Requerido(dto.Nombre, 100, "nombre");
 
         if (await _context.alm_grupos.AsNoTracking().AnyAsync(g => g.codigo == codigo && g.id != id, ct))
         {
-            throw new InvalidOperationException($"Ya existe un grupo con el código {codigo}.");
+            throw new InvalidOperationException($"Ya existe una categoría con el código {codigo}.");
         }
+
+        await ValidarTipoArticuloAsync(dto.TipoArticuloId, ct);
 
         entity.codigo = codigo;
         entity.nombre = nombre;
-        entity.linea_id = dto.LineaId;
-        entity.linea_codigo = await ResolverLineaCodigoAsync(dto.LineaId, ct);
+        entity.tipo_articulo_id = dto.TipoArticuloId;
         entity.activo = dto.Activo;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -144,17 +148,15 @@ public sealed class GrupoService : IGrupoService
         return true;
     }
 
-    private async Task<string?> ResolverLineaCodigoAsync(int? lineaId, CancellationToken ct)
+    /// <summary>El tipo es opcional en la categoría, pero si viene debe existir (en la empresa actual).</summary>
+    private async Task ValidarTipoArticuloAsync(int? tipoArticuloId, CancellationToken ct)
     {
-        if (!lineaId.HasValue) return null;
-        var linea = await _context.alm_lineas.AsNoTracking()
-            .Where(l => l.id == lineaId.Value)
-            .Select(l => l.codigo)
-            .FirstOrDefaultAsync(ct);
-        if (linea is null)
+        if (!tipoArticuloId.HasValue) return;
+        var existe = await _context.alm_tipo_articulos.AsNoTracking()
+            .AnyAsync(t => t.id == tipoArticuloId.Value, ct);
+        if (!existe)
         {
-            throw new InvalidOperationException("La línea seleccionada no existe.");
+            throw new InvalidOperationException("El tipo de artículo seleccionado no existe.");
         }
-        return linea;
     }
 }

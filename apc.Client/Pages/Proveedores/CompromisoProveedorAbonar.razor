@@ -1,0 +1,493 @@
+@page "/proveedores/compromisos-proveedor/{NumeroOrden:int}/abonar"
+@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using Microsoft.AspNetCore.Components.Authorization
+@using Microsoft.JSInterop
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services.Contabilidad
+@using apc.Client.Services.Presupuesto
+
+@inject OrdenesPagoDirectoClient OrdenesPagoDirectoClient
+@inject AccountFormatState AccountFormat
+@inject NavigationManager Navigation
+@inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
+@inject ILogger<CompromisoProveedorAbonar> Logger
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Abonar Compromiso</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CompromisoProveedorAbonarToast" MaxToastCount="4" />
+    <ErrorNotice @ref="errorNotice" />
+
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">Abonos del compromiso de proveedor</h2>
+            <p class="page-subtitle">Registre pagos parciales o totales y consulte el historial de abonos.</p>
+        </div>
+        <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
+                  CssClass="btn-modern shadow-sm" Click="Volver" />
+    </div>
+
+    @if (isLoading)
+    {
+        <div class="modern-card">
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+        </div>
+    }
+    else if (saldo is null)
+    {
+        <div class="alert alert-warning" role="alert">No se encontro el compromiso solicitado.</div>
+    }
+    else
+    {
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+            <span class="text-muted">Compromiso <strong>@saldo.NumeroOrden</strong> &middot; @ProveedorResumenTexto</span>
+            <span class="badge-status @EstadoBadgeClass">@saldo.EstadoTexto</span>
+        </div>
+
+        <div class="summary-strip mb-3">
+            <div class="summary-card">
+                <div class="summary-label">Monto</div>
+                <div class="summary-value">@saldo.Monto.ToString("N2")</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Abonado</div>
+                <div class="summary-value">@saldo.Abonado.ToString("N2")</div>
+            </div>
+            <div class="summary-card">
+                <div class="summary-label">Saldo</div>
+                <div class="summary-value">@saldo.Saldo.ToString("N2")</div>
+            </div>
+        </div>
+
+        @if (EstaPagado)
+        {
+            <div class="alert alert-info" role="alert">
+                Este compromiso ya esta pagado (saldo cero). No admite nuevos abonos.
+            </div>
+        }
+        else
+        {
+            <div class="modern-card mb-3">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-3 section-header">
+                    <div>
+                        <h5 class="mb-0">Nuevo abono</h5>
+                        <small class="text-muted">El monto debe ser mayor a cero y no superar el saldo pendiente.</small>
+                    </div>
+                    <DxButton Text="Abonar todo el saldo" IconCssClass="bi bi-cash-stack"
+                              RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern shadow-sm"
+                              Click="AbonarTodoElSaldo" Enabled="@(!isSaving)" />
+                </div>
+
+                @if (!TieneCuentaProveedorDisponible)
+                {
+                    <div class="alert alert-warning mb-3" role="alert">
+                        El proveedor no tiene una cuenta contable valida configurada. No se puede registrar el abono.
+                    </div>
+                }
+                @if (cuentasContra.Count == 0)
+                {
+                    <div class="alert alert-warning mb-3" role="alert">
+                        No hay cuentas de origen disponibles para el abono.
+                    </div>
+                }
+
+                <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                    <DxFormLayoutItem Caption="Monto del abono" ColSpanMd="4">
+                        <DxSpinEdit TValue="decimal" @bind-Value="nuevoMonto"
+                                    MinValue="0m" MaxValue="@saldo.Saldo" Increment="0.01m"
+                                    DisplayFormat="N2" InputCssClass="text-end"
+                                    ValidationEnabled="false" Enabled="@PuedeEditarFormulario" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Metodo de pago" ColSpanMd="4">
+                        <DxComboBox Data="@metodosPago" TData="MetodoPagoItem" TValue="string"
+                                    @bind-Value="nuevoMetodo"
+                                    ValueFieldName="@nameof(MetodoPagoItem.Value)"
+                                    TextFieldName="@nameof(MetodoPagoItem.Display)"
+                                    NullText="Seleccione metodo" DropDownStyle="DropDownStyle.DropDownList"
+                                    Enabled="@PuedeEditarFormulario" />
+                    </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Cuenta de origen" ColSpanMd="4">
+                        <DxComboBox Data="@cuentasContra" TData="CuentaContableLookupDto" TValue="long"
+                                    @bind-Value="cuentaOrigenId"
+                                    ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                    NullText="Seleccione cuenta de origen"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    DropDownStyle="DropDownStyle.DropDown"
+                                    AllowUserInput="true"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValidationEnabled="false" Enabled="@PuedeEditarFormulario" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                <div class="total-bar mt-3">
+                    <div class="text-muted">Usuario: <strong>@UsuarioActualTexto</strong></div>
+                    <DxButton Text="@(isSaving ? "Registrando..." : "Registrar abono")"
+                              IconCssClass="bi bi-check2-circle" RenderStyle="ButtonRenderStyle.Success"
+                              CssClass="btn-modern shadow-sm" Click="RegistrarAbonoAsync" Enabled="@CanRegistrar" />
+                </div>
+            </div>
+        }
+
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center gap-2 mb-3 section-header">
+                <div>
+                    <h5 class="mb-0">Historial de abonos</h5>
+                    <small class="text-muted">Solo puede anularse el ultimo abono vigente.</small>
+                </div>
+                <span class="summary-pill">Abonos: <strong>@saldo.Abonos.Count</strong></span>
+            </div>
+
+            @if (saldo.Abonos.Count == 0)
+            {
+                <div class="alert alert-info mb-0" role="alert">Este compromiso aun no tiene abonos registrados.</div>
+            }
+            else
+            {
+                <div class="grid-wrapper">
+                    <DxGrid Data="@saldo.Abonos" TData="AbonoCompromisoListItemDto"
+                            KeyFieldName="@nameof(AbonoCompromisoListItemDto.NumeroAbono)"
+                            PageSize="10" ShowFilterRow="false" ShowSearchBox="false" ShowGroupPanel="false"
+                            SizeMode="SizeMode.Large" CssClass="grid-modern">
+                        <Columns>
+                            <DxGridDataColumn FieldName="@nameof(AbonoCompromisoListItemDto.NumeroAbono)" Caption="#"
+                                              Width="70px" TextAlignment="GridTextAlignment.Center" />
+                            <DxGridDataColumn FieldName="@nameof(AbonoCompromisoListItemDto.Fecha)" Caption="Fecha"
+                                              Width="120px" DisplayFormat="dd/MM/yyyy" />
+                            <DxGridDataColumn FieldName="@nameof(AbonoCompromisoListItemDto.MetodoPago)" Caption="Metodo" MinWidth="140" />
+                            <DxGridDataColumn FieldName="@nameof(AbonoCompromisoListItemDto.Monto)" Caption="Monto"
+                                              Width="140px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(AbonoCompromisoListItemDto.NumeroPartida)" Caption="Partida" Width="150px">
+                                <CellDisplayTemplate Context="cell">
+                                    @GetTextOrDash(((AbonoCompromisoListItemDto)cell.DataItem).NumeroPartida)
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn Caption="Estado" Width="120px">
+                                <CellDisplayTemplate Context="cell">
+                                    @if (cell.DataItem is AbonoCompromisoListItemDto item)
+                                    {
+                                        <span class="badge-status @(EsVigente(item) ? "active" : "inactive")">
+                                            @(EsVigente(item) ? "Vigente" : "Anulado")
+                                        </span>
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                            <DxGridDataColumn Caption="Acciones" Width="130px">
+                                <CellDisplayTemplate Context="cell">
+                                    @if (cell.DataItem is AbonoCompromisoListItemDto item)
+                                    {
+                                        <div class="d-flex flex-wrap gap-2">
+                                            <button type="button" class="btn-icon btn-view" title="Ver comprobante"
+                                                    @onclick="@(() => VerComprobanteAsync(item.NumeroAbono))">
+                                                <i class="bi bi-printer"></i>
+                                            </button>
+                                            <button type="button" class="btn-icon btn-delete" title="Anular abono"
+                                                    disabled="@(!item.PuedeAnular || isSaving)"
+                                                    @onclick="@(() => AnularAbonoAsync(item.NumeroAbono))">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        </div>
+                                    }
+                                </CellDisplayTemplate>
+                            </DxGridDataColumn>
+                        </Columns>
+                    </DxGrid>
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter]
+    public int NumeroOrden { get; set; }
+
+    [SupplyParameterFromQuery(Name = "returnUrl")]
+    public string? ReturnUrl { get; set; }
+
+    private readonly List<CuentaContableLookupDto> cuentasContra = new();
+
+    // OrdenPagoDirectoMetodoPago es clase estatica de constantes string (Contable="CONTABLE", ...),
+    // NO enum. El Value enviado al backend usa esas constantes para ser compatible con EsBancario.
+    private readonly List<MetodoPagoItem> metodosPago = new()
+    {
+        new(OrdenPagoDirectoMetodoPago.Contable, "Contable"),
+        new(OrdenPagoDirectoMetodoPago.Deposito, "Deposito"),
+        new(OrdenPagoDirectoMetodoPago.Cheque, "Cheque"),
+        new(OrdenPagoDirectoMetodoPago.Transferencia, "Transferencia"),
+    };
+
+    private CompromisoSaldoDto? saldo;
+    private OrdenPagoDirectoDetalleDto? detalle;
+    private decimal nuevoMonto;
+    private string? nuevoMetodo = OrdenPagoDirectoMetodoPago.Contable;
+    private long cuentaOrigenId;
+    private bool isLoading = true;
+    private bool isSaving;
+    private ErrorNotice errorNotice = default!;
+    private readonly List<string> validationMessages = new();
+    private string usuarioActual = "SISTEMA";
+
+    private bool EstaPagado => saldo is not null && saldo.Saldo <= 0m;
+    private bool TieneCuentaProveedorDisponible => !string.IsNullOrWhiteSpace(detalle?.CuentaContableProveedor);
+    private bool PuedeEditarFormulario => !isSaving && !EstaPagado && TieneCuentaProveedorDisponible && cuentasContra.Count > 0;
+    private string UsuarioActualTexto => string.IsNullOrWhiteSpace(usuarioActual) ? "SISTEMA" : usuarioActual;
+    private string ProveedorResumenTexto => BuildProveedorResumenTexto();
+    private string EstadoBadgeClass => saldo?.EstadoTexto switch
+    {
+        "Pagado" => "inactive",
+        "Anulado" => "inactive",
+        "Abonado parcial" => "partial",
+        _ => "pending"
+    };
+    private bool CanRegistrar => PuedeEditarFormulario &&
+                                 nuevoMonto > 0m &&
+                                 nuevoMonto <= (saldo?.Saldo ?? 0m) &&
+                                 cuentaOrigenId > 0 &&
+                                 !string.IsNullOrWhiteSpace(nuevoMetodo);
+
+    protected override async Task OnParametersSetAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        validationMessages.Clear();
+        saldo = null;
+        detalle = null;
+
+        try
+        {
+            await AccountFormat.EnsureLoadedAsync();
+
+            var authState = await AuthStateProvider.GetAuthenticationStateAsync();
+            usuarioActual = authState.User.Identity?.Name ?? "SISTEMA";
+
+            var saldoTask = OrdenesPagoDirectoClient.GetSaldoConAbonosAsync(NumeroOrden);
+            var detalleTask = OrdenesPagoDirectoClient.GetByNumeroOrdenAsync(NumeroOrden);
+            var cuentasTask = OrdenesPagoDirectoClient.GetCuentasContraProcesamientoAsync();
+            await Task.WhenAll(saldoTask, detalleTask, cuentasTask);
+
+            saldo = await saldoTask;
+            detalle = await detalleTask;
+            cuentasContra.Clear();
+            cuentasContra.AddRange(await cuentasTask);
+
+            if (saldo is null)
+            {
+                ShowToast("Abonar compromiso", $"No se encontro el compromiso {NumeroOrden}.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            ResetFormulario();
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Abonar compromiso", "No se pudo cargar la pantalla de abonos.", ToastRenderStyle.Danger);
+            Logger.LogError(ex, "Error al cargar pantalla de abonos para compromiso {NumeroOrden}", NumeroOrden);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void ResetFormulario()
+    {
+        nuevoMonto = 0m;
+        nuevoMetodo = OrdenPagoDirectoMetodoPago.Contable;
+        cuentaOrigenId = 0;
+    }
+
+    private void AbonarTodoElSaldo()
+    {
+        if (saldo is not null)
+        {
+            nuevoMonto = saldo.Saldo;
+        }
+    }
+
+    private async Task RegistrarAbonoAsync()
+    {
+        if (saldo is null || EstaPagado)
+        {
+            return;
+        }
+
+        validationMessages.Clear();
+        if (!Validar())
+        {
+            ShowToast("Validacion", string.Join(" | ", validationMessages), ToastRenderStyle.Warning);
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+
+            var dto = new AbonoCompromisoUpsertDto
+            {
+                Monto = nuevoMonto,
+                MetodoPago = nuevoMetodo!,
+                CuentaContraId = cuentaOrigenId,
+                CuentaDestinoProveedorId = null, // informativo; combo de cuenta destino pendiente
+                Usuario = UsuarioActualTexto
+            };
+
+            var result = await OrdenesPagoDirectoClient.RegistrarAbonoAsync(NumeroOrden, dto);
+            if (!result.Success)
+            {
+                ShowToast("Abonar compromiso", result.Message, ToastRenderStyle.Danger);
+                return;
+            }
+
+            ShowToast("Exito", result.Message, ToastRenderStyle.Success);
+            if (result.NumeroAbono > 0)
+            {
+                await JS.InvokeVoidAsync("open",
+                    OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, result.NumeroAbono), "_blank");
+            }
+
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al registrar abono del compromiso {NumeroOrden}", NumeroOrden);
+            errorNotice.ShowError("No se pudo registrar el abono.", ex);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task AnularAbonoAsync(int numeroAbono)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm", $"Anular el abono #{numeroAbono} del compromiso {NumeroOrden}?");
+        if (!confirmado)
+        {
+            return;
+        }
+
+        try
+        {
+            isSaving = true;
+
+            var dto = new AnularOrdenPagoDirectoDto { Motivo = "Anulacion desde pantalla de abonos" };
+            var result = await OrdenesPagoDirectoClient.AnularAbonoAsync(NumeroOrden, numeroAbono, dto);
+            if (!result.Success)
+            {
+                ShowToast("Anular abono", result.Message, ToastRenderStyle.Danger);
+                return;
+            }
+
+            ShowToast("Exito", result.Message, ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al anular abono {NumeroAbono} del compromiso {NumeroOrden}", numeroAbono, NumeroOrden);
+            errorNotice.ShowError("No se pudo anular el abono.", ex);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task VerComprobanteAsync(int numeroAbono)
+        => await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, numeroAbono), "_blank");
+
+    private bool Validar()
+    {
+        if (saldo is null)
+        {
+            validationMessages.Add("No se cargo el saldo del compromiso.");
+            return false;
+        }
+
+        if (!TieneCuentaProveedorDisponible)
+        {
+            validationMessages.Add("El proveedor no tiene una cuenta contable valida configurada.");
+        }
+
+        if (nuevoMonto <= 0m)
+        {
+            validationMessages.Add("El monto del abono debe ser mayor a cero.");
+        }
+        else if (nuevoMonto > saldo.Saldo)
+        {
+            validationMessages.Add($"El monto no puede superar el saldo pendiente ({saldo.Saldo:N2}).");
+        }
+
+        if (cuentaOrigenId <= 0)
+        {
+            validationMessages.Add("Debe seleccionar la cuenta de origen.");
+        }
+
+        if (string.IsNullOrWhiteSpace(nuevoMetodo))
+        {
+            validationMessages.Add("Debe seleccionar el metodo de pago.");
+        }
+
+        return validationMessages.Count == 0;
+    }
+
+    private void Volver()
+    {
+        var returnUrl = NormalizeLocalUrl(ReturnUrl) ?? "/proveedores/compromisos-proveedor";
+        Navigation.NavigateTo(returnUrl, true);
+    }
+
+    private static bool EsVigente(AbonoCompromisoListItemDto item)
+        => string.Equals(item.Estado, "V", StringComparison.OrdinalIgnoreCase);
+
+    private string BuildProveedorResumenTexto()
+    {
+        var correlativo = detalle?.CorrelativoProveedor?.ToString() ?? "-";
+        var proveedor = GetTextOrDash(detalle?.Proveedor);
+        if (correlativo == "-")
+        {
+            return proveedor;
+        }
+        return proveedor == "-" ? correlativo : $"{correlativo} - {proveedor}";
+    }
+
+    private void ShowToast(string title, string message, ToastRenderStyle style)
+    {
+        ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = message,
+            RenderStyle = style,
+            ProviderName = "CompromisoProveedorAbonarToast"
+        });
+    }
+
+    private static string GetTextOrDash(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+
+    private static string? NormalizeLocalUrl(string? url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return null;
+        }
+
+        var normalized = url.Trim();
+        return !normalized.StartsWith("/", StringComparison.Ordinal) || normalized.StartsWith("//", StringComparison.Ordinal)
+            ? null
+            : normalized;
+    }
+
+    private sealed record MetodoPagoItem(string Value, string Display);
+}

@@ -8,6 +8,7 @@
 
 @inject IJSRuntime JS
 @inject ArticulosClient ArticulosClient
+@inject TiposArticuloClient TiposClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -82,11 +83,13 @@
                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
                                    Style="min-width: 260px;" />
 
-                        <DxComboBox Data="@lineas" Value="@filtroLinea"
-                                    NullText="Todos los grupos"
+                        <DxComboBox Data="@tipos" Value="@filtroTipoArticuloId"
+                                    ValueFieldName="@nameof(TipoArticuloLookupDto.Id)"
+                                    TextFieldName="@nameof(TipoArticuloLookupDto.Display)"
+                                    NullText="Todos los tipos"
                                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                    ValueChanged="@((string? v) => OnLineaChanged(v))"
-                                    Style="min-width: 170px;" CssClass="me-1" />
+                                    ValueChanged="@((int? v) => OnTipoArticuloChanged(v))"
+                                    Style="min-width: 220px;" CssClass="me-1" />
 
                         <div class="d-flex align-items-center me-2">
                             <DxCheckBox Checked="@filtroSoloBajoMinimo"
@@ -143,11 +146,20 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.LineaDisplay)" Caption="Grupo" MinWidth="150">
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.TipoArticuloDisplay)" Caption="Tipo" MinWidth="150">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
-                                <span class="text-muted" title="@item.LineaDisplay">@item.LineaDisplay</span>
+                                <span class="text-muted" title="@item.TipoArticuloDisplay">@item.TipoArticuloDisplay</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.GrupoDisplay)" Caption="Categoría" MinWidth="140" Visible="false">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted" title="@item.GrupoDisplay">@item.GrupoDisplay</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -250,10 +262,10 @@
 @code {
     private DxGrid? grid;
     private List<ArticuloListItemDto> articulos = new();
-    private List<string> lineas = new();
+    private List<TipoArticuloLookupDto> tipos = new();
 
     private string filtroBusqueda = string.Empty;
-    private string? filtroLinea;
+    private int? filtroTipoArticuloId;
     private bool filtroSoloBajoMinimo;
 
     private bool isLoading;
@@ -269,7 +281,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await CargarLineasAsync();
+        await CargarTiposAsync();
         await CargarAsync();
     }
 
@@ -278,20 +290,20 @@
         return new ArticuloFilterDto
         {
             Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
-            Linea = string.IsNullOrWhiteSpace(filtroLinea) ? null : filtroLinea,
+            TipoArticuloId = filtroTipoArticuloId,
             SoloBajoMinimo = filtroSoloBajoMinimo ? true : null
         };
     }
 
-    private async Task CargarLineasAsync()
+    private async Task CargarTiposAsync()
     {
         try
         {
-            lineas = await ArticulosClient.GetLineasAsync();
+            tipos = await TiposClient.GetLookupAsync();
         }
         catch
         {
-            lineas = new List<string>();
+            tipos = new List<TipoArticuloLookupDto>();
         }
     }
 
@@ -328,9 +340,9 @@
         await CargarAsync();
     }
 
-    private async Task OnLineaChanged(string? valor)
+    private async Task OnTipoArticuloChanged(int? valor)
     {
-        filtroLinea = valor;
+        filtroTipoArticuloId = valor;
         await CargarAsync();
     }
 

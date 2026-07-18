@@ -4,9 +4,11 @@
 @using DevExpress.Blazor
 @using System.ComponentModel.DataAnnotations
 @using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
 
 @inject ConfiguracionPresupuestoClient ConfiguracionPresupuestoClient
+@inject AccountFormatState AccountFormat
 @inject NavigationManager Navigation
 @inject IToastNotificationService ToastService
 @inject ILogger<PresupuestoDetalleEdit> Logger
@@ -147,13 +149,13 @@
 
     private string CuentaNumeroDisplay => string.IsNullOrWhiteSpace(CuentaContable)
         ? "-"
-        : AccountCodeFormatter.Format(CuentaContable);
+        : AccountFormat.Format(CuentaContable);
 
     private string CuentaDisplay => string.IsNullOrWhiteSpace(cuentaContableDisplay)
         ? CuentaNumeroDisplay
         : cuentaContableDisplay;
 
-    private string CuentaDescripcionDisplay => ExtractCuentaDescripcion(CuentaDisplay, CuentaNumeroDisplay);
+    private string CuentaDescripcionDisplay => ExtractCuentaDescripcion(CuentaDisplay);
 
     protected override async Task OnParametersSetAsync()
     {
@@ -180,10 +182,12 @@
                 return;
             }
 
+            await AccountFormat.EnsureLoadedAsync();
+
             var id = IdPresupuesto.Trim();
             var cuenta = CuentaContable.Trim();
             detalle = await ConfiguracionPresupuestoClient.GetDetailByIdAsync(id, cuenta);
-            cuentaContableDisplay = FormatCuentaContableDisplay(detalle?.CuentaContable);
+            cuentaContableDisplay = detalle?.CuentaContable;
 
             if (detalle is null)
             {
@@ -267,7 +271,7 @@
                 });
 
             detalle = updated;
-            cuentaContableDisplay = FormatCuentaContableDisplay(updated.CuentaContable);
+            cuentaContableDisplay = updated.CuentaContable;
             form.ValorProyeccion = updated.ValorProyeccion;
             ShowToast("Éxito", "Detalle actualizado correctamente.", ToastRenderStyle.Success);
             Navigation.NavigateTo("/presupuesto/configuraciones");
@@ -307,42 +311,13 @@
         });
     }
 
-    private static string FormatCuentaContableDisplay(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        var parts = value.Split(" - ", 2, StringSplitOptions.TrimEntries);
-        return parts.Length == 2
-            ? AccountCodeFormatter.FormatDisplay(parts[0], parts[1])
-            : AccountCodeFormatter.Format(value);
-    }
-
-    private static string ExtractCuentaDescripcion(string? cuentaDisplay, string? cuentaCodigo)
+    private static string ExtractCuentaDescripcion(string? cuentaDisplay)
     {
         var display = cuentaDisplay?.Trim() ?? string.Empty;
-        var code = cuentaCodigo?.Trim() ?? string.Empty;
 
         if (string.IsNullOrWhiteSpace(display))
         {
             return "-";
-        }
-
-        if (!string.IsNullOrWhiteSpace(code))
-        {
-            var prefix = $"{code} - ";
-            if (display.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-            {
-                var descripcion = display[prefix.Length..].Trim();
-                return string.IsNullOrWhiteSpace(descripcion) ? "-" : descripcion;
-            }
-
-            if (string.Equals(display, code, StringComparison.OrdinalIgnoreCase))
-            {
-                return "-";
-            }
         }
 
         var separatorIndex = display.IndexOf(" - ", StringComparison.Ordinal);

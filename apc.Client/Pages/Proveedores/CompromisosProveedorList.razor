@@ -8,11 +8,13 @@
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Presupuesto
 @using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
 @using apc.Client.Services.Proveedores
 
 @inject OrdenesPagoDirectoClient OrdenesPagoDirectoClient
 @inject ProveedoresClient ProveedoresClient
+@inject AccountFormatState AccountFormat
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject ILogger<CompromisosProveedorList> Logger
@@ -208,7 +210,7 @@
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
-                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                        <DxGridDataColumn Caption="Acciones" Width="190px">
                             <CellDisplayTemplate Context="cellContext">
                                 @if (cellContext.DataItem is OrdenPagoDirectoListItemDto item)
                                 {
@@ -220,11 +222,23 @@
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
                                         <button type="button"
+                                                class="btn-icon btn-view"
+                                                title="Imprimir compromiso"
+                                                @onclick="@(() => ImprimirAsync(item.NumeroOrden))">
+                                            <i class="bi bi-printer"></i>
+                                        </button>
+                                        <button type="button"
                                                 class="btn-icon btn-consolidate"
-                                                title="Procesar compromiso"
+                                                title="Emitir pago"
                                                 disabled="@item.Procesada"
                                                 @onclick="@(() => IrAProcesar(item.NumeroOrden))">
                                             <i class="bi bi-check2-circle"></i>
+                                        </button>
+                                        <button type="button"
+                                                class="btn-icon btn-view"
+                                                title="Abonos"
+                                                @onclick="@(() => IrAAbonar(item.NumeroOrden))">
+                                            <i class="bi bi-cash-coin"></i>
                                         </button>
                                         <button type="button"
                                                 class="btn-icon btn-delete"
@@ -282,6 +296,7 @@
         {
             isLoading = true;
 
+            await AccountFormat.EnsureLoadedAsync();
             await EnsureProveedoresFiltroAsync();
             await CargarProveedorSeleccionadoAsync();
 
@@ -365,6 +380,9 @@
         Navigation.NavigateTo(url);
     }
 
+    private async Task ImprimirAsync(int numeroOrden)
+        => await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetPdfUrl(numeroOrden), "_blank");
+
     private void IrAProcesar(int numeroOrden)
     {
         var query = new List<string>
@@ -379,6 +397,12 @@
         }
 
         Navigation.NavigateTo($"/proveedores/compromisos-proveedor/{numeroOrden}/procesar?{string.Join("&", query)}");
+    }
+
+    private void IrAAbonar(int numeroOrden)
+    {
+        var returnUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
+        Navigation.NavigateTo($"/proveedores/compromisos-proveedor/{numeroOrden}/abonar?returnUrl={returnUrl}");
     }
 
     private void VolverAlOrigen()
@@ -520,9 +544,9 @@
             : $"{codigoNormalizado} - {nombreNormalizado}";
     }
 
-    private static string FormatCuentaOrDash(string? value)
+    private string FormatCuentaOrDash(string? value)
     {
-        var formatted = AccountCodeFormatter.Format(value);
+        var formatted = AccountFormat.Format(value);
         return string.IsNullOrWhiteSpace(formatted) ? "-" : formatted;
     }
 

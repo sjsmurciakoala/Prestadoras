@@ -36,13 +36,6 @@ public sealed class ArticulosController : ControllerBase
         return Ok(alertas);
     }
 
-    [HttpGet("lineas")]
-    public async Task<IActionResult> GetLineas(CancellationToken ct)
-    {
-        var lineas = await _service.GetLineasAsync(ct);
-        return Ok(lineas);
-    }
-
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     {

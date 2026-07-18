@@ -55,7 +55,12 @@ public static class AccountCodeFormatter
 
     public static string FormatDisplay(string? code, string? description)
     {
-        var formattedCode = Format(code);
+        return FormatDisplay(code, description, DefaultMask, DefaultSeparator);
+    }
+
+    public static string FormatDisplay(string? code, string? description, string? mask, string? separator = DefaultSeparator)
+    {
+        var formattedCode = Format(code, mask, separator);
         var cleanDescription = string.IsNullOrWhiteSpace(description) ? string.Empty : description.Trim();
 
         if (string.IsNullOrWhiteSpace(formattedCode))

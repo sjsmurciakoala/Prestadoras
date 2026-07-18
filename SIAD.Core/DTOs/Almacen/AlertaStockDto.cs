@@ -6,7 +6,9 @@ public sealed class AlertaStockDto
     public string Codigo { get; init; } = string.Empty;
     public string Descripcion { get; init; } = string.Empty;
     public string? UnidadMedida { get; init; }
-    public string? Linea { get; init; }
+
+    /// <summary>Nombre del tipo de artículo (alm_tipo_articulo), si está asignado.</summary>
+    public string? TipoArticuloNombre { get; init; }
 
     /// <summary>Bodega donde se detecta la alerta (existencia y mínimo son por bodega).</summary>
     public int BodegaId { get; init; }

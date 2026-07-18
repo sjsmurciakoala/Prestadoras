@@ -63,7 +63,10 @@ public static class NumerosALetras
         if (n >= 100)
         {
             var c = (int)(n / 100);
-            resultado += n == 100 ? "CIEN " : Centenas[c] + " ";
+            // 100 exacto es "CIEN"; 101-199 se dice "CIENTO ..." (no "CIEN ...").
+            resultado += n == 100
+                ? "CIEN "
+                : (c == 1 ? "CIENTO " : Centenas[c] + " ");
             n %= 100;
         }
 

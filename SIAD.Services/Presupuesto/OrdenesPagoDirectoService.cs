@@ -11,27 +11,38 @@ using SIAD.Core.DTOs.Presupuesto;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Bancos;
+using SIAD.Services.Contabilidad;
 using SIAD.Services.Proveedores;
 
 namespace SIAD.Services.Presupuesto;
 
 public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
 {
+    private const string EstadoAbonoVigente = "V";
+    private const string EstadoAbonoAnulado = "A";
+
     private readonly SiadDbContext _context;
     private readonly IProveedoresService _proveedoresService;
     private readonly ICurrentCompanyService _currentCompanyService;
     private readonly IHttpContextAccessor _httpContextAccessor;
+    private readonly IAccountFormatService _accountFormatService;
+    private readonly IBanTransaccionesService _banTransaccionesService;
 
     public OrdenesPagoDirectoService(
         SiadDbContext context,
         IProveedoresService proveedoresService,
         ICurrentCompanyService currentCompanyService,
-        IHttpContextAccessor httpContextAccessor)
+        IHttpContextAccessor httpContextAccessor,
+        IAccountFormatService accountFormatService,
+        IBanTransaccionesService banTransaccionesService)
     {
         _context = context;
         _proveedoresService = proveedoresService;
         _currentCompanyService = currentCompanyService;
         _httpContextAccessor = httpContextAccessor;
+        _accountFormatService = accountFormatService;
+        _banTransaccionesService = banTransaccionesService;
     }
 
     public async Task<IReadOnlyList<OrdenPagoDirectoListItemDto>> GetAsync(
@@ -233,6 +244,228 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
                 })
                 .ToList(),
             PartidaContable = partidaContable
+        };
+    }
+
+    public async Task<CompromisoSaldoDto?> GetSaldoConAbonosAsync(
+        int numeroOrden,
+        CancellationToken ct = default)
+    {
+        // Filtro global multi-tenant (company_id == CurrentCompanyId) lo aplica el contexto.
+        var compromiso = await _context.prv_compromiso_hdrs
+            .AsNoTracking()
+            .Where(c => c.numero_orden == numeroOrden)
+            .Select(c => new { c.numero_orden, c.monto, c.anulado, c.status_transacc })
+            .FirstOrDefaultAsync(ct);
+
+        if (compromiso is null)
+        {
+            return null;
+        }
+
+        var abonos = await LoadAbonosAsync(numeroOrden, ct);
+
+        var abonado = abonos
+            .Where(a => string.Equals(a.Estado, EstadoAbonoVigente, StringComparison.Ordinal))
+            .Sum(a => a.Monto);
+
+        var saldo = compromiso.monto - abonado;
+
+        // Compat legacy: procesado (status_transacc==true) SIN filas de abono => saldo 0 / pagado.
+        var procesadoLegacySinAbonos = compromiso.status_transacc == true && abonos.Count == 0;
+        if (procesadoLegacySinAbonos)
+        {
+            abonado = compromiso.monto;
+            saldo = 0m;
+        }
+
+        if (saldo < 0m)
+        {
+            saldo = 0m;
+        }
+
+        var pagado = !compromiso.anulado && saldo <= 0m;
+
+        return new CompromisoSaldoDto
+        {
+            NumeroOrden = compromiso.numero_orden,
+            Monto = compromiso.monto,
+            Abonado = abonado,
+            Saldo = saldo,
+            Pagado = pagado,
+            Anulado = compromiso.anulado,
+            EstadoTexto = ResolverEstadoTexto(compromiso.anulado, pagado, abonado),
+            Abonos = abonos
+        };
+    }
+
+    /// <summary>
+    /// Carga los abonos del compromiso (numero_partida derivado por JOIN a con_partida_hdr).
+    /// Marca PuedeAnular=true solo en el ultimo vigente para no dejar huecos.
+    /// </summary>
+    private async Task<IReadOnlyList<AbonoCompromisoListItemDto>> LoadAbonosAsync(
+        int numeroOrden,
+        CancellationToken ct)
+    {
+        var companyId = EnsureCompanyId();
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+        var shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        var abonos = new List<AbonoCompromisoListItemDto>();
+        try
+        {
+            await using var command = connection.CreateCommand();
+            command.Transaction = _context.Database.CurrentTransaction?.GetDbTransaction() as NpgsqlTransaction;
+            command.CommandText = @"
+SELECT a.abono_id, a.numero_abono, a.fecha, a.monto, a.metodo_pago, a.estado,
+       a.partida_id, ph.poliza_number
+FROM public.prv_compromiso_abono a
+LEFT JOIN public.con_partida_hdr ph
+       ON ph.company_id = a.company_id AND ph.poliza_id = a.partida_id
+WHERE a.company_id = @company_id AND a.numero_orden = @numero_orden
+ORDER BY a.numero_abono;";
+            command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+            command.Parameters.AddWithValue("numero_orden", NpgsqlDbType.Integer, numeroOrden);
+
+            await using var reader = await command.ExecuteReaderAsync(ct);
+            while (await reader.ReadAsync(ct))
+            {
+                abonos.Add(new AbonoCompromisoListItemDto
+                {
+                    AbonoId = reader.GetInt64(0),
+                    NumeroAbono = reader.GetInt32(1),
+                    Fecha = reader.GetDateTime(2),
+                    Monto = reader.GetDecimal(3),
+                    MetodoPago = reader.IsDBNull(4) ? string.Empty : reader.GetString(4),
+                    Estado = reader.IsDBNull(5) ? string.Empty : reader.GetString(5),
+                    PartidaId = reader.IsDBNull(6) ? (long?)null : reader.GetInt64(6),
+                    NumeroPartida = reader.IsDBNull(7) ? null : reader.GetString(7),
+                    PuedeAnular = false
+                });
+            }
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
+
+        var ultimoVigente = abonos
+            .Where(a => string.Equals(a.Estado, EstadoAbonoVigente, StringComparison.Ordinal))
+            .OrderByDescending(a => a.NumeroAbono)
+            .FirstOrDefault();
+        if (ultimoVigente is not null)
+        {
+            ultimoVigente.PuedeAnular = true;
+        }
+
+        return abonos;
+    }
+
+    private static string ResolverEstadoTexto(bool anulado, bool pagado, decimal abonado)
+    {
+        if (anulado)
+        {
+            return "Anulado";
+        }
+
+        if (pagado)
+        {
+            return "Pagado";
+        }
+
+        return abonado > 0m ? "Abonado parcial" : "Pendiente";
+    }
+
+    public async Task<OrdenPagoDirectoImpresionDto?> GetDatosImpresionAsync(
+        int numeroOrden,
+        CancellationToken ct = default)
+    {
+        var compromiso = await GetByNumeroOrdenAsync(numeroOrden, ct);
+        if (compromiso is null)
+        {
+            return null;
+        }
+
+        var companyId = _currentCompanyService.GetCompanyId();
+        var company = await _context.cfg_companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+
+        var format = await _accountFormatService.GetFormatAsync(ct);
+
+        return new OrdenPagoDirectoImpresionDto
+        {
+            EmpresaNombre = company?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = company?.legal_name,
+            EmpresaRtn = company?.tax_id,
+            EmpresaDireccion = company?.address,
+            EmpresaTelefono = company?.phone,
+            EmpresaEmail = company?.email,
+            EmpresaLogo = company?.logo,
+            Compromiso = compromiso,
+            MontoEnLetras = $"{NumerosALetras.Convertir(compromiso.Monto)} LEMPIRAS",
+            ProveedorGenerico = IsProveedorGenerico(compromiso.CodigoProveedor),
+            ImpresoPor = GetCurrentUser(),
+            FormatoCuentas = format.Mask,
+            SeparadorCodigo = format.Separator
+        };
+    }
+
+    public async Task<CompromisoAbonoImpresionDto?> GetDatosImpresionAbonoAsync(
+        int numeroOrden,
+        int numeroAbono,
+        CancellationToken ct = default)
+    {
+        if (numeroOrden <= 0 || numeroAbono <= 0)
+        {
+            return null;
+        }
+
+        var baseDatos = await GetDatosImpresionAsync(numeroOrden, ct);
+        if (baseDatos is null)
+        {
+            return null;
+        }
+
+        var saldo = await GetSaldoConAbonosAsync(numeroOrden, ct);
+        if (saldo is null)
+        {
+            return null;
+        }
+
+        var abono = saldo.Abonos.FirstOrDefault(a => a.NumeroAbono == numeroAbono);
+        if (abono is null)
+        {
+            return null;
+        }
+
+        // Saldo anterior = monto - SUM(vigentes con numero_abono < este). Restante = anterior - este (si vigente).
+        var vigenteEsteAbono = string.Equals(abono.Estado, EstadoAbonoVigente, StringComparison.Ordinal);
+        var abonadoPrevio = saldo.Abonos
+            .Where(a => a.NumeroAbono < numeroAbono && string.Equals(a.Estado, EstadoAbonoVigente, StringComparison.Ordinal))
+            .Sum(a => a.Monto);
+        var saldoAnterior = baseDatos.Compromiso.Monto - abonadoPrevio;
+        var saldoRestante = saldoAnterior - (vigenteEsteAbono ? abono.Monto : 0m);
+        if (saldoRestante < 0m) saldoRestante = 0m;
+
+        return new CompromisoAbonoImpresionDto
+        {
+            Base = baseDatos,
+            NumeroAbono = abono.NumeroAbono,
+            FechaAbono = abono.Fecha,
+            MontoAbono = abono.Monto,
+            SaldoAnterior = saldoAnterior,
+            SaldoRestante = saldoRestante,
+            MetodoPago = abono.MetodoPago,
+            NumeroPartida = abono.NumeroPartida,
+            Estado = abono.Estado
         };
     }
 
@@ -468,15 +701,34 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
         var metodoPago = NormalizeMetodoPago(dto.MetodoPago);
 
         var lineasDto = dto.Lineas ?? new List<PartidaLineaOrdenPagoDto>();
-        IReadOnlyList<PartidaLineaOrdenPagoDto> lineasContraProcesamiento;
+        var usaModeloGeneral = lineasDto.Count > 0;
 
-        if (lineasDto.Count > 0)
+        List<PartidaLineaOrden> lineas;
+        List<PartidaLineaOrdenPagoDto> lineasBancoGeneral = new();
+        IReadOnlyList<NormalizedContraProcessingLine> lineasContraNormalizadas = Array.Empty<NormalizedContraProcessingLine>();
+
+        if (usaModeloGeneral)
         {
-            lineasContraProcesamiento = lineasDto;
+            // Modelo GENERAL (retenciones/deducciones): cada linea del DTO trae su Debito/Credito REAL
+            // (excluyente por linea). El proveedor se agrega automatico al DEBE por el bruto; el/los
+            // banco(s) quedan al HABER por el neto que el llamador ya calculo. Ver
+            // BuildGeneralProcessingPartidaLineasAsync para las validaciones (cuadre, neto > 0, cheque).
+            var partidaGeneral = await BuildGeneralProcessingPartidaLineasAsync(
+                orden.cod_proveedor,
+                lineasDto,
+                orden.monto,
+                descripcion,
+                metodoPago,
+                ct);
+            lineas = partidaGeneral.Lineas;
+            lineasBancoGeneral = partidaGeneral.LineasBanco;
         }
         else if (dto.CuentaContraId.HasValue && dto.CuentaContraId.Value > 0)
         {
-            lineasContraProcesamiento = new List<PartidaLineaOrdenPagoDto>
+            // Modelo LEGACY (contra-magnitud): compatibilidad con llamadores que solo mandan una cuenta
+            // contra unica sin desglose de retenciones (la magnitud completa viaja en Debito y se
+            // asienta al Haber en BuildProviderProcessingPartidaLineasAsync).
+            var lineaContraLegacy = new List<PartidaLineaOrdenPagoDto>
             {
                 new()
                 {
@@ -486,6 +738,18 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
                     Credito = 0m
                 }
             };
+
+            lineasContraNormalizadas = await NormalizeContraProcessingLinesAsync(
+                lineaContraLegacy,
+                orden.monto,
+                descripcion,
+                ct);
+            lineas = await BuildProviderProcessingPartidaLineasAsync(
+                orden.cod_proveedor,
+                lineasContraNormalizadas,
+                orden.monto,
+                descripcion,
+                ct);
         }
         else
         {
@@ -494,28 +758,35 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
                 nameof(dto));
         }
 
-        var lineasContraNormalizadas = await NormalizeContraProcessingLinesAsync(
-            lineasContraProcesamiento,
-            orden.monto,
-            descripcion,
-            ct);
-        var lineas = await BuildProviderProcessingPartidaLineasAsync(
-            orden.cod_proveedor,
-            lineasContraNormalizadas,
-            orden.monto,
-            descripcion,
-            ct);
-
+        var companyId = EnsureCompanyId();
         var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
-        var shouldClose = connection.State != ConnectionState.Open;
         var kardexIds = new List<long>();
 
-        if (shouldClose)
-            await connection.OpenAsync(ct);
+        // Reutiliza la transaccion ambiente (tests bajo BEGIN...ROLLBACK) o abre una propia
+        // (produccion), igual que RegistrarAbonoAsync: BeginTransactionAsync sobre una conexion que ya
+        // tiene una transaccion EF activa (UseTransaction) revienta con "A transaction is already in
+        // progress".
+        var ambient = _context.Database.CurrentTransaction;
+        var ownsConnection = false;
+        NpgsqlTransaction dbTransaction;
+        var ownsTx = false;
+        if (ambient is not null)
+        {
+            dbTransaction = (NpgsqlTransaction)ambient.GetDbTransaction();
+        }
+        else
+        {
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync(ct);
+                ownsConnection = true;
+            }
+            dbTransaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+            ownsTx = true;
+        }
 
         try
         {
-            await using var dbTransaction = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
             if (faltaPartidaCreacion && lineasCreacion is not null)
             {
                 await RegisterPartidaContableAsync(
@@ -549,32 +820,53 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
                         "No se pudo resolver la partida contable del procesamiento para vincular la transaccion bancaria.");
                 }
 
-                kardexIds = await RegisterLinkedBankTransactionsAsync(
-                    connection,
-                    dbTransaction,
-                    numeroOrden,
-                    fechaOrden,
-                    descripcion,
-                    usuarioProceso,
-                    metodoPago,
-                    partidaId.Value,
-                    lineasContraNormalizadas,
-                    ct);
+                kardexIds = usaModeloGeneral
+                    ? await RegisterLinkedBankMovementsGeneralAsync(
+                        connection,
+                        dbTransaction,
+                        numeroOrden,
+                        fechaOrden,
+                        descripcion,
+                        usuarioProceso,
+                        metodoPago,
+                        partidaId.Value,
+                        lineasBancoGeneral,
+                        ct)
+                    : await RegisterLinkedBankTransactionsAsync(
+                        connection,
+                        dbTransaction,
+                        numeroOrden,
+                        fechaOrden,
+                        descripcion,
+                        usuarioProceso,
+                        metodoPago,
+                        partidaId.Value,
+                        lineasContraNormalizadas,
+                        ct);
             }
 
             await UpdateCompromisoStatusTransaccAsync(
                 connection,
                 dbTransaction,
-                EnsureCompanyId(),
+                companyId,
                 numeroOrden,
                 statusTransacc: true,
                 ct);
 
-            await dbTransaction.CommitAsync(ct);
+            if (ownsTx)
+                await dbTransaction.CommitAsync(ct);
+        }
+        catch
+        {
+            if (ownsTx)
+                await dbTransaction.RollbackAsync(ct);
+            throw;
         }
         finally
         {
-            if (shouldClose)
+            if (ownsTx)
+                await dbTransaction.DisposeAsync();
+            if (ownsConnection)
                 await connection.CloseAsync();
         }
 
@@ -584,6 +876,311 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
             NumeroOrden = numeroOrden,
             Message = BuildProcessSavedMessage(metodoPago, kardexIds.Count)
         };
+    }
+
+    public async Task<AbonoCompromisoResultadoDto> RegistrarAbonoAsync(
+        int numeroOrden,
+        AbonoCompromisoUpsertDto dto,
+        CancellationToken ct = default)
+    {
+        if (numeroOrden <= 0)
+            throw new ArgumentException("El numero de orden no es valido.", nameof(numeroOrden));
+
+        ArgumentNullException.ThrowIfNull(dto);
+
+        // Pre-lectura (fuera de transaccion) para rechazos tempranos y datos del compromiso.
+        var orden = await _context.prv_compromiso_hdrs
+            .AsNoTracking()
+            .Where(x => x.numero_orden == numeroOrden)
+            .Select(x => new { x.numero_orden, x.fecha, x.concepto, x.monto, x.cod_proveedor, x.status_transacc, x.anulado })
+            .FirstOrDefaultAsync(ct);
+
+        if (orden is null)
+            return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, Message = "La orden no existe." };
+        if (orden.anulado)
+            return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, Message = "La orden esta anulada y no admite abonos." };
+        if (dto.Monto <= 0m)
+            return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, Message = "El monto del abono debe ser mayor a cero." };
+
+        var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? GetCurrentUser() : dto.Usuario.Trim();
+        var metodoPago = NormalizeMetodoPago(dto.MetodoPago);
+        // fecha local (sin TZ), coherente con TIMESTAMP WITHOUT TIME ZONE del resto del modulo prv_*.
+        var fechaAbono = (dto.Fecha ?? DateTime.Now).Date;
+        var descripcionBase = $"Abono - {(orden.concepto?.Trim() ?? $"Orden pago directo {numeroOrden}")}";
+        if (descripcionBase.Length > 200) descripcionBase = descripcionBase[..200];
+
+        // Contracuentas del abono (por el MONTO DEL ABONO). Preparacion read-only, fuera de la transaccion.
+        IReadOnlyList<PartidaLineaOrdenPagoDto> lineasContraDto;
+        if (dto.Lineas is { Count: > 0 })
+        {
+            lineasContraDto = dto.Lineas;
+        }
+        else if (dto.CuentaContraId is > 0)
+        {
+            lineasContraDto = new List<PartidaLineaOrdenPagoDto>
+            {
+                new() { CuentaId = dto.CuentaContraId.Value, Descripcion = descripcionBase, Debito = dto.Monto, Credito = 0m }
+            };
+        }
+        else
+        {
+            throw new ArgumentException(
+                "Debe seleccionar al menos una cuenta contra (origen) para registrar el abono.", nameof(dto));
+        }
+
+        // Normaliza contra el monto del ABONO (resuelve BancoCuentaId de cada contracuenta).
+        var lineasContra = await NormalizeContraProcessingLinesAsync(lineasContraDto, dto.Monto, descripcionBase, ct);
+        var lineasPartida = await BuildProviderProcessingPartidaLineasAsync(
+            orden.cod_proveedor, lineasContra, dto.Monto, descripcionBase, ct);
+        var cuentaContraId = lineasContra.Select(x => (long?)x.AccountId).FirstOrDefault();
+
+        var faltaPartidaCreacion = !await HasPartidaContableRegistradaAsync(numeroOrden, ct);
+        List<PartidaLineaOrden>? lineasCreacion = null;
+        if (faltaPartidaCreacion)
+        {
+            (lineasCreacion, _, _) = await BuildCreatePartidaFromStoredAsync(numeroOrden, ct);
+        }
+
+        var companyId = EnsureCompanyId();
+        var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+
+        // Reusar la transaccion ambiente (tests) o abrir una propia (produccion).
+        var ambient = _context.Database.CurrentTransaction;
+        var ownsConnection = false;
+        NpgsqlTransaction tx;
+        var ownsTx = false;
+        if (ambient is not null)
+        {
+            tx = (NpgsqlTransaction)ambient.GetDbTransaction();
+        }
+        else
+        {
+            if (connection.State != ConnectionState.Open)
+            {
+                await connection.OpenAsync(ct);
+                ownsConnection = true;
+            }
+            tx = await connection.BeginTransactionAsync(IsolationLevel.ReadCommitted, ct);
+            ownsTx = true;
+        }
+
+        try
+        {
+            // (a) Concurrencia: bloquear la fila del compromiso ANTES de recalcular.
+            await LockCompromisoRowAsync(connection, tx, companyId, numeroOrden, ct);
+
+            // (b) Recalcular saldo y numero_abono BAJO el lock (autoritativo) via el calculador.
+            var abonoStates = await ReadAbonoStatesAsync(connection, tx, companyId, numeroOrden, ct);
+            var estado = AbonoCompromisoCalculator.Compute(orden.monto, orden.status_transacc == true, abonoStates);
+
+            if (estado.SaldoActual <= 0m)
+            {
+                if (ownsTx) await tx.RollbackAsync(ct);
+                return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, Saldo = 0m, Pagado = true, Message = "El compromiso ya esta pagado; no admite mas abonos." };
+            }
+            if (dto.Monto - estado.SaldoActual > 0.01m)
+            {
+                if (ownsTx) await tx.RollbackAsync(ct);
+                return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, Saldo = estado.SaldoActual, Message = $"El abono ({dto.Monto:N2}) no puede superar el saldo pendiente ({estado.SaldoActual:N2})." };
+            }
+
+            var numeroAbono = estado.SiguienteNumeroAbono;
+            var descripcionAbono = $"Abono {numeroAbono} - {(orden.concepto?.Trim() ?? $"Orden pago directo {numeroOrden}")}";
+            if (descripcionAbono.Length > 200) descripcionAbono = descripcionAbono[..200];
+            var partidaNumber = BuildPartidaNumber(numeroOrden, $"ABO{numeroAbono}");
+
+            long? partidaId;
+            long? bancoCuentaId = null;
+            long? banKardexId = null;
+
+            // (c) Si el compromiso nunca genero la partida GEN de creacion, generarla ahora.
+            // Revalidar BAJO el lock (raw, misma tx): faltaPartidaCreacion se calculo antes del lock y
+            // pudo quedar obsoleto si otro abono concurrente ya registro la GEN mientras esperabamos el lock.
+            if (faltaPartidaCreacion)
+            {
+                faltaPartidaCreacion = !await HasPartidaContableRegistradaRawAsync(
+                    connection, tx, companyId, BuildDocumentNumber(numeroOrden), ct);
+            }
+            if (faltaPartidaCreacion && lineasCreacion is not null)
+            {
+                await RegisterPartidaContableAsync(
+                    connection, tx, BuildDocumentNumber(numeroOrden), BuildPartidaNumber(numeroOrden, "GEN"),
+                    orden.fecha.Date, orden.concepto?.Trim() ?? $"Orden pago directo {numeroOrden}",
+                    usuario, lineasCreacion, ct);
+            }
+
+            // (d) Partida contable del abono.
+            partidaId = await RegisterPartidaContableAsync(
+                connection, tx, BuildDocumentNumber(numeroOrden), partidaNumber,
+                fechaAbono, descripcionAbono, usuario, lineasPartida, ct);
+
+            // (e) Si el metodo es bancario, transaccion bancaria vinculada.
+            if (OrdenPagoDirectoMetodoPago.EsBancario(metodoPago))
+            {
+                if (!partidaId.HasValue || partidaId.Value <= 0)
+                    throw new InvalidOperationException("No se pudo resolver la partida contable del abono para vincular la transaccion bancaria.");
+
+                var kardexIds = await RegisterLinkedBankTransactionsAsync(
+                    connection, tx, numeroOrden, fechaAbono, descripcionAbono, usuario, metodoPago, partidaId.Value, lineasContra, ct);
+
+                banKardexId = kardexIds.Count > 0 ? kardexIds[0] : null;
+                bancoCuentaId = lineasContra.Where(x => x.BancoCuentaId is > 0).Select(x => x.BancoCuentaId).FirstOrDefault();
+            }
+
+            // (f) Persistir la fila del abono (estado 'V').
+            await InsertAbonoRowAsync(
+                connection, tx, companyId, numeroOrden, numeroAbono, fechaAbono, dto.Monto, metodoPago,
+                cuentaContraId, bancoCuentaId, banKardexId, partidaId, usuario, ct);
+
+            // (g) Si el abono liquida el saldo, marcar el compromiso como pagado.
+            var saldoTrasAbono = estado.SaldoActual - dto.Monto;
+            var quedaPagado = saldoTrasAbono <= 0.01m;
+            if (quedaPagado)
+            {
+                await UpdateCompromisoStatusTransaccAsync(connection, tx, companyId, numeroOrden, statusTransacc: true, ct);
+            }
+
+            if (ownsTx) await tx.CommitAsync(ct);
+
+            return new AbonoCompromisoResultadoDto
+            {
+                Success = true,
+                NumeroOrden = numeroOrden,
+                NumeroAbono = numeroAbono,
+                NumeroPartida = partidaNumber,
+                Saldo = quedaPagado ? 0m : saldoTrasAbono,
+                Pagado = quedaPagado,
+                Message = quedaPagado
+                    ? $"Se registro el abono {numeroAbono} y el compromiso quedo pagado."
+                    : $"Se registro el abono {numeroAbono}. Saldo pendiente: {saldoTrasAbono:N2}."
+            };
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.UniqueViolation)
+        {
+            // Carrera contra uq_prv_compromiso_abono_numero: negocio, no 500.
+            if (ownsTx) await tx.RollbackAsync(ct);
+            return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, Message = "Otro abono se registro al mismo tiempo. Reintente el abono." };
+        }
+        catch
+        {
+            if (ownsTx) await tx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            if (ownsTx) await tx.DisposeAsync();
+            if (ownsConnection) await connection.CloseAsync();
+        }
+    }
+
+    /// <summary>Bloquea la fila del compromiso (FOR UPDATE) para serializar abonos concurrentes.</summary>
+    private static async Task LockCompromisoRowAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, long companyId, int numeroOrden, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = @"
+SELECT 1 FROM public.prv_compromiso_hdr
+ WHERE company_id = @company_id AND numero_orden = @numero_orden
+ FOR UPDATE;";
+        command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("numero_orden", NpgsqlDbType.Integer, numeroOrden);
+        await command.ExecuteScalarAsync(ct);
+    }
+
+    /// <summary>
+    /// Revalida BAJO el lock (SQL raw sobre la misma connection/transaction) si la partida GEN de la orden
+    /// ya fue registrada. Necesario porque <see cref="HasPartidaContableRegistradaAsync"/> se evalua ANTES
+    /// del lock: dos abonos concurrentes sin partida GEN pueden capturar faltaPartidaCreacion=true y, sin esta
+    /// revalidacion, ambos crearian la GEN. Replica el mismo criterio (tabla/condicion) que
+    /// LoadPartidaContableFromConPartidaAsync usa para con_partida_hdr/con_partida_dtl.
+    /// </summary>
+    private static async Task<bool> HasPartidaContableRegistradaRawAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, long companyId, string documentNumber, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = @"
+SELECT 1
+FROM public.con_partida_hdr h
+WHERE h.company_id = @company_id
+  AND h.""module"" = 'PROV'
+  AND h.document_type = 'OPD'
+  AND (
+        btrim(coalesce(h.document_number, '')) = btrim(@document_number)
+     OR btrim(coalesce(h.poliza_number, '')) = btrim(@document_number)
+     OR EXISTS (
+            SELECT 1
+            FROM public.con_partida_dtl d
+            WHERE d.company_id = h.company_id
+              AND d.poliza_id = h.poliza_id
+              AND btrim(coalesce(d.source_document, '')) = btrim(@document_number)
+        )
+  )
+LIMIT 1;";
+        command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("document_number", NpgsqlDbType.Varchar, documentNumber);
+        var result = await command.ExecuteScalarAsync(ct);
+        return result is not null && result is not DBNull;
+    }
+
+    /// <summary>Lee (bajo el lock) las filas de abono para alimentar AbonoCompromisoCalculator.</summary>
+    private static async Task<List<AbonoLineaState>> ReadAbonoStatesAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, long companyId, int numeroOrden, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandText = @"
+SELECT numero_abono, monto, estado
+FROM public.prv_compromiso_abono
+WHERE company_id = @company_id AND numero_orden = @numero_orden;";
+        command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("numero_orden", NpgsqlDbType.Integer, numeroOrden);
+
+        var states = new List<AbonoLineaState>();
+        await using var reader = await command.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            states.Add(new AbonoLineaState(
+                reader.GetInt32(0),
+                reader.GetDecimal(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2)));
+        }
+        return states;
+    }
+
+    /// <summary>Inserta la fila del abono con las columnas canonicas (fecha_creacion la pone el DEFAULT now()).</summary>
+    private static async Task InsertAbonoRowAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, long companyId, int numeroOrden, int numeroAbono,
+        DateTime fecha, decimal monto, string metodoPago, long? cuentaContraId, long? bancoCuentaId, long? banKardexId,
+        long? partidaId, string usuario, CancellationToken ct)
+    {
+        await using var command = connection.CreateCommand();
+        command.Transaction = transaction;
+        command.CommandType = CommandType.Text;
+        command.CommandText = @"
+INSERT INTO public.prv_compromiso_abono
+    (company_id, numero_orden, numero_abono, fecha, monto, metodo_pago,
+     cuenta_contra_id, banco_cuenta_id, ban_kardex_id, partida_id, estado, usuario_creo)
+VALUES
+    (@company_id, @numero_orden, @numero_abono, @fecha, @monto, @metodo_pago,
+     @cuenta_contra_id, @banco_cuenta_id, @ban_kardex_id, @partida_id, @estado, @usuario_creo);";
+
+        command.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        command.Parameters.AddWithValue("numero_orden", NpgsqlDbType.Integer, numeroOrden);
+        command.Parameters.AddWithValue("numero_abono", NpgsqlDbType.Integer, numeroAbono);
+        command.Parameters.AddWithValue("fecha", NpgsqlDbType.Timestamp, fecha);
+        command.Parameters.AddWithValue("monto", NpgsqlDbType.Numeric, monto);
+        // metodo_pago nunca DBNull: NormalizeMetodoPago siempre retorna valor.
+        command.Parameters.AddWithValue("metodo_pago", NpgsqlDbType.Varchar, metodoPago);
+        command.Parameters.Add(new NpgsqlParameter("cuenta_contra_id", NpgsqlDbType.Bigint) { Value = cuentaContraId ?? (object)DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("banco_cuenta_id", NpgsqlDbType.Bigint) { Value = bancoCuentaId ?? (object)DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("ban_kardex_id", NpgsqlDbType.Bigint) { Value = banKardexId ?? (object)DBNull.Value });
+        command.Parameters.Add(new NpgsqlParameter("partida_id", NpgsqlDbType.Bigint) { Value = partidaId ?? (object)DBNull.Value });
+        command.Parameters.AddWithValue("estado", NpgsqlDbType.Varchar, AbonoCompromisoCalculator.EstadoVigente);
+        command.Parameters.AddWithValue("usuario_creo", NpgsqlDbType.Varchar, usuario);
+
+        await command.ExecuteNonQueryAsync(ct);
     }
 
     private async Task<List<PartidaLineaOrden>> BuildProviderProcessingPartidaLineasAsync(
@@ -691,8 +1288,9 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
             string.Equals(x.code?.Trim(), cuentaProveedorCodigo, StringComparison.OrdinalIgnoreCase));
         if (cuentaProveedor is null)
         {
+            var format = await _accountFormatService.GetFormatAsync(ct);
             throw new InvalidOperationException(
-                $"No se encontro la cuenta contable del proveedor ({cuentaProveedorCodigo}) en el plan de cuentas.");
+                $"No se encontro la cuenta contable del proveedor ({format.Format(cuentaProveedorCodigo)}) en el plan de cuentas.");
         }
 
         if (!cuentaProveedor.allows_posting)
@@ -737,22 +1335,223 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
                     $"La cuenta contra de la fila {lineaContra.RowNumber} no puede ser la misma cuenta contable del proveedor.");
             }
 
+            // Direccion contable del pago (confirmada con el usuario):
+            //   Proveedor  -> DEBE  (salda la cuenta por pagar por el bruto)
+            //   Contra/Banco -> HABER (salida de efectivo; con retencion sera el neto)
+            // La MAGNITUD del origen viaja en lineaContra.Debit (contrato del DTO/normalizador y
+            // fuente del monto del movimiento bancario); aqui se ASIENTA al HABER.
             lineas.Add(new PartidaLineaOrden(
                 cuentaContra.account_id,
                 null,
                 lineaContra.Description,
-                lineaContra.Debit,
-                0m));
+                0m,
+                lineaContra.Debit));
         }
 
         lineas.Add(new PartidaLineaOrden(
             cuentaProveedor.account_id,
             null,
             descripcion,
-            0m,
-            monto));
+            monto,
+            0m));
 
         return lineas;
+    }
+
+    /// <summary>
+    /// Modelo GENERAL de procesamiento (retenciones/deducciones): a diferencia de
+    /// <see cref="BuildProviderProcessingPartidaLineasAsync(string?, IReadOnlyList{NormalizedContraProcessingLine}, decimal, string, CancellationToken)"/>
+    /// (que asume TODA la magnitud del origen en Debito y la asienta al Haber), aqui cada linea del DTO
+    /// trae su Debito/Credito REAL (excluyente por linea: exactamente uno de los dos es mayor a cero).
+    /// El proveedor se agrega automatico al DEBE por el bruto del compromiso. Las lineas con
+    /// BancoCuentaId &gt; 0 son las de banco (van al HABER por el neto que ya trae calculado el DTO).
+    /// Valida cuadre (Debe == Haber) y que el neto de banco sea mayor a cero cuando el metodo es
+    /// bancario. NO usa <see cref="NormalizeContraProcessingLinesAsync"/> (ese queda para abonos).
+    /// </summary>
+    private async Task<GeneralProcessingPartidaResult> BuildGeneralProcessingPartidaLineasAsync(
+        string? codigoProveedor,
+        IReadOnlyList<PartidaLineaOrdenPagoDto> lineasDto,
+        decimal bruto,
+        string descripcion,
+        string metodoPago,
+        CancellationToken ct)
+    {
+        if (bruto <= 0m)
+        {
+            throw new InvalidOperationException(
+                "El compromiso no tiene un monto valido para generar la partida de procesamiento.");
+        }
+
+        if (lineasDto.Count == 0)
+        {
+            throw new InvalidOperationException(
+                "Debe seleccionar al menos una cuenta contra para generar la partida de procesamiento.");
+        }
+
+        for (var i = 0; i < lineasDto.Count; i++)
+        {
+            var linea = lineasDto[i];
+            var tieneDebito = linea.Debito > 0m;
+            var tieneCredito = linea.Credito > 0m;
+            if (tieneDebito == tieneCredito)
+            {
+                throw new InvalidOperationException(
+                    $"La fila {i + 1} debe tener un Debito o un Credito (uno solo, mayor a cero).");
+            }
+
+            if (linea.CuentaId <= 0)
+            {
+                throw new InvalidOperationException(
+                    $"La fila {i + 1} debe tener una cuenta contable valida.");
+            }
+        }
+
+        var proveedor = await LoadProveedorMetadataAsync(codigoProveedor, ct);
+        if (proveedor is null)
+        {
+            throw new InvalidOperationException("No se encontro el proveedor del compromiso.");
+        }
+
+        if (string.IsNullOrWhiteSpace(proveedor.CuentaContable))
+        {
+            throw new InvalidOperationException("El proveedor no tiene una cuenta contable configurada.");
+        }
+
+        var companyId = EnsureCompanyId();
+        var cuentaProveedorCodigo = proveedor.CuentaContable.Trim();
+        var cuentaIds = lineasDto.Select(x => x.CuentaId).Distinct().ToList();
+
+        var cuentas = await _context.con_plan_cuentas
+            .AsNoTracking()
+            .Where(x =>
+                x.company_id == companyId &&
+                (cuentaIds.Contains(x.account_id) || x.code == cuentaProveedorCodigo))
+            .Select(x => new
+            {
+                x.account_id,
+                x.code,
+                x.name,
+                x.allows_posting,
+                x.status
+            })
+            .ToListAsync(ct);
+
+        var cuentaProveedor = cuentas.FirstOrDefault(x =>
+            string.Equals(x.code?.Trim(), cuentaProveedorCodigo, StringComparison.OrdinalIgnoreCase));
+        if (cuentaProveedor is null)
+        {
+            var format = await _accountFormatService.GetFormatAsync(ct);
+            throw new InvalidOperationException(
+                $"No se encontro la cuenta contable del proveedor ({format.Format(cuentaProveedorCodigo)}) en el plan de cuentas.");
+        }
+
+        if (!cuentaProveedor.allows_posting)
+        {
+            throw new InvalidOperationException("La cuenta contable del proveedor no permite movimientos.");
+        }
+
+        if (!IsCuentaActiva(cuentaProveedor.status))
+        {
+            throw new InvalidOperationException("La cuenta contable del proveedor esta inactiva.");
+        }
+
+        var cuentasMap = cuentas
+            .Where(x => cuentaIds.Contains(x.account_id))
+            .ToDictionary(x => x.account_id);
+
+        var lineasBanco = lineasDto.Where(x => x.BancoCuentaId is > 0).ToList();
+        var esBancario = OrdenPagoDirectoMetodoPago.EsBancario(metodoPago);
+        if (esBancario && lineasBanco.Count == 0)
+        {
+            throw new InvalidOperationException(
+                $"El metodo de pago {metodoPago} requiere seleccionar al menos una cuenta bancaria de origen.");
+        }
+
+        Dictionary<long, CuentaContableLookupDto>? cuentasBancoDisponibles = null;
+        if (lineasBanco.Count > 0)
+        {
+            var disponibles = await GetCuentasContraProcesamientoAsync(ct);
+            cuentasBancoDisponibles = disponibles
+                .Where(x => x.BancoCuentaId is > 0)
+                .GroupBy(x => x.BancoCuentaId!.Value)
+                .ToDictionary(x => x.Key, x => x.First());
+        }
+
+        var lineas = new List<PartidaLineaOrden>();
+        for (var i = 0; i < lineasDto.Count; i++)
+        {
+            var linea = lineasDto[i];
+            if (!cuentasMap.TryGetValue(linea.CuentaId, out var cuenta))
+            {
+                throw new InvalidOperationException(
+                    $"La cuenta de la fila {i + 1} no existe en la empresa actual.");
+            }
+
+            if (!cuenta.allows_posting)
+            {
+                throw new InvalidOperationException($"La cuenta de la fila {i + 1} no permite movimientos.");
+            }
+
+            if (!IsCuentaActiva(cuenta.status))
+            {
+                throw new InvalidOperationException($"La cuenta de la fila {i + 1} esta inactiva.");
+            }
+
+            if (cuenta.account_id == cuentaProveedor.account_id)
+            {
+                throw new InvalidOperationException(
+                    $"La cuenta de la fila {i + 1} no puede ser la misma cuenta contable del proveedor.");
+            }
+
+            if (linea.BancoCuentaId is > 0)
+            {
+                if (cuentasBancoDisponibles is null ||
+                    !cuentasBancoDisponibles.TryGetValue(linea.BancoCuentaId.Value, out var cuentaBanco))
+                {
+                    throw new InvalidOperationException(
+                        $"La cuenta bancaria de la fila {i + 1} no es valida para procesamiento.");
+                }
+
+                if (string.Equals(metodoPago, OrdenPagoDirectoMetodoPago.Cheque, StringComparison.OrdinalIgnoreCase) &&
+                    !IsChequeBankAccount(cuentaBanco.TipoCuenta))
+                {
+                    throw new InvalidOperationException(
+                        $"La cuenta bancaria {linea.BancoCuentaId} no esta configurada como cuenta de cheques.");
+                }
+            }
+
+            var descripcionLinea = string.IsNullOrWhiteSpace(linea.Descripcion)
+                ? descripcion
+                : linea.Descripcion.Trim();
+
+            lineas.Add(new PartidaLineaOrden(linea.CuentaId, linea.CentroCostoId, descripcionLinea, linea.Debito, linea.Credito));
+        }
+
+        lineas.Add(new PartidaLineaOrden(cuentaProveedor.account_id, null, descripcion, bruto, 0m));
+
+        var totalDebito = lineas.Sum(x => x.Debit);
+        var totalCredito = lineas.Sum(x => x.Credit);
+        if (Math.Abs(totalDebito - totalCredito) > 0.01m)
+        {
+            throw new InvalidOperationException(
+                $"La partida de procesamiento no cuadra. Debitos: {totalDebito:N2}, Creditos: {totalCredito:N2}.");
+        }
+
+        if (esBancario)
+        {
+            var netoBanco = lineasBanco.Sum(x => x.Credito);
+            if (netoBanco <= 0m)
+            {
+                throw new InvalidOperationException(
+                    "El neto a pagar por banco debe ser mayor a cero. Revise las deducciones cargadas.");
+            }
+        }
+
+        return new GeneralProcessingPartidaResult
+        {
+            Lineas = lineas,
+            LineasBanco = lineasBanco
+        };
     }
 
     private async Task<(List<PartidaLineaOrden> Lineas, DateTime FechaCompromiso, string Concepto)>
@@ -891,6 +1690,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
             .Select(x => new { x.code, x.account_id })
             .ToDictionaryAsync(x => x.code.Trim(), x => x.account_id, StringComparer.OrdinalIgnoreCase, ct);
 
+        var format = await _accountFormatService.GetFormatAsync(ct);
         var descripcion = preparedOrder.Concepto.Length > 200
             ? preparedOrder.Concepto[..200]
             : preparedOrder.Concepto;
@@ -902,7 +1702,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
             if (!cuentasMap.TryGetValue(cuentaServicio, out var cuentaServicioId))
             {
                 throw new ArgumentException(
-                    $"No se encontro la cuenta de servicio {cuentaServicio} para generar la partida contable.",
+                    $"No se encontro la cuenta de servicio {format.Format(cuentaServicio)} para generar la partida contable.",
                     nameof(preparedOrder));
             }
 
@@ -920,7 +1720,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
                 if (!cuentasMap.TryGetValue(grupo.CuentaContable, out var cuentaGastoId))
                 {
                     throw new ArgumentException(
-                        $"No se encontro la cuenta de gasto {grupo.CuentaContable} para generar la partida contable.",
+                        $"No se encontro la cuenta de gasto {format.Format(grupo.CuentaContable)} para generar la partida contable.",
                         nameof(preparedOrder));
                 }
 
@@ -938,7 +1738,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
             if (!cuentasMap.TryGetValue(grupo.CuentaContable, out var cuentaGastoId))
             {
                 throw new ArgumentException(
-                    $"No se encontro la cuenta de gasto {grupo.CuentaContable} para generar la partida contable.",
+                    $"No se encontro la cuenta de gasto {format.Format(grupo.CuentaContable)} para generar la partida contable.",
                     nameof(preparedOrder));
             }
 
@@ -1212,6 +2012,89 @@ WHERE numero_orden = @numero_orden
                 referencia,
                 tasaCambio,
                 grupo.Sum(x => x.Debit),
+                usuario,
+                partidaId,
+                numeroOrden,
+                ct);
+
+            kardexIds.Add(kardexId);
+        }
+
+        return kardexIds;
+    }
+
+    /// <summary>
+    /// Modelo GENERAL: registra UN movimiento bancario por CADA linea de banco del DTO (a diferencia de
+    /// <see cref="RegisterLinkedBankTransactionsAsync"/>, que agrupa por banco_cuenta_id y sale del
+    /// modelo contra-magnitud). El monto de cada movimiento es el Credito de esa linea (el neto que el
+    /// llamador ya calculo), nunca la magnitud del bruto.
+    /// </summary>
+    private async Task<List<long>> RegisterLinkedBankMovementsGeneralAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        int numeroOrden,
+        DateTime fechaOrden,
+        string descripcion,
+        string usuario,
+        string metodoPago,
+        long partidaId,
+        IReadOnlyList<PartidaLineaOrdenPagoDto> lineasBanco,
+        CancellationToken ct)
+    {
+        if (lineasBanco.Count == 0)
+        {
+            return new List<long>();
+        }
+
+        var bancoCuentaIds = lineasBanco
+            .Select(x => x.BancoCuentaId!.Value)
+            .Distinct()
+            .OrderBy(x => x)
+            .ToArray();
+
+        var cuentasBanco = await LoadProcessingBankAccountsAsync(connection, transaction, bancoCuentaIds, ct);
+        if (cuentasBanco.Count != bancoCuentaIds.Length)
+        {
+            throw new InvalidOperationException(
+                "Una o mas cuentas bancarias de origen ya no estan disponibles para registrar la transaccion.");
+        }
+
+        if (string.Equals(metodoPago, OrdenPagoDirectoMetodoPago.Cheque, StringComparison.OrdinalIgnoreCase))
+        {
+            var cuentaNoCheque = cuentasBanco.Values.FirstOrDefault(x => !IsChequeBankAccount(x.TipoCuenta));
+            if (cuentaNoCheque is not null)
+            {
+                throw new InvalidOperationException(
+                    $"La cuenta bancaria {cuentaNoCheque.BancoCuentaId} no esta configurada como cuenta de cheques.");
+            }
+        }
+
+        var tipoTransaccion = await ResolveBankTransactionTypeAsync(metodoPago, ct);
+        var kardexIds = new List<long>();
+
+        for (var i = 0; i < lineasBanco.Count; i++)
+        {
+            var lineaBanco = lineasBanco[i];
+            if (!cuentasBanco.TryGetValue(lineaBanco.BancoCuentaId!.Value, out var cuentaBanco))
+            {
+                throw new InvalidOperationException(
+                    $"No se pudo cargar la cuenta bancaria de origen {lineaBanco.BancoCuentaId}.");
+            }
+
+            var referencia = BuildProcessingBankReference(numeroOrden, metodoPago, i + 1);
+            var descripcionMovimiento = descripcion.Length <= 500 ? descripcion : descripcion[..500];
+            var tasaCambio = ResolveProcessingExchangeRate(cuentaBanco);
+
+            var kardexId = await RegisterLinkedBankMovementAsync(
+                connection,
+                transaction,
+                lineaBanco.BancoCuentaId.Value,
+                tipoTransaccion.TipoTransaccionId,
+                DateOnly.FromDateTime(fechaOrden),
+                descripcionMovimiento,
+                referencia,
+                tasaCambio,
+                lineaBanco.Credito,
                 usuario,
                 partidaId,
                 numeroOrden,
@@ -1946,6 +2829,226 @@ ORDER BY line_number;";
         return lineas;
     }
 
+    /// <summary>
+    /// Lee las lineas de la partida identificada por poliza_id e invierte debito/credito
+    /// para generar la contrapartida. Reversa un abono puntual por su poliza_id exacto.
+    /// </summary>
+    private async Task<List<PartidaLineaOrden>> LoadPartidaLineasReversaPorPolizaIdAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long polizaId,
+        CancellationToken ct)
+    {
+        var companyId = EnsureCompanyId();
+
+        if (polizaId <= 0 || !await TableExistsAsync(connection, transaction, "con_partida_dtl", ct))
+        {
+            return new List<PartidaLineaOrden>();
+        }
+
+        await using var dtlCmd = connection.CreateCommand();
+        dtlCmd.Transaction = transaction;
+        dtlCmd.CommandText = @"
+SELECT account_id, cost_center_id, description, debit_amount, credit_amount
+FROM public.con_partida_dtl
+WHERE company_id = @company_id AND poliza_id = @poliza_id
+ORDER BY line_number;";
+        dtlCmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        dtlCmd.Parameters.AddWithValue("poliza_id", NpgsqlDbType.Bigint, polizaId);
+
+        var lineas = new List<PartidaLineaOrden>();
+        await using var reader = await dtlCmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            var accountId = reader.GetInt64(0);
+            var costCenterId = reader.IsDBNull(1) ? (long?)null : reader.GetInt64(1);
+            var description = reader.IsDBNull(2) ? string.Empty : reader.GetString(2);
+            var debit = reader.IsDBNull(3) ? 0m : reader.GetDecimal(3);
+            var credit = reader.IsDBNull(4) ? 0m : reader.GetDecimal(4);
+            // Invertir debito/credito para la contrapartida.
+            lineas.Add(new PartidaLineaOrden(accountId, costCenterId, description, credit, debit));
+        }
+
+        return lineas;
+    }
+
+    public async Task<AbonoCompromisoResultadoDto> AnularAbonoAsync(
+        int numeroOrden,
+        int numeroAbono,
+        AnularOrdenPagoDirectoDto dto,
+        CancellationToken ct = default)
+    {
+        if (numeroOrden <= 0)
+            throw new ArgumentException("El numero de orden no es valido.", nameof(numeroOrden));
+        if (numeroAbono <= 0)
+            throw new ArgumentException("El numero de abono no es valido.", nameof(numeroAbono));
+
+        ArgumentNullException.ThrowIfNull(dto);
+
+        var companyId = EnsureCompanyId();
+
+        // 1) Localizar el abono por (numero_orden, numero_abono) — el filtro global limita company_id.
+        var abono = await _context.prv_compromiso_abonos
+            .AsNoTracking()
+            .Where(x => x.numero_orden == numeroOrden && x.numero_abono == numeroAbono)
+            .Select(x => new { x.numero_abono, x.estado, x.banco_cuenta_id, x.ban_kardex_id, x.partida_id })
+            .FirstOrDefaultAsync(ct);
+
+        if (abono is null)
+            return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, NumeroAbono = numeroAbono, Message = "El abono no existe para esta orden." };
+
+        if (!string.Equals(abono.estado, EstadoAbonoVigente, StringComparison.Ordinal))
+            return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, NumeroAbono = numeroAbono, Message = "El abono ya fue anulado." };
+
+        // 2) Debe ser el ULTIMO abono vigente.
+        var maxVigente = await _context.prv_compromiso_abonos
+            .AsNoTracking()
+            .Where(x => x.numero_orden == numeroOrden && x.estado == EstadoAbonoVigente)
+            .Select(x => (int?)x.numero_abono)
+            .MaxAsync(ct);
+
+        if (maxVigente != abono.numero_abono)
+            return new AbonoCompromisoResultadoDto
+            {
+                Success = false,
+                NumeroOrden = numeroOrden,
+                NumeroAbono = numeroAbono,
+                Message = $"Solo se puede anular el ultimo abono vigente (abono {maxVigente}). Anule primero los abonos posteriores."
+            };
+
+        var hdr = await _context.prv_compromiso_hdrs
+            .AsNoTracking()
+            .Where(x => x.numero_orden == numeroOrden)
+            .Select(x => new { x.concepto, x.status_transacc })
+            .FirstOrDefaultAsync(ct);
+
+        if (hdr is null)
+            return new AbonoCompromisoResultadoDto { Success = false, NumeroOrden = numeroOrden, NumeroAbono = numeroAbono, Message = "La orden no existe." };
+
+        var usuarioActual = GetCurrentUser();
+        var fechaReverso = DateTime.Now.Date;   // hora local, sin TZ
+        var motivo = string.IsNullOrWhiteSpace(dto.Motivo)
+            ? $"Reverso del abono {abono.numero_abono} de la orden {numeroOrden}."
+            : dto.Motivo.Trim();
+        if (motivo.Length > 250) motivo = motivo[..250];
+        var descripcionRev = $"REVERSO ABONO {abono.numero_abono}: {(hdr.concepto ?? $"Orden {numeroOrden}").Trim()}";
+        if (descripcionRev.Length > 200) descripcionRev = descripcionRev[..200];
+
+        // 3) Reverso bancario PRIMERO (abre su propia transaccion; no puede anidarse en la EF de abajo).
+        long? banKardexReverso = null;
+        if (abono.banco_cuenta_id is > 0 && abono.ban_kardex_id is > 0)
+        {
+            try
+            {
+                var (kardexAnulacion, _) = await _banTransaccionesService.AnularMovimientoAsync(
+                    abono.banco_cuenta_id.Value, abono.ban_kardex_id.Value, motivo, usuarioActual, ct);
+                banKardexReverso = kardexAnulacion;
+            }
+            catch (Exception ex) when (ex is InvalidOperationException or ArgumentException)
+            {
+                var limpio = ex.Message.Split(" (Parameter", StringSplitOptions.None)[0];
+                return new AbonoCompromisoResultadoDto
+                {
+                    Success = false,
+                    NumeroOrden = numeroOrden,
+                    NumeroAbono = numeroAbono,
+                    Message = $"No se pudo reversar el movimiento bancario del abono: {limpio}"
+                };
+            }
+            catch (PostgresException ex)
+            {
+                // Reintento tras un reverso previo (u otra falla de SP): no propagar como 500.
+                return new AbonoCompromisoResultadoDto
+                {
+                    Success = false,
+                    NumeroOrden = numeroOrden,
+                    NumeroAbono = numeroAbono,
+                    Message = $"No se pudo reversar el movimiento bancario del abono: {ex.Message}. Verifique si ya fue reversado."
+                };
+            }
+        }
+
+        // 4) Contrapartida contable, estado del abono y reapertura, en una transaccion EF (ambiente o propia).
+        var ambient = _context.Database.CurrentTransaction;
+        var ownedTx = ambient is null
+            ? await _context.Database.BeginTransactionAsync(IsolationLevel.Serializable, ct)
+            : null;
+        long? partidaReversoId = null;
+
+        try
+        {
+            var connection = (NpgsqlConnection)_context.Database.GetDbConnection();
+            var transaction = _context.Database.CurrentTransaction?.GetDbTransaction() as NpgsqlTransaction
+                ?? throw new InvalidOperationException("No se pudo obtener la transaccion activa para la contrapartida del abono.");
+
+            // (a) Partida inversa por el poliza_id guardado en el abono.
+            var lineasReversa = await LoadPartidaLineasReversaPorPolizaIdAsync(connection, transaction, abono.partida_id ?? 0, ct);
+            if (lineasReversa.Count > 0)
+            {
+                partidaReversoId = await RegisterPartidaContableAsync(
+                    connection, transaction, BuildDocumentNumber(numeroOrden),
+                    BuildPartidaNumber(numeroOrden, $"RAB{abono.numero_abono}"),
+                    fechaReverso, descripcionRev, usuarioActual, lineasReversa, ct);
+            }
+
+            // (b) Marcar el abono anulado + auditoria + trazas de reverso.
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE public.prv_compromiso_abono
+                      SET estado = 'A',
+                          motivo_anulacion = {motivo},
+                          usuario_anulacion = {usuarioActual},
+                          fecha_anulacion = {fechaReverso},
+                          partida_reverso_id = {partidaReversoId},
+                          ban_kardex_id_reverso = {banKardexReverso}
+                    WHERE company_id = {companyId}
+                      AND numero_orden = {numeroOrden}
+                      AND numero_abono = {numeroAbono}",
+                ct);
+
+            // (c) Si el compromiso estaba Pagado, al quitar este abono el saldo vuelve a ser > 0.
+            if (hdr.status_transacc == true)
+            {
+                await UpdateCompromisoStatusTransaccAsync(connection, transaction, companyId, numeroOrden, statusTransacc: false, ct);
+            }
+
+            if (ownedTx is not null) await ownedTx.CommitAsync(ct);
+        }
+        catch (PostgresException ex) when (ex.SqlState == PostgresErrorCodes.SerializationFailure)
+        {
+            // Transaccion Serializable abortada por Postgres (40001) bajo concurrencia: negocio, no 500.
+            if (ownedTx is not null) await ownedTx.RollbackAsync(ct);
+            return new AbonoCompromisoResultadoDto
+            {
+                Success = false,
+                NumeroOrden = numeroOrden,
+                NumeroAbono = numeroAbono,
+                Message = "Otra operacion modifico el abono al mismo tiempo. Reintente la anulacion."
+            };
+        }
+        catch
+        {
+            if (ownedTx is not null) await ownedTx.RollbackAsync(ct);
+            throw;
+        }
+        finally
+        {
+            if (ownedTx is not null) await ownedTx.DisposeAsync();
+        }
+
+        var partes = new List<string>();
+        if (partidaReversoId is > 0) partes.Add("se genero la contrapartida contable");
+        if (banKardexReverso is > 0) partes.Add("se reverso el movimiento bancario");
+        var detalle = partes.Count > 0 ? $" y {string.Join(" y ", partes)}." : ".";
+
+        return new AbonoCompromisoResultadoDto
+        {
+            Success = true,
+            NumeroOrden = numeroOrden,
+            NumeroAbono = abono.numero_abono,
+            Message = $"El abono {abono.numero_abono} fue anulado correctamente{detalle}"
+        };
+    }
+
     private async Task<bool> EstaMovimientoConciliadoAsync(int numeroOrden, CancellationToken ct)
     {
         var companyId = EnsureCompanyId();
@@ -1977,7 +3080,7 @@ SELECT EXISTS (
     public async Task<IReadOnlyList<CuentaContableLookupDto>> GetCuentasContablesAsync(CancellationToken ct = default)
     {
         var companyId = EnsureCompanyId();
-        return await _context.con_plan_cuentas
+        var cuentas = await _context.con_plan_cuentas
             .AsNoTracking()
             .Where(c => c.company_id == companyId && c.allows_posting)
             .OrderBy(c => c.code)
@@ -1988,11 +3091,20 @@ SELECT EXISTS (
                 Description = c.name
             })
             .ToListAsync(ct);
+
+        var format = await _accountFormatService.GetFormatAsync(ct);
+        foreach (var cuenta in cuentas)
+        {
+            cuenta.DisplayText = format.FormatDisplay(cuenta.Code, cuenta.Description);
+        }
+
+        return cuentas;
     }
 
     public async Task<IReadOnlyList<CuentaContableLookupDto>> GetCuentasContraProcesamientoAsync(CancellationToken ct = default)
     {
         var companyId = EnsureCompanyId();
+        var format = await _accountFormatService.GetFormatAsync(ct);
 
         return await (
             from cuentaBanco in _context.ban_cuenta.AsNoTracking()
@@ -2029,6 +3141,7 @@ SELECT EXISTS (
                 SaldoActual = cuentaBanco.saldo_actual,
                 DisplayText = BuildCuentaContraProcesamientoDisplay(
                     cuentaContable.code,
+                    format,
                     new CuentaContraProcesamientoBancoInfo(
                         cuentaBanco.banco_cuenta_id,
                         banco != null ? banco.nombre : cuentaBanco.banco_nombre,
@@ -2042,7 +3155,7 @@ SELECT EXISTS (
     public async Task<IReadOnlyList<CuentaContableLookupDto>> GetCuentasGastoAsync(CancellationToken ct = default)
     {
         var companyId = EnsureCompanyId();
-        return await _context.con_plan_cuentas
+        var cuentas = await _context.con_plan_cuentas
             .AsNoTracking()
             .Where(c =>
                 c.company_id == companyId &&
@@ -2066,6 +3179,14 @@ SELECT EXISTS (
                 Description = c.name
             })
             .ToListAsync(ct);
+
+        var format = await _accountFormatService.GetFormatAsync(ct);
+        foreach (var cuenta in cuentas)
+        {
+            cuenta.DisplayText = format.FormatDisplay(cuenta.Code, cuenta.Description);
+        }
+
+        return cuentas;
     }
 
     private long EnsureCompanyId()
@@ -2449,6 +3570,7 @@ SELECT EXISTS (
         var fechaPresupuesto = DateOnly.FromDateTime(fechaCompromiso);
         var affectedBudgetIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         var cuentasPresupuestables = await LoadBudgetEnabledAccountCodesAsync(ct);
+        var format = await _accountFormatService.GetFormatAsync(ct);
 
         foreach (var linea in lineas)
         {
@@ -2475,8 +3597,8 @@ SELECT EXISTS (
             {
                 throw new InvalidOperationException(
                     delta > 0m
-                        ? $"No existe un presupuesto aprobado y vigente para la cuenta contable {cuentaContable} en la fecha {fechaPresupuesto:yyyy-MM-dd}."
-                        : $"No se encontro el presupuesto a liberar para la cuenta contable {cuentaContable} en la fecha {fechaPresupuesto:yyyy-MM-dd}.");
+                        ? $"No existe un presupuesto aprobado y vigente para la cuenta contable {format.Format(cuentaContable)} en la fecha {fechaPresupuesto:yyyy-MM-dd}."
+                        : $"No se encontro el presupuesto a liberar para la cuenta contable {format.Format(cuentaContable)} en la fecha {fechaPresupuesto:yyyy-MM-dd}.");
             }
 
             var nuevoValorReal = budgetRow.Detail.valor_real + delta;
@@ -2484,7 +3606,7 @@ SELECT EXISTS (
             {
                 var disponibleCuenta = Math.Max(budgetRow.Detail.valor_proyeccion - budgetRow.Detail.valor_real, 0m);
                 throw new InvalidOperationException(
-                    $"El compromiso excede el presupuesto disponible para la cuenta contable {cuentaContable}. Disponible: {disponibleCuenta:N2}.");
+                    $"El compromiso excede el presupuesto disponible para la cuenta contable {format.Format(cuentaContable)}. Disponible: {disponibleCuenta:N2}.");
             }
 
             budgetRow.Detail.valor_real = nuevoValorReal < 0m ? 0m : nuevoValorReal;
@@ -3475,9 +4597,10 @@ LIMIT 1;";
 
     private static string BuildCuentaContraProcesamientoDisplay(
         string? cuentaContable,
+        AccountFormat format,
         CuentaContraProcesamientoBancoInfo banco)
     {
-        var codigoCuenta = AccountCodeFormatter.Format(cuentaContable);
+        var codigoCuenta = format.Format(cuentaContable);
         if (string.IsNullOrWhiteSpace(codigoCuenta))
         {
             codigoCuenta = "-";
@@ -3790,6 +4913,15 @@ WHERE company_id = @company_id
         public string? TipoCuenta { get; init; }
         public string Description { get; init; } = string.Empty;
         public decimal Debit { get; init; }
+    }
+
+    /// <summary>Resultado de <see cref="BuildGeneralProcessingPartidaLineasAsync"/>: lineas listas para
+    /// registrar la partida (incluye la del proveedor) y las lineas de banco (subconjunto del DTO original
+    /// con BancoCuentaId, usadas para registrar los movimientos bancarios por su Credito/neto).</summary>
+    private sealed class GeneralProcessingPartidaResult
+    {
+        public List<PartidaLineaOrden> Lineas { get; init; } = new();
+        public List<PartidaLineaOrdenPagoDto> LineasBanco { get; init; } = new();
     }
 
     private sealed class BankTransactionTypeConfig

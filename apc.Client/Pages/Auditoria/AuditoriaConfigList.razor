@@ -1,0 +1,132 @@
+@page "/auditoria/configuracion"
+@attribute [Authorize(Policy = "CanSuperAdmin")]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Auditoria
+@using apc.Client.Services.Auditoria
+
+@inject AuditoriaConfigClient ConfigClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Configuración de auditoría</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="AuditoriaConfigToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Configuración de auditoría</h2>
+            <p class="page-subtitle">Elegí qué maestros registran bitácora</p>
+        </div>
+        <div class="d-flex gap-2">
+            <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" Enabled="@(!isSaving)" />
+            <DxButton Text="Guardar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern" Click="GuardarAsync" Enabled="@(!isSaving && !isLoading)" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="@(isLoading || isSaving)" IsContentBlocked="true"
+                        Text="@(isSaving ? "Guardando..." : "Cargando...")" />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@items" KeyFieldName="@nameof(AuditoriaConfigItemDto.Entidad)" PageSize="25"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(AuditoriaConfigItemDto.Modulo)" Caption="Módulo" Width="160px" />
+                    <DxGridDataColumn FieldName="@nameof(AuditoriaConfigItemDto.Nombre)" Caption="Maestro" MinWidth="220" />
+                    <DxGridDataColumn Caption="Habilitado" Width="120px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
+                        <CellDisplayTemplate Context="context">
+                            @if (context.DataItem is AuditoriaConfigItemDto item)
+                            {
+                                <DxCheckBox @bind-Checked="item.Habilitado" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Crear" Width="110px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
+                        <CellDisplayTemplate Context="context">
+                            @if (context.DataItem is AuditoriaConfigItemDto item)
+                            {
+                                <DxCheckBox @bind-Checked="item.AuditaCrear" Enabled="@item.Habilitado" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Editar" Width="110px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
+                        <CellDisplayTemplate Context="context">
+                            @if (context.DataItem is AuditoriaConfigItemDto item)
+                            {
+                                <DxCheckBox @bind-Checked="item.AuditaEditar" Enabled="@item.Habilitado" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Eliminar" Width="110px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
+                        <CellDisplayTemplate Context="context">
+                            @if (context.DataItem is AuditoriaConfigItemDto item)
+                            {
+                                <DxCheckBox @bind-Checked="item.AuditaEliminar" Enabled="@item.Habilitado" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay maestros configurables.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DxGrid? grid;
+    private List<AuditoriaConfigItemDto> items = new();
+    private bool isLoading;
+    private bool isSaving;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            items = await ConfigClient.GetAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar la configuración: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            isSaving = true;
+            await ConfigClient.GuardarAsync(items);
+            Toast("Auditoría", "Configuración guardada", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Auditoría", $"No se pudo guardar: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "AuditoriaConfigToast" });
+}

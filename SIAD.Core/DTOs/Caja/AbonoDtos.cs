@@ -1,4 +1,5 @@
 using System;
+using SIAD.Core.DTOs.Clientes;
 
 namespace SIAD.Core.DTOs.Caja;
 
@@ -26,6 +27,12 @@ public class FacturaConSaldoDto
     public decimal SaldoTotal { get; set; }
     public decimal SaldoPendiente { get; set; }
     public string Estado { get; set; } = null!;
+}
+
+public class ClienteSaldoDto
+{
+    public string ClienteClave { get; set; } = null!;
+    public decimal SaldoTotal { get; set; }
 }
 
 public class AbonoResponseDto
@@ -82,6 +89,9 @@ public class ReciboAbonoDto
     public int NumeroTransaccion { get; set; }
     public string GeneradoPor { get; set; } = string.Empty;
     public bool EsPendiente { get; set; }
+
+    // Desglose del saldo del cliente (deuda / % / saldo), igual al del estado de cuenta
+    public List<SaldoServicioDto> DesgloseSaldo { get; set; } = new();
 }
 
 public class AbonoHistorialItemDto

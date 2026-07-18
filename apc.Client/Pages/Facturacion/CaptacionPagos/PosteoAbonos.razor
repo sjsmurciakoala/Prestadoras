@@ -116,172 +116,183 @@
     {
         @* ── Factura seleccionada ── *@
         <div class="ab-invoice-card">
-            <div class="ab-invoice-info">
-                <div class="ab-invoice-num">
-                    @selectedFactura.NumFactura
-                    <span class="ab-badge @(selectedFactura.Estado == "B" ? "ab-badge-partial" : "ab-badge-open")">
-                        @(selectedFactura.Estado == "B" ? "Parcial" : "Abierta")
-                    </span>
-                </div>
-                <div class="ab-invoice-cli">@selectedFactura.ClienteClave — @selectedFactura.ClienteNombre</div>
-            </div>
-            <div class="ab-invoice-saldo">
-                <span class="ab-invoice-saldo-label">Saldo pendiente</span>
-                <span class="ab-invoice-saldo-val">@SaldoPendienteVista.ToString("C2")</span>
-            </div>
-            <button class="ab-invoice-change" @onclick="DeseleccionarFactura" title="Elegir otra factura">
-                <i class="bi bi-arrow-left-right me-1"></i>Cambiar
-            </button>
-        </div>
-
-        <p class="ab-options-lead">Elige <strong>una</strong> forma de aplicar el pago:</p>
-
-        @* ── Opción A: procesar recibos ya generados ── *@
-        <div class="ab-option">
-            <div class="ab-option-head">
-                <span class="ab-option-tag">Opción A</span>
-                <span class="ab-option-title">Procesar recibos ya generados</span>
-            </div>
-
-            @if (isLoadingPendientes)
-            {
-                <DxWaitIndicator Visible="true" />
-            }
-            else if (recibosPendientes.Count > 0)
-            {
-                @foreach (var rp in recibosPendientes)
-                {
-                    var staged = reciboPendienteSeleccionado?.TransaccionId == rp.TransaccionId;
-                    <div class="ab-receipt @(staged ? "is-staged" : "")">
-                        <div class="ab-receipt-info">
-                            <span class="ab-receipt-amount">@rp.Monto.ToString("C2")</span>
-                            <span class="ab-receipt-meta">@rp.FechaGenerado · @rp.Operador</span>
-                        </div>
-
-                        @if (staged)
-                        {
-                            <div class="ab-receipt-confirm">
-                                @if (PuedePagarEnBanco)
-                                {
-                                    <DxComboBox TData="string" TValue="string"
-                                                Data="@formasPago"
-                                                @bind-Value="formaPago"
-                                                AllowUserInput="false"
-                                                CssClass="ab-pay-combo" />
-                                    @if (formaPago == "BANCO" && Bancos.Count > 0)
-                                    {
-                                        <DxComboBox TData="BancoDto" TValue="long?"
-                                                    Data="@Bancos"
-                                                    ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
-                                                    TextFieldName="@nameof(BancoDto.Nombre)"
-                                                    @bind-Value="bancoCuentaIdSeleccionado"
-                                                    NullText="Cuenta bancaria…"
-                                                    AllowUserInput="false"
-                                                    CssClass="ab-pay-combo" />
-                                    }
-                                }
-                                <DxButton Text="@(isSaving ? "Procesando…" : "Confirmar pago")"
-                                          Click="ProcesarAbono"
-                                          RenderStyle="ButtonRenderStyle.Success"
-                                          IconCssClass="bi bi-check-circle-fill"
-                                          Enabled="@(!isSaving && FormaPagoValida())"
-                                          SizeMode="SizeMode.Small" />
-                                <DxButton Text="Cancelar"
-                                          RenderStyle="ButtonRenderStyle.Secondary"
-                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                          Enabled="@(!isSaving)"
-                                          Click="@(() => reciboPendienteSeleccionado = null)"
-                                          SizeMode="SizeMode.Small" />
-                            </div>
-                        }
-                        else
-                        {
-                            <div class="ab-receipt-actions">
-                                <DxButton Text="Procesar"
-                                          RenderStyle="ButtonRenderStyle.Success"
-                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                          IconCssClass="bi bi-cash-coin"
-                                          Enabled="@(!isSaving)"
-                                          Click="@(() => PrepararProcesarPendiente(rp))"
-                                          SizeMode="SizeMode.Small" />
-                                <DxButton Text="Anular"
-                                          RenderStyle="ButtonRenderStyle.Secondary"
-                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
-                                          IconCssClass="bi bi-x-circle"
-                                          Enabled="@(!isSaving)"
-                                          Click="@(() => ConfirmarAnularPendiente(rp))"
-                                          SizeMode="SizeMode.Small" />
-                            </div>
-                        }
+            <div class="ab-invoice-top">
+                <div class="ab-invoice-info">
+                    <div class="ab-invoice-num">
+                        @selectedFactura.NumFactura
+                        <span class="ab-badge @(selectedFactura.Estado == "B" ? "ab-badge-partial" : "ab-badge-open")">
+                            @(selectedFactura.Estado == "B" ? "Parcial" : "Abierta")
+                        </span>
                     </div>
-                }
-
-                <div class="ab-receipt-sum">
-                    <i class="bi bi-calculator me-1"></i>@TotalRecibosPendientes.ToString("C2") en recibos pendientes
-                    <span class="@(RecibosCuadran ? "ab-sum-ok" : "ab-sum-warn")">
-                        @(RecibosCuadran
-                            ? "· cuadra con el saldo"
-                            : $"· saldo pendiente {SaldoPendienteVista.ToString("C2")}")
-                    </span>
+                    <div class="ab-invoice-cli">@selectedFactura.ClienteClave — @selectedFactura.ClienteNombre</div>
                 </div>
-            }
-            else
-            {
-                <p class="ab-option-empty">
-                    <i class="bi bi-info-circle me-1"></i>
-                    No hay recibos generados para esta factura. Usa la Opción B.
-                </p>
-            }
-        </div>
-
-        <div class="ab-or"><span>o</span></div>
-
-        @* ── Opción B: abono directo ── *@
-        <div class="ab-option @(reciboPendienteSeleccionado != null ? "is-disabled" : "")">
-            <div class="ab-option-head">
-                <span class="ab-option-tag">Opción B</span>
-                <span class="ab-option-title">Registrar abono directo</span>
+                <button class="ab-invoice-change" @onclick="DeseleccionarFactura" title="Elegir otra factura">
+                    <i class="bi bi-arrow-left-right me-1"></i>Cambiar
+                </button>
             </div>
 
-            @if (PuedePagarEnBanco)
-            {
-                <label class="ab-field-label">Forma de pago</label>
-                <DxComboBox TData="string" TValue="string"
-                            Data="@formasPago"
-                            @bind-Value="formaPago"
-                            AllowUserInput="false"
-                            CssClass="ab-monto" />
-
-                @if (formaPago == "BANCO" && Bancos.Count > 0)
-                {
-                    <label class="ab-field-label">Cuenta bancaria</label>
-                    <DxComboBox TData="BancoDto" TValue="long?"
-                                Data="@Bancos"
-                                ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
-                                TextFieldName="@nameof(BancoDto.Nombre)"
-                                @bind-Value="bancoCuentaIdSeleccionado"
-                                NullText="Selecciona la cuenta bancaria…"
-                                AllowUserInput="false"
-                                CssClass="ab-monto" />
-                }
-            }
-
-            <label class="ab-field-label">Monto a abonar</label>
-            <DxSpinEdit T="decimal"
-                        @bind-Value="montoAbonar"
-                        MinValue="0.01m"
-                        MaxValue="@SaldoPendienteVista"
-                        DisplayFormat="C2"
-                        CssClass="ab-monto"
-                        InputId="abono-monto" />
-
-            <DxButton Text="@(isSaving && reciboPendienteSeleccionado is null ? "Procesando…" : "Confirmar abono")"
-                      Click="ProcesarAbono"
-                      RenderStyle="ButtonRenderStyle.Success"
-                      IconCssClass="bi bi-check-circle-fill"
-                      Enabled="@(!isSaving && reciboPendienteSeleccionado is null && montoAbonar > 0 && FormaPagoValida())"
-                      CssClass="ab-confirm-btn" />
+            <div class="ab-invoice-saldos">
+                <div class="ab-invoice-saldo ab-invoice-saldo--factura">
+                    <span class="ab-invoice-saldo-label">Saldo de la factura</span>
+                    <span class="ab-invoice-saldo-val">@SaldoPendienteVista.ToString("C2")</span>
+                    <span class="ab-invoice-saldo-hint">
+                        <i class="bi bi-arrow-down-circle me-1"></i>A esto se aplica el abono
+                    </span>
+                </div>
+                <div class="ab-invoice-saldo ab-invoice-saldo--cliente">
+                    <span class="ab-invoice-saldo-label">Saldo total del cliente</span>
+                    <span class="ab-invoice-saldo-val">
+                        @(saldoTotalCliente.HasValue ? saldoTotalCliente.Value.ToString("C2") : "—")
+                    </span>
+                    <span class="ab-invoice-saldo-hint">Deuda global · solo referencia</span>
+                </div>
+            </div>
         </div>
+
+        <p class="ab-options-lead">Elige cómo aplicar el pago según la pestaña:</p>
+
+        @* ── Pestañas: cada proceso de pago en su propia pestaña ── *@
+        <DxTabs @bind-ActiveTabIndex="@TabActivo" CssClass="ab-tabs">
+
+            @* ── Pestaña A: procesar recibos ya generados ── *@
+            <DxTabPage Text="@ReciboTabText">
+                <div class="ab-tab-body">
+                    @if (isLoadingPendientes)
+                    {
+                        <DxWaitIndicator Visible="true" />
+                    }
+                    else if (recibosPendientes.Count > 0)
+                    {
+                        @foreach (var rp in recibosPendientes)
+                        {
+                            var staged = reciboPendienteSeleccionado?.TransaccionId == rp.TransaccionId;
+                            <div class="ab-receipt @(staged ? "is-staged" : "")">
+                                <div class="ab-receipt-info">
+                                    <span class="ab-receipt-amount">@rp.Monto.ToString("C2")</span>
+                                    <span class="ab-receipt-meta">@rp.FechaGenerado · @rp.Operador</span>
+                                </div>
+
+                                @if (staged)
+                                {
+                                    <div class="ab-receipt-confirm">
+                                        @if (PuedePagarEnBanco)
+                                        {
+                                            <DxComboBox TData="string" TValue="string"
+                                                        Data="@formasPago"
+                                                        @bind-Value="formaPago"
+                                                        AllowUserInput="false"
+                                                        CssClass="ab-pay-combo" />
+                                            @if (formaPago == "BANCO" && Bancos.Count > 0)
+                                            {
+                                                <DxComboBox TData="BancoDto" TValue="long?"
+                                                            Data="@Bancos"
+                                                            ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
+                                                            TextFieldName="@nameof(BancoDto.Nombre)"
+                                                            @bind-Value="bancoCuentaIdSeleccionado"
+                                                            NullText="Cuenta bancaria…"
+                                                            AllowUserInput="false"
+                                                            CssClass="ab-pay-combo" />
+                                            }
+                                        }
+                                        <DxButton Text="@(isSaving ? "Procesando…" : "Confirmar pago")"
+                                                  Click="ProcesarAbono"
+                                                  RenderStyle="ButtonRenderStyle.Success"
+                                                  IconCssClass="bi bi-check-circle-fill"
+                                                  Enabled="@(!isSaving && FormaPagoValida())"
+                                                  SizeMode="SizeMode.Small" />
+                                        <DxButton Text="Cancelar"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  Enabled="@(!isSaving)"
+                                                  Click="@(() => reciboPendienteSeleccionado = null)"
+                                                  SizeMode="SizeMode.Small" />
+                                    </div>
+                                }
+                                else
+                                {
+                                    <div class="ab-receipt-actions">
+                                        <DxButton Text="Procesar"
+                                                  RenderStyle="ButtonRenderStyle.Success"
+                                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  IconCssClass="bi bi-cash-coin"
+                                                  Enabled="@(!isSaving)"
+                                                  Click="@(() => PrepararProcesarPendiente(rp))"
+                                                  SizeMode="SizeMode.Small" />
+                                        <DxButton Text="Anular"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  IconCssClass="bi bi-x-circle"
+                                                  Enabled="@(!isSaving)"
+                                                  Click="@(() => ConfirmarAnularPendiente(rp))"
+                                                  SizeMode="SizeMode.Small" />
+                                    </div>
+                                }
+                            </div>
+                        }
+
+                        <div class="ab-receipt-sum">
+                            <i class="bi bi-calculator me-1"></i>@TotalRecibosPendientes.ToString("C2") en recibos pendientes
+                            <span class="@(RecibosCuadran ? "ab-sum-ok" : "ab-sum-warn")">
+                                @(RecibosCuadran
+                                    ? "· cuadra con el saldo"
+                                    : $"· saldo pendiente {SaldoPendienteVista.ToString("C2")}")
+                            </span>
+                        </div>
+                    }
+                    else
+                    {
+                        <p class="ab-option-empty">
+                            <i class="bi bi-info-circle me-1"></i>
+                            No hay recibos generados para esta factura. Usa la pestaña <strong>Abono directo</strong>.
+                        </p>
+                    }
+                </div>
+            </DxTabPage>
+
+            @* ── Pestaña B: registrar abono directo ── *@
+            <DxTabPage Text="Abono directo">
+                <div class="ab-tab-body">
+                    @if (PuedePagarEnBanco)
+                    {
+                        <label class="ab-field-label">Forma de pago</label>
+                        <DxComboBox TData="string" TValue="string"
+                                    Data="@formasPago"
+                                    @bind-Value="formaPago"
+                                    AllowUserInput="false"
+                                    CssClass="ab-monto" />
+
+                        @if (formaPago == "BANCO" && Bancos.Count > 0)
+                        {
+                            <label class="ab-field-label">Cuenta bancaria</label>
+                            <DxComboBox TData="BancoDto" TValue="long?"
+                                        Data="@Bancos"
+                                        ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
+                                        TextFieldName="@nameof(BancoDto.Nombre)"
+                                        @bind-Value="bancoCuentaIdSeleccionado"
+                                        NullText="Selecciona la cuenta bancaria…"
+                                        AllowUserInput="false"
+                                        CssClass="ab-monto" />
+                        }
+                    }
+
+                    <label class="ab-field-label">Monto a abonar</label>
+                    <DxSpinEdit T="decimal"
+                                @bind-Value="montoAbonar"
+                                MinValue="0.01m"
+                                MaxValue="@SaldoPendienteVista"
+                                DisplayFormat="C2"
+                                CssClass="ab-monto"
+                                InputId="abono-monto" />
+
+                    <DxButton Text="@(isSaving && reciboPendienteSeleccionado is null ? "Procesando…" : "Confirmar abono")"
+                              Click="ProcesarAbono"
+                              RenderStyle="ButtonRenderStyle.Success"
+                              IconCssClass="bi bi-check-circle-fill"
+                              Enabled="@(!isSaving && reciboPendienteSeleccionado is null && montoAbonar > 0 && FormaPagoValida())"
+                              CssClass="ab-confirm-btn" />
+                </div>
+            </DxTabPage>
+        </DxTabs>
 
         @* ── Abonos ya aplicados a esta factura ── *@
         <div class="ab-applied">
@@ -457,8 +468,15 @@
     private bool isLoadingPendientes;
     private ReciboPendienteDto? reciboPendienteSeleccionado;
 
+    // Pestaña activa del panel de pago: 0 = Recibos generados · 1 = Abono directo.
+    private int _tabActivo;
+
     private List<AbonoHistorialItemDto> historialFactura = new();
     private bool isLoadingHistorialFactura;
+
+    // Saldo global (corrido) del cliente, informativo. El abono NO se aplica a este
+    // saldo sino a la factura; se muestra solo como referencia.
+    private decimal? saldoTotalCliente;
 
     private ReciboPendienteDto? reciboPendienteAAnular;
     private string motivoAnulacion = string.Empty;
@@ -515,6 +533,27 @@
         Math.Abs(TotalRecibosPendientes - SaldoPendienteVista) < 0.01m;
 
     private string PeriodoTexto => FormatPeriodo(PeriodoActual);
+
+    // ── Pestañas del panel de pago ──
+    // Al alternar de pestaña se cancela cualquier recibo preparado para procesar,
+    // de modo que "Abono directo" no herede el staging de la pestaña de recibos
+    // (ProcesarAbono comparte reciboPendienteSeleccionado entre ambos flujos).
+    private int TabActivo
+    {
+        get => _tabActivo;
+        set
+        {
+            if (_tabActivo == value) return;
+            _tabActivo = value;
+            reciboPendienteSeleccionado = null;
+        }
+    }
+
+    // Muestra el conteo de recibos pendientes en la propia pestaña.
+    private string ReciboTabText =>
+        recibosPendientes.Count > 0
+            ? $"Recibos generados ({recibosPendientes.Count})"
+            : "Recibos generados";
 
     protected override async Task OnParametersSetAsync()
     {
@@ -587,10 +626,12 @@
         formaPago = "EFECTIVO";
         bancoCuentaIdSeleccionado = null;
         reciboPendienteSeleccionado = null;
+        _tabActivo = 0; // siempre iniciar en "Recibos generados"
 
         await Task.WhenAll(
             CargarRecibosPendientesAsync(fact.NumFactura),
-            CargarHistorialFacturaAsync(fact.NumFactura));
+            CargarHistorialFacturaAsync(fact.NumFactura),
+            CargarSaldoClienteAsync(fact.ClienteClave));
 
         // Con el historial cargado ya podemos usar el saldo derivado en la vista.
         montoAbonar = SaldoPendienteVista;
@@ -635,6 +676,19 @@
         finally
         {
             isLoadingHistorialFactura = false;
+        }
+    }
+
+    private async Task CargarSaldoClienteAsync(string clienteClave)
+    {
+        try
+        {
+            var res = await AbonoClient.ObtenerSaldoClienteAsync(clienteClave);
+            saldoTotalCliente = res?.SaldoTotal;
+        }
+        catch
+        {
+            saldoTotalCliente = null;
         }
     }
 
@@ -769,6 +823,7 @@
         reciboPendienteSeleccionado = null;
         formaPago = "EFECTIVO";
         bancoCuentaIdSeleccionado = null;
+        saldoTotalCliente = null;
     }
 
     private static string EstadoBadgeClass(string estado) => estado switch

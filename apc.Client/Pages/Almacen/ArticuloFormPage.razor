@@ -11,7 +11,6 @@
 @inject ArticulosClient ArticulosClient
 @inject UnidadesMedidaClient UnidadesClient
 @inject TiposArticuloClient TiposClient
-@inject LineasCatalogoClient LineasClient
 @inject GruposClient GruposClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
@@ -58,7 +57,6 @@
                     <ArticuloForm Model="modelo"
                                   Unidades="unidades"
                                   Tipos="tipos"
-                                  Lineas="lineas"
                                   Grupos="grupos"
                                   CuentasContables="cuentasContables"
                                   OnValidSubmit="GuardarAsync"
@@ -94,7 +92,6 @@
     private ArticuloEditDto modelo = new();
     private List<UnidadMedidaLookupDto> unidades = new();
     private List<TipoArticuloLookupDto> tipos = new();
-    private List<LineaLookupDto> lineas = new();
     private List<GrupoLookupDto> grupos = new();
     private List<CuentaContableLookupDto> cuentasContables = new();
 
@@ -133,7 +130,6 @@
         {
             unidades = await UnidadesClient.GetLookupAsync();
             tipos = await TiposClient.GetLookupAsync();
-            lineas = await LineasClient.GetLookupAsync();
             grupos = await GruposClient.GetLookupAsync();
             cuentasContables = await ArticulosClient.GetCuentasContablesAsync();
         }
@@ -141,7 +137,6 @@
         {
             unidades = new List<UnidadMedidaLookupDto>();
             tipos = new List<TipoArticuloLookupDto>();
-            lineas = new List<LineaLookupDto>();
             grupos = new List<GrupoLookupDto>();
             cuentasContables = new List<CuentaContableLookupDto>();
         }

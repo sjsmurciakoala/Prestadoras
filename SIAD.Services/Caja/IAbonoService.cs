@@ -18,6 +18,10 @@ public interface IAbonoService
     Task<ReciboAbonoDto?> GenerarDatosReciboAsync(int transaccionId, CancellationToken ct = default);
     Task<IReadOnlyList<AbonoHistorialItemDto>> ListarHistorialPorClienteAsync(string clienteClave, CancellationToken ct = default);
 
+    // Caja — saldo global (corrido) del cliente, para mostrar como referencia
+    // junto al saldo de la factura a la que se aplica el abono.
+    Task<decimal> ObtenerSaldoClienteAsync(string clienteClave, CancellationToken ct = default);
+
     // Paso 1 — generar recibo pendiente desde Maestro Clientes
     Task<ResponseModelDto> GenerarReciboPendienteAsync(GenerarReciboDto dto, CancellationToken ct = default);
 

@@ -24,9 +24,9 @@ public sealed class ArticulosClient
             parameters.Add($"search={Uri.EscapeDataString(filter.Search)}");
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Linea))
+        if (filter.TipoArticuloId.HasValue)
         {
-            parameters.Add($"linea={Uri.EscapeDataString(filter.Linea)}");
+            parameters.Add($"tipoArticuloId={filter.TipoArticuloId.Value}");
         }
 
         if (filter.SoloBajoMinimo == true)
@@ -52,9 +52,9 @@ public sealed class ArticulosClient
             parameters.Add($"search={Uri.EscapeDataString(filter.Search)}");
         }
 
-        if (!string.IsNullOrWhiteSpace(filter.Linea))
+        if (filter.TipoArticuloId.HasValue)
         {
-            parameters.Add($"linea={Uri.EscapeDataString(filter.Linea)}");
+            parameters.Add($"tipoArticuloId={filter.TipoArticuloId.Value}");
         }
 
         if (!string.IsNullOrWhiteSpace(filter.Severidad))
@@ -73,12 +73,6 @@ public sealed class ArticulosClient
 
         var response = await _http.GetAsync(url, ct);
         return await response.ReadFromJsonAsyncWithAuthCheck<List<AlertaStockDto>>(ct) ?? new List<AlertaStockDto>();
-    }
-
-    public async Task<List<string>> GetLineasAsync(CancellationToken ct = default)
-    {
-        var response = await _http.GetAsync("api/almacen/articulos/lineas", ct);
-        return await response.ReadFromJsonAsyncWithAuthCheck<List<string>>(ct) ?? new List<string>();
     }
 
     /// <summary>

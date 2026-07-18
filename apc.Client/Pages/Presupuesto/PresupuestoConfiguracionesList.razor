@@ -8,9 +8,11 @@
 @using SIAD.Core.DTOs.Presupuesto
 @using apc.Client.Pages.Presupuesto
 @using apc.Client.Services
+@using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
 
 @inject ConfiguracionPresupuestoClient ConfiguracionPresupuestoClient
+@inject AccountFormatState AccountFormat
 @inject PresupuestoSelectionState SelectionState
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
@@ -241,7 +243,7 @@
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is ConfiguracionPresupuestoDetalleListItemDto item)
                                 {
-                                    <span>@FormatCuentaContableDisplay(item.CuentaContable)</span>
+                                    <span>@(string.IsNullOrWhiteSpace(item.CuentaContable) ? "-" : item.CuentaContable)</span>
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
@@ -432,19 +434,6 @@
 </DxPopup>
 
 @code {
-    private static string FormatCuentaContableDisplay(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return "-";
-        }
-
-        var parts = value.Split(" - ", 2, StringSplitOptions.TrimEntries);
-        return parts.Length == 2
-            ? AccountCodeFormatter.FormatDisplay(parts[0], parts[1])
-            : AccountCodeFormatter.Format(value);
-    }
-
     private DxGrid? grid;
     private PresupuestoConfiguracionesGridDataSource dataSource = default!;
 
@@ -882,7 +871,12 @@
             detalleFormLoading = true;
             if (cuentasDetalle.Count == 0)
             {
+                await AccountFormat.EnsureLoadedAsync();
                 cuentasDetalle = await ConfiguracionPresupuestoClient.ObtenerCuentasContablesAsync();
+                foreach (var cuenta in cuentasDetalle)
+                {
+                    cuenta.DisplayText = AccountFormat.FormatDisplay(cuenta.Code, cuenta.Description);
+                }
             }
 
             RecalcularCuentasDisponiblesDetalle();

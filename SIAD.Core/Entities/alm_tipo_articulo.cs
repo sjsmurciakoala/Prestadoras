@@ -1,11 +1,13 @@
 using System;
+using System.Collections.Generic;
 using SIAD.Core.Tenancy;
 
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Clasificación de artículos de almacén por uso (operativo, mantenimiento,
-/// consumo). Funcionalidad nueva; no existía en el legacy MySQL.
+/// Tipo de artículo: la clasificación única de los artículos de almacén desde
+/// la unificación línea→tipo (2026-07-16, seed desde alm_linea). Lleva las
+/// cuentas contables del tipo y define si sus artículos manejan inventario.
 /// </summary>
 public partial class alm_tipo_articulo : ICompanyScopedEntity
 {
@@ -34,4 +36,7 @@ public partial class alm_tipo_articulo : ICompanyScopedEntity
     public DateTime? fechacreacion { get; set; }
     public string? usuariomodificacion { get; set; }
     public DateTime? fechamodificacion { get; set; }
+
+    /// <summary>Categorías (alm_grupo) que cuelgan de este tipo (unificación 2026-07-16).</summary>
+    public virtual ICollection<alm_grupo> grupos { get; set; } = new List<alm_grupo>();
 }

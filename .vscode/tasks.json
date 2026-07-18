@@ -1,41 +1,64 @@
 {
-	"version": "2.0.0",
-	"tasks": [
-		{
-			"label": "dotnet-build-solution",
-			"type": "shell",
-			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		},
-		{
-			"label": "dotnet-build-solution",
-			"type": "shell",
-			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		},
-		{
-			"label": "dotnet-build-solution",
-			"type": "shell",
-			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		},
-		{
-			"label": "dotnet-build-solution",
-			"type": "shell",
-			"command": "dotnet build HODSOFT_DEVEXPRESS.sln",
-			"problemMatcher": [
-				"$msCompile"
-			],
-			"group": "build"
-		}
-	]
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "build-apc",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/apc/apc.csproj",
+        "--configuration",
+        "Debug",
+        "--nologo"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "build-mobile-api",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/apc.MobileApi/apc.MobileApi.csproj",
+        "--configuration",
+        "Debug",
+        "--nologo"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-bancos-ws",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/apc.BancosWs/apc.BancosWs.csproj",
+        "--configuration",
+        "Debug",
+        "--nologo"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    },
+    {
+      "label": "build-solution",
+      "type": "process",
+      "command": "dotnet",
+      "args": [
+        "build",
+        "${workspaceFolder}/HODSOFT_DEVEXPRESS.sln",
+        "--configuration",
+        "Debug",
+        "--nologo"
+      ],
+      "problemMatcher": "$msCompile",
+      "group": "build"
+    }
+  ]
 }

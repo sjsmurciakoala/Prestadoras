@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Presupuesto;
+using SIAD.Reports;
 using SIAD.Services.Presupuesto;
 
 namespace apc.Controllers.Presupuesto;
@@ -70,6 +71,29 @@ public sealed class OrdenesPagoDirectoController : ControllerBase
 
         var result = await _service.GetByNumeroOrdenAsync(numeroOrden, ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpGet("{numeroOrden:int}/pdf")]
+    public async Task<IActionResult> GetPdf(int numeroOrden, CancellationToken ct)
+    {
+        if (numeroOrden <= 0)
+        {
+            return BadRequest(new { message = "El numero de orden no es valido." });
+        }
+
+        var datos = await _service.GetDatosImpresionAsync(numeroOrden, ct);
+        if (datos is null)
+        {
+            return NotFound(new { message = $"No se encontro el compromiso {numeroOrden}." });
+        }
+
+        using var report = new Rpt_Dev_Compromiso_Proveedor(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=Compromiso-{numeroOrden}.pdf";
+
+        return File(stream.ToArray(), "application/pdf");
     }
 
     [HttpPost]
@@ -221,5 +245,102 @@ public sealed class OrdenesPagoDirectoController : ControllerBase
         {
             return Conflict(new { message = ex.Message });
         }
+    }
+
+    [HttpGet("{numeroOrden:int}/saldo")]
+    public async Task<IActionResult> GetSaldo(int numeroOrden, CancellationToken ct)
+    {
+        if (numeroOrden <= 0)
+            return BadRequest(new { message = "El numero de orden no es valido." });
+
+        var result = await _service.GetSaldoConAbonosAsync(numeroOrden, ct);
+        return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpPost("{numeroOrden:int}/abonos")]
+    public async Task<IActionResult> RegistrarAbono(
+        int numeroOrden,
+        [FromBody] AbonoCompromisoUpsertDto dto,
+        CancellationToken ct)
+    {
+        if (numeroOrden <= 0)
+            return BadRequest(new { message = "El numero de orden no es valido." });
+
+        if (!ModelState.IsValid)
+            return BadRequest(ModelState);
+
+        try
+        {
+            var result = await _service.RegistrarAbonoAsync(numeroOrden, dto, ct);
+            return result.Success ? Ok(result) : Conflict(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [HttpPost("{numeroOrden:int}/abonos/{numeroAbono:int}/anular")]
+    public async Task<IActionResult> AnularAbono(
+        int numeroOrden,
+        int numeroAbono,
+        [FromBody] AnularOrdenPagoDirectoDto dto,
+        CancellationToken ct)
+    {
+        if (numeroOrden <= 0)
+            return BadRequest(new { message = "El numero de orden no es valido." });
+
+        if (numeroAbono <= 0)
+            return BadRequest(new { message = "El numero de abono no es valido." });
+
+        try
+        {
+            var result = await _service.AnularAbonoAsync(numeroOrden, numeroAbono, dto, ct);
+            return result.Success ? Ok(result) : Conflict(result);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { message = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { message = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { message = ex.Message });
+        }
+    }
+
+    [HttpGet("{numeroOrden:int}/abonos/{numeroAbono:int}/comprobante/pdf")]
+    public async Task<IActionResult> GetComprobanteAbonoPdf(int numeroOrden, int numeroAbono, CancellationToken ct)
+    {
+        if (numeroOrden <= 0)
+            return BadRequest(new { message = "El numero de orden no es valido." });
+
+        if (numeroAbono <= 0)
+            return BadRequest(new { message = "El numero de abono no es valido." });
+
+        var datos = await _service.GetDatosImpresionAbonoAsync(numeroOrden, numeroAbono, ct);
+        if (datos is null)
+        {
+            return NotFound(new { message = $"No se encontro el abono {numeroAbono} del compromiso {numeroOrden}." });
+        }
+
+        using var report = new Rpt_Dev_Comprobante_Abono(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=Comprobante-Abono-{numeroOrden}-{numeroAbono}.pdf";
+
+        return File(stream.ToArray(), "application/pdf");
     }
 }

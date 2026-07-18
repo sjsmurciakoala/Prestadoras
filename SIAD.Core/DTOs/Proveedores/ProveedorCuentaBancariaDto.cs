@@ -12,5 +12,8 @@ public sealed class ProveedorCuentaBancariaDto
     [StringLength(50, ErrorMessage = "La cuenta bancaria no puede superar 50 caracteres.")]
     public string? CuentaBancaria { get; set; }
 
+    [StringLength(20, ErrorMessage = "El tipo de cuenta no puede superar 20 caracteres.")]
+    public string? TipoCuenta { get; set; }
+
     public int Orden { get; set; }
 }

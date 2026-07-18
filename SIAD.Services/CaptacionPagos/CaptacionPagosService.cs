@@ -1963,9 +1963,14 @@ public class CaptacionPagosService : ICaptacionPagosService
             await connection.OpenAsync(ct);
         }
 
-        const string sql = "SELECT * FROM sp_obtener_cliente_saldo(@ClienteClave)";
+        // Firma de 2 args (fix vigencia 2026-07-16): filtra company_id y suma los
+        // movimientos vigentes. La de 1 arg leia el saldo corrido del ultimo movimiento
+        // con estado 'A' e ignoraba los abonos vigentes 'C', por lo que cada abono se
+        // grababa restando del mismo saldo base (sin encadenar) y corrompia la columna.
+        var companyId = _currentCompanyService.GetCompanyId();
+        const string sql = "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@CompanyId, @ClienteClave)";
         var saldo = await connection.ExecuteScalarAsync<decimal?>(
-            new CommandDefinition(sql, new { ClienteClave = clienteClave }, cancellationToken: ct));
+            new CommandDefinition(sql, new { CompanyId = companyId, ClienteClave = clienteClave }, cancellationToken: ct));
 
         return saldo ?? 0m;
     }

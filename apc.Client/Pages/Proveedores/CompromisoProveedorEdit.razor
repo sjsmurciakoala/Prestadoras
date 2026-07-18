@@ -9,12 +9,17 @@
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Presupuesto
 @using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
 @using apc.Client.Services.Proveedores
 
+@using Microsoft.JSInterop
+
 @inject OrdenesPagoDirectoClient OrdenesPagoDirectoClient
 @inject ProveedoresClient ProveedoresClient
+@inject AccountFormatState AccountFormat
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 @inject ILogger<CompromisoProveedorEdit> Logger
 @inject IToastNotificationService ToastService
 
@@ -38,9 +43,17 @@
                           RenderStyle="ButtonRenderStyle.Secondary"
                           CssClass="btn-modern shadow-sm" />
             }
+            @if (IsEdit && ordenDetalle is not null)
+            {
+                <DxButton Text="Imprimir"
+                          Click="ImprimirAsync"
+                          IconCssClass="bi bi-printer"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="btn-modern shadow-sm" />
+            }
             @if (IsEdit && !ordenProcesada)
             {
-                <DxButton Text="Procesar compromiso"
+                <DxButton Text="Emitir pago"
                           Click="IrAProcesar"
                           IconCssClass="bi bi-check2-circle"
                           RenderStyle="ButtonRenderStyle.Success"
@@ -610,6 +623,8 @@
 
         try
         {
+            await AccountFormat.EnsureLoadedAsync();
+
             await Task.WhenAll(
                 CargarProveedoresAsync(),
                 CargarCuentasContablesAsync(),
@@ -902,6 +917,7 @@
             }
             else
             {
+                await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetPdfUrl(result.NumeroOrden), "_blank");
                 Navigation.NavigateTo(BuildCreatedDetailUrl(result.NumeroOrden), true);
             }
         }
@@ -915,6 +931,9 @@
             isSaving = false;
         }
     }
+
+    private async Task ImprimirAsync()
+        => await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetPdfUrl(NumeroOrden), "_blank");
 
     private void TogglePreviaPartida() => mostrarPreviaPartida = !mostrarPreviaPartida;
 
@@ -1392,7 +1411,7 @@
             : $"{codigoNormalizado} - {nombreNormalizado}";
     }
 
-    private static string FormatCuentaOrDash(string? value)
+    private string FormatCuentaOrDash(string? value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -1405,7 +1424,7 @@
             return cleanValue;
         }
 
-        var formatted = AccountCodeFormatter.Format(cleanValue);
+        var formatted = AccountFormat.Format(cleanValue);
         return string.IsNullOrWhiteSpace(formatted) ? "-" : formatted;
     }
 

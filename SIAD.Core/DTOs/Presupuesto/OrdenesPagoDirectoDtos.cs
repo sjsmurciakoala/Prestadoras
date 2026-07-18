@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using SIAD.Core.Utilities;
 
 namespace SIAD.Core.DTOs.Presupuesto;
 
@@ -254,4 +255,33 @@ public sealed class PartidaLineaOrdenPagoDto
 public sealed class AnularOrdenPagoDirectoDto
 {
     public string? Motivo { get; set; }
+}
+
+public sealed class OrdenPagoDirectoImpresionDto
+{
+    public string EmpresaNombre { get; set; } = string.Empty;
+
+    public string? EmpresaRazonSocial { get; set; }
+
+    public string? EmpresaRtn { get; set; }
+
+    public string? EmpresaDireccion { get; set; }
+
+    public string? EmpresaTelefono { get; set; }
+
+    public string? EmpresaEmail { get; set; }
+
+    public byte[]? EmpresaLogo { get; set; }
+
+    public OrdenPagoDirectoDetalleDto Compromiso { get; set; } = new();
+
+    public string MontoEnLetras { get; set; } = string.Empty;
+
+    public bool ProveedorGenerico { get; set; }
+
+    public string ImpresoPor { get; set; } = string.Empty;
+
+    public string FormatoCuentas { get; set; } = AccountCodeFormatter.DefaultMask;
+
+    public string SeparadorCodigo { get; set; } = AccountCodeFormatter.DefaultSeparator;
 }

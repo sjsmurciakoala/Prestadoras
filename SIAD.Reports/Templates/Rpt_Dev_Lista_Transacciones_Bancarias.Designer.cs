@@ -337,7 +337,7 @@
             // 
             // sqlDataSource1
             // 
-            this.sqlDataSource1.ConnectionName = "Connection_SIAD";
+            this.sqlDataSource1.ConnectionName = "DefaultConnection";
             this.sqlDataSource1.Name = "sqlDataSource1";
             customSqlQuery8.Name = "Query";
             queryParameter22.Name = "CompaniaID";

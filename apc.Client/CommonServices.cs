@@ -18,6 +18,7 @@ using apc.Client.Services.Bancos;
 using apc.Client.Services.Catalogos;
 using apc.Client.Services.Abogados;
 using apc.Client.Services.Almacen;
+using apc.Client.Services.Auditoria;
 using apc.Client.Services.Impuestos;
 using apc.Client.Services.Ciclos;
 using apc.Client.Services.AppLectores;
@@ -59,6 +60,7 @@ namespace apc.Client
             services.AddScoped<ClientesCobroClient>();
             services.AddScoped<EmpresasContabilidadClient>();
             services.AddScoped<ConfiguracionSistemaClient>();
+            services.AddScoped<AccountFormatState>();
             services.AddScoped<IntegracionContableClient>();
             services.AddScoped<LoteFacturacionClient>();
             services.AddScoped<PeriodosContablesClient>();
@@ -89,9 +91,10 @@ namespace apc.Client
             services.AddScoped<UnidadesMedidaClient>();
             services.AddScoped<CategoriasUnidadClient>();
             services.AddScoped<TiposArticuloClient>();
-            services.AddScoped<LineasCatalogoClient>();
             services.AddScoped<GruposClient>();
             services.AddScoped<BodegasClient>();
+            services.AddScoped<BitacoraMaestrosClient>();
+            services.AddScoped<AuditoriaConfigClient>();
             services.AddScoped<CiclosClient>();
             services.AddScoped<InformesClient>();
             // presupuesto (de Combinacio_E_J_1.0; TarifasBase/TarifasContador retirados como legacy)
@@ -103,6 +106,7 @@ namespace apc.Client
             services.AddScoped<PruebaCalculoClient>();
             services.AddScoped<CuadroTarifarioClient>();
             services.AddScoped<ServicioTarifarioV3Client>();
+            services.AddScoped<DesgloseAbonoConfigClient>();
             services.AddScoped<CaiTarifarioClient>();
             services.AddScoped<TarifarioConflictoClient>();
 

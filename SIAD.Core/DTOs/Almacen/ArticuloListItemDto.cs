@@ -19,18 +19,13 @@ public sealed class ArticuloListItemDto
     public string UnidadMedidaDisplay =>
         !string.IsNullOrWhiteSpace(UnidadMedidaCodigo) ? UnidadMedidaCodigo
         : (!string.IsNullOrWhiteSpace(UnidadMedida) ? UnidadMedida : "—");
-    public string? Linea { get; init; }
-    public string? Grupo { get; init; }
 
-    /// <summary>Nombre de la clasificación por uso (si está asignada).</summary>
+    /// <summary>Nombre del tipo de artículo (clasificación única desde la unificación 2026-07-16).</summary>
     public string? TipoArticuloNombre { get; init; }
+    public string TipoArticuloDisplay => !string.IsNullOrWhiteSpace(TipoArticuloNombre) ? TipoArticuloNombre : "—";
 
-    /// <summary>Nombre de la línea del catálogo (fallback al código legacy).</summary>
-    public string? LineaNombre { get; init; }
-    public string LineaDisplay => !string.IsNullOrWhiteSpace(LineaNombre) ? LineaNombre
-        : (!string.IsNullOrWhiteSpace(Linea) ? Linea : "—");
-
-    /// <summary>Nombre del grupo del catálogo (fallback al código legacy).</summary>
+    /// <summary>Nombre de la categoría (alm_grupo) del catálogo (fallback al código legacy).</summary>
+    public string? Grupo { get; init; }
     public string? GrupoNombre { get; init; }
     public string GrupoDisplay => !string.IsNullOrWhiteSpace(GrupoNombre) ? GrupoNombre
         : (!string.IsNullOrWhiteSpace(Grupo) ? Grupo : "—");

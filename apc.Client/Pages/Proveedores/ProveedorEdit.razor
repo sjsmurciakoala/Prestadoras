@@ -197,6 +197,7 @@
                         ProveedorCuentaBancariaId = x.ProveedorCuentaBancariaId,
                         Banco = x.Banco,
                         CuentaBancaria = x.CuentaBancaria,
+                        TipoCuenta = x.TipoCuenta,
                         Orden = index + 1
                     })
                     .ToList()
@@ -282,6 +283,7 @@
                 ProveedorCuentaBancariaId = source[i].ProveedorCuentaBancariaId,
                 Banco = banco,
                 CuentaBancaria = cuenta,
+                TipoCuenta = string.IsNullOrWhiteSpace(source[i].TipoCuenta) ? null : source[i].TipoCuenta!.Trim(),
                 Orden = cuentas.Count + 1
             });
         }

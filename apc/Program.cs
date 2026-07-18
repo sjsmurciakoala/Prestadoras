@@ -19,12 +19,14 @@ using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection.Extensions;
 using System.Linq;
 using System.Net.Http;
 using SIAD.Core.Constants;
 using SIAD.Data;
 using SIAD.Reports;
 using SIAD.Services;
+using SIAD.Services.Auditoria;
 using System.Globalization;
 using System.Net.Http.Headers;
 using System.Text.Json;
@@ -180,8 +182,10 @@ builder.Services.AddDbContext<ApplicationDbContext>(options =>
     options.UseNpgsql(connectionString, npgsql =>
         npgsql.MigrationsHistoryTable("__IdentityMigrationsHistory", "identity")));
 
-builder.Services.AddDbContext<SiadDbContext>(options =>
-    options.UseNpgsql(connectionString));
+builder.Services.AddScoped<BitacoraMaestrosInterceptor>();
+builder.Services.AddDbContext<SiadDbContext>((sp, options) =>
+    options.UseNpgsql(connectionString)
+           .AddInterceptors(sp.GetRequiredService<BitacoraMaestrosInterceptor>()));
 builder.Services.AddDatabaseDeveloperPageExceptionFilter();
 builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.RequireConfirmedAccount = false)
     .AddRoles<IdentityRole>()
@@ -193,6 +197,10 @@ builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSe
 
 // Wire SIAD layered services
 builder.Services.AddSiadServices();
+
+// Auditoría: en el portal usamos la impl real sobre IHttpContextAccessor.
+// Replace sobrescribe el fallback SystemUserAudit registrado por AddSiadServices.
+builder.Services.Replace(ServiceDescriptor.Scoped<ICurrentUserAudit, apc.Security.CurrentUserAudit>());
 
 var app = builder.Build();
 ReportingRuntimeBootstrap.Initialize(app.Services);

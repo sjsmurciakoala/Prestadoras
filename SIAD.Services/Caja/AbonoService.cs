@@ -18,6 +18,7 @@ using SIAD.Core.Tenancy;
 using SIAD.Data;
 using SIAD.Core.Utilities;
 using SIAD.Services.Bancos;
+using SIAD.Services.Clientes;
 using SIAD.Services.Cobranza;
 using SIAD.Services.Contabilidad;
 
@@ -29,6 +30,7 @@ public class AbonoService : IAbonoService
     private readonly IBanTransaccionesService _banTransaccionesService;
     private readonly ICurrentCompanyService _currentCompanyService;
     private readonly ICorteMasivoService _corteMasivoService;
+    private readonly IClientesService _clientesService;
     private const string ContabilidadModuloCaja = "CAJA";
     private const string ContabilidadDocumentoAbono = "ABO";
     private const string BancoMarkerPrefix = "BANCO_CUENTA:";
@@ -38,12 +40,14 @@ public class AbonoService : IAbonoService
         SiadDbContext context,
         IBanTransaccionesService banTransaccionesService,
         ICurrentCompanyService currentCompanyService,
-        ICorteMasivoService corteMasivoService)
+        ICorteMasivoService corteMasivoService,
+        IClientesService clientesService)
     {
         _context = context;
         _banTransaccionesService = banTransaccionesService;
         _currentCompanyService = currentCompanyService;
         _corteMasivoService = corteMasivoService;
+        _clientesService = clientesService;
     }
 
     public async Task<IReadOnlyList<FacturaConSaldoDto>> BuscarFacturasConSaldoAsync(string term, CancellationToken ct = default)
@@ -657,7 +661,7 @@ public class AbonoService : IAbonoService
         }).ToList();
     }
 
-    private async Task<decimal> ObtenerSaldoClienteAsync(string clienteClave, CancellationToken ct)
+    public async Task<decimal> ObtenerSaldoClienteAsync(string clienteClave, CancellationToken ct = default)
     {
         var connection = _context.Database.GetDbConnection();
         if (connection.State != ConnectionState.Open)
@@ -665,9 +669,14 @@ public class AbonoService : IAbonoService
             await connection.OpenAsync(ct);
         }
 
-        const string sql = "SELECT * FROM sp_obtener_cliente_saldo(@ClienteClave)";
+        // Firma de 2 args (fix vigencia 2026-07-16): filtra company_id y suma los
+        // movimientos vigentes. La de 1 arg leia el saldo corrido del ultimo movimiento
+        // con estado 'A' e ignoraba los abonos vigentes 'C', por lo que cada abono se
+        // grababa restando del mismo saldo base (sin encadenar) y corrompia la columna.
+        var companyId = _currentCompanyService.GetCompanyId();
+        const string sql = "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@CompanyId, @ClienteClave)";
         var saldo = await connection.ExecuteScalarAsync<decimal?>(
-            new CommandDefinition(sql, new { ClienteClave = clienteClave }, cancellationToken: ct));
+            new CommandDefinition(sql, new { CompanyId = companyId, ClienteClave = clienteClave }, cancellationToken: ct));
 
         return saldo ?? 0m;
     }
@@ -823,6 +832,13 @@ public class AbonoService : IAbonoService
 
         var esPendiente = transaccion.estado == "P";
 
+        // Desglose del saldo del cliente (deuda / % de distribución / saldo), el
+        // mismo que muestra el estado de cuenta. Refleja el estado ACTUAL, ya con
+        // este abono aplicado cuando el recibo se imprime tras el cobro.
+        var desgloseSaldo = string.IsNullOrWhiteSpace(transaccion.cliente_clave)
+            ? Array.Empty<SIAD.Core.DTOs.Clientes.SaldoServicioDto>()
+            : await _clientesService.GetDesglosePorServicioAsync(transaccion.cliente_clave, ct);
+
         return new ReciboAbonoDto
         {
             EmpresaNombre = company?.commercial_name ?? string.Empty,
@@ -846,7 +862,8 @@ public class AbonoService : IAbonoService
             FechaPago = esPendiente ? string.Empty : (transaccion.fecha_docu?.ToString("dd/MM/yy") ?? string.Empty),
             NumeroTransaccion = transaccionId,
             GeneradoPor = transaccion.usuario ?? string.Empty,
-            EsPendiente = esPendiente
+            EsPendiente = esPendiente,
+            DesgloseSaldo = desgloseSaldo.ToList()
         };
     }
 

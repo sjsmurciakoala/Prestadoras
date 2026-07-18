@@ -266,25 +266,39 @@ public class ClientesController : ControllerBase
 
         // NOTE: Added paged endpoint to support server-side paging/sorting with remote summary.
 
-        var desdeValue = (desde ?? DateTime.Today.AddMonths(-12)).Date;
-
-        var hastaValue = (hasta ?? DateTime.Today).Date;
-
-
-
-        if (desdeValue > hastaValue)
+        try
 
         {
 
-            (desdeValue, hastaValue) = (hastaValue, desdeValue);
+            var desdeValue = (desde ?? DateTime.Today.AddMonths(-12)).Date;
+
+            var hastaValue = (hasta ?? DateTime.Today).Date;
+
+
+
+            if (desdeValue > hastaValue)
+
+            {
+
+                (desdeValue, hastaValue) = (hastaValue, desdeValue);
+
+            }
+
+
+
+            var result = await _clientesService.GetHistoricoConsumoPagedAsync(id, desdeValue, hastaValue, skip, take, sortField, sortDesc, cancellationToken);
+
+            return Ok(result);
 
         }
 
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
 
+        {
 
-        var result = await _clientesService.GetHistoricoConsumoPagedAsync(id, desdeValue, hastaValue, skip, take, sortField, sortDesc, cancellationToken);
+            return StatusCode(499);
 
-        return Ok(result);
+        }
 
     }
 

@@ -200,7 +200,7 @@
             <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
             <div>
                 <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
-                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Bodega y ubicación manual del artículo</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">Bodega, ubicación y existencias del artículo</div>
             </div>
         </div>
     </HeaderContentTemplate>
@@ -245,8 +245,8 @@
                 </div>
             </div>
 
-            @* Comprometida, tránsito, costo promedio y último costo NO van en el modal: los
-               mantiene el motor de movimientos y no hay nada que teclear. *@
+            @* Comprometida y tránsito NO van en el modal: no hay nada que teclear; las
+               mantiene el motor de movimientos y sólo se ven en la grilla. *@
             <div class="row g-3 mb-3 mt-1">
                 <div class="col-12 col-md-3">
                     <label class="form-label fw-semibold">Existencia</label>
@@ -265,6 +265,25 @@
                     <DxSpinEdit @bind-Value="form.PuntoReorden" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
                     <div class="form-text small text-muted">Existencia a la que conviene reponer.</div>
                 </div>
+            </div>
+
+            @* Costo promedio y último costo son SOLO LECTURA: los recalcula el motor de
+               movimientos (kardex) en cada ingreso. Se muestran para consulta —el servicio
+               los ignora al guardar—; en una ubicación nueva aún son 0. *@
+            <div class="row g-3 mb-1">
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Costo promedio</label>
+                    <DxSpinEdit @bind-Value="form.CostoPromedio" DisplayFormat="N4"
+                                ReadOnly="true" ShowSpinButtons="false" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Último costo</label>
+                    <DxSpinEdit @bind-Value="form.UltimoCosto" DisplayFormat="N4"
+                                ReadOnly="true" ShowSpinButtons="false" CssClass="w-100" />
+                </div>
+            </div>
+            <div class="form-text small text-muted mb-3">
+                <i class="bi bi-lock me-1"></i>Los mantiene el motor de movimientos; no se editan aquí.
             </div>
 
             <div class="mb-3">
@@ -345,7 +364,7 @@
     private bool confirmVisible;
     private ArticuloUbicacionDto? paraDeshabilitar;
 
-    private string PopupTitle => form.Id.HasValue ? "Editar ubicación" : "Nueva ubicación";
+    private string PopupTitle => form.Id.HasValue ? "Editar existencias y ubicación" : "Agregar existencias y ubicación";
     private string PopupIcon => form.Id.HasValue ? "bi bi-pencil-square" : "bi bi-geo-alt";
     private string PopupIconWrapperClass => form.Id.HasValue
         ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"

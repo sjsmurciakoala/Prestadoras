@@ -5,10 +5,12 @@
 @using System.ComponentModel.DataAnnotations
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
 
 @inject NavigationManager Navigation
 @inject ConfiguracionPresupuestoClient ConfiguracionPresupuestoClient
+@inject AccountFormatState AccountFormat
 @inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Detalle de Presupuesto</PageTitle>
@@ -255,8 +257,8 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.CuentaOrigenCode)" Caption="Origen" Width="140px" />
-                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.CuentaDestinoCode)" Caption="Destino" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.CuentaOrigenDisplay)" Caption="Origen" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.CuentaDestinoDisplay)" Caption="Destino" Width="140px" />
 
                     <DxGridDataColumn FieldName="@nameof(PresupuestoActividadSolicitudListItemDto.Monto)" Caption="Monto" Width="140px" TextAlignment="GridTextAlignment.Right">
                         <CellDisplayTemplate Context="cell">
@@ -354,7 +356,7 @@
 
     private string CuentaNumeroDisplay => CuentaCodigo == "-"
         ? "-"
-        : AccountCodeFormatter.Format(CuentaCodigo);
+        : AccountFormat.Format(CuentaCodigo);
 
     private string CuentaDisplay => CuentaCodigo;
 
@@ -371,6 +373,7 @@
     protected override async Task OnParametersSetAsync()
     {
         cuentaContableDisplay = null;
+        await AccountFormat.EnsureLoadedAsync();
         await CargarCuentaDestinoDisplayAsync();
         await EvaluarBloqueoPorRangoAsync();
         if (!PuedeGestionarPorRango(showToast: false))
@@ -670,7 +673,7 @@
 
             if (!string.IsNullOrWhiteSpace(detalle?.CuentaContable))
             {
-                cuentaContableDisplay = FormatCuentaContableDisplay(detalle.CuentaContable);
+                cuentaContableDisplay = detalle.CuentaContable;
             }
         }
         catch
@@ -786,7 +789,7 @@
 
                 if (!string.IsNullOrWhiteSpace(detalleDestino?.CuentaContable))
                 {
-                    cuentaContableDisplay = FormatCuentaContableDisplay(detalleDestino.CuentaContable);
+                    cuentaContableDisplay = detalleDestino.CuentaContable;
                 }
             }
 
@@ -891,19 +894,6 @@
                !string.IsNullOrWhiteSpace(CuentaDisplay) &&
                PresupuestoDisplay != "-" &&
                CuentaDisplay != "-";
-    }
-
-    private static string FormatCuentaContableDisplay(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return string.Empty;
-        }
-
-        var parts = value.Split(" - ", 2, StringSplitOptions.TrimEntries);
-        return parts.Length == 2
-            ? AccountCodeFormatter.FormatDisplay(parts[0], parts[1])
-            : AccountCodeFormatter.Format(value);
     }
 
     private decimal? ObtenerSaldoPresupuesto(string? cuentaCode)

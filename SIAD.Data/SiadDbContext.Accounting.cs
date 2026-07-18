@@ -1029,6 +1029,9 @@ public partial class SiadDbContext
 
         // Catálogo global de impuestos y sus tasas con vigencia (2026-07-14)
         ConfigureImpuestosModel(modelBuilder);
+
+        // Bitácora de maestros Fase 1 (2026-07-17)
+        ConfigureAuditoriaModel(modelBuilder);
     }
 }
 

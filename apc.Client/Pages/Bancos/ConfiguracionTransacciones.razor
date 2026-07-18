@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = PermissionNames.Bancos.View)]
 
 @using apc.Client.Services.Bancos
+@using apc.Client.Services.Contabilidad
 @using DevExpress.Blazor
 @using System.Linq
 @using System.Net.Http.Json
@@ -9,6 +10,7 @@
 @using SIAD.Core.DTOs.Contabilidad
 
 @inject ConfiguracionTransaccionesClient ConfigClient
+@inject AccountFormatState AccountFormat
 @inject HttpClient Http
 
 <PageTitle>SIAD - Configuración de Transacciones</PageTitle>
@@ -228,7 +230,7 @@
                             </DxFormLayoutItem>
 
                             <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="3" ColSpanSm="12" Visible="false">
-                                <DxTextBox Text="@AccountCodeFormatter.Format(editModel.CuentaContable)"
+                                <DxTextBox Text="@AccountFormat.Format(editModel.CuentaContable)"
                                            TextChanged="@OnCuentaContableChanged"
                                            TextExpression="@(() => editModel.CuentaContable)"
                                            MaxLength="30" />
@@ -351,9 +353,9 @@
 </DxPopup>
 
 @code {
-    private static string FormatCuentaOrDash(string? value)
+    private string FormatCuentaOrDash(string? value)
     {
-        var formatted = AccountCodeFormatter.Format(value);
+        var formatted = AccountFormat.Format(value);
         return string.IsNullOrWhiteSpace(formatted) ? "-" : formatted;
     }
 
@@ -421,6 +423,7 @@
         {
             isLoading = true;
             alerta = null;
+            await AccountFormat.EnsureLoadedAsync();
             items.Clear();
             var data = await ConfigClient.GetAsync(new BancoConfiguracionTransaccionFilterDto
             {
@@ -488,7 +491,7 @@
 
     private void OnCuentaContableChanged(string? value)
     {
-        editModel.CuentaContable = AccountCodeFormatter.Normalize(value);
+        editModel.CuentaContable = AccountFormat.Normalize(value);
     }
 
     private void CloseForm()

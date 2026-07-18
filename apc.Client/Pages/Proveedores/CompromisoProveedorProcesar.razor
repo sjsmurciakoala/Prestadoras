@@ -8,11 +8,16 @@
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
 
+@using Microsoft.JSInterop
+
 @inject OrdenesPagoDirectoClient OrdenesPagoDirectoClient
+@inject AccountFormatState AccountFormat
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
+@inject IJSRuntime JS
 @inject ILogger<CompromisoProveedorProcesar> Logger
 @inject IToastNotificationService ToastService
 
@@ -41,7 +46,7 @@
                       RenderStyle="ButtonRenderStyle.Secondary"
                       CssClass="btn-modern shadow-sm"
                       Click="Volver" />
-            <DxButton Text="@(isProcessing ? "Procesando..." : "Procesar compromiso")"
+            <DxButton Text="@(isProcessing ? "Emitiendo pago..." : "Emitir pago")"
                       IconCssClass="bi bi-check2-circle"
                       RenderStyle="ButtonRenderStyle.Success"
                       CssClass="btn-modern shadow-sm"
@@ -152,6 +157,182 @@
         }
         else
         {
+            <div class="modern-card mb-3">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-3 section-header">
+                    <div>
+                        <h5 class="mb-0">Medio de pago</h5>
+                        <small class="text-muted">Seleccione la cuenta bancaria de origen y el metodo de pago del compromiso.</small>
+                    </div>
+                </div>
+
+                @if (cuentasBanco.Count == 0)
+                {
+                    <div class="alert alert-warning mb-0" role="alert">
+                        No hay cuentas bancarias configuradas en el modulo de Bancos.
+                    </div>
+                }
+                else
+                {
+                    <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                        <DxFormLayoutItem Caption="Cuenta de banco" ColSpanMd="6">
+                            <DxComboBox Data="@cuentasBanco"
+                                        TData="CuentaContableLookupDto"
+                                        TValue="long?"
+                                        Value="@bancoCuentaSeleccionadaId"
+                                        ValueChanged="@OnBancoCuentaChanged"
+                                        ValueFieldName="@nameof(CuentaContableLookupDto.BancoCuentaId)"
+                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                        NullText="Seleccione la cuenta de banco"
+                                        SearchMode="ListSearchMode.AutoSearch"
+                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                        SearchDelay="200"
+                                        DropDownStyle="DropDownStyle.DropDown"
+                                        DropDownTriggerMode="DropDownTriggerMode.Input"
+                                        AllowUserInput="true"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        ValidationEnabled="false"
+                                        Enabled="@(!isProcessing)" />
+                        </DxFormLayoutItem>
+                        <DxFormLayoutItem Caption="Metodo de pago" ColSpanMd="6">
+                            <DxComboBox Data="@MediosDisponibles"
+                                        TData="MetodoPagoOption"
+                                        TValue="string"
+                                        @bind-Value="metodoPagoSeleccionado"
+                                        ValueFieldName="@nameof(MetodoPagoOption.Valor)"
+                                        TextFieldName="@nameof(MetodoPagoOption.Texto)"
+                                        NullText="Seleccione el metodo"
+                                        DropDownStyle="DropDownStyle.DropDownList"
+                                        ValidationEnabled="false"
+                                        Enabled="@(!isProcessing && bancoCuentaSeleccionadaId.HasValue)" />
+                        </DxFormLayoutItem>
+                    </DxFormLayout>
+
+                    @if (CuentaBancoSeleccionada is not null)
+                    {
+                        <div class="text-muted mt-2">
+                            Tipo de cuenta: <strong>@(GetTextOrDash(CuentaBancoSeleccionada.TipoCuenta))</strong>
+                            @if (!EsCuentaCheque)
+                            {
+                                <span>&nbsp;&middot; Cuenta de ahorro: solo permite transferencia.</span>
+                            }
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="modern-card mb-3">
+                <div class="d-flex justify-content-between align-items-center gap-2 mb-3 section-header">
+                    <div>
+                        <h5 class="mb-0">Retenciones y deducciones</h5>
+                        <small class="text-muted">Cargue las retenciones u otras deducciones que afectan el neto a pagar por banco.</small>
+                    </div>
+                    <DxButton Text="Agregar deduccion"
+                              IconCssClass="bi bi-plus"
+                              RenderStyle="ButtonRenderStyle.Secondary"
+                              CssClass="btn-modern shadow-sm"
+                              SizeMode="SizeMode.Small"
+                              Click="AgregarDeduccion"
+                              Enabled="@(!isProcessing)" />
+                </div>
+
+                @if (deducciones.Count == 0)
+                {
+                    <div class="text-muted small mb-0">No hay deducciones cargadas. El pago se procesara por el monto bruto del compromiso.</div>
+                }
+                else
+                {
+                    <div class="table-responsive detail-table mb-3">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="min-width:260px;">Cuenta</th>
+                                    <th style="min-width:180px;">Descripcion</th>
+                                    <th style="min-width:120px;">Debe</th>
+                                    <th style="min-width:120px;">Haber</th>
+                                    <th style="width:60px;" class="text-center">Quitar</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var deduccion in deducciones)
+                                {
+                                    <tr>
+                                        <td>
+                                            <DxComboBox Data="@cuentasContables"
+                                                        TData="CuentaContableLookupDto"
+                                                        TValue="long?"
+                                                        Value="@deduccion.CuentaId"
+                                                        ValueChanged="@((long? v) => deduccion.CuentaId = v)"
+                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                                                        TextFieldName="@nameof(CuentaContableLookupDto.DisplayText)"
+                                                        NullText="Seleccione la cuenta"
+                                                        SearchMode="ListSearchMode.AutoSearch"
+                                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                        SearchDelay="200"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        ValidationEnabled="false"
+                                                        SizeMode="SizeMode.Small"
+                                                        Enabled="@(!isProcessing)" />
+                                        </td>
+                                        <td>
+                                            <DxTextBox @bind-Text="deduccion.Descripcion"
+                                                       NullText="Descripcion"
+                                                       SizeMode="SizeMode.Small"
+                                                       Enabled="@(!isProcessing)" />
+                                        </td>
+                                        <td>
+                                            <DxSpinEdit T="decimal"
+                                                        @bind-Value="deduccion.Debe"
+                                                        MinValue="0"
+                                                        Increment="0.01m"
+                                                        SizeMode="SizeMode.Small"
+                                                        Enabled="@(!isProcessing)" />
+                                        </td>
+                                        <td>
+                                            <DxSpinEdit T="decimal"
+                                                        @bind-Value="deduccion.Haber"
+                                                        MinValue="0"
+                                                        Increment="0.01m"
+                                                        SizeMode="SizeMode.Small"
+                                                        Enabled="@(!isProcessing)" />
+                                        </td>
+                                        <td class="text-center">
+                                            <button type="button"
+                                                    class="btn-icon btn-delete"
+                                                    title="Quitar deduccion"
+                                                    disabled="@isProcessing"
+                                                    @onclick="@(() => EliminarDeduccion(deduccion))">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                    @if (FilaTieneAmbosMontos(deduccion))
+                                    {
+                                        <tr>
+                                            <td colspan="5" class="text-danger small py-1">
+                                                Esta fila no puede tener Debe y Haber a la vez. Deje solo uno de los dos en cero.
+                                            </td>
+                                        </tr>
+                                    }
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <div class="d-flex justify-content-end gap-2 flex-wrap mb-0">
+                        <span class="summary-pill">Debe deducciones: <strong>@TotalDeduccionDebe.ToString("N2")</strong></span>
+                        <span class="summary-pill">Haber deducciones: <strong>@TotalDeduccionHaber.ToString("N2")</strong></span>
+                        <span class="summary-pill">Neto a pagar por banco: <strong>@NetoBanco.ToString("N2")</strong></span>
+                    </div>
+
+                    @if (NetoBanco <= 0m)
+                    {
+                        <div class="alert alert-warning mt-2 mb-0" role="alert">
+                            El neto a pagar por banco debe ser mayor a cero. Revise las deducciones cargadas.
+                        </div>
+                    }
+                }
+            </div>
+
             <div class="modern-card">
                 <div class="d-flex justify-content-between align-items-center gap-2 mb-3 section-header">
                     <div>
@@ -171,21 +352,8 @@
                 }
 
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
-                    <span class="text-muted">Distribuya el monto del compromiso<br />entre una o varias cuentas del plan contable.</span>
-                    <button type="button"
-                            class="btn btn-outline-primary btn-sm"
-                            disabled="@(!PuedeEditarContraLineas)"
-                            @onclick="AgregarContraLinea">
-                        <i class="bi bi-plus-lg me-1"></i>Agregar
-                    </button>
+                    <span class="text-muted">Vista previa de la partida contable que se generara al procesar el pago.</span>
                 </div>
-
-                @if (cuentasContables.Count == 0)
-                {
-                    <div class="alert alert-warning mb-3" role="alert">
-                        No hay cuentas contables disponibles para distribuir el debito del compromiso.
-                    </div>
-                }
 
                 @if (PartidaNoCuadra)
                 {
@@ -194,6 +362,7 @@
                     </div>
                 }
 
+                @{ var previewLineas = LineasPartida; }
                 <div class="table-responsive detail-table mb-3">
                     <table class="table table-sm align-middle mb-0">
                         <thead>
@@ -202,87 +371,25 @@
                                 <th style="min-width:200px;">Descripcion</th>
                                 <th style="min-width:110px;">Debito</th>
                                 <th style="min-width:110px;">Credito</th>
-                                <th style="width:72px;"></th>
                             </tr>
                         </thead>
                         <tbody>
-                            @for (var i = 0; i < lineasPartida.Count; i++)
+                            @for (var i = 0; i < previewLineas.Count; i++)
                             {
                                 var rowIndex = i;
-                                var linea = lineasPartida[rowIndex];
-                                var esLineaProveedor = IsProviderLine(rowIndex);
+                                var linea = previewLineas[rowIndex];
+                                var esLineaProveedor = IsProviderLine(rowIndex, previewLineas.Count);
+                                var cuentaDisplay = ResolveLineaCuentaDisplay(linea, esLineaProveedor);
                                 <tr>
                                     <td>
-                                        @if (!esLineaProveedor)
-                                        {
-                                            <DxComboBox Data="@cuentasContables"
-                                                        TData="CuentaContableLookupDto"
-                                                        TValue="long"
-                                                        @bind-Value="linea.CuentaId"
-                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                                        NullText="Seleccione cuenta contable"
-                                                        SearchMode="ListSearchMode.AutoSearch"
-                                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
-                                                        SearchDelay="200"
-                                                        DropDownStyle="DropDownStyle.DropDown"
-                                                        DropDownTriggerMode="DropDownTriggerMode.Input"
-                                                        AllowUserInput="true"
-                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                                        ValidationEnabled="false"
-                                                        Enabled="@PuedeEditarContraLineas" />
-                                        }
-                                        else
-                                        {
-                                            <div class="d-flex flex-column">
-                                                <span class="fw-semibold">@CuentaProveedorCodigoTexto</span>
-                                                <small class="text-muted">@CuentaProveedorNombreTexto</small>
-                                            </div>
-                                        }
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-semibold">@cuentaDisplay.Codigo</span>
+                                            <small class="text-muted">@cuentaDisplay.Nombre</small>
+                                        </div>
                                     </td>
-                                    <td>
-                                        @if (!esLineaProveedor)
-                                        {
-                                            <DxTextBox @bind-Text="linea.Descripcion"
-                                                       NullText="Descripcion"
-                                                       MaxLength="200"
-                                                       Enabled="@PuedeEditarContraLineas" />
-                                        }
-                                        else
-                                        {
-                                            @GetTextOrDash(linea.Descripcion)
-                                        }
-                                    </td>
-                                    <td class="text-end">
-                                        @if (!esLineaProveedor)
-                                        {
-                                            <DxSpinEdit TValue="decimal"
-                                                        @bind-Value="linea.Debito"
-                                                        Min="0m"
-                                                        Increment="0.01m"
-                                                        DisplayFormat="N2"
-                                                        InputCssClass="text-end"
-                                                        ValidationEnabled="false"
-                                                        Enabled="@PuedeEditarContraLineas" />
-                                        }
-                                        else
-                                        {
-                                            @linea.Debito.ToString("N2")
-                                        }
-                                    </td>
+                                    <td>@GetTextOrDash(linea.Descripcion)</td>
+                                    <td class="text-end">@linea.Debito.ToString("N2")</td>
                                     <td class="text-end">@linea.Credito.ToString("N2")</td>
-                                    <td class="text-end">
-                                        @if (!esLineaProveedor)
-                                        {
-                                            <button type="button"
-                                                    class="btn-icon btn-delete"
-                                                    title="Eliminar cuenta"
-                                                    disabled="@(!PuedeEliminarContraLinea(rowIndex))"
-                                                    @onclick="@(() => EliminarContraLinea(rowIndex))">
-                                                <i class="bi bi-trash"></i>
-                                            </button>
-                                        }
-                                    </td>
                                 </tr>
                             }
                         </tbody>
@@ -291,12 +398,11 @@
                                 <td colspan="2" class="text-end">Totales</td>
                                 <td class="text-end">@TotalDebitoTexto</td>
                                 <td class="text-end">@TotalCreditoTexto</td>
-                                <td></td>
                             </tr>
                             @if (PartidaNoCuadra)
                             {
                                 <tr class="partida-no-cuadra-message">
-                                    <td colspan="5">@PartidaNoCuadraMensaje</td>
+                                    <td colspan="4">@PartidaNoCuadraMensaje</td>
                                 </tr>
                             }
                         </tfoot>
@@ -313,12 +419,6 @@
                                   CssClass="btn-modern shadow-sm"
                                   Click="Volver"
                                   Enabled="@(!isProcessing)" />
-                        <DxButton Text="@(isProcessing ? "Procesando..." : "Confirmar y generar nueva partida")"
-                                  IconCssClass="bi bi-check2-circle"
-                                  RenderStyle="ButtonRenderStyle.Success"
-                                  CssClass="btn-modern shadow-sm"
-                                  Click="ProcesarAsync"
-                                  Enabled="@CanProcess" />
                     </div>
                 </div>
             </div>
@@ -337,18 +437,74 @@
     public string? OriginUrlQuery { get; set; }
 
     private readonly List<CuentaContableLookupDto> cuentasContables = new();
-    private readonly List<PartidaLineaOrdenPagoDto> lineasPartida = new();
+    private readonly List<CuentaContableLookupDto> cuentasBanco = new();
+    private readonly List<DeduccionLinea> deducciones = new();
 
     private OrdenPagoDirectoDetalleDto? ordenDetalle;
     private long? cuentaProveedorId;
+    private long? bancoCuentaSeleccionadaId;
+    private string? metodoPagoSeleccionado;
     private bool isLoading = true;
     private bool isProcessing;
     private ErrorNotice errorNotice = default!;
     private readonly List<string> validationMessages = new();
     private string usuarioActual = "SISTEMA";
 
-    private decimal TotalDebito => lineasPartida.Sum(x => x.Debito);
-    private decimal TotalCredito => lineasPartida.Sum(x => x.Credito);
+    // Vista previa de la partida (banco + deducciones + proveedor). Se recalcula en cada acceso a partir
+    // del bruto, la cuenta de banco elegida y las deducciones cargadas: banco/proveedor NUNCA se editan
+    // directamente, asi que no hace falta sincronizar un estado mutable aparte.
+    private List<PartidaLineaOrdenPagoDto> LineasPartida
+    {
+        get
+        {
+            var lineas = new List<PartidaLineaOrdenPagoDto>();
+            if (ordenDetalle is null || ordenDetalle.Procesada)
+            {
+                return lineas;
+            }
+
+            var cuentaBanco = CuentaBancoSeleccionada;
+            lineas.Add(new PartidaLineaOrdenPagoDto
+            {
+                CuentaId = cuentaBanco?.AccountId ?? 0,
+                BancoCuentaId = cuentaBanco?.BancoCuentaId,
+                Descripcion = ordenDetalle.Concepto,
+                Debito = 0m,
+                Credito = NetoBanco
+            });
+
+            foreach (var deduccion in deducciones)
+            {
+                lineas.Add(new PartidaLineaOrdenPagoDto
+                {
+                    CuentaId = deduccion.CuentaId ?? 0,
+                    Descripcion = string.IsNullOrWhiteSpace(deduccion.Descripcion) ? ordenDetalle.Concepto : deduccion.Descripcion.Trim(),
+                    Debito = deduccion.Debe,
+                    Credito = deduccion.Haber
+                });
+            }
+
+            lineas.Add(new PartidaLineaOrdenPagoDto
+            {
+                CuentaId = cuentaProveedorId ?? 0,
+                Descripcion = ordenDetalle.Concepto,
+                Debito = ordenDetalle.Monto,
+                Credito = 0m
+            });
+
+            return lineas;
+        }
+    }
+
+    private decimal Bruto => ordenDetalle?.Monto ?? 0m;
+    private decimal TotalDeduccionDebe => deducciones.Sum(x => x.Debe);
+    private decimal TotalDeduccionHaber => deducciones.Sum(x => x.Haber);
+
+    // neto = bruto + Sum(Debe deduccion) - Sum(Haber deduccion). Es el HABER que se le asienta al banco.
+    private decimal NetoBanco => Bruto + TotalDeduccionDebe - TotalDeduccionHaber;
+
+    private decimal TotalDebito => LineasPartida.Sum(x => x.Debito);
+    private decimal TotalCredito => LineasPartida.Sum(x => x.Credito);
     private string TotalDebitoTexto => TotalDebito.ToString("N2");
     private string TotalCreditoTexto => TotalCredito.ToString("N2");
     private bool PartidaNoCuadra => Math.Abs(TotalDebito - TotalCredito) > 0.01m;
@@ -356,17 +512,64 @@
     private string SubtituloPagina => "Genere la partida contable y cierre el compromiso seleccionado.";
     private string UsuarioActualTexto => string.IsNullOrWhiteSpace(usuarioActual) ? "SISTEMA" : usuarioActual;
     private bool TieneCuentaProveedorDisponible => cuentaProveedorId.HasValue && cuentaProveedorId.Value > 0;
-    private bool PuedeEditarContraLineas => !isProcessing && TieneCuentaProveedorDisponible && cuentasContables.Count > 0;
-    private int ContraLineCount => lineasPartida.Count > 0 ? lineasPartida.Count - 1 : 0;
+    private int ContraLineCount => LineasPartida.Count > 0 ? LineasPartida.Count - 1 : 0;
     private string CuentaProveedorCodigoTexto => FormatCuentaOrDash(ordenDetalle?.CuentaContableProveedor);
     private string CuentaProveedorNombreTexto => GetCuentaNombre(cuentaProveedorId);
     private string ProveedorResumenTexto => BuildProveedorResumenTexto();
+
+    private CuentaContableLookupDto? CuentaBancoSeleccionada =>
+        cuentasBanco.FirstOrDefault(c => c.BancoCuentaId == bancoCuentaSeleccionadaId);
+
+    private bool EsCuentaCheque
+    {
+        get
+        {
+            var tipoCuenta = CuentaBancoSeleccionada?.TipoCuenta;
+            return !string.IsNullOrWhiteSpace(tipoCuenta) &&
+                   tipoCuenta.Contains("CHEQ", StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    // Una cuenta de ahorro (u otro tipo distinto de cheques) solo admite transferencia;
+    // una cuenta de cheques admite cheque o transferencia. Sin cuenta elegida, no hay medios.
+    private List<MetodoPagoOption> MediosDisponibles
+    {
+        get
+        {
+            if (CuentaBancoSeleccionada is null)
+            {
+                return new List<MetodoPagoOption>();
+            }
+
+            return EsCuentaCheque
+                ? new List<MetodoPagoOption>
+                  {
+                      new(OrdenPagoDirectoMetodoPago.Cheque, "Cheque"),
+                      new(OrdenPagoDirectoMetodoPago.Transferencia, "Transferencia"),
+                  }
+                : new List<MetodoPagoOption>
+                  {
+                      new(OrdenPagoDirectoMetodoPago.Transferencia, "Transferencia"),
+                  };
+        }
+    }
+
+    private string BancoCuentaCodigoTexto => CuentaBancoSeleccionada is not null
+        ? FormatCuentaOrDash(CuentaBancoSeleccionada.Code)
+        : "-";
+
+    private string BancoCuentaNombreTexto => CuentaBancoSeleccionada is not null
+        ? GetTextOrDash(CuentaBancoSeleccionada.Description)
+        : "Seleccione una cuenta de banco";
+
     private bool CanProcess => !isLoading &&
                                !isProcessing &&
                                ordenDetalle is not null &&
                                !ordenDetalle.Procesada &&
                                TieneCuentaProveedorDisponible &&
-                               ContraLineCount > 0;
+                               ContraLineCount > 0 &&
+                               bancoCuentaSeleccionadaId.HasValue &&
+                               !string.IsNullOrWhiteSpace(metodoPagoSeleccionado);
     private bool CanReturnToOrigin => GetOriginUrl() is not null;
 
     protected override async Task OnParametersSetAsync()
@@ -379,23 +582,32 @@
         isLoading = true;
         validationMessages.Clear();
         ordenDetalle = null;
-        lineasPartida.Clear();
+        deducciones.Clear();
         cuentaProveedorId = null;
+        bancoCuentaSeleccionadaId = null;
+        metodoPagoSeleccionado = null;
 
         try
         {
+            await AccountFormat.EnsureLoadedAsync();
+
             var authState = await AuthStateProvider.GetAuthenticationStateAsync();
             usuarioActual = authState.User.Identity?.Name ?? "SISTEMA";
 
             var ordenTask = OrdenesPagoDirectoClient.GetByNumeroOrdenAsync(NumeroOrden);
             var cuentasContablesTask = OrdenesPagoDirectoClient.GetCuentasContablesAsync();
-            await Task.WhenAll(ordenTask, cuentasContablesTask);
+            var cuentasBancoTask = OrdenesPagoDirectoClient.GetCuentasContraProcesamientoAsync();
+            await Task.WhenAll(ordenTask, cuentasContablesTask, cuentasBancoTask);
 
             ordenDetalle = await ordenTask;
             var cuentasPlan = await cuentasContablesTask;
+            var cuentasBancoDisponibles = await cuentasBancoTask;
 
             cuentasContables.Clear();
             cuentasContables.AddRange(cuentasPlan);
+
+            cuentasBanco.Clear();
+            cuentasBanco.AddRange(cuentasBancoDisponibles);
 
             if (ordenDetalle is null)
             {
@@ -404,7 +616,6 @@
             }
 
             cuentaProveedorId = ResolveCuentaProveedorId(ordenDetalle.CuentaContableProveedor);
-            InicializarLineas();
         }
         catch (Exception ex)
         {
@@ -417,56 +628,29 @@
         }
     }
 
-    private void InicializarLineas()
+    private void OnBancoCuentaChanged(long? value)
     {
-        lineasPartida.Clear();
+        bancoCuentaSeleccionadaId = value;
 
-        if (ordenDetalle is null || ordenDetalle.Procesada)
+        var mediosDisponibles = MediosDisponibles;
+        if (metodoPagoSeleccionado is null || !mediosDisponibles.Any(m => m.Valor == metodoPagoSeleccionado))
         {
-            return;
+            metodoPagoSeleccionado = mediosDisponibles.Count > 0 ? mediosDisponibles[0].Valor : null;
         }
-
-        lineasPartida.Add(new PartidaLineaOrdenPagoDto
-        {
-            Descripcion = ordenDetalle.Concepto,
-            Debito = ordenDetalle.Monto,
-            Credito = 0m
-        });
-
-        lineasPartida.Add(new PartidaLineaOrdenPagoDto
-        {
-            CuentaId = cuentaProveedorId ?? 0,
-            Descripcion = ordenDetalle.Concepto,
-            Debito = 0m,
-            Credito = ordenDetalle.Monto
-        });
     }
 
-    private void AgregarContraLinea()
+    private void AgregarDeduccion()
     {
-        if (!PuedeEditarContraLineas || ordenDetalle is null)
-        {
-            return;
-        }
-
-        var insertIndex = Math.Max(0, lineasPartida.Count - 1);
-        lineasPartida.Insert(insertIndex, new PartidaLineaOrdenPagoDto
-        {
-            Descripcion = ordenDetalle.Concepto,
-            Debito = 0m,
-            Credito = 0m
-        });
+        deducciones.Add(new DeduccionLinea());
     }
 
-    private void EliminarContraLinea(int rowIndex)
+    private void EliminarDeduccion(DeduccionLinea deduccion)
     {
-        if (!PuedeEliminarContraLinea(rowIndex))
-        {
-            return;
-        }
-
-        lineasPartida.RemoveAt(rowIndex);
+        deducciones.Remove(deduccion);
     }
+
+    private static bool FilaTieneAmbosMontos(DeduccionLinea deduccion)
+        => deduccion.Debe > 0m && deduccion.Haber > 0m;
 
     private async Task ProcesarAsync()
     {
@@ -487,20 +671,36 @@
         {
             isProcessing = true;
 
+            // Modelo GENERAL (retenciones/deducciones): el DTO trae solo las lineas NO-proveedor, cada
+            // una con su Debito/Credito real. El backend agrega la linea del proveedor automaticamente
+            // (Debe = bruto) y valida el cuadre. La linea de banco va al Haber por el NETO ya calculado.
             var dto = new ProcesarOrdenPagoDirectoDto
             {
                 Usuario = UsuarioActualTexto,
-                Lineas = GetContraLineas()
-                    .Select(x => new PartidaLineaOrdenPagoDto
+                MetodoPago = metodoPagoSeleccionado!,
+                Lineas = new List<PartidaLineaOrdenPagoDto>
+                {
+                    new()
                     {
-                        CuentaId = x.CuentaId,
-                        CentroCostoId = x.CentroCostoId,
-                        Descripcion = x.Descripcion,
-                        Debito = x.Debito,
-                        Credito = 0m
-                    })
-                    .ToList()
+                        CuentaId = CuentaBancoSeleccionada!.AccountId,
+                        BancoCuentaId = CuentaBancoSeleccionada.BancoCuentaId,
+                        Descripcion = ordenDetalle!.Concepto,
+                        Debito = 0m,
+                        Credito = NetoBanco
+                    }
+                }
             };
+
+            foreach (var deduccion in deducciones)
+            {
+                dto.Lineas.Add(new PartidaLineaOrdenPagoDto
+                {
+                    CuentaId = deduccion.CuentaId ?? 0,
+                    Descripcion = string.IsNullOrWhiteSpace(deduccion.Descripcion) ? ordenDetalle.Concepto : deduccion.Descripcion.Trim(),
+                    Debito = deduccion.Debe,
+                    Credito = deduccion.Haber
+                });
+            }
 
             var result = await OrdenesPagoDirectoClient.ProcesarAsync(NumeroOrden, dto);
             if (!result.Success)
@@ -510,6 +710,7 @@
             }
 
             ShowToast("Exito", result.Message, ToastRenderStyle.Success);
+            await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetPdfUrl(NumeroOrden), "_blank");
             Navigation.NavigateTo(GetReturnUrl(), true);
         }
         catch (Exception ex)
@@ -539,6 +740,9 @@
         Navigation.NavigateTo(originUrl, true);
     }
 
+    // Modelo de 2 lineas (una sola cuenta de banco de origen fija por el monto total del compromiso):
+    // valida banco+metodo seleccionados, que la cuenta de origen exista y no coincida con la del
+    // proveedor, y el cuadre Debe==Haber de la vista previa (ya no distribuye por fila).
     private bool ValidarPartida()
     {
         if (!TieneCuentaProveedorDisponible)
@@ -546,38 +750,51 @@
             validationMessages.Add("El proveedor no tiene una cuenta contable valida configurada.");
         }
 
-        var lineasContra = GetContraLineas();
-        if (lineasContra.Count == 0)
+        if (!bancoCuentaSeleccionadaId.HasValue)
         {
-            validationMessages.Add("Debe agregar al menos una cuenta para distribuir el debito.");
+            validationMessages.Add("Debe seleccionar la cuenta de banco de origen del pago.");
+        }
+        else if (CuentaBancoSeleccionada is null || CuentaBancoSeleccionada.AccountId <= 0)
+        {
+            validationMessages.Add("La cuenta de banco seleccionada no es valida.");
+        }
+        else if (cuentaProveedorId.HasValue && CuentaBancoSeleccionada.AccountId == cuentaProveedorId.Value)
+        {
+            validationMessages.Add("La cuenta de banco de origen no puede ser la misma cuenta contable del proveedor.");
         }
 
-        for (var i = 0; i < lineasContra.Count; i++)
+        if (string.IsNullOrWhiteSpace(metodoPagoSeleccionado))
         {
-            var linea = lineasContra[i];
-            if (linea.CuentaId <= 0)
+            validationMessages.Add("Debe seleccionar el metodo de pago.");
+        }
+
+        if (ordenDetalle is not null && ordenDetalle.Monto <= 0m)
+        {
+            validationMessages.Add("El compromiso no tiene un monto valido para generar la partida.");
+        }
+
+        for (var i = 0; i < deducciones.Count; i++)
+        {
+            var deduccion = deducciones[i];
+            var fila = i + 1;
+
+            if (!deduccion.CuentaId.HasValue || deduccion.CuentaId.Value <= 0)
             {
-                validationMessages.Add($"Debe seleccionar la cuenta contable en la fila {i + 1}.");
-            }
-            else if (cuentaProveedorId.HasValue && linea.CuentaId == cuentaProveedorId.Value)
-            {
-                validationMessages.Add($"La cuenta de la fila {i + 1} no puede ser la misma cuenta contable del proveedor.");
+                validationMessages.Add($"La deduccion de la fila {fila} debe tener una cuenta contable seleccionada.");
+                continue;
             }
 
-            if (linea.Debito <= 0m)
+            var tieneDebe = deduccion.Debe > 0m;
+            var tieneHaber = deduccion.Haber > 0m;
+            if (tieneDebe == tieneHaber)
             {
-                validationMessages.Add($"El monto de la fila {i + 1} debe ser mayor a cero.");
+                validationMessages.Add($"La deduccion de la fila {fila} debe tener Debe o Haber (uno solo, mayor a cero).");
             }
         }
 
-        if (ordenDetalle is not null)
+        if (NetoBanco <= 0m)
         {
-            var totalDistribuido = lineasContra.Sum(x => x.Debito);
-            if (Math.Abs(totalDistribuido - ordenDetalle.Monto) > 0.01m)
-            {
-                validationMessages.Add(
-                    $"La distribucion del debito debe sumar {ordenDetalle.Monto:N2}. Total distribuido: {totalDistribuido:N2}.");
-            }
+            validationMessages.Add("El neto a pagar por banco debe ser mayor a cero. Revise las deducciones cargadas.");
         }
 
         if (PartidaNoCuadra)
@@ -588,25 +805,24 @@
         return validationMessages.Count == 0;
     }
 
-    private bool IsProviderLine(int rowIndex)
+    private bool IsProviderLine(int rowIndex, int totalLineas)
     {
         return rowIndex >= 0 &&
-               lineasPartida.Count > 0 &&
-               rowIndex == lineasPartida.Count - 1;
+               totalLineas > 0 &&
+               rowIndex == totalLineas - 1;
     }
 
-    private bool PuedeEliminarContraLinea(int rowIndex)
+    private (string Codigo, string Nombre) ResolveLineaCuentaDisplay(PartidaLineaOrdenPagoDto linea, bool esProveedor)
     {
-        return PuedeEditarContraLineas &&
-               !IsProviderLine(rowIndex) &&
-               ContraLineCount > 1;
-    }
+        if (esProveedor)
+        {
+            return (CuentaProveedorCodigoTexto, CuentaProveedorNombreTexto);
+        }
 
-    private List<PartidaLineaOrdenPagoDto> GetContraLineas()
-    {
-        return ContraLineCount <= 0
-            ? new List<PartidaLineaOrdenPagoDto>()
-            : lineasPartida.Take(ContraLineCount).ToList();
+        var cuenta = cuentasContables.FirstOrDefault(c => c.AccountId == linea.CuentaId);
+        return cuenta is not null
+            ? (FormatCuentaOrDash(cuenta.Code), GetTextOrDash(cuenta.Description))
+            : ("-", "Seleccione una cuenta");
     }
 
     private long? ResolveCuentaProveedorId(string? cuentaContable)
@@ -633,9 +849,9 @@
         return FormatCuentaOrDash(fallbackCode);
     }
 
-    private static string FormatCuentaOrDash(string? cuenta)
+    private string FormatCuentaOrDash(string? cuenta)
     {
-        var formatted = AccountCodeFormatter.Format(cuenta);
+        var formatted = AccountFormat.Format(cuenta);
         return string.IsNullOrWhiteSpace(formatted) ? "-" : formatted;
     }
 
@@ -747,5 +963,16 @@
         }
 
         return $"{correlativo} - {proveedor}";
+    }
+
+    private sealed record MetodoPagoOption(string Valor, string Texto);
+
+    /// <summary>Fila editable de retencion/deduccion. Excluyente por fila: Debe XOR Haber (uno solo > 0).</summary>
+    private sealed class DeduccionLinea
+    {
+        public long? CuentaId { get; set; }
+        public string Descripcion { get; set; } = string.Empty;
+        public decimal Debe { get; set; }
+        public decimal Haber { get; set; }
     }
 }

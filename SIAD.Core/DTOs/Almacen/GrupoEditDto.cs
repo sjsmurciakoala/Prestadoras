@@ -14,8 +14,8 @@ public sealed class GrupoEditDto
     [StringLength(100, ErrorMessage = "El nombre no puede superar los 100 caracteres.")]
     public string Nombre { get; set; } = string.Empty;
 
-    /// <summary>Línea a la que pertenece el grupo.</summary>
-    public int? LineaId { get; set; }
+    /// <summary>Tipo de artículo (alm_tipo_articulo) al que pertenece la categoría.</summary>
+    public int? TipoArticuloId { get; set; }
 
     public bool Activo { get; set; } = true;
 }

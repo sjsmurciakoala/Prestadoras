@@ -6,6 +6,8 @@ using SIAD.Core.DTOs.Proveedores;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
+using SIAD.Data.Auditoria;
+using SIAD.Services.Auditoria;
 using System.Data;
 using System.Globalization;
 
@@ -21,13 +23,15 @@ public class ProveedoresService : IProveedoresService
     private const int ProveedorCodigoMaximo = 999999;
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _currentCompanyService;
+    private readonly IBitacoraMaestrosWriter _bitacora;
     private readonly Dictionary<string, bool> _columnExists = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, DateTimeKind> _timestampKinds = new(StringComparer.OrdinalIgnoreCase);
 
-    public ProveedoresService(SiadDbContext context, ICurrentCompanyService currentCompanyService)
+    public ProveedoresService(SiadDbContext context, ICurrentCompanyService currentCompanyService, IBitacoraMaestrosWriter bitacora)
     {
         _context = context;
         _currentCompanyService = currentCompanyService;
+        _bitacora = bitacora;
     }
 
     public async Task EnsureProveedorGenericoAsync(CancellationToken cancellationToken = default)
@@ -541,6 +545,16 @@ public class ProveedoresService : IProveedoresService
                 });
         }
 
+        var camposNuevos = new List<AuditDiff.Campo>
+        {
+            new("nombre", null, nombre), new("direccion", null, direccion), new("cuenta_contable", null, cuentaContable),
+            new("cod_tipoproveedor", null, dto.CodTipoProveedor), new("rtn", null, NormalizeOptional(dto.Rtn)),
+            new("razon_social", null, NormalizeOptional(dto.RazonSocial)), new("telefono", null, NormalizeOptional(dto.Telefono)),
+            new("email", null, NormalizeOptional(dto.Email)), new("status", null, dto.Activo)
+        };
+        await _bitacora.RegistrarAsync("prv_proveedores", AccionesBitacora.Creacion, codigo,
+            $"{codigo} - {nombre}", $"Creación del proveedor {codigo} - {nombre}", camposNuevos, cancellationToken);
+
         await SyncBancosCatalogoAsync(cuentasBancarias, user, cancellationToken);
         await SyncCuentasBancariasAsync(codigo, cuentasBancarias, user, cancellationToken);
         await tx.CommitAsync(cancellationToken);
@@ -573,6 +587,9 @@ public class ProveedoresService : IProveedoresService
         var legacyFields = hasLegacyBankColumns ? BuildLegacyCompatibilityFields(cuentasBancarias) : null;
 
         await using var tx = await _context.Database.BeginTransactionAsync(cancellationToken);
+
+        var previo = await _context.prv_proveedores.AsNoTracking()
+            .FirstOrDefaultAsync(p => p.cod_proveedor == codigoNormalizado, cancellationToken);
 
         int rows;
         if (hasLegacyBankColumns && legacyFields is not null)
@@ -655,6 +672,28 @@ public class ProveedoresService : IProveedoresService
             throw new KeyNotFoundException($"No se encontro el proveedor {codigoNormalizado}.");
         }
 
+        var camposCambiados = new List<AuditDiff.Campo>();
+        void Diff(string campo, object? antes, object? despues)
+        {
+            if (previo is null || !Equals(antes, despues))
+            {
+                camposCambiados.Add(new AuditDiff.Campo(campo, antes, despues));
+            }
+        }
+
+        Diff("nombre", previo?.nombre, nombre);
+        Diff("direccion", previo?.direccion, direccion);
+        Diff("cuenta_contable", previo?.cuenta_contable, cuentaContable);
+        Diff("cod_tipoproveedor", previo is null ? null : (int)previo.cod_tipoproveedor, dto.CodTipoProveedor);
+        Diff("rtn", previo?.rtn, NormalizeOptional(dto.Rtn));
+        Diff("razon_social", previo?.razon_social, NormalizeOptional(dto.RazonSocial));
+        Diff("telefono", previo?.telefono, NormalizeOptional(dto.Telefono));
+        Diff("email", previo?.email, NormalizeOptional(dto.Email));
+        Diff("status", previo?.status, dto.Activo);
+
+        await _bitacora.RegistrarAsync("prv_proveedores", AccionesBitacora.Actualizacion, codigoNormalizado,
+            $"{codigoNormalizado} - {nombre}", $"Actualización del proveedor {codigoNormalizado}", camposCambiados, cancellationToken);
+
         await SyncBancosCatalogoAsync(cuentasBancarias, user, cancellationToken);
         await SyncCuentasBancariasAsync(codigoNormalizado, cuentasBancarias, user, cancellationToken);
         await tx.CommitAsync(cancellationToken);
@@ -681,6 +720,9 @@ public class ProveedoresService : IProveedoresService
         {
             throw new KeyNotFoundException($"No se encontro el proveedor {codigoNormalizado}.");
         }
+
+        await _bitacora.RegistrarAsync("prv_proveedores", AccionesBitacora.Eliminacion, codigoNormalizado,
+            codigoNormalizado, $"Eliminación del proveedor {codigoNormalizado}", null, cancellationToken);
 
         await tx.CommitAsync(cancellationToken);
     }
@@ -800,6 +842,7 @@ public class ProveedoresService : IProveedoresService
                 ProveedorCuentaBancariaId = x.proveedor_cuenta_bancaria_id,
                 Banco = x.banco,
                 CuentaBancaria = x.cuenta_bancaria,
+                TipoCuenta = x.tipo_cuenta,
                 Orden = x.orden
             })
             .ToListAsync(cancellationToken);
@@ -1090,10 +1133,12 @@ LIMIT 1;";
 
                 var hayCambios = !string.Equals(existente.banco, item.Banco, StringComparison.Ordinal)
                     || !string.Equals(existente.cuenta_bancaria, item.CuentaBancaria, StringComparison.Ordinal)
+                    || !string.Equals(existente.tipo_cuenta, item.TipoCuenta, StringComparison.Ordinal)
                     || existente.orden != orden;
 
                 existente.banco = item.Banco!;
                 existente.cuenta_bancaria = item.CuentaBancaria!;
+                existente.tipo_cuenta = item.TipoCuenta;
                 existente.orden = orden;
 
                 if (hayCambios)
@@ -1110,6 +1155,7 @@ LIMIT 1;";
                 cod_proveedor = codigoProveedor,
                 banco = item.Banco!,
                 cuenta_bancaria = item.CuentaBancaria!,
+                tipo_cuenta = item.TipoCuenta,
                 orden = orden,
                 fecha_creacion = fechaCreacion,
                 usuario_creo = usuario
@@ -1128,6 +1174,7 @@ LIMIT 1;";
         {
             var banco = NormalizeOptional(source[i].Banco, 80, $"banco en la fila {i + 1}");
             var cuentaBancaria = NormalizeOptional(source[i].CuentaBancaria, 50, $"cuenta bancaria en la fila {i + 1}");
+            var tipoCuenta = NormalizeOptional(source[i].TipoCuenta, 20, $"tipo de cuenta en la fila {i + 1}")?.ToUpperInvariant();
 
             if (banco is null && cuentaBancaria is null)
             {
@@ -1139,11 +1186,19 @@ LIMIT 1;";
                 throw new ArgumentException($"Debe completar banco y cuenta bancaria en la fila {i + 1}.", nameof(dto.CuentasBancarias));
             }
 
+            if (tipoCuenta is not null && !ProveedoresConstants.TiposCuentaBancaria.Contains(tipoCuenta))
+            {
+                throw new ArgumentException(
+                    $"El tipo de cuenta en la fila {i + 1} debe ser {string.Join(" o ", ProveedoresConstants.TiposCuentaBancaria)}.",
+                    nameof(dto.CuentasBancarias));
+            }
+
             cuentas.Add(new ProveedorCuentaBancariaDto
             {
                 ProveedorCuentaBancariaId = source[i].ProveedorCuentaBancariaId,
                 Banco = banco,
                 CuentaBancaria = cuentaBancaria,
+                TipoCuenta = tipoCuenta,
                 Orden = cuentas.Count + 1
             });
         }

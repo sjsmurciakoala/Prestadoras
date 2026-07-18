@@ -27,13 +27,14 @@ public sealed class ArticuloEditDto
     /// <summary>Unidad de salidas (cómo se despacha/consume). Catálogo alm_unidad_medida.</summary>
     public int? UnidadSalidaId { get; set; }
 
-    /// <summary>Clasificación por uso (alm_tipo_articulo): operativo/mantenimiento/consumo.</summary>
+    /// <summary>
+    /// Tipo de artículo (alm_tipo_articulo): la clasificación única desde la
+    /// unificación línea→tipo del 2026-07-16. Obligatorio.
+    /// </summary>
+    [Required(ErrorMessage = "El tipo de artículo es obligatorio.")]
     public int? TipoArticuloId { get; set; }
 
-    /// <summary>Línea de inventario del catálogo alm_linea (reemplaza el código de texto).</summary>
-    public int? LineaId { get; set; }
-
-    /// <summary>Grupo de producto del catálogo alm_grupo (reemplaza el código de texto).</summary>
+    /// <summary>Categoría (alm_grupo) del artículo; debe pertenecer al tipo elegido.</summary>
     public int? GrupoId { get; set; }
 
     [StringLength(80, ErrorMessage = "El diámetro no puede superar los 80 caracteres.")]

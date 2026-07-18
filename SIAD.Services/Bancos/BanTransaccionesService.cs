@@ -17,15 +17,18 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
     private readonly SiadDbContext context;
     private readonly IMapper mapper;
     private readonly ICurrentCompanyService currentCompanyService;
+    private readonly IAccountFormatService accountFormatService;
 
     public BanTransaccionesService(
         SiadDbContext context,
         IMapper mapper,
-        ICurrentCompanyService currentCompanyService)
+        ICurrentCompanyService currentCompanyService,
+        IAccountFormatService accountFormatService)
     {
         this.context = context;
         this.mapper = mapper;
         this.currentCompanyService = currentCompanyService;
+        this.accountFormatService = accountFormatService;
     }
 
     public async Task<IReadOnlyList<BanTransaccionListDto>> GetTransaccionesAsync(
@@ -705,6 +708,8 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             ? tipoInfo.cod_centrocosto.Value
             : (long?)null;
 
+        var accountFormat = await accountFormatService.GetFormatAsync(ct);
+
         var lineas = new List<PartidaLinea>
         {
             new PartidaLinea(
@@ -727,7 +732,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
                 continue;
             }
 
-            var descripcionLinea = BuildContraDescripcion(linea, cuentasContraLookup);
+            var descripcionLinea = BuildContraDescripcion(linea, cuentasContraLookup, accountFormat);
             if (descripcionLinea.Length > 500)
             {
                 descripcionLinea = descripcionLinea[..500];
@@ -773,6 +778,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
                 companyId,
                 fechaMovimiento,
                 lineas,
+                accountFormat,
                 ct);
 
             var supportsSourceDocuments = await SupportsSourceDocumentsAsync(connection, dbTransaction as NpgsqlTransaction, ct);
@@ -874,6 +880,8 @@ CALL public.sp_registrar_partida_contable(
                 partidaId.Value,
                 usuario,
                 ct);
+
+            await dbTransaction.CommitAsync(ct);
         }
         finally
         {
@@ -1232,6 +1240,7 @@ LIMIT 1;";
         long companyId,
         DateOnly fechaMovimiento,
         IReadOnlyList<PartidaLinea> lineas,
+        AccountFormat accountFormat,
         CancellationToken ct)
     {
         var cuentasDisplay = await ObtenerDisplayCuentasAsync(
@@ -1239,6 +1248,7 @@ LIMIT 1;";
             transaction,
             companyId,
             lineas.Select(l => l.AccountId),
+            accountFormat,
             ct);
 
         foreach (var linea in lineas)
@@ -1290,6 +1300,7 @@ SELECT public.fn_pst_afectar_saldo_real_credito(
         NpgsqlTransaction transaction,
         long companyId,
         IEnumerable<long> accountIds,
+        AccountFormat accountFormat,
         CancellationToken ct)
     {
         var ids = accountIds
@@ -1326,11 +1337,10 @@ WHERE c.company_id = @p_company_id
             var code = reader.IsDBNull(1) ? string.Empty : reader.GetString(1).Trim();
             var name = reader.IsDBNull(2) ? string.Empty : reader.GetString(2).Trim();
 
-            cuentas[accountId] = string.IsNullOrWhiteSpace(code)
-                ? (string.IsNullOrWhiteSpace(name) ? accountId.ToString() : name)
-                : string.IsNullOrWhiteSpace(name)
-                    ? code
-                    : $"{code} - {name}";
+            var display = accountFormat.FormatDisplay(code, name);
+            cuentas[accountId] = string.IsNullOrWhiteSpace(display)
+                ? accountId.ToString()
+                : display;
         }
 
         return cuentas;
@@ -2348,7 +2358,8 @@ WHERE k.company_id = @p_company_id
 
     private static string BuildContraDescripcion(
         BanTransaccionContraLineaDto linea,
-        IReadOnlyDictionary<long, (string Code, string Name)> cuentasLookup)
+        IReadOnlyDictionary<long, (string Code, string Name)> cuentasLookup,
+        AccountFormat accountFormat)
     {
         if (!string.IsNullOrWhiteSpace(linea.Descripcion))
         {
@@ -2357,7 +2368,7 @@ WHERE k.company_id = @p_company_id
 
         if (cuentasLookup.TryGetValue(linea.CuentaId, out var cuenta))
         {
-            var code = cuenta.Code.Trim();
+            var code = accountFormat.Format(cuenta.Code);
             var name = cuenta.Name.Trim();
             var label = string.Join(" ", new[] { code, name }.Where(v => !string.IsNullOrWhiteSpace(v)));
             if (!string.IsNullOrWhiteSpace(label))

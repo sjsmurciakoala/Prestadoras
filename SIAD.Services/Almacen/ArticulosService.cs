@@ -27,10 +27,9 @@ public sealed class ArticulosService : IArticulosService
 
         var query = _context.alm_articulos.AsNoTracking().AsQueryable();
 
-        if (!string.IsNullOrWhiteSpace(filtro.Linea))
+        if (filtro.TipoArticuloId.HasValue)
         {
-            var linea = filtro.Linea.Trim();
-            query = query.Where(a => a.linea == linea);
+            query = query.Where(a => a.tipo_articulo_id == filtro.TipoArticuloId.Value);
         }
 
         if (filtro.SoloBajoMinimo == true)
@@ -70,10 +69,8 @@ public sealed class ArticulosService : IArticulosService
                 UnidadMedida = a.unidad_medida,
                 UnidadMedidaId = a.unidad_medida_id,
                 UnidadMedidaCodigo = a.unidad_medida_ref != null ? a.unidad_medida_ref.codigo : null,
-                Linea = a.linea,
-                Grupo = a.grupo,
                 TipoArticuloNombre = a.tipo_articulo_ref != null ? a.tipo_articulo_ref.nombre : null,
-                LineaNombre = a.linea_ref != null ? a.linea_ref.nombre : null,
+                Grupo = a.grupo,
                 GrupoNombre = a.grupo_ref != null ? a.grupo_ref.nombre : null,
                 Diametro = a.diametro,
                 CuentaContable = a.cuenta_contable,
@@ -101,10 +98,9 @@ public sealed class ArticulosService : IArticulosService
             query = query.Where(u => u.existencia_minima > 0);
         }
 
-        if (!string.IsNullOrWhiteSpace(filtro.Linea))
+        if (filtro.TipoArticuloId.HasValue)
         {
-            var linea = filtro.Linea.Trim();
-            query = query.Where(u => u.articulo != null && u.articulo.linea == linea);
+            query = query.Where(u => u.articulo != null && u.articulo.tipo_articulo_id == filtro.TipoArticuloId.Value);
         }
 
         // El filtro de severidad se traduce a predicados sobre existencia.
@@ -148,7 +144,8 @@ public sealed class ArticulosService : IArticulosService
                 Codigo = u.articulo != null ? u.articulo.codigo_articulo : string.Empty,
                 Descripcion = u.articulo != null ? u.articulo.descripcion : string.Empty,
                 UnidadMedida = u.articulo != null ? u.articulo.unidad_medida : null,
-                Linea = u.articulo != null ? u.articulo.linea : null,
+                TipoArticuloNombre = u.articulo != null && u.articulo.tipo_articulo_ref != null
+                    ? u.articulo.tipo_articulo_ref.nombre : null,
                 BodegaId = u.bodega_id,
                 BodegaNombre = u.bodega != null ? u.bodega.nombre : null,
                 u.existencia,
@@ -175,7 +172,7 @@ public sealed class ArticulosService : IArticulosService
                 Codigo = a.Codigo,
                 Descripcion = a.Descripcion,
                 UnidadMedida = a.UnidadMedida,
-                Linea = a.Linea,
+                TipoArticuloNombre = a.TipoArticuloNombre,
                 BodegaId = a.BodegaId,
                 BodegaNombre = a.BodegaNombre,
                 Existencia = a.existencia,
@@ -196,24 +193,62 @@ public sealed class ArticulosService : IArticulosService
     }
 
     /// <summary>
-    /// ¿Los artículos de este tipo llevan existencias? Lo dice alm_tipo_articulo.maneja_inventario.
-    /// Si el artículo no tiene tipo (tipo_articulo_id es nullable) se asume que SÍ maneja
-    /// inventario: es el comportamiento histórico y no debe romperse.
+    /// Valida que el tipo de artículo exista (en la empresa actual: el filtro global por
+    /// company_id lo garantiza) y devuelve su maneja_inventario. El tipo es OBLIGATORIO
+    /// desde la unificación línea→tipo (2026-07-16): un tipo ausente o inexistente
+    /// (incluido el cross-tenant) se rechaza, no se asume nada.
     /// </summary>
-    private async Task<bool> ManejaInventarioAsync(int? tipoArticuloId, CancellationToken ct)
+    private async Task<bool> ValidarTipoArticuloAsync(int? tipoArticuloId, CancellationToken ct)
     {
         if (!tipoArticuloId.HasValue)
         {
-            return true;
+            throw new InvalidOperationException("Debe seleccionar el tipo de artículo.");
         }
 
         var tipo = await _context.alm_tipo_articulos.AsNoTracking()
             .Where(t => t.id == tipoArticuloId.Value)
-            .Select(t => (bool?)t.maneja_inventario)
+            .Select(t => new { t.maneja_inventario, t.activo })
             .FirstOrDefaultAsync(ct);
 
-        // Tipo inexistente (o de otra empresa): no lo inventamos, se comporta como el caso sin tipo.
-        return tipo ?? true;
+        if (tipo is null)
+        {
+            throw new InvalidOperationException("El tipo de artículo seleccionado no existe.");
+        }
+
+        if (!tipo.activo)
+        {
+            throw new InvalidOperationException("El tipo de artículo seleccionado está inactivo.");
+        }
+
+        return tipo.maneja_inventario;
+    }
+
+    /// <summary>
+    /// La categoría (alm_grupo) es opcional, pero si viene debe existir y pertenecer al
+    /// tipo de artículo elegido. Antes esta coherencia vivía sólo en la UI; un POST
+    /// directo a la API podía guardar cualquier combinación.
+    /// </summary>
+    private async Task ValidarGrupoAsync(int? grupoId, int tipoArticuloId, CancellationToken ct)
+    {
+        if (!grupoId.HasValue)
+        {
+            return;
+        }
+
+        var grupo = await _context.alm_grupos.AsNoTracking()
+            .Where(g => g.id == grupoId.Value)
+            .Select(g => new { g.tipo_articulo_id })
+            .FirstOrDefaultAsync(ct);
+
+        if (grupo is null)
+        {
+            throw new InvalidOperationException("La categoría seleccionada no existe.");
+        }
+
+        if (grupo.tipo_articulo_id != tipoArticuloId)
+        {
+            throw new InvalidOperationException("La categoría seleccionada no pertenece al tipo de artículo elegido.");
+        }
     }
 
     private async Task ValidarUnidadMedidaAsync(int? unidadMedidaId, CancellationToken ct)
@@ -304,7 +339,6 @@ public sealed class ArticulosService : IArticulosService
                 UnidadAlmacenajeId = a.unidad_almacenaje_id,
                 UnidadSalidaId = a.unidad_salida_id,
                 TipoArticuloId = a.tipo_articulo_id,
-                LineaId = a.linea_id,
                 GrupoId = a.grupo_id,
                 Diametro = a.diametro,
                 CuentaContable = a.cuenta_contable,
@@ -316,17 +350,6 @@ public sealed class ArticulosService : IArticulosService
             .FirstOrDefaultAsync(ct);
     }
 
-    public async Task<IReadOnlyList<string>> GetLineasAsync(CancellationToken ct = default)
-    {
-        return await _context.alm_articulos
-            .AsNoTracking()
-            .Where(a => a.linea != null && a.linea != "")
-            .Select(a => a.linea!)
-            .Distinct()
-            .OrderBy(l => l)
-            .ToListAsync(ct);
-    }
-
     public async Task<ArticuloEditDto> CreateAsync(ArticuloEditDto dto, string user, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
@@ -334,11 +357,12 @@ public sealed class ArticulosService : IArticulosService
         var codigo = NormalizeOptional(dto.Codigo, 20, uppercase: true) ?? string.Empty;
         var descripcion = NormalizeRequired(dto.Descripcion, 120, "descripción");
 
-        // ¿El tipo de artículo lleva existencias? Si el tipo tiene maneja_inventario=false
-        // (p. ej. "Servicios"), el artículo NO lleva bodega, ni ubicación, ni kardex.
-        // La regla vive aquí (capa de servicio), no en la BD: un POST directo a la API
-        // saltándose la UI también queda rechazado.
-        var manejaInventario = await ManejaInventarioAsync(dto.TipoArticuloId, ct);
+        // El tipo es obligatorio y define si el artículo lleva existencias: con
+        // maneja_inventario=false (p. ej. "Servicios") NO lleva bodega, ni ubicación,
+        // ni kardex. La regla vive aquí (capa de servicio), no en la BD: un POST
+        // directo a la API saltándose la UI también queda rechazado.
+        var manejaInventario = await ValidarTipoArticuloAsync(dto.TipoArticuloId, ct);
+        await ValidarGrupoAsync(dto.GrupoId, dto.TipoArticuloId!.Value, ct);
 
         var ubicaciones = dto.Ubicaciones ?? new List<ArticuloUbicacionDto>();
 
@@ -416,7 +440,6 @@ public sealed class ArticulosService : IArticulosService
             unidad_almacenaje_id = dto.UnidadAlmacenajeId,
             unidad_salida_id = dto.UnidadSalidaId,
             tipo_articulo_id = dto.TipoArticuloId,
-            linea_id = dto.LineaId,
             grupo_id = dto.GrupoId,
             diametro = NormalizeOptional(dto.Diametro, 80),
             cuenta_contable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true),
@@ -557,11 +580,14 @@ public sealed class ArticulosService : IArticulosService
         await ValidarUnidadMedidaAsync(dto.UnidadSalidaId, ct);
         await ValidarCategoriaUnidadesAsync(dto.UnidadMedidaId, dto.UnidadAlmacenajeId, dto.UnidadSalidaId, ct);
 
+        var manejaInventario = await ValidarTipoArticuloAsync(dto.TipoArticuloId, ct);
+        await ValidarGrupoAsync(dto.GrupoId, dto.TipoArticuloId!.Value, ct);
+
         // Cambiar el tipo a uno SIN inventario sólo es válido si el artículo no tiene rastro
         // de existencias: si ya tiene bodegas asignadas o movimientos de kardex, convertirlo
         // en "servicio" dejaría filas y asientos huérfanos. Se rechaza y se le dice al usuario
         // qué debe hacer primero.
-        if (!await ManejaInventarioAsync(dto.TipoArticuloId, ct))
+        if (!manejaInventario)
         {
             if (await _context.alm_articulo_bodegas.AsNoTracking().AnyAsync(u => u.articulo_id == id, ct))
             {
@@ -582,7 +608,6 @@ public sealed class ArticulosService : IArticulosService
         entity.unidad_almacenaje_id = dto.UnidadAlmacenajeId;
         entity.unidad_salida_id = dto.UnidadSalidaId;
         entity.tipo_articulo_id = dto.TipoArticuloId;
-        entity.linea_id = dto.LineaId;
         entity.grupo_id = dto.GrupoId;
         entity.diametro = NormalizeOptional(dto.Diametro, 80);
         entity.cuenta_contable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true);

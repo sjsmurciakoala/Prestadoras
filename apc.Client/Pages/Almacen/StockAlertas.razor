@@ -7,6 +7,7 @@
 @using apc.Client.Services.Almacen
 
 @inject ArticulosClient ArticulosClient
+@inject TiposArticuloClient TiposClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
@@ -79,11 +80,13 @@
                                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
                                     Style="min-width: 190px;" CssClass="me-1" />
 
-                        <DxComboBox Data="@lineas" Value="@filtroLinea"
-                                    NullText="Todas las líneas"
+                        <DxComboBox Data="@tipos" Value="@filtroTipoArticuloId"
+                                    ValueFieldName="@nameof(TipoArticuloLookupDto.Id)"
+                                    TextFieldName="@nameof(TipoArticuloLookupDto.Display)"
+                                    NullText="Todos los tipos"
                                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                    ValueChanged="@((string? v) => OnLineaChanged(v))"
-                                    Style="min-width: 160px;" CssClass="me-1" />
+                                    ValueChanged="@((int? v) => OnTipoArticuloChanged(v))"
+                                    Style="min-width: 200px;" CssClass="me-1" />
 
                         <div class="d-flex align-items-center me-2">
                             <DxCheckBox Checked="@soloConMinimo"
@@ -212,7 +215,7 @@
 
     private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
         => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
-    private List<string> lineas = new();
+    private List<TipoArticuloLookupDto> tipos = new();
 
     private readonly List<SeveridadOpcion> severidades = new()
     {
@@ -222,7 +225,7 @@
     };
 
     private string filtroBusqueda = string.Empty;
-    private string? filtroLinea;
+    private int? filtroTipoArticuloId;
     private SeveridadOpcion? severidadSeleccionada;
     private bool soloConMinimo;
 
@@ -236,27 +239,27 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await CargarLineasAsync();
+        await CargarTiposAsync();
         await CargarAsync();
     }
 
     private AlertaStockFilterDto BuildFilter() => new()
     {
         Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
-        Linea = string.IsNullOrWhiteSpace(filtroLinea) ? null : filtroLinea,
+        TipoArticuloId = filtroTipoArticuloId,
         Severidad = severidadSeleccionada?.Codigo,
         SoloConMinimo = soloConMinimo ? true : null
     };
 
-    private async Task CargarLineasAsync()
+    private async Task CargarTiposAsync()
     {
         try
         {
-            lineas = await ArticulosClient.GetLineasAsync();
+            tipos = await TiposClient.GetLookupAsync();
         }
         catch
         {
-            lineas = new List<string>();
+            tipos = new List<TipoArticuloLookupDto>();
         }
     }
 
@@ -293,9 +296,9 @@
         await CargarAsync();
     }
 
-    private async Task OnLineaChanged(string? valor)
+    private async Task OnTipoArticuloChanged(int? valor)
     {
-        filtroLinea = valor;
+        filtroTipoArticuloId = valor;
         await CargarAsync();
     }
 

@@ -66,6 +66,13 @@ public class AbonoController : ControllerBase
         return Ok(result);
     }
 
+    [HttpGet("saldo-cliente")]
+    public async Task<IActionResult> SaldoCliente([FromQuery] string clienteClave, CancellationToken ct)
+    {
+        var saldo = await _abonoService.ObtenerSaldoClienteAsync(clienteClave, ct);
+        return Ok(new ClienteSaldoDto { ClienteClave = clienteClave, SaldoTotal = saldo });
+    }
+
     [HttpGet("recibo-pdf/{transaccionId:int}")]
     public async Task<IActionResult> GetReciboPdf(int transaccionId, CancellationToken ct)
     {

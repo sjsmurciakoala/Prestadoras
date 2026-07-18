@@ -11,26 +11,26 @@ public sealed class TipoArticuloEditDto
     public string Codigo { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "El nombre es obligatorio.")]
-    [StringLength(60, ErrorMessage = "El nombre no puede superar los 60 caracteres.")]
+    [StringLength(100, ErrorMessage = "El nombre no puede superar los 100 caracteres.")]
     public string Nombre { get; set; } = string.Empty;
 
     [StringLength(200, ErrorMessage = "La descripción no puede superar los 200 caracteres.")]
     public string? Descripcion { get; set; }
 
     /// <summary>Cuentas contables (código del plan de cuentas). Opcionales.</summary>
-    [StringLength(20, ErrorMessage = "La cuenta de inventario no puede superar 20 caracteres.")]
+    [StringLength(25, ErrorMessage = "La cuenta de inventario no puede superar 25 caracteres.")]
     public string? CuentaInventario { get; set; }
 
-    [StringLength(20, ErrorMessage = "La cuenta de costo de ventas no puede superar 20 caracteres.")]
+    [StringLength(25, ErrorMessage = "La cuenta de costo de ventas no puede superar 25 caracteres.")]
     public string? CuentaCostoVentas { get; set; }
 
-    [StringLength(20, ErrorMessage = "La cuenta de ventas no puede superar 20 caracteres.")]
+    [StringLength(25, ErrorMessage = "La cuenta de ventas no puede superar 25 caracteres.")]
     public string? CuentaVentas { get; set; }
 
-    [StringLength(20, ErrorMessage = "La cuenta de ajustes no puede superar 20 caracteres.")]
+    [StringLength(25, ErrorMessage = "La cuenta de ajustes no puede superar 25 caracteres.")]
     public string? CuentaAjustes { get; set; }
 
-    [StringLength(20, ErrorMessage = "La cuenta de devoluciones no puede superar 20 caracteres.")]
+    [StringLength(25, ErrorMessage = "La cuenta de devoluciones no puede superar 25 caracteres.")]
     public string? CuentaDevoluciones { get; set; }
 
     /// <summary>
