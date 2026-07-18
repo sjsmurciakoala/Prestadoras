@@ -136,3 +136,59 @@ public class AnularReciboPendienteDto
     public string Usuario { get; set; } = null!;
     public string Motivo { get; set; } = string.Empty;
 }
+
+// ── Consulta / listado de abonos especiales (transaccion_abonado, tipo 202) ──
+
+/// <summary>
+/// Filtro del listado de abonos especiales. <see cref="Estado"/> es el código
+/// crudo de <c>transaccion_abonado.estado</c>: "C" = pagado/cobrado, "P" = recibo
+/// pendiente (no aplicado), "A" = anulado/reversado; <c>null</c> o vacío = todos.
+/// </summary>
+public class AbonoEspecialFiltroDto
+{
+    public string? Estado { get; set; }
+    public string? Search { get; set; }
+    public DateOnly? Desde { get; set; }
+    public DateOnly? Hasta { get; set; }
+    public int Skip { get; set; }
+    public int Take { get; set; } = 15;
+    public string? SortField { get; set; }
+    public bool SortDesc { get; set; }
+}
+
+public class AbonoEspecialListItemDto
+{
+    public int TransaccionId { get; set; }
+    public int? ClienteId { get; set; }
+    public string ClienteClave { get; set; } = string.Empty;
+    public string ClienteNombre { get; set; } = string.Empty;
+    public string NumFactura { get; set; } = string.Empty;
+    public int NumRecibo { get; set; }
+    public decimal Monto { get; set; }
+    public DateTime? Fecha { get; set; }
+    public string Periodo { get; set; } = string.Empty;
+    public string Cajero { get; set; } = string.Empty;
+    public string? Banco { get; set; }
+    public string? Descripcion { get; set; }
+
+    /// <summary>Código crudo: "C" | "P" | "A".</summary>
+    public string Estado { get; set; } = string.Empty;
+
+    /// <summary>Etiqueta legible: "Pagado" | "No aplicado" | "Anulado".</summary>
+    public string EstadoDescripcion { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Conteos y montos por estado del conjunto filtrado (búsqueda + rango de fechas,
+/// ignorando el filtro de estado) para los KPIs de la vista de consulta.
+/// </summary>
+public class AbonoEspecialResumenDto
+{
+    public int TotalRegistros { get; set; }
+    public int PagadosCount { get; set; }
+    public decimal PagadosMonto { get; set; }
+    public int NoAplicadosCount { get; set; }
+    public decimal NoAplicadosMonto { get; set; }
+    public int AnuladosCount { get; set; }
+    public decimal AnuladosMonto { get; set; }
+}

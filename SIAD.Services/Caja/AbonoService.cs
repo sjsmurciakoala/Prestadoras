@@ -1148,4 +1148,204 @@ public class AbonoService : IAbonoService
         await _context.SaveChangesAsync(ct);
         return ResponseModelDto.Ok("Recibo pendiente anulado correctamente.");
     }
+
+    // ───────────────────────── Consulta de abonos especiales ─────────────────────────
+
+    public async Task<PagedResult<AbonoEspecialListItemDto>> ListarAbonosEspecialesAsync(AbonoEspecialFiltroDto filtro, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+        var companyId = _currentCompanyService.GetCompanyId();
+
+        var baseQuery = BuildAbonosEspecialesQuery(companyId, filtro);
+
+        var total = await baseQuery.CountAsync(ct);
+        if (total == 0)
+            return new PagedResult<AbonoEspecialListItemDto>(Array.Empty<AbonoEspecialListItemDto>(), 0);
+
+        var skip = Math.Max(filtro.Skip, 0);
+        var take = filtro.Take <= 0 ? 15 : filtro.Take;
+
+        // Página de transacciones; los datos de cliente/factura se resuelven por
+        // lote (mismo patrón que ListarHistorialPorClienteAsync) para evitar joins
+        // con cast decimal→int que EF no traduce.
+        var pageTx = await OrdenarAbonosEspeciales(baseQuery, filtro)
+            .Skip(skip)
+            .Take(take)
+            .Select(t => new
+            {
+                t.ide,
+                t.cliente_clave,
+                t.recibo,
+                t.creditos,
+                t.fecha_docu,
+                t.periodo,
+                t.usuario,
+                t.banco,
+                t.descripcion,
+                t.estado
+            })
+            .ToListAsync(ct);
+
+        var claves = pageTx
+            .Where(t => !string.IsNullOrWhiteSpace(t.cliente_clave))
+            .Select(t => t.cliente_clave!)
+            .Distinct()
+            .ToList();
+
+        var clientesMap = await _context.cliente_maestros
+            .AsNoTracking()
+            .Where(c => claves.Contains(c.maestro_cliente_clave))
+            .Select(c => new { c.maestro_cliente_clave, c.maestro_cliente_id, c.maestro_cliente_nombre })
+            .ToDictionaryAsync(c => c.maestro_cliente_clave, ct);
+
+        var recibos = pageTx
+            .Where(t => t.recibo.HasValue)
+            .Select(t => (int)t.recibo!.Value)
+            .Distinct()
+            .ToList();
+
+        var facturasMap = await _context.facturas
+            .AsNoTracking()
+            .Where(f => recibos.Contains(f.numrecibo))
+            .Select(f => new { f.numrecibo, f.numfactura })
+            .ToDictionaryAsync(f => f.numrecibo, f => f.numfactura, ct);
+
+        var items = pageTx.Select(t =>
+        {
+            var numRecibo = (int)(t.recibo ?? 0);
+            clientesMap.TryGetValue(t.cliente_clave ?? string.Empty, out var cli);
+            facturasMap.TryGetValue(numRecibo, out var numFactura);
+
+            return new AbonoEspecialListItemDto
+            {
+                TransaccionId = t.ide,
+                ClienteId = cli?.maestro_cliente_id,
+                ClienteClave = t.cliente_clave ?? string.Empty,
+                ClienteNombre = cli?.maestro_cliente_nombre ?? string.Empty,
+                NumFactura = string.IsNullOrWhiteSpace(numFactura) ? numRecibo.ToString() : numFactura!,
+                NumRecibo = numRecibo,
+                Monto = t.creditos ?? 0m,
+                Fecha = t.fecha_docu?.ToDateTime(TimeOnly.MinValue),
+                Periodo = t.periodo ?? string.Empty,
+                Cajero = t.usuario ?? string.Empty,
+                Banco = t.banco,
+                Descripcion = t.descripcion,
+                Estado = t.estado ?? string.Empty,
+                EstadoDescripcion = DescribirEstadoAbono(t.estado)
+            };
+        }).ToList();
+
+        return new PagedResult<AbonoEspecialListItemDto>(items, total);
+    }
+
+    public async Task<AbonoEspecialResumenDto> ObtenerResumenAbonosEspecialesAsync(AbonoEspecialFiltroDto filtro, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+        var companyId = _currentCompanyService.GetCompanyId();
+
+        // El resumen ignora el filtro de estado (queremos el conteo de CADA estado)
+        // pero respeta la búsqueda y el rango de fechas.
+        var filtroSinEstado = new AbonoEspecialFiltroDto
+        {
+            Search = filtro.Search,
+            Desde = filtro.Desde,
+            Hasta = filtro.Hasta
+        };
+
+        var agregados = await BuildAbonosEspecialesQuery(companyId, filtroSinEstado)
+            .GroupBy(t => t.estado)
+            .Select(g => new { Estado = g.Key, Count = g.Count(), Monto = g.Sum(x => x.creditos ?? 0m) })
+            .ToListAsync(ct);
+
+        var resumen = new AbonoEspecialResumenDto();
+        foreach (var a in agregados)
+        {
+            switch (a.Estado)
+            {
+                case "C": resumen.PagadosCount = a.Count; resumen.PagadosMonto = a.Monto; break;
+                case "P": resumen.NoAplicadosCount = a.Count; resumen.NoAplicadosMonto = a.Monto; break;
+                case "A": resumen.AnuladosCount = a.Count; resumen.AnuladosMonto = a.Monto; break;
+            }
+            resumen.TotalRegistros += a.Count;
+        }
+
+        return resumen;
+    }
+
+    private IQueryable<transaccion_abonado> BuildAbonosEspecialesQuery(long companyId, AbonoEspecialFiltroDto filtro)
+    {
+        var query = _context.transaccion_abonados
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId && t.tipotransaccion == "202");
+
+        var estado = string.IsNullOrWhiteSpace(filtro.Estado) ? null : filtro.Estado.Trim().ToUpperInvariant();
+        if (estado is "C" or "P" or "A")
+            query = query.Where(t => t.estado == estado);
+
+        if (filtro.Desde.HasValue)
+            query = query.Where(t => t.fecha_docu >= filtro.Desde.Value);
+        if (filtro.Hasta.HasValue)
+            query = query.Where(t => t.fecha_docu <= filtro.Hasta.Value);
+
+        if (!string.IsNullOrWhiteSpace(filtro.Search))
+        {
+            var termino = filtro.Search.Trim();
+            var like = $"%{termino}%";
+            var isNum = int.TryParse(termino, out var num);
+
+            query = query.Where(t =>
+                (t.cliente_clave != null && EF.Functions.ILike(t.cliente_clave, like))
+                || (isNum && t.recibo == num)
+                || _context.cliente_maestros.Any(c =>
+                        c.maestro_cliente_clave == t.cliente_clave
+                        && EF.Functions.ILike(c.maestro_cliente_nombre, like))
+                || _context.facturas.Any(f =>
+                        (decimal?)f.numrecibo == t.recibo
+                        && f.numfactura != null
+                        && EF.Functions.ILike(f.numfactura, like)));
+        }
+
+        return query;
+    }
+
+    private static IQueryable<transaccion_abonado> OrdenarAbonosEspeciales(
+        IQueryable<transaccion_abonado> query, AbonoEspecialFiltroDto filtro)
+    {
+        var desc = filtro.SortDesc;
+        return filtro.SortField switch
+        {
+            "Monto" => desc
+                ? query.OrderByDescending(t => t.creditos).ThenByDescending(t => t.ide)
+                : query.OrderBy(t => t.creditos).ThenBy(t => t.ide),
+            "NumRecibo" => desc
+                ? query.OrderByDescending(t => t.recibo).ThenByDescending(t => t.ide)
+                : query.OrderBy(t => t.recibo).ThenBy(t => t.ide),
+            "ClienteClave" => desc
+                ? query.OrderByDescending(t => t.cliente_clave).ThenByDescending(t => t.ide)
+                : query.OrderBy(t => t.cliente_clave).ThenBy(t => t.ide),
+            "Cajero" => desc
+                ? query.OrderByDescending(t => t.usuario).ThenByDescending(t => t.ide)
+                : query.OrderBy(t => t.usuario).ThenBy(t => t.ide),
+            "Estado" => desc
+                ? query.OrderByDescending(t => t.estado).ThenByDescending(t => t.ide)
+                : query.OrderBy(t => t.estado).ThenBy(t => t.ide),
+            "Periodo" => desc
+                ? query.OrderByDescending(t => t.periodo).ThenByDescending(t => t.ide)
+                : query.OrderBy(t => t.periodo).ThenBy(t => t.ide),
+            "Banco" => desc
+                ? query.OrderByDescending(t => t.banco).ThenByDescending(t => t.ide)
+                : query.OrderBy(t => t.banco).ThenBy(t => t.ide),
+            // "Fecha" y por defecto: más recientes primero.
+            "Fecha" when !desc => query.OrderBy(t => t.fecha_docu).ThenBy(t => t.ide),
+            _ => query.OrderByDescending(t => t.fecha_docu).ThenByDescending(t => t.ide),
+        };
+    }
+
+    private static string DescribirEstadoAbono(string? estado) => estado switch
+    {
+        "C" => "Pagado",
+        "P" => "No aplicado",
+        "A" => "Anulado",
+        _ => "—"
+    };
 }

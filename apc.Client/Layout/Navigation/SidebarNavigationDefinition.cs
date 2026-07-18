@@ -235,7 +235,8 @@ public static class SidebarNavigationDefinition
                     Children =
                     [
                         new SidebarNavItem { Id = "fact-captacion", Text = "Captación de Pagos", NavigateUrl = "/facturacion/captacion/caja", MatchPrefixes = ["/facturacion/captacion/caja"], IconCssClass = "bi bi-bag-check" },
-                        new SidebarNavItem { Id = "fact-abonos-especiales", Text = "Abonos Especiales", NavigateUrl = "/facturacion/captacion/abonos-especiales", MatchPrefixes = ["/facturacion/captacion/abonos-especiales"], IconCssClass = "bi bi-cash-coin" },
+                        new SidebarNavItem { Id = "fact-abonos-especiales", Text = "Abonos Especiales", NavigateUrl = "/facturacion/captacion/abonos-especiales", MatchPrefixes = ["/facturacion/captacion/abonos-especiales"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
+                        new SidebarNavItem { Id = "fact-abonos-especiales-consulta", Text = "Consultar abonos especiales", NavigateUrl = "/facturacion/captacion/abonos-especiales/consulta", MatchPrefixes = ["/facturacion/captacion/abonos-especiales/consulta"], IconCssClass = "bi bi-search" },
                         new SidebarNavItem
                         {
                             Id = "fact-miscelaneos-group",

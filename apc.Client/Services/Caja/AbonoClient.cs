@@ -77,4 +77,41 @@ public class AbonoClient
         var response = await _http.PostAsJsonAsyncWithAuthCheck("api/abono/anular-pendiente", request);
         return await response.ReadFromJsonAsyncWithAuthCheck<ResponseModelDto>();
     }
+
+    public Task<PagedResult<AbonoEspecialListItemDto>?> ListarAbonosEspecialesAsync(
+        string? estado, string? search, DateOnly? desde, DateOnly? hasta,
+        int skip, int take, string? sortField, bool sortDesc)
+    {
+        var parameters = new List<string>
+        {
+            $"skip={Math.Max(skip, 0)}",
+            $"take={(take <= 0 ? 15 : take)}"
+        };
+
+        if (!string.IsNullOrWhiteSpace(estado)) parameters.Add($"estado={Uri.EscapeDataString(estado)}");
+        if (!string.IsNullOrWhiteSpace(search)) parameters.Add($"search={Uri.EscapeDataString(search)}");
+        if (desde.HasValue) parameters.Add($"desde={desde.Value:yyyy-MM-dd}");
+        if (hasta.HasValue) parameters.Add($"hasta={hasta.Value:yyyy-MM-dd}");
+        if (!string.IsNullOrWhiteSpace(sortField))
+        {
+            parameters.Add($"sortField={Uri.EscapeDataString(sortField)}");
+            if (sortDesc) parameters.Add("sortDesc=true");
+        }
+
+        var url = $"api/abono/especiales?{string.Join("&", parameters)}";
+        return _http.GetFromJsonAsyncWithAuthCheck<PagedResult<AbonoEspecialListItemDto>>(url);
+    }
+
+    public Task<AbonoEspecialResumenDto?> ObtenerResumenAbonosEspecialesAsync(
+        string? estado, string? search, DateOnly? desde, DateOnly? hasta)
+    {
+        var parameters = new List<string>();
+        if (!string.IsNullOrWhiteSpace(estado)) parameters.Add($"estado={Uri.EscapeDataString(estado)}");
+        if (!string.IsNullOrWhiteSpace(search)) parameters.Add($"search={Uri.EscapeDataString(search)}");
+        if (desde.HasValue) parameters.Add($"desde={desde.Value:yyyy-MM-dd}");
+        if (hasta.HasValue) parameters.Add($"hasta={hasta.Value:yyyy-MM-dd}");
+
+        var query = parameters.Count > 0 ? "?" + string.Join("&", parameters) : string.Empty;
+        return _http.GetFromJsonAsyncWithAuthCheck<AbonoEspecialResumenDto>($"api/abono/especiales/resumen{query}");
+    }
 }

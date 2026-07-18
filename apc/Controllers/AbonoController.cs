@@ -86,8 +86,10 @@ public class AbonoController : ControllerBase
         using var stream = new System.IO.MemoryStream();
         report.ExportToPdf(stream);
 
-        var fileName = $"Recibo-{datos.NumRecibo}-{transaccionId}.pdf";
-        return File(stream.ToArray(), "application/pdf", fileName);
+        // Content-Disposition inline: el navegador muestra el recibo como vista
+        // previa en una pestaña en vez de descargarlo (mismo patrón que InformesController).
+        Response.Headers.ContentDisposition = $"inline; filename=Recibo-{datos.NumRecibo}-{transaccionId}.pdf";
+        return File(stream.ToArray(), "application/pdf");
     }
 
     [HttpPost("generar-recibo")]
@@ -118,5 +120,53 @@ public class AbonoController : ControllerBase
         request.Usuario = User?.Identity?.Name ?? "system";
         var result = await _abonoService.AnularReciboPendienteAsync(request, ct);
         return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpGet("especiales")]
+    public async Task<IActionResult> ListarEspeciales(
+        [FromQuery] string? estado,
+        [FromQuery] string? search,
+        [FromQuery] DateOnly? desde,
+        [FromQuery] DateOnly? hasta,
+        [FromQuery] int skip,
+        [FromQuery] int take,
+        [FromQuery] string? sortField,
+        [FromQuery] bool sortDesc,
+        CancellationToken ct)
+    {
+        var filtro = new AbonoEspecialFiltroDto
+        {
+            Estado = estado,
+            Search = search,
+            Desde = desde,
+            Hasta = hasta,
+            Skip = skip,
+            Take = take <= 0 ? 15 : take,
+            SortField = sortField,
+            SortDesc = sortDesc
+        };
+
+        var result = await _abonoService.ListarAbonosEspecialesAsync(filtro, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("especiales/resumen")]
+    public async Task<IActionResult> ResumenEspeciales(
+        [FromQuery] string? estado,
+        [FromQuery] string? search,
+        [FromQuery] DateOnly? desde,
+        [FromQuery] DateOnly? hasta,
+        CancellationToken ct)
+    {
+        var filtro = new AbonoEspecialFiltroDto
+        {
+            Estado = estado,
+            Search = search,
+            Desde = desde,
+            Hasta = hasta
+        };
+
+        var result = await _abonoService.ObtenerResumenAbonosEspecialesAsync(filtro, ct);
+        return Ok(result);
     }
 }

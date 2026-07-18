@@ -76,8 +76,15 @@
                         </div>
                         <hr class="my-2" />
                         <div class="d-flex justify-content-between fs-5 fw-bold text-success">
-                            <span>Saldo Pendiente:</span>
+                            <span>Saldo pendiente de la factura:</span>
                             <span>@selectedFactura.SaldoPendiente.ToString("C2")</span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center mt-1 small">
+                            <span class="text-muted">Saldo total del cliente:</span>
+                            <span class="fw-semibold text-primary">
+                                @(saldoTotalCliente.HasValue ? saldoTotalCliente.Value.ToString("C2") : "—")
+                                <span class="text-muted fw-normal">· referencia</span>
+                            </span>
                         </div>
                     </div>
 
@@ -207,12 +214,16 @@
     private List<ReciboPendienteDto> recibosPendientes = new();
     private bool isLoadingRecibos;
 
+    // Saldo global (corrido) del cliente, informativo. Este flujo no abona: solo
+    // genera el recibo; el saldo del cliente se muestra solo como referencia.
+    private decimal? saldoTotalCliente;
+
     protected override async Task OnParametersSetAsync()
     {
         if (!_initialLoadDone && !string.IsNullOrWhiteSpace(ClienteClave))
         {
             _initialLoadDone = true;
-            await CargarFacturasAsync();
+            await Task.WhenAll(CargarFacturasAsync(), CargarSaldoClienteAsync());
         }
     }
 
@@ -231,6 +242,19 @@
         finally
         {
             isLoading = false;
+        }
+    }
+
+    private async Task CargarSaldoClienteAsync()
+    {
+        try
+        {
+            var res = await AbonoClient.ObtenerSaldoClienteAsync(ClienteClave);
+            saldoTotalCliente = res?.SaldoTotal;
+        }
+        catch
+        {
+            saldoTotalCliente = null;
         }
     }
 

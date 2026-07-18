@@ -786,6 +786,10 @@
                         dataStr, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
                 }
 
+                // Abrir la vista previa del recibo automáticamente al procesar el pago.
+                if (ultimoAbono is not null && ultimoAbono.TransaccionId > 0)
+                    await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{ultimoAbono.TransaccionId}", "_blank");
+
                 MostrarToast("Abono Registrado", "Abono aplicado correctamente.", ToastRenderStyle.Success);
                 reciboPendienteSeleccionado = null;
                 selectedFactura = null;
