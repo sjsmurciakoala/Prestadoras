@@ -1,0 +1,580 @@
+@page "/facturacion/captacion/abonos-especiales/consulta"
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Caja
+@using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services
+@using apc.Client.Services.Caja
+@using apc.Client.Services.CaptacionPagos
+@using apc.Client.Pages.Clientes.Components
+
+@inject AbonoClient AbonoClient
+@inject CaptacionPagosClient CaptacionClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
+@inject TenantState TenantState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Consulta de Abonos Especiales</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="@ToastName" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Consulta de Abonos Especiales</h2>
+            <p class="page-subtitle">Clientes con abonos especiales pagados, no aplicados o anulados</p>
+        </div>
+        <DxButton Text="Registrar abono" Click="IrARegistrar" IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" />
+    </div>
+
+    @* ── KPIs por estado que a la vez actúan como filtro ── *@
+    <div class="ae-estado-cards">
+        <button type="button" class="ae-estado-card @(EstadoActivo is null ? "is-active" : "")"
+                @onclick="() => FiltrarPorEstadoAsync(null)">
+            <span class="ae-estado-top">
+                <i class="bi bi-collection"></i> Todos
+            </span>
+            <span class="ae-estado-count">@(resumen?.TotalRegistros.ToString("N0") ?? "—")</span>
+            <span class="ae-estado-monto">&nbsp;</span>
+        </button>
+
+        <button type="button" class="ae-estado-card ae-pagado @(EstadoActivo == EstPagado ? "is-active" : "")"
+                @onclick="() => FiltrarPorEstadoAsync(EstPagado)">
+            <span class="ae-estado-top">
+                <i class="bi bi-check-circle-fill"></i> Pagados
+            </span>
+            <span class="ae-estado-count">@(resumen?.PagadosCount.ToString("N0") ?? "—")</span>
+            <span class="ae-estado-monto">@FormatMonto(resumen?.PagadosMonto)</span>
+        </button>
+
+        <button type="button" class="ae-estado-card ae-pendiente @(EstadoActivo == EstNoAplicado ? "is-active" : "")"
+                @onclick="() => FiltrarPorEstadoAsync(EstNoAplicado)">
+            <span class="ae-estado-top">
+                <i class="bi bi-hourglass-split"></i> No aplicados
+            </span>
+            <span class="ae-estado-count">@(resumen?.NoAplicadosCount.ToString("N0") ?? "—")</span>
+            <span class="ae-estado-monto">@FormatMonto(resumen?.NoAplicadosMonto)</span>
+        </button>
+
+        <button type="button" class="ae-estado-card ae-anulado @(EstadoActivo == EstAnulado ? "is-active" : "")"
+                @onclick="() => FiltrarPorEstadoAsync(EstAnulado)">
+            <span class="ae-estado-top">
+                <i class="bi bi-x-circle-fill"></i> Anulados
+            </span>
+            <span class="ae-estado-count">@(resumen?.AnuladosCount.ToString("N0") ?? "—")</span>
+            <span class="ae-estado-monto">@FormatMonto(resumen?.AnuladosMonto)</span>
+        </button>
+    </div>
+
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="TransaccionId" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Cliente, clave o N° de factura..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 240px;"
+                                   InputAttributes="@(new Dictionary<string, object> { ["autocomplete"] = "off" })" />
+
+                        <DxDateEdit Date="@filtroDesde" DateChanged="@((DateTime? v) => OnDesdeChanged(v))"
+                                    DateExpression="@(() => filtroDesde)" NullText="Desde"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="width: 150px;" />
+
+                        <DxDateEdit Date="@filtroHasta" DateChanged="@((DateTime? v) => OnHastaChanged(v))"
+                                    DateExpression="@(() => filtroHasta)" NullText="Hasta"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="width: 150px;" />
+
+                        <DxButton Text="Limpiar" IconCssClass="bi bi-eraser"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="LimpiarFiltrosAsync" CssClass="me-1" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Abonos: <span class="fw-bold">@totalRegistros.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="ClienteClave" Caption="Cliente" MinWidth="280">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <div class="client-cell">
+                                <div class="client-title" title="@a.ClienteNombre">
+                                    @(string.IsNullOrWhiteSpace(a.ClienteNombre) ? "(sin nombre)" : a.ClienteNombre)
+                                </div>
+                                <div class="client-sub">
+                                    <i class="bi bi-person-vcard"></i>
+                                    <span class="text-truncate" title="@a.ClienteClave">@a.ClienteClave</span>
+                                </div>
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="NumRecibo" Caption="Factura" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <span class="fw-semibold">@a.NumFactura</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Periodo" Caption="Período" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <span class="text-muted">@FormatPeriodo(a.Periodo)</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Fecha" Caption="Fecha" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <span>@(a.Fecha?.ToString("dd/MM/yyyy") ?? "—")</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Monto" Caption="Monto" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <span class="fw-bold">@a.Monto.ToString("C2")</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Cajero" Caption="Cajero" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <span class="text-truncate text-muted" title="@a.Cajero">
+                                @(string.IsNullOrWhiteSpace(a.Cajero) ? "—" : a.Cajero)
+                            </span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Banco" Caption="Forma de pago" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            @if (string.IsNullOrWhiteSpace(a.Banco))
+                            {
+                                <span class="text-muted"><i class="bi bi-cash me-1"></i>Efectivo</span>
+                            }
+                            else
+                            {
+                                <span class="text-truncate" title="@a.Banco"><i class="bi bi-bank me-1"></i>@a.Banco</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <span class="ae-badge @EstadoBadgeClass(a.Estado)">@a.EstadoDescripcion</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="170px" TextAlignment="GridTextAlignment.Center"
+                                      AllowSort="false" AllowGroup="false">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var a = (AbonoEspecialListItemDto)cell.DataItem;
+                            }
+                            <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                @if (a.Estado == EstNoAplicado)
+                                {
+                                    <button type="button" class="btn-icon btn-estado" title="Cobrar / aplicar"
+                                            @onclick="() => IniciarCobro(a)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-cash-coin"></i>
+                                    </button>
+                                }
+
+                                <button type="button" class="btn-icon btn-view" title="Estado de cuenta del cliente"
+                                        disabled="@(a.ClienteId is null)"
+                                        @onclick="() => AbrirEstadoCuenta(a)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-receipt"></i>
+                                </button>
+
+                                <button type="button" class="btn-icon btn-edit" title="Imprimir recibo (PDF)"
+                                        @onclick="() => ImprimirReciboAsync(a.TransaccionId)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-printer"></i>
+                                </button>
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay abonos especiales que coincidan con el filtro.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@* ── Popup: estado de cuenta del cliente ── *@
+<DxPopup Visible="@mostrarEstadoCuentaModal"
+         VisibleChanged="@(v => { mostrarEstadoCuentaModal = v; if (!v) clienteEstadoCuentaId = null; })"
+         Width="min(900px, 95vw)" MaxHeight="90vh" Scrollable="true"
+         HeaderText="Estado de cuenta">
+    <BodyContentTemplate>
+        @if (clienteEstadoCuentaId.HasValue)
+        {
+            <div class="p-2">
+                <ClienteEstadoCuentaTab ClienteId="@clienteEstadoCuentaId.Value" @key="clienteEstadoCuentaId" />
+            </div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ── Popup: cobrar / aplicar un recibo pendiente ── *@
+@if (abonoACobrar is not null)
+{
+    <DxPopup Visible="true" Width="440px" HeaderText="Cobrar abono pendiente"
+             CloseOnOutsideClick="false" ShowCloseButton="true"
+             OnHiding="@(() => abonoACobrar = null)">
+        <BodyContentTemplate>
+            <div class="p-3">
+                <div class="border border-light bg-light rounded p-3 mb-3 text-start">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">Cliente:</span>
+                        <strong>@abonoACobrar.ClienteClave</strong>
+                    </div>
+                    <div class="d-flex justify-content-between mb-1">
+                        <span class="text-muted">N° Factura:</span>
+                        <strong>@abonoACobrar.NumFactura</strong>
+                    </div>
+                    <div class="d-flex justify-content-between">
+                        <span class="text-muted">Monto a cobrar:</span>
+                        <strong class="text-success">@abonoACobrar.Monto.ToString("C2")</strong>
+                    </div>
+                </div>
+
+                @if (puedePagarEnBanco)
+                {
+                    <label class="form-label small text-muted mb-1">Forma de pago</label>
+                    <DxComboBox TData="string" TValue="string" Data="@formasPago"
+                                @bind-Value="formaPago" AllowUserInput="false" CssClass="w-100 mb-2" />
+
+                    @if (formaPago == "BANCO")
+                    {
+                        <label class="form-label small text-muted mb-1">Cuenta bancaria</label>
+                        <DxComboBox TData="BancoDto" TValue="long?" Data="@bancos"
+                                    ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
+                                    TextFieldName="@nameof(BancoDto.Nombre)"
+                                    @bind-Value="bancoCuentaIdSeleccionado"
+                                    NullText="Selecciona la cuenta bancaria..."
+                                    AllowUserInput="false" CssClass="w-100" />
+                    }
+                }
+                else
+                {
+                    <p class="text-muted small mb-0">
+                        <i class="bi bi-cash me-1"></i>El cobro se registrará en <strong>efectivo</strong>.
+                    </p>
+                }
+            </div>
+        </BodyContentTemplate>
+        <FooterContentTemplate>
+            <div class="d-flex justify-content-end gap-2 w-100">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(!isCobrando)" Click="@(() => abonoACobrar = null)" />
+                <DxButton Text="@(isCobrando ? "Procesando..." : "Confirmar cobro")"
+                          RenderStyle="ButtonRenderStyle.Success" IconCssClass="bi bi-check-circle-fill"
+                          Enabled="@(!isCobrando && FormaPagoValida())" Click="ConfirmarCobroAsync" />
+            </div>
+        </FooterContentTemplate>
+    </DxPopup>
+}
+
+@code {
+    private const string ToastName = "AbonosEspConsultaToast";
+
+    private const string EstPagado = "C";
+    private const string EstNoAplicado = "P";
+    private const string EstAnulado = "A";
+
+    private DxGrid? grid;
+    private AbonosEspecialesConsultaGridDataSource dataSource = default!;
+    private AbonoEspecialResumenDto? resumen;
+
+    private string? EstadoActivo;
+    private string filtroBusqueda = string.Empty;
+    private DateTime? filtroDesde;
+    private DateTime? filtroHasta;
+    private int totalRegistros;
+
+    private string? usuarioActual;
+    private bool puedePagarEnBanco;
+    private List<BancoDto> bancos = new();
+
+    private bool mostrarEstadoCuentaModal;
+    private int? clienteEstadoCuentaId;
+
+    private AbonoEspecialListItemDto? abonoACobrar;
+    private string formaPago = "EFECTIVO";
+    private long? bancoCuentaIdSeleccionado;
+    private bool isCobrando;
+
+    private readonly List<string> formasPago = new() { "EFECTIVO", "BANCO" };
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TenantState.EnsureCompanyAsync();
+        await EstablecerUsuarioAsync();
+
+        dataSource = new AbonosEspecialesConsultaGridDataSource(AbonoClient, total =>
+        {
+            totalRegistros = total;
+            InvokeAsync(StateHasChanged);
+        });
+
+        AplicarFiltrosAlDataSource();
+
+        if (puedePagarEnBanco)
+            await CargarBancosAsync();
+
+        await CargarResumenAsync();
+    }
+
+    private async Task EstablecerUsuarioAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        usuarioActual = authState.User?.Identity?.Name ?? "sistema";
+        puedePagarEnBanco = authState.User?.HasClaim("permission", PermissionNames.Ventas.Caja.AbonoBanco) ?? false;
+    }
+
+    private async Task CargarBancosAsync()
+    {
+        try
+        {
+            bancos = (await CaptacionClient.GetBancosAsync()).ToList();
+        }
+        catch
+        {
+            bancos = new();
+        }
+    }
+
+    // ── Filtros ──
+
+    private void AplicarFiltrosAlDataSource()
+    {
+        dataSource.Estado = EstadoActivo;
+        dataSource.Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda.Trim();
+        dataSource.Desde = filtroDesde.HasValue ? DateOnly.FromDateTime(filtroDesde.Value) : null;
+        dataSource.Hasta = filtroHasta.HasValue ? DateOnly.FromDateTime(filtroHasta.Value) : null;
+    }
+
+    private async Task AplicarFiltrosAsync(bool recargarResumen = true)
+    {
+        AplicarFiltrosAlDataSource();
+        grid?.Reload();
+        if (recargarResumen)
+            await CargarResumenAsync();
+    }
+
+    private Task FiltrarPorEstadoAsync(string? estado)
+    {
+        EstadoActivo = estado;
+        // El resumen no depende del estado; basta con recargar el grid.
+        return AplicarFiltrosAsync(recargarResumen: false);
+    }
+
+    private Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        return AplicarFiltrosAsync();
+    }
+
+    private Task OnDesdeChanged(DateTime? valor)
+    {
+        filtroDesde = valor;
+        return AplicarFiltrosAsync();
+    }
+
+    private Task OnHastaChanged(DateTime? valor)
+    {
+        filtroHasta = valor;
+        return AplicarFiltrosAsync();
+    }
+
+    private Task LimpiarFiltrosAsync()
+    {
+        EstadoActivo = null;
+        filtroBusqueda = string.Empty;
+        filtroDesde = null;
+        filtroHasta = null;
+        return AplicarFiltrosAsync();
+    }
+
+    private Task RecargarAsync() => AplicarFiltrosAsync();
+
+    private async Task CargarResumenAsync()
+    {
+        try
+        {
+            resumen = await AbonoClient.ObtenerResumenAbonosEspecialesAsync(
+                null,
+                string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda.Trim(),
+                filtroDesde.HasValue ? DateOnly.FromDateTime(filtroDesde.Value) : null,
+                filtroHasta.HasValue ? DateOnly.FromDateTime(filtroHasta.Value) : null);
+        }
+        catch
+        {
+            resumen = null;
+        }
+        await InvokeAsync(StateHasChanged);
+    }
+
+    // ── Acciones de fila ──
+
+    private async Task ImprimirReciboAsync(int transaccionId)
+        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{transaccionId}", "_blank");
+
+    private void AbrirEstadoCuenta(AbonoEspecialListItemDto a)
+    {
+        if (a.ClienteId is null)
+        {
+            MostrarToast("Cliente", "No se encontró el cliente para este abono.", ToastRenderStyle.Warning);
+            return;
+        }
+        clienteEstadoCuentaId = a.ClienteId;
+        mostrarEstadoCuentaModal = true;
+    }
+
+    private void IniciarCobro(AbonoEspecialListItemDto a)
+    {
+        abonoACobrar = a;
+        formaPago = "EFECTIVO";
+        bancoCuentaIdSeleccionado = null;
+    }
+
+    private bool FormaPagoValida()
+    {
+        if (formaPago == "BANCO")
+            return bancoCuentaIdSeleccionado.HasValue && bancoCuentaIdSeleccionado > 0;
+        return true;
+    }
+
+    private async Task ConfirmarCobroAsync()
+    {
+        if (abonoACobrar is null) return;
+
+        if (formaPago == "BANCO" && (bancoCuentaIdSeleccionado is null || bancoCuentaIdSeleccionado <= 0))
+        {
+            MostrarToast("Validación", "Selecciona la cuenta bancaria.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        isCobrando = true;
+        try
+        {
+            var banco = bancos.FirstOrDefault(b => b.BancoCuentaId == bancoCuentaIdSeleccionado);
+            var request = new AbonoCrearDto
+            {
+                NumFactura = abonoACobrar.NumFactura,
+                ClienteClave = abonoACobrar.ClienteClave,
+                Monto = abonoACobrar.Monto,
+                FormaPago = formaPago,
+                BancoCuentaId = formaPago == "BANCO" ? bancoCuentaIdSeleccionado : null,
+                Banco = formaPago == "BANCO" ? banco?.Codigo : null,
+                ReciboPendienteId = abonoACobrar.TransaccionId
+            };
+
+            var response = await AbonoClient.RegistrarAbonoAsync(request);
+            if (response?.Success == true)
+            {
+                MostrarToast("Cobro aplicado", "El abono pendiente fue cobrado y aplicado a la factura.", ToastRenderStyle.Success);
+                abonoACobrar = null;
+                await AplicarFiltrosAsync();
+            }
+            else
+            {
+                MostrarToast("Error", response?.Message ?? "No se pudo procesar el cobro.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Error", $"No se pudo procesar el cobro: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isCobrando = false;
+        }
+    }
+
+    // ── Toolbar / layout ──
+
+    private void IrARegistrar() => Navigation.NavigateTo("/facturacion/captacion/abonos-especiales");
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private const string GridLayoutStorageKey = "abonos-especiales-consulta-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    // ── Helpers de presentación ──
+
+    private static string FormatMonto(decimal? monto)
+        => monto.HasValue ? monto.Value.ToString("C2") : "—";
+
+    private static string FormatPeriodo(string? periodo)
+    {
+        if (string.IsNullOrWhiteSpace(periodo)) return "—";
+        var p = periodo.Trim();
+        return p.Length == 6 ? $"{p[..4]}/{p[4..]}" : p;
+    }
+
+    private static string EstadoBadgeClass(string? estado) => estado switch
+    {
+        EstPagado => "ae-badge-pagado",
+        EstNoAplicado => "ae-badge-pendiente",
+        EstAnulado => "ae-badge-anulado",
+        _ => "ae-badge-neutral"
+    };
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+}

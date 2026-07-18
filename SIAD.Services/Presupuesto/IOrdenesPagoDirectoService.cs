@@ -25,6 +25,15 @@ public interface IOrdenesPagoDirectoService
         int numeroOrden,
         CancellationToken ct = default);
 
+    Task<OrdenPagoDirectoImpresionDto?> GetDatosImpresionAsync(
+        int numeroOrden,
+        CancellationToken ct = default);
+
+    Task<CompromisoAbonoImpresionDto?> GetDatosImpresionAbonoAsync(
+        int numeroOrden,
+        int numeroAbono,
+        CancellationToken ct = default);
+
     Task<OrdenPagoDirectoOperacionResultadoDto> CreateAsync(
         OrdenPagoDirectoUpsertDto dto,
         CancellationToken ct = default);
@@ -46,5 +55,20 @@ public interface IOrdenesPagoDirectoService
     Task<OrdenPagoDirectoOperacionResultadoDto> MarkAsProcessedAsync(
         int numeroOrden,
         ProcesarOrdenPagoDirectoDto dto,
+        CancellationToken ct = default);
+
+    Task<CompromisoSaldoDto?> GetSaldoConAbonosAsync(
+        int numeroOrden,
+        CancellationToken ct = default);
+
+    Task<AbonoCompromisoResultadoDto> RegistrarAbonoAsync(
+        int numeroOrden,
+        AbonoCompromisoUpsertDto dto,
+        CancellationToken ct = default);
+
+    Task<AbonoCompromisoResultadoDto> AnularAbonoAsync(
+        int numeroOrden,
+        int numeroAbono,
+        AnularOrdenPagoDirectoDto dto,
         CancellationToken ct = default);
 }

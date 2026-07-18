@@ -2,6 +2,7 @@
 @attribute [Authorize(Policy = PermissionNames.Bancos.View)]
 
 @using apc.Client.Services.Bancos
+@using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Tenant
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Components.Forms
@@ -13,6 +14,7 @@
 @inject BancoConfiguracionClient BancoConfigClient
 @inject BanMonedasClient MonedasClient
 @inject TenantState TenantState
+@inject AccountFormatState AccountFormat
 @inject NavigationManager NavigationManager
 
 @implements IDisposable
@@ -412,6 +414,7 @@
                 return;
             }
 
+            await AccountFormat.EnsureLoadedAsync(loadCts.Token);
             await LoadBancoConfiguracionAsync(companyId, loadCts.Token);
             await LoadMonedasAsync(companyId, loadCts.Token);
 
@@ -709,12 +712,12 @@
         var nombre = cuenta.CuentaContableNombre?.Trim();
         if (!string.IsNullOrWhiteSpace(codigo) && !string.IsNullOrWhiteSpace(nombre))
         {
-            return AccountCodeFormatter.FormatDisplay(codigo, nombre);
+            return AccountFormat.FormatDisplay(codigo, nombre);
         }
 
         if (!string.IsNullOrWhiteSpace(codigo))
         {
-            return AccountCodeFormatter.Format(codigo);
+            return AccountFormat.Format(codigo);
         }
 
         if (!string.IsNullOrWhiteSpace(nombre))
@@ -724,7 +727,7 @@
 
         if (!string.IsNullOrWhiteSpace(cuenta.CtaConc) && cuenta.CtaConc != "0")
         {
-            return AccountCodeFormatter.Format(cuenta.CtaConc);
+            return AccountFormat.Format(cuenta.CtaConc);
         }
 
         return "--";

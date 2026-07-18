@@ -609,7 +609,7 @@ namespace SIAD.Reports
             // 
             // sqlDataSource1
             // 
-            this.sqlDataSource1.ConnectionName = "Connection_SIAD";
+            this.sqlDataSource1.ConnectionName = "DefaultConnection";
             this.sqlDataSource1.Name = "sqlDataSource1";
             customSqlQuery4.Name = "Query";
             queryParameter7.Name = "CompaniaID";

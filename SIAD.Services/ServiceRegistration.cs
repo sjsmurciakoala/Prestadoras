@@ -27,6 +27,7 @@ using SIAD.Services.Caja;
 using SIAD.Services.AppLectores;
 using SIAD.Services.Tarifario;
 using SIAD.Services.Presupuesto;
+using SIAD.Services.Auditoria;
 
 namespace SIAD.Services;
 
@@ -83,6 +84,7 @@ public static class ServiceRegistration
         services.AddScoped<ICompanyManagementService, CompanyManagementService>();
         services.AddScoped<IPeriodoContableService, PeriodoContableService>();
         services.AddScoped<IConfiguracionSistemaService, ConfiguracionSistemaService>();
+        services.AddScoped<IAccountFormatService, AccountFormatService>();
         services.AddScoped<IIntegracionContableService, IntegracionContableService>();
         services.AddScoped<ILoteFacturacionService, LoteFacturacionService>();
         services.AddScoped<PeriodosComerciales.IPeriodoComercialService, PeriodosComerciales.PeriodoComercialService>();
@@ -114,7 +116,6 @@ public static class ServiceRegistration
         services.AddScoped<IBodegaService, BodegaService>();
         services.AddScoped<IArticuloUbicacionService, ArticuloUbicacionService>();
         services.AddScoped<IArticuloProveedorService, ArticuloProveedorService>();
-        services.AddScoped<ILineaService, LineaService>();
         services.AddScoped<IGrupoService, GrupoService>();
 
         // ciclos
@@ -155,6 +156,15 @@ public static class ServiceRegistration
         services.AddScoped<CaiTarifarioService>();
         services.AddScoped<ICaiTarifarioService, CaiTarifarioService>();
         services.AddScoped<ITarifarioConflictoService, TarifarioConflictoService>();
+        services.AddScoped<IDesgloseAbonoConfigService, DesgloseAbonoConfigService>();
+
+        // auditoría / bitácora de maestros
+        services.AddMemoryCache();
+        services.AddScoped<ICurrentUserAudit, SystemUserAudit>();          // fallback; apc lo reemplaza
+        services.AddScoped<IAuditConfigProvider, AuditConfigProvider>();
+        services.AddScoped<IBitacoraMaestrosService, BitacoraMaestrosService>();
+        services.AddScoped<IAuditoriaConfigService, AuditoriaConfigService>();
+        services.AddScoped<IBitacoraMaestrosWriter, BitacoraMaestrosWriter>();
 
         return services;
     }

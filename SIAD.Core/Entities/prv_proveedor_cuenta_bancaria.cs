@@ -12,6 +12,8 @@ public partial class prv_proveedor_cuenta_bancaria
 
     public string cuenta_bancaria { get; set; } = null!;
 
+    public string? tipo_cuenta { get; set; }
+
     public int orden { get; set; }
 
     public DateTime fecha_creacion { get; set; }

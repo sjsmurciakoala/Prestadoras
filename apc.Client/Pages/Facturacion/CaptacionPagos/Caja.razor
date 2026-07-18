@@ -5,14 +5,14 @@
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 
-<PageTitle>SIAD - Caja</PageTitle>
+<PageTitle>SIAD - Captación de Pagos</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="@ToastName" MaxToastCount="4" />
 
     <div class="header-section">
         <div>
-            <h2 class="page-title">Captación en Caja</h2>
+            <h2 class="page-title">Captación de Pagos</h2>
             <p class="page-subtitle">Registro y consulta de pagos</p>
         </div>
     </div>
@@ -41,15 +41,6 @@
                 <DxTabPage Text="Manual">
                     <div class="p-3">
                         <PosteoManual Bancos="@bancos" Clientes="@clientes" UsuarioActual="@usuarioActual" PeriodoActual="@periodoActual" />
-                    </div>
-                </DxTabPage>
-                <DxTabPage Text="Abonos Especiales">
-                    <div class="p-3">
-                        <PosteoAbonos Bancos="@bancos"
-                                      Clientes="@clientes"
-                                      UsuarioActual="@usuarioActual"
-                                      PuedePagarEnBanco="@puedePagarEnBanco"
-                                      PeriodoActual="@periodoActual" />
                     </div>
                 </DxTabPage>
             </DxTabs>
@@ -171,7 +162,6 @@
     private int totalArqueos;
 
     private string? usuarioActual;
-    private bool puedePagarEnBanco;
     private bool buscandoArqueos;
     private int tabActual = 2; // Inicia en tab Manual
 
@@ -202,7 +192,6 @@
     {
         var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         usuarioActual = authState.User?.Identity?.Name ?? "sistema";
-        puedePagarEnBanco = authState.User?.HasClaim("permission", PermissionNames.Ventas.Caja.AbonoBanco) ?? false;
     }
 
     private async Task CargarCajasAsync()

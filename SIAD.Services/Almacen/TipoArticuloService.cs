@@ -90,7 +90,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
     {
         ArgumentNullException.ThrowIfNull(dto);
         var codigo = ClasificacionNormalizer.Requerido(dto.Codigo, 10, "código", mayus: true);
-        var nombre = ClasificacionNormalizer.Requerido(dto.Nombre, 60, "nombre");
+        var nombre = ClasificacionNormalizer.Requerido(dto.Nombre, 100, "nombre");
 
         if (await _context.alm_tipo_articulos.AsNoTracking().AnyAsync(t => t.codigo == codigo, ct))
         {
@@ -102,11 +102,11 @@ public sealed class TipoArticuloService : ITipoArticuloService
             codigo = codigo,
             nombre = nombre,
             descripcion = ClasificacionNormalizer.Opcional(dto.Descripcion, 200),
-            cuenta_inventario = ClasificacionNormalizer.Opcional(dto.CuentaInventario, 20),
-            cuenta_costo_ventas = ClasificacionNormalizer.Opcional(dto.CuentaCostoVentas, 20),
-            cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 20),
-            cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 20),
-            cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 20),
+            cuenta_inventario = ClasificacionNormalizer.Opcional(dto.CuentaInventario, 25),
+            cuenta_costo_ventas = ClasificacionNormalizer.Opcional(dto.CuentaCostoVentas, 25),
+            cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 25),
+            cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 25),
+            cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 25),
             maneja_inventario = dto.ManejaInventario,
             activo = dto.Activo,
             usuariocreacion = ClasificacionNormalizer.Usuario(user),
@@ -127,7 +127,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
                      ?? throw new KeyNotFoundException("El tipo de artículo no existe.");
 
         var codigo = ClasificacionNormalizer.Requerido(dto.Codigo, 10, "código", mayus: true);
-        var nombre = ClasificacionNormalizer.Requerido(dto.Nombre, 60, "nombre");
+        var nombre = ClasificacionNormalizer.Requerido(dto.Nombre, 100, "nombre");
 
         if (await _context.alm_tipo_articulos.AsNoTracking().AnyAsync(t => t.codigo == codigo && t.id != id, ct))
         {
@@ -137,11 +137,11 @@ public sealed class TipoArticuloService : ITipoArticuloService
         entity.codigo = codigo;
         entity.nombre = nombre;
         entity.descripcion = ClasificacionNormalizer.Opcional(dto.Descripcion, 200);
-        entity.cuenta_inventario = ClasificacionNormalizer.Opcional(dto.CuentaInventario, 20);
-        entity.cuenta_costo_ventas = ClasificacionNormalizer.Opcional(dto.CuentaCostoVentas, 20);
-        entity.cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 20);
-        entity.cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 20);
-        entity.cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 20);
+        entity.cuenta_inventario = ClasificacionNormalizer.Opcional(dto.CuentaInventario, 25);
+        entity.cuenta_costo_ventas = ClasificacionNormalizer.Opcional(dto.CuentaCostoVentas, 25);
+        entity.cuenta_ventas = ClasificacionNormalizer.Opcional(dto.CuentaVentas, 25);
+        entity.cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 25);
+        entity.cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 25);
         entity.maneja_inventario = dto.ManejaInventario;
         entity.activo = dto.Activo;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);

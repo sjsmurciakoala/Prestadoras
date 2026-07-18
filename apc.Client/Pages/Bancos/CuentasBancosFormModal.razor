@@ -1,6 +1,9 @@
 @using System.Collections.Generic
+@using apc.Client.Services.Contabilidad
 @using SIAD.Core.DTOs.Bancos
 @using SIAD.Core.DTOs.Contabilidad
+
+@inject AccountFormatState AccountFormat
 
 @if (Visible)
 {
@@ -103,7 +106,7 @@
                             }
                             else
                             {
-                                <DxTextBox Text="@AccountCodeFormatter.Format(EditModel.CtaConc)"
+                                <DxTextBox Text="@AccountFormat.Format(EditModel.CtaConc)"
                                            TextChanged="@OnCuentaConcChanged"
                                            TextExpression="@(() => EditModel.CtaConc)"
                                            NullText="Ingrese cuenta contable"
@@ -157,9 +160,14 @@
     [Parameter] public EventCallback OnSave { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
 
+    protected override async Task OnInitializedAsync()
+    {
+        await AccountFormat.EnsureLoadedAsync();
+    }
+
     private void OnCuentaConcChanged(string? value)
     {
-        EditModel.CtaConc = AccountCodeFormatter.Normalize(value);
+        EditModel.CtaConc = AccountFormat.Normalize(value);
     }
 
     private async Task OnVisibleChanged(bool value)

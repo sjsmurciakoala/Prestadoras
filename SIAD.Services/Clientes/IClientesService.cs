@@ -17,6 +17,7 @@ public interface IClientesService
     Task<PagedResult<ClienteListItemDto>> SearchClientesPagedAsync(string? search, bool soloActivos, int skip, int take, string? sortField, bool sortDesc, CancellationToken cancellationToken = default);
 
     Task<ClienteEstadoCuentaDto> GetEstadoCuentaAsync(int clienteId, CancellationToken ct = default);
+    Task<IReadOnlyList<SaldoServicioDto>> GetDesglosePorServicioAsync(string clienteClave, CancellationToken ct = default);
     Task<IReadOnlyList<ClienteMovimientoDto>> GetMovimientosAsync(int clienteId, CancellationToken ct = default);
     Task<PagedResult<ClienteMovimientoDto>> GetMovimientosPagedAsync(int clienteId, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default);
     Task<ClienteHistoricoConsumoResponseDto> GetHistoricoConsumoAsync(int clienteId, DateTime desde, DateTime hasta, CancellationToken ct = default);

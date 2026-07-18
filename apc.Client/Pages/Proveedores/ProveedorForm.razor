@@ -1,3 +1,4 @@
+@using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Proveedores
 @using SIAD.Core.DTOs.Contabilidad
 @using DevExpress.Blazor
@@ -124,6 +125,21 @@
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorCuentaBancariaDto.TipoCuenta)" Caption="Tipo" Width="150px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorCuentaBancariaDto item)
+                                {
+                                    <DxComboBox Data="@TiposCuenta"
+                                                TData="string"
+                                                TValue="string"
+                                                @bind-Value="item.TipoCuenta"
+                                                NullText="Seleccione tipo"
+                                                DropDownStyle="DropDownStyle.DropDownList"
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
                         <DxGridDataColumn Caption="" Width="80px">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is ProveedorCuentaBancariaDto item)
@@ -190,6 +206,8 @@
 
     [Parameter]
     public bool IsEdit { get; set; }
+
+    private static IReadOnlyList<string> TiposCuenta => ProveedoresConstants.TiposCuentaBancaria;
 
     private IReadOnlyList<ProveedorTipoLookupDto> TiposConPlaceholder =>
         new[] { new ProveedorTipoLookupDto(0, "Seleccionar tipo") }

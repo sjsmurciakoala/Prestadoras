@@ -48,9 +48,12 @@ public sealed class SaldoCrossCompanyTests : IntegrationTestBase
             ON CONFLICT (company_id) DO NOTHING",
             new { id = EmpresaOtraId }, Transaction));
 
+        // debitos y saldo llevan el mismo valor: la firma de 2 args suma
+        // (debitos - creditos) de los vigentes (fix vigencia 2026-07-16) y la de
+        // 1 arg (deprecated) sigue leyendo la columna saldo del último movimiento.
         await Connection.ExecuteAsync(new CommandDefinition(@"
-            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, saldo, estado, estado_id)
-            VALUES (@id, @clave, @saldo, 'A', 1)",
+            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, debitos, saldo, estado, estado_id)
+            VALUES (@id, @clave, @saldo, @saldo, 'A', 1)",
             new { id = EmpresaOtraId, clave, saldo = SaldoOtra }, Transaction));
     }
 

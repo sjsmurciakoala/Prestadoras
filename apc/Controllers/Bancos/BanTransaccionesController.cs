@@ -22,13 +22,16 @@ public sealed class BanTransaccionesController : ControllerBase
 {
     private readonly IBanTransaccionesService transaccionesService;
     private readonly ICurrentCompanyService currentCompanyService;
+    private readonly IConfiguration configuration;
 
     public BanTransaccionesController(
         IBanTransaccionesService transaccionesService,
-        ICurrentCompanyService currentCompanyService)
+        ICurrentCompanyService currentCompanyService,
+        IConfiguration configuration)
     {
         this.transaccionesService = transaccionesService;
         this.currentCompanyService = currentCompanyService;
+        this.configuration = configuration;
     }
 
     [HttpGet]
@@ -219,6 +222,7 @@ public sealed class BanTransaccionesController : ControllerBase
             }
 
             var reporte = new Rpt_DE_Transacciones_Bancarias();
+            ReportingRuntimeBootstrap.ConfigureSqlDataSources(reporte, configuration);
             reporte.RequestParameters = false;
             reporte.Parameters["id_compani"].Value = (int)companyId;
             reporte.Parameters["id_compani"].Visible = false;
@@ -283,6 +287,7 @@ public sealed class BanTransaccionesController : ControllerBase
             }
 
             var reporte = new Rpt_Dev_Lista_Transacciones_Bancarias();
+            ReportingRuntimeBootstrap.ConfigureSqlDataSources(reporte, configuration);
             reporte.RequestParameters = false;
             reporte.Parameters["p_Compania_ID"].Value = (int)companyId;
             reporte.Parameters["p_Compania_ID"].Visible = false;

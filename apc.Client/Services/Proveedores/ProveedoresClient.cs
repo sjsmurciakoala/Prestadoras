@@ -1,5 +1,6 @@
 ﻿using System.Net.Http.Json;
 using System.Text.Json;
+using apc.Client.Services.Contabilidad;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.DTOs.Proveedores;
 
@@ -11,8 +12,13 @@ namespace apc.Client.Services.Proveedores;
 public sealed class ProveedoresClient
 {
     private readonly HttpClient http;
+    private readonly AccountFormatState accountFormat;
 
-    public ProveedoresClient(HttpClient http) => this.http = http;
+    public ProveedoresClient(HttpClient http, AccountFormatState accountFormat)
+    {
+        this.http = http;
+        this.accountFormat = accountFormat;
+    }
 
     public async Task<ProveedorListItemDto[]> BuscarAsync(ProveedorFilterDto filtro, CancellationToken ct = default)
     {
@@ -84,6 +90,8 @@ public sealed class ProveedoresClient
         var cuentas = await http.GetFromJsonAsyncWithAuthCheck<PlanCuentaDto[]>("api/contabilidad/catalogos/plan-cuentas", ct)
             ?? Array.Empty<PlanCuentaDto>();
 
+        await accountFormat.EnsureLoadedAsync(ct);
+
         return cuentas
             .Where(c => c.AllowsPosting
                 && (string.IsNullOrWhiteSpace(c.Status)
@@ -94,7 +102,8 @@ public sealed class ProveedoresClient
             {
                 AccountId = c.AccountId,
                 Code = c.Code ?? string.Empty,
-                Description = c.Name ?? string.Empty
+                Description = c.Name ?? string.Empty,
+                DisplayText = accountFormat.FormatDisplay(c.Code, c.Name)
             })
             .ToArray();
     }

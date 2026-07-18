@@ -1035,6 +1035,9 @@ public partial class SiadDbContext
 
         // Generador del código de cliente por empresa (2026-07-16)
         ConfigureCodigoClienteModel(modelBuilder);
+
+        // Bitácora de maestros Fase 1 (2026-07-17)
+        ConfigureAuditoriaModel(modelBuilder);
     }
 }
 

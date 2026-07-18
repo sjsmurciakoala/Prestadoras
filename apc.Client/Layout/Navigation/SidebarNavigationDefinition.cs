@@ -108,6 +108,7 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "tarv3-cuadros", Text = "Cuadros tarifarios", NavigateUrl = "/tarifario/cuadros", MatchPrefixes = ["/tarifario/cuadros"], IconCssClass = "bi bi-table" },
                         new SidebarNavItem { Id = "tarv3-cliente-servicio", Text = "Cliente servicio", NavigateUrl = "/tarifario/cliente-servicio-v3", MatchPrefixes = ["/tarifario/cliente-servicio-v3"], IconCssClass = "bi bi-diagram-3" },
                         new SidebarNavItem { Id = "tarv3-maestro-servicios", Text = "Maestro servicios", NavigateUrl = "/tarifario/maestro-servicios-v3", MatchPrefixes = ["/tarifario/maestro-servicios-v3"], IconCssClass = "bi bi-list-ul" },
+                        new SidebarNavItem { Id = "tarv3-desglose-abonos", Text = "Distribución de abonos", NavigateUrl = "/tarifario/desglose-abonos", MatchPrefixes = ["/tarifario/desglose-abonos"], IconCssClass = "bi bi-percent" },
                         new SidebarNavItem { Id = "tarv3-cai-offline", Text = "CAI offline", NavigateUrl = "/tarifario/cai-offline", MatchPrefixes = ["/tarifario/cai-offline"], IconCssClass = "bi bi-upc-scan" },
                         new SidebarNavItem { Id = "tarv3-conflictos", Text = "Conflictos", NavigateUrl = "/tarifario/conflictos-v3", MatchPrefixes = ["/tarifario/conflictos-v3"], IconCssClass = "bi bi-exclamation-diamond" }
                     ]
@@ -119,6 +120,23 @@ public static class SidebarNavigationDefinition
                     IconCssClass = "bi bi-chat-left-text",
                     NavigateUrl = "/solicitudes",
                     MatchPrefixes = ["/solicitudes"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "oper-mantenimiento",
+                    Text = "Mantenimiento",
+                    IconCssClass = "bi bi-tools",
+                    MatchPrefixes = ["/mantenimientos"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "mant-recargo-mora", Text = "Recargo por mora", NavigateUrl = "/mantenimientos/recargo-mora", MatchPrefixes = ["/mantenimientos/recargo-mora"], IconCssClass = "bi bi-clock-history" },
+                        new SidebarNavItem { Id = "mant-ajustes-tarifarios", Text = "Ajustes tarifarios", NavigateUrl = "/mantenimientos/ajustes-tarifarios", MatchPrefixes = ["/mantenimientos/ajustes-tarifarios"], IconCssClass = "bi bi-percent" },
+                        new SidebarNavItem { Id = "mant-impuestos", Text = "Impuestos", NavigateUrl = "/mantenimientos/impuestos", MatchPrefixes = ["/mantenimientos/impuestos"], IconCssClass = "bi bi-receipt" },
+                        new SidebarNavItem { Id = "mant-barrios", Text = "Barrios", NavigateUrl = "/mantenimientos/barrios", MatchPrefixes = ["/mantenimientos/barrios"], IconCssClass = "bi bi-map-fill" },
+                        new SidebarNavItem { Id = "mant-clases-medidor", Text = "Clases de medidor", NavigateUrl = "/mantenimientos/clases-medidor", MatchPrefixes = ["/mantenimientos/clases-medidor"], IconCssClass = "bi bi-speedometer" },
+                        new SidebarNavItem { Id = "mant-acciones-cobranza", Text = "Acciones de cobranza", NavigateUrl = "/mantenimientos/acciones-cobranza", MatchPrefixes = ["/mantenimientos/acciones-cobranza"], IconCssClass = "bi bi-journal-check" },
+                        new SidebarNavItem { Id = "mant-observaciones-cobranza", Text = "Observaciones cobranza", NavigateUrl = "/mantenimientos/observaciones-cobranza", MatchPrefixes = ["/mantenimientos/observaciones-cobranza"], IconCssClass = "bi bi-chat-square-text" }
+                    ]
                 }
             ]
         },
@@ -205,10 +223,12 @@ public static class SidebarNavigationDefinition
                     Id = "fact-servicios",
                     Text = "Servicios públicos",
                     IconCssClass = "bi bi-lightning-charge",
-                    MatchPrefixes = ["/facturacion/captacion/caja", "/facturacion/miscelaneos", "/facturacion/miscelaneos/catalogo", "/facturacion/miscelaneos/consulta"],
+                    MatchPrefixes = ["/facturacion/captacion/caja", "/facturacion/captacion/abonos-especiales", "/facturacion/miscelaneos", "/facturacion/miscelaneos/catalogo", "/facturacion/miscelaneos/consulta"],
                     Children =
                     [
                         new SidebarNavItem { Id = "fact-captacion", Text = "Captación de Pagos", NavigateUrl = "/facturacion/captacion/caja", MatchPrefixes = ["/facturacion/captacion/caja"], IconCssClass = "bi bi-bag-check" },
+                        new SidebarNavItem { Id = "fact-abonos-especiales", Text = "Abonos Especiales", NavigateUrl = "/facturacion/captacion/abonos-especiales", MatchPrefixes = ["/facturacion/captacion/abonos-especiales"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
+                        new SidebarNavItem { Id = "fact-abonos-especiales-consulta", Text = "Consultar abonos especiales", NavigateUrl = "/facturacion/captacion/abonos-especiales/consulta", MatchPrefixes = ["/facturacion/captacion/abonos-especiales/consulta"], IconCssClass = "bi bi-search" },
                         new SidebarNavItem
                         {
                             Id = "fact-miscelaneos-group",
@@ -350,22 +370,6 @@ public static class SidebarNavigationDefinition
             [
                 new SidebarNavItem
                 {
-                    Id = "mant-recargo-mora",
-                    Text = "Recargo por mora",
-                    IconCssClass = "bi bi-clock-history",
-                    NavigateUrl = "/mantenimientos/recargo-mora",
-                    MatchPrefixes = ["/mantenimientos/recargo-mora"]
-                },
-                new SidebarNavItem
-                {
-                    Id = "mant-ajustes-tarifarios",
-                    Text = "Ajustes tarifarios",
-                    IconCssClass = "bi bi-percent",
-                    NavigateUrl = "/mantenimientos/ajustes-tarifarios",
-                    MatchPrefixes = ["/mantenimientos/ajustes-tarifarios"]
-                },
-                new SidebarNavItem
-                {
                     Id = "mant-motivos-notas",
                     Text = "Motivos de Notas C/D",
                     IconCssClass = "bi bi-tags",
@@ -493,6 +497,23 @@ public static class SidebarNavigationDefinition
             ]
         },
 
+        // ===== AUDITORÍA =====
+        new SidebarNavSection
+        {
+            Label = "Auditoría",
+            Items =
+            [
+                new SidebarNavItem
+                {
+                    Id = "auditoria-bitacora-maestros",
+                    Text = "Bitácora de maestros",
+                    IconCssClass = "bi bi-clock-history",
+                    NavigateUrl = "/auditoria/bitacora-maestros",
+                    MatchPrefixes = ["/auditoria/bitacora-maestros"]
+                }
+            ]
+        },
+
         // ===== CONFIGURACIÓN =====
         new SidebarNavSection
         {
@@ -506,6 +527,14 @@ public static class SidebarNavigationDefinition
                     IconCssClass = "bi bi-phone",
                     NavigateUrl = "/mi-app/usuarios",
                     MatchPrefixes = ["/mi-app/usuarios"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "app-facturas",
+                    Text = "Facturas App",
+                    IconCssClass = "bi bi-receipt",
+                    NavigateUrl = "/mi-app/facturas",
+                    MatchPrefixes = ["/mi-app/facturas"]
                 },
                 new SidebarNavItem
                 {
@@ -564,6 +593,14 @@ public static class SidebarNavigationDefinition
                     IconCssClass = "bi bi-shield-check",
                     NavigateUrl = "/parametros/roles",
                     MatchPrefixes = ["/parametros/roles"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "auditoria-config",
+                    Text = "Configuración de auditoría",
+                    IconCssClass = "bi bi-sliders",
+                    NavigateUrl = "/auditoria/configuracion",
+                    MatchPrefixes = ["/auditoria/configuracion"]
                 }
             ]
         }

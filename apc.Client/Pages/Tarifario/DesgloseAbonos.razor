@@ -1,0 +1,221 @@
+@page "/tarifario/desglose-abonos"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using SIAD.Core.DTOs.Tarifario
+@using apc.Client.Services
+@using apc.Client.Services.Tarifario
+
+@inject DesgloseAbonoConfigClient Client
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Distribución de abonos</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="DesgloseAbonosToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Distribución de abonos</h2>
+            <p class="page-subtitle">Porcentaje con que un abono se reparte entre los ítems del desglose por servicio del estado de cuenta.</p>
+        </div>
+        <DxButton Text="Guardar"
+                  IconCssClass="bi bi-save"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Enabled="@PuedeGuardar"
+                  Click="GuardarAsync" />
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="alert @(SumaValida ? "alert-info" : "alert-warning") d-flex align-items-center gap-2 mb-3">
+            <i class="bi @(SumaValida ? "bi-info-circle" : "bi-exclamation-triangle")"></i>
+            <div>
+                Los porcentajes deben sumar exactamente <strong>100.00%</strong> (o dejarse todos en 0 para
+                desactivar la distribución y mantener la fila "Pagos y ajustes").
+                Suma actual: <strong>@SumaTotal.ToString("N2")%</strong>.
+            </div>
+        </div>
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid"
+                    Data="@items"
+                    KeyFieldName="@nameof(DesgloseAbonoItemDto.ItemCodigo)"
+                    PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false"
+                    CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxButton Text="Recargar"
+                                  IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="CargarAsync" />
+
+                        <DxButton Text="Columnas"
+                                  IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                  Click="MostrarColumnChooser"
+                                  CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Ítems: <span class="fw-bold">@((items?.Count ?? 0).ToString("N0"))</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(DesgloseAbonoItemDto.ItemNombre)"
+                                      Caption="Ítem"
+                                      MinWidth="220" />
+
+                    <DxGridDataColumn FieldName="@nameof(DesgloseAbonoItemDto.ItemCodigo)"
+                                      Caption="Código"
+                                      Width="200px" />
+
+                    <DxGridDataColumn FieldName="@nameof(DesgloseAbonoItemDto.EsServicioCatalogo)"
+                                      Caption="Tipo"
+                                      Width="140px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DesgloseAbonoItemDto item)
+                            {
+                                @if (item.EsServicioCatalogo)
+                                {
+                                    <span class="badge-status active">SERVICIO</span>
+                                }
+                                else
+                                {
+                                    <span class="badge-status inactive">ESPECIAL</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(DesgloseAbonoItemDto.Porcentaje)"
+                                      Caption="Porcentaje (%)"
+                                      Width="180px"
+                                      TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is DesgloseAbonoItemDto item)
+                            {
+                                <DxSpinEdit Value="@item.Porcentaje"
+                                            ValueChanged="@((decimal v) => CambiarPorcentaje(item, v))"
+                                            Min="0" Max="100"
+                                            Increment="0.5m"
+                                            DisplayFormat="N2"
+                                            Enabled="!guardando" />
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay servicios activos en el catálogo de la empresa.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@code {
+    private DxGrid? grid;
+    private List<DesgloseAbonoItemDto>? items;
+    private bool isLoading = true;
+    private bool guardando;
+
+    private const string GridLayoutStorageKey = "tarifario-desglose-abonos-grid-layout";
+
+    private decimal SumaTotal => items?.Sum(i => i.Porcentaje) ?? 0m;
+    private bool SumaValida => SumaTotal == 100m || SumaTotal == 0m;
+    private bool PuedeGuardar => !isLoading && !guardando && SumaValida && items is { Count: > 0 };
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        try
+        {
+            items = (await Client.ObtenerAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Distribución de abonos", $"Error al cargar la configuración: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void CambiarPorcentaje(DesgloseAbonoItemDto item, decimal valor)
+    {
+        item.Porcentaje = valor;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (items is null || guardando)
+        {
+            return;
+        }
+
+        guardando = true;
+        try
+        {
+            var dto = new DesgloseAbonoGuardarDto
+            {
+                Items = items
+                    .Select(i => new DesgloseAbonoItemGuardarDto { ItemCodigo = i.ItemCodigo, Porcentaje = i.Porcentaje })
+                    .ToList()
+            };
+
+            var respuesta = await Client.GuardarAsync(dto);
+            if (respuesta?.Success == true)
+            {
+                MostrarToast("Distribución de abonos", respuesta.Message, ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+            else
+            {
+                MostrarToast("Distribución de abonos", respuesta?.Message ?? "No se pudo guardar la configuración.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Distribución de abonos", $"Error al guardar: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "DesgloseAbonosToast",
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+}

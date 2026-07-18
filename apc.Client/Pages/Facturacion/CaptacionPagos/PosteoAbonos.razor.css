@@ -197,14 +197,20 @@
 /* ── Tarjeta de factura seleccionada ── */
 .ab-invoice-card {
     display: flex;
-    align-items: center;
-    gap: 1rem;
+    flex-direction: column;
+    gap: 0.9rem;
     background: #eef4fd;
     border: 1px solid #c6dcf6;
     border-left: 4px solid #1c63b8;
     border-radius: 12px;
     padding: 1rem 1.25rem;
     margin-bottom: 1.5rem;
+}
+
+.ab-invoice-top {
+    display: flex;
+    align-items: flex-start;
+    gap: 1rem;
 }
 
 .ab-invoice-info {
@@ -227,25 +233,59 @@
     margin-top: 0.2rem;
 }
 
+/* Dos saldos lado a lado: factura (destino del abono) y cliente (referencia) */
+.ab-invoice-saldos {
+    display: flex;
+    gap: 0.75rem;
+    flex-wrap: wrap;
+}
+
 .ab-invoice-saldo {
-    text-align: right;
-    flex-shrink: 0;
+    flex: 1 1 200px;
+    background: #fff;
+    border: 1px solid #d6e4f5;
+    border-radius: 10px;
+    padding: 0.65rem 0.9rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.ab-invoice-saldo--factura {
+    border-color: #bfe3cf;
+    background: #f4fbf7;
 }
 
 .ab-invoice-saldo-label {
-    display: block;
     color: #1c63b8;
-    font-size: 0.78rem;
+    font-size: 0.76rem;
     text-transform: uppercase;
     letter-spacing: 0.03em;
+    font-weight: 600;
+}
+
+.ab-invoice-saldo--factura .ab-invoice-saldo-label {
+    color: #1f8a55;
 }
 
 .ab-invoice-saldo-val {
-    display: block;
-    font-size: 1.7rem;
+    font-size: 1.55rem;
     font-weight: 800;
+    line-height: 1.15;
+    color: #16447f;
+}
+
+.ab-invoice-saldo--factura .ab-invoice-saldo-val {
     color: #1f8a55;
-    line-height: 1.1;
+}
+
+.ab-invoice-saldo-hint {
+    color: #8a929b;
+    font-size: 0.74rem;
+}
+
+.ab-invoice-saldo--factura .ab-invoice-saldo-hint {
+    color: #2c8a5f;
 }
 
 .ab-invoice-change {
@@ -270,40 +310,18 @@
     margin-bottom: 1rem;
 }
 
-.ab-option {
+/* ── Pestañas de proceso de pago ── */
+.ab-tabs {
+    margin-bottom: 0;
+}
+
+/* Panel bajo la barra de pestañas: recupera el marco tipo tarjeta */
+.ab-tab-body {
     background: #fff;
     border: 1px solid #e6e9ed;
-    border-radius: 12px;
+    border-top: none;
+    border-radius: 0 0 12px 12px;
     padding: 1.25rem;
-    transition: opacity 0.15s;
-}
-
-.ab-option.is-disabled {
-    opacity: 0.55;
-    pointer-events: none;
-}
-
-.ab-option-head {
-    display: flex;
-    align-items: center;
-    gap: 0.6rem;
-    margin-bottom: 1rem;
-}
-
-.ab-option-tag {
-    background: #e3effb;
-    color: #1c63b8;
-    font-size: 0.72rem;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 0.04em;
-    padding: 0.2rem 0.55rem;
-    border-radius: 6px;
-}
-
-.ab-option-title {
-    font-weight: 700;
-    color: #2c3e50;
 }
 
 .ab-option-empty {
@@ -382,30 +400,7 @@
     font-weight: 600;
 }
 
-/* ── Separador "o" ── */
-.ab-or {
-    display: flex;
-    align-items: center;
-    text-align: center;
-    color: #b3bac2;
-    margin: 1rem 0;
-}
-
-.ab-or::before,
-.ab-or::after {
-    content: "";
-    flex: 1;
-    height: 1px;
-    background: #e6e9ed;
-}
-
-.ab-or span {
-    padding: 0 0.9rem;
-    font-size: 0.85rem;
-    font-style: italic;
-}
-
-/* ── Campos Opción B ── */
+/* ── Campos del abono directo ── */
 .ab-field-label {
     display: block;
     color: #6b747e;
@@ -506,14 +501,5 @@
 @media (max-width: 640px) {
     .ab-step-label {
         display: none;
-    }
-
-    .ab-invoice-card {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-
-    .ab-invoice-saldo {
-        text-align: left;
     }
 }

@@ -1036,20 +1036,20 @@ public class CobranzaService : ICobranzaService
                 LIMIT 1
             ) cd ON TRUE
             LEFT JOIN LATERAL (
-                SELECT ta.saldo
-                FROM transaccion_abonado ta
+                -- Saldo = suma de movimientos vigentes; la vista absorbe la convencion
+                -- invertida de estados (facturas vigentes 'A'; abonos vigentes 'C').
+                SELECT SUM(COALESCE(ta.debitos, 0) - COALESCE(ta.creditos, 0)) AS saldo
+                FROM public.vw_transaccion_abonado_vigente ta
                 WHERE ta.company_id    = cm.company_id
                   AND ta.cliente_clave = cm.maestro_cliente_clave
-                  AND ta.estado        = 'A'
-                ORDER BY ta.ide DESC
-                LIMIT 1
             ) ta_s ON TRUE
             LEFT JOIN LATERAL (
                 SELECT MAX(ta.fecha_docu) AS ultima_pago
                 FROM transaccion_abonado ta
                 WHERE ta.company_id    = cm.company_id
                   AND ta.cliente_clave = cm.maestro_cliente_clave
-                  AND ta.tipotransaccion ILIKE '%PAGO%'
+                  AND (ta.tipotransaccion ILIKE '%PAGO%'
+                       OR (ta.tipotransaccion IN ('201', '202') AND ta.estado = 'C'))
             ) ta_p ON TRUE
             WHERE cm.company_id = @CompanyId
               AND cm.estado = TRUE
@@ -1105,7 +1105,8 @@ public class CobranzaService : ICobranzaService
         return rows
             .Select(r => new ClienteCobroDto(
                 r.Clave, r.Nombre, r.Direccion, r.CicloId, r.BarrioCodigo,
-                r.CategoriaId, r.Ruta, r.SaldoAdeudado, r.DiasMora, r.UltimoPago,
+                r.CategoriaId, r.Ruta, r.SaldoAdeudado, r.DiasMora,
+                r.UltimoPago.HasValue ? DateOnly.FromDateTime(r.UltimoPago.Value) : null,
                 r.Bloqueado, r.NoCortable, r.AbogadoId))
             .ToList();
     }
@@ -1422,7 +1423,10 @@ public class CobranzaService : ICobranzaService
         public string? Ruta { get; init; }
         public decimal SaldoAdeudado { get; init; }
         public int? DiasMora { get; init; }
-        public DateOnly? UltimoPago { get; init; }
+        // Npgsql entrega las columnas date como DateTime al leer por GetValue (lo que
+        // usa Dapper); sin un TypeHandler de DateOnly el cast directo revienta en
+        // cuanto MAX(fecha_docu) trae valor. Se lee DateTime y se convierte al mapear.
+        public DateTime? UltimoPago { get; init; }
         public bool Bloqueado { get; init; }
         public bool NoCortable { get; init; }
         public int? AbogadoId { get; init; }

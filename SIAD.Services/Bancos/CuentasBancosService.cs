@@ -8,8 +8,8 @@ using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
-using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.Bancos;
 
@@ -20,11 +20,16 @@ public sealed class CuentasBancosService : ICuentasBancosService
 
     private readonly SiadDbContext context;
     private readonly ICurrentCompanyService currentCompanyService;
+    private readonly IAccountFormatService accountFormatService;
 
-    public CuentasBancosService(SiadDbContext context, ICurrentCompanyService currentCompanyService)
+    public CuentasBancosService(
+        SiadDbContext context,
+        ICurrentCompanyService currentCompanyService,
+        IAccountFormatService accountFormatService)
     {
         this.context = context;
         this.currentCompanyService = currentCompanyService;
+        this.accountFormatService = accountFormatService;
     }
 
     public async Task<IReadOnlyList<BancoCuentaListDto>> GetAsync(long companyId, CancellationToken ct = default)
@@ -382,7 +387,7 @@ SELECT cpc.*
 FROM public.con_plan_cuentas cpc
 WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
 
-        return await context.con_plan_cuentas
+        var cuentas = await context.con_plan_cuentas
             .FromSqlRaw(sql, companyId, cuentaMayor)
             .AsNoTracking()
             .Where(c => c.allows_posting)
@@ -394,6 +399,14 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
                 Description = c.name
             })
             .ToListAsync(ct);
+
+        var format = await accountFormatService.GetFormatAsync(ct);
+        foreach (var cuenta in cuentas)
+        {
+            cuenta.DisplayText = format.FormatDisplay(cuenta.Code, cuenta.Description);
+        }
+
+        return cuentas;
     }
 
     public async Task<BancoCuentaEditDto?> GetByIdAsync(long cuentaId, CancellationToken ct = default)
@@ -649,7 +662,8 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
             throw new ArgumentException("La cuenta contable seleccionada no pertenece a la empresa actual.", nameof(cuentaContableId));
         }
 
-        return AccountCodeFormatter.FormatDisplay(cuenta.code, cuenta.name);
+        var format = await accountFormatService.GetFormatAsync(ct);
+        return format.FormatDisplay(cuenta.code, cuenta.name);
     }
 
     private static string? NormalizeCuentaConcManual(string? value)

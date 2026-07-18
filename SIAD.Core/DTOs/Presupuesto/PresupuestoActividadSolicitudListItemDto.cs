@@ -8,6 +8,8 @@ public sealed class PresupuestoActividadSolicitudListItemDto
     public string Estado { get; set; } = string.Empty;
     public string? CuentaOrigenCode { get; set; }
     public string CuentaDestinoCode { get; set; } = string.Empty;
+    public string? CuentaOrigenDisplay { get; set; }
+    public string CuentaDestinoDisplay { get; set; } = string.Empty;
     public decimal Monto { get; set; }
     public short Prioridad { get; set; }
     public string Justificacion { get; set; } = string.Empty;

@@ -125,6 +125,37 @@ public sealed class Rpt_Dev_Recibo_Abono : XtraReport
 
         rf.Controls.Add(Dashed(fy)); fy += 10f;
 
+        // Desglose del saldo del cliente (deuda / % de distribución / saldo),
+        // el mismo que muestra el estado de cuenta.
+        if (datos.DesgloseSaldo.Count > 0)
+        {
+            rf.Controls.Add(CenteredLabel("DESGLOSE DEL SALDO", fy, 8f, bold: true));
+            fy += 14f;
+
+            fy = AddDesgloseRow(rf, "Servicio", "Deuda", "%", "Saldo", fy, bold: true);
+            foreach (var item in datos.DesgloseSaldo)
+            {
+                fy = AddDesgloseRow(
+                    rf,
+                    item.Servicio,
+                    item.Deuda.ToString("N2"),
+                    item.Porcentaje?.ToString("N2") ?? "-",
+                    item.Saldo.ToString("N2"),
+                    fy);
+            }
+
+            fy = AddDesgloseRow(
+                rf,
+                "TOTAL",
+                datos.DesgloseSaldo.Sum(d => d.Deuda).ToString("N2"),
+                string.Empty,
+                datos.DesgloseSaldo.Sum(d => d.Saldo).ToString("N2"),
+                fy,
+                bold: true);
+
+            rf.Controls.Add(Dashed(fy)); fy += 10f;
+        }
+
         var sello = new XRLabel
         {
             BoundsF = new RectangleF(20f, fy, ContentWidth - 40f, 28f),
@@ -194,6 +225,44 @@ public sealed class Rpt_Dev_Recibo_Abono : XtraReport
 
     private static float AddRowFooter(Band band, string label, string value, float y)
         => AddRow(band, label, value, y) + 2f;
+
+    // Fila del desglose del saldo: Servicio | Deuda | % | Saldo (suman ContentWidth).
+    private static float AddDesgloseRow(Band band, string servicio, string deuda, string pct,
+        string saldo, float y, bool bold = false)
+    {
+        var font = new DXFont("Courier New", 7f, bold ? DXFontStyle.Bold : DXFontStyle.Regular);
+
+        band.Controls.Add(new XRLabel
+        {
+            BoundsF = new RectangleF(0f, y, 100f, 12f),
+            Font = font,
+            Text = servicio,
+            TextAlignment = TextAlignment.MiddleLeft
+        });
+        band.Controls.Add(new XRLabel
+        {
+            BoundsF = new RectangleF(100f, y, 70f, 12f),
+            Font = font,
+            Text = deuda,
+            TextAlignment = TextAlignment.MiddleRight
+        });
+        band.Controls.Add(new XRLabel
+        {
+            BoundsF = new RectangleF(170f, y, 35f, 12f),
+            Font = font,
+            Text = pct,
+            TextAlignment = TextAlignment.MiddleRight
+        });
+        band.Controls.Add(new XRLabel
+        {
+            BoundsF = new RectangleF(205f, y, 70f, 12f),
+            Font = font,
+            Text = saldo,
+            TextAlignment = TextAlignment.MiddleRight
+        });
+
+        return y + 12f;
+    }
 
     private static XRTableCell CreateCell(float width, string bindingExpr, TextAlignment align,
         string? format = null, bool bold = false)

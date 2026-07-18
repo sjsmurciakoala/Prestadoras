@@ -1,0 +1,112 @@
+@page "/facturacion/captacion/abonos-especiales"
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
+@inject apc.Client.Services.CaptacionPagos.CaptacionPagosClient CaptacionClient
+@inject AuthenticationStateProvider AuthenticationStateProvider
+@inject IToastNotificationService ToastService
+@inject TenantState TenantState
+
+<PageTitle>SIAD - Abonos Especiales</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="@ToastName" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Abonos Especiales</h2>
+            <p class="page-subtitle">Registro de abonos especiales sobre facturas pendientes</p>
+        </div>
+    </div>
+
+    <DxCard CssClass="custom-dx-card mb-4">
+        <HeaderTemplate>
+            <div class="d-flex align-items-center w-100">
+                <i class="bi bi-cash-coin me-2 fs-5"></i>
+                <span class="fw-bold">Registro de Abonos Especiales</span>
+                <span class="ms-auto text-muted small">@($"Periodo: {periodoActual?.Periodo ?? "N/D"}")</span>
+            </div>
+        </HeaderTemplate>
+        <BodyTemplate>
+            <div class="p-3">
+                <PosteoAbonos Bancos="@bancos"
+                              Clientes="@clientes"
+                              UsuarioActual="@usuarioActual"
+                              PuedePagarEnBanco="@puedePagarEnBanco"
+                              PeriodoActual="@periodoActual" />
+            </div>
+        </BodyTemplate>
+    </DxCard>
+</div>
+
+@code {
+    private const string ToastName = "AbonosEspecialesToast";
+
+    private List<BancoDto> bancos = new();
+    private List<ClienteComboDto> clientes = new();
+    private PeriodoActualDto? periodoActual;
+
+    private string? usuarioActual;
+    private bool puedePagarEnBanco;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TenantState.EnsureCompanyAsync();
+        await EstablecerUsuarioAsync();
+        await Task.WhenAll(
+            CargarBancosAsync(),
+            CargarClientesAsync(),
+            CargarPeriodoAsync()
+        );
+    }
+
+    private async Task EstablecerUsuarioAsync()
+    {
+        var authState = await AuthenticationStateProvider.GetAuthenticationStateAsync();
+        usuarioActual = authState.User?.Identity?.Name ?? "sistema";
+        puedePagarEnBanco = authState.User?.HasClaim("permission", PermissionNames.Ventas.Caja.AbonoBanco) ?? false;
+    }
+
+    private async Task CargarBancosAsync()
+    {
+        try
+        {
+            bancos = (await CaptacionClient.GetBancosAsync()).ToList();
+        }
+        catch
+        {
+            MostrarToast("Error", "No se pudieron cargar los bancos.", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task CargarClientesAsync()
+    {
+        try
+        {
+            clientes = (await CaptacionClient.GetClientesAsync()).ToList();
+        }
+        catch
+        {
+            MostrarToast("Error", "No se pudieron cargar los clientes.", ToastRenderStyle.Danger);
+        }
+    }
+
+    private async Task CargarPeriodoAsync()
+    {
+        try
+        {
+            periodoActual = await CaptacionClient.GetPeriodoActualAsync();
+        }
+        catch
+        {
+            MostrarToast("Error", "No se pudo cargar el periodo.", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void MostrarToast(string titulo, string mensaje, ToastRenderStyle estilo) =>
+        ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = ToastName,
+            Title = titulo,
+            Text = mensaje,
+            RenderStyle = estilo
+        });
+}

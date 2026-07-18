@@ -28,17 +28,13 @@
                     @($"Total consumo: {(dataSource?.TotalConsumo ?? 0m):N2}")
                 </span>
 
-                <DxButton CssClass="btn-icon"
-                          IconCssClass="bi bi-layout-three-columns"
+                <DxButton IconCssClass="bi bi-layout-three-columns"
                           RenderStyle="ButtonRenderStyle.Secondary"
-                          RenderStyleMode="ButtonRenderStyleMode.Outline"
                           Click="@(() => showColumnsPopup = true)"
                           Text="Columnas" />
 
-                <DxButton CssClass="btn-icon"
-                          IconCssClass="bi bi-arrow-repeat"
+                <DxButton IconCssClass="bi bi-arrow-repeat"
                           RenderStyle="ButtonRenderStyle.Secondary"
-                          RenderStyleMode="ButtonRenderStyleMode.Outline"
                           Click="ReloadAsync"
                           Text="Recargar" />
             </div>
@@ -64,7 +60,6 @@
             <div class="d-flex gap-2">
                 <DxButton Text="Aplicar"
                           IconCssClass="bi bi-funnel"
-                          CssClass="btn-icon"
                           Click="ReloadAsync" />
             </div>
 
@@ -217,7 +212,7 @@
     private DateTime desdeInput = DateTime.Today.AddYears(-3);
     private DateTime hastaInput = DateTime.Today;
 
-    private bool pendingReload;
+    private int clienteIdCargado;
 
     // Visibilidad de columnas (default: todo visible)
     private bool colPeriodo = true;
@@ -247,7 +242,21 @@
         if (dataSource is null)
             return;
 
-        dataSource.ClienteId = ClienteId;
+        SyncFiltrosAlDataSource();
+
+        // El grid recién montado dispara su primera carga solo (virtual scrolling);
+        // encimarle un Reload() cancelaría la petición en vuelo (OperationCanceledException).
+        // Solo recargamos si el cliente cambió con el componente ya vivo.
+        if (grid is not null && ClienteId != clienteIdCargado)
+            _ = ReloadAsync();
+
+        clienteIdCargado = ClienteId;
+    }
+
+    private void SyncFiltrosAlDataSource()
+    {
+        if (dataSource is null)
+            return;
 
         // Normaliza rango
         var desde = desdeInput.Date;
@@ -259,29 +268,19 @@
             hastaInput = hasta;
         }
 
+        dataSource.ClienteId = ClienteId;
         dataSource.Desde = desde;
         dataSource.Hasta = hasta;
-
-        // Si ya existe grid, recarga; si no, marca pendiente
-        if (grid is not null)
-            _ = ReloadAsync();
-        else
-            pendingReload = true;
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (pendingReload && grid is not null)
-        {
-            pendingReload = false;
-            await ReloadAsync();
-        }
     }
 
     private Task ReloadAsync()
     {
         if (grid is null || dataSource is null || ClienteId <= 0)
             return Task.CompletedTask;
+
+        // Copia el rango vigente al DataSource antes de pedir datos
+        // (así "Aplicar" recarga con las fechas que el usuario acaba de elegir).
+        SyncFiltrosAlDataSource();
 
         // Virtual scrolling: el grid pedirá solo lo visible (skip/take) al DataSource
         grid.Reload(); // Reload() es void en esta versión de DevExpress

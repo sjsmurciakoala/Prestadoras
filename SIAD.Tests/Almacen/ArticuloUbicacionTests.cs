@@ -60,6 +60,20 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         return bodega.id;
     }
 
+    private async Task<int> SeedTipoAsync(string codigo)
+    {
+        var t = new alm_tipo_articulo
+        {
+            codigo = codigo,
+            nombre = $"Tipo {codigo}",
+            activo = true,
+            maneja_inventario = true
+        };
+        _context!.alm_tipo_articulos.Add(t);
+        await _context.SaveChangesAsync();
+        return t.id;
+    }
+
     [SkippableFact]
     public async Task Add_UbicacionValida_Persiste()
     {
@@ -242,9 +256,10 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
+        var tipo = await SeedTipoAsync("ZTC1");
         var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            articulos.CreateAsync(new ArticuloEditDto { Codigo = "ZZCRE1", Descripcion = "Sin bodega" }, "tester"));
+            articulos.CreateAsync(new ArticuloEditDto { Codigo = "ZZCRE1", Descripcion = "Sin bodega", TipoArticuloId = tipo }, "tester"));
     }
 
     [SkippableFact]
@@ -254,12 +269,14 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
 
         var bA = await SeedBodegaAsync("CRA");
         var bB = await SeedBodegaAsync("CRB");
+        var tipo = await SeedTipoAsync("ZTC2");
         var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
 
         var creado = await articulos.CreateAsync(new ArticuloEditDto
         {
             Codigo = "ZZCRE2",
             Descripcion = "Con bodegas",
+            TipoArticuloId = tipo,
             Ubicaciones =
             {
                 new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, ExistenciaMinima = 3 },

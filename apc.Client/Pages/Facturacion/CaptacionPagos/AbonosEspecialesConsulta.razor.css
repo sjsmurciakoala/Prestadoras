@@ -1,0 +1,96 @@
+/* Lo propio de esta pantalla. El look de grid/tarjetas/botones se hereda de
+   apc/wwwroot/css/siad-grid.css (no se duplica aquí). */
+
+/* ── Tarjetas de estado (KPIs que a la vez filtran) ── */
+.ae-estado-cards {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-bottom: 1.25rem;
+}
+
+.ae-estado-card {
+    flex: 1 1 160px;
+    min-width: 150px;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.15rem;
+    padding: 0.85rem 1rem;
+    background: #fff;
+    border: 1px solid #e5e7eb;
+    border-left: 4px solid #cbd5e1;
+    border-radius: 0.65rem;
+    cursor: pointer;
+    text-align: left;
+    transition: box-shadow 0.15s ease, border-color 0.15s ease, transform 0.05s ease;
+}
+
+.ae-estado-card:hover {
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.08);
+}
+
+.ae-estado-card:active {
+    transform: translateY(1px);
+}
+
+.ae-estado-card.is-active {
+    box-shadow: 0 4px 14px rgba(15, 23, 42, 0.12);
+}
+
+.ae-estado-top {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.ae-estado-count {
+    font-size: 1.6rem;
+    font-weight: 700;
+    line-height: 1.1;
+    color: #0f172a;
+}
+
+.ae-estado-monto {
+    font-size: 0.8rem;
+    color: #64748b;
+    min-height: 1rem;
+}
+
+/* Variantes de color por estado */
+.ae-estado-card.ae-pagado { border-left-color: #198754; }
+.ae-estado-card.ae-pagado .ae-estado-top { color: #198754; }
+.ae-estado-card.ae-pagado.is-active { border-color: #198754; background: #f2faf5; }
+
+.ae-estado-card.ae-pendiente { border-left-color: #d97706; }
+.ae-estado-card.ae-pendiente .ae-estado-top { color: #b45309; }
+.ae-estado-card.ae-pendiente.is-active { border-color: #d97706; background: #fffaf1; }
+
+.ae-estado-card.ae-anulado { border-left-color: #dc3545; }
+.ae-estado-card.ae-anulado .ae-estado-top { color: #b02a37; }
+.ae-estado-card.ae-anulado.is-active { border-color: #dc3545; background: #fdf3f4; }
+
+/* "Todos" activo: acento neutro azulado */
+.ae-estado-card.is-active:not(.ae-pagado):not(.ae-pendiente):not(.ae-anulado) {
+    border-color: #6366f1;
+    border-left-color: #6366f1;
+    background: #f5f6ff;
+}
+
+/* ── Badges de estado en la columna Estado ── */
+.ae-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.72rem;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    white-space: nowrap;
+}
+
+.ae-badge-pagado { background: #d1e7dd; color: #0f5132; }
+.ae-badge-pendiente { background: #fff3cd; color: #664d03; }
+.ae-badge-anulado { background: #f8d7da; color: #842029; }
+.ae-badge-neutral { background: #e2e8f0; color: #475569; }

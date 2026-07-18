@@ -78,15 +78,27 @@
         </DxFormLayoutGroup>
 
         <DxFormLayoutGroup Caption="Clasificación" ColSpanXs="12">
-            <DxFormLayoutItem Caption="Tipo de artículo" ColSpanMd="4">
+            <DxFormLayoutItem Caption="Tipo de artículo *" ColSpanMd="6">
                 <DxComboBox Data="@Tipos" Value="Model.TipoArticuloId"
                             ValueChanged="@((int? v) => HandleTipoArticuloChanged(v))"
                             ValueExpression="@(() => Model.TipoArticuloId)"
                             ValueFieldName="@nameof(TipoArticuloLookupDto.Id)"
                             TextFieldName="@nameof(TipoArticuloLookupDto.Display)"
-                            NullText="Operativo, mantenimiento..."
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            NullText="Seleccione un tipo..."
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                 <ValidationMessage For="() => Model.TipoArticuloId" />
+            </DxFormLayoutItem>
+
+            <DxFormLayoutItem Caption="Categoría" ColSpanMd="6">
+                <DxComboBox Data="@GruposFiltrados" @bind-Value="Model.GrupoId"
+                            ValueFieldName="@nameof(GrupoLookupDto.Id)"
+                            TextFieldName="@nameof(GrupoLookupDto.Display)"
+                            FilteringMode="DataGridFilteringMode.Contains"
+                            Enabled="@(Model.TipoArticuloId.HasValue)"
+                            NullText="@(Model.TipoArticuloId.HasValue ? "Seleccione una categoría..." : "Elija primero el tipo de artículo")"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                <ValidationMessage For="() => Model.GrupoId" />
             </DxFormLayoutItem>
 
             @if (!ManejaInventario)
@@ -101,26 +113,6 @@
                     </Template>
                 </DxFormLayoutItem>
             }
-
-            <DxFormLayoutItem Caption="Grupo" ColSpanMd="4">
-                <DxComboBox Data="@Lineas" @bind-Value="Model.LineaId"
-                            ValueFieldName="@nameof(LineaLookupDto.Id)"
-                            TextFieldName="@nameof(LineaLookupDto.Display)"
-                            FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Seleccione un grupo..."
-                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-                <ValidationMessage For="() => Model.LineaId" />
-            </DxFormLayoutItem>
-
-            <DxFormLayoutItem Caption="Categoría" ColSpanMd="4">
-                <DxComboBox Data="@GruposFiltrados" @bind-Value="Model.GrupoId"
-                            ValueFieldName="@nameof(GrupoLookupDto.Id)"
-                            TextFieldName="@nameof(GrupoLookupDto.Display)"
-                            FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Seleccione una categoría..."
-                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
-                <ValidationMessage For="() => Model.GrupoId" />
-            </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
         <DxFormLayoutGroup Caption="Contabilidad" ColSpanXs="12">
@@ -221,9 +213,6 @@
     public IReadOnlyList<TipoArticuloLookupDto> Tipos { get; set; } = Array.Empty<TipoArticuloLookupDto>();
 
     [Parameter]
-    public IReadOnlyList<LineaLookupDto> Lineas { get; set; } = Array.Empty<LineaLookupDto>();
-
-    [Parameter]
     public IReadOnlyList<GrupoLookupDto> Grupos { get; set; } = Array.Empty<GrupoLookupDto>();
 
     [Parameter]
@@ -247,6 +236,12 @@
     {
         Model.TipoArticuloId = value;
 
+        // La categoría cuelga del tipo: si la elegida no pertenece al nuevo tipo, se limpia.
+        if (Model.GrupoId.HasValue && GruposFiltrados.All(g => g.Id != Model.GrupoId.Value))
+        {
+            Model.GrupoId = null;
+        }
+
         // Si el tipo elegido no maneja inventario, las ubicaciones que el usuario hubiera
         // cargado dejan de tener sentido (un servicio no puede tener bodega) y el servidor
         // las rechazaría. Se limpian y se avisa en la pestaña, que además queda bloqueada.
@@ -267,9 +262,12 @@
         }
     }
 
-    // Si hay línea seleccionada, mostrar sólo sus grupos; si no, todos.
+    // Cascada tipo→categoría: sólo las categorías del tipo elegido. Sin tipo, el
+    // combo queda deshabilitado (el tipo es obligatorio y se elige primero).
     private IReadOnlyList<GrupoLookupDto> GruposFiltrados =>
-        Model.LineaId.HasValue ? Grupos.Where(g => g.LineaId == Model.LineaId.Value).ToList() : Grupos;
+        Model.TipoArticuloId.HasValue
+            ? Grupos.Where(g => g.TipoArticuloId == Model.TipoArticuloId.Value).ToList()
+            : Array.Empty<GrupoLookupDto>();
 
     // ── Unidades de medida: las tres (medida/almacenaje/salida) deben ser de la
     //    misma categoría. La unidad de medida es el ancla y define la categoría.

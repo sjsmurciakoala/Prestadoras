@@ -5,8 +5,8 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Contabilidad;
-using SIAD.Core.Utilities;
 using apc.Client.Services.Bancos;
+using apc.Client.Services.Contabilidad;
 using apc.Client.Services.Tenant;
 
 namespace apc.Client.Pages.Contabilidad;
@@ -21,6 +21,9 @@ public partial class TransaccionBancariaModal : IDisposable
 
     [Inject]
     private TenantState TenantState { get; set; } = null!;
+
+    [Inject]
+    private AccountFormatState AccountFormat { get; set; } = null!;
 
     [Inject]
     private NavigationManager NavigationManager { get; set; } = null!;
@@ -294,6 +297,19 @@ public partial class TransaccionBancariaModal : IDisposable
     {
         try
         {
+            await AccountFormat.EnsureLoadedAsync(ct);
+        }
+        catch (OperationCanceledException)
+        {
+            return;
+        }
+        catch
+        {
+            // Sin máscara cargada se formatea con la máscara por defecto; las cargas siguen.
+        }
+
+        try
+        {
             await Task.WhenAll(
                 LoadTiposTransaccionAsync(ct),
                 LoadPlanCuentasAsync(ct));
@@ -353,7 +369,8 @@ public partial class TransaccionBancariaModal : IDisposable
                 {
                     AccountId = c.AccountId,
                     Code = c.Code ?? string.Empty,
-                    Description = c.Name ?? string.Empty
+                    Description = c.Name ?? string.Empty,
+                    DisplayText = AccountFormat.FormatDisplay(c.Code, c.Name)
                 })
                 .ToList();
         }
@@ -499,12 +516,12 @@ public partial class TransaccionBancariaModal : IDisposable
             var name = cuenta.Name?.Trim() ?? string.Empty;
             if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
             {
-                return $"{AccountCodeFormatter.Format(code)} ({name})";
+                return $"{AccountFormat.Format(code)} ({name})";
             }
 
             if (!string.IsNullOrWhiteSpace(code))
             {
-                return AccountCodeFormatter.Format(code);
+                return AccountFormat.Format(code);
             }
 
             if (!string.IsNullOrWhiteSpace(name))
@@ -544,12 +561,12 @@ public partial class TransaccionBancariaModal : IDisposable
         var name = cuenta.CuentaContableNombre?.Trim();
         if (!string.IsNullOrWhiteSpace(code) && !string.IsNullOrWhiteSpace(name))
         {
-            return $"{AccountCodeFormatter.Format(code)} ({name})";
+            return $"{AccountFormat.Format(code)} ({name})";
         }
 
         if (!string.IsNullOrWhiteSpace(code))
         {
-            return AccountCodeFormatter.Format(code);
+            return AccountFormat.Format(code);
         }
 
         if (!string.IsNullOrWhiteSpace(name))

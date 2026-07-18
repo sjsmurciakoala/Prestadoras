@@ -5,6 +5,7 @@ public sealed class GrupoLookupDto
     public int Id { get; init; }
     public string Codigo { get; init; } = string.Empty;
     public string Nombre { get; init; } = string.Empty;
-    public int? LineaId { get; init; }
+    /// <summary>Tipo de artículo al que pertenece la categoría (para la cascada tipo→categoría).</summary>
+    public int? TipoArticuloId { get; init; }
     public string Display => $"{Codigo} - {Nombre}";
 }

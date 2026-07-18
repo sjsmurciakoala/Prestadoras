@@ -3,16 +3,19 @@ using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 using SIAD.Data;
+using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.Bancos;
 
 public sealed class BancoConfiguracionService : IBancoConfiguracionService
 {
     private readonly SiadDbContext dbContext;
+    private readonly IAccountFormatService accountFormatService;
 
-    public BancoConfiguracionService(SiadDbContext dbContext)
+    public BancoConfiguracionService(SiadDbContext dbContext, IAccountFormatService accountFormatService)
     {
         this.dbContext = dbContext;
+        this.accountFormatService = accountFormatService;
     }
 
     public async Task<BancoConfiguracionDto> ObtenerAsync(long companyId, CancellationToken ct = default)
@@ -47,7 +50,7 @@ public sealed class BancoConfiguracionService : IBancoConfiguracionService
 
     public async Task<IReadOnlyList<CuentaContableLookupDto>> ListarCuentasMayoresAsync(long companyId, CancellationToken ct = default)
     {
-        return await dbContext.con_plan_cuentas
+        var cuentas = await dbContext.con_plan_cuentas
             .AsNoTracking()
             .Where(c => c.company_id == companyId && !c.allows_posting)
             .OrderBy(c => c.code)
@@ -58,6 +61,14 @@ public sealed class BancoConfiguracionService : IBancoConfiguracionService
                 Description = c.name
             })
             .ToListAsync(ct);
+
+        var format = await accountFormatService.GetFormatAsync(ct);
+        foreach (var cuenta in cuentas)
+        {
+            cuenta.DisplayText = format.FormatDisplay(cuenta.Code, cuenta.Description);
+        }
+
+        return cuentas;
     }
 
     private static BancoConfiguracionDto MapToDto(ban_config entity)

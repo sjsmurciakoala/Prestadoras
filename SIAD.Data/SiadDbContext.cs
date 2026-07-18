@@ -207,6 +207,8 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<prv_compromiso_hdr> prv_compromiso_hdrs { get; set; }
 
+    public virtual DbSet<prv_compromiso_abono> prv_compromiso_abonos { get; set; }
+
     public virtual DbSet<prv_banco> prv_bancos { get; set; }
 
     public virtual DbSet<prv_kardex> prv_kardices { get; set; }
@@ -1720,6 +1722,37 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.nombre_proveedor).HasMaxLength(150);
         });
 
+        modelBuilder.Entity<prv_compromiso_abono>(entity =>
+        {
+            entity.HasKey(e => e.abono_id).HasName("prv_compromiso_abono_pkey");
+
+            entity.ToTable("prv_compromiso_abono");
+
+            // El filtro tenant y el stamping de company_id los aplica SiadDbContext.Tenancy.cs
+            // para toda ICompanyScopedEntity (no se declara HasQueryFilter aqui).
+            entity.HasIndex(e => new { e.company_id, e.numero_orden, e.estado })
+                .HasDatabaseName("ix_prv_compromiso_abono_estado");
+            entity.HasIndex(e => new { e.company_id, e.numero_orden, e.numero_abono })
+                .IsUnique()
+                .HasDatabaseName("uq_prv_compromiso_abono_numero");
+
+            entity.Property(e => e.abono_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.fecha).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.monto).HasPrecision(15, 2);
+            entity.Property(e => e.metodo_pago).HasMaxLength(20);
+            entity.Property(e => e.estado).HasMaxLength(1).HasDefaultValue("V");
+            entity.Property(e => e.motivo_anulacion).HasMaxLength(250);
+            entity.Property(e => e.usuario_creo).HasMaxLength(100);
+            entity.Property(e => e.fecha_creacion)
+                .HasDefaultValueSql("now()")
+                .HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuario_anulacion).HasMaxLength(100);
+            entity.Property(e => e.fecha_anulacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuario_modifica).HasMaxLength(100);
+            entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+        });
+
         modelBuilder.Entity<prv_kardex>(entity =>
         {
             entity
@@ -1807,6 +1840,7 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.orden).HasDefaultValue(1);
             entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.tipo_cuenta).HasMaxLength(20);
             entity.Property(e => e.usuario_creo).HasMaxLength(100);
             entity.Property(e => e.usuario_modifica).HasMaxLength(100);
         });

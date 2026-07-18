@@ -8,8 +8,8 @@ using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.DTOs.Presupuesto;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
-using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.Presupuesto;
 
@@ -17,11 +17,16 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
 {
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _currentCompanyService;
+    private readonly IAccountFormatService _accountFormatService;
 
-    public ConfiguracionPresupuestoService(SiadDbContext context, ICurrentCompanyService currentCompanyService)
+    public ConfiguracionPresupuestoService(
+        SiadDbContext context,
+        ICurrentCompanyService currentCompanyService,
+        IAccountFormatService accountFormatService)
     {
         _context = context;
         _currentCompanyService = currentCompanyService;
+        _accountFormatService = accountFormatService;
     }
 
     public async Task<string> GetNextIdAsync(CancellationToken ct = default)
@@ -260,6 +265,12 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
                 Description = c.name
             })
             .ToListAsync(ct);
+
+        var format = await _accountFormatService.GetFormatAsync(ct);
+        foreach (var cuenta in cuentas)
+        {
+            cuenta.DisplayText = format.FormatDisplay(cuenta.Code, cuenta.Description);
+        }
 
         return cuentas;
     }
@@ -780,6 +791,15 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
             })
             .ToListAsync(ct);
 
+        var format = await _accountFormatService.GetFormatAsync(ct);
+        foreach (var item in items)
+        {
+            item.CuentaOrigenDisplay = string.IsNullOrWhiteSpace(item.CuentaOrigenCode)
+                ? null
+                : format.Format(item.CuentaOrigenCode);
+            item.CuentaDestinoDisplay = format.Format(item.CuentaDestinoCode);
+        }
+
         return items;
     }
 
@@ -884,7 +904,8 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
         _context.pst_solicitud_actividad_presupuestos.Add(solicitud);
         await _context.SaveChangesAsync(ct);
 
-        return MapSolicitud(solicitud);
+        var format = await _accountFormatService.GetFormatAsync(ct);
+        return MapSolicitud(solicitud, format);
     }
 
     public async Task<PresupuestoActividadSolicitudListItemDto> ApproveSolicitudAsync(
@@ -986,7 +1007,8 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
         await _context.SaveChangesAsync(ct);
 
         await tx.CommitAsync(ct);
-        return MapSolicitud(solicitud);
+        var format = await _accountFormatService.GetFormatAsync(ct);
+        return MapSolicitud(solicitud, format);
     }
 
     public async Task<PresupuestoActividadSolicitudListItemDto> RejectSolicitudAsync(
@@ -1014,7 +1036,8 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
         solicitud.comentario_revision = string.IsNullOrWhiteSpace(comentario) ? null : comentario.Trim();
 
         await _context.SaveChangesAsync(ct);
-        return MapSolicitud(solicitud);
+        var format = await _accountFormatService.GetFormatAsync(ct);
+        return MapSolicitud(solicitud, format);
     }
 
     private IQueryable<PresupuestoConfigQueryRow> BuildDetailQuery(ConfiguracionPresupuestoFilterDto? filtro)
@@ -1583,6 +1606,7 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
             .Select(c => new { c.code, c.name })
             .ToListAsync(ct);
 
+        var format = await _accountFormatService.GetFormatAsync(ct);
         var displayMap = planItems
             .GroupBy(x => x.code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
@@ -1592,7 +1616,7 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
                 {
                     var code = (x.code ?? string.Empty).Trim();
                     var name = (x.name ?? string.Empty).Trim();
-                    return AccountCodeFormatter.FormatDisplay(code, name);
+                    return format.FormatDisplay(code, name);
                 },
                 StringComparer.OrdinalIgnoreCase);
 
@@ -1610,7 +1634,7 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
                 continue;
             }
 
-            item.CuentaContable = code;
+            item.CuentaContable = format.Format(code);
         }
     }
 
@@ -1646,6 +1670,7 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
             .Select(c => new { c.code, c.name })
             .ToListAsync(ct);
 
+        var format = await _accountFormatService.GetFormatAsync(ct);
         var displayMap = planItems
             .GroupBy(x => x.code ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .Select(g => g.First())
@@ -1655,7 +1680,7 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
                 {
                     var code = (x.code ?? string.Empty).Trim();
                     var name = (x.name ?? string.Empty).Trim();
-                    return AccountCodeFormatter.FormatDisplay(code, name);
+                    return format.FormatDisplay(code, name);
                 },
                 StringComparer.OrdinalIgnoreCase);
 
@@ -1673,7 +1698,7 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
                 continue;
             }
 
-            item.CuentaContable = code;
+            item.CuentaContable = format.Format(code);
         }
     }
 
@@ -1823,7 +1848,8 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
     }
 
     private static PresupuestoActividadSolicitudListItemDto MapSolicitud(
-        pst_solicitud_actividad_presupuesto solicitud)
+        pst_solicitud_actividad_presupuesto solicitud,
+        AccountFormat format)
     {
         return new PresupuestoActividadSolicitudListItemDto
         {
@@ -1833,6 +1859,10 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
             Estado = solicitud.estado,
             CuentaOrigenCode = solicitud.cuenta_origen_code,
             CuentaDestinoCode = solicitud.cuenta_destino_code,
+            CuentaOrigenDisplay = string.IsNullOrWhiteSpace(solicitud.cuenta_origen_code)
+                ? null
+                : format.Format(solicitud.cuenta_origen_code),
+            CuentaDestinoDisplay = format.Format(solicitud.cuenta_destino_code),
             Monto = solicitud.monto,
             Prioridad = solicitud.prioridad,
             Justificacion = solicitud.justificacion,

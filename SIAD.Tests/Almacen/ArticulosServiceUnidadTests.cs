@@ -78,11 +78,26 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
         return b.id;
     }
 
-    private static ArticuloEditDto NuevoArticulo(string codigo, int bodegaId, int? medida, int? almacenaje, int? salida)
+    private async Task<int> SeedTipoAsync(string codigo)
+    {
+        var t = new alm_tipo_articulo
+        {
+            codigo = codigo,
+            nombre = $"Tipo {codigo}",
+            activo = true,
+            maneja_inventario = true
+        };
+        _context!.alm_tipo_articulos.Add(t);
+        await _context.SaveChangesAsync();
+        return t.id;
+    }
+
+    private static ArticuloEditDto NuevoArticulo(string codigo, int bodegaId, int tipoId, int? medida, int? almacenaje, int? salida)
         => new()
         {
             Codigo = codigo,
             Descripcion = $"Artículo {codigo}",
+            TipoArticuloId = tipoId,
             UnidadMedidaId = medida,
             UnidadAlmacenajeId = almacenaje,
             UnidadSalidaId = salida,
@@ -95,11 +110,12 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bodega = await SeedBodegaAsync("UCB1");
+        var tipo = await SeedTipoAsync("ZT1");
         var peso = await SeedCategoriaAsync("Peso-T1");
         var kg = await SeedUnidadAsync("UKG1", peso);
         var lb = await SeedUnidadAsync("ULB1", peso);
 
-        var creado = await _service!.CreateAsync(NuevoArticulo("ZZUCAT1", bodega, kg, lb, kg), "tester");
+        var creado = await _service!.CreateAsync(NuevoArticulo("ZZUCAT1", bodega, tipo, kg, lb, kg), "tester");
         Assert.NotNull(creado.Id);
     }
 
@@ -109,13 +125,14 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bodega = await SeedBodegaAsync("UCB2");
+        var tipo = await SeedTipoAsync("ZT2");
         var peso = await SeedCategoriaAsync("Peso-T2");
         var vol = await SeedCategoriaAsync("Volumen-T2");
         var kg = await SeedUnidadAsync("UKG2", peso);
         var lt = await SeedUnidadAsync("ULT2", vol);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service!.CreateAsync(NuevoArticulo("ZZUCAT2", bodega, kg, lt, null), "tester"));
+            _service!.CreateAsync(NuevoArticulo("ZZUCAT2", bodega, tipo, kg, lt, null), "tester"));
     }
 
     [SkippableFact]
@@ -124,10 +141,11 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bodega = await SeedBodegaAsync("UCB3");
+        var tipo = await SeedTipoAsync("ZT3");
         var sinCat = await SeedUnidadAsync("USINCAT3", null);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service!.CreateAsync(NuevoArticulo("ZZUCAT3", bodega, sinCat, null, null), "tester"));
+            _service!.CreateAsync(NuevoArticulo("ZZUCAT3", bodega, tipo, sinCat, null, null), "tester"));
     }
 
     [SkippableFact]
@@ -136,11 +154,12 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bodega = await SeedBodegaAsync("UCB4");
+        var tipo = await SeedTipoAsync("ZT4");
         var peso = await SeedCategoriaAsync("Peso-T4");
         var kg = await SeedUnidadAsync("UKG4", peso);
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _service!.CreateAsync(NuevoArticulo("ZZUCAT4", bodega, null, kg, null), "tester"));
+            _service!.CreateAsync(NuevoArticulo("ZZUCAT4", bodega, tipo, null, kg, null), "tester"));
     }
 
     [SkippableFact]
@@ -149,7 +168,8 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bodega = await SeedBodegaAsync("UCB5");
-        var creado = await _service!.CreateAsync(NuevoArticulo("ZZUCAT5", bodega, null, null, null), "tester");
+        var tipo = await SeedTipoAsync("ZT5");
+        var creado = await _service!.CreateAsync(NuevoArticulo("ZZUCAT5", bodega, tipo, null, null, null), "tester");
         Assert.NotNull(creado.Id);
     }
 
