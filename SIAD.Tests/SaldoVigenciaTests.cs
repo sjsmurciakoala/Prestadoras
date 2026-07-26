@@ -122,4 +122,136 @@ public sealed class SaldoVigenciaTests : IntegrationTestBase
 
         Assert.Equal(300m, saldo);
     }
+
+    // ------------------------------------------------------------------------
+    // Unificación cobranza F1 (2026-07-26): espejos numéricos derivados por
+    // trigger (tipo_transaccion_id, estado_pago_id) y vista de vigencia sobre
+    // adm_estado_pago. La semántica del saldo NO cambia (tests de arriba).
+    // ------------------------------------------------------------------------
+
+    private Task<(short? tipoId, short? estadoPagoId, short? estadoId)> UltimoEspejoAsync() =>
+        Connection.QuerySingleAsync<(short?, short?, short?)>(new CommandDefinition(@"
+            SELECT tipo_transaccion_id, estado_pago_id, estado_id
+            FROM public.transaccion_abonado
+            WHERE company_id = @companyId AND cliente_clave = @clave
+            ORDER BY ide DESC LIMIT 1",
+            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
+
+    [SkippableFact]
+    public async Task Trigger_deriva_espejos_de_abono_de_caja()
+    {
+        await PrepararEmpresaAsync();
+
+        await InsertarMovimientoAsync("202", "C", 0m, 50m);
+        var (tipoId, estadoPagoId, _) = await UltimoEspejoAsync();
+
+        Assert.Equal((short)4, tipoId);       // ABONO (202 caja, sin marker WS)
+        Assert.Equal((short)1, estadoPagoId); // APLICADO
+    }
+
+    [SkippableFact]
+    public async Task Trigger_distingue_anulado_de_caja_y_reversado_del_ws()
+    {
+        await PrepararEmpresaAsync();
+
+        // Anulación desde caja: 202 sin marker pasa a 'A' → ANULADO(3)
+        await InsertarMovimientoAsync("202", "C", 0m, 30m);
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            UPDATE public.transaccion_abonado SET estado = 'A'
+            WHERE company_id = @companyId AND cliente_clave = @clave",
+            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
+        var (_, anulado, _) = await UltimoEspejoAsync();
+        Assert.Equal((short)3, anulado);
+
+        // Pago WS (marker WSBANCO:) → tipo PAGO_BANCO(3); su reverso → REVERSADO(4)
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.transaccion_abonado
+                (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos, trans_aplicar)
+            VALUES (@companyId, @clave, '202', 'C', 0, 40, 'WSBANCO:777')",
+            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
+        var (tipoWs, aplicadoWs, _) = await UltimoEspejoAsync();
+        Assert.Equal((short)3, tipoWs);
+        Assert.Equal((short)1, aplicadoWs);
+
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            UPDATE public.transaccion_abonado SET estado = 'A'
+            WHERE company_id = @companyId AND cliente_clave = @clave
+              AND trans_aplicar LIKE 'WSBANCO:%'",
+            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
+        var (_, reversadoWs, _) = await UltimoEspejoAsync();
+        Assert.Equal((short)4, reversadoWs);
+    }
+
+    [SkippableFact]
+    public async Task Trigger_deriva_espejos_de_cargos_y_planes_sin_estado_pago()
+    {
+        await PrepararEmpresaAsync();
+
+        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 100m, 0m);
+        var (tipoCargo, pagoCargo, estadoCargo) = await UltimoEspejoAsync();
+        Assert.Equal((short)1, tipoCargo);   // CARGO_SERVICIO
+        Assert.Null(pagoCargo);              // no es pago
+        Assert.Equal((short)1, estadoCargo); // Activa
+
+        await InsertarMovimientoAsync("PLAN-CUOTA", "A", 57.31m, 0m);
+        var (tipoCuota, pagoCuota, _) = await UltimoEspejoAsync();
+        Assert.Equal((short)9, tipoCuota);   // PLAN_CUOTA
+        Assert.Null(pagoCuota);
+
+        await InsertarMovimientoAsync("SALDO_ANTERIOR", "A", 500m, 0m);
+        var (tipoSaldo, _, _) = await UltimoEspejoAsync();
+        Assert.Equal((short)11, tipoSaldo);  // SALDO_INICIAL
+    }
+
+    [SkippableFact]
+    public async Task Vista_de_vigencia_gobierna_pagos_por_estado_pago_id()
+    {
+        await PrepararEmpresaAsync();
+
+        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 200m, 0m);
+        await InsertarMovimientoAsync("202", "C", 0m, 50m);  // APLICADO → cuenta
+        await InsertarMovimientoAsync("202", "P", 0m, 20m);  // PENDIENTE → fuera
+        await InsertarMovimientoAsync("202", "A", 0m, 30m);  // ANULADO → fuera
+
+        var vigentes = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            SELECT count(*) FROM public.vw_transaccion_abonado_vigente
+            WHERE company_id = @companyId AND cliente_clave = @clave
+              AND tipotransaccion = '202'",
+            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
+        Assert.Equal(1L, vigentes);
+
+        var estadoPagoVigente = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(@"
+            SELECT estado_pago_id FROM public.vw_transaccion_abonado_vigente
+            WHERE company_id = @companyId AND cliente_clave = @clave
+              AND tipotransaccion = '202'",
+            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
+        Assert.Equal((short)1, estadoPagoVigente);
+    }
+
+    [SkippableFact]
+    public async Task Catalogos_f1_sembrados_y_factura_B_tiene_estado_id_4()
+    {
+        await PrepararEmpresaAsync();
+
+        var codigoB = await Connection.ExecuteScalarAsync<string>(new CommandDefinition(
+            "SELECT codigo FROM public.cfg_estado_documento_comercial WHERE estado_id = 4",
+            transaction: Transaction));
+        Assert.Equal("B", codigoB);
+
+        var tipos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM public.adm_tipo_transaccion", transaction: Transaction));
+        Assert.Equal(11L, tipos);
+
+        var estadosPago = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM public.adm_estado_pago", transaction: Transaction));
+        Assert.Equal(4L, estadosPago);
+
+        var estadoId = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(@"
+            INSERT INTO public.factura (company_id, numfactura, clientecodigo, tipofactura,
+                ano, mes, fechaemision, estado, tipofacturacion, tipo_documento_fiscal_id)
+            VALUES (@companyId, 'F1-B-TEST', @clave, 'F', '2026', '7', current_date, 'B', 'S', 1)
+            RETURNING estado_id",
+            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
+        Assert.Equal((short)4, estadoId);
+    }
 }
