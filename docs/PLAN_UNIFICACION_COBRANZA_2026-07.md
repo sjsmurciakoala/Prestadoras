@@ -245,6 +245,13 @@ Los canales son adaptadores delgados sobre el motor:
 
 ## 5. La pantalla única de caja
 
+**"Única" = un solo módulo/motor, NO una sola caja.** La empresa opera con
+**varias cajas físicas simultáneas** (`adm_caja`, agregado en F2): cada cajero
+abre su sesión EN una caja concreta (una sesión ABIERTA por caja, índice único
+parcial), el arqueo sale por caja, y `adm_pago.sesion_caja_id` amarra cada
+cobro transitivamente a su caja física. La UI de apertura (F3) exige elegir
+caja; el mantenimiento de cajas es parte del módulo.
+
 Nueva `apc.Client/Pages/Facturacion/Caja/CajaCobro.razor` (`/facturacion/caja/cobro`):
 
 1. Buscar cliente (clave/nombre/RTN) **o** documento (N° factura/recibo).
