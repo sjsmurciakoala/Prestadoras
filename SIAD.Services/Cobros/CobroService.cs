@@ -184,6 +184,14 @@ public class CobroService : ICobroService
                 planContable.Add((null, restantePlan));
         }
 
+        // Recibos misceláneos legacy: las líneas contables van contra la CxC
+        // GENERAL (servicio null), no la analítica — la aplicación por línea a
+        // los documentos (adm_pago_aplicacion) no cambia.
+        if (dto.CxcGeneral)
+        {
+            planContable = [(null, montoTotal)];
+        }
+
         var documentoContable = ResolverDocumentoContable(dto.TipoLegacy);
         var referenciaContable = string.IsNullOrWhiteSpace(numFacturaPrincipal)
             ? $"{documentoContable.Documento}-{numReciboPrincipal}"
@@ -336,6 +344,13 @@ public class CobroService : ICobroService
                 });
             }
 
+            if (dto.CxcGeneral)
+            {
+                // La contabilidad va a la CxC general; el detalle por línea de
+                // adm_pago_aplicacion se conserva intacto.
+                aplicacionesContables = [(null, montoTotal)];
+            }
+
             // ---------- Fila espejo legacy (dual-write, muere en F7) ----------
             var saldoActualCliente = await ObtenerSaldoClienteAsync(dto.ClienteClave, ct);
 
@@ -354,7 +369,7 @@ public class CobroService : ICobroService
                 pendiente.creditos = montoTotal;
                 pendiente.saldo = saldoActualCliente - montoTotal;
                 pendiente.saldo_detalle = montoTotal;
-                pendiente.descripcion = $"Abono parcial factura :Recibo # :{numReciboPrincipal}";
+                pendiente.descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}";
                 pendiente.usuario = usuario;
                 pendiente.caja_id = sesionCajaId;
                 pendiente.ciclo = clienteInfo?.ciclos_id?.ToString();
@@ -375,7 +390,7 @@ public class CobroService : ICobroService
                     fecha_docu = fechaHoy,
                     tipo_partida = dto.TipoPartidaLegacy,
                     banco = banco,
-                    descripcion = $"Abono parcial factura :Recibo # :{numReciboPrincipal}",
+                    descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}",
                     debitos = 0,
                     creditos = montoTotal,
                     saldo = saldoActualCliente - montoTotal,
@@ -451,6 +466,7 @@ public class CobroService : ICobroService
 
             // ---------- Comprobante contable (efectivo; banco ya posteó su partida) ----------
             long? polizaId = null;
+            var polizaEncolada = false;
             if (!integrarBancos)
             {
                 var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, dbTransaction, ct);
@@ -488,6 +504,7 @@ public class CobroService : ICobroService
                         dbTransaction,
                         ct);
 
+                    polizaEncolada = polizaId is null;
                     if (polizaId.HasValue)
                     {
                         pago.poliza_id = polizaId;
@@ -505,6 +522,8 @@ public class CobroService : ICobroService
                 MontoTotal = montoTotal,
                 NuevoSaldoCliente = saldoActualCliente - montoTotal,
                 PolizaId = polizaId,
+                PolizaEncolada = polizaEncolada,
+                BanKardexId = movimientoBanco?.BanKardexId,
                 TransaccionId = espejo.ide,
                 Aplicaciones = resultados
             }, "Cobro registrado correctamente.");

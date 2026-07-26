@@ -11,8 +11,10 @@ using SIAD.Core.DTOs.Common;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
+using SIAD.Core.DTOs.Cobros;
 using SIAD.Services.Bancos;
 using SIAD.Services.Cobranza;
+using SIAD.Services.Cobros;
 using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.CaptacionPagos;
@@ -23,6 +25,7 @@ public class CaptacionPagosService : ICaptacionPagosService
     private readonly IBanTransaccionesService _banTransaccionesService;
     private readonly ICurrentCompanyService _currentCompanyService;
     private readonly ICorteMasivoService _corteMasivoService;
+    private readonly ICobroService _cobroService;
     private const string ContabilidadModuloVentas = "VENTAS";
     private const string ContabilidadDocumentoRecibo = "REC";
     private const string ContabilidadDocumentoFactura = "FAC";
@@ -35,12 +38,14 @@ public class CaptacionPagosService : ICaptacionPagosService
         SiadDbContext context,
         IBanTransaccionesService banTransaccionesService,
         ICurrentCompanyService currentCompanyService,
-        ICorteMasivoService corteMasivoService)
+        ICorteMasivoService corteMasivoService,
+        ICobroService cobroService)
     {
         _context = context;
         _banTransaccionesService = banTransaccionesService;
         _currentCompanyService = currentCompanyService;
         _corteMasivoService = corteMasivoService;
+        _cobroService = cobroService;
     }
 
     public async Task<IReadOnlyList<CajaDto>> ListarCatalogoCajasAsync(CancellationToken ct = default)
@@ -310,6 +315,11 @@ public class CaptacionPagosService : ICaptacionPagosService
 
     public async Task<ResponseModelDto> RegistrarPagoAsync(PagoCrearDto dto, CancellationToken ct = default)
     {
+        // FACHADA (unificacion cobranza F2b): validaciones legacy con sus mensajes
+        // exactos + delegacion al motor unico (CobroService). La aplicacion, el
+        // dual-write, la contabilidad (REC unico) y el kardex viven en el motor.
+        // Regla nueva del plan (art. 4): el cobro en ventanilla exige sesion de
+        // caja ABIERTA.
         ArgumentNullException.ThrowIfNull(dto);
 
         if (string.IsNullOrWhiteSpace(dto.NumFactura))
@@ -338,218 +348,69 @@ public class CaptacionPagosService : ICaptacionPagosService
             return ResponseModelDto.Fail($"La factura {dto.NumFactura} ya tiene un pago registrado.");
         }
 
-        var detalles = await _context.factura_detalles
-            .Where(d => d.factura_id == factura.id)
-            .ToListAsync(ct);
-
-        if (detalles.Count == 0)
+        var tieneDetalles = await _context.factura_detalles
+            .AsNoTracking()
+            .AnyAsync(d => d.factura_id == factura.id, ct);
+        if (!tieneDetalles)
         {
             return ResponseModelDto.Fail("La factura no tiene detalles asociados.");
         }
 
-        var total = detalles.Sum(d => d.montovalor_saldo ?? d.montovalor ?? 0m);
+        var total = await _context.factura_detalles
+            .AsNoTracking()
+            .Where(d => d.factura_id == factura.id)
+            .SumAsync(d => d.montovalor_saldo ?? d.montovalor ?? 0m, ct);
         if (total <= 0)
         {
             return ResponseModelDto.Fail("La factura no tiene saldo pendiente.");
         }
 
-        // Montos por servicio ANTES de saldar el detalle: son la base de las
-        // líneas CxC analíticas (efectivo y banco) de la integración por config.
-        var aplicacionesContables = detalles
-            .Select(d => (
-                ServicioCodigo: ResolveServicioCodigoDetalle(d.tiposervicio, d.codigo),
-                Monto: d.montovalor_saldo ?? d.montovalor ?? 0m))
-            .Where(a => a.Monto > 0)
-            .ToList();
-
         var integrarBancos = dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
-        var companyId = EnsureCompanyId();
-        var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
-        var banco = await ResolverBancoCodigoAsync(dto.BancoCuentaId, dto.Banco, ct);
         var fechaPago = dto.FechaPago?.Date ?? DateTime.UtcNow.Date;
         if (integrarBancos && fechaPago > DateTime.Today)
         {
             return ResponseModelDto.Fail("No se permiten pagos bancarios con fecha futura.");
         }
 
-        var fechaHoy = DateOnly.FromDateTime(fechaPago);
-        var contabilidadDocumentId = BuildContabilidadDocumentIdLectora(factura.numrecibo);
-        var contabilidadDocumentNumber = string.IsNullOrWhiteSpace(factura.numfactura)
-            ? $"REC-{factura.numrecibo}"
-            : factura.numfactura.Trim();
-        var contabilidadDescription = $"Cobro captacion factura {contabilidadDocumentNumber}";
+        var banco = await ResolverBancoCodigoAsync(dto.BancoCuentaId, dto.Banco, ct);
 
-        (long BanKardexId, decimal SaldoResultante)? movimientoBanco = null;
-        if (integrarBancos)
+        var cobro = await _cobroService.RegistrarCobroAsync(new CobroCrearDto
         {
-            try
-            {
-                var contraCuentasBanco = await ConstruirContraCuentasBancariasAsync(
-                    aplicacionesContables,
-                    factura.categoria_servicio_id,
-                    factura.con_medicion,
-                    contabilidadDescription,
-                    contabilidadDocumentNumber,
-                    ct);
+            Canal = CanalCobro.Caja,
+            ClienteClave = clienteClave,
+            FormaPago = integrarBancos ? "BANCO" : "EFECTIVO",
+            BancoCuentaId = dto.BancoCuentaId,
+            Banco = dto.Banco,
+            FechaPago = dto.FechaPago,
+            Usuario = dto.Usuario,
+            TipoLegacy = "201",
+            TipoPartidaLegacy = "002",
+            DescripcionLegacy = $"Pago comprobante de banco # {banco} :Recibo # :{factura.numrecibo}",
+            Aplicaciones =
+            [
+                new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = factura.id, Monto = total }
+            ]
+        }, ct);
 
-                movimientoBanco = await RegistrarMovimientoBancarioCaptacionAsync(
-                    dto.BancoCuentaId!.Value,
-                    fechaHoy,
-                    contabilidadDescription,
-                    contabilidadDocumentNumber,
-                    contabilidadDocumentNumber,
-                    total,
-                    contraCuentasBanco,
-                    usuario,
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                return ResponseModelDto.Fail($"Error al registrar movimiento bancario: {ex.Message}");
-            }
+        if (!cobro.Success)
+        {
+            return cobro;
         }
 
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-
-        try
-        {
-            foreach (var detalle in detalles)
+        var resultado = (CobroResultadoDto)cobro.Data!;
+        return ResponseModelDto.Ok(
+            new
             {
-                var saldoActual = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
-                detalle.montovalor_saldo = saldoActual - saldoActual;
-            }
-
-            factura.estado = "C";
-            factura.recolectora = banco;
-            factura.fechapago = fechaHoy;
-            factura.usuario = usuario;
-
-            var clienteInfo = await _context.cliente_maestros
-                .AsNoTracking()
-                .Where(c => c.maestro_cliente_clave == clienteClave)
-                .Select(c => new
-                {
-                    c.ciclos_id,
-                    c.maestro_cliente_indicativo_ruta,
-                    c.maestro_cliente_secuencia,
-                    c.maestro_cliente_tiene_medidor
-                })
-                .FirstOrDefaultAsync(ct);
-
-            var saldoActualCliente = await ObtenerSaldoClienteAsync(clienteClave, ct);
-            var sesionCajaId = await _context.sesion_cajas
-                .Where(s => s.usuario_apertura == usuario && s.estado == "ABIERTA")
-                .Select(s => (int?)s.id)
-                .FirstOrDefaultAsync(ct);
-
-            var transaccion = new transaccion_abonado
-            {
-                company_id = _currentCompanyService.GetCompanyId(),
-                caja_id = sesionCajaId,
-                cliente_clave = clienteClave,
-                recibo = factura.numrecibo,
-                tipotransaccion = "201",
-                fecha_docu = fechaHoy,
-                tipo_partida = "002",
-                banco = banco,
-                descripcion = $"Pago comprobante de banco # {banco} :Recibo # :{factura.numrecibo}",
-                debitos = 0,
-                creditos = total,
-                saldo = saldoActualCliente - total,
-                tipo_servicio = "E",
-                periodo = await ObtenerPeriodoActualCodigoAsync(ct),
-                tasa = "0",
-                estado = "C",
-                fecha_registro = fechaHoy,
-                ciclo = clienteInfo?.ciclos_id?.ToString(),
-                ruta = clienteInfo?.maestro_cliente_indicativo_ruta,
-                secuencia = clienteInfo?.maestro_cliente_secuencia,
-                tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N",
-                usuario = usuario,
-                saldo_detalle = total
-            };
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                AplicarReferenciaMovimientoBancario(
-                    transaccion,
-                    dto.BancoCuentaId.Value,
-                    movimientoBanco.Value.BanKardexId);
-            }
-
-            _context.transaccion_abonados.Add(transaccion);
-            await _context.SaveChangesAsync(ct);
-
-            long? polizaId = null;
-            int? polizaStatus = null;
-            string? polizaEstado = null;
-
-            if (!integrarBancos)
-            {
-                (polizaId, var encolada) = await GenerarComprobanteCaptacionConfigAsync(
-                    companyId,
-                    contabilidadDocumentId,
-                    contabilidadDocumentNumber,
-                    fechaHoy,
-                    contabilidadDescription,
-                    usuario,
-                    aplicacionesContables,
-                    factura.categoria_servicio_id,
-                    factura.con_medicion,
-                    cxcGeneral: false,
-                    _context.Database.CurrentTransaction?.GetDbTransaction(),
-                    ct);
-
-                polizaStatus = polizaId.HasValue ? 1 : null;
-                polizaEstado = polizaId.HasValue ? "POSTED" : (encolada ? "ENCOLADA" : null);
-            }
-
-            // Si el cliente queda sin saldo tras el pago, cancela las OT de corte (33)
-            // pendientes y las saca de la reimpresión del corte.
-            if (saldoActualCliente - total <= 0m)
-            {
-                await _corteMasivoService.CancelarOrdenesCorteClienteAsync(clienteClave, usuario, ct);
-            }
-
-            await tx.CommitAsync(ct);
-
-            return ResponseModelDto.Ok(
-                new
-                {
-                    factura.numfactura,
-                    factura.numrecibo,
-                    PolizaId = polizaId,
-                    PolizaStatus = polizaStatus,
-                    PolizaEstado = polizaEstado,
-                    ContabilidadDocumentId = integrarBancos ? (long?)null : contabilidadDocumentId,
-                    BancoCuentaId = dto.BancoCuentaId,
-                    BanKardexId = movimientoBanco.HasValue ? movimientoBanco.Value.BanKardexId : (long?)null
-                },
-                "Pago registrado correctamente.");
-        }
-        catch (Exception ex)
-        {
-            await tx.RollbackAsync(ct);
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                var compensacionError = await TryCompensarMovimientoBancarioAsync(
-                    dto.BancoCuentaId.Value,
-                    movimientoBanco.Value.BanKardexId,
-                    usuario,
-                    "Rollback captacion lectora",
-                    ct);
-
-                if (!string.IsNullOrWhiteSpace(compensacionError))
-                {
-                    return ResponseModelDto.Fail(
-                        $"Error al registrar el pago: {ex.Message}. " +
-                        $"Adicionalmente, no se pudo compensar el movimiento bancario {movimientoBanco.Value.BanKardexId}: {compensacionError}");
-                }
-            }
-
-            return ResponseModelDto.Fail($"Error al registrar el pago: {ex.Message}");
-        }
+                factura.numfactura,
+                factura.numrecibo,
+                PolizaId = resultado.PolizaId,
+                PolizaStatus = resultado.PolizaId.HasValue ? 1 : (int?)null,
+                PolizaEstado = resultado.PolizaId.HasValue ? "POSTED" : (resultado.PolizaEncolada ? "ENCOLADA" : null),
+                ContabilidadDocumentId = integrarBancos ? (long?)null : resultado.TransaccionId,
+                BancoCuentaId = dto.BancoCuentaId,
+                BanKardexId = resultado.BanKardexId
+            },
+            "Pago registrado correctamente.");
     }
 
     public async Task<ResponseModelDto> ReversarPagoAsync(ReversoRequestDto dto, CancellationToken ct = default)
@@ -593,6 +454,31 @@ public class CaptacionPagosService : ICaptacionPagosService
             transaccionPago,
             out var bancoCuentaId,
             out var banKardexIdOriginal);
+
+        // FACHADA (F2b): pagos nacidos en el motor (tienen adm_pago) se reversan
+        // por el motor — restitucion exacta por linea, sin DELETE, contabilidad y
+        // kardex incluidos. El camino legacy de abajo queda para pagos pre-F2b.
+        if (transaccionPago is not null)
+        {
+            var pagoMotorId = await _context.adm_pagos
+                .AsNoTracking()
+                .Where(p => p.transaccion_abonado_ide == transaccionPago.ide)
+                .Select(p => (long?)p.pago_id)
+                .FirstOrDefaultAsync(ct);
+            if (pagoMotorId.HasValue)
+            {
+                var reversoMotor = await _cobroService.ReversarCobroAsync(new CobroReversoDto
+                {
+                    PagoId = pagoMotorId.Value,
+                    Usuario = dto.Usuario,
+                    Motivo = $"Reverso captacion recibo {factura.numrecibo}"
+                }, ct);
+                return reversoMotor.Success
+                    ? ResponseModelDto.Ok(new { factura.numfactura, factura.numrecibo }, "Pago reversado correctamente.")
+                    : reversoMotor;
+            }
+        }
+
 
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
         try
@@ -908,6 +794,11 @@ public class CaptacionPagosService : ICaptacionPagosService
 
     public async Task<ResponseModelDto> RegistrarPagoManualAsync(PagoManualCrearDto dto, CancellationToken ct = default)
     {
+        // FACHADA (unificacion cobranza F2b): validaciones legacy (incluida la
+        // distribucion por detalle, que debe cubrir el saldo total) + delegacion
+        // al motor unico. Como la distribucion valida cubrir TODO el saldo, el
+        // derrame FIFO del motor produce el mismo estado final (todas las lineas
+        // en cero) y las mismas lineas contables por servicio.
         ArgumentNullException.ThrowIfNull(dto);
 
         if (string.IsNullOrWhiteSpace(dto.ClienteClave))
@@ -920,7 +811,7 @@ public class CaptacionPagosService : ICaptacionPagosService
             return ResponseModelDto.Fail("El recibo es requerido.");
         }
 
-        var reciboDecimal = Convert.ToDecimal(dto.NumRecibo, CultureInfo.InvariantCulture);
+        var reciboDecimal = (decimal)dto.NumRecibo;
         var yaPosteado = await _context.transaccion_abonados
             .AsNoTracking()
             .AnyAsync(t => t.recibo == reciboDecimal && t.tipotransaccion == "201", ct);
@@ -932,7 +823,6 @@ public class CaptacionPagosService : ICaptacionPagosService
         var distribuciones = (dto.Distribucion ?? new List<PagoManualDistribucionDto>())
             .Where(d => d != null && d.Id > 0 && d.ValorDistribuido > 0)
             .ToList();
-
         if (distribuciones.Count == 0)
         {
             return ResponseModelDto.Fail("Debe indicar al menos una distribucion con monto mayor a cero.");
@@ -950,304 +840,97 @@ public class CaptacionPagosService : ICaptacionPagosService
         }
 
         var clienteClave = dto.ClienteClave.Trim();
-        var facturaPrevia = await _context.facturas
+        var factura = await _context.facturas
             .AsNoTracking()
             .FirstOrDefaultAsync(f => f.numrecibo == dto.NumRecibo, ct);
-        if (facturaPrevia is null)
+        if (factura is null)
         {
             return ResponseModelDto.Fail("No se encontro el recibo indicado.");
         }
 
-        if (!string.Equals(facturaPrevia.clientecodigo, clienteClave, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(factura.clientecodigo, clienteClave, StringComparison.OrdinalIgnoreCase))
         {
             return ResponseModelDto.Fail("El recibo no corresponde al cliente indicado.");
         }
 
-        if (string.Equals(facturaPrevia.estado, "C", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(factura.estado, "C", StringComparison.OrdinalIgnoreCase))
         {
             return ResponseModelDto.Fail("El recibo ya esta marcado como pagado.");
         }
 
-        var detalleIds = distribuciones
-            .Select(d => Convert.ToInt32(d.Id, CultureInfo.InvariantCulture))
-            .Distinct()
-            .ToList();
-
+        var detalleIds = distribuciones.Select(d => Convert.ToInt32(d.Id)).Distinct().ToList();
         var detallesDistribucion = await _context.factura_detalles
             .AsNoTracking()
-            .Where(d => d.factura_id == facturaPrevia.id && detalleIds.Contains(d.id))
-            .Select(d => new
-            {
-                d.id,
-                d.tiposervicio,
-                d.codigo,
-                d.descripcion,
-                d.montovalor,
-                d.montovalor_saldo
-            })
+            .Where(d => d.factura_id == factura.id && detalleIds.Contains(d.id))
             .ToListAsync(ct);
-
         if (detallesDistribucion.Count != detalleIds.Count)
         {
             return ResponseModelDto.Fail("No se pudo resolver la distribucion del recibo para registrar el posteo manual.");
         }
 
-        var detalleLookup = detallesDistribucion.ToDictionary(d => Convert.ToInt64(d.id, CultureInfo.InvariantCulture));
+        var lookup = detallesDistribucion.ToDictionary(d => (long)d.id);
         foreach (var distribucion in distribuciones)
         {
-            if (!detalleLookup.TryGetValue(distribucion.Id, out var detalle))
+            if (!lookup.TryGetValue(distribucion.Id, out var detalle))
             {
                 return ResponseModelDto.Fail($"No se encontro el detalle {distribucion.Id} para el posteo manual.");
             }
 
-            var saldoDisponible = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
-            if (distribucion.ValorDistribuido > saldoDisponible)
+            var saldoLinea = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
+            if (distribucion.ValorDistribuido > saldoLinea)
             {
-                return ResponseModelDto.Fail(
-                    $"La distribucion del detalle {distribucion.Id} excede el saldo pendiente del recibo.");
+                return ResponseModelDto.Fail($"La distribucion del detalle {distribucion.Id} excede el saldo pendiente del recibo.");
             }
         }
 
-        var saldoPendienteRecibo = await _context.factura_detalles
+        var saldoTotalRecibo = await _context.factura_detalles
             .AsNoTracking()
-            .Where(d => d.factura_id == facturaPrevia.id)
-            .Select(d => d.montovalor_saldo ?? d.montovalor ?? 0m)
-            .ToListAsync(ct);
-
-        if (Math.Abs(totalDistribucion - saldoPendienteRecibo.Sum()) > 0.01m)
+            .Where(d => d.factura_id == factura.id)
+            .SumAsync(d => d.montovalor_saldo ?? d.montovalor ?? 0m, ct);
+        if (Math.Abs(totalDistribucion - saldoTotalRecibo) > 0.01m)
         {
             return ResponseModelDto.Fail("La distribucion debe cubrir el saldo total del recibo.");
         }
 
-        var integrarBancos = dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
-        var companyId = EnsureCompanyId();
-        var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
-        var fechaContable = DateOnly.FromDateTime(DateTime.UtcNow.Date);
-        var contabilidadDocumentId = BuildContabilidadDocumentIdManual(dto.NumRecibo);
-        var contabilidadDocumentNumber = $"MAN-{dto.NumRecibo}";
-        var contabilidadDescription = $"Cobro manual captacion recibo {dto.NumRecibo}";
         var bancoCodigo = await ResolverBancoCodigoAsync(dto.BancoCuentaId, dto.Banco, ct) ?? "EFECTIVO";
+        var integrarBancos = dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
 
-        // Montos por servicio de la distribución: base de las líneas CxC
-        // analíticas (efectivo y banco) de la integración por config.
-        var aplicacionesContables = distribuciones
-            .Select(d => (
-                ServicioCodigo: ResolveServicioCodigoDetalle(
-                    detalleLookup[d.Id].tiposervicio,
-                    detalleLookup[d.Id].codigo),
-                Monto: d.ValorDistribuido))
-            .Where(a => a.Monto > 0)
-            .ToList();
-
-        (long BanKardexId, decimal SaldoResultante)? movimientoBanco = null;
-        if (integrarBancos)
+        var cobro = await _cobroService.RegistrarCobroAsync(new CobroCrearDto
         {
-            try
-            {
-                var contraCuentasBanco = await ConstruirContraCuentasBancariasAsync(
-                    aplicacionesContables,
-                    facturaPrevia.categoria_servicio_id,
-                    facturaPrevia.con_medicion,
-                    contabilidadDescription,
-                    contabilidadDocumentNumber,
-                    ct);
+            Canal = CanalCobro.Caja,
+            ClienteClave = clienteClave,
+            FormaPago = integrarBancos ? "BANCO" : "EFECTIVO",
+            BancoCuentaId = dto.BancoCuentaId,
+            Banco = string.IsNullOrWhiteSpace(dto.Banco) ? bancoCodigo : dto.Banco,
+            Usuario = dto.Usuario,
+            TipoLegacy = "201",
+            TipoPartidaLegacy = "002",
+            DescripcionLegacy = $"Pago comprobante de banco # {bancoCodigo} :Recibo # :{dto.NumRecibo}",
+            Aplicaciones =
+            [
+                new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = factura.id, Monto = dto.Valor }
+            ]
+        }, ct);
 
-                movimientoBanco = await RegistrarMovimientoBancarioCaptacionAsync(
-                    dto.BancoCuentaId!.Value,
-                    fechaContable,
-                    contabilidadDescription,
-                    contabilidadDocumentNumber,
-                    contabilidadDocumentNumber,
-                    dto.Valor,
-                    contraCuentasBanco,
-                    usuario,
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                return ResponseModelDto.Fail($"Error al registrar movimiento bancario manual: {ex.Message}");
-            }
+        if (!cobro.Success)
+        {
+            return cobro;
         }
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(ct);
-
-        try
-        {
-            // Lock factura row to prevent concurrent duplicate postings.
-            var factura = await _context.facturas
-                .FromSqlInterpolated($@"SELECT * FROM factura WHERE numrecibo = {dto.NumRecibo} AND clientecodigo = {clienteClave} FOR UPDATE")
-                .FirstOrDefaultAsync(ct);
-
-            if (factura is null)
+        var resultado = (CobroResultadoDto)cobro.Data!;
+        return ResponseModelDto.Ok(
+            new
             {
-                throw new InvalidOperationException("No se pudo bloquear el recibo para registrar el posteo manual.");
-            }
-
-            if (string.Equals(factura.estado, "C", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("El recibo ya esta marcado como pagado.");
-            }
-
-            var posteoExistente = await _context.transaccion_abonados
-                .AnyAsync(t => t.recibo == reciboDecimal && t.tipotransaccion == "201", ct);
-            if (posteoExistente)
-            {
-                throw new InvalidOperationException("El recibo ya tiene un posteo aplicado.");
-            }
-
-            // Apply distribution to detail balances.
-            var detallesTracked = await _context.factura_detalles
-                .Where(d => d.factura_id == factura.id && detalleIds.Contains(d.id))
-                .ToListAsync(ct);
-            foreach (var dist in distribuciones)
-            {
-                var det = detallesTracked.FirstOrDefault(d => d.id == Convert.ToInt32(dist.Id, CultureInfo.InvariantCulture));
-                if (det is not null)
-                {
-                    det.montovalor_saldo = (det.montovalor_saldo ?? det.montovalor ?? 0m) - dist.ValorDistribuido;
-                }
-            }
-
-            // Mark invoice as paid.
-            factura.estado = "C";
-            factura.fechapago = fechaContable;
-            factura.recolectora = bancoCodigo;
-            factura.usuario = usuario;
-
-            // Build transaccion_abonado directly (replaces sp_registrar_posteo_manual).
-            var clienteInfo = await _context.cliente_maestros
-                .AsNoTracking()
-                .Where(c => c.maestro_cliente_clave == clienteClave)
-                .Select(c => new
-                {
-                    c.ciclos_id,
-                    c.maestro_cliente_indicativo_ruta,
-                    c.maestro_cliente_secuencia,
-                    c.maestro_cliente_tiene_medidor
-                })
-                .FirstOrDefaultAsync(ct);
-
-            var saldoActualCliente = await ObtenerSaldoClienteAsync(clienteClave, ct);
-            var descripcion = $"Pago comprobante de banco # {bancoCodigo} :Recibo # :{dto.NumRecibo}";
-            var sesionCajaId = await _context.sesion_cajas
-                .Where(s => s.usuario_apertura == usuario && s.estado == "ABIERTA")
-                .Select(s => (int?)s.id)
-                .FirstOrDefaultAsync(ct);
-
-            var transaccion = new transaccion_abonado
-            {
-                company_id = _currentCompanyService.GetCompanyId(),
-                caja_id = sesionCajaId,
-                cliente_clave = clienteClave,
-                recibo = dto.NumRecibo,
-                tipotransaccion = "201",
-                fecha_docu = fechaContable,
-                tipo_partida = "002",
-                banco = bancoCodigo,
-                descripcion = descripcion,
-                debitos = 0,
-                creditos = dto.Valor,
-                saldo = saldoActualCliente - dto.Valor,
-                tipo_servicio = "E",
-                periodo = await ObtenerPeriodoActualCodigoAsync(ct),
-                tasa = "0",
-                estado = "C",
-                fecha_registro = fechaContable,
-                ciclo = clienteInfo?.ciclos_id?.ToString(),
-                ruta = clienteInfo?.maestro_cliente_indicativo_ruta,
-                secuencia = clienteInfo?.maestro_cliente_secuencia,
-                tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N",
-                usuario = usuario,
-                saldo_detalle = dto.Valor
-            };
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                AplicarReferenciaMovimientoBancario(
-                    transaccion,
-                    dto.BancoCuentaId.Value,
-                    movimientoBanco.Value.BanKardexId);
-            }
-
-            _context.transaccion_abonados.Add(transaccion);
-            await _context.SaveChangesAsync(ct);
-
-            long? polizaId = null;
-            int? polizaStatus = null;
-            string? polizaEstado = null;
-            if (!integrarBancos)
-            {
-                (polizaId, var encolada) = await GenerarComprobanteCaptacionConfigAsync(
-                    companyId,
-                    contabilidadDocumentId,
-                    contabilidadDocumentNumber,
-                    fechaContable,
-                    contabilidadDescription,
-                    usuario,
-                    aplicacionesContables,
-                    facturaPrevia.categoria_servicio_id,
-                    facturaPrevia.con_medicion,
-                    cxcGeneral: false,
-                    _context.Database.CurrentTransaction?.GetDbTransaction(),
-                    ct);
-
-                polizaStatus = polizaId.HasValue ? 1 : null;
-                polizaEstado = polizaId.HasValue ? "POSTED" : (encolada ? "ENCOLADA" : null);
-            }
-
-            // Si el cliente queda sin saldo tras el posteo, cancela las OT de corte (33)
-            // pendientes y las saca de la reimpresión del corte.
-            if (saldoActualCliente - dto.Valor <= 0m)
-            {
-                await _corteMasivoService.CancelarOrdenesCorteClienteAsync(clienteClave, usuario, ct);
-            }
-
-            await transaction.CommitAsync(ct);
-
-            return ResponseModelDto.Ok(
-                new
-                {
-                    dto.ClienteClave,
-                    dto.NumRecibo,
-                    PolizaId = polizaId,
-                    PolizaStatus = polizaStatus,
-                    PolizaEstado = polizaEstado,
-                    ContabilidadDocumentId = polizaId.HasValue ? (long?)contabilidadDocumentId : null,
-                    BancoCuentaId = dto.BancoCuentaId,
-                    BanKardexId = movimientoBanco.HasValue ? movimientoBanco.Value.BanKardexId : (long?)null
-                },
-                "Posteo manual registrado correctamente.");
-        }
-        catch (Exception ex)
-        {
-            try
-            {
-                await transaction.RollbackAsync(ct);
-            }
-            catch
-            {
-                // Ignore rollback failures to preserve original error.
-            }
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                var compensacionError = await TryCompensarMovimientoBancarioAsync(
-                    dto.BancoCuentaId.Value,
-                    movimientoBanco.Value.BanKardexId,
-                    usuario,
-                    "Rollback captacion manual",
-                    ct);
-
-                if (!string.IsNullOrWhiteSpace(compensacionError))
-                {
-                    return ResponseModelDto.Fail(
-                        $"Error al registrar posteo manual: {ex.Message}. " +
-                        $"Adicionalmente, no se pudo compensar el movimiento bancario {movimientoBanco.Value.BanKardexId}: {compensacionError}");
-                }
-            }
-
-            return ResponseModelDto.Fail($"Error al registrar posteo manual: {ex.Message}");
-        }
+                dto.ClienteClave,
+                dto.NumRecibo,
+                PolizaId = resultado.PolizaId,
+                PolizaStatus = resultado.PolizaId.HasValue ? 1 : (int?)null,
+                PolizaEstado = resultado.PolizaId.HasValue ? "POSTED" : (resultado.PolizaEncolada ? "ENCOLADA" : null),
+                ContabilidadDocumentId = resultado.PolizaId.HasValue ? (long?)resultado.TransaccionId : null,
+                BancoCuentaId = dto.BancoCuentaId,
+                BanKardexId = resultado.BanKardexId
+            },
+            "Posteo manual registrado correctamente.");
     }
 
     public async Task<ResponseModelDto> ReversarPagoManualAsync(ReversoManualRequestDto dto, CancellationToken ct = default)
@@ -1295,6 +978,38 @@ public class CaptacionPagosService : ICaptacionPagosService
             transaccionPago,
             out var bancoCuentaId,
             out var banKardexIdOriginal);
+
+        // FACHADA (F2b): posteos nacidos en el motor se reversan por el motor.
+        {
+            var reciboDecimalMotor = (decimal)dto.Recibo;
+            var ideMotor = await _context.transaccion_abonados
+                .AsNoTracking()
+                .Where(t => t.recibo == reciboDecimalMotor && t.tipotransaccion == "201")
+                .OrderByDescending(t => t.ide)
+                .Select(t => (int?)t.ide)
+                .FirstOrDefaultAsync(ct);
+            if (ideMotor.HasValue)
+            {
+                var pagoMotorId = await _context.adm_pagos
+                    .AsNoTracking()
+                    .Where(p => p.transaccion_abonado_ide == ideMotor.Value)
+                    .Select(p => (long?)p.pago_id)
+                    .FirstOrDefaultAsync(ct);
+                if (pagoMotorId.HasValue)
+                {
+                    var reversoMotor = await _cobroService.ReversarCobroAsync(new CobroReversoDto
+                    {
+                        PagoId = pagoMotorId.Value,
+                        Usuario = dto.Usuario,
+                        Motivo = $"Reverso posteo manual recibo {dto.Recibo}"
+                    }, ct);
+                    return reversoMotor.Success
+                        ? ResponseModelDto.Ok(new { dto.ClienteClave, dto.Recibo }, "Posteo manual reversado correctamente.")
+                        : reversoMotor;
+                }
+            }
+        }
+
 
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
         try
@@ -1421,6 +1136,10 @@ public class CaptacionPagosService : ICaptacionPagosService
 
     public async Task<ResponseModelDto> RegistrarPagoMiscelaneoAsync(PagoMiscelaneoCrearDto dto, CancellationToken ct = default)
     {
+        // FACHADA (unificacion cobranza F2b): validaciones legacy + delegacion al
+        // motor unico con CxcGeneral (los recibos R solo saldan la CxC general que
+        // dejo su emision). NOTA plan art. 9.8: los miscelaneos que son VENTA nueva
+        // migran a factura con CAI en F3; este flujo queda solo para cobros.
         ArgumentNullException.ThrowIfNull(dto);
 
         if (string.IsNullOrWhiteSpace(dto.ClienteClave))
@@ -1433,267 +1152,88 @@ public class CaptacionPagosService : ICaptacionPagosService
             return ResponseModelDto.Fail("El numero de recibo es requerido.");
         }
 
-        var integrarBancos = dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
         var clienteClave = dto.ClienteClave.Trim();
-        var companyId = EnsureCompanyId();
-        var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
         var banco = await ResolverBancoCodigoAsync(dto.BancoCuentaId, dto.Banco, ct);
-        var fechaHoy = DateOnly.FromDateTime(DateTime.UtcNow);
-        var reciboDecimal = Convert.ToDecimal(dto.Recibo, CultureInfo.InvariantCulture);
-        var contabilidadDocumentId = BuildContabilidadDocumentIdMiscelaneo(dto.Recibo);
-        var contabilidadDocumentNumber = $"MIS-{dto.Recibo}";
-        var contabilidadDescription = $"Cobro miscelaneo captacion recibo {dto.Recibo}";
-        (long BanKardexId, decimal SaldoResultante)? movimientoBanco = null;
+        var integrarBancos = dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
 
-        var facturaPrevia = await _context.facturas
+        var factura = await _context.facturas
             .AsNoTracking()
             .FirstOrDefaultAsync(f => f.numrecibo == dto.Recibo, ct);
-
-        if (facturaPrevia is null)
+        if (factura is null)
         {
             return ResponseModelDto.Fail("No se encontro el recibo indicado.");
         }
 
-        if (!string.Equals(facturaPrevia.clientecodigo, clienteClave, StringComparison.OrdinalIgnoreCase))
+        if (!string.Equals(factura.clientecodigo, clienteClave, StringComparison.OrdinalIgnoreCase))
         {
             return ResponseModelDto.Fail("El recibo no corresponde al cliente indicado.");
         }
 
-        if (string.Equals(facturaPrevia.estado, "C", StringComparison.OrdinalIgnoreCase))
+        if (string.Equals(factura.estado, "C", StringComparison.OrdinalIgnoreCase))
         {
             return ResponseModelDto.Fail("El recibo ya esta marcado como pagado.");
         }
 
-        var yaPosteado = await _context.transaccion_abonados
+        var reciboDecimal = (decimal)dto.Recibo;
+        var yaPagado = await _context.transaccion_abonados
             .AsNoTracking()
             .AnyAsync(t => t.recibo == reciboDecimal && t.tipotransaccion == "201", ct);
-        if (yaPosteado)
+        if (yaPagado)
         {
             return ResponseModelDto.Fail($"El recibo {dto.Recibo} ya tiene un pago registrado.");
         }
 
-        var detallesPrevios = await _context.factura_detalles
+        var tieneDetalles = await _context.factura_detalles
             .AsNoTracking()
-            .Where(d => d.factura_id == facturaPrevia.id)
-            .ToListAsync(ct);
-
-        if (detallesPrevios.Count == 0)
+            .AnyAsync(d => d.factura_id == factura.id, ct);
+        if (!tieneDetalles)
         {
             return ResponseModelDto.Fail("El recibo no tiene detalles asociados.");
         }
 
-        var total = facturaPrevia.saldototal ?? 0m;
+        var total = factura.saldototal ?? 0m;
         if (total <= 0)
         {
             return ResponseModelDto.Fail("El recibo no tiene saldo pendiente.");
         }
 
-        if (integrarBancos)
+        var cobro = await _cobroService.RegistrarCobroAsync(new CobroCrearDto
         {
-            try
-            {
-                // El cobro de un misceláneo salda la CxC que dejó su emisión
-                // (Banco / CxC): contracuenta CxC general de la matriz de
-                // integración — el ingreso ya se reconoció al emitir el recibo.
-                var cuentaCxc = await IntegracionContableConfigSql.ResolverCuentaAsync(
-                    _context.Database.GetDbConnection(), companyId, "CXC", transaction: null, ct);
+            Canal = CanalCobro.Caja,
+            ClienteClave = clienteClave,
+            FormaPago = integrarBancos ? "BANCO" : "EFECTIVO",
+            BancoCuentaId = dto.BancoCuentaId,
+            Banco = dto.Banco,
+            Usuario = dto.Usuario,
+            TipoLegacy = "201",
+            TipoPartidaLegacy = "01",
+            CxcGeneral = true,
+            DescripcionLegacy = $"Pago comprobante de banco # {banco} :Recibo # :{factura.numrecibo}",
+            Aplicaciones =
+            [
+                new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = factura.id, Monto = total }
+            ]
+        }, ct);
 
-                var contraCuentasBanco = new List<BanTransaccionContraLineaDto>
-                {
-                    new()
-                    {
-                        CuentaId = cuentaCxc,
-                        Monto = total,
-                        Descripcion = contabilidadDescription,
-                        SourceDocument = contabilidadDocumentNumber
-                    }
-                };
-
-                movimientoBanco = await RegistrarMovimientoBancarioCaptacionAsync(
-                    dto.BancoCuentaId!.Value,
-                    fechaHoy,
-                    contabilidadDescription,
-                    contabilidadDocumentNumber,
-                    contabilidadDocumentNumber,
-                    total,
-                    contraCuentasBanco,
-                    usuario,
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                return ResponseModelDto.Fail($"Error al registrar movimiento bancario miscelaneo: {ex.Message}");
-            }
+        if (!cobro.Success)
+        {
+            return cobro;
         }
 
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-        try
-        {
-            // Lock the invoice row to avoid concurrent duplicate postings for the same receipt.
-            var factura = await _context.facturas
-                .FromSqlInterpolated($@"SELECT * FROM factura WHERE numrecibo = {dto.Recibo} FOR UPDATE")
-                .FirstOrDefaultAsync(ct);
-
-            if (factura is null)
+        var resultado = (CobroResultadoDto)cobro.Data!;
+        return ResponseModelDto.Ok(
+            new
             {
-                throw new InvalidOperationException("No se encontro el recibo indicado.");
-            }
-
-            if (!string.Equals(factura.clientecodigo, clienteClave, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("El recibo no corresponde al cliente indicado.");
-            }
-
-            if (string.Equals(factura.estado, "C", StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException("El recibo ya esta marcado como pagado.");
-            }
-
-            yaPosteado = await _context.transaccion_abonados
-                .AnyAsync(t => t.recibo == reciboDecimal && t.tipotransaccion == "201", ct);
-            if (yaPosteado)
-            {
-                throw new InvalidOperationException($"El recibo {dto.Recibo} ya tiene un pago registrado.");
-            }
-
-            var detallesFactura = await _context.factura_detalles
-                .Where(d => d.factura_id == factura.id)
-                .ToListAsync(ct);
-
-            if (detallesFactura.Count == 0)
-            {
-                throw new InvalidOperationException("El recibo no tiene detalles asociados.");
-            }
-
-            total = factura.saldototal ?? 0m;
-            if (total <= 0)
-            {
-                throw new InvalidOperationException("El recibo no tiene saldo pendiente.");
-            }
-
-            foreach (var detalle in detallesFactura)
-            {
-                var saldoDetalleActual = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
-                detalle.montovalor_saldo = saldoDetalleActual - saldoDetalleActual;
-            }
-
-            factura.estado = "C";
-            factura.recolectora = banco;
-            factura.fechapago = fechaHoy;
-            factura.usuario = usuario;
-
-            var saldoActual = await ObtenerSaldoClienteAsync(clienteClave, ct);
-            var sesionCajaId = await _context.sesion_cajas
-                .Where(s => s.usuario_apertura == usuario && s.estado == "ABIERTA")
-                .Select(s => (int?)s.id)
-                .FirstOrDefaultAsync(ct);
-
-            var transaccion = new transaccion_abonado
-            {
-                company_id = _currentCompanyService.GetCompanyId(),
-                caja_id = sesionCajaId,
-                cliente_clave = clienteClave,
-                recibo = factura.numrecibo,
-                tipotransaccion = "201",
-                docufuente = factura.id,
-                docufuente2 = factura.numfactura,
-                fecha_docu = fechaHoy,
-                tipo_partida = "01",
-                banco = banco,
-                descripcion = $"Pago comprobante de banco # {banco} :Recibo # :{factura.numrecibo}",
-                plazo = 30,
-                debitos = 0,
-                creditos = total,
-                saldo = saldoActual - total,
-                tipo_servicio = "E",
-                periodo = await ObtenerPeriodoActualCodigoAsync(ct),
-                tasa = "",
-                estado = "C",
-                fecha_registro = fechaHoy,
-                usuario = usuario,
-                saldo_detalle = total
-            };
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                AplicarReferenciaMovimientoBancario(
-                    transaccion,
-                    dto.BancoCuentaId.Value,
-                    movimientoBanco.Value.BanKardexId);
-            }
-
-            _context.transaccion_abonados.Add(transaccion);
-            await _context.SaveChangesAsync(ct);
-
-            long? polizaId = null;
-            int? polizaStatus = null;
-            string? polizaEstado = null;
-            if (!integrarBancos)
-            {
-                (polizaId, var encolada) = await GenerarComprobanteCaptacionConfigAsync(
-                    companyId,
-                    contabilidadDocumentId,
-                    contabilidadDocumentNumber,
-                    fechaHoy,
-                    contabilidadDescription,
-                    usuario,
-                    new List<(string? ServicioCodigo, decimal Monto)> { (null, total) },
-                    categoriaServicioId: null,
-                    conMedicion: null,
-                    cxcGeneral: true,
-                    _context.Database.CurrentTransaction?.GetDbTransaction(),
-                    ct);
-
-                polizaStatus = polizaId.HasValue ? 1 : null;
-                polizaEstado = polizaId.HasValue ? "POSTED" : (encolada ? "ENCOLADA" : null);
-            }
-
-            await tx.CommitAsync(ct);
-
-            return ResponseModelDto.Ok(
-                new
-                {
-                    factura.numrecibo,
-                    factura.clientecodigo,
-                    PolizaId = polizaId,
-                    PolizaStatus = polizaStatus,
-                    PolizaEstado = polizaEstado,
-                    ContabilidadDocumentId = polizaId.HasValue ? (long?)contabilidadDocumentId : null,
-                    BancoCuentaId = dto.BancoCuentaId,
-                    BanKardexId = movimientoBanco.HasValue ? movimientoBanco.Value.BanKardexId : (long?)null
-                },
-                "Pago miscelaneo registrado correctamente.");
-        }
-        catch (Exception ex)
-        {
-            try
-            {
-                await tx.RollbackAsync(ct);
-            }
-            catch
-            {
-                // Ignore rollback failures to preserve original error.
-            }
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                var compensacionError = await TryCompensarMovimientoBancarioAsync(
-                    dto.BancoCuentaId.Value,
-                    movimientoBanco.Value.BanKardexId,
-                    usuario,
-                    "Rollback captacion miscelaneo",
-                    ct);
-
-                if (!string.IsNullOrWhiteSpace(compensacionError))
-                {
-                    return ResponseModelDto.Fail(
-                        $"Error al registrar pago miscelaneo: {ex.Message}. " +
-                        $"Adicionalmente, no se pudo compensar el movimiento bancario {movimientoBanco.Value.BanKardexId}: {compensacionError}");
-                }
-            }
-
-            return ResponseModelDto.Fail($"Error al registrar pago miscelaneo: {ex.Message}");
-        }
+                factura.numrecibo,
+                factura.clientecodigo,
+                PolizaId = resultado.PolizaId,
+                PolizaStatus = resultado.PolizaId.HasValue ? 1 : (int?)null,
+                PolizaEstado = resultado.PolizaId.HasValue ? "POSTED" : (resultado.PolizaEncolada ? "ENCOLADA" : null),
+                ContabilidadDocumentId = resultado.PolizaId.HasValue ? (long?)resultado.TransaccionId : null,
+                BancoCuentaId = dto.BancoCuentaId,
+                BanKardexId = resultado.BanKardexId
+            },
+            "Pago miscelaneo registrado correctamente.");
     }
 
     public async Task<ResponseModelDto> ReversarPagoMiscelaneoAsync(ReversoMiscelaneoRequestDto dto, CancellationToken ct = default)
@@ -1730,6 +1270,38 @@ public class CaptacionPagosService : ICaptacionPagosService
         {
             return ResponseModelDto.Fail("El recibo no tiene detalles asociados.");
         }
+
+        // FACHADA (F2b): pagos nacidos en el motor se reversan por el motor.
+        {
+            var reciboDecimalMotor = (decimal)dto.Recibo;
+            var ideMotor = await _context.transaccion_abonados
+                .AsNoTracking()
+                .Where(t => t.recibo == reciboDecimalMotor && t.tipotransaccion == "201")
+                .OrderByDescending(t => t.ide)
+                .Select(t => (int?)t.ide)
+                .FirstOrDefaultAsync(ct);
+            if (ideMotor.HasValue)
+            {
+                var pagoMotorId = await _context.adm_pagos
+                    .AsNoTracking()
+                    .Where(p => p.transaccion_abonado_ide == ideMotor.Value)
+                    .Select(p => (long?)p.pago_id)
+                    .FirstOrDefaultAsync(ct);
+                if (pagoMotorId.HasValue)
+                {
+                    var reversoMotor = await _cobroService.ReversarCobroAsync(new CobroReversoDto
+                    {
+                        PagoId = pagoMotorId.Value,
+                        Usuario = dto.Usuario,
+                        Motivo = $"Reverso captacion miscelaneo recibo {dto.Recibo}"
+                    }, ct);
+                    return reversoMotor.Success
+                        ? ResponseModelDto.Ok(new { dto.Recibo }, "Pago miscelaneo reversado correctamente.")
+                        : reversoMotor;
+                }
+            }
+        }
+
 
         await using var tx = await _context.Database.BeginTransactionAsync(ct);
         try
