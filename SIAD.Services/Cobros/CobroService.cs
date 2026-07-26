@@ -616,8 +616,10 @@ public class CobroService : ICobroService
             {
                 var connection = _context.Database.GetDbConnection();
                 var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
-                var documentoContable = ResolverDocumentoContable(espejo.tipotransaccion ?? "202");
 
+                // Documento único del motor (VENTAS/REC). Los ABO históricos
+                // pre-motor se reversan por su camino legacy hasta F2b.
+                var documentoContable = ResolverDocumentoContable(espejo.tipotransaccion ?? "202");
                 await IntegracionContableConfigSql.RevertirComprobanteAsync(
                     connection,
                     companyId,
@@ -673,12 +675,14 @@ public class CobroService : ICobroService
     }
 
     /// <summary>
-    /// Módulo/documento contable por compatibilidad legacy durante el dual-write:
-    /// '201' (captación) → VENTAS/REC, '202' (abono) → CAJA/ABO. La unificación a
-    /// un documento único queda pendiente de validación con el contador (plan §9.4).
+    /// Documento contable ÚNICO para todo cobro del motor: VENTAS/REC
+    /// (decisión confirmada con el contador 2026-07-26 — plan §9.4; la
+    /// distinción REC/ABO era un accidente de que existían dos pantallas).
+    /// Los ABO históricos pre-motor no se tocan; su reverso va por el camino
+    /// legacy (F2b) o por la búsqueda [REC, ABO] del reverso del motor.
     /// </summary>
-    private static (string Modulo, string Documento) ResolverDocumentoContable(string tipoLegacy) =>
-        tipoLegacy == "201" ? ("VENTAS", "REC") : ("CAJA", "ABO");
+    private static (string Modulo, string Documento) ResolverDocumentoContable(string _) =>
+        ("VENTAS", "REC");
 
     private async Task<decimal> ObtenerSaldoClienteAsync(string clienteClave, CancellationToken ct)
     {

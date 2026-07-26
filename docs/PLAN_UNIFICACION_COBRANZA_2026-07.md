@@ -190,9 +190,11 @@ fn_adm_siguiente_correlativo_documento(company_id, tipo_documento, canal_id)
   → 'REC-00000013'  (consumo atómico UPDATE…RETURNING)
 ```
 
-- El folio puede tener huecos si un cobro hace rollback (igual que el CAI acepta
-  huecos vía estado del correlativo). Si el contador exige folio continuo
-  estricto, se consume en subtransacción propia — decisión en §9.
+- **Continuidad estricta** (confirmada con el contador 2026-07-26 y ya
+  garantizada por construcción): el folio se consume DENTRO de la transacción
+  del cobro — si el cobro falla, el rollback devuelve el folio y no queda
+  hueco. Costo: dos cobros simultáneos de la misma empresa se serializan un
+  instante en la fila de la serie (imperceptible al volumen de APC).
 - Migración: `valor_actual` inicial = `MAX(factura.numrecibo)` por empresa; el
   recibo PDF pasa a imprimir `adm_pago.numero_recibo`.
 - La misma tabla reemplaza los correlativos `MAX+1` con carrera de
@@ -437,22 +439,25 @@ embebidos + `CaptacionPagosIndex.razor` huérfano + clientes HTTP),
 2. Se **reescriben por dentro** los SPs del WS bancario (no se crea un canal
    paralelo).
 3. `transaccion_abonado` queda como histórico solo-lectura, **no se elimina**.
-4. Documento contable único `REC` para todo cobro (desaparece la distinción
-   REC/ABO en contabilidad) — validar con el contador antes de F2.
+4. ✅ **CONFIRMADO (contador, 2026-07-26)**: documento contable único `REC`
+   (módulo VENTAS) para todo cobro del motor — desaparece la distinción
+   REC/ABO. Implementado en `CobroService.ResolverDocumentoContable`; los ABO
+   históricos no se tocan y se reversan por su camino legacy.
 5. La cartera real SIMAFI se migrará como documentos `SALDO_INICIAL` por
    cliente/período (no como bulto de saldo).
 6. **El recibo de cobro NO lleva CAI** (§3.8): folio interno por empresa vía
    `adm_documento_secuencia`, único por `(company_id, numero_recibo)`. El CAI
-   sigue intacto para FAC/NC/ND. — Validar con el contador/SAR si quieren
-   confirmación formal.
-7. Folio de recibo **con huecos aceptados** ante rollback (mismo criterio que el
-   CAI offline). Si el contador exige continuidad estricta, se cambia a consumo
-   en subtransacción (costo menor, decidir antes de F2).
-8. Los misceláneos (`tipofactura='R'`) hoy no llevan CAI y su
-   `tipo_documento_fiscal_id` cae al default 1 (Factura) — inconsistencia
-   fiscal latente que este plan corrige al pasarlos por el motor único; si un
-   misceláneo ES una venta nueva (no un cobro), debe emitirse como factura con
-   CAI. Validar caso por caso con el contador.
+   sigue intacto para FAC/NC/ND.
+7. ✅ **CONFIRMADO (contador, 2026-07-26)**: folio con **continuidad estricta**
+   — ya garantizada por construcción (§3.8): el folio se consume dentro de la
+   transacción del cobro y el rollback lo devuelve.
+8. ✅ **CONFIRMADO (contador, 2026-07-26)**: los misceláneos que son **venta
+   nueva se emiten como factura con CAI** (tipo fiscal correcto, serie CAI
+   propia); el recibo interno queda solo para el COBRO de documentos ya
+   emitidos. Diseño de detalle en F3: la pantalla de venta miscelánea emite la
+   factura (con CAI) y la caja única la cobra como cualquier factura — corrige
+   de raíz la inconsistencia actual (`tipofactura='R'` sin CAI con
+   `tipo_documento_fiscal_id` default 1).
 
 ## 10. Hallazgos anexos (fuera de alcance, registrar como correcciones aparte)
 
