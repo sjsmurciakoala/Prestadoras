@@ -5,6 +5,10 @@ namespace SIAD.Core.DTOs.Caja;
 
 // ------- Sesión activa -------
 
+// NOTA: los records de DTO deben tener UN solo constructor — System.Text.Json
+// no deserializa tipos con varios constructores parametrizados sin
+// [JsonConstructor]. No agregar sobrecargas "de compatibilidad" aquí; ante un
+// cambio de firma, Rebuild Solution.
 public record SesionCajaDto(
     int Id,
     string UsuarioApertura,
@@ -14,25 +18,14 @@ public record SesionCajaDto(
     string Estado,
     decimal? TotalCobrado,
     int? CajaFisicaId = null
-)
-{
-    // Compatibilidad binaria con ensamblados compilados contra la firma previa
-    // (sin CajaFisicaId) — evita MissingMethodException en builds a medias.
-    public SesionCajaDto(int Id, string UsuarioApertura, DateTime FechaApertura,
-        string? UsuarioCierre, DateTime? FechaCierre, string Estado, decimal? TotalCobrado)
-        : this(Id, UsuarioApertura, FechaApertura, UsuarioCierre, FechaCierre, Estado, TotalCobrado, null) { }
-}
+);
 
 // ------- Apertura / Cierre -------
 
-// CajaFisicaId: caja (ventanilla) donde se abre la sesión. Opcional durante la
-// transición F2; la UI de apertura la exige desde F3 (varias cajas simultáneas,
-// una sesión abierta por caja).
-public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null)
-{
-    // Compatibilidad binaria con la firma previa de un solo argumento.
-    public AbrirCajaRequestDto(string UsuarioApertura) : this(UsuarioApertura, null) { }
-}
+// F3: la caja NO se elige — la apertura resuelve la caja ASIGNADA al usuario
+// (adm_caja_usuario). CajaFisicaId se conserva solo por compatibilidad de
+// contrato y el servicio lo ignora.
+public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null);
 
 // ------- Cajas físicas (adm_caja) -------
 
