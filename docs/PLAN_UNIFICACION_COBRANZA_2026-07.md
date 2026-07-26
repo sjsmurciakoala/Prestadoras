@@ -303,10 +303,15 @@ Cada fase = 1 PR contra `origin/main` + scripts DDL timestampeados en `Database/
   `valor_actual = MAX(numrecibo)`), índices tenant-safe.
 - `CobroService` + `ICobroService` + DTOs + controller `api/cobros`
   (`[ModuleAuthorize(Ventas, Caja)]`) + registro DI.
-- Los 4 caminos C# actuales pasan a delegar en el motor (fachadas temporales, sin
-  tocar UI aún). Reverso unificado (se elimina el DELETE físico).
-- Aceptación: tests nuevos del motor (aplicación, parcial, idempotencia,
-  reverso, sesión obligatoria) + los existentes de caja/abonos verdes vía fachada.
+- **F2b (PR aparte, inmediato)**: los 4 caminos C# actuales pasan a delegar en
+  el motor (fachadas temporales, sin tocar UI aún; deben reproducir los payloads
+  anónimos que la UI consume — PolizaStatus/PolizaEstado/BanKardexId — y
+  conservar el reverso legacy para pagos pre-F2, cuyo documentId contable era
+  offset+numrecibo y no existe en adm_pago). Reverso unificado post-fachada (se
+  elimina el DELETE físico para todo cobro nuevo).
+- Aceptación F2: tests nuevos del motor (aplicación total/parcial/multi-factura,
+  FIFO por línea, idempotencia, reverso sin DELETE, sesión obligatoria, folio).
+  Aceptación F2b: los tests existentes de caja/abonos verdes vía fachada.
 
 ### F3 — Pantalla única de caja (5–6 días)
 - `CajaCobro.razor` + sub-vistas + `CobrosClient`; estándar de grid del repo.

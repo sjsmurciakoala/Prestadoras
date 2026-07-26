@@ -1038,6 +1038,9 @@ public partial class SiadDbContext
 
         // Bitácora de maestros Fase 1 (2026-07-17)
         ConfigureAuditoriaModel(modelBuilder);
+
+        // Unificación cobranza F2: adm_pago + aplicación + folio (2026-07-26)
+        ConfigureCobrosModel(modelBuilder);
     }
 }
 

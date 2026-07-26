@@ -65,6 +65,9 @@ public static class ServiceRegistration
         // gestión de caja
         services.AddScoped<ICajaService, CajaService>();
         services.AddScoped<IAbonoService, AbonoService>();
+
+        // motor único de cobro (unificación cobranza F2)
+        services.AddScoped<Cobros.ICobroService, Cobros.CobroService>();
         
         // facturación misceláneos
         services.AddScoped<IFacturacionMiscelaneosService, FacturacionMiscelaneosService>();
