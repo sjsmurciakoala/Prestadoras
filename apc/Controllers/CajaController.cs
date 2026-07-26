@@ -52,4 +52,10 @@ public class CajaController : ControllerBase
     [HttpGet("historial")]
     public async Task<IActionResult> GetHistorial([FromQuery] string usuario)
         => Ok(await _cajaService.ListarHistorialAsync(usuario));
+
+    // GET api/caja/cajas — cajas físicas de la empresa con su disponibilidad
+    // (varias cajas simultáneas; la apertura elige una — unificación F2)
+    [HttpGet("cajas")]
+    public async Task<IActionResult> GetCajas()
+        => Ok(await _cajaService.ListarCajasAsync());
 }

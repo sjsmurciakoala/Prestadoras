@@ -13,9 +13,29 @@ public partial class SiadDbContext
     public virtual DbSet<adm_pago> adm_pagos { get; set; } = null!;
     public virtual DbSet<adm_pago_aplicacion> adm_pago_aplicaciones { get; set; } = null!;
     public virtual DbSet<adm_documento_secuencia> adm_documento_secuencias { get; set; } = null!;
+    public virtual DbSet<adm_caja> adm_cajas { get; set; } = null!;
 
     private void ConfigureCobrosModel(ModelBuilder modelBuilder)
     {
+        modelBuilder.Entity<adm_caja>(entity =>
+        {
+            entity.HasKey(e => e.caja_id).HasName("adm_caja_pkey");
+            entity.ToTable("adm_caja", "public");
+            entity.Property(e => e.caja_id).UseIdentityAlwaysColumn();
+            entity.HasIndex(e => new { e.company_id, e.codigo }, "uq_adm_caja_codigo").IsUnique();
+            entity.Property(e => e.codigo).HasMaxLength(20);
+            entity.Property(e => e.nombre).HasMaxLength(120);
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.creado_en).HasDefaultValueSql("now()");
+        });
+
+        // La sesión legacy gana la caja física (columna nueva post-scaffold)
+        modelBuilder.Entity<sesion_caja>(entity =>
+        {
+            entity.Property(e => e.caja_fisica_id).IsRequired(false);
+        });
+
         modelBuilder.Entity<adm_pago>(entity =>
         {
             entity.HasKey(e => e.pago_id).HasName("adm_pago_pkey");

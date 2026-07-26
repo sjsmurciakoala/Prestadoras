@@ -20,4 +20,8 @@ public interface ICajaService
 
     // Historial de sesiones cerradas del usuario en la empresa
     Task<IReadOnlyList<HistorialCierreDto>> ListarHistorialAsync(string usuario);
+
+    // Cajas físicas de la empresa con su disponibilidad (varias cajas
+    // simultáneas — unificación cobranza F2)
+    Task<IReadOnlyList<CajaFisicaDto>> ListarCajasAsync();
 }
