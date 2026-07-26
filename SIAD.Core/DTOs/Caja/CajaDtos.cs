@@ -14,14 +14,25 @@ public record SesionCajaDto(
     string Estado,
     decimal? TotalCobrado,
     int? CajaFisicaId = null
-);
+)
+{
+    // Compatibilidad binaria con ensamblados compilados contra la firma previa
+    // (sin CajaFisicaId) — evita MissingMethodException en builds a medias.
+    public SesionCajaDto(int Id, string UsuarioApertura, DateTime FechaApertura,
+        string? UsuarioCierre, DateTime? FechaCierre, string Estado, decimal? TotalCobrado)
+        : this(Id, UsuarioApertura, FechaApertura, UsuarioCierre, FechaCierre, Estado, TotalCobrado, null) { }
+}
 
 // ------- Apertura / Cierre -------
 
 // CajaFisicaId: caja (ventanilla) donde se abre la sesión. Opcional durante la
 // transición F2; la UI de apertura la exige desde F3 (varias cajas simultáneas,
 // una sesión abierta por caja).
-public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null);
+public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null)
+{
+    // Compatibilidad binaria con la firma previa de un solo argumento.
+    public AbrirCajaRequestDto(string UsuarioApertura) : this(UsuarioApertura, null) { }
+}
 
 // ------- Cajas físicas (adm_caja) -------
 
