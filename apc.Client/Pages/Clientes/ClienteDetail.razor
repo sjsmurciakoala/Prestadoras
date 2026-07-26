@@ -525,7 +525,7 @@
     void BackToList() => Navigation.NavigateTo("/clientes");
     void EditarCliente() => Navigation.NavigateTo($"/clientes/{Id}/editar");
     void AbrirHistoricoConsumo() => mostrarHistoricoConsumoModal = true;
-    void AbrirAbonoEspecial() => Navigation.NavigateTo($"/facturacion/captacion/abono-especial/{Id}");
+    void AbrirAbonoEspecial() => Navigation.NavigateTo("/facturacion/caja");
     void AbrirServiciosTarifario() => Navigation.NavigateTo($"/tarifario/cliente-servicio-v3?clienteId={Id}");
     void AbrirPruebaCalculo() => mostrarPruebaCalculoModal = true;
     void AbrirFotoMedidor() => mostrarFotoMedidorModal = true;

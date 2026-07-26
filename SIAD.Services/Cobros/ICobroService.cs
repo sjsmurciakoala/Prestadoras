@@ -18,4 +18,7 @@ public interface ICobroService
     Task<ResponseModelDto> RegistrarCobroAsync(CobroCrearDto dto, CancellationToken ct = default);
 
     Task<ResponseModelDto> ReversarCobroAsync(CobroReversoDto dto, CancellationToken ct = default);
+
+    /// <summary>Cobros del día desde el modelo nuevo (adm_pago), opcionalmente por usuario.</summary>
+    Task<IReadOnlyList<CobroDelDiaDto>> ListarCobrosDelDiaAsync(DateTime? fecha, string? usuario, CancellationToken ct = default);
 }

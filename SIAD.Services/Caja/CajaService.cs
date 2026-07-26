@@ -38,35 +38,63 @@ public class CajaService : ICajaService
         if (yaAbierta)
             return new CajaResponseDto(false, "El usuario ya tiene una sesión de caja abierta.");
 
-        // Varias cajas físicas simultáneas (unificación cobranza F2): la sesión
-        // se abre EN una caja concreta y solo puede haber una sesión abierta por
-        // caja (respaldado además por índice único parcial en BD).
-        if (request.CajaFisicaId.HasValue)
-        {
-            var caja = await _context.adm_cajas
-                .AsNoTracking()
-                .FirstOrDefaultAsync(c => c.caja_id == request.CajaFisicaId.Value && c.activo);
-            if (caja is null)
-                return new CajaResponseDto(false, "La caja indicada no existe o está inactiva.");
+        // F3: la caja NO se elige — el sistema resuelve la caja ASIGNADA al
+        // usuario (adm_caja_usuario). Sin asignación no se puede cobrar. Una
+        // sola sesión ABIERTA por caja (índice único parcial en BD).
+        var asignacion = await (
+            from cu in _context.adm_caja_usuarios
+            join c in _context.adm_cajas on cu.caja_id equals c.caja_id
+            where cu.usuario == request.UsuarioApertura
+            select new { c.caja_id, c.nombre, c.activo })
+            .FirstOrDefaultAsync();
 
-            var cajaOcupada = await _context.sesion_cajas
-                .AnyAsync(s => s.caja_fisica_id == request.CajaFisicaId.Value && s.estado == "ABIERTA");
-            if (cajaOcupada)
-                return new CajaResponseDto(false, $"La caja {caja.nombre} ya tiene una sesión abierta.");
-        }
+        if (asignacion is null)
+            return new CajaResponseDto(false,
+                "No tiene una caja asignada. Solicite al administrador que le asigne una en el mantenimiento de cajas.");
+        if (!asignacion.activo)
+            return new CajaResponseDto(false, $"La caja {asignacion.nombre} está inactiva.");
+
+        var ocupadaPor = await _context.sesion_cajas
+            .Where(s => s.caja_fisica_id == asignacion.caja_id && s.estado == "ABIERTA")
+            .Select(s => s.usuario_apertura)
+            .FirstOrDefaultAsync();
+        if (ocupadaPor is not null)
+            return new CajaResponseDto(false,
+                $"La caja {asignacion.nombre} ya tiene una sesión abierta (cajero: {ocupadaPor}).");
 
         var sesion = new sesion_caja
         {
             usuario_apertura = request.UsuarioApertura,
             fecha_apertura   = DateTime.UtcNow,
             estado           = "ABIERTA",
-            caja_fisica_id   = request.CajaFisicaId
+            caja_fisica_id   = asignacion.caja_id
         };
 
         _context.sesion_cajas.Add(sesion);
         await _context.SaveChangesAsync();
 
-        return new CajaResponseDto(true, "Caja abierta correctamente.", sesion.id);
+        return new CajaResponseDto(true, $"Caja {asignacion.nombre} abierta correctamente.", sesion.id);
+    }
+
+    // ------------------------------------------------------------------
+    public async Task<MiCajaDto?> ObtenerMiCajaAsync(string usuario)
+    {
+        // La caja asignada al usuario, con su disponibilidad actual.
+        return await (
+            from cu in _context.adm_caja_usuarios
+            join c in _context.adm_cajas on cu.caja_id equals c.caja_id
+            where cu.usuario == usuario
+            select new MiCajaDto(
+                c.caja_id,
+                c.codigo,
+                c.nombre,
+                c.activo,
+                _context.sesion_cajas.Any(s => s.caja_fisica_id == c.caja_id && s.estado == "ABIERTA"),
+                _context.sesion_cajas
+                    .Where(s => s.caja_fisica_id == c.caja_id && s.estado == "ABIERTA")
+                    .Select(s => s.usuario_apertura)
+                    .FirstOrDefault()))
+            .FirstOrDefaultAsync();
     }
 
     // ------------------------------------------------------------------
@@ -84,6 +112,118 @@ public class CajaService : ICajaService
                 c.activo,
                 _context.sesion_cajas.Any(s => s.caja_fisica_id == c.caja_id && s.estado == "ABIERTA")))
             .ToListAsync();
+    }
+
+    // ------------------------------------------------------------------
+    // Mantenimiento de cajas + asignación de cajeros (F3)
+    // ------------------------------------------------------------------
+
+    public async Task<IReadOnlyList<CajaAdminDto>> ListarCajasAdminAsync()
+    {
+        var cajas = await _context.adm_cajas
+            .AsNoTracking()
+            .OrderBy(c => c.codigo)
+            .Select(c => new
+            {
+                c.caja_id,
+                c.codigo,
+                c.nombre,
+                c.activo,
+                Ocupada = _context.sesion_cajas.Any(s => s.caja_fisica_id == c.caja_id && s.estado == "ABIERTA"),
+                Asignados = _context.adm_caja_usuarios
+                    .Where(cu => cu.caja_id == c.caja_id)
+                    .OrderBy(cu => cu.usuario)
+                    .Select(cu => cu.usuario)
+                    .ToList()
+            })
+            .ToListAsync();
+
+        return cajas
+            .Select(c => new CajaAdminDto(c.caja_id, c.codigo, c.nombre, c.activo, c.Ocupada, c.Asignados))
+            .ToList();
+    }
+
+    public async Task<CajaResponseDto> GuardarCajaAsync(CajaGuardarDto dto, string usuario)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Codigo) || string.IsNullOrWhiteSpace(dto.Nombre))
+            return new CajaResponseDto(false, "El código y el nombre de la caja son requeridos.");
+
+        var codigo = dto.Codigo.Trim().ToUpperInvariant();
+        var duplicada = await _context.adm_cajas
+            .AnyAsync(c => c.codigo == codigo && c.caja_id != (dto.CajaId ?? 0));
+        if (duplicada)
+            return new CajaResponseDto(false, $"Ya existe una caja con el código {codigo}.");
+
+        if (dto.CajaId is > 0)
+        {
+            var caja = await _context.adm_cajas.FirstOrDefaultAsync(c => c.caja_id == dto.CajaId.Value);
+            if (caja is null)
+                return new CajaResponseDto(false, "No se encontró la caja indicada.");
+
+            caja.codigo = codigo;
+            caja.nombre = dto.Nombre.Trim();
+            caja.activo = dto.Activo;
+            caja.actualizado_en = DateTime.UtcNow;
+            caja.updated_by = usuario;
+            await _context.SaveChangesAsync();
+            return new CajaResponseDto(true, "Caja actualizada.", caja.caja_id);
+        }
+
+        var nueva = new adm_caja
+        {
+            codigo = codigo,
+            nombre = dto.Nombre.Trim(),
+            activo = dto.Activo,
+            updated_by = usuario
+        };
+        _context.adm_cajas.Add(nueva);
+        await _context.SaveChangesAsync();
+        return new CajaResponseDto(true, "Caja creada.", nueva.caja_id);
+    }
+
+    public async Task<CajaResponseDto> AsignarCajeroAsync(AsignarCajeroDto dto, string usuario)
+    {
+        if (string.IsNullOrWhiteSpace(dto.Usuario))
+            return new CajaResponseDto(false, "Debe indicar el usuario a asignar.");
+
+        var caja = await _context.adm_cajas
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.caja_id == dto.CajaId);
+        if (caja is null)
+            return new CajaResponseDto(false, "No se encontró la caja indicada.");
+
+        var cajero = dto.Usuario.Trim();
+        var existente = await _context.adm_caja_usuarios
+            .FirstOrDefaultAsync(cu => cu.usuario == cajero);
+        if (existente is not null)
+        {
+            // Un usuario pertenece a UNA caja: reasignar lo mueve de caja.
+            existente.caja_id = dto.CajaId;
+            existente.updated_by = usuario;
+        }
+        else
+        {
+            _context.adm_caja_usuarios.Add(new adm_caja_usuario
+            {
+                caja_id = dto.CajaId,
+                usuario = cajero,
+                updated_by = usuario
+            });
+        }
+        await _context.SaveChangesAsync();
+        return new CajaResponseDto(true, $"{cajero} asignado a {caja.nombre}.");
+    }
+
+    public async Task<CajaResponseDto> QuitarCajeroAsync(string cajero)
+    {
+        var existente = await _context.adm_caja_usuarios
+            .FirstOrDefaultAsync(cu => cu.usuario == cajero);
+        if (existente is null)
+            return new CajaResponseDto(false, "El usuario no tiene caja asignada.");
+
+        _context.adm_caja_usuarios.Remove(existente);
+        await _context.SaveChangesAsync();
+        return new CajaResponseDto(true, $"Asignación de {cajero} eliminada.");
     }
 
     // ------------------------------------------------------------------

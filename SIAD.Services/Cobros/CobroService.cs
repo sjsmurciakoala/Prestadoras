@@ -666,6 +666,70 @@ public class CobroService : ICobroService
         }
     }
 
+    public async Task<IReadOnlyList<CobroDelDiaDto>> ListarCobrosDelDiaAsync(
+        DateTime? fecha, string? usuario, CancellationToken ct = default)
+    {
+        var companyId = _currentCompanyService.GetCompanyId();
+        var dia = DateOnly.FromDateTime(fecha?.Date ?? DateTime.UtcNow.Date);
+
+        var query = from p in _context.adm_pagos.AsNoTracking()
+                    where p.company_id == companyId && p.fecha == dia
+                    join c in _context.cliente_maestros.AsNoTracking()
+                        on p.cliente_clave equals c.maestro_cliente_clave into clientes
+                    from c in clientes.DefaultIfEmpty()
+                    join s in _context.sesion_cajas.AsNoTracking()
+                        on p.sesion_caja_id equals (int?)s.id into sesiones
+                    from s in sesiones.DefaultIfEmpty()
+                    join k in _context.adm_cajas.AsNoTracking()
+                        on s.caja_fisica_id equals (int?)k.caja_id into cajas
+                    from k in cajas.DefaultIfEmpty()
+                    orderby p.pago_id descending
+                    select new
+                    {
+                        p.pago_id,
+                        p.numero_recibo,
+                        p.fecha,
+                        p.cliente_clave,
+                        ClienteNombre = c != null ? c.maestro_cliente_nombre : string.Empty,
+                        p.monto_total,
+                        p.forma_pago,
+                        p.estado_id,
+                        p.usuario,
+                        CajaNombre = k != null ? k.nombre : null,
+                        p.transaccion_abonado_ide
+                    };
+
+        if (!string.IsNullOrWhiteSpace(usuario))
+        {
+            var u = usuario.Trim();
+            query = query.Where(x => x.usuario == u);
+        }
+
+        var items = await query.Take(500).ToListAsync(ct);
+        return items.Select(x => new CobroDelDiaDto
+        {
+            PagoId = x.pago_id,
+            NumeroRecibo = x.numero_recibo,
+            Fecha = x.fecha.ToDateTime(TimeOnly.MinValue),
+            ClienteClave = x.cliente_clave,
+            ClienteNombre = x.ClienteNombre ?? string.Empty,
+            MontoTotal = x.monto_total,
+            FormaPago = x.forma_pago,
+            EstadoId = x.estado_id,
+            Estado = x.estado_id switch
+            {
+                EstadoPago.Aplicado => "APLICADO",
+                EstadoPago.Pendiente => "PENDIENTE",
+                EstadoPago.Anulado => "ANULADO",
+                EstadoPago.Reversado => "REVERSADO",
+                _ => x.estado_id.ToString()
+            },
+            Usuario = x.usuario,
+            CajaNombre = x.CajaNombre,
+            TransaccionId = x.transaccion_abonado_ide
+        }).ToList();
+    }
+
     // ------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------

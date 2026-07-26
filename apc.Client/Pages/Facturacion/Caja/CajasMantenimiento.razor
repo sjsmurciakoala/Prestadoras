@@ -1,0 +1,222 @@
+@page "/facturacion/caja/cajas"
+@using SIAD.Core.DTOs.Caja
+@using SIAD.Core.DTOs.Usuarios
+@using apc.Client.Services.Caja
+@using apc.Client.Services.Parametros
+@using apc.Client.Services.Tenant
+@inject CajaClient CajaHttp
+@inject UsuariosPortalClient UsuariosHttp
+@inject IToastNotificationService ToastService
+@inject NavigationManager Nav
+@inject TenantState TenantState
+
+<PageTitle>SIAD - Mantenimiento de cajas</PageTitle>
+
+<div class="page-container">
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Mantenimiento de cajas</h2>
+            <p class="page-subtitle">Cajas físicas de la empresa y asignación de cajeros. Cada cajero pertenece a una caja.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <DxButton Text="Volver a caja" IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern"
+                      Click="@(() => Nav.NavigateTo("/facturacion/caja"))" />
+            <DxButton Text="Nueva caja" IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                      Click="@(() => AbrirEdicion(null))" />
+        </div>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="_cargando" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid Data="@_cajas" KeyFieldName="CajaId" PageSize="15"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+                <Columns>
+                    <DxGridDataColumn FieldName="Codigo" Caption="Código" Width="120px" />
+                    <DxGridDataColumn FieldName="Nombre" Caption="Nombre" />
+                    <DxGridDataColumn Caption="Cajeros asignados">
+                        <CellDisplayTemplate>
+                            @{ var caja = (CajaAdminDto)context.DataItem; }
+                            @if (caja.Asignados.Count == 0)
+                            {
+                                <span class="text-muted fst-italic">Sin cajeros</span>
+                            }
+                            else
+                            {
+                                <div class="d-flex flex-wrap gap-1">
+                                    @foreach (var cajero in caja.Asignados)
+                                    {
+                                        <span class="badge bg-light text-dark border">
+                                            @cajero
+                                            <a class="ms-1 text-danger" style="cursor:pointer" title="Quitar asignación"
+                                               @onclick="@(() => QuitarCajero(cajero))">×</a>
+                                        </span>
+                                    }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="Ocupada" Caption="Estado" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate>
+                            @{ var caja = (CajaAdminDto)context.DataItem; }
+                            @if (!caja.Activo)
+                            {
+                                <span class="badge bg-secondary">INACTIVA</span>
+                            }
+                            else if (caja.Ocupada)
+                            {
+                                <span class="badge bg-warning text-dark">EN USO</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-success">LIBRE</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="150px" AllowSort="false" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate>
+                            @{ var caja = (CajaAdminDto)context.DataItem; }
+                            <div class="d-flex gap-1 justify-content-center">
+                                <DxButton IconCssClass="bi bi-pencil" RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                          title="Editar" Click="@(() => AbrirEdicion(caja))" />
+                                <DxButton IconCssClass="bi bi-person-plus" RenderStyle="ButtonRenderStyle.Primary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                          title="Asignar cajero" Click="@(() => AbrirAsignacion(caja))" />
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@* ---- Popup crear/editar caja ---- *@
+<DxPopup @bind-Visible="_edicionVisible" HeaderText="@(_edicionId is null ? "Nueva caja" : "Editar caja")"
+         Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <label class="form-label small text-muted fw-bold">CÓDIGO</label>
+            <DxTextBox @bind-Text="_edicionCodigo" NullText="CAJA-01" CssClass="mb-3" />
+            <label class="form-label small text-muted fw-bold">NOMBRE</label>
+            <DxTextBox @bind-Text="_edicionNombre" NullText="Caja principal" CssClass="mb-3" />
+            <DxCheckBox @bind-Checked="_edicionActivo">Activa</DxCheckBox>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _edicionVisible = false)" />
+                <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary" Click="GuardarCaja" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ---- Popup asignar cajero ---- *@
+<DxPopup @bind-Visible="_asignacionVisible" HeaderText="@($"Asignar cajero a {_asignacionCaja?.Nombre}")"
+         Width="460px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <label class="form-label small text-muted fw-bold">USUARIO DEL PORTAL</label>
+            <DxComboBox TData="UsuarioPortalDto" TValue="string" Data="@_usuarios"
+                        TextFieldName="@nameof(UsuarioPortalDto.Email)"
+                        ValueFieldName="@nameof(UsuarioPortalDto.Email)"
+                        @bind-Value="_asignacionUsuario"
+                        FilterCondition="DataEditorFilterCondition.Contains"
+                        NullText="Seleccione el usuario..." CssClass="mb-2" />
+            <small class="text-muted d-block mb-3">
+                Si el usuario ya está asignado a otra caja, se moverá a esta.
+            </small>
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _asignacionVisible = false)" />
+                <DxButton Text="Asignar" RenderStyle="ButtonRenderStyle.Primary" Click="AsignarCajero"
+                          Enabled="@(!string.IsNullOrWhiteSpace(_asignacionUsuario))" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    private bool _cargando = true;
+    private IReadOnlyList<CajaAdminDto> _cajas = [];
+    private IReadOnlyList<UsuarioPortalDto> _usuarios = [];
+
+    private bool _edicionVisible;
+    private int? _edicionId;
+    private string _edicionCodigo = string.Empty;
+    private string _edicionNombre = string.Empty;
+    private bool _edicionActivo = true;
+
+    private bool _asignacionVisible;
+    private CajaAdminDto? _asignacionCaja;
+    private string? _asignacionUsuario;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await TenantState.EnsureCompanyAsync();
+        _usuarios = await UsuariosHttp.ListarAsync();
+        await CargarAsync();
+        _cargando = false;
+    }
+
+    private async Task CargarAsync()
+        => _cajas = await CajaHttp.GetCajasAdminAsync() ?? [];
+
+    private void AbrirEdicion(CajaAdminDto? caja)
+    {
+        _edicionId = caja?.CajaId;
+        _edicionCodigo = caja?.Codigo ?? string.Empty;
+        _edicionNombre = caja?.Nombre ?? string.Empty;
+        _edicionActivo = caja?.Activo ?? true;
+        _edicionVisible = true;
+    }
+
+    private async Task GuardarCaja()
+    {
+        var result = await CajaHttp.GuardarCajaAsync(new CajaGuardarDto(_edicionId, _edicionCodigo, _edicionNombre, _edicionActivo));
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo guardar la caja.");
+        if (result?.Success == true)
+        {
+            _edicionVisible = false;
+            await CargarAsync();
+        }
+    }
+
+    private void AbrirAsignacion(CajaAdminDto caja)
+    {
+        _asignacionCaja = caja;
+        _asignacionUsuario = null;
+        _asignacionVisible = true;
+    }
+
+    private async Task AsignarCajero()
+    {
+        if (_asignacionCaja is null || string.IsNullOrWhiteSpace(_asignacionUsuario)) return;
+        var result = await CajaHttp.AsignarCajeroAsync(new AsignarCajeroDto(_asignacionCaja.CajaId, _asignacionUsuario));
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo asignar.");
+        if (result?.Success == true)
+        {
+            _asignacionVisible = false;
+            await CargarAsync();
+        }
+    }
+
+    private async Task QuitarCajero(string usuario)
+    {
+        var result = await CajaHttp.QuitarCajeroAsync(usuario);
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo quitar la asignación.");
+        if (result?.Success == true) await CargarAsync();
+    }
+
+    private void Notificar(bool ok, string mensaje)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = ok ? "Éxito" : "Error",
+            Text = mensaje,
+            RenderStyle = ok ? ToastRenderStyle.Success : ToastRenderStyle.Danger
+        });
+}

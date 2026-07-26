@@ -38,6 +38,16 @@ public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = nu
 
 public record CajaFisicaDto(int CajaId, string Codigo, string Nombre, bool Activo, bool Ocupada);
 
+// La caja asignada al usuario (F3: la apertura la resuelve el sistema, no un combo)
+public record MiCajaDto(int CajaId, string Codigo, string Nombre, bool Activo, bool Ocupada, string? OcupadaPor);
+
+// Mantenimiento de cajas + asignación de cajeros
+public record CajaAdminDto(int CajaId, string Codigo, string Nombre, bool Activo, bool Ocupada, IReadOnlyList<string> Asignados);
+
+public record CajaGuardarDto(int? CajaId, string Codigo, string Nombre, bool Activo);
+
+public record AsignarCajeroDto(int CajaId, string Usuario);
+
 public record CerrarCajaRequestDto(int SesionId, string UsuarioCierre, string? Observacion);
 
 // ------- Resumen del día -------

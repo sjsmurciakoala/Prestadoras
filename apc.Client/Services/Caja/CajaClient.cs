@@ -36,4 +36,30 @@ public class CajaClient
     public Task<IReadOnlyList<HistorialCierreDto>?> GetHistorialAsync(string usuario)
         => _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<HistorialCierreDto>>(
                $"api/caja/historial?usuario={Uri.EscapeDataString(usuario)}");
+
+    // ---- F3: caja asignada + mantenimiento de cajas ----
+
+    public Task<MiCajaDto?> GetMiCajaAsync()
+        => _http.GetFromJsonAsyncWithAuthCheck<MiCajaDto>("api/caja/mi-caja");
+
+    public Task<IReadOnlyList<CajaAdminDto>?> GetCajasAdminAsync()
+        => _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<CajaAdminDto>>("api/caja/cajas/admin");
+
+    public async Task<CajaResponseDto?> GuardarCajaAsync(CajaGuardarDto dto)
+    {
+        var response = await _http.PostAsJsonAsyncWithAuthCheck("api/caja/cajas", dto);
+        return await response.ReadFromJsonAsyncWithAuthCheck<CajaResponseDto>();
+    }
+
+    public async Task<CajaResponseDto?> AsignarCajeroAsync(AsignarCajeroDto dto)
+    {
+        var response = await _http.PostAsJsonAsyncWithAuthCheck("api/caja/cajas/asignar", dto);
+        return await response.ReadFromJsonAsyncWithAuthCheck<CajaResponseDto>();
+    }
+
+    public async Task<CajaResponseDto?> QuitarCajeroAsync(string usuario)
+    {
+        var response = await _http.DeleteAsync($"api/caja/cajas/asignacion/{Uri.EscapeDataString(usuario)}");
+        return await response.ReadFromJsonAsyncWithAuthCheck<CajaResponseDto>();
+    }
 }

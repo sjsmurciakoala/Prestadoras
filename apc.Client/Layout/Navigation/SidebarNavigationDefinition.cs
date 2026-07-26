@@ -223,12 +223,14 @@ public static class SidebarNavigationDefinition
                     Id = "fact-servicios",
                     Text = "Servicios públicos",
                     IconCssClass = "bi bi-lightning-charge",
-                    MatchPrefixes = ["/facturacion/captacion/caja", "/facturacion/captacion/abonos-especiales", "/facturacion/miscelaneos", "/facturacion/miscelaneos/catalogo", "/facturacion/miscelaneos/consulta"],
+                    MatchPrefixes = ["/facturacion/caja", "/facturacion/miscelaneos", "/facturacion/miscelaneos/catalogo", "/facturacion/miscelaneos/consulta"],
                     Children =
                     [
-                        new SidebarNavItem { Id = "fact-captacion", Text = "Captación de Pagos", NavigateUrl = "/facturacion/captacion/caja", MatchPrefixes = ["/facturacion/captacion/caja"], IconCssClass = "bi bi-bag-check" },
-                        new SidebarNavItem { Id = "fact-abonos-especiales", Text = "Abonos Especiales", NavigateUrl = "/facturacion/captacion/abonos-especiales", MatchPrefixes = ["/facturacion/captacion/abonos-especiales"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
-                        new SidebarNavItem { Id = "fact-abonos-especiales-consulta", Text = "Consultar abonos especiales", NavigateUrl = "/facturacion/captacion/abonos-especiales/consulta", MatchPrefixes = ["/facturacion/captacion/abonos-especiales/consulta"], IconCssClass = "bi bi-search" },
+                        // Unificación cobranza F3: UNA sola vista para cobrar
+                        // (reemplaza captación, abonos especiales y reversos).
+                        new SidebarNavItem { Id = "fact-caja", Text = "Caja", NavigateUrl = "/facturacion/caja", MatchPrefixes = ["/facturacion/caja"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
+                        new SidebarNavItem { Id = "fact-caja-consulta", Text = "Consulta de cobros", NavigateUrl = "/facturacion/caja/consulta", MatchPrefixes = ["/facturacion/caja/consulta"], IconCssClass = "bi bi-search" },
+                        new SidebarNavItem { Id = "fact-caja-cajas", Text = "Cajas", NavigateUrl = "/facturacion/caja/cajas", MatchPrefixes = ["/facturacion/caja/cajas"], IconCssClass = "bi bi-gear" },
                         new SidebarNavItem
                         {
                             Id = "fact-miscelaneos-group",
@@ -324,14 +326,6 @@ public static class SidebarNavigationDefinition
                             IconCssClass = "bi bi-calendar-x"
                         }
                     ]
-                },
-                new SidebarNavItem
-                {
-                    Id = "fact-reversos",
-                    Text = "Reversos",
-                    IconCssClass = "bi bi-arrow-counterclockwise",
-                    NavigateUrl = "/facturacion/captacion/reverso",
-                    MatchPrefixes = ["/facturacion/captacion/reverso"]
                 },
                 new SidebarNavItem
                 {

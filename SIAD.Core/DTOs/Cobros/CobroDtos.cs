@@ -99,3 +99,21 @@ public class CobroReversoDto
     public string Usuario { get; set; } = null!;
     public string Motivo { get; set; } = string.Empty;
 }
+
+/// <summary>Fila de "Cobros del día" (fuente: adm_pago — el modelo nuevo).</summary>
+public class CobroDelDiaDto
+{
+    public long PagoId { get; set; }
+    public string NumeroRecibo { get; set; } = string.Empty;
+    public DateTime Fecha { get; set; }
+    public string ClienteClave { get; set; } = string.Empty;
+    public string ClienteNombre { get; set; } = string.Empty;
+    public decimal MontoTotal { get; set; }
+    public string FormaPago { get; set; } = string.Empty;
+    public short EstadoId { get; set; }
+    public string Estado { get; set; } = string.Empty;
+    public string Usuario { get; set; } = string.Empty;
+    public string? CajaNombre { get; set; }
+    /// <summary>Fila espejo legacy — para reimprimir el recibo PDF actual.</summary>
+    public int? TransaccionId { get; set; }
+}

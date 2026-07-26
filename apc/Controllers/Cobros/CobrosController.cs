@@ -41,4 +41,9 @@ public class CobrosController : ControllerBase
         var result = await _cobroService.ReversarCobroAsync(request, ct);
         return result.Success ? Ok(result) : BadRequest(result);
     }
+
+    // GET api/cobros/del-dia — cobros del día desde el modelo nuevo (adm_pago)
+    [HttpGet("del-dia")]
+    public async Task<IActionResult> DelDia([FromQuery] DateTime? fecha, [FromQuery] string? usuario, CancellationToken ct)
+        => Ok(await _cobroService.ListarCobrosDelDiaAsync(fecha, usuario, ct));
 }
