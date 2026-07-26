@@ -135,6 +135,65 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(750.50m, sesionCerrada.total_cobrado);
     }
 
+    // ------------------------------------------------------------------------
+    // Cajas físicas (unificación cobranza F2): varias cajas simultáneas, una
+    // sesión abierta por caja, disponibilidad visible en el listado.
+    // ------------------------------------------------------------------------
+
+    [SkippableFact]
+    public async Task AbrirCaja_EnCajaFisica_QuedaVinculadaYSoloUnaSesionPorCaja()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var caja = await _context!.adm_cajas.AsNoTracking().FirstOrDefaultAsync(c => c.activo);
+        Assert.NotNull(caja); // seed CAJA-01 del DDL F2
+
+        // Cajero 1 abre en la caja física
+        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero1", caja.caja_id));
+        Assert.True(apertura.Success, apertura.Message);
+
+        var sesion = await _service.ObtenerSesionActivaAsync("cajero1");
+        Assert.NotNull(sesion);
+        Assert.Equal(caja.caja_id, sesion.CajaFisicaId);
+
+        // Cajero 2 intenta abrir en la MISMA caja → rechazado
+        var ocupada = await _service.AbrirCajaAsync(new AbrirCajaRequestDto("cajero2", caja.caja_id));
+        Assert.False(ocupada.Success);
+        Assert.Contains("ya tiene una sesión abierta", ocupada.Message);
+
+        // El listado refleja la ocupación
+        var cajas = await _service.ListarCajasAsync();
+        var laCaja = Assert.Single(cajas, c => c.CajaId == caja.caja_id);
+        Assert.True(laCaja.Ocupada);
+    }
+
+    [SkippableFact]
+    public async Task VariasCajas_OperanSimultaneamente_CadaUnaConSuCajero()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var caja1 = await _context!.adm_cajas.AsNoTracking().FirstAsync(c => c.activo);
+        _context.adm_cajas.Add(new SIAD.Core.Entities.adm_caja
+        {
+            company_id = CompanyId,
+            codigo = "CAJA-T2",
+            nombre = "Caja test 2",
+            activo = true
+        });
+        await _context.SaveChangesAsync();
+        var caja2 = await _context.adm_cajas.AsNoTracking().FirstAsync(c => c.codigo == "CAJA-T2");
+
+        var a1 = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_a", caja1.caja_id));
+        var a2 = await _service.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_b", caja2.caja_id));
+
+        Assert.True(a1.Success, a1.Message);
+        Assert.True(a2.Success, a2.Message);
+
+        var cajas = await _service.ListarCajasAsync();
+        Assert.True(cajas.Where(c => c.CajaId == caja1.caja_id || c.CajaId == caja2.caja_id)
+            .All(c => c.Ocupada));
+    }
+
     private class TestCurrentCompanyService : ICurrentCompanyService
     {
         private readonly long _companyId;

@@ -190,9 +190,11 @@ fn_adm_siguiente_correlativo_documento(company_id, tipo_documento, canal_id)
   → 'REC-00000013'  (consumo atómico UPDATE…RETURNING)
 ```
 
-- El folio puede tener huecos si un cobro hace rollback (igual que el CAI acepta
-  huecos vía estado del correlativo). Si el contador exige folio continuo
-  estricto, se consume en subtransacción propia — decisión en §9.
+- **Continuidad estricta** (confirmada con el contador 2026-07-26 y ya
+  garantizada por construcción): el folio se consume DENTRO de la transacción
+  del cobro — si el cobro falla, el rollback devuelve el folio y no queda
+  hueco. Costo: dos cobros simultáneos de la misma empresa se serializan un
+  instante en la fila de la serie (imperceptible al volumen de APC).
 - Migración: `valor_actual` inicial = `MAX(factura.numrecibo)` por empresa; el
   recibo PDF pasa a imprimir `adm_pago.numero_recibo`.
 - La misma tabla reemplaza los correlativos `MAX+1` con carrera de
@@ -244,6 +246,13 @@ Los canales son adaptadores delgados sobre el motor:
 - **Futuro** (app, kioscos, pasarelas) → mismo motor.
 
 ## 5. La pantalla única de caja
+
+**"Única" = un solo módulo/motor, NO una sola caja.** La empresa opera con
+**varias cajas físicas simultáneas** (`adm_caja`, agregado en F2): cada cajero
+abre su sesión EN una caja concreta (una sesión ABIERTA por caja, índice único
+parcial), el arqueo sale por caja, y `adm_pago.sesion_caja_id` amarra cada
+cobro transitivamente a su caja física. La UI de apertura (F3) exige elegir
+caja; el mantenimiento de cajas es parte del módulo.
 
 Nueva `apc.Client/Pages/Facturacion/Caja/CajaCobro.razor` (`/facturacion/caja/cobro`):
 
@@ -303,10 +312,15 @@ Cada fase = 1 PR contra `origin/main` + scripts DDL timestampeados en `Database/
   `valor_actual = MAX(numrecibo)`), índices tenant-safe.
 - `CobroService` + `ICobroService` + DTOs + controller `api/cobros`
   (`[ModuleAuthorize(Ventas, Caja)]`) + registro DI.
-- Los 4 caminos C# actuales pasan a delegar en el motor (fachadas temporales, sin
-  tocar UI aún). Reverso unificado (se elimina el DELETE físico).
-- Aceptación: tests nuevos del motor (aplicación, parcial, idempotencia,
-  reverso, sesión obligatoria) + los existentes de caja/abonos verdes vía fachada.
+- **F2b (PR aparte, inmediato)**: los 4 caminos C# actuales pasan a delegar en
+  el motor (fachadas temporales, sin tocar UI aún; deben reproducir los payloads
+  anónimos que la UI consume — PolizaStatus/PolizaEstado/BanKardexId — y
+  conservar el reverso legacy para pagos pre-F2, cuyo documentId contable era
+  offset+numrecibo y no existe en adm_pago). Reverso unificado post-fachada (se
+  elimina el DELETE físico para todo cobro nuevo).
+- Aceptación F2: tests nuevos del motor (aplicación total/parcial/multi-factura,
+  FIFO por línea, idempotencia, reverso sin DELETE, sesión obligatoria, folio).
+  Aceptación F2b: los tests existentes de caja/abonos verdes vía fachada.
 
 ### F3 — Pantalla única de caja (5–6 días)
 - `CajaCobro.razor` + sub-vistas + `CobrosClient`; estándar de grid del repo.
@@ -425,22 +439,25 @@ embebidos + `CaptacionPagosIndex.razor` huérfano + clientes HTTP),
 2. Se **reescriben por dentro** los SPs del WS bancario (no se crea un canal
    paralelo).
 3. `transaccion_abonado` queda como histórico solo-lectura, **no se elimina**.
-4. Documento contable único `REC` para todo cobro (desaparece la distinción
-   REC/ABO en contabilidad) — validar con el contador antes de F2.
+4. ✅ **CONFIRMADO (contador, 2026-07-26)**: documento contable único `REC`
+   (módulo VENTAS) para todo cobro del motor — desaparece la distinción
+   REC/ABO. Implementado en `CobroService.ResolverDocumentoContable`; los ABO
+   históricos no se tocan y se reversan por su camino legacy.
 5. La cartera real SIMAFI se migrará como documentos `SALDO_INICIAL` por
    cliente/período (no como bulto de saldo).
 6. **El recibo de cobro NO lleva CAI** (§3.8): folio interno por empresa vía
    `adm_documento_secuencia`, único por `(company_id, numero_recibo)`. El CAI
-   sigue intacto para FAC/NC/ND. — Validar con el contador/SAR si quieren
-   confirmación formal.
-7. Folio de recibo **con huecos aceptados** ante rollback (mismo criterio que el
-   CAI offline). Si el contador exige continuidad estricta, se cambia a consumo
-   en subtransacción (costo menor, decidir antes de F2).
-8. Los misceláneos (`tipofactura='R'`) hoy no llevan CAI y su
-   `tipo_documento_fiscal_id` cae al default 1 (Factura) — inconsistencia
-   fiscal latente que este plan corrige al pasarlos por el motor único; si un
-   misceláneo ES una venta nueva (no un cobro), debe emitirse como factura con
-   CAI. Validar caso por caso con el contador.
+   sigue intacto para FAC/NC/ND.
+7. ✅ **CONFIRMADO (contador, 2026-07-26)**: folio con **continuidad estricta**
+   — ya garantizada por construcción (§3.8): el folio se consume dentro de la
+   transacción del cobro y el rollback lo devuelve.
+8. ✅ **CONFIRMADO (contador, 2026-07-26)**: los misceláneos que son **venta
+   nueva se emiten como factura con CAI** (tipo fiscal correcto, serie CAI
+   propia); el recibo interno queda solo para el COBRO de documentos ya
+   emitidos. Diseño de detalle en F3: la pantalla de venta miscelánea emite la
+   factura (con CAI) y la caja única la cobra como cualquier factura — corrige
+   de raíz la inconsistencia actual (`tipofactura='R'` sin CAI con
+   `tipo_documento_fiscal_id` default 1).
 
 ## 10. Hallazgos anexos (fuera de alcance, registrar como correcciones aparte)
 

@@ -12,12 +12,20 @@ public record SesionCajaDto(
     string? UsuarioCierre,
     DateTime? FechaCierre,
     string Estado,
-    decimal? TotalCobrado
+    decimal? TotalCobrado,
+    int? CajaFisicaId = null
 );
 
 // ------- Apertura / Cierre -------
 
-public record AbrirCajaRequestDto(string UsuarioApertura);
+// CajaFisicaId: caja (ventanilla) donde se abre la sesión. Opcional durante la
+// transición F2; la UI de apertura la exige desde F3 (varias cajas simultáneas,
+// una sesión abierta por caja).
+public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null);
+
+// ------- Cajas físicas (adm_caja) -------
+
+public record CajaFisicaDto(int CajaId, string Codigo, string Nombre, bool Activo, bool Ocupada);
 
 public record CerrarCajaRequestDto(int SesionId, string UsuarioCierre, string? Observacion);
 

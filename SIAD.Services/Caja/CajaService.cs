@@ -38,17 +38,52 @@ public class CajaService : ICajaService
         if (yaAbierta)
             return new CajaResponseDto(false, "El usuario ya tiene una sesión de caja abierta.");
 
+        // Varias cajas físicas simultáneas (unificación cobranza F2): la sesión
+        // se abre EN una caja concreta y solo puede haber una sesión abierta por
+        // caja (respaldado además por índice único parcial en BD).
+        if (request.CajaFisicaId.HasValue)
+        {
+            var caja = await _context.adm_cajas
+                .AsNoTracking()
+                .FirstOrDefaultAsync(c => c.caja_id == request.CajaFisicaId.Value && c.activo);
+            if (caja is null)
+                return new CajaResponseDto(false, "La caja indicada no existe o está inactiva.");
+
+            var cajaOcupada = await _context.sesion_cajas
+                .AnyAsync(s => s.caja_fisica_id == request.CajaFisicaId.Value && s.estado == "ABIERTA");
+            if (cajaOcupada)
+                return new CajaResponseDto(false, $"La caja {caja.nombre} ya tiene una sesión abierta.");
+        }
+
         var sesion = new sesion_caja
         {
             usuario_apertura = request.UsuarioApertura,
             fecha_apertura   = DateTime.UtcNow,
-            estado           = "ABIERTA"
+            estado           = "ABIERTA",
+            caja_fisica_id   = request.CajaFisicaId
         };
 
         _context.sesion_cajas.Add(sesion);
         await _context.SaveChangesAsync();
 
         return new CajaResponseDto(true, "Caja abierta correctamente.", sesion.id);
+    }
+
+    // ------------------------------------------------------------------
+    public async Task<IReadOnlyList<CajaFisicaDto>> ListarCajasAsync()
+    {
+        // Cajas de la empresa con su disponibilidad (Ocupada = sesión ABIERTA).
+        return await _context.adm_cajas
+            .AsNoTracking()
+            .Where(c => c.activo)
+            .OrderBy(c => c.codigo)
+            .Select(c => new CajaFisicaDto(
+                c.caja_id,
+                c.codigo,
+                c.nombre,
+                c.activo,
+                _context.sesion_cajas.Any(s => s.caja_fisica_id == c.caja_id && s.estado == "ABIERTA")))
+            .ToListAsync();
     }
 
     // ------------------------------------------------------------------
@@ -124,5 +159,6 @@ public class CajaService : ICajaService
         s.usuario_cierre,
         s.fecha_cierre,
         s.estado,
-        s.total_cobrado);
+        s.total_cobrado,
+        s.caja_fisica_id);
 }
