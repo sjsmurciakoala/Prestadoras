@@ -11,17 +11,49 @@ namespace SIAD.Core.Constants;
 
 public static class EstadoDocumentoComercial
 {
-    public const short Activa  = 1;   // 'A'
-    public const short Cobrada = 2;   // 'C'
-    public const short Anulada = 3;   // 'N'
+    public const short Activa               = 1;   // 'A'
+    public const short Cobrada              = 2;   // 'C'
+    public const short Anulada              = 3;   // 'N'
+    public const short ParcialmenteAbonada  = 4;   // 'B' (unificación cobranza F1, 2026-07)
 
     public static string ToCodigo(short id) => id switch
     {
-        Activa  => "A",
-        Cobrada => "C",
-        Anulada => "N",
+        Activa              => "A",
+        Cobrada             => "C",
+        Anulada             => "N",
+        ParcialmenteAbonada => "B",
         _ => string.Empty
     };
+}
+
+// Estados de PAGO (adm_estado_pago) — catálogo separado del de documentos
+// porque la letra 'A' significa "activo" en cargos y "anulado" en pagos.
+// Aplica a transaccion_abonado.estado_pago_id (solo tipos 201/202) y, desde
+// F2, a adm_pago.estado_id. Unificación cobranza F1 (2026-07).
+public static class EstadoPago
+{
+    public const short Aplicado  = 1;  // 'C' en 201/202
+    public const short Pendiente = 2;  // 'P' (recibo generado sin pagar)
+    public const short Anulado   = 3;  // 'A' desde caja
+    public const short Reversado = 4;  // 'A' con trans_aplicar 'WSBANCO:%'
+}
+
+// Tipos de movimiento comercial (adm_tipo_transaccion) — reemplaza el string
+// libre transaccion_abonado.tipotransaccion. El espejo tipo_transaccion_id lo
+// mantiene el trigger de BD desde el código legacy. Unificación cobranza F1.
+public static class TipoTransaccion
+{
+    public const short CargoServicio = 1;   // códigos de servicio (AGUA_POTABLE, ...)
+    public const short PagoCaja      = 2;   // legacy '201' (y 'PAGO%' migrados SIMAFI)
+    public const short PagoBanco     = 3;   // legacy '202' con marker WSBANCO:
+    public const short Abono         = 4;   // legacy '202' de caja
+    public const short NotaCredito   = 5;   // legacy '205'
+    public const short NotaDebito    = 6;   // legacy '206'
+    public const short PlanTraslado  = 7;   // legacy 'PLAN'
+    public const short PlanPrima     = 8;   // legacy 'PLAN-PR'
+    public const short PlanCuota     = 9;   // legacy 'PLAN-CUOTA'
+    public const short Ajuste        = 10;
+    public const short SaldoInicial  = 11;  // legacy 'SALDO_ANTERIOR'
 }
 
 public static class EstadoCorrelativoCai

@@ -950,6 +950,8 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.tipofactura).HasColumnType("character varying");
             entity.Property(e => e.tipofacturacion).HasColumnType("character varying");
             entity.Property(e => e.usuario).HasColumnType("character varying");
+            // Espejo numérico mantenido por trigger en BD (unificación cobranza F1)
+            entity.Property(e => e.estado_id).IsRequired(false);
         });
 
         modelBuilder.Entity<factura_detalle>(entity =>
@@ -2060,6 +2062,10 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.trans_aplicar).HasColumnType("character varying");
             entity.Property(e => e.usuario).HasColumnType("character varying");
             entity.Property(e => e.caja_id).IsRequired(false);
+            // Espejos numéricos mantenidos por trigger en BD (unificación cobranza F1)
+            entity.Property(e => e.estado_id).IsRequired(false);
+            entity.Property(e => e.tipo_transaccion_id).IsRequired(false);
+            entity.Property(e => e.estado_pago_id).IsRequired(false);
         });
 
         modelBuilder.Entity<transaccion_presupuesto>(entity =>
