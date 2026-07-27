@@ -524,4 +524,101 @@ public sealed class BancosWsSqlTests : IntegrationTestBase
         Assert.Equal("OK", resultado.status);
         Assert.Equal(100.00m, totalConsulta);
     }
+
+    // ------------------------------------------------------------------------
+    // Unificación cobranza F5 (2026-07-28): el pago del WS queda ADEMÁS como
+    // documento del motor único (adm_pago canal 2 + adm_pago_aplicacion por
+    // línea, link 1:1 en ban_ws_pago.adm_pago_id). La fila legacy 202 sigue
+    // hasta F7. El contrato XML no cambia (golden files verbatim).
+    // ------------------------------------------------------------------------
+
+    [SkippableFact]
+    public async Task Pago_registra_documento_adm_pago_del_motor()
+    {
+        var cuentaId = await ArrangeAsync();
+        Skip.If(cuentaId is null, "Falta diario/tipo, cuenta bancaria o tipo DEP en la BD de pruebas.");
+        var facturas = await CrearClienteConFacturasAsync(100.00m, 50.00m);
+
+        var resultado = await PagarAsync("F5REF001", 150.00m, cuentaId);
+        Assert.Equal("OK", resultado.status);
+
+        // ban_ws_pago (bitácora del canal) enlaza 1:1 al documento del motor.
+        var admPagoId = await Connection.ExecuteScalarAsync<long?>(new CommandDefinition(
+            "SELECT adm_pago_id FROM public.ban_ws_pago WHERE company_id = @CompanyId AND referencia = 'F5REF001'",
+            new { CompanyId }, Transaction));
+        Assert.NotNull(admPagoId);
+
+        // Cabecera del motor: canal banco, PAGO_BANCO, APLICADO, con folio,
+        // kardex/póliza compartidos con el canal y la referencia del banco.
+        var pago = await Connection.QueryFirstAsync<(short canal, short tipo, short estado, decimal monto,
+            string forma, string numeroRecibo, string referencia, long? kardexId, long? polizaId)>(new CommandDefinition(@"
+            SELECT canal_id, tipo_transaccion_id, estado_id, monto_total, forma_pago,
+                   numero_recibo, referencia_externa, ban_kardex_id, poliza_id
+            FROM public.adm_pago WHERE company_id = @CompanyId AND pago_id = @Id",
+            new { CompanyId, Id = admPagoId }, Transaction));
+        Assert.Equal(2, pago.canal);
+        Assert.Equal(3, pago.tipo);         // PAGO_BANCO
+        Assert.Equal(1, pago.estado);       // APLICADO
+        Assert.Equal(150.00m, pago.monto);
+        Assert.Equal("BANCO", pago.forma);
+        Assert.False(string.IsNullOrWhiteSpace(pago.numeroRecibo));
+        Assert.Equal("F5REF001", pago.referencia);
+        Assert.Equal(resultado.kardexId, pago.kardexId);
+        Assert.Equal(resultado.polizaId, pago.polizaId);
+
+        // Una aplicación por LÍNEA cobrada (2 facturas × 2 líneas agua/alca del
+        // helper) que suma el monto y referencia documento_tipo factura.
+        var aplicaciones = (await Connection.QueryAsync<(short tipo, int facturaId, int? detalleId, decimal monto)>(new CommandDefinition(@"
+            SELECT documento_tipo, factura_id, factura_detalle_id, monto_aplicado
+            FROM public.adm_pago_aplicacion
+            WHERE company_id = @CompanyId AND pago_id = @Id
+            ORDER BY monto_aplicado DESC",
+            new { CompanyId, Id = admPagoId }, Transaction))).ToList();
+        Assert.Equal(4, aplicaciones.Count);
+        Assert.All(aplicaciones, a => Assert.Equal(1, a.tipo));
+        Assert.All(aplicaciones, a => Assert.NotNull(a.detalleId));
+        Assert.Equal(150.00m, aplicaciones.Sum(a => a.monto));
+        Assert.Equal(facturas.OrderBy(f => f).ToArray(),
+            aplicaciones.Select(a => (long)a.facturaId).Distinct().OrderBy(f => f).ToArray());
+
+        // Replay idempotente: NO duplica el documento del motor.
+        var replay = await PagarAsync("F5REF001", 150.00m, cuentaId);
+        Assert.Equal("IDEMPOTENTE", replay.status);
+        var pagos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT COUNT(*) FROM public.adm_pago WHERE company_id = @CompanyId AND referencia_externa = 'F5REF001'",
+            new { CompanyId }, Transaction));
+        Assert.Equal(1L, pagos);
+    }
+
+    [SkippableFact]
+    public async Task Reversion_marca_adm_pago_reversado_conservando_aplicaciones()
+    {
+        var cuentaId = await ArrangeAsync();
+        Skip.If(cuentaId is null, "Falta diario/tipo, cuenta bancaria o tipo DEP en la BD de pruebas.");
+        await CrearClienteConFacturasAsync(80.00m);
+
+        var pagoResult = await PagarAsync("F5REF002", 80.00m, cuentaId);
+        Assert.Equal("OK", pagoResult.status);
+
+        var reverso = await ReversarAsync("F5REF002");
+        Assert.Equal("OK", reverso.status);
+
+        var (estado, motivo) = await Connection.QueryFirstAsync<(short, string)>(new CommandDefinition(@"
+            SELECT ap.estado_id, ap.motivo_reverso
+            FROM public.adm_pago ap
+            JOIN public.ban_ws_pago b ON b.adm_pago_id = ap.pago_id
+            WHERE b.company_id = @CompanyId AND b.referencia = 'F5REF002'",
+            new { CompanyId }, Transaction));
+        Assert.Equal(4, estado);            // REVERSADO
+        Assert.Contains("F5REF002", motivo);
+
+        // Las aplicaciones se conservan como auditoría (regla del motor: el
+        // reverso nunca borra). 1 factura × 2 líneas del helper = 2.
+        var aplicaciones = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            SELECT COUNT(*) FROM public.adm_pago_aplicacion a
+            JOIN public.ban_ws_pago b ON b.adm_pago_id = a.pago_id
+            WHERE b.company_id = @CompanyId AND b.referencia = 'F5REF002'",
+            new { CompanyId }, Transaction));
+        Assert.Equal(2L, aplicaciones);
+    }
 }
