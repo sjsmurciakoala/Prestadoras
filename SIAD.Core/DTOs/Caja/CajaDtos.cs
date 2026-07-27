@@ -42,7 +42,8 @@ public record CajaGuardarDto(int? CajaId, string Codigo, string Nombre, bool Act
 
 public record AsignarCajeroDto(int CajaId, string Usuario);
 
-public record CerrarCajaRequestDto(int SesionId, string UsuarioCierre, string? Observacion);
+// MontoCierre = efectivo contado por el cajero en el arqueo del cierre.
+public record CerrarCajaRequestDto(int SesionId, string UsuarioCierre, string? Observacion, decimal? MontoCierre = null);
 
 // ------- Resumen del día -------
 
@@ -64,7 +65,10 @@ public record HistorialCierreDto(
     DateTime? FechaCierre,
     string UsuarioApertura,
     string? UsuarioCierre,
-    decimal? TotalCobrado
+    decimal? TotalCobrado,
+    decimal? MontoApertura = null,
+    decimal? MontoCierre = null,
+    string? Observacion = null
 );
 
 // ------- Response genérico -------

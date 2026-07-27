@@ -205,6 +205,14 @@ public class CajaService : ICajaService
             return new CajaResponseDto(false,
                 $"La caja {caja.nombre} ya está asignada a {ocupanteActual}. Quite esa asignación primero para reasignarla.");
 
+        // No se puede mover a un cajero a mitad de turno: los cobros del turno
+        // quedarían amarrados a la caja anterior y el arqueo no cuadraría.
+        var sesionAbierta = await _context.sesion_cajas
+            .AnyAsync(s => s.usuario_apertura == cajero && s.estado == "ABIERTA");
+        if (sesionAbierta)
+            return new CajaResponseDto(false,
+                $"{cajero} tiene un turno de caja abierto. Debe cerrar su caja antes de cambiar la asignación.");
+
         var existente = await _context.adm_caja_usuarios
             .FirstOrDefaultAsync(cu => cu.usuario == cajero);
         if (existente is not null)
@@ -234,6 +242,14 @@ public class CajaService : ICajaService
         if (existente is null)
             return new CajaResponseDto(false, "El usuario no tiene caja asignada.");
 
+        // Con turno abierto no se quita la asignación: dejaría al cajero
+        // cobrando en una caja que ya no es suya. Primero se cierra la caja.
+        var sesionAbierta = await _context.sesion_cajas
+            .AnyAsync(s => s.usuario_apertura == cajero && s.estado == "ABIERTA");
+        if (sesionAbierta)
+            return new CajaResponseDto(false,
+                $"{cajero} tiene un turno de caja abierto. Debe cerrar su caja antes de quitar la asignación.");
+
         _context.adm_caja_usuarios.Remove(existente);
         await _context.SaveChangesAsync();
         return new CajaResponseDto(true, $"Asignación de {cajero} eliminada.");
@@ -258,6 +274,7 @@ public class CajaService : ICajaService
         sesion.fecha_cierre   = DateTime.UtcNow;
         sesion.total_cobrado  = totalCreditos;
         sesion.observacion    = request.Observacion;
+        sesion.monto_cierre   = request.MontoCierre; // efectivo contado (arqueo)
 
         await _context.SaveChangesAsync();
 
@@ -313,7 +330,10 @@ public class CajaService : ICajaService
                 s.fecha_cierre,
                 s.usuario_apertura,
                 s.usuario_cierre,
-                s.total_cobrado))
+                s.total_cobrado,
+                s.monto_apertura,
+                s.monto_cierre,
+                s.observacion))
             .ToListAsync();
     }
 

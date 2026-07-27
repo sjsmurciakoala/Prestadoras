@@ -365,7 +365,10 @@
                             <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaApertura)" Caption="Apertura" DisplayFormat="dd/MM/yyyy HH:mm" Width="170px" />
                             <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaCierre)" Caption="Cierre" DisplayFormat="dd/MM/yyyy HH:mm" Width="170px" />
                             <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.UsuarioApertura)" Caption="Cajero" />
-                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.TotalCobrado)" Caption="Total cobrado" DisplayFormat="{0:C}" Width="160px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.TotalCobrado)" Caption="Total cobrado" DisplayFormat="{0:C}" Width="150px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.MontoApertura)" Caption="Fondo inicial" DisplayFormat="{0:C}" Width="130px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.MontoCierre)" Caption="Efectivo contado" DisplayFormat="{0:C}" Width="140px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.Observacion)" Caption="Observación" />
                         </Columns>
                     </DxGrid>
                 </div>
@@ -406,18 +409,30 @@
             <ul class="mb-3">
                 <li>Cobros del turno: <strong>@(_resumen?.CantidadTransacciones ?? 0)</strong></li>
                 <li>Total cobrado (sistema): <strong>@((_resumen?.TotalCreditos ?? 0m).ToString("C", Culture))</strong></li>
-                @if (_sesionActiva?.MontoApertura is > 0)
-                {
-                    <li>Fondo inicial: <strong>@_sesionActiva.MontoApertura.Value.ToString("C", Culture)</strong> ·
-                        efectivo esperado en caja: <strong>@(((_sesionActiva.MontoApertura ?? 0m) + (_resumen?.PorTipo.FirstOrDefault(t => t.Tipo == "EFECTIVO")?.Creditos ?? 0m)).ToString("C", Culture))</strong></li>
-                }
+                <li>Fondo inicial: <strong>@((_sesionActiva?.MontoApertura ?? 0m).ToString("C", Culture))</strong></li>
+                <li>Efectivo esperado en caja (fondo + efectivo cobrado):
+                    <strong>@EfectivoEsperado.ToString("C", Culture)</strong></li>
             </ul>
+            <label class="form-label small text-muted fw-bold">EFECTIVO CONTADO (ARQUEO) *</label>
+            <DxSpinEdit @bind-Value="_montoCierre" MinValue="0" DisplayFormat="N2" CssClass="w-100 mb-2"
+                        NullText="Cuente el efectivo físico de la caja..." />
+            @if (_montoCierre is not null)
+            {
+                var dif = _montoCierre.Value - EfectivoEsperado;
+                <p class="mb-2 @(dif == 0 ? "text-success" : "text-danger")">
+                    <i class="bi @(dif == 0 ? "bi-check-circle" : "bi-exclamation-triangle") me-1"></i>
+                    @(dif == 0
+                        ? "El arqueo cuadra con el sistema."
+                        : $"Diferencia contra el sistema: {dif.ToString("C", Culture)} ({(dif > 0 ? "sobrante" : "faltante")}). Explíquela en las observaciones.")
+                </p>
+            }
             <label class="form-label small text-muted fw-bold">OBSERVACIONES DEL CIERRE</label>
             <DxMemo @bind-Text="_observacionCierre" Rows="2" CssClass="w-100" NullText="Diferencias, notas del arqueo..." />
             <div class="d-flex justify-content-end gap-2 mt-3">
                 <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
                           Click="@(() => _cierreVisible = false)" />
-                <DxButton Text="Confirmar cierre" RenderStyle="ButtonRenderStyle.Danger" Click="OnCerrarCaja" />
+                <DxButton Text="Confirmar cierre" RenderStyle="ButtonRenderStyle.Danger" Click="OnCerrarCaja"
+                          Enabled="@(_montoCierre is not null)" />
             </div>
         </div>
     </BodyContentTemplate>
@@ -443,8 +458,10 @@
                 </p>
             }
             <label class="form-label small text-muted fw-bold">MONTO DEL RECIBO</label>
-            <DxSpinEdit @bind-Value="_reciboBancoMonto" MinValue="0.01m"
-                        MaxValue="@_reciboBancoDisponible"
+            @* MinValue 0 (no 0.01): si el disponible fuera menor al mínimo el
+               rango sería inválido; el botón Generar exige monto > 0. *@
+            <DxSpinEdit @bind-Value="_reciboBancoMonto" MinValue="0"
+                        MaxValue="@Math.Max(_reciboBancoDisponible, 0m)"
                         DisplayFormat="N2" CssClass="w-100" />
             <div class="d-flex justify-content-end gap-2 mt-3">
                 <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
@@ -510,6 +527,12 @@
     private bool _aperturaVisible;
     private decimal? _montoApertura;
     private bool _cierreVisible;
+    private decimal? _montoCierre;
+
+    // Fondo inicial + efectivo cobrado según el sistema (lo que debe haber en el cajón).
+    private decimal EfectivoEsperado =>
+        (_sesionActiva?.MontoApertura ?? 0m) +
+        (_resumen?.PorTipo.FirstOrDefault(t => t.Tipo == "EFECTIVO")?.Creditos ?? 0m);
 
     private SesionCajaDto? _sesionActiva;
     private MiCajaDto? _miCaja;
@@ -596,13 +619,14 @@
         // Refrescar el resumen para que el popup muestre los totales al momento.
         _resumen = await CajaHttp.GetResumenAsync(_sesionActiva.Id);
         _observacionCierre = null;
+        _montoCierre = null;
         _cierreVisible = true;
     }
 
     private async Task OnCerrarCaja()
     {
         if (_sesionActiva is null) return;
-        var result = await CajaHttp.CerrarAsync(new CerrarCajaRequestDto(_sesionActiva.Id, _usuario, _observacionCierre));
+        var result = await CajaHttp.CerrarAsync(new CerrarCajaRequestDto(_sesionActiva.Id, _usuario, _observacionCierre, _montoCierre));
         Notificar(result?.Success == true, result?.Message ?? "Error al cerrar caja.");
         if (result?.Success == true)
         {
@@ -657,12 +681,22 @@
 
     private void AbrirReciboBanco(DocumentoCobroRow doc)
     {
-        _reciboBancoDoc = doc;
         // Control de recibos: lo ya emitido en pendientes descuenta el disponible
         // (el backend valida lo mismo — esto solo evita el error al usuario).
-        _reciboBancoPendientes = _pendientes.Where(p => p.NumRecibo == doc.NumRecibo).Sum(p => p.Monto);
-        _reciboBancoDisponible = Math.Max(doc.SaldoPendiente - _reciboBancoPendientes, 0m);
-        _reciboBancoMonto = _reciboBancoDisponible;
+        var pendientes = _pendientes.Where(p => p.NumRecibo == doc.NumRecibo).Sum(p => p.Monto);
+        var disponible = Math.Max(doc.SaldoPendiente - pendientes, 0m);
+        if (disponible <= 0)
+        {
+            // Sin disponible no se abre el popup: el DxSpinEdit no admite
+            // MaxValue < MinValue y el saldo ya está cubierto por pendientes.
+            Notificar(false, $"La factura {doc.NumFactura} ya tiene recibos pendientes por todo su saldo ({pendientes.ToString("C", Culture)}). Anule un pendiente si necesita emitir otro.");
+            return;
+        }
+
+        _reciboBancoDoc = doc;
+        _reciboBancoPendientes = pendientes;
+        _reciboBancoDisponible = disponible;
+        _reciboBancoMonto = disponible;
         _reciboBancoVisible = true;
     }
 

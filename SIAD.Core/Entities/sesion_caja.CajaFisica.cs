@@ -9,4 +9,7 @@ public partial class sesion_caja
 
     /// <summary>Fondo inicial del turno (opcional), visible en el cierre.</summary>
     public decimal? monto_apertura { get; set; }
+
+    /// <summary>Efectivo contado por el cajero en el arqueo del cierre.</summary>
+    public decimal? monto_cierre { get; set; }
 }

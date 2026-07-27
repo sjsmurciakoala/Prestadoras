@@ -230,7 +230,7 @@ public static class SidebarNavigationDefinition
                         // (reemplaza captación, abonos especiales y reversos).
                         new SidebarNavItem { Id = "fact-caja", Text = "Caja", NavigateUrl = "/facturacion/caja", MatchPrefixes = ["/facturacion/caja"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
                         new SidebarNavItem { Id = "fact-caja-consulta", Text = "Consulta de cobros", NavigateUrl = "/facturacion/caja/consulta", MatchPrefixes = ["/facturacion/caja/consulta"], IconCssClass = "bi bi-search" },
-                        new SidebarNavItem { Id = "fact-caja-cajas", Text = "Cajas", NavigateUrl = "/facturacion/cajas", MatchPrefixes = ["/facturacion/cajas", "/facturacion/caja/cajas"], IconCssClass = "bi bi-gear" },
+                        new SidebarNavItem { Id = "fact-caja-cajas", Text = "Cajas", NavigateUrl = "/facturacion/cajas", MatchPrefixes = ["/facturacion/cajas"], IconCssClass = "bi bi-gear" },
                         new SidebarNavItem
                         {
                             Id = "fact-miscelaneos-group",

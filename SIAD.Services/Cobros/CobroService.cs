@@ -73,7 +73,9 @@ public class CobroService : ICobroService
 
         var companyId = _currentCompanyService.GetCompanyId();
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
-        var fechaPago = dto.FechaPago?.Date ?? DateTime.UtcNow.Date;
+        // Fecha LOCAL del servidor (Honduras): el "día" de la caja es el día
+        // operativo, no el UTC (con UTC un cobro de las 6pm caía en mañana).
+        var fechaPago = dto.FechaPago?.Date ?? DateTime.Now.Date;
         var fechaHoy = DateOnly.FromDateTime(fechaPago);
         var montoTotal = dto.Aplicaciones.Sum(a => a.Monto);
         var referencia = string.IsNullOrWhiteSpace(dto.ReferenciaExterna) ? null : dto.ReferenciaExterna.Trim();
@@ -660,7 +662,8 @@ public class CobroService : ICobroService
         DateTime? fecha, string? usuario, int? cajaFisicaId = null, CancellationToken ct = default)
     {
         var companyId = _currentCompanyService.GetCompanyId();
-        var dia = DateOnly.FromDateTime(fecha?.Date ?? DateTime.UtcNow.Date);
+        // Mismo criterio que el registro: día LOCAL del servidor.
+        var dia = DateOnly.FromDateTime(fecha?.Date ?? DateTime.Now.Date);
 
         var query = from p in _context.adm_pagos.AsNoTracking()
                     where p.company_id == companyId && p.fecha == dia

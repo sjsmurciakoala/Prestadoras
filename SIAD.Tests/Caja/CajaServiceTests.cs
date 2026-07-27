@@ -135,6 +135,30 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
+    public async Task Quitar_o_mover_cajero_con_turno_abierto_se_rechaza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await AsignarCajaAsync("cajero_turno", "CAJA-TUR");
+        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_turno"));
+        Assert.True(apertura.Success, apertura.Message);
+
+        // Con el turno abierto no se puede ni quitar ni mover al cajero
+        var quitar = await _service.QuitarCajeroAsync("cajero_turno");
+        Assert.False(quitar.Success);
+        Assert.Contains("turno de caja abierto", quitar.Message);
+
+        var otra = await _service.GuardarCajaAsync(new CajaGuardarDto(null, "CAJA-TUR2", "Otra", true), "admin");
+        var mover = await _service.AsignarCajeroAsync(new AsignarCajeroDto((int)otra.Data!, "cajero_turno"), "admin");
+        Assert.False(mover.Success);
+        Assert.Contains("turno de caja abierto", mover.Message);
+
+        // Cerrado el turno, quitar procede
+        var sesion = await _service.ObtenerSesionActivaAsync("cajero_turno");
+        await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesion!.Id, "cajero_turno", null, 0m));
+        Assert.True((await _service.QuitarCajeroAsync("cajero_turno")).Success);
+    }
+
+    [SkippableFact]
     public async Task Apertura_guarda_fondo_inicial_del_turno()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
@@ -221,7 +245,7 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
         _context!.transaccion_abonados.Add(transaccion);
         await _context.SaveChangesAsync();
 
-        var cierre = await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesionId, "user_trans", "cierre con recaudacion"));
+        var cierre = await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesionId, "user_trans", "cierre con recaudacion", 750.50m));
 
         Assert.True(cierre.Success);
 
@@ -229,6 +253,7 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
         Assert.NotNull(sesionCerrada);
         Assert.Equal("CERRADA", sesionCerrada.estado);
         Assert.Equal(750.50m, sesionCerrada.total_cobrado);
+        Assert.Equal(750.50m, sesionCerrada.monto_cierre); // arqueo auditable
     }
 
     [SkippableFact]

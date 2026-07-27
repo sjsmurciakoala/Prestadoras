@@ -47,6 +47,7 @@ public partial class SiadDbContext
         {
             entity.Property(e => e.caja_fisica_id).IsRequired(false);
             entity.Property(e => e.monto_apertura).IsRequired(false).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.monto_cierre).IsRequired(false).HasColumnType("numeric(18,2)");
         });
 
         modelBuilder.Entity<adm_pago>(entity =>
