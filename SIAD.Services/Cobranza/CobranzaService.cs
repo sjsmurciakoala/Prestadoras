@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Cobranza;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.Entities;
@@ -232,9 +233,39 @@ public class CobranzaService : ICobranzaService
         var periodoActual = fechaPlan.ToString("yyyy/MM");
         var fechaRegistro = DateOnly.FromDateTime(ahora);
 
-        await using var transaction = await _context.Database.BeginTransactionAsync(ct);
+        // Mismo patrón que CobroService: si ya hay transacción ambiente (tests,
+        // orquestaciones), participar en ella en vez de abrir otra.
+        var ownsTx = _context.Database.CurrentTransaction is null;
+        await using var transaction = ownsTx ? await _context.Database.BeginTransactionAsync(ct) : null;
         try
         {
+            var companyId = _currentCompanyService.GetCompanyId();
+
+            // F6 (2026-07-29): el traslado de deuda es por APLICACIÓN DE
+            // DOCUMENTOS — derrame FIFO sobre las líneas pendientes (mismo
+            // orden y clamp que la caja y el WS bancario). El plan solo puede
+            // financiar deuda que exista como documento; la cartera migrada
+            // sin documento (residuo SALDO_ANTERIOR) será financiable tras la
+            // re-migración de F7.
+            var lineasPendientes = await (
+                from f in _context.facturas
+                join d in _context.factura_detalles on f.id equals d.factura_id
+                where f.company_id == companyId
+                      && f.clientecodigo == cliente.Clave
+                      && (f.estado == "A" || f.estado == "B")
+                      && (d.montovalor_saldo ?? d.montovalor ?? 0m) > 0m
+                orderby f.fechaemision, f.numrecibo, d.id
+                select new { Factura = f, Detalle = d, Saldo = d.montovalor_saldo ?? d.montovalor ?? 0m })
+                .ToListAsync(ct);
+
+            var pendienteDocs = lineasPendientes.Sum(l => l.Saldo);
+            if (dto.MontoFinanciar > pendienteDocs)
+            {
+                // Sin escrituras hasta aquí: no hay nada que revertir.
+                return ResponseModelDto.Fail(
+                    $"El monto a financiar (L {dto.MontoFinanciar:N2}) excede la deuda en documentos pendientes (L {pendienteDocs:N2}).");
+            }
+
             var header = new cln_plan_pago_hdr
             {
                 correlativo = correlativo,
@@ -251,7 +282,8 @@ public class CobranzaService : ICobranzaService
                 vprima = montoPrima,
                 montofinanc = dto.MontoFinanciar,
                 meses = dto.Meses,
-                estadopago = "Pendiente",
+                estado_id = EstadoPlan.Activo,
+                estadopago = "Pendiente",   // legacy de solo-lectura hasta F7
                 usuariocreacion = usuario,
                 usuariomodificacion = usuario,
                 fechacreacion = ahora,
@@ -262,6 +294,26 @@ public class CobranzaService : ICobranzaService
             await _context.SaveChangesAsync(ct);
 
             var cuotasDetalle = new List<cln_plan_pago_dtl>();
+
+            // La prima es cobrable de inmediato: nace como cuota mes 0.
+            if (montoPrima > 0)
+            {
+                cuotasDetalle.Add(new cln_plan_pago_dtl
+                {
+                    idhdr = header.id,
+                    valorcuota = montoPrima,
+                    fechacuota = fechaPlan,
+                    mes = 0,
+                    estado_id = EstadoDocumentoComercial.Activa,
+                    saldo_cuota = montoPrima,
+                    estadopago = "Pendiente",
+                    usuariocreacion = usuario,
+                    usuariomodificacion = usuario,
+                    fechacreacion = ahora,
+                    fechamodificacion = ahora
+                });
+            }
+
             var fechaCuotaBase = fechaPrimerPago;
             for (int i = 0; i < dto.Meses; i++)
             {
@@ -277,6 +329,8 @@ public class CobranzaService : ICobranzaService
                     valorcuota = valor,
                     fechacuota = fechaCuotaBase.AddMonths(i),
                     mes = i + 1,
+                    estado_id = EstadoDocumentoComercial.Activa,
+                    saldo_cuota = valor,
                     estadopago = "Pendiente",
                     usuariocreacion = usuario,
                     usuariomodificacion = usuario,
@@ -285,104 +339,96 @@ public class CobranzaService : ICobranzaService
                 });
             }
 
-            if (cuotasDetalle.Count > 0)
-            {
-                _context.cln_plan_pago_dtls.AddRange(cuotasDetalle);
-            }
+            _context.cln_plan_pago_dtls.AddRange(cuotasDetalle);
 
-            var trasladoFondos = new transaccion_abonado
+            // Derrame FIFO: compensa líneas por montoFinanciar y registra el
+            // traslado línea a línea (permite anular restituyendo exacto).
+            var restante = dto.MontoFinanciar;
+            var facturasTocadas = new HashSet<int>();
+            foreach (var linea in lineasPendientes)
             {
-                company_id = _currentCompanyService.GetCompanyId(),
-                cliente_clave = cliente.Clave,
-                recibo = recibo,
-                tipotransaccion = "PLAN",
-                docufuente = header.id,
-                fecha_docu = DateOnly.FromDateTime(fechaPlan),
-                tipo_partida = "01",
-                descripcion = "Traslado de Fondos",
-                debitos = 0,
-                creditos = dto.MontoFinanciar,
-                saldo = saldoCliente - (dto.MontoFinanciar + montoPrima),
-                periodo = periodoActual,
-                estado = "C",
-                fecha_registro = fechaRegistro,
-                ciclo = ciclo,
-                tiene_med = tieneMedidor,
-                usuario = usuario,
-                saldo_detalle = 0
-            };
-
-            var prima = new transaccion_abonado
-            {
-                company_id = _currentCompanyService.GetCompanyId(),
-                cliente_clave = cliente.Clave,
-                recibo = recibo,
-                tipotransaccion = "PLAN-PR",
-                docufuente = header.id,
-                fecha_docu = DateOnly.FromDateTime(fechaPlan),
-                tipo_partida = "01",
-                descripcion = "Concepto de Prima",
-                debitos = montoPrima,
-                creditos = 0,
-                saldo = saldoCliente + montoPrima,
-                periodo = periodoActual,
-                estado = "A",
-                fecha_registro = fechaRegistro,
-                ciclo = ciclo,
-                tiene_med = tieneMedidor,
-                usuario = usuario,
-                saldo_detalle = montoPrima
-            };
-
-            var transaccionesCuotas = new List<transaccion_abonado>();
-            decimal saldoCuotas = 0m;
-            for (int i = 0; i < dto.Meses; i++)
-            {
-                var valor = cuotaBase;
-                if (i == dto.Meses - 1)
+                if (restante <= 0)
                 {
-                    valor += ajuste;
+                    break;
                 }
 
-                saldoCuotas += valor;
-                var fechaCuota = fechaPrimerPago.AddMonths(i);
+                var aplicado = Math.Min(linea.Saldo, restante);
+                linea.Detalle.montovalor_saldo = linea.Saldo - aplicado;
+                restante -= aplicado;
+                facturasTocadas.Add(linea.Factura.id);
 
-                transaccionesCuotas.Add(new transaccion_abonado
+                _context.cln_plan_pago_traslados.Add(new cln_plan_pago_traslado
                 {
-                    company_id = _currentCompanyService.GetCompanyId(),
+                    plan_id = header.id,
+                    factura_id = linea.Factura.id,
+                    factura_detalle_id = linea.Detalle.id,
+                    monto_trasladado = aplicado,
+                    creado_por = usuario
+                });
+            }
+
+            // Facturas sin saldo → Cobrada/Compensada; con resto → Abonada B.
+            foreach (var facturaId in facturasTocadas)
+            {
+                var facturaSaldo = lineasPendientes
+                    .Where(l => l.Factura.id == facturaId)
+                    .Sum(l => l.Detalle.montovalor_saldo ?? 0m);
+                var facturaEntidad = lineasPendientes.First(l => l.Factura.id == facturaId).Factura;
+                facturaEntidad.estado = facturaSaldo <= 0m ? "C" : "B";
+                facturaEntidad.estado_id = facturaSaldo <= 0m
+                    ? EstadoDocumentoComercial.Cobrada
+                    : EstadoDocumentoComercial.ParcialmenteAbonada;
+                facturaEntidad.usuario = usuario;
+            }
+
+            // F6: mueren los asientos de saldo PLAN (traslado) y PLAN-CUOTA —
+            // el traslado ya quedó como compensación de documentos y las
+            // cuotas viven en cln_plan_pago_dtl como documentos cobrables.
+            // SOLO la prima conserva su espejo legacy hasta F7: es deuda NUEVA
+            // (no traslado) y sin este débito el saldo legacy divergiría del
+            // saldo por documentos justo en el monto de la prima.
+            if (montoPrima > 0)
+            {
+                _context.transaccion_abonados.Add(new transaccion_abonado
+                {
+                    company_id = companyId,
                     cliente_clave = cliente.Clave,
                     recibo = recibo,
-                    tipotransaccion = "PLAN-CUOTA",
+                    tipotransaccion = "PLAN-PR",
                     docufuente = header.id,
-                    fecha_docu = DateOnly.FromDateTime(fechaCuota),
+                    fecha_docu = DateOnly.FromDateTime(fechaPlan),
                     tipo_partida = "01",
-                    descripcion = $"Cuota#{i + 1}",
-                    debitos = valor,
+                    descripcion = "Concepto de Prima",
+                    debitos = montoPrima,
                     creditos = 0,
-                    saldo = saldoCuotas,
-                    periodo = fechaCuota.ToString("yyyy/MM"),
+                    saldo = saldoCliente + montoPrima,
+                    periodo = periodoActual,
                     estado = "A",
                     fecha_registro = fechaRegistro,
                     ciclo = ciclo,
                     tiene_med = tieneMedidor,
                     usuario = usuario,
-                    saldo_detalle = valor
+                    saldo_detalle = montoPrima
                 });
             }
 
-            _context.transaccion_abonados.AddRange(new[] { trasladoFondos, prima });
-            if (transaccionesCuotas.Count > 0)
-            {
-                _context.transaccion_abonados.AddRange(transaccionesCuotas);
-            }
-
             await _context.SaveChangesAsync(ct);
-            await transaction.CommitAsync(ct);
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(ct);
+            }
 
             return ResponseModelDto.Ok(new { header.correlativo }, "Plan de pago registrado correctamente.");
         }
         catch (Exception ex)
         {
+            if (transaction is null)
+            {
+                // Transacción ambiente: el dueño decide el rollback; propagar
+                // para no dejar escrituras parciales silenciosas.
+                throw;
+            }
+
             await transaction.RollbackAsync(ct);
             return ResponseModelDto.Fail($"No se pudo guardar el plan: {GetInnermostMessage(ex)}");
         }
