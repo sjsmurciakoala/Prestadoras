@@ -1,3 +1,4 @@
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using SIAD.Core.Constants;
@@ -503,17 +504,23 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
         return $"{periodo.anio:D4}{periodo.mes:D2}";
     }
 
+    // F4 (2026-07-28): antes leia la columna corrida t.saldo del ultimo
+    // movimiento SIN filtro de empresa ni de vigencia. El SP v3 calcula por
+    // documentos pendientes + residuo migrado (este valor alimenta las columnas
+    // saldo/saldo_detalle de las transacciones espejo del misceláneo).
     private async Task<decimal> ObtenerSaldoClienteAsync(string clienteClave, CancellationToken ct)
     {
-        var saldo = await _context.transaccion_abonados
-            .AsNoTracking()
-            .Where(t => t.cliente_clave == clienteClave)
-            .OrderByDescending(t => t.fecha_docu)
-            .ThenByDescending(t => t.ide)
-            .Select(t => t.saldo ?? 0m)
-            .FirstOrDefaultAsync(ct);
+        var companyId = EnsureCompanyId();
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(ct);
+        }
 
-        return saldo;
+        return await connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
+            "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@CompanyId, @Clave)",
+            new { CompanyId = companyId, Clave = clienteClave },
+            cancellationToken: ct)) ?? 0m;
     }
 
     private long EnsureCompanyId()

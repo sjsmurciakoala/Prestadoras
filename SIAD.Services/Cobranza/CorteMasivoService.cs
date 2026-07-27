@@ -255,12 +255,10 @@ public class CorteMasivoService : ICorteMasivoService
                 END AS DiasSinPago
             FROM cliente_maestro cm
             LEFT JOIN LATERAL (
-                -- Saldo = suma de movimientos vigentes; la vista absorbe la convencion
-                -- invertida de estados (facturas vigentes 'A'; abonos vigentes 'C').
-                SELECT SUM(COALESCE(ta.debitos, 0) - COALESCE(ta.creditos, 0)) AS saldo
-                FROM public.vw_transaccion_abonado_vigente ta
-                WHERE ta.company_id    = cm.company_id
-                  AND ta.cliente_clave = cm.maestro_cliente_clave
+                -- F4: saldo por documentos pendientes + residuo migrado (SP v3,
+                -- unica fuente de verdad del saldo del cliente).
+                SELECT s.saldo_actual AS saldo
+                FROM public.sp_obtener_cliente_saldo(cm.company_id, cm.maestro_cliente_clave) s
             ) ta_s ON TRUE
             LEFT JOIN LATERAL (
                 SELECT MAX(ta.fecha_docu) AS ultima_pago

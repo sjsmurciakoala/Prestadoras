@@ -41,21 +41,53 @@ public class CobranzaService : ICobranzaService
 
         var reciboReferencia = await ObtenerReciboAplicableAsync(cliente.Clave, ct);
 
-        var movimientos = await _context.transaccion_abonados
-            .AsNoTracking()
-            .Where(t => t.cliente_clave == cliente.Clave && t.saldo_detalle != null && t.saldo_detalle != 0)
-            .OrderByDescending(t => t.fecha_docu)
-            .ThenByDescending(t => t.ide)
-            .Take(50)
-            .Select(t => new
+        // F4 (2026-07-28): el detalle del saldo son las LINEAS pendientes de los
+        // documentos (facturas A/B) + el residuo migrado de SIMAFI, en vez de la
+        // corrida saldo_detalle de transaccion_abonado (desactualizada con los
+        // pagos del motor y sin filtro de empresa).
+        var companyId = _currentCompanyService.GetCompanyId();
+
+        var lineas = await (
+            from f in _context.facturas.AsNoTracking()
+            join d in _context.factura_detalles.AsNoTracking() on f.id equals d.factura_id
+            where f.company_id == companyId
+                  && f.clientecodigo == cliente.Clave
+                  && (f.estado == "A" || f.estado == "B")
+                  && (d.montovalor_saldo ?? d.montovalor ?? 0m) != 0m
+            orderby f.fechaemision descending, f.numrecibo descending
+            select new
             {
-                t.descripcion,
-                t.saldo_detalle,
-                t.periodo,
-                t.tipo_servicio,
-                t.recibo
+                descripcion = d.descripcion,
+                saldo_detalle = (decimal?)(d.montovalor_saldo ?? d.montovalor ?? 0m),
+                periodo = f.periodo,
+                tipo_servicio = d.tiposervicio,
+                recibo = (decimal?)f.numrecibo
             })
+            .Take(50)
             .ToListAsync(ct);
+
+        var residuoMigrado = await _context.transaccion_abonados
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId
+                        && t.cliente_clave == cliente.Clave
+                        && (t.tipotransaccion == "SALDO_ANTERIOR" || t.tipotransaccion == "SALDO_INICIAL")
+                        && t.estado != "N" && t.estado != "R" && t.estado != "P")
+            .SumAsync(t => (t.debitos ?? 0m) - (t.creditos ?? 0m), ct);
+
+        var movimientos = lineas;
+        if (residuoMigrado != 0m)
+        {
+            movimientos = lineas
+                .Append(new
+                {
+                    descripcion = (string?)"Saldo anterior (migrado)",
+                    saldo_detalle = (decimal?)residuoMigrado,
+                    periodo = (string?)null,
+                    tipo_servicio = (string?)null,
+                    recibo = (decimal?)null
+                })
+                .ToList();
+        }
 
         if (movimientos.Count == 0)
         {
@@ -476,15 +508,23 @@ public class CobranzaService : ICobranzaService
         return 1.ToString("D6");
     }
 
+    // F4 (2026-07-28): antes leia la columna corrida t.saldo del ultimo
+    // movimiento SIN filtro de empresa ni de vigencia (corrupta para abonos y
+    // cross-company). El SP v3 calcula por documentos pendientes + residuo
+    // migrado. Este saldo se congela en el plan de pago y la carta de cobro.
     private async Task<decimal> ObtenerSaldoClienteAsync(string clienteClave, CancellationToken ct)
     {
-        return await _context.transaccion_abonados
-            .AsNoTracking()
-            .Where(t => t.cliente_clave == clienteClave)
-            .OrderByDescending(t => t.fecha_docu)
-            .ThenByDescending(t => t.ide)
-            .Select(t => t.saldo ?? 0m)
-            .FirstOrDefaultAsync(ct);
+        var companyId = _currentCompanyService.GetCompanyId();
+        var connection = _context.Database.GetDbConnection();
+        if (connection.State != System.Data.ConnectionState.Open)
+        {
+            await connection.OpenAsync(ct);
+        }
+
+        return await connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
+            "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@CompanyId, @Clave)",
+            new { CompanyId = companyId, Clave = clienteClave },
+            cancellationToken: ct)) ?? 0m;
     }
 
     private async Task<decimal?> ObtenerReciboAplicableAsync(string clienteClave, CancellationToken ct)
@@ -1036,12 +1076,10 @@ public class CobranzaService : ICobranzaService
                 LIMIT 1
             ) cd ON TRUE
             LEFT JOIN LATERAL (
-                -- Saldo = suma de movimientos vigentes; la vista absorbe la convencion
-                -- invertida de estados (facturas vigentes 'A'; abonos vigentes 'C').
-                SELECT SUM(COALESCE(ta.debitos, 0) - COALESCE(ta.creditos, 0)) AS saldo
-                FROM public.vw_transaccion_abonado_vigente ta
-                WHERE ta.company_id    = cm.company_id
-                  AND ta.cliente_clave = cm.maestro_cliente_clave
+                -- F4: saldo por documentos pendientes + residuo migrado (SP v3,
+                -- unica fuente de verdad del saldo del cliente).
+                SELECT s.saldo_actual AS saldo
+                FROM public.sp_obtener_cliente_saldo(cm.company_id, cm.maestro_cliente_clave) s
             ) ta_s ON TRUE
             LEFT JOIN LATERAL (
                 SELECT MAX(ta.fecha_docu) AS ultima_pago
