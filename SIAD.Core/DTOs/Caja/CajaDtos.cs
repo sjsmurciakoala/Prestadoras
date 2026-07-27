@@ -17,15 +17,16 @@ public record SesionCajaDto(
     DateTime? FechaCierre,
     string Estado,
     decimal? TotalCobrado,
-    int? CajaFisicaId = null
+    int? CajaFisicaId = null,
+    decimal? MontoApertura = null
 );
 
 // ------- Apertura / Cierre -------
 
 // F3: la caja NO se elige — la apertura resuelve la caja ASIGNADA al usuario
 // (adm_caja_usuario). CajaFisicaId se conserva solo por compatibilidad de
-// contrato y el servicio lo ignora.
-public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null);
+// contrato y el servicio lo ignora. MontoApertura = fondo inicial del turno.
+public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null, decimal? MontoApertura = null);
 
 // ------- Cajas físicas (adm_caja) -------
 

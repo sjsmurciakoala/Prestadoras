@@ -44,6 +44,6 @@ public class CobrosController : ControllerBase
 
     // GET api/cobros/del-dia — cobros del día desde el modelo nuevo (adm_pago)
     [HttpGet("del-dia")]
-    public async Task<IActionResult> DelDia([FromQuery] DateTime? fecha, [FromQuery] string? usuario, CancellationToken ct)
-        => Ok(await _cobroService.ListarCobrosDelDiaAsync(fecha, usuario, ct));
+    public async Task<IActionResult> DelDia([FromQuery] DateTime? fecha, [FromQuery] string? usuario, [FromQuery] int? cajaId, CancellationToken ct)
+        => Ok(await _cobroService.ListarCobrosDelDiaAsync(fecha, usuario, cajaId, ct));
 }

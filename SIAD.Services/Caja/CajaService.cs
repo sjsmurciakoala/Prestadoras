@@ -67,7 +67,8 @@ public class CajaService : ICajaService
             usuario_apertura = request.UsuarioApertura,
             fecha_apertura   = DateTime.UtcNow,
             estado           = "ABIERTA",
-            caja_fisica_id   = asignacion.caja_id
+            caja_fisica_id   = asignacion.caja_id,
+            monto_apertura   = request.MontoApertura
         };
 
         _context.sesion_cajas.Add(sesion);
@@ -192,12 +193,24 @@ public class CajaService : ICajaService
         if (caja is null)
             return new CajaResponseDto(false, "No se encontró la caja indicada.");
 
+        // Regla 1:1 (revisión 2026-07-27): una caja tiene UN cajero. Para
+        // reasignar, primero se quita la asignación actual de la caja.
         var cajero = dto.Usuario.Trim();
+        var ocupanteActual = await _context.adm_caja_usuarios
+            .AsNoTracking()
+            .Where(cu => cu.caja_id == dto.CajaId && cu.usuario != cajero)
+            .Select(cu => cu.usuario)
+            .FirstOrDefaultAsync();
+        if (ocupanteActual is not null)
+            return new CajaResponseDto(false,
+                $"La caja {caja.nombre} ya está asignada a {ocupanteActual}. Quite esa asignación primero para reasignarla.");
+
         var existente = await _context.adm_caja_usuarios
             .FirstOrDefaultAsync(cu => cu.usuario == cajero);
         if (existente is not null)
         {
-            // Un usuario pertenece a UNA caja: reasignar lo mueve de caja.
+            // Un usuario pertenece a UNA caja: asignarlo a otra lo mueve
+            // (su caja anterior queda libre).
             existente.caja_id = dto.CajaId;
             existente.updated_by = usuario;
         }
@@ -257,22 +270,35 @@ public class CajaService : ICajaService
         var existe = await _context.sesion_cajas.AnyAsync(s => s.id == sesionId);
         if (!existe) return null;
 
-        // transaccion_abonado.caja_id almacena sesion_caja.id como referencia libre
-        var grupos = await _context.transaccion_abonados
-            .Where(t => t.caja_id == sesionId && t.estado != "N")
-            .GroupBy(t => t.tipotransaccion ?? "SIN TIPO")
-            .Select(g => new ResumenPorTipoDto(
-                g.Key,
-                g.Sum(t => t.creditos ?? 0),
-                g.Sum(t => t.debitos ?? 0),
-                g.Count()))
+        // Resumen legible del TURNO desde el modelo nuevo (adm_pago): total
+        // cobrado por forma de pago + reversos aparte, en vez de los códigos
+        // legacy 201/202. (El total del cierre sigue saliendo del espejo en
+        // CerrarCajaAsync — sin cambio de comportamiento.)
+        var pagos = await _context.adm_pagos
+            .AsNoTracking()
+            .Where(p => p.sesion_caja_id == sesionId)
+            .Select(p => new { p.forma_pago, p.estado_id, p.monto_total })
             .ToListAsync();
 
+        var aplicados = pagos.Where(p => p.estado_id == SIAD.Core.Constants.EstadoPago.Aplicado).ToList();
+        var reversados = pagos.Where(p => p.estado_id != SIAD.Core.Constants.EstadoPago.Aplicado).ToList();
+
+        var porTipo = aplicados
+            .GroupBy(p => p.forma_pago)
+            .Select(g => new ResumenPorTipoDto(g.Key, g.Sum(x => x.monto_total), 0m, g.Count()))
+            .OrderBy(x => x.Tipo)
+            .ToList();
+        if (reversados.Count > 0)
+        {
+            porTipo.Add(new ResumenPorTipoDto(
+                "REVERSADOS", 0m, reversados.Sum(x => x.monto_total), reversados.Count));
+        }
+
         return new ResumenCajaDto(
-            grupos.Sum(g => g.Creditos),
-            grupos.Sum(g => g.Debitos),
-            grupos.Sum(g => g.Cantidad),
-            grupos);
+            aplicados.Sum(p => p.monto_total),
+            reversados.Sum(p => p.monto_total),
+            aplicados.Count,
+            porTipo);
     }
 
     // ------------------------------------------------------------------
@@ -300,5 +326,6 @@ public class CajaService : ICajaService
         s.fecha_cierre,
         s.estado,
         s.total_cobrado,
-        s.caja_fisica_id);
+        s.caja_fisica_id,
+        s.monto_apertura);
 }

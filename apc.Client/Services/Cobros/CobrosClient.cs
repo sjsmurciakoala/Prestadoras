@@ -28,11 +28,12 @@ public class CobrosClient
         return await response.ReadFromJsonAsyncWithAuthCheck<ResponseModelDto>();
     }
 
-    public Task<IReadOnlyList<CobroDelDiaDto>?> DelDiaAsync(DateTime? fecha = null, string? usuario = null)
+    public Task<IReadOnlyList<CobroDelDiaDto>?> DelDiaAsync(DateTime? fecha = null, string? usuario = null, int? cajaId = null)
     {
         var query = new List<string>();
         if (fecha.HasValue) query.Add($"fecha={fecha.Value:yyyy-MM-dd}");
         if (!string.IsNullOrWhiteSpace(usuario)) query.Add($"usuario={Uri.EscapeDataString(usuario)}");
+        if (cajaId is > 0) query.Add($"cajaId={cajaId}");
         var qs = query.Count > 0 ? "?" + string.Join("&", query) : string.Empty;
         return _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<CobroDelDiaDto>>($"api/cobros/del-dia{qs}");
     }

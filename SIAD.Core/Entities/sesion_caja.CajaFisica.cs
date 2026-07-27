@@ -6,4 +6,7 @@ namespace SIAD.Core.Entities;
 public partial class sesion_caja
 {
     public int? caja_fisica_id { get; set; }
+
+    /// <summary>Fondo inicial del turno (opcional), visible en el cierre.</summary>
+    public decimal? monto_apertura { get; set; }
 }

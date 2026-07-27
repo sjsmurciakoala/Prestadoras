@@ -783,6 +783,24 @@ public class AbonoService : IAbonoService
         if (dto.Monto > saldoPendiente)
             return ResponseModelDto.Fail($"El monto ({dto.Monto:N2}) excede el saldo pendiente ({saldoPendiente:N2}).");
 
+        // Control de recibos (revisión 2026-07-27): los pendientes vigentes de la
+        // factura se descuentan del disponible — no se puede "recibir" dos veces
+        // el mismo saldo en papeles distintos.
+        var pendientesVigentes = await _context.transaccion_abonados
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId
+                && t.recibo == (decimal)factura.numrecibo
+                && t.tipotransaccion == "202"
+                && t.estado == "P")
+            .SumAsync(t => t.creditos ?? 0m, ct);
+
+        var disponible = saldoPendiente - pendientesVigentes;
+        if (dto.Monto > disponible)
+            return ResponseModelDto.Fail(
+                $"Ya existen recibos pendientes por {pendientesVigentes:N2} sobre esta factura; " +
+                $"el monto disponible para nuevos recibos es {Math.Max(disponible, 0m):N2}. " +
+                "Anule un recibo pendiente si necesita re-emitirlo.");
+
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var periodo = await ObtenerPeriodoActualCodigoAsync(ct);
 

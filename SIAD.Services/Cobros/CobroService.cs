@@ -657,7 +657,7 @@ public class CobroService : ICobroService
     }
 
     public async Task<IReadOnlyList<CobroDelDiaDto>> ListarCobrosDelDiaAsync(
-        DateTime? fecha, string? usuario, CancellationToken ct = default)
+        DateTime? fecha, string? usuario, int? cajaFisicaId = null, CancellationToken ct = default)
     {
         var companyId = _currentCompanyService.GetCompanyId();
         var dia = DateOnly.FromDateTime(fecha?.Date ?? DateTime.UtcNow.Date);
@@ -686,6 +686,7 @@ public class CobroService : ICobroService
                         p.estado_id,
                         p.usuario,
                         CajaNombre = k != null ? k.nombre : null,
+                        CajaFisicaId = s != null ? s.caja_fisica_id : null,
                         p.transaccion_abonado_ide
                     };
 
@@ -693,6 +694,11 @@ public class CobroService : ICobroService
         {
             var u = usuario.Trim();
             query = query.Where(x => x.usuario == u);
+        }
+
+        if (cajaFisicaId is > 0)
+        {
+            query = query.Where(x => x.CajaFisicaId == cajaFisicaId.Value);
         }
 
         var items = await query.Take(500).ToListAsync(ct);

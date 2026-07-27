@@ -31,7 +31,7 @@
         </div>
         <DxButton Text="Mantenimiento de cajas" IconCssClass="bi bi-gear"
                   RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern"
-                  Click="@(() => Nav.NavigateTo("/facturacion/caja/cajas"))" />
+                  Click="@(() => Nav.NavigateTo("/facturacion/cajas"))" />
     </div>
 
     @if (_cargando)
@@ -50,8 +50,14 @@
                     {
                         <span class="badge bg-success px-3 py-2 fs-6">ABIERTA</span>
                         <div>
-                            <h5 class="mb-0 fw-bold">@(_miCaja?.Nombre ?? "Caja") · Sesión #@_sesionActiva.Id</h5>
-                            <small class="text-muted">Cajero: <strong>@_usuario</strong> · desde @_sesionActiva.FechaApertura.ToString("dd/MM/yyyy HH:mm")</small>
+                            <h5 class="mb-0 fw-bold">@(_miCaja?.Nombre ?? "Caja") · Turno #@_sesionActiva.Id</h5>
+                            <small class="text-muted">
+                                Cajero: <strong>@_usuario</strong> · abierto el @_sesionActiva.FechaApertura.ToString("dd/MM/yyyy HH:mm")
+                                @if (_sesionActiva.MontoApertura is > 0)
+                                {
+                                    <text> · fondo inicial: <strong>@_sesionActiva.MontoApertura.Value.ToString("C", Culture)</strong></text>
+                                }
+                            </small>
                         </div>
                     }
                     else
@@ -76,16 +82,13 @@
                 <div>
                     @if (_sesionActiva is not null)
                     {
-                        <div class="d-flex align-items-center gap-2">
-                            <DxTextBox @bind-Text="@_observacionCierre" NullText="Observaciones de cierre..." />
-                            <DxButton Text="Cerrar caja" RenderStyle="ButtonRenderStyle.Danger"
-                                      IconCssClass="bi bi-lock-fill" Click="OnCerrarCaja" />
-                        </div>
+                        <DxButton Text="Cerrar caja" RenderStyle="ButtonRenderStyle.Danger"
+                                  IconCssClass="bi bi-lock-fill" Click="AbrirConfirmarCierre" />
                     }
                     else
                     {
                         <DxButton Text="Abrir caja" RenderStyle="ButtonRenderStyle.Success"
-                                  IconCssClass="bi bi-unlock-fill" Click="OnAbrirCaja"
+                                  IconCssClass="bi bi-unlock-fill" Click="AbrirConfirmarApertura"
                                   Enabled="@(_miCaja is not null && !_miCaja.Ocupada)" />
                     }
                 </div>
@@ -242,11 +245,13 @@
                                     ShowGroupPanel="false" CssClass="grid-solicitudes">
                                 <ToolbarTemplate>
                                     <div class="d-flex flex-wrap gap-2 align-items-center w-100 p-2">
-                                        <DxCheckBox Checked="@_soloMisCobros" CheckedChanged="@((bool v) => CambiarFiltroCobros(v))">Solo mis cobros</DxCheckBox>
+                                        <DxCheckBox Checked="@_soloMiCaja" CheckedChanged="@((bool v) => CambiarFiltroCobros(v))"
+                                                    Enabled="@(_miCaja is not null)">Solo mi caja (@(_miCaja?.Nombre ?? "sin asignar"))</DxCheckBox>
                                         <DxButton Text="Actualizar" IconCssClass="bi bi-arrow-clockwise"
                                                   RenderStyle="ButtonRenderStyle.Secondary" Click="CargarCobrosDelDiaAsync" />
                                         <div class="ms-auto text-muted small">
-                                            Total del día: <span class="fw-bold">@_cobrosDelDia.Where(c => c.EstadoId == EstadoPago.Aplicado).Sum(c => c.MontoTotal).ToString("C", Culture)</span>
+                                            Total cobrado (@(_soloMiCaja ? "mi caja" : "todas las cajas")):
+                                            <span class="fw-bold">@_cobrosDelDia.Where(c => c.EstadoId == EstadoPago.Aplicado).Sum(c => c.MontoTotal).ToString("C", Culture)</span>
                                         </div>
                                     </div>
                                 </ToolbarTemplate>
@@ -292,11 +297,15 @@
                 </div>
             </DxTabPage>
 
-            @* =========================== RESUMEN DEL DÍA ========================== *@
-            <DxTabPage Text="Resumen de la sesión">
+            @* =========================== RESUMEN DEL TURNO ======================== *@
+            <DxTabPage Text="Resumen del turno">
                 <div class="p-3">
                     @if (_sesionActiva is not null && _resumen is not null)
                     {
+                        <p class="text-muted small mb-3">
+                            El turno agrupa todo lo cobrado desde que abrió su caja hasta el cierre —
+                            es la base del arqueo: cuánto debe entregar al cerrar.
+                        </p>
                         <div class="row g-3 mb-3">
                             <div class="col-md-4">
                                 <div class="p-3 border rounded d-flex align-items-center justify-content-between">
@@ -310,17 +319,29 @@
                             <div class="col-md-4">
                                 <div class="p-3 border rounded d-flex align-items-center justify-content-between">
                                     <div>
-                                        <small class="text-muted d-block text-uppercase fw-bold">Transacciones</small>
+                                        <small class="text-muted d-block text-uppercase fw-bold">Cobros</small>
                                         <span class="fs-3 fw-bold text-primary">@_resumen.CantidadTransacciones</span>
                                     </div>
                                     <i class="bi bi-receipt-cutoff fs-2 text-primary"></i>
                                 </div>
                             </div>
+                            @if (_resumen.TotalDebitos > 0)
+                            {
+                                <div class="col-md-4">
+                                    <div class="p-3 border rounded d-flex align-items-center justify-content-between">
+                                        <div>
+                                            <small class="text-muted d-block text-uppercase fw-bold">Reversado</small>
+                                            <span class="fs-3 fw-bold text-danger">@_resumen.TotalDebitos.ToString("C", Culture)</span>
+                                        </div>
+                                        <i class="bi bi-arrow-counterclockwise fs-2 text-danger"></i>
+                                    </div>
+                                </div>
+                            }
                         </div>
                         <DxGrid Data="_resumen.PorTipo" ShowGroupPanel="false" CssClass="grid-solicitudes">
                             <Columns>
-                                <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Tipo)" Caption="Tipo" />
-                                <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Cantidad)" Caption="Cantidad" Width="120px" TextAlignment="GridTextAlignment.Center" />
+                                <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Tipo)" Caption="Forma de pago" />
+                                <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Cantidad)" Caption="Cobros" Width="120px" TextAlignment="GridTextAlignment.Center" />
                                 <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Creditos)" Caption="Cobrado" DisplayFormat="{0:C}" Width="180px" TextAlignment="GridTextAlignment.Right" />
                             </Columns>
                         </DxGrid>
@@ -329,7 +350,7 @@
                     {
                         <div class="text-center py-5 text-muted">
                             <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                            <p class="mb-0">Abra la sesión de caja para ver el resumen.</p>
+                            <p class="mb-0">Abra su caja para ver el resumen del turno.</p>
                         </div>
                     }
                 </div>
@@ -353,6 +374,55 @@
     }
 </div>
 
+@* ---- Popup confirmar apertura de caja ---- *@
+<DxPopup @bind-Visible="_aperturaVisible" HeaderText="Abrir caja" Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Va a abrir el turno de <strong>@_miCaja?.Nombre (@_miCaja?.Codigo)</strong>
+                como cajero <strong>@_usuario</strong>. Todos los cobros del turno
+                quedarán amarrados a esta caja para el arqueo y el cierre.
+            </p>
+            <label class="form-label small text-muted fw-bold">FONDO INICIAL (OPCIONAL)</label>
+            <DxSpinEdit @bind-Value="_montoApertura" MinValue="0" DisplayFormat="N2" CssClass="w-100"
+                        NullText="Efectivo con el que inicia la caja..." />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _aperturaVisible = false)" />
+                <DxButton Text="Abrir caja" RenderStyle="ButtonRenderStyle.Success" Click="OnAbrirCaja" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ---- Popup confirmar cierre de caja ---- *@
+<DxPopup @bind-Visible="_cierreVisible" HeaderText="Cerrar caja" Width="460px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Cierre del turno <strong>#@_sesionActiva?.Id</strong> de
+                <strong>@_miCaja?.Nombre</strong>:
+            </p>
+            <ul class="mb-3">
+                <li>Cobros del turno: <strong>@(_resumen?.CantidadTransacciones ?? 0)</strong></li>
+                <li>Total cobrado (sistema): <strong>@((_resumen?.TotalCreditos ?? 0m).ToString("C", Culture))</strong></li>
+                @if (_sesionActiva?.MontoApertura is > 0)
+                {
+                    <li>Fondo inicial: <strong>@_sesionActiva.MontoApertura.Value.ToString("C", Culture)</strong> ·
+                        efectivo esperado en caja: <strong>@(((_sesionActiva.MontoApertura ?? 0m) + (_resumen?.PorTipo.FirstOrDefault(t => t.Tipo == "EFECTIVO")?.Creditos ?? 0m)).ToString("C", Culture))</strong></li>
+                }
+            </ul>
+            <label class="form-label small text-muted fw-bold">OBSERVACIONES DEL CIERRE</label>
+            <DxMemo @bind-Text="_observacionCierre" Rows="2" CssClass="w-100" NullText="Diferencias, notas del arqueo..." />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _cierreVisible = false)" />
+                <DxButton Text="Confirmar cierre" RenderStyle="ButtonRenderStyle.Danger" Click="OnCerrarCaja" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
 @* ---- Popup recibo para banco ---- *@
 <DxPopup @bind-Visible="_reciboBancoVisible" HeaderText="Recibo para pagar en banco" Width="420px" ShowCloseButton="true">
     <BodyContentTemplate>
@@ -363,9 +433,18 @@
                 El recibo NO rebaja la factura: el cliente lo lleva al banco y el
                 pago se aplica cuando el banco lo reporta.
             </p>
+            @if (_reciboBancoPendientes > 0)
+            {
+                <p class="mb-2 text-warning-emphasis">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Esta factura ya tiene recibos pendientes por
+                    <strong>@_reciboBancoPendientes.ToString("C", Culture)</strong> —
+                    disponible para nuevos recibos: <strong>@_reciboBancoDisponible.ToString("C", Culture)</strong>.
+                </p>
+            }
             <label class="form-label small text-muted fw-bold">MONTO DEL RECIBO</label>
             <DxSpinEdit @bind-Value="_reciboBancoMonto" MinValue="0.01m"
-                        MaxValue="@(_reciboBancoDoc?.SaldoPendiente ?? 0m)"
+                        MaxValue="@_reciboBancoDisponible"
                         DisplayFormat="N2" CssClass="w-100" />
             <div class="d-flex justify-content-end gap-2 mt-3">
                 <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
@@ -428,6 +507,9 @@
     private int _tabActiva;
     private string _usuario = "sistema";
     private string? _observacionCierre;
+    private bool _aperturaVisible;
+    private decimal? _montoApertura;
+    private bool _cierreVisible;
 
     private SesionCajaDto? _sesionActiva;
     private MiCajaDto? _miCaja;
@@ -441,7 +523,7 @@
     private IReadOnlyList<BancoDto> _bancos = [];
 
     private IReadOnlyList<CobroDelDiaDto> _cobrosDelDia = [];
-    private bool _soloMisCobros = true;
+    private bool _soloMiCaja = true;
 
     private bool _reversoVisible;
     private CobroDelDiaDto? _reversoCobro;
@@ -491,11 +573,30 @@
         _historial = await CajaHttp.GetHistorialAsync(_usuario) ?? [];
     }
 
+    private void AbrirConfirmarApertura()
+    {
+        _montoApertura = null;
+        _aperturaVisible = true;
+    }
+
     private async Task OnAbrirCaja()
     {
-        var result = await CajaHttp.AbrirAsync(new AbrirCajaRequestDto(_usuario));
+        var result = await CajaHttp.AbrirAsync(new AbrirCajaRequestDto(_usuario, null, _montoApertura));
         Notificar(result?.Success == true, result?.Message ?? "Error al abrir caja.");
-        if (result?.Success == true) await CargarEstadoAsync();
+        if (result?.Success == true)
+        {
+            _aperturaVisible = false;
+            await CargarEstadoAsync();
+        }
+    }
+
+    private async Task AbrirConfirmarCierre()
+    {
+        if (_sesionActiva is null) return;
+        // Refrescar el resumen para que el popup muestre los totales al momento.
+        _resumen = await CajaHttp.GetResumenAsync(_sesionActiva.Id);
+        _observacionCierre = null;
+        _cierreVisible = true;
     }
 
     private async Task OnCerrarCaja()
@@ -505,9 +606,11 @@
         Notificar(result?.Success == true, result?.Message ?? "Error al cerrar caja.");
         if (result?.Success == true)
         {
+            _cierreVisible = false;
             _observacionCierre = null;
             _clienteClave = null;
             _documentos = [];
+            _pendientes = [];
             await CargarEstadoAsync();
         }
     }
@@ -549,10 +652,17 @@
 
     // ---------------- Recibo para banco (pendiente, NO rebaja la factura) ----------------
 
+    private decimal _reciboBancoPendientes;
+    private decimal _reciboBancoDisponible;
+
     private void AbrirReciboBanco(DocumentoCobroRow doc)
     {
         _reciboBancoDoc = doc;
-        _reciboBancoMonto = doc.SaldoPendiente;
+        // Control de recibos: lo ya emitido en pendientes descuenta el disponible
+        // (el backend valida lo mismo — esto solo evita el error al usuario).
+        _reciboBancoPendientes = _pendientes.Where(p => p.NumRecibo == doc.NumRecibo).Sum(p => p.Monto);
+        _reciboBancoDisponible = Math.Max(doc.SaldoPendiente - _reciboBancoPendientes, 0m);
+        _reciboBancoMonto = _reciboBancoDisponible;
         _reciboBancoVisible = true;
     }
 
@@ -711,12 +821,16 @@
 
     private async Task CargarCobrosDelDiaAsync()
     {
-        _cobrosDelDia = await CobrosHttp.DelDiaAsync(usuario: _soloMisCobros ? _usuario : null) ?? [];
+        // El día de la CAJA (no del cajero): con "Solo mi caja" se ven todos los
+        // cobros de la caja asignada sin importar quién los registró; sin el
+        // filtro, todas las cajas de la empresa.
+        _cobrosDelDia = await CobrosHttp.DelDiaAsync(
+            cajaId: _soloMiCaja ? _miCaja?.CajaId : null) ?? [];
     }
 
     private async Task CambiarFiltroCobros(bool valor)
     {
-        _soloMisCobros = valor;
+        _soloMiCaja = valor;
         await CargarCobrosDelDiaAsync();
     }
 

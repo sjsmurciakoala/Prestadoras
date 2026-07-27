@@ -1,3 +1,4 @@
+@page "/facturacion/cajas"
 @page "/facturacion/caja/cajas"
 @using SIAD.Core.DTOs.Caja
 @using SIAD.Core.DTOs.Usuarios
@@ -17,7 +18,7 @@
     <div class="header-section">
         <div>
             <h2 class="page-title">Mantenimiento de cajas</h2>
-            <p class="page-subtitle">Cajas físicas de la empresa y asignación de cajeros. Cada cajero pertenece a una caja.</p>
+            <p class="page-subtitle">Cajas físicas de la empresa y su cajero. Regla: una caja tiene UN cajero y un cajero pertenece a UNA caja; para reasignar, quite primero la asignación actual.</p>
         </div>
         <div class="d-flex gap-2">
             <DxButton Text="Volver a caja" IconCssClass="bi bi-arrow-left"
@@ -128,7 +129,7 @@
                         FilterCondition="DataEditorFilterCondition.Contains"
                         NullText="Seleccione el usuario..." CssClass="mb-2" />
             <small class="text-muted d-block mb-3">
-                Si el usuario ya está asignado a otra caja, se moverá a esta.
+                Una caja admite un solo cajero: si esta caja ya tiene uno, quite esa asignación primero. Si el usuario elegido está en otra caja, se moverá a esta (su caja anterior queda libre).
             </small>
             <div class="d-flex justify-content-end gap-2">
                 <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"

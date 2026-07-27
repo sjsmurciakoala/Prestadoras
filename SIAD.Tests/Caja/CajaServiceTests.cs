@@ -113,19 +113,39 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task Caja_ocupada_por_otro_cajero_rechaza_la_apertura()
+    public async Task Una_caja_no_acepta_segundo_cajero_y_la_reasignacion_es_quitar_y_asignar()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
         await AsignarCajaAsync("cajero_a", "CAJA-OCUP");
-        await AsignarCajaAsync("cajero_b", "CAJA-OCUP"); // misma caja, turnos
+        var caja = await _context!.adm_cajas.AsNoTracking().FirstAsync(c => c.codigo == "CAJA-OCUP");
 
-        var primera = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_a"));
-        Assert.True(primera.Success, primera.Message);
+        // Regla 1:1: la caja ya tiene cajero → rechaza al segundo con instrucción
+        var segundo = await _service!.AsignarCajeroAsync(new AsignarCajeroDto(caja.caja_id, "cajero_b"), "test");
+        Assert.False(segundo.Success);
+        Assert.Contains("ya está asignada a cajero_a", segundo.Message);
 
-        var segunda = await _service.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_b"));
-        Assert.False(segunda.Success);
-        Assert.Contains("ya tiene una sesión abierta", segunda.Message);
-        Assert.Contains("cajero_a", segunda.Message);
+        // Flujo correcto de reasignación: quitar la asignación actual y asignar
+        Assert.True((await _service.QuitarCajeroAsync("cajero_a")).Success);
+        var reasignado = await _service.AsignarCajeroAsync(new AsignarCajeroDto(caja.caja_id, "cajero_b"), "test");
+        Assert.True(reasignado.Success, reasignado.Message);
+
+        var mia = await _service.ObtenerMiCajaAsync("cajero_b");
+        Assert.NotNull(mia);
+        Assert.Equal(caja.caja_id, mia.CajaId);
+    }
+
+    [SkippableFact]
+    public async Task Apertura_guarda_fondo_inicial_del_turno()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await AsignarCajaAsync("cajero_fondo", "CAJA-FON");
+
+        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_fondo", null, 500m));
+        Assert.True(apertura.Success, apertura.Message);
+
+        var sesion = await _service.ObtenerSesionActivaAsync("cajero_fondo");
+        Assert.NotNull(sesion);
+        Assert.Equal(500m, sesion.MontoApertura);
     }
 
     [SkippableFact]
