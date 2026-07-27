@@ -9,10 +9,13 @@ namespace SIAD.Core.DTOs.Cobros;
 /// <summary>Una aplicación del cobro a un documento concreto.</summary>
 public class CobroAplicacionDto
 {
-    /// <summary>DocumentoCobroTipo: 1 = factura (único soportado en F2).</summary>
+    /// <summary>DocumentoCobroTipo: 1 = factura, 2 = cuota de plan (F6).</summary>
     public short DocumentoTipo { get; set; } = 1;
 
     public int? FacturaId { get; set; }
+
+    /// <summary>Cuota de plan de pago (cln_plan_pago_dtl.id) cuando DocumentoTipo = 2.</summary>
+    public int? PlanCuotaId { get; set; }
 
     /// <summary>Monto a aplicar al documento. Total = parcial con monto igual al saldo.</summary>
     public decimal Monto { get; set; }

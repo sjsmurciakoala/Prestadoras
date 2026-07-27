@@ -1,13 +1,20 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
+using SIAD.Core.DTOs.Bancos;
+using SIAD.Core.DTOs.Caja;
 using SIAD.Core.DTOs.Cobranza;
+using SIAD.Core.DTOs.Cobros;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
+using SIAD.Services.Bancos;
 using SIAD.Services.Cobranza;
+using SIAD.Services.Cobros;
 using SIAD.Tests.Infrastructure;
 
 namespace SIAD.Tests.Cobros;
@@ -65,6 +72,36 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         public bool Soporta(string documentoCodigo) => false;
         public DocumentoGenerado Generar(string documentoCodigo, DocumentoCobranzaDatos datos)
             => throw new NotSupportedException();
+    }
+
+    private sealed class StubBanTransaccionesService : IBanTransaccionesService
+    {
+        public Task<IReadOnlyList<BanTransaccionListDto>> GetTransaccionesAsync(long companyId, long? bancoId = null, long? bancoCuentaId = null, DateOnly? fechaDesde = null, DateOnly? fechaHasta = null, bool incluirAnuladas = false, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<BanTransaccionListDto?> GetTransaccionByIdAsync(long banKardexId, long companyId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<BanTransaccionDetalleDto?> GetTransaccionDetalleAsync(long banKardexId, long companyId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<EstadoCuentaDto?> GetEstadoCuentaAsync(long companyId, long bancoCuentaId, DateOnly? fechaDesde = null, DateOnly? fechaHasta = null, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoAsync(long bancoCuentaId, string idTipoTransaccion, DateOnly fechaMovimiento, string descripcion, string? referencia, string? sourceDocument, decimal tasaCambio, decimal monto, IReadOnlyList<BanTransaccionContraLineaDto> contraCuentas, string usuario, CancellationToken ct = default)
+            => throw new NotSupportedException("El E2E de cuotas cubre solo EFECTIVO.");
+        public Task<(long BanKardexIdAnulacion, decimal SaldoResultante)> AnularMovimientoAsync(long bancoCuentaId, long banKardexIdOriginal, string motivo, string usuario, CancellationToken ct = default)
+            => throw new NotSupportedException();
+    }
+
+    private sealed class StubCorteMasivoService : ICorteMasivoService
+    {
+        public Task<CorteMasivoHdrDto> GenerarAsync(GenerarCorteMasivoRequest request, string usuario, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<IReadOnlyList<CorteMasivoHdrDto>> ListarAsync(CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<CorteMasivoDetalleDto?> ObtenerDetalleAsync(int hdrId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<CorteMasivoDetalleDto?> ObtenerParaReimpresionAsync(int hdrId, CancellationToken ct = default)
+            => throw new NotSupportedException();
+        public Task<int> CancelarOrdenesCorteClienteAsync(string clienteClave, string usuario, CancellationToken ct = default)
+            => Task.FromResult(0);
     }
 
     // ------------------------------------------------------------------ setup
@@ -188,6 +225,118 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         var estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
             "SELECT estado_id FROM public.cln_plan_pago_hdr WHERE company_id = @C", new { C = Empresa }, Transaction));
         Assert.Equal((short)1, estadoPlan);
+    }
+
+    [SkippableFact]
+    public async Task E2E_cobrar_cuotas_en_caja_completa_el_plan_y_reversar_lo_reabre()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await PrepararEmpresaYClienteAsync();
+        await CrearFacturaConEspejoAsync(60m, 40m, "C");
+
+        // Infraestructura de caja del motor (folio + sesión abierta).
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.adm_documento_secuencia
+                (company_id, tipo_documento, canal_id, prefijo, longitud_padding, valor_actual, updated_by)
+            VALUES (@id, 'RECIBO_PAGO', 0, 'REC-', 8, 0, 'test')
+            ON CONFLICT (company_id, tipo_documento, canal_id) DO NOTHING",
+            new { id = Empresa }, Transaction));
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.sesion_caja (company_id, usuario_apertura, fecha_apertura, estado)
+            VALUES (@id, 'test-f6', now(), 'ABIERTA')",
+            new { id = Empresa }, Transaction));
+
+        // Plan sin prima de 2 cuotas (50 + 50) sobre los 100 en documentos.
+        var creado = await _servicio!.GuardarPlanPagoAsync(Plan(100m, 0m, 2));
+        Assert.True(creado.Success, creado.Message);
+
+        var cuotas = (await Connection.QueryAsync<int>(new CommandDefinition(
+            "SELECT id FROM public.cln_plan_pago_dtl WHERE company_id = @C ORDER BY mes",
+            new { C = Empresa }, Transaction))).ToList();
+        Assert.Equal(2, cuotas.Count);
+
+        var motor = new CobroService(
+            _context!,
+            new StubBanTransaccionesService(),
+            new TestCurrentCompanyService(Empresa),
+            new StubCorteMasivoService());
+
+        // Cobrar la primera cuota completa: cuota Cobrada, plan sigue ACTIVO.
+        var cobro1 = await motor.RegistrarCobroAsync(new CobroCrearDto
+        {
+            Canal = CanalCobro.Caja,
+            ClienteClave = Clave,
+            Usuario = "test-f6",
+            FormaPago = "EFECTIVO",
+            Aplicaciones = [new CobroAplicacionDto
+            {
+                DocumentoTipo = DocumentoCobroTipo.CuotaPlan,
+                PlanCuotaId = cuotas[0],
+                Monto = 50m
+            }]
+        });
+        Assert.True(cobro1.Success, cobro1.Message);
+        Assert.Equal(50m, await SaldoDocumentosAsync());
+        Assert.Equal(await SaldoLegacyAsync(), await SaldoDocumentosAsync());
+
+        var estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT estado_id FROM public.cln_plan_pago_hdr WHERE company_id = @C", new { C = Empresa }, Transaction));
+        Assert.Equal((short)1, estadoPlan);
+
+        // Cobrar la segunda: última cuota viva → plan COMPLETADO.
+        var cobro2 = await motor.RegistrarCobroAsync(new CobroCrearDto
+        {
+            Canal = CanalCobro.Caja,
+            ClienteClave = Clave,
+            Usuario = "test-f6",
+            FormaPago = "EFECTIVO",
+            Aplicaciones = [new CobroAplicacionDto
+            {
+                DocumentoTipo = DocumentoCobroTipo.CuotaPlan,
+                PlanCuotaId = cuotas[1],
+                Monto = 50m
+            }]
+        });
+        Assert.True(cobro2.Success, cobro2.Message);
+        Assert.Equal(0m, await SaldoDocumentosAsync());
+
+        estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT estado_id FROM public.cln_plan_pago_hdr WHERE company_id = @C", new { C = Empresa }, Transaction));
+        Assert.Equal((short)2, estadoPlan);   // Completado
+
+        // El documento del motor referencia la cuota (documento_tipo 2).
+        var aplicacion = await Connection.QueryFirstAsync<(short tipo, int? cuotaId)>(new CommandDefinition(@"
+            SELECT a.documento_tipo, a.plan_cuota_id
+            FROM public.adm_pago_aplicacion a
+            JOIN public.adm_pago p ON p.pago_id = a.pago_id
+            WHERE p.company_id = @C ORDER BY a.aplicacion_id DESC LIMIT 1",
+            new { C = Empresa }, Transaction));
+        Assert.Equal(2, aplicacion.tipo);
+        Assert.Equal(cuotas[1], aplicacion.cuotaId);
+
+        // Reversar el último cobro: cuota vuelve viva y el plan se REABRE.
+        var pagoId = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT MAX(pago_id) FROM public.adm_pago WHERE company_id = @C", new { C = Empresa }, Transaction));
+        var reverso = await motor.ReversarCobroAsync(new CobroReversoDto
+        {
+            PagoId = pagoId,
+            Usuario = "test-f6",
+            Motivo = "prueba F6"
+        });
+        Assert.True(reverso.Success, reverso.Message);
+
+        var (cuotaEstado, cuotaSaldo) = await Connection.QueryFirstAsync<(short, decimal)>(new CommandDefinition(
+            "SELECT estado_id, saldo_cuota FROM public.cln_plan_pago_dtl WHERE id = @Id",
+            new { Id = cuotas[1] }, Transaction));
+        Assert.Equal((short)1, cuotaEstado);   // Activa otra vez
+        Assert.Equal(50m, cuotaSaldo);
+
+        estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT estado_id FROM public.cln_plan_pago_hdr WHERE company_id = @C", new { C = Empresa }, Transaction));
+        Assert.Equal((short)1, estadoPlan);    // reabierto
+
+        Assert.Equal(50m, await SaldoDocumentosAsync());
+        Assert.Equal(await SaldoLegacyAsync(), await SaldoDocumentosAsync());
     }
 
     [SkippableFact]

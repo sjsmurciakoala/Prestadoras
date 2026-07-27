@@ -671,6 +671,18 @@ otros AS (
     FROM lineas l
     WHERE NOT EXISTS (SELECT 1 FROM cat c WHERE c.codigo = l.tiposervicio)
     HAVING SUM(l.saldo) <> 0
+    UNION ALL
+    -- F6: cuotas vivas de planes de pago activos (convenio).
+    SELECT 'CONVENIO', NULL, NULL, SUM(dt.saldo_cuota), 9100
+    FROM public.cln_plan_pago_dtl dt
+    JOIN public.cln_plan_pago_hdr h ON h.id = dt.idhdr
+    JOIN public.cliente_maestro cm ON cm.maestro_cliente_id = h.clienteid
+                                  AND cm.company_id = h.company_id
+    WHERE h.company_id = @CompanyId
+      AND cm.maestro_cliente_clave = @Clave
+      AND h.estado_id = 1
+      AND dt.estado_id IN (1, 4)
+    HAVING SUM(dt.saldo_cuota) <> 0
 )
 SELECT categoria, codigo, servicio, saldo, orden
 FROM (SELECT * FROM servicios UNION ALL SELECT * FROM otros) t
@@ -699,6 +711,14 @@ ORDER BY orden, servicio";
         {
             items.Add(new DesgloseAbonoDistribuidor.ItemDesglose(
                 DesgloseAbonoDistribuidor.CodigoSaldoAnterior, "Saldo anterior", saldoAnterior.Saldo, 9000));
+        }
+
+        // F6: cuotas vivas del convenio de pago — parte del saldo del cliente.
+        var convenio = desgloseRows.FirstOrDefault(r => r.Categoria == "CONVENIO");
+        if (convenio is not null)
+        {
+            items.Add(new DesgloseAbonoDistribuidor.ItemDesglose(
+                "CONVENIO", "Convenio de pago", convenio.Saldo, 9100));
         }
 
         var pagos = desgloseRows.FirstOrDefault(r => r.Categoria == "PAGOS")?.Saldo ?? 0m;
