@@ -695,13 +695,17 @@ public class CobroService : ICobroService
                         aplicacionesCxc,
                         descripcionContable);
 
+                    // F7 H2c: el comprobante se identifica por el DOCUMENTO del
+                    // motor (pago_id), no por el ide del espejo legacy — el
+                    // espejo muere en este mismo hito y su ide dejaría al
+                    // asiento sin ancla para reversar.
                     polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
                         connection,
                         companyId,
                         documentoContable.Modulo,
                         documentoContable.Documento,
-                        espejo.ide,
-                        $"{documentoContable.Documento}-{espejo.ide}",
+                        pago.pago_id,
+                        $"{documentoContable.Documento}-{pago.pago_id}",
                         fechaHoy,
                         descripcionContable,
                         usuario,
@@ -882,20 +886,21 @@ public class CobroService : ICobroService
                     usuario,
                     ct);
             }
-            else if (espejo is not null)
+            else
             {
                 var connection = _context.Database.GetDbConnection();
                 var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
 
-                // Documento único del motor (VENTAS/REC). Los ABO históricos
-                // pre-motor se reversan por su camino legacy hasta F2b.
-                var documentoContable = ResolverDocumentoContable(espejo.tipotransaccion ?? "202");
+                // F7 H2c: el comprobante se reversa por el DOCUMENTO del motor
+                // (pago_id), la misma identidad con que se posteó. El tipo
+                // legacy solo resuelve el par módulo/documento contable.
+                var documentoContable = ResolverDocumentoContable(espejo?.tipotransaccion ?? "202");
                 await IntegracionContableConfigSql.RevertirComprobanteAsync(
                     connection,
                     companyId,
                     documentoContable.Modulo,
                     new[] { documentoContable.Documento },
-                    espejo.ide,
+                    pago.pago_id,
                     usuario,
                     dbTransaction,
                     ct);
