@@ -7,11 +7,15 @@ namespace SIAD.Tests;
 /// Regla de vigencia de transaccion_abonado (fix 2026-07-16). La convención de
 /// estado está invertida entre módulos: facturación V3 marca vigente = 'A', pero
 /// caja/posteos/WS bancario graban el abono vigente con 'C' y al anular/reversar
-/// ponen 'A'. sp_obtener_cliente_saldo suma (debitos - creditos) de los movimientos
-/// de vw_transaccion_abonado_vigente, que excluye SOLO lo muerto: 'N' (anulada),
-/// 'R' (reversado legacy), 'P' (recibo pendiente) y los pagos 201/202 con 'A'
-/// (anulados por caja/WS). Todo lo demás cuenta, incluido el traslado 'PLAN' con
-/// 'C' de los planes de pago (crédito que compensa las cuotas PLAN-CUOTA).
+/// ponen 'A'. vw_transaccion_abonado_vigente excluye SOLO lo muerto: 'N'
+/// (anulada), 'R' (reversado legacy), 'P' (recibo pendiente) y los pagos 201/202
+/// con 'A' (anulados por caja/WS). Todo lo demás cuenta, incluido el traslado
+/// 'PLAN' con 'C' de los planes de pago (crédito que compensa las cuotas).
+///
+/// F4 (2026-07-28): sp_obtener_cliente_saldo YA NO suma la vista completa —
+/// pasa a documentos pendientes + residuo migrado (ver SaldoDocumentosTests).
+/// La regla de vigencia sigue gobernando la VISTA (fuente del residuo y de los
+/// lectores legacy hasta F7), así que estos tests asertan la vista directa.
 /// </summary>
 [Collection("Postgres")]
 public sealed class SaldoVigenciaTests : IntegrationTestBase
@@ -37,9 +41,13 @@ public sealed class SaldoVigenciaTests : IntegrationTestBase
             new { companyId = EmpresaSintetica, clave = Clave, tipo = tipotransaccion, estado, debitos, creditos },
             Transaction));
 
+    // F4: la regla de vigencia se aserta sobre la vista (los tests del SP de
+    // saldo por documentos viven en SaldoDocumentosTests).
     private Task<decimal?> SaldoAsync() =>
-        Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
-            "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@companyId, @clave)",
+        Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(@"
+            SELECT COALESCE(SUM(COALESCE(debitos,0) - COALESCE(creditos,0)), 0)
+            FROM public.vw_transaccion_abonado_vigente
+            WHERE company_id = @companyId AND cliente_clave = @clave",
             new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
 
     [SkippableFact]
