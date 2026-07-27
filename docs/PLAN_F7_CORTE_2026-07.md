@@ -64,14 +64,21 @@ Orden de hitos, cada uno con suite verde:
    listado de documentos y recibos pendientes) + actualizar
    `ESTADOS_DOCUMENTOS_COMERCIALES.md`.
 
-### Desviación propuesta al plan original
+### Decisión del usuario (2026-07-30): NADA legacy se conserva
 
-El plan decía "retiro de `vw_transaccion_abonado_vigente`". Propongo
-**conservarla como vista histórica de solo lectura**: los 9 reportes `rep_*`
-la usan para rangos históricos pre-corte (esa historia solo existe ahí) y la
-tabla queda congelada — la vista es inocua y evita reescribir los reportes
-una segunda vez. Se retira cuando la historia deje de consultarse
-(post-cierre anual, fuera de alcance de F7).
+Rechazada la desviación que proponía conservar la vista como histórica. En
+consecuencia:
+
+- `vw_transaccion_abonado_vigente` **se retira** (como decía el plan maestro).
+- Los 9 reportes `rep_*` pasan a leer EXCLUSIVAMENTE el modelo nuevo:
+  cargos/saldos desde documentos (facturas/cuotas) y pagos desde `adm_pago`
+  (+ aplicaciones). Segunda pasada de reportes dentro de F7 (H5).
+- La re-migración (H3) crece: además de la cartera como documentos
+  `SI-<clave>`, los **pagos históricos** de la migración comercial se
+  escriben como `adm_pago` (canal 1, fecha histórica) para que los reportes
+  de períodos pasados no dependan de la tabla congelada.
+- `transaccion_abonado` queda como archivo congelado SIN lectores en el
+  código (solo auditoría manual por SQL si algún día hace falta).
 
 ## 4. La ventana de deploy a 0.9 (runbook resumido)
 
