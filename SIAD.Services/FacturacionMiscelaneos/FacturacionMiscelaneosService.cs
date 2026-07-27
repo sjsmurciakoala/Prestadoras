@@ -314,40 +314,9 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
 
         _context.factura_detalles.AddRange(facturaDetalles);
 
-        var saldoActual = await ObtenerSaldoClienteAsync(cliente.Clave, ct);
-        var transacciones = new List<transaccion_abonado>();
-
-        foreach (var detalle in detallesValidos)
-        {
-            saldoActual += detalle.ValorTotal;
-            transacciones.Add(new transaccion_abonado
-            {
-                company_id = companyId,
-                caja_id = null, // caja desvinculada (2026-06-04)
-                cliente_clave = cliente.Clave,
-                recibo = factura.numrecibo,
-                tipotransaccion = detalle.Codigo,
-                docufuente = factura.id,
-                docufuente2 = factura.numfactura,
-                fecha_docu = hoy,
-                tipo_partida = "01",
-                descripcion = detalle.Nombre,
-                debitos = detalle.ValorTotal,
-                creditos = 0,
-                saldo = saldoActual,
-                tipo_servicio = "E",
-                periodo = periodo,
-                estado = "A",
-                fecha_registro = hoy,
-                usuario = usuario,
-                saldo_detalle = detalle.ValorTotal
-            });
-        }
-
-        if (transacciones.Count > 0)
-        {
-            _context.transaccion_abonados.AddRange(transacciones);
-        }
+        // F7 H2c: se acabó el dual-write. El misceláneo YA emite una factura
+        // (documento con sus líneas) — el espejo en transaccion_abonado era
+        // una copia del mismo cargo y desaparece con el corte.
 
         await _context.SaveChangesAsync(ct);
 

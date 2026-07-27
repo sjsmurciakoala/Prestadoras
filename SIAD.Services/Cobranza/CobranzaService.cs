@@ -381,36 +381,10 @@ public class CobranzaService : ICobranzaService
                 facturaEntidad.usuario = usuario;
             }
 
-            // F6: mueren los asientos de saldo PLAN (traslado) y PLAN-CUOTA —
-            // el traslado ya quedó como compensación de documentos y las
-            // cuotas viven en cln_plan_pago_dtl como documentos cobrables.
-            // SOLO la prima conserva su espejo legacy hasta F7: es deuda NUEVA
-            // (no traslado) y sin este débito el saldo legacy divergiría del
-            // saldo por documentos justo en el monto de la prima.
-            if (montoPrima > 0)
-            {
-                _context.transaccion_abonados.Add(new transaccion_abonado
-                {
-                    company_id = companyId,
-                    cliente_clave = cliente.Clave,
-                    recibo = recibo,
-                    tipotransaccion = "PLAN-PR",
-                    docufuente = header.id,
-                    fecha_docu = DateOnly.FromDateTime(fechaPlan),
-                    tipo_partida = "01",
-                    descripcion = "Concepto de Prima",
-                    debitos = montoPrima,
-                    creditos = 0,
-                    saldo = saldoCliente + montoPrima,
-                    periodo = periodoActual,
-                    estado = "A",
-                    fecha_registro = fechaRegistro,
-                    ciclo = ciclo,
-                    tiene_med = tieneMedidor,
-                    usuario = usuario,
-                    saldo_detalle = montoPrima
-                });
-            }
+            // F7 H2c: se acabó el dual-write. El plan vive solo en sus tablas
+            // (cln_plan_pago_hdr/dtl + traslado): el traslado es compensación
+            // de documentos y la prima es la cuota mes 0. Ya no se escribe
+            // ningún movimiento en transaccion_abonado.
 
             await _context.SaveChangesAsync(ct);
             if (transaction is not null)

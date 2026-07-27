@@ -137,13 +137,12 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
             new { C = Empresa, F = facturaId }, Transaction));
         Assert.Equal(2, fila.estado);
         Assert.Equal(60m, fila.monto);
-        Assert.NotNull(fila.taIde);
+        Assert.Null(fila.taIde);   // F7 H2c: sin espejo legacy
 
         // El listado lee la tabla nueva y expone ambos ids.
         var listado = await _abonos.ListarRecibosPendientesPorClienteAsync(Clave);
         var pendiente = Assert.Single(listado);
         Assert.Equal(fila.id, pendiente.PendienteId);
-        Assert.Equal(fila.taIde, pendiente.TransaccionId);
         Assert.Equal(60m, pendiente.Monto);
 
         // Control de disponible: no se puede duplicar el papel sobre el saldo.
@@ -165,14 +164,10 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
         });
         Assert.True(anulado.Success, anulado.Message);
 
-        var (estadoNuevo, estadoLegacy) = await Connection.QueryFirstAsync<(short, string)>(new CommandDefinition(@"
-            SELECT r.estado_id, t.estado
-            FROM public.adm_recibo_banco_pendiente r
-            JOIN public.transaccion_abonado t ON t.ide = r.transaccion_abonado_ide
-            WHERE r.recibo_pendiente_id = @Id",
+        var estadoNuevo = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT estado_id FROM public.adm_recibo_banco_pendiente WHERE recibo_pendiente_id = @Id",
             new { Id = fila.id }, Transaction));
         Assert.Equal(3, estadoNuevo);
-        Assert.Equal("A", estadoLegacy);
     }
 
     [SkippableFact]
@@ -190,7 +185,7 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
             Usuario = "test-f7"
         });
         Assert.True(generado.Success, generado.Message);
-        var taIde = ((GenerarReciboResponseDto)generado.Data!).TransaccionId;
+        var pendienteId = ((GenerarReciboResponseDto)generado.Data!).PendienteId;
 
         var cobro = await _motor!.RegistrarCobroAsync(new CobroCrearDto
         {
@@ -198,7 +193,7 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
             ClienteClave = Clave,
             Usuario = "test-f7",
             FormaPago = "EFECTIVO",
-            ReciboPendienteId = taIde,
+            ReciboPendienteId = pendienteId,
             Aplicaciones = [new CobroAplicacionDto
             {
                 DocumentoTipo = DocumentoCobroTipo.Factura,

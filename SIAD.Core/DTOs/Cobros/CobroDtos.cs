@@ -43,8 +43,8 @@ public class CobroCrearDto
     /// <summary>Idempotencia entre canales (referencia bancaria / uuid app). Nullable en ventanilla.</summary>
     public string? ReferenciaExterna { get; set; }
 
-    /// <summary>Recibo pendiente legacy (transaccion_abonado estado 'P') que este cobro liquida.</summary>
-    public int? ReciboPendienteId { get; set; }
+    /// <summary>F7: adm_recibo_banco_pendiente.recibo_pendiente_id del papel que se está cobrando.</summary>
+    public long? ReciboPendienteId { get; set; }
 
     public DateTime? FechaPago { get; set; }
 
@@ -82,7 +82,7 @@ public class CobroResultadoDto
     public bool PolizaEncolada { get; set; }
     /// <summary>Movimiento bancario (kardex DEP) cuando el cobro fue por banco.</summary>
     public long? BanKardexId { get; set; }
-    /// <summary>ide de la fila espejo legacy (dual-write) — para recibos PDF y consultas actuales.</summary>
+    /// <summary>[OBSOLETO F7] Espejo legacy; siempre 0 desde el corte — use PagoId.</summary>
     public int TransaccionId { get; set; }
     /// <summary>True si la referencia_externa ya estaba aplicada y se devolvió el cobro original.</summary>
     public bool Idempotente { get; set; }
@@ -120,6 +120,6 @@ public class CobroDelDiaDto
     public string Estado { get; set; } = string.Empty;
     public string Usuario { get; set; } = string.Empty;
     public string? CajaNombre { get; set; }
-    /// <summary>Fila espejo legacy — para reimprimir el recibo PDF actual.</summary>
+    /// <summary>[OBSOLETO F7] Espejo legacy de cobros pre-corte; el recibo se reimprime por PagoId.</summary>
     public int? TransaccionId { get; set; }
 }

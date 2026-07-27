@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.CaptacionPagos;
 using SIAD.Core.DTOs.Cobranza;
@@ -126,16 +127,13 @@ public sealed class CobroFachadaTests : IntegrationTestBase, IAsyncLifetime
             "SELECT estado FROM public.factura WHERE id = @facturaId", new { facturaId }, Transaction));
         Assert.Equal("C", estado);
 
-        var espejo = await Connection.QuerySingleAsync<(int ide, string tipo, string partida, int? cajaId)>(new CommandDefinition(
-            "SELECT ide, tipotransaccion, tipo_partida, caja_id FROM public.transaccion_abonado WHERE company_id = @id AND recibo = @recibo AND tipotransaccion = '201'",
-            new { id = Empresa, recibo = (decimal)numRecibo }, Transaction));
-        Assert.Equal("002", espejo.partida);
-        Assert.NotNull(espejo.cajaId);
-
-        var pagosMotor = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT count(*) FROM public.adm_pago WHERE company_id = @id AND transaccion_abonado_ide = @ide",
-            new { id = Empresa, ide = espejo.ide }, Transaction));
-        Assert.Equal(1L, pagosMotor);
+        // F7 H2c: sin espejo legacy — el pago de la lectora es un documento
+        // del motor (canal caja, con su sesión).
+        var pagoMotor = await Connection.QuerySingleAsync<(long pagoId, short canal, int? sesion)>(new CommandDefinition(
+            "SELECT pago_id, canal_id, sesion_caja_id FROM public.adm_pago WHERE company_id = @id",
+            new { id = Empresa }, Transaction));
+        Assert.Equal(CanalCobro.Caja, pagoMotor.canal);
+        Assert.NotNull(pagoMotor.sesion);
 
         // Doble pago rechazado con el mensaje legacy exacto
         var doble = await _servicio.RegistrarPagoAsync(new PagoCrearDto
@@ -157,11 +155,11 @@ public sealed class CobroFachadaTests : IntegrationTestBase, IAsyncLifetime
         Assert.True(reverso.Success, reverso.Message);
         Assert.Equal("Pago reversado correctamente.", reverso.Message);
 
-        var trasReverso = await Connection.QuerySingleAsync<(string estado, short? estadoPago)>(new CommandDefinition(
-            "SELECT estado, estado_pago_id FROM public.transaccion_abonado WHERE ide = @ide",
-            new { ide = espejo.ide }, Transaction));
-        Assert.Equal("A", trasReverso.estado);          // marcada anulada, no borrada
-        Assert.Equal((short)3, trasReverso.estadoPago); // ANULADO (F1)
+        // El documento del motor queda ANULADO (nunca se borra).
+        var estadoTrasReverso = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT estado_id FROM public.adm_pago WHERE pago_id = @id",
+            new { id = pagoMotor.pagoId }, Transaction));
+        Assert.Equal(EstadoPago.Anulado, estadoTrasReverso);
 
         var facturaTras = await Connection.QuerySingleAsync<(string estado, decimal saldo)>(new CommandDefinition(@"
             SELECT f.estado, (SELECT SUM(d.montovalor_saldo) FROM public.factura_detalle d WHERE d.factura_id = f.id)
@@ -233,11 +231,11 @@ public sealed class CobroFachadaTests : IntegrationTestBase, IAsyncLifetime
         Assert.True(ok.Success, ok.Message);
         Assert.Equal("Pago miscelaneo registrado correctamente.", ok.Message);
 
-        var espejo = await Connection.QuerySingleAsync<(string partida, decimal creditos)>(new CommandDefinition(
-            "SELECT tipo_partida, creditos FROM public.transaccion_abonado WHERE company_id = @id AND recibo = @recibo AND tipotransaccion = '201'",
-            new { id = Empresa, recibo = (decimal)numRecibo }, Transaction));
-        Assert.Equal("01", espejo.partida);   // tipo_partida histórico del misceláneo
-        Assert.Equal(200m, espejo.creditos);
+        // F7 H2c: el misceláneo cobra por el motor — documento con CxC general.
+        var pagoMisc = await Connection.QuerySingleAsync<(long pagoId, decimal monto)>(new CommandDefinition(
+            "SELECT pago_id, monto_total FROM public.adm_pago WHERE company_id = @id",
+            new { id = Empresa }, Transaction));
+        Assert.Equal(200m, pagoMisc.monto);
 
         var estado = await Connection.ExecuteScalarAsync<string>(new CommandDefinition(
             "SELECT estado FROM public.factura WHERE id = @facturaId", new { facturaId }, Transaction));

@@ -125,8 +125,9 @@ public class CobroService : ICobroService
 
         if (dto.ReciboPendienteId.HasValue)
         {
-            var existePendiente = await _context.transaccion_abonados
-                .AnyAsync(t => t.company_id == companyId && t.ide == dto.ReciboPendienteId.Value && t.estado == "P", ct);
+            // F7: ReciboPendienteId es adm_recibo_banco_pendiente.recibo_pendiente_id.
+            var existePendiente = await _context.adm_recibo_banco_pendientes
+                .AnyAsync(r => r.recibo_pendiente_id == dto.ReciboPendienteId.Value && r.estado_id == 2, ct);
             if (!existePendiente)
                 return ResponseModelDto.Fail("El recibo pendiente indicado no existe o ya fue procesado.");
         }
@@ -516,68 +517,22 @@ public class CobroService : ICobroService
                 }
             }
 
-            // ---------- Fila espejo legacy (dual-write, muere en F7) ----------
+            // ---------- F7 H2c: SE ACABÓ EL ESPEJO LEGACY ----------
+            // El cobro vive solo como documento del motor (adm_pago +
+            // aplicaciones). transaccion_abonado ya no se escribe: queda
+            // congelada como archivo histórico (freeze en H4).
             var saldoActualCliente = await ObtenerSaldoClienteAsync(dto.ClienteClave, ct);
 
-            transaccion_abonado espejo;
+            // El papel "para banco" que se está cobrando debe seguir vivo
+            // (adm_recibo_banco_pendiente); se marca APLICADO más abajo, con el
+            // pago ya creado.
             if (dto.ReciboPendienteId.HasValue)
             {
-                var pendiente = await _context.transaccion_abonados
-                    .FirstOrDefaultAsync(t => t.ide == dto.ReciboPendienteId.Value && t.estado == "P", ct);
-                if (pendiente is null)
+                var pendienteVivo = await _context.adm_recibo_banco_pendientes
+                    .AsNoTracking()
+                    .AnyAsync(r => r.recibo_pendiente_id == dto.ReciboPendienteId.Value && r.estado_id == 2, ct);
+                if (!pendienteVivo)
                     return ResponseModelDto.Fail("El recibo pendiente ya fue procesado o no existe.");
-
-                pendiente.estado = "C";
-                pendiente.fecha_docu = fechaHoy;
-                pendiente.banco = banco;
-                pendiente.debitos = 0m;
-                pendiente.creditos = montoTotal;
-                pendiente.saldo = saldoActualCliente - montoTotal;
-                pendiente.saldo_detalle = montoTotal;
-                pendiente.descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}";
-                pendiente.usuario = usuario;
-                pendiente.caja_id = sesionCajaId;
-                pendiente.ciclo = clienteInfo?.ciclos_id?.ToString();
-                pendiente.ruta = clienteInfo?.maestro_cliente_indicativo_ruta;
-                pendiente.secuencia = clienteInfo?.maestro_cliente_secuencia;
-                pendiente.tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N";
-                espejo = pendiente;
-            }
-            else
-            {
-                espejo = new transaccion_abonado
-                {
-                    company_id = companyId,
-                    caja_id = sesionCajaId,
-                    cliente_clave = dto.ClienteClave,
-                    recibo = numReciboPrincipal,
-                    tipotransaccion = dto.TipoLegacy,
-                    fecha_docu = fechaHoy,
-                    tipo_partida = dto.TipoPartidaLegacy,
-                    banco = banco,
-                    descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}",
-                    debitos = 0,
-                    creditos = montoTotal,
-                    saldo = saldoActualCliente - montoTotal,
-                    tipo_servicio = "E",
-                    periodo = periodo,
-                    tasa = "0",
-                    estado = "C",
-                    fecha_registro = fechaHoy,
-                    ciclo = clienteInfo?.ciclos_id?.ToString(),
-                    ruta = clienteInfo?.maestro_cliente_indicativo_ruta,
-                    secuencia = clienteInfo?.maestro_cliente_secuencia,
-                    tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N",
-                    usuario = usuario,
-                    saldo_detalle = montoTotal
-                };
-                _context.transaccion_abonados.Add(espejo);
-            }
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                espejo.docuaplicar = Convert.ToDecimal(movimientoBanco.Value.BanKardexId, CultureInfo.InvariantCulture);
-                espejo.trans_aplicar = $"{BancoMarkerPrefix}{dto.BancoCuentaId.Value.ToString(CultureInfo.InvariantCulture)}";
             }
 
             await _context.SaveChangesAsync(ct);
@@ -606,7 +561,7 @@ public class CobroService : ICobroService
                 ban_kardex_id = movimientoBanco?.BanKardexId,
                 sesion_caja_id = sesionCajaId,
                 referencia_externa = referencia,
-                transaccion_abonado_ide = espejo.ide,
+                transaccion_abonado_ide = null,   // F7 H2c: sin espejo legacy
                 usuario = usuario
             };
             foreach (var (facturaId, detalleId, monto) in lineasAplicadas)
@@ -650,7 +605,7 @@ public class CobroService : ICobroService
             if (dto.ReciboPendienteId.HasValue)
             {
                 var reciboPendiente = await _context.adm_recibo_banco_pendientes
-                    .FirstOrDefaultAsync(r => r.transaccion_abonado_ide == dto.ReciboPendienteId.Value
+                    .FirstOrDefaultAsync(r => r.recibo_pendiente_id == dto.ReciboPendienteId.Value
                                               && r.cobrado_pago_id == null, ct);
                 if (reciboPendiente is not null)
                 {
@@ -733,7 +688,7 @@ public class CobroService : ICobroService
                 PolizaId = polizaId,
                 PolizaEncolada = polizaEncolada,
                 BanKardexId = movimientoBanco?.BanKardexId,
-                TransaccionId = espejo.ide,
+                TransaccionId = 0,   // F7 H2c: sin espejo legacy (usar PagoId)
                 Aplicaciones = resultados
             }, "Cobro registrado correctamente.");
         }
@@ -771,6 +726,8 @@ public class CobroService : ICobroService
             .Distinct()
             .ToList();
 
+        // F7 H2c: los cobros nuevos no tienen espejo; los pre-corte (data de
+        // prueba local) todavía lo traen y se marcan anulados por cortesía.
         transaccion_abonado? espejo = null;
         if (pago.transaccion_abonado_ide.HasValue)
         {

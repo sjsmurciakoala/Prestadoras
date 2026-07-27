@@ -999,34 +999,8 @@ public class AbonoService : IAbonoService
             })
             .FirstOrDefaultAsync(ct);
 
-        var transaccion = new transaccion_abonado
-        {
-            company_id = companyId,
-            cliente_clave = dto.ClienteClave.Trim(),
-            recibo = factura.numrecibo,
-            tipotransaccion = "202",
-            estado = "P",
-            fecha_docu = hoy,
-            fecha_registro = hoy,
-            tipo_partida = "002",
-            creditos = dto.Monto,
-            debitos = 0m,
-            descripcion = $"Recibo pendiente de pago - Factura: {factura.numfactura ?? factura.numrecibo.ToString()}",
-            usuario = usuario,
-            periodo = periodo,
-            tipo_servicio = "E",
-            tasa = "0",
-            ciclo = clienteInfo?.ciclos_id?.ToString(),
-            ruta = clienteInfo?.maestro_cliente_indicativo_ruta,
-            secuencia = clienteInfo?.maestro_cliente_secuencia,
-            tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N"
-        };
-
-        _context.transaccion_abonados.Add(transaccion);
-        await _context.SaveChangesAsync(ct);
-
-        // F7 H1: registro formal en la tabla propia (fuente de verdad). La fila
-        // legacy 'P' de arriba queda solo para la impresión hasta F7 H2.
+        // F7 H2c: el papel "para banco" vive SOLO en adm_recibo_banco_pendiente
+        // (se acabó la fila espejo 202/'P').
         var pendiente = new adm_recibo_banco_pendiente
         {
             cliente_clave = dto.ClienteClave.Trim(),
@@ -1034,9 +1008,8 @@ public class AbonoService : IAbonoService
             numrecibo = factura.numrecibo,
             monto = dto.Monto,
             estado_id = 2,
-            descripcion = transaccion.descripcion,
-            generado_por = usuario,
-            transaccion_abonado_ide = transaccion.ide
+            descripcion = $"Recibo pendiente de pago - Factura: {factura.numfactura ?? factura.numrecibo.ToString()}",
+            generado_por = usuario
         };
         _context.adm_recibo_banco_pendientes.Add(pendiente);
         await _context.SaveChangesAsync(ct);
@@ -1044,7 +1017,7 @@ public class AbonoService : IAbonoService
         return ResponseModelDto.Ok(new GenerarReciboResponseDto
         {
             PendienteId = pendiente.recibo_pendiente_id,
-            TransaccionId = transaccion.ide,
+            TransaccionId = 0,
             NumFactura = factura.numfactura ?? factura.numrecibo.ToString()
         }, "Recibo generado. El cliente puede presentarlo en ventanilla o banco.");
     }

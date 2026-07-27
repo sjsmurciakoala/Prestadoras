@@ -756,7 +756,7 @@
             Canal = CanalCobro.Caja,
             ClienteClave = _clienteClave!,
             FormaPago = "EFECTIVO",
-            ReciboPendienteId = pendiente.TransaccionId,
+            ReciboPendienteId = pendiente.PendienteId,
             Aplicaciones =
             [
                 new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = doc.FacturaId, Monto = monto }

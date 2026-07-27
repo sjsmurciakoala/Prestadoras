@@ -458,12 +458,14 @@ public class CaptacionPagosService : ICaptacionPagosService
         // FACHADA (F2b): pagos nacidos en el motor (tienen adm_pago) se reversan
         // por el motor — restitucion exacta por linea, sin DELETE, contabilidad y
         // kardex incluidos. El camino legacy de abajo queda para pagos pre-F2b.
-        if (transaccionPago is not null)
         {
-            var pagoMotorId = await _context.adm_pagos
+            // F7 H2c: el pago del motor se localiza por sus APLICACIONES a esta
+            // factura (ya no hay espejo que enlazar). El camino legacy de abajo
+            // queda solo para pagos pre-motor sin adm_pago.
+            var pagoMotorId = await _context.adm_pago_aplicaciones
                 .AsNoTracking()
-                .Where(p => p.transaccion_abonado_ide == transaccionPago.ide)
-                .Select(p => (long?)p.pago_id)
+                .Where(a => a.factura_id == factura.id && a.pago.estado_id == EstadoPago.Aplicado)
+                .Select(a => (long?)a.pago_id)
                 .FirstOrDefaultAsync(ct);
             if (pagoMotorId.HasValue)
             {
@@ -707,9 +709,13 @@ public class CaptacionPagosService : ICaptacionPagosService
             return false;
         }
 
-        return await _context.transaccion_abonados
+        // F7 H2c: la existencia del pago se resuelve en el modelo nuevo — un
+        // cobro APLICADO del motor con aplicación a esta factura (antes se
+        // miraba la fila espejo 201, que ya no se escribe).
+        return await _context.adm_pago_aplicaciones
             .AsNoTracking()
-            .AnyAsync(t => t.recibo == factura.numrecibo && t.tipotransaccion == "201", ct);
+            .AnyAsync(a => a.factura_id == factura.id
+                           && a.pago.estado_id == EstadoPago.Aplicado, ct);
     }
 
     // ==================== POSTEO MANUAL ====================

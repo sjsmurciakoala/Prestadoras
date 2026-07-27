@@ -208,18 +208,16 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         Assert.All(cuotas, c => Assert.Equal((short)1, c.estadoId));
         Assert.Equal(110m, cuotas.Sum(c => c.saldo));
 
-        // Mueren los asientos PLAN/PLAN-CUOTA; solo queda la prima (deuda nueva).
-        var espejos = (await Connection.QueryAsync<string>(new CommandDefinition(@"
-            SELECT tipotransaccion FROM public.transaccion_abonado
+        // F7 H2c: el plan NO escribe nada en transaccion_abonado (ni traslado,
+        // ni cuotas, ni prima) — vive solo en sus tablas.
+        var espejos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            SELECT count(*) FROM public.transaccion_abonado
             WHERE company_id = @C AND cliente_clave = @Clave AND tipotransaccion LIKE 'PLAN%'",
-            new { C = Empresa, Clave }, Transaction))).ToList();
-        Assert.Equal(["PLAN-PR"], espejos);
+            new { C = Empresa, Clave }, Transaction));
+        Assert.Equal(0L, espejos);
 
-        // Equivalencia dual-write: documentos (cuotas 110) == legacy (100 + prima).
-        var saldoDocs = await SaldoDocumentosAsync();
-        var saldoLegacy = await SaldoLegacyAsync();
-        Assert.Equal(110m, saldoDocs);
-        Assert.Equal(saldoLegacy, saldoDocs);
+        // El saldo por documentos son las 4 cuotas (3 x 100/3 + prima 10).
+        Assert.Equal(110m, await SaldoDocumentosAsync());
 
         // El plan queda ACTIVO.
         var estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
@@ -277,7 +275,6 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         });
         Assert.True(cobro1.Success, cobro1.Message);
         Assert.Equal(50m, await SaldoDocumentosAsync());
-        Assert.Equal(await SaldoLegacyAsync(), await SaldoDocumentosAsync());
 
         var estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
             "SELECT estado_id FROM public.cln_plan_pago_hdr WHERE company_id = @C", new { C = Empresa }, Transaction));
@@ -336,7 +333,6 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal((short)1, estadoPlan);    // reabierto
 
         Assert.Equal(50m, await SaldoDocumentosAsync());
-        Assert.Equal(await SaldoLegacyAsync(), await SaldoDocumentosAsync());
     }
 
     [SkippableFact]
