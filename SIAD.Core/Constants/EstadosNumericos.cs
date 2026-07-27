@@ -56,6 +56,18 @@ public static class TipoTransaccion
     public const short SaldoInicial  = 11;  // legacy 'SALDO_ANTERIOR'
 }
 
+/// <summary>
+/// Estados del plan de pago (cln_plan_pago_hdr.estado_id → adm_estado_plan,
+/// unificación cobranza F6, 2026-07). Las cuotas (cln_plan_pago_dtl.estado_id)
+/// usan EstadoDocumentoComercial: la cuota es un documento cobrable.
+/// </summary>
+public static class EstadoPlan
+{
+    public const short Activo     = 1;
+    public const short Completado = 2;
+    public const short Anulado    = 3;
+}
+
 public static class EstadoCorrelativoCai
 {
     public const short PendingOffline = 1;
