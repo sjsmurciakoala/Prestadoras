@@ -229,7 +229,7 @@ INSERT INTO public.cfg_tipo_documento_fiscal (tipo_documento_fiscal_id, codigo, 
 ON CONFLICT (tipo_documento_fiscal_id) DO NOTHING;
 ```
 
-**Decisión:** APC emitirá inicialmente código `1` (Factura) para lecturas y `10` (Recibo de servicio público) si se confirma con SAR que aplica. NC y ND como documentos complementarios al anular o ajustar.
+**Decisión:** ✅ **CONFIRMADA con el contador (2026-07-27): el ciclo de agua se emite con código `10` (Recibo de servicio público)**, no con `1` (Factura). NC y ND siguen como documentos complementarios al anular o ajustar. Implementación pendiente en el flujo de facturación (CAI/rangos del tipo 10, correlativo `EEE-PPP-10-NNNNNNNN`); es tema de facturación, no de cobranza.
 
 ### 2.2 `cfg_motivo_anulacion` — catálogo de motivos NC
 
