@@ -165,10 +165,56 @@
                                                             DisplayFormat="N2" Enabled="@row.Seleccionado" />
                                             </CellDisplayTemplate>
                                         </DxGridDataColumn>
+                                        <DxGridDataColumn Caption="" Width="60px" AllowSort="false" TextAlignment="GridTextAlignment.Center">
+                                            <CellDisplayTemplate>
+                                                @{ var row = (DocumentoCobroRow)context.DataItem; }
+                                                <DxButton IconCssClass="bi bi-bank" RenderStyle="ButtonRenderStyle.Secondary"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                          title="Generar recibo para pagar en banco"
+                                                          Click="@(() => AbrirReciboBanco(row))" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
                                     </Columns>
                                 </DxGrid>
                             </div>
                         </div>
+
+                        @if (_pendientes.Count > 0)
+                        {
+                            <div class="modern-card mt-3">
+                                <div class="p-2">
+                                    <h6 class="fw-bold mb-2"><i class="bi bi-bank me-1"></i>Recibos pendientes para banco</h6>
+                                    <DxGrid Data="@_pendientes" KeyFieldName="TransaccionId" PageSize="5"
+                                            ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                        <Columns>
+                                            <DxGridDataColumn FieldName="NumFactura" Caption="Factura" />
+                                            <DxGridDataColumn FieldName="Monto" Caption="Monto" DisplayFormat="{0:N2}" Width="130px" TextAlignment="GridTextAlignment.Right" />
+                                            <DxGridDataColumn FieldName="FechaGenerado" Caption="Generado" Width="110px" />
+                                            <DxGridDataColumn FieldName="Operador" Caption="Operador" Width="160px" />
+                                            <DxGridDataColumn Caption="Acciones" Width="160px" AllowSort="false" TextAlignment="GridTextAlignment.Center">
+                                                <CellDisplayTemplate>
+                                                    @{ var p = (ReciboPendienteDto)context.DataItem; }
+                                                    <div class="d-flex gap-1 justify-content-center">
+                                                        <DxButton IconCssClass="bi bi-cash-coin" RenderStyle="ButtonRenderStyle.Success"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  title="Cobrar este recibo en caja"
+                                                                  Click="@(() => CobrarPendiente(p))" />
+                                                        <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  title="Reimprimir"
+                                                                  Click="@(() => AbrirRecibo(p.TransaccionId))" />
+                                                        <DxButton IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  title="Anular recibo pendiente"
+                                                                  Click="@(() => AbrirAnularPendiente(p))" />
+                                                    </div>
+                                                </CellDisplayTemplate>
+                                            </DxGridDataColumn>
+                                        </Columns>
+                                    </DxGrid>
+                                </div>
+                            </div>
+                        }
 
                         <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-3">
                             <div class="text-muted">
@@ -307,6 +353,50 @@
     }
 </div>
 
+@* ---- Popup recibo para banco ---- *@
+<DxPopup @bind-Visible="_reciboBancoVisible" HeaderText="Recibo para pagar en banco" Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Factura <strong>@_reciboBancoDoc?.NumFactura</strong> ·
+                saldo <strong>@(_reciboBancoDoc?.SaldoPendiente.ToString("C", Culture))</strong>.
+                El recibo NO rebaja la factura: el cliente lo lleva al banco y el
+                pago se aplica cuando el banco lo reporta.
+            </p>
+            <label class="form-label small text-muted fw-bold">MONTO DEL RECIBO</label>
+            <DxSpinEdit @bind-Value="_reciboBancoMonto" MinValue="0.01m"
+                        MaxValue="@(_reciboBancoDoc?.SaldoPendiente ?? 0m)"
+                        DisplayFormat="N2" CssClass="w-100" />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _reciboBancoVisible = false)" />
+                <DxButton Text="Generar recibo" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="OnGenerarReciboBanco" Enabled="@(_reciboBancoMonto > 0)" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ---- Popup anular pendiente ---- *@
+<DxPopup @bind-Visible="_anularPendienteVisible" HeaderText="Anular recibo pendiente" Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Anular el recibo de <strong>@(_anularPendienteRecibo?.Monto.ToString("C", Culture))</strong>
+                de la factura <strong>@_anularPendienteRecibo?.NumFactura</strong>.
+            </p>
+            <label class="form-label small text-muted fw-bold">MOTIVO</label>
+            <DxMemo @bind-Text="_anularPendienteMotivo" Rows="3" CssClass="w-100" NullText="Motivo de la anulación..." />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _anularPendienteVisible = false)" />
+                <DxButton Text="Anular" RenderStyle="ButtonRenderStyle.Danger"
+                          Click="OnAnularPendiente" Enabled="@(!string.IsNullOrWhiteSpace(_anularPendienteMotivo))" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
 @* ---- Popup de reverso ---- *@
 <DxPopup @bind-Visible="_reversoVisible" HeaderText="Reversar cobro" Width="420px" ShowCloseButton="true">
     <BodyContentTemplate>
@@ -356,6 +446,14 @@
     private bool _reversoVisible;
     private CobroDelDiaDto? _reversoCobro;
     private string _reversoMotivo = string.Empty;
+
+    private IReadOnlyList<ReciboPendienteDto> _pendientes = [];
+    private bool _reciboBancoVisible;
+    private DocumentoCobroRow? _reciboBancoDoc;
+    private decimal _reciboBancoMonto;
+    private bool _anularPendienteVisible;
+    private ReciboPendienteDto? _anularPendienteRecibo;
+    private string _anularPendienteMotivo = string.Empty;
 
     private decimal TotalACobrar => _documentos.Where(d => d.Seleccionado).Sum(d => d.MontoCobrar);
 
@@ -420,6 +518,7 @@
     {
         _clienteClave = clave;
         _documentos = [];
+        _pendientes = [];
         if (string.IsNullOrWhiteSpace(clave)) return;
 
         _cargandoDocs = true;
@@ -439,12 +538,111 @@
                     MontoCobrar = f.SaldoPendiente
                 })
                 .ToList();
+
+            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(clave) ?? [];
         }
         finally
         {
             _cargandoDocs = false;
         }
     }
+
+    // ---------------- Recibo para banco (pendiente, NO rebaja la factura) ----------------
+
+    private void AbrirReciboBanco(DocumentoCobroRow doc)
+    {
+        _reciboBancoDoc = doc;
+        _reciboBancoMonto = doc.SaldoPendiente;
+        _reciboBancoVisible = true;
+    }
+
+    private async Task OnGenerarReciboBanco()
+    {
+        if (_reciboBancoDoc is null || string.IsNullOrWhiteSpace(_clienteClave)) return;
+
+        var result = await AbonoHttp.GenerarReciboPendienteAsync(new GenerarReciboDto
+        {
+            NumFactura = _reciboBancoDoc.NumFactura,
+            ClienteClave = _clienteClave,
+            Monto = _reciboBancoMonto
+        });
+
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo generar el recibo.");
+        if (result?.Success == true)
+        {
+            _reciboBancoVisible = false;
+            var datos = Deserializar<GenerarReciboResponseDto>(result.Data);
+            if (datos?.TransaccionId is > 0)
+                await AbrirRecibo(datos.TransaccionId);
+            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave) ?? [];
+        }
+    }
+
+    private async Task CobrarPendiente(ReciboPendienteDto pendiente)
+    {
+        var doc = _documentos.FirstOrDefault(d => d.NumRecibo == pendiente.NumRecibo);
+        if (doc is null)
+        {
+            Notificar(false, "La factura del recibo ya no tiene saldo pendiente; anule el recibo.");
+            return;
+        }
+
+        var monto = Math.Min(pendiente.Monto, doc.SaldoPendiente);
+        var result = await CobrosHttp.RegistrarAsync(new CobroCrearDto
+        {
+            Canal = CanalCobro.Caja,
+            ClienteClave = _clienteClave!,
+            FormaPago = "EFECTIVO",
+            ReciboPendienteId = pendiente.TransaccionId,
+            Aplicaciones =
+            [
+                new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = doc.FacturaId, Monto = monto }
+            ]
+        });
+
+        if (result?.Success == true)
+        {
+            var datos = Deserializar<CobroResultadoDto>(result.Data);
+            Notificar(true, $"Recibo cobrado. Folio {datos?.NumeroRecibo}.");
+            if (datos?.TransaccionId is > 0)
+                await AbrirRecibo(datos.TransaccionId);
+            await OnClienteSeleccionado(_clienteClave);
+            await CargarCobrosDelDiaAsync();
+        }
+        else
+        {
+            Notificar(false, result?.Message ?? "No se pudo cobrar el recibo.");
+        }
+    }
+
+    private void AbrirAnularPendiente(ReciboPendienteDto pendiente)
+    {
+        _anularPendienteRecibo = pendiente;
+        _anularPendienteMotivo = string.Empty;
+        _anularPendienteVisible = true;
+    }
+
+    private async Task OnAnularPendiente()
+    {
+        if (_anularPendienteRecibo is null) return;
+        var result = await AbonoHttp.AnularReciboPendienteAsync(new AnularReciboPendienteDto
+        {
+            TransaccionId = _anularPendienteRecibo.TransaccionId,
+            Usuario = _usuario,
+            Motivo = _anularPendienteMotivo.Trim()
+        });
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo anular.");
+        if (result?.Success == true)
+        {
+            _anularPendienteVisible = false;
+            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave!) ?? [];
+        }
+    }
+
+    private static T? Deserializar<T>(object? data) where T : class
+        => data is null ? null : System.Text.Json.JsonSerializer.Deserialize<T>(
+            System.Text.Json.JsonSerializer.Serialize(data),
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
     private void ToggleSeleccion(DocumentoCobroRow row, bool valor)
     {

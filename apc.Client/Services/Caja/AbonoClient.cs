@@ -72,6 +72,10 @@ public class AbonoClient
         => _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<AbonoHistorialItemDto>>(
             $"api/abono/historial-factura/{Uri.EscapeDataString(numFactura)}");
 
+    public Task<IReadOnlyList<ReciboPendienteDto>?> ListarRecibosPendientesPorClienteAsync(string clave)
+        => _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<ReciboPendienteDto>>(
+               $"api/abono/recibos-pendientes-cliente?clave={Uri.EscapeDataString(clave)}");
+
     public async Task<ResponseModelDto?> AnularReciboPendienteAsync(AnularReciboPendienteDto request)
     {
         var response = await _http.PostAsJsonAsyncWithAuthCheck("api/abono/anular-pendiente", request);

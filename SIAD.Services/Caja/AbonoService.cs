@@ -869,6 +869,52 @@ public class AbonoService : IAbonoService
             .ToListAsync(ct);
     }
 
+    public async Task<IReadOnlyList<ReciboPendienteDto>> ListarRecibosPendientesPorClienteAsync(string clienteClave, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(clienteClave))
+            return Array.Empty<ReciboPendienteDto>();
+
+        var companyId = _currentCompanyService.GetCompanyId();
+        var clave = clienteClave.Trim();
+
+        // Facturas del cliente (para resolver numfactura desde el recibo del
+        // pendiente sin joins decimal↔int que EF no traduce).
+        var facturas = await _context.facturas
+            .AsNoTracking()
+            .Where(f => f.company_id == companyId && f.clientecodigo == clave)
+            .Select(f => new { f.numrecibo, f.numfactura })
+            .ToListAsync(ct);
+        if (facturas.Count == 0)
+            return Array.Empty<ReciboPendienteDto>();
+
+        var pendientes = await _context.transaccion_abonados
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId
+                && t.cliente_clave == clave
+                && t.tipotransaccion == "202"
+                && t.estado == "P")
+            .OrderByDescending(t => t.fecha_docu)
+            .ThenByDescending(t => t.ide)
+            .Select(t => new { t.ide, t.recibo, Monto = t.creditos ?? 0m, t.fecha_docu, t.usuario })
+            .ToListAsync(ct);
+
+        var porRecibo = facturas.ToDictionary(f => f.numrecibo, f => f.numfactura);
+        return pendientes.Select(p =>
+        {
+            var numRecibo = p.recibo.HasValue ? (int)p.recibo.Value : 0;
+            return new ReciboPendienteDto
+            {
+                TransaccionId = p.ide,
+                NumRecibo = numRecibo,
+                NumFactura = porRecibo.TryGetValue(numRecibo, out var nf) && !string.IsNullOrWhiteSpace(nf)
+                    ? nf : numRecibo.ToString(),
+                Monto = p.Monto,
+                FechaGenerado = p.fecha_docu?.ToString("dd/MM/yyyy") ?? string.Empty,
+                Operador = p.usuario ?? string.Empty
+            };
+        }).ToList();
+    }
+
     public async Task<IReadOnlyList<AbonoHistorialItemDto>> ListarAbonosPorFacturaAsync(string numFactura, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(numFactura))

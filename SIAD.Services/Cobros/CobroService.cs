@@ -126,7 +126,11 @@ public class CobroService : ICobroService
         // ---------- Plan pre-tx (solo lectura): validación y derrame proyectado ----------
         // Base del kardex bancario (que postea su propia transacción, patrón legacy)
         // y validación temprana. El derrame definitivo se recalcula DENTRO de la
-        // transacción con las filas bloqueadas.
+        // transacción con las filas bloqueadas — MISMA estrategia (porcentajes).
+        var porcentajes = await CargarPorcentajesDesgloseAsync(
+            _context.Database.GetDbConnection(), companyId,
+            _context.Database.CurrentTransaction?.GetDbTransaction(), ct);
+
         var planContable = new List<(string? ServicioCodigo, decimal Monto)>();
         int? categoriaServicioId = null;
         bool? conMedicion = null;
@@ -152,11 +156,19 @@ public class CobroService : ICobroService
                 conMedicion = vista.con_medicion;
             }
 
+            // Clones desconectados para proyectar el derrame sin tocar nada.
             var lineas = await _context.factura_detalles
                 .AsNoTracking()
                 .Where(d => d.factura_id == vista.id)
                 .OrderBy(d => d.id)
-                .Select(d => new { d.montovalor_saldo, d.montovalor, d.tiposervicio, d.codigo })
+                .Select(d => new factura_detalle
+                {
+                    id = d.id,
+                    montovalor_saldo = d.montovalor_saldo,
+                    montovalor = d.montovalor,
+                    tiposervicio = d.tiposervicio,
+                    codigo = d.codigo
+                })
                 .ToListAsync(ct);
 
             var saldoDetalles = lineas.Sum(d => d.montovalor_saldo ?? d.montovalor ?? 0m);
@@ -168,18 +180,8 @@ public class CobroService : ICobroService
                 return ResponseModelDto.Fail(
                     $"El monto aplicado ({apl.Monto:N2}) excede el saldo pendiente ({saldoPendiente:N2}) de la factura {vista.numfactura ?? vista.numrecibo.ToString()}.");
 
-            var restantePlan = apl.Monto;
-            foreach (var linea in lineas)
-            {
-                if (restantePlan <= 0) break;
-                var lineSaldo = linea.montovalor_saldo ?? linea.montovalor ?? 0m;
-                if (lineSaldo <= 0) continue;
-                var aplicado = Math.Min(restantePlan, lineSaldo);
-                planContable.Add((
-                    string.IsNullOrWhiteSpace(linea.tiposervicio) ? linea.codigo : linea.tiposervicio,
-                    aplicado));
-                restantePlan -= aplicado;
-            }
+            var lineasPlan = new List<(int, int?, decimal)>();
+            var restantePlan = AplicarMontoALineas(vista.id, lineas, apl.Monto, porcentajes, lineasPlan, planContable);
             if (restantePlan > 0)
                 planContable.Add((null, restantePlan));
         }
@@ -297,22 +299,10 @@ public class CobroService : ICobroService
                     return ResponseModelDto.Fail(
                         $"El saldo de la factura {factura.numfactura ?? factura.numrecibo.ToString()} cambió; vuelva a consultar e intente de nuevo.");
 
-                var restante = apl.Monto;
-                foreach (var detalle in detalles)
-                {
-                    if (restante <= 0) break;
-                    var lineSaldo = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
-                    if (lineSaldo <= 0) continue;
-
-                    var aplicado = Math.Min(restante, lineSaldo);
-                    detalle.montovalor_saldo = lineSaldo - aplicado;
-                    restante -= aplicado;
-
-                    lineasAplicadas.Add((factura.id, detalle.id, aplicado));
-                    aplicacionesContables.Add((
-                        string.IsNullOrWhiteSpace(detalle.tiposervicio) ? detalle.codigo : detalle.tiposervicio,
-                        aplicado));
-                }
+                // Derrame definitivo: prioridad a otros cargos + distribución por
+                // porcentajes configurados (o FIFO si no hay configuración).
+                var restante = AplicarMontoALineas(
+                    factura.id, detalles, apl.Monto, porcentajes, lineasAplicadas, aplicacionesContables);
 
                 if (restante > 0)
                 {
@@ -733,6 +723,113 @@ public class CobroService : ICobroService
     // ------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------
+
+    /// <summary>
+    /// Porcentajes de aplicación por servicio (adm_desglose_abono_porcentaje,
+    /// mantenimiento /tarifario/desglose-abonos). Solo gobiernan la aplicación
+    /// si suman exactamente 100; sin configuración el derrame es FIFO.
+    /// </summary>
+    private static async Task<Dictionary<string, decimal>> CargarPorcentajesDesgloseAsync(
+        System.Data.Common.DbConnection connection, long companyId, IDbTransaction? transaction, CancellationToken ct)
+    {
+        var filas = await connection.QueryAsync<(string Codigo, decimal Porcentaje)>(new CommandDefinition(
+            "SELECT item_codigo, porcentaje FROM public.adm_desglose_abono_porcentaje WHERE company_id = @CompanyId",
+            new { CompanyId = companyId }, transaction, cancellationToken: ct));
+        return filas.ToDictionary(f => f.Codigo.Trim().ToUpperInvariant(), f => f.Porcentaje);
+    }
+
+    /// <summary>
+    /// Aplica un monto a las líneas de una factura y registra la aplicación.
+    /// Con porcentajes configurados (suma 100): PRIORIDAD a las líneas NO
+    /// configuradas (otros cargos) en FIFO, y el resto se distribuye entre los
+    /// servicios configurados presentes según su porcentaje (renormalizado),
+    /// con redistribución al saturarse una línea y residuo de redondeo en FIFO.
+    /// Sin configuración: FIFO puro (comportamiento previo). Devuelve el
+    /// remanente no aplicable a líneas (facturas legacy con saldo solo en
+    /// encabezado).
+    /// </summary>
+    private static decimal AplicarMontoALineas(
+        int facturaId,
+        IReadOnlyList<factura_detalle> detalles,
+        decimal monto,
+        IReadOnlyDictionary<string, decimal> porcentajes,
+        List<(int FacturaId, int? DetalleId, decimal Monto)> lineasAplicadas,
+        List<(string? ServicioCodigo, decimal Monto)> aplicacionesContables)
+    {
+        var restante = monto;
+
+        static decimal Saldo(factura_detalle d) => d.montovalor_saldo ?? d.montovalor ?? 0m;
+        static string? ServicioCodigo(factura_detalle d) =>
+            string.IsNullOrWhiteSpace(d.tiposervicio) ? d.codigo : d.tiposervicio;
+        static string Clave(factura_detalle d) => ServicioCodigo(d)?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        void Aplicar(factura_detalle d, decimal aplicado)
+        {
+            d.montovalor_saldo = Saldo(d) - aplicado;
+            restante -= aplicado;
+            lineasAplicadas.Add((facturaId, d.id, aplicado));
+            aplicacionesContables.Add((ServicioCodigo(d), aplicado));
+        }
+
+        var usarPorcentajes = porcentajes.Count > 0 && porcentajes.Values.Sum() == 100m;
+
+        if (usarPorcentajes)
+        {
+            // 1) Prioridad: líneas fuera de la configuración (otros cargos) en FIFO.
+            foreach (var d in detalles)
+            {
+                if (restante <= 0) break;
+                var s = Saldo(d);
+                if (s <= 0 || porcentajes.ContainsKey(Clave(d))) continue;
+                Aplicar(d, Math.Min(restante, s));
+            }
+
+            // 2) Distribución porcentual (renormalizada a los servicios presentes),
+            //    con vueltas de redistribución cuando una línea se satura.
+            for (var vuelta = 0; vuelta < 10 && restante > 0m; vuelta++)
+            {
+                var activos = detalles
+                    .Where(d => Saldo(d) > 0 && porcentajes.ContainsKey(Clave(d)))
+                    .GroupBy(Clave)
+                    .ToList();
+                if (activos.Count == 0) break;
+
+                var pesoTotal = activos.Sum(g => porcentajes[g.Key]);
+                if (pesoTotal <= 0) break;
+
+                var presupuesto = restante;
+                var asignado = false;
+                foreach (var grupo in activos)
+                {
+                    var objetivo = decimal.Round(
+                        presupuesto * porcentajes[grupo.Key] / pesoTotal, 2, MidpointRounding.AwayFromZero);
+                    foreach (var d in grupo)
+                    {
+                        if (objetivo <= 0 || restante <= 0) break;
+                        var s = Saldo(d);
+                        if (s <= 0) continue;
+                        var aplicado = Math.Min(Math.Min(objetivo, s), restante);
+                        if (aplicado <= 0) continue;
+                        Aplicar(d, aplicado);
+                        objetivo -= aplicado;
+                        asignado = true;
+                    }
+                }
+                if (!asignado) break;
+            }
+        }
+
+        // FIFO: derrame normal sin configuración, o residuo de redondeo con ella.
+        foreach (var d in detalles)
+        {
+            if (restante <= 0) break;
+            var s = Saldo(d);
+            if (s <= 0) continue;
+            Aplicar(d, Math.Min(restante, s));
+        }
+
+        return restante;
+    }
 
     private async Task<ResponseModelDto?> BuscarCobroPorReferenciaAsync(long companyId, string referencia, CancellationToken ct)
     {

@@ -349,6 +349,76 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal("REC-00000002", ((CobroResultadoDto)r2.Data!).NumeroRecibo);
     }
 
+    [SkippableFact]
+    public async Task Aplicacion_por_porcentajes_prioriza_otros_cargos_y_distribuye_servicios()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await PrepararEmpresaAsync();
+
+        // Config estilo "Abono Normal automático": Agua 60 / Alcantarillado 30 /
+        // F. Ambiental 5 / Ersaps 5 (suma 100 exacta — requisito para aplicar).
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.adm_desglose_abono_porcentaje (company_id, item_codigo, porcentaje, usuario)
+            VALUES (@id, 'AGUA_POTABLE', 60, 't'), (@id, 'ALCANTARILLADO', 30, 't'),
+                   (@id, 'TASA_AMBIENTAL', 5, 't'), (@id, 'TASA_SVA_ERSAPS', 5, 't')",
+            new { id = Empresa }, Transaction));
+
+        // Factura con AGUA 60 + ALCANTARILLADO 40 + una línea NO configurada (OTROS 20).
+        var facturaId = await CrearFacturaAsync(60m, 40m, "PCT");
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.factura_detalle (company_id, factura_id, codigo, tiposervicio, montovalor, montovalor_saldo)
+            VALUES (@companyId, @facturaId, 'OTROS_CARGOS', 'OTROS_CARGOS', 20, 20);
+            UPDATE public.factura SET saldototal = 120 WHERE id = @facturaId;",
+            new { companyId = Empresa, facturaId }, Transaction));
+
+        // Pago parcial de 65: primero OTROS (20); el resto (45) se reparte entre
+        // AGUA y ALC renormalizado (60/90 y 30/90) → 30 y 15.
+        var result = await _motor!.RegistrarCobroAsync(Cobro(facturaId, 65m));
+        Assert.True(result.Success, result.Message);
+
+        var saldos = (await Connection.QueryAsync<(string codigo, decimal saldo)>(new CommandDefinition(
+            "SELECT codigo, montovalor_saldo FROM public.factura_detalle WHERE factura_id = @facturaId ORDER BY id",
+            new { facturaId }, Transaction))).ToDictionary(x => x.codigo, x => x.saldo);
+
+        Assert.Equal(0m, saldos["OTROS_CARGOS"]);       // prioridad: otros cargos primero
+        Assert.Equal(30m, saldos["AGUA_POTABLE"]);      // 60 − 30
+        Assert.Equal(25m, saldos["ALCANTARILLADO"]);    // 40 − 15
+    }
+
+    [SkippableFact]
+    public async Task Recibo_pendiente_se_concilia_solo_al_saldarse_la_factura()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await PrepararEmpresaAsync();
+        var facturaId = await CrearFacturaAsync(60m, 40m, "PEND");
+        var numRecibo = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT numrecibo FROM public.factura WHERE id = @facturaId", new { facturaId }, Transaction));
+
+        // Recibo pendiente "para banco": NO rebaja la factura.
+        var pendienteId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
+            INSERT INTO public.transaccion_abonado
+                (company_id, cliente_clave, recibo, tipotransaccion, estado, creditos, debitos, descripcion)
+            VALUES (@companyId, @clave, @recibo, '202', 'P', 50, 0, 'Recibo pendiente de pago')
+            RETURNING ide",
+            new { companyId = Empresa, clave = Clave, recibo = (decimal)numRecibo }, Transaction));
+
+        var saldoIntacto = await Connection.ExecuteScalarAsync<decimal>(new CommandDefinition(
+            "SELECT SUM(montovalor_saldo) FROM public.factura_detalle WHERE factura_id = @facturaId",
+            new { facturaId }, Transaction));
+        Assert.Equal(100m, saldoIntacto);
+
+        // La factura se salda por caja (podría ser el WS: el trigger es el mismo)
+        var cobro = await _motor!.RegistrarCobroAsync(Cobro(facturaId, 100m));
+        Assert.True(cobro.Success, cobro.Message);
+
+        var pendiente = await Connection.QuerySingleAsync<(string estado, short? estadoPago, string desc)>(new CommandDefinition(
+            "SELECT estado, estado_pago_id, descripcion FROM public.transaccion_abonado WHERE ide = @id",
+            new { id = pendienteId }, Transaction));
+        Assert.Equal("A", pendiente.estado);            // anulado automáticamente
+        Assert.Equal((short)3, pendiente.estadoPago);   // ANULADO
+        Assert.StartsWith("CUBIERTO:", pendiente.desc); // conciliado como cubierto
+    }
+
     // ------------------------------------------------------------------ stubs
 
     private sealed class TestCurrentCompanyService : ICurrentCompanyService
