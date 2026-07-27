@@ -171,6 +171,52 @@ public class AbonoService : IAbonoService
             });
         }
 
+        // F6 (2026-07-29): las cuotas vivas de planes ACTIVOS también son
+        // documentos cobrables (documento_tipo = 2 del motor único).
+        var cuotas = await (
+            from d in _context.cln_plan_pago_dtls.AsNoTracking()
+            join h in _context.cln_plan_pago_hdrs.AsNoTracking() on d.idhdr equals h.id
+            join c in _context.cliente_maestros.AsNoTracking() on h.clienteid equals (int?)c.maestro_cliente_id
+            where c.company_id == companyId
+                  && c.maestro_cliente_clave == clave
+                  && h.estado_id == EstadoPlan.Activo
+                  && (d.estado_id == EstadoDocumentoComercial.Activa
+                      || d.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada)
+                  && d.saldo_cuota > 0
+            orderby d.fechacuota
+            select new
+            {
+                d.id,
+                d.mes,
+                d.fechacuota,
+                d.valorcuota,
+                d.saldo_cuota,
+                d.estado_id,
+                h.correlativo,
+                ClienteNombre = c.maestro_cliente_nombre
+            })
+            .ToListAsync(ct);
+
+        foreach (var q in cuotas)
+        {
+            response.Add(new FacturaConSaldoDto
+            {
+                FacturaId = 0,
+                DocumentoTipo = DocumentoCobroTipo.CuotaPlan,
+                PlanCuotaId = q.id,
+                NumFactura = q.mes == 0
+                    ? $"Prima plan {q.correlativo}"
+                    : $"Cuota {q.mes} plan {q.correlativo}",
+                NumRecibo = 0,
+                ClienteClave = clave,
+                ClienteNombre = q.ClienteNombre ?? string.Empty,
+                FechaEmision = q.fechacuota ?? DateTime.MinValue,
+                SaldoTotal = q.valorcuota ?? 0m,
+                SaldoPendiente = q.saldo_cuota,
+                Estado = q.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada ? "B" : "A"
+            });
+        }
+
         return response;
     }
 

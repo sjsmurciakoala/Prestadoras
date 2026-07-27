@@ -60,16 +60,26 @@ public class CobroService : ICobroService
             return ResponseModelDto.Fail("El cobro debe aplicar al menos a un documento.");
         if (dto.Aplicaciones.Any(a => a.Monto <= 0))
             return ResponseModelDto.Fail("Todos los montos aplicados deben ser mayores a cero.");
-        if (dto.Aplicaciones.Any(a => a.DocumentoTipo != DocumentoCobroTipo.Factura))
-            return ResponseModelDto.Fail("En esta fase el motor solo cobra facturas (las cuotas de plan llegan en F6).");
-        if (dto.Aplicaciones.Any(a => !a.FacturaId.HasValue))
-            return ResponseModelDto.Fail("Cada aplicación debe indicar la factura.");
+        if (dto.Aplicaciones.Any(a => a.DocumentoTipo != DocumentoCobroTipo.Factura
+                                       && a.DocumentoTipo != DocumentoCobroTipo.CuotaPlan))
+            return ResponseModelDto.Fail("Tipo de documento no soportado (factura o cuota de plan).");
+        if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.Factura && !a.FacturaId.HasValue))
+            return ResponseModelDto.Fail("Cada aplicación a factura debe indicar la factura.");
+        if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.CuotaPlan && !a.PlanCuotaId.HasValue))
+            return ResponseModelDto.Fail("Cada aplicación a cuota debe indicar la cuota del plan.");
         if (dto.FormaPago != "EFECTIVO" && dto.FormaPago != "BANCO")
             return ResponseModelDto.Fail("Forma de pago inválida (EFECTIVO o BANCO).");
 
-        var facturaIds = dto.Aplicaciones.Select(a => a.FacturaId!.Value).ToList();
+        var facturaIds = dto.Aplicaciones
+            .Where(a => a.DocumentoTipo == DocumentoCobroTipo.Factura)
+            .Select(a => a.FacturaId!.Value).ToList();
         if (facturaIds.Distinct().Count() != facturaIds.Count)
             return ResponseModelDto.Fail("Hay aplicaciones duplicadas a la misma factura.");
+        var cuotaIds = dto.Aplicaciones
+            .Where(a => a.DocumentoTipo == DocumentoCobroTipo.CuotaPlan)
+            .Select(a => a.PlanCuotaId!.Value).ToList();
+        if (cuotaIds.Distinct().Count() != cuotaIds.Count)
+            return ResponseModelDto.Fail("Hay aplicaciones duplicadas a la misma cuota.");
 
         var companyId = _currentCompanyService.GetCompanyId();
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
@@ -140,6 +150,35 @@ public class CobroService : ICobroService
         var numReciboPrincipal = 0;
         foreach (var apl in dto.Aplicaciones)
         {
+            if (apl.DocumentoTipo == DocumentoCobroTipo.CuotaPlan)
+            {
+                // Validación temprana de la cuota (el bloqueo definitivo es en-tx).
+                var cuotaVista = await _context.cln_plan_pago_dtls
+                    .AsNoTracking()
+                    .Where(d => d.id == apl.PlanCuotaId!.Value)
+                    .Select(d => new { d.id, d.estado_id, d.saldo_cuota, d.idhdr })
+                    .FirstOrDefaultAsync(ct);
+                if (cuotaVista is null)
+                    return ResponseModelDto.Fail($"No se encontró la cuota {apl.PlanCuotaId}.");
+                if (cuotaVista.estado_id is not (EstadoDocumentoComercial.Activa or EstadoDocumentoComercial.ParcialmenteAbonada))
+                    return ResponseModelDto.Fail("La cuota ya está pagada o anulada.");
+                if (apl.Monto > cuotaVista.saldo_cuota)
+                    return ResponseModelDto.Fail(
+                        $"El monto aplicado ({apl.Monto:N2}) excede el saldo de la cuota ({cuotaVista.saldo_cuota:N2}).");
+
+                var planActivo = await _context.cln_plan_pago_hdrs
+                    .AsNoTracking()
+                    .AnyAsync(h => h.id == cuotaVista.idhdr && h.estado_id == EstadoPlan.Activo, ct);
+                if (!planActivo)
+                    return ResponseModelDto.Fail("El plan de pago de la cuota no está activo.");
+
+                // Parte contable: desglose porcentual configurado (aproximación
+                // del pago de convenio entre servicios, como el posteo legacy);
+                // sin configuración va a la CxC general.
+                planContable.AddRange(DistribuirCuotaContable(apl.Monto, porcentajes));
+                continue;
+            }
+
             var vista = await _context.facturas
                 .AsNoTracking()
                 .Where(f => f.company_id == companyId && f.id == apl.FacturaId!.Value)
@@ -278,11 +317,49 @@ public class CobroService : ICobroService
             // ---------- Bloqueo de filas + derrame definitivo ----------
             var aplicacionesContables = new List<(string? ServicioCodigo, decimal Monto)>();
             var lineasAplicadas = new List<(int FacturaId, int? DetalleId, decimal Monto)>();
+            var cuotasAplicadas = new List<(int PlanCuotaId, decimal Monto)>();
+            var planesTocados = new HashSet<int>();
             var resultados = new List<CobroAplicacionResultadoDto>();
             factura? facturaPrincipal = null;
 
             foreach (var apl in dto.Aplicaciones)
             {
+                if (apl.DocumentoTipo == DocumentoCobroTipo.CuotaPlan)
+                {
+                    // F6: la cuota es un documento — bloquear, rebajar saldo y
+                    // avanzar su estado (mismo catálogo que la factura).
+                    var cuota = await _context.cln_plan_pago_dtls
+                        .FromSqlInterpolated($"SELECT * FROM public.cln_plan_pago_dtl WHERE company_id = {companyId} AND id = {apl.PlanCuotaId!.Value} FOR UPDATE")
+                        .FirstOrDefaultAsync(ct);
+                    if (cuota is null)
+                        return ResponseModelDto.Fail($"No se encontró la cuota {apl.PlanCuotaId}.");
+                    if (cuota.estado_id is not (EstadoDocumentoComercial.Activa or EstadoDocumentoComercial.ParcialmenteAbonada)
+                        || apl.Monto > cuota.saldo_cuota)
+                        return ResponseModelDto.Fail("El saldo de la cuota cambió; vuelva a consultar e intente de nuevo.");
+
+                    cuota.saldo_cuota -= apl.Monto;
+                    cuota.estado_id = cuota.saldo_cuota <= 0m
+                        ? EstadoDocumentoComercial.Cobrada
+                        : EstadoDocumentoComercial.ParcialmenteAbonada;
+                    cuota.estadopago = cuota.saldo_cuota <= 0m ? "Pagado" : "Pendiente"; // legacy hasta F7
+                    cuota.usuariomodificacion = usuario;
+                    cuota.fechamodificacion = DateTime.Now;
+
+                    cuotasAplicadas.Add((cuota.id, apl.Monto));
+                    if (cuota.idhdr.HasValue) planesTocados.Add(cuota.idhdr.Value);
+
+                    resultados.Add(new CobroAplicacionResultadoDto
+                    {
+                        FacturaId = 0,
+                        NumFactura = $"CUOTA-{cuota.mes}",
+                        NumRecibo = 0,
+                        MontoAplicado = apl.Monto,
+                        SaldoRestante = cuota.saldo_cuota,
+                        EstadoFactura = cuota.saldo_cuota <= 0m ? "C" : "B"
+                    });
+                    continue;
+                }
+
                 var factura = await _context.facturas
                     .FromSqlInterpolated($"SELECT * FROM public.factura WHERE company_id = {companyId} AND id = {apl.FacturaId!.Value} FOR UPDATE")
                     .FirstOrDefaultAsync(ct);
@@ -341,6 +418,41 @@ public class CobroService : ICobroService
                 // La contabilidad va a la CxC general; el detalle por línea de
                 // adm_pago_aplicacion se conserva intacto.
                 aplicacionesContables = [(null, montoTotal)];
+            }
+            else
+            {
+                // F6: parte contable de las cuotas cobradas (desglose porcentual
+                // configurado o CxC general) — espejo del planContable pre-tx.
+                foreach (var (_, monto) in cuotasAplicadas)
+                {
+                    aplicacionesContables.AddRange(DistribuirCuotaContable(monto, porcentajes));
+                }
+            }
+
+            // F6: si el pago saldó la última cuota viva, el plan se COMPLETA.
+            if (planesTocados.Count > 0)
+            {
+                // Persistir las cuotas rebajadas ANTES de consultar si quedan
+                // vivas (la verificación va a la BD, no al change tracker).
+                await _context.SaveChangesAsync(ct);
+            }
+            foreach (var planId in planesTocados)
+            {
+                var quedanVivas = await _context.cln_plan_pago_dtls
+                    .AnyAsync(d => d.idhdr == planId
+                                   && (d.estado_id == EstadoDocumentoComercial.Activa
+                                       || d.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada), ct);
+                if (!quedanVivas)
+                {
+                    var plan = await _context.cln_plan_pago_hdrs.FirstOrDefaultAsync(h => h.id == planId, ct);
+                    if (plan is not null)
+                    {
+                        plan.estado_id = EstadoPlan.Completado;
+                        plan.estadopago = "Completado"; // legacy hasta F7
+                        plan.usuariomodificacion = usuario;
+                        plan.fechamodificacion = DateTime.Now;
+                    }
+                }
             }
 
             // ---------- Fila espejo legacy (dual-write, muere en F7) ----------
@@ -444,6 +556,16 @@ public class CobroService : ICobroService
                     documento_tipo = DocumentoCobroTipo.Factura,
                     factura_id = facturaId,
                     factura_detalle_id = detalleId,
+                    monto_aplicado = monto
+                });
+            }
+            foreach (var (planCuotaId, monto) in cuotasAplicadas)
+            {
+                pago.aplicaciones.Add(new adm_pago_aplicacion
+                {
+                    company_id = companyId,
+                    documento_tipo = DocumentoCobroTipo.CuotaPlan,
+                    plan_cuota_id = planCuotaId,
                     monto_aplicado = monto
                 });
             }
@@ -605,6 +727,40 @@ public class CobroService : ICobroService
                 }
             }
 
+            // F6: restituir cuotas de plan aplicadas (documento_tipo = 2) y
+            // reabrir el plan si el cobro lo había completado.
+            var planesReabrir = new HashSet<int>();
+            foreach (var apl in pago.aplicaciones.Where(a => a.plan_cuota_id.HasValue))
+            {
+                var cuota = await _context.cln_plan_pago_dtls
+                    .FromSqlInterpolated($"SELECT * FROM public.cln_plan_pago_dtl WHERE company_id = {companyId} AND id = {apl.plan_cuota_id!.Value} FOR UPDATE")
+                    .FirstOrDefaultAsync(ct);
+                if (cuota is null)
+                    return ResponseModelDto.Fail($"No se encontró la cuota {apl.plan_cuota_id} del cobro.");
+
+                var tope = cuota.valorcuota ?? 0m;
+                cuota.saldo_cuota = Math.Min(tope, cuota.saldo_cuota + apl.monto_aplicado);
+                cuota.estado_id = cuota.saldo_cuota >= tope
+                    ? EstadoDocumentoComercial.Activa
+                    : EstadoDocumentoComercial.ParcialmenteAbonada;
+                cuota.estadopago = "Pendiente"; // legacy hasta F7
+                cuota.usuariomodificacion = usuario;
+                cuota.fechamodificacion = DateTime.Now;
+                if (cuota.idhdr.HasValue) planesReabrir.Add(cuota.idhdr.Value);
+            }
+
+            foreach (var planId in planesReabrir)
+            {
+                var plan = await _context.cln_plan_pago_hdrs.FirstOrDefaultAsync(h => h.id == planId, ct);
+                if (plan is not null && plan.estado_id == EstadoPlan.Completado)
+                {
+                    plan.estado_id = EstadoPlan.Activo;
+                    plan.estadopago = "Pendiente"; // legacy hasta F7
+                    plan.usuariomodificacion = usuario;
+                    plan.fechamodificacion = DateTime.Now;
+                }
+            }
+
             // Espejo legacy: marcar anulado (NUNCA borrar — regla única del motor).
             if (espejo is not null)
             {
@@ -732,6 +888,40 @@ public class CobroService : ICobroService
     // ------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------
+
+    /// <summary>
+    /// F6: parte contable del pago de una cuota de plan — se distribuye entre
+    /// servicios por el desglose porcentual configurado (la cuota no tiene
+    /// líneas por servicio propias; es la misma aproximación del posteo
+    /// legacy). Sin configuración, todo a la CxC general (servicio null).
+    /// El redondeo por ítem se cierra contra el último (restos al final).
+    /// </summary>
+    private static List<(string? ServicioCodigo, decimal Monto)> DistribuirCuotaContable(
+        decimal monto, Dictionary<string, decimal> porcentajes)
+    {
+        if (porcentajes.Count == 0 || porcentajes.Values.Sum() != 100m)
+        {
+            return [(null, monto)];
+        }
+
+        var resultado = new List<(string?, decimal)>();
+        var acumulado = 0m;
+        foreach (var (codigo, pct) in porcentajes.OrderBy(p => p.Key))
+        {
+            var parte = Math.Round(monto * pct / 100m, 2, MidpointRounding.AwayFromZero);
+            resultado.Add((codigo, parte));
+            acumulado += parte;
+        }
+
+        var resto = monto - acumulado;
+        if (resto != 0m && resultado.Count > 0)
+        {
+            var ultimo = resultado[^1];
+            resultado[^1] = (ultimo.Item1, ultimo.Item2 + resto);
+        }
+
+        return resultado.Where(r => r.Item2 > 0m).ToList();
+    }
 
     /// <summary>
     /// Porcentajes de aplicación por servicio (adm_desglose_abono_porcentaje,

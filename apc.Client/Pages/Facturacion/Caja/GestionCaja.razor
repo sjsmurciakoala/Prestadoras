@@ -135,7 +135,7 @@
                         <div class="modern-card position-relative">
                             <DxLoadingPanel Visible="_cargandoDocs" IsContentBlocked="true" Text="Cargando documentos..." />
                             <div class="grid-wrapper">
-                                <DxGrid Data="@_documentos" KeyFieldName="FacturaId" PageSize="10"
+                                <DxGrid Data="@_documentos" KeyFieldName="DocKey" PageSize="10"
                                         ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
                                         ShowGroupPanel="false" CssClass="grid-solicitudes">
                                     <Columns>
@@ -171,10 +171,14 @@
                                         <DxGridDataColumn Caption="" Width="60px" AllowSort="false" TextAlignment="GridTextAlignment.Center">
                                             <CellDisplayTemplate>
                                                 @{ var row = (DocumentoCobroRow)context.DataItem; }
-                                                <DxButton IconCssClass="bi bi-bank" RenderStyle="ButtonRenderStyle.Secondary"
-                                                          RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
-                                                          title="Generar recibo para pagar en banco"
-                                                          Click="@(() => AbrirReciboBanco(row))" />
+                                                @* El recibo para banco aplica a facturas; las cuotas de plan se cobran en caja (F6). *@
+                                                @if (row.DocumentoTipo == DocumentoCobroTipo.Factura)
+                                                {
+                                                    <DxButton IconCssClass="bi bi-bank" RenderStyle="ButtonRenderStyle.Secondary"
+                                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                              title="Generar recibo para pagar en banco"
+                                                              Click="@(() => AbrirReciboBanco(row))" />
+                                                }
                                             </CellDisplayTemplate>
                                         </DxGridDataColumn>
                                     </Columns>
@@ -566,6 +570,9 @@
     private sealed class DocumentoCobroRow
     {
         public int FacturaId { get; init; }
+        // F6: la caja también cobra cuotas de plan (DocumentoCobroTipo.CuotaPlan).
+        public short DocumentoTipo { get; init; } = DocumentoCobroTipo.Factura;
+        public int? PlanCuotaId { get; init; }
         public string NumFactura { get; init; } = string.Empty;
         public int NumRecibo { get; init; }
         public DateTime FechaEmision { get; init; }
@@ -573,6 +580,11 @@
         public decimal SaldoPendiente { get; init; }
         public bool Seleccionado { get; set; }
         public decimal MontoCobrar { get; set; }
+
+        // Clave única del grid: facturas y cuotas comparten la lista.
+        public string DocKey => DocumentoTipo == DocumentoCobroTipo.CuotaPlan
+            ? $"C{PlanCuotaId}"
+            : $"F{FacturaId}";
     }
 
     protected override async Task OnInitializedAsync()
@@ -657,6 +669,8 @@
                 .Select(f => new DocumentoCobroRow
                 {
                     FacturaId = f.FacturaId,
+                    DocumentoTipo = f.DocumentoTipo,
+                    PlanCuotaId = f.PlanCuotaId,
                     NumFactura = f.NumFactura,
                     NumRecibo = f.NumRecibo,
                     FechaEmision = f.FechaEmision,
@@ -818,8 +832,9 @@
                 Aplicaciones = seleccionados
                     .Select(d => new CobroAplicacionDto
                     {
-                        DocumentoTipo = DocumentoCobroTipo.Factura,
-                        FacturaId = d.FacturaId,
+                        DocumentoTipo = d.DocumentoTipo,
+                        FacturaId = d.DocumentoTipo == DocumentoCobroTipo.Factura ? d.FacturaId : null,
+                        PlanCuotaId = d.PlanCuotaId,
                         Monto = d.MontoCobrar
                     })
                     .ToList()

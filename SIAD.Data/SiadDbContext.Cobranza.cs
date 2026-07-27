@@ -16,9 +16,39 @@ public partial class SiadDbContext
     public virtual DbSet<cln_carta_cobro_hdr> cln_carta_cobro_hdrs { get; set; } = null!;
     public virtual DbSet<cln_carta_cobro_dtl> cln_carta_cobro_dtls { get; set; } = null!;
     public virtual DbSet<cln_cliente_estado_log> cln_cliente_estado_logs { get; set; } = null!;
+    public virtual DbSet<cln_plan_pago_traslado> cln_plan_pago_traslados { get; set; } = null!;
 
     private void ConfigureCobranzaModel(ModelBuilder modelBuilder)
     {
+        // F6 (2026-07-29): columnas nuevas de plan de pago (tenancy + cuota
+        // como documento). Las entidades base son scaffolded; estas columnas
+        // viven en las parciales *.Cuotas.cs.
+        modelBuilder.Entity<cln_plan_pago_hdr>(entity =>
+        {
+            entity.Property(e => e.company_id);
+            entity.Property(e => e.estado_id).HasDefaultValue((short)1);
+        });
+
+        modelBuilder.Entity<cln_plan_pago_dtl>(entity =>
+        {
+            entity.Property(e => e.company_id);
+            entity.Property(e => e.estado_id).HasDefaultValue((short)1);
+            entity.Property(e => e.saldo_cuota).HasColumnType("numeric(18,2)");
+        });
+
+        modelBuilder.Entity<cln_plan_pago_traslado>(entity =>
+        {
+            entity.HasKey(e => e.traslado_id);
+            entity.ToTable("cln_plan_pago_traslado", "public");
+            entity.HasIndex(e => new { e.company_id, e.plan_id },
+                "ix_cln_plan_pago_traslado_plan");
+
+            entity.Property(e => e.traslado_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.monto_trasladado).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.creado_por).HasMaxLength(100);
+            entity.Property(e => e.creado_en).HasDefaultValueSql("now()");
+        });
+
         modelBuilder.Entity<cln_llamada_cobranza>(entity =>
         {
             entity.HasKey(e => e.id).HasName("cln_llamada_cobranza_pkey");

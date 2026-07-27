@@ -27,6 +27,12 @@ public class FacturaConSaldoDto
     public decimal SaldoTotal { get; set; }
     public decimal SaldoPendiente { get; set; }
     public string Estado { get; set; } = null!;
+
+    /// <summary>DocumentoCobroTipo: 1 = factura, 2 = cuota de plan (F6).</summary>
+    public short DocumentoTipo { get; set; } = 1;
+
+    /// <summary>cln_plan_pago_dtl.id cuando DocumentoTipo = 2.</summary>
+    public int? PlanCuotaId { get; set; }
 }
 
 public class ClienteSaldoDto
