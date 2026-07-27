@@ -61,12 +61,15 @@ public class CobroService : ICobroService
         if (dto.Aplicaciones.Any(a => a.Monto <= 0))
             return ResponseModelDto.Fail("Todos los montos aplicados deben ser mayores a cero.");
         if (dto.Aplicaciones.Any(a => a.DocumentoTipo != DocumentoCobroTipo.Factura
-                                       && a.DocumentoTipo != DocumentoCobroTipo.CuotaPlan))
-            return ResponseModelDto.Fail("Tipo de documento no soportado (factura o cuota de plan).");
+                                       && a.DocumentoTipo != DocumentoCobroTipo.CuotaPlan
+                                       && a.DocumentoTipo != DocumentoCobroTipo.NotaDebito))
+            return ResponseModelDto.Fail("Tipo de documento no soportado (factura, cuota de plan o nota de débito).");
         if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.Factura && !a.FacturaId.HasValue))
             return ResponseModelDto.Fail("Cada aplicación a factura debe indicar la factura.");
         if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.CuotaPlan && !a.PlanCuotaId.HasValue))
             return ResponseModelDto.Fail("Cada aplicación a cuota debe indicar la cuota del plan.");
+        if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.NotaDebito && !a.NotaDebitoId.HasValue))
+            return ResponseModelDto.Fail("Cada aplicación a nota de débito debe indicar la nota.");
         if (dto.FormaPago != "EFECTIVO" && dto.FormaPago != "BANCO")
             return ResponseModelDto.Fail("Forma de pago inválida (EFECTIVO o BANCO).");
 
@@ -80,6 +83,11 @@ public class CobroService : ICobroService
             .Select(a => a.PlanCuotaId!.Value).ToList();
         if (cuotaIds.Distinct().Count() != cuotaIds.Count)
             return ResponseModelDto.Fail("Hay aplicaciones duplicadas a la misma cuota.");
+        var notaIds = dto.Aplicaciones
+            .Where(a => a.DocumentoTipo == DocumentoCobroTipo.NotaDebito)
+            .Select(a => a.NotaDebitoId!.Value).ToList();
+        if (notaIds.Distinct().Count() != notaIds.Count)
+            return ResponseModelDto.Fail("Hay aplicaciones duplicadas a la misma nota de débito.");
 
         var companyId = _currentCompanyService.GetCompanyId();
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
@@ -150,6 +158,26 @@ public class CobroService : ICobroService
         var numReciboPrincipal = 0;
         foreach (var apl in dto.Aplicaciones)
         {
+            if (apl.DocumentoTipo == DocumentoCobroTipo.NotaDebito)
+            {
+                // F7 H2b: validación temprana de la ND (bloqueo definitivo en-tx).
+                var ndVista = await _context.adm_nota_debitos
+                    .AsNoTracking()
+                    .Where(n => n.nota_debito_id == apl.NotaDebitoId!.Value && n.company_id == companyId)
+                    .Select(n => new { n.nota_debito_id, n.estado_id, n.saldo_pendiente })
+                    .FirstOrDefaultAsync(ct);
+                if (ndVista is null)
+                    return ResponseModelDto.Fail($"No se encontró la nota de débito {apl.NotaDebitoId}.");
+                if (ndVista.estado_id == 3 || ndVista.saldo_pendiente <= 0)
+                    return ResponseModelDto.Fail("La nota de débito ya está cobrada o anulada.");
+                if (apl.Monto > ndVista.saldo_pendiente)
+                    return ResponseModelDto.Fail(
+                        $"El monto aplicado ({apl.Monto:N2}) excede el saldo de la nota ({ndVista.saldo_pendiente:N2}).");
+
+                planContable.AddRange(await DistribuirNdContableAsync(apl.NotaDebitoId!.Value, apl.Monto, ct));
+                continue;
+            }
+
             if (apl.DocumentoTipo == DocumentoCobroTipo.CuotaPlan)
             {
                 // Validación temprana de la cuota (el bloqueo definitivo es en-tx).
@@ -318,12 +346,40 @@ public class CobroService : ICobroService
             var aplicacionesContables = new List<(string? ServicioCodigo, decimal Monto)>();
             var lineasAplicadas = new List<(int FacturaId, int? DetalleId, decimal Monto)>();
             var cuotasAplicadas = new List<(int PlanCuotaId, decimal Monto)>();
+            var ndsAplicadas = new List<(long NotaDebitoId, decimal Monto)>();
             var planesTocados = new HashSet<int>();
             var resultados = new List<CobroAplicacionResultadoDto>();
             factura? facturaPrincipal = null;
 
             foreach (var apl in dto.Aplicaciones)
             {
+                if (apl.DocumentoTipo == DocumentoCobroTipo.NotaDebito)
+                {
+                    // F7 H2b: la ND es un documento — bloquear y rebajar su
+                    // saldo vivo. El estado FISCAL no cambia por cobros.
+                    var nd = await _context.adm_nota_debitos
+                        .FromSqlInterpolated($"SELECT * FROM public.adm_nota_debito WHERE company_id = {companyId} AND nota_debito_id = {apl.NotaDebitoId!.Value} FOR UPDATE")
+                        .FirstOrDefaultAsync(ct);
+                    if (nd is null)
+                        return ResponseModelDto.Fail($"No se encontró la nota de débito {apl.NotaDebitoId}.");
+                    if (nd.estado_id == 3 || apl.Monto > nd.saldo_pendiente)
+                        return ResponseModelDto.Fail("El saldo de la nota de débito cambió; vuelva a consultar e intente de nuevo.");
+
+                    nd.saldo_pendiente -= apl.Monto;
+                    ndsAplicadas.Add((nd.nota_debito_id, apl.Monto));
+
+                    resultados.Add(new CobroAplicacionResultadoDto
+                    {
+                        FacturaId = 0,
+                        NumFactura = $"ND {nd.numero_documento}",
+                        NumRecibo = 0,
+                        MontoAplicado = apl.Monto,
+                        SaldoRestante = nd.saldo_pendiente,
+                        EstadoFactura = nd.saldo_pendiente <= 0m ? "C" : "B"
+                    });
+                    continue;
+                }
+
                 if (apl.DocumentoTipo == DocumentoCobroTipo.CuotaPlan)
                 {
                     // F6: la cuota es un documento — bloquear, rebajar saldo y
@@ -426,6 +482,11 @@ public class CobroService : ICobroService
                 foreach (var (_, monto) in cuotasAplicadas)
                 {
                     aplicacionesContables.AddRange(DistribuirCuotaContable(monto, porcentajes));
+                }
+                // F7 H2b: parte contable de las ND por sus propias líneas.
+                foreach (var (notaDebitoId, monto) in ndsAplicadas)
+                {
+                    aplicacionesContables.AddRange(await DistribuirNdContableAsync(notaDebitoId, monto, ct));
                 }
             }
 
@@ -566,6 +627,16 @@ public class CobroService : ICobroService
                     company_id = companyId,
                     documento_tipo = DocumentoCobroTipo.CuotaPlan,
                     plan_cuota_id = planCuotaId,
+                    monto_aplicado = monto
+                });
+            }
+            foreach (var (notaDebitoId, monto) in ndsAplicadas)
+            {
+                pago.aplicaciones.Add(new adm_pago_aplicacion
+                {
+                    company_id = companyId,
+                    documento_tipo = DocumentoCobroTipo.NotaDebito,
+                    nota_debito_id = notaDebitoId,
                     monto_aplicado = monto
                 });
             }
@@ -781,6 +852,18 @@ public class CobroService : ICobroService
                 }
             }
 
+            // F7 H2b: restituir notas de débito aplicadas (documento_tipo = 3).
+            foreach (var apl in pago.aplicaciones.Where(a => a.nota_debito_id.HasValue))
+            {
+                var nd = await _context.adm_nota_debitos
+                    .FromSqlInterpolated($"SELECT * FROM public.adm_nota_debito WHERE company_id = {companyId} AND nota_debito_id = {apl.nota_debito_id!.Value} FOR UPDATE")
+                    .FirstOrDefaultAsync(ct);
+                if (nd is null)
+                    return ResponseModelDto.Fail($"No se encontró la nota de débito {apl.nota_debito_id} del cobro.");
+
+                nd.saldo_pendiente = Math.Min(nd.total_nota, nd.saldo_pendiente + apl.monto_aplicado);
+            }
+
             // Espejo legacy: marcar anulado (NUNCA borrar — regla única del motor).
             if (espejo is not null)
             {
@@ -938,6 +1021,43 @@ public class CobroService : ICobroService
         {
             var ultimo = resultado[^1];
             resultado[^1] = (ultimo.Item1, ultimo.Item2 + resto);
+        }
+
+        return resultado.Where(r => r.Item2 > 0m).ToList();
+    }
+
+    /// <summary>
+    /// F7 H2b: parte contable del cobro de una nota de débito — se distribuye
+    /// por las LÍNEAS propias de la ND (proporción de sus servicios), de modo
+    /// que el Haber acredite la misma CxC analítica que la emisión debitó.
+    /// Sin líneas con servicio, todo a la CxC general (servicio null).
+    /// </summary>
+    private async Task<List<(string? ServicioCodigo, decimal Monto)>> DistribuirNdContableAsync(
+        long notaDebitoId, decimal monto, CancellationToken ct)
+    {
+        var lineas = await _context.adm_nota_debito_detalles
+            .AsNoTracking()
+            .Where(d => d.nota_debito_id == notaDebitoId
+                        && d.servicio_codigo != null
+                        && d.monto_total > 0)
+            .Select(d => new { d.servicio_codigo, d.monto_total })
+            .ToListAsync(ct);
+
+        var total = lineas.Sum(l => l.monto_total);
+        if (lineas.Count == 0 || total <= 0)
+        {
+            return [(null, monto)];
+        }
+
+        var resultado = new List<(string?, decimal)>();
+        var acumulado = 0m;
+        for (var i = 0; i < lineas.Count; i++)
+        {
+            var parte = i == lineas.Count - 1
+                ? monto - acumulado
+                : Math.Round(monto * lineas[i].monto_total / total, 2, MidpointRounding.AwayFromZero);
+            resultado.Add((lineas[i].servicio_codigo, parte));
+            acumulado += parte;
         }
 
         return resultado.Where(r => r.Item2 > 0m).ToList();

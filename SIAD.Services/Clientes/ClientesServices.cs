@@ -683,6 +683,17 @@ otros AS (
       AND h.estado_id = 1
       AND dt.estado_id IN (1, 4)
     HAVING SUM(dt.saldo_cuota) <> 0
+    UNION ALL
+    -- F7 H2b: notas de débito vivas (documentos cobrables).
+    SELECT 'NOTAS_DEBITO', NULL, NULL, SUM(nd.saldo_pendiente), 9200
+    FROM public.adm_nota_debito nd
+    JOIN public.cliente_maestro cm ON cm.maestro_cliente_id = nd.cliente_id
+                                  AND cm.company_id = nd.company_id
+    WHERE nd.company_id = @CompanyId
+      AND cm.maestro_cliente_clave = @Clave
+      AND nd.estado_id <> 3
+      AND nd.saldo_pendiente > 0
+    HAVING SUM(nd.saldo_pendiente) <> 0
 )
 SELECT categoria, codigo, servicio, saldo, orden
 FROM (SELECT * FROM servicios UNION ALL SELECT * FROM otros) t
@@ -719,6 +730,14 @@ ORDER BY orden, servicio";
         {
             items.Add(new DesgloseAbonoDistribuidor.ItemDesglose(
                 "CONVENIO", "Convenio de pago", convenio.Saldo, 9100));
+        }
+
+        // F7: notas de débito vivas — parte del saldo del cliente.
+        var notasDebito = desgloseRows.FirstOrDefault(r => r.Categoria == "NOTAS_DEBITO");
+        if (notasDebito is not null)
+        {
+            items.Add(new DesgloseAbonoDistribuidor.ItemDesglose(
+                "NOTAS_DEBITO", "Notas de débito", notasDebito.Saldo, 9200));
         }
 
         var pagos = desgloseRows.FirstOrDefault(r => r.Categoria == "PAGOS")?.Saldo ?? 0m;

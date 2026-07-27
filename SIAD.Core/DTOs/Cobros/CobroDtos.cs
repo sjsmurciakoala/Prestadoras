@@ -17,6 +17,9 @@ public class CobroAplicacionDto
     /// <summary>Cuota de plan de pago (cln_plan_pago_dtl.id) cuando DocumentoTipo = 2.</summary>
     public int? PlanCuotaId { get; set; }
 
+    /// <summary>Nota de débito (adm_nota_debito.nota_debito_id) cuando DocumentoTipo = 3 (F7).</summary>
+    public long? NotaDebitoId { get; set; }
+
     /// <summary>Monto a aplicar al documento. Total = parcial con monto igual al saldo.</summary>
     public decimal Monto { get; set; }
 }

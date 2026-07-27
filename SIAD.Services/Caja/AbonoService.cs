@@ -217,6 +217,45 @@ public class AbonoService : IAbonoService
             });
         }
 
+        // F7 H2b: las notas de débito vivas también son documentos cobrables
+        // (documento_tipo = 3 del motor).
+        var notas = await (
+            from n in _context.adm_nota_debitos.AsNoTracking()
+            join c in _context.cliente_maestros.AsNoTracking() on n.cliente_id equals (long?)c.maestro_cliente_id
+            where c.company_id == companyId
+                  && c.maestro_cliente_clave == clave
+                  && n.estado_id != 3
+                  && n.saldo_pendiente > 0
+            orderby n.fecha_emision
+            select new
+            {
+                n.nota_debito_id,
+                n.numero_documento,
+                n.fecha_emision,
+                n.total_nota,
+                n.saldo_pendiente,
+                ClienteNombre = c.maestro_cliente_nombre
+            })
+            .ToListAsync(ct);
+
+        foreach (var n in notas)
+        {
+            response.Add(new FacturaConSaldoDto
+            {
+                FacturaId = 0,
+                DocumentoTipo = DocumentoCobroTipo.NotaDebito,
+                NotaDebitoId = n.nota_debito_id,
+                NumFactura = $"ND {n.numero_documento}",
+                NumRecibo = 0,
+                ClienteClave = clave,
+                ClienteNombre = n.ClienteNombre ?? string.Empty,
+                FechaEmision = n.fecha_emision.ToLocalTime(),
+                SaldoTotal = n.total_nota,
+                SaldoPendiente = n.saldo_pendiente,
+                Estado = n.saldo_pendiente < n.total_nota ? "B" : "A"
+            });
+        }
+
         return response;
     }
 

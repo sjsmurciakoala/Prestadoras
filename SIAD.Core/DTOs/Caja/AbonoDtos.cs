@@ -28,11 +28,14 @@ public class FacturaConSaldoDto
     public decimal SaldoPendiente { get; set; }
     public string Estado { get; set; } = null!;
 
-    /// <summary>DocumentoCobroTipo: 1 = factura, 2 = cuota de plan (F6).</summary>
+    /// <summary>DocumentoCobroTipo: 1 = factura, 2 = cuota de plan (F6), 3 = nota de débito (F7).</summary>
     public short DocumentoTipo { get; set; } = 1;
 
     /// <summary>cln_plan_pago_dtl.id cuando DocumentoTipo = 2.</summary>
     public int? PlanCuotaId { get; set; }
+
+    /// <summary>adm_nota_debito.nota_debito_id cuando DocumentoTipo = 3.</summary>
+    public long? NotaDebitoId { get; set; }
 }
 
 public class ClienteSaldoDto

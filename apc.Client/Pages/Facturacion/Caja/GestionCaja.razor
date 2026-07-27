@@ -570,9 +570,10 @@
     private sealed class DocumentoCobroRow
     {
         public int FacturaId { get; init; }
-        // F6: la caja también cobra cuotas de plan (DocumentoCobroTipo.CuotaPlan).
+        // F6/F7: la caja también cobra cuotas de plan y notas de débito.
         public short DocumentoTipo { get; init; } = DocumentoCobroTipo.Factura;
         public int? PlanCuotaId { get; init; }
+        public long? NotaDebitoId { get; init; }
         public string NumFactura { get; init; } = string.Empty;
         public int NumRecibo { get; init; }
         public DateTime FechaEmision { get; init; }
@@ -581,10 +582,13 @@
         public bool Seleccionado { get; set; }
         public decimal MontoCobrar { get; set; }
 
-        // Clave única del grid: facturas y cuotas comparten la lista.
-        public string DocKey => DocumentoTipo == DocumentoCobroTipo.CuotaPlan
-            ? $"C{PlanCuotaId}"
-            : $"F{FacturaId}";
+        // Clave única del grid: facturas, cuotas y ND comparten la lista.
+        public string DocKey => DocumentoTipo switch
+        {
+            DocumentoCobroTipo.CuotaPlan => $"C{PlanCuotaId}",
+            DocumentoCobroTipo.NotaDebito => $"D{NotaDebitoId}",
+            _ => $"F{FacturaId}"
+        };
     }
 
     protected override async Task OnInitializedAsync()
@@ -671,6 +675,7 @@
                     FacturaId = f.FacturaId,
                     DocumentoTipo = f.DocumentoTipo,
                     PlanCuotaId = f.PlanCuotaId,
+                    NotaDebitoId = f.NotaDebitoId,
                     NumFactura = f.NumFactura,
                     NumRecibo = f.NumRecibo,
                     FechaEmision = f.FechaEmision,
@@ -836,6 +841,7 @@
                         DocumentoTipo = d.DocumentoTipo,
                         FacturaId = d.DocumentoTipo == DocumentoCobroTipo.Factura ? d.FacturaId : null,
                         PlanCuotaId = d.PlanCuotaId,
+                        NotaDebitoId = d.NotaDebitoId,
                         Monto = d.MontoCobrar
                     })
                     .ToList()
