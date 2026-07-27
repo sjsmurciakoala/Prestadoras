@@ -593,19 +593,19 @@ public class ClientesService : IClientesService
             saldoPorServicio);
     }
 
-    // Desglose por servicio: se suma (debitos - creditos) de los movimientos VIGENTES
-    // (vw_transaccion_abonado_vigente absorbe la convencion invertida de estados entre
-    // facturacion y caja) en vez de leer saldo_detalle del ultimo movimiento, que solo
-    // acumula por servicio en las facturas. La suma de todos los movimientos vigentes
-    // coincide con sp_obtener_cliente_saldo, de modo que el TOTAL de la tabla cuadra
-    // con el saldo actual del resumen.
+    // Desglose por servicio (F4, 2026-07-28): fuente = DOCUMENTOS pendientes.
+    // Cada servicio suma las lineas (montovalor_saldo ?? montovalor) de las
+    // facturas A/B del cliente; el motor de cobro rebaja montovalor_saldo linea
+    // a linea, asi que los pagos ya estan APLICADOS dentro de cada servicio (la
+    // aplicacion real de adm_pago_aplicacion, no la estimacion porcentual del
+    // modelo viejo). SALDO_ANTERIOR es el residuo migrado de SIMAFI que aun no
+    // existe como documento (vigente SALDO_ANTERIOR/SALDO_INICIAL — muere en
+    // F7) y AJUSTES agrupa lineas pendientes cuyo tiposervicio no esta en el
+    // catalogo (misc, etc.). TOTAL de la tabla == sp_obtener_cliente_saldo v3.
     //
-    // Los servicios recurrentes del catalogo (facturable_app o genera_por_regla) se listan
-    // siempre, aunque el cliente no tenga movimientos, con saldo 0. Lo que no corresponde a
-    // un servicio del catalogo se clasifica en SALDO_ANTERIOR (migrado de SIMAFI), PAGOS
-    // (abonos '201'/'202', tipo_servicio 'E' o 'PAGO...' migrado) y AJUSTES (NC/ND y resto):
-    // los PAGOS se reparten entre los items segun adm_desglose_abono_porcentaje
-    // (DesgloseAbonoDistribuidor) y lo no distribuible queda en "Pagos y ajustes".
+    // Los servicios recurrentes del catalogo (facturable_app o genera_por_regla)
+    // se listan siempre, aunque el cliente no deba nada, con saldo 0. El
+    // distribuidor porcentual se conserva por contrato (pagos ya vienen en 0).
     // Lo consumen el estado de cuenta del cliente y el recibo de abono (AbonoService).
     public async Task<IReadOnlyList<SaldoServicioDto>> GetDesglosePorServicioAsync(
         string clienteClave, CancellationToken ct = default)
@@ -623,13 +623,15 @@ public class ClientesService : IClientesService
         }
 
         const string sqlDesglose = @"
-WITH mov AS (
-    SELECT ta.tipo_servicio,
-           ta.tipotransaccion,
-           COALESCE(ta.debitos, 0) - COALESCE(ta.creditos, 0) AS importe
-    FROM public.vw_transaccion_abonado_vigente ta
-    WHERE ta.company_id    = @CompanyId
-      AND ta.cliente_clave = @Clave
+WITH lineas AS (
+    SELECT d.tiposervicio,
+           SUM(COALESCE(d.montovalor_saldo, d.montovalor, 0)) AS saldo
+    FROM public.factura f
+    JOIN public.factura_detalle d ON d.factura_id = f.id
+    WHERE f.company_id    = @CompanyId
+      AND f.clientecodigo = @Clave
+      AND f.estado IN ('A','B')
+    GROUP BY d.tiposervicio
 ),
 cat AS (
     SELECT s.codigo,
@@ -644,26 +646,31 @@ servicios AS (
     SELECT 'SERVICIO'                          AS categoria,
            c.codigo                            AS codigo,
            c.nombre                            AS servicio,
-           COALESCE(SUM(m.importe), 0)         AS saldo,
+           COALESCE(SUM(l.saldo), 0)           AS saldo,
            COALESCE(c.orden_visual, 0)::int    AS orden
     FROM cat c
-    LEFT JOIN mov m ON m.tipo_servicio = c.codigo
+    LEFT JOIN lineas l ON l.tiposervicio = c.codigo
     GROUP BY c.codigo, c.nombre, c.orden_visual, c.es_recurrente
-    HAVING c.es_recurrente OR COUNT(m.tipo_servicio) > 0
+    HAVING c.es_recurrente OR COUNT(l.tiposervicio) > 0
 ),
 otros AS (
-    SELECT CASE WHEN m.tipotransaccion = 'SALDO_ANTERIOR' THEN 'SALDO_ANTERIOR'
-                WHEN m.tipotransaccion IN ('201', '202')
-                     OR m.tipo_servicio = 'E'
-                     OR m.tipotransaccion ILIKE '%PAGO%' THEN 'PAGOS'
-                ELSE 'AJUSTES' END AS categoria,
+    -- Residuo migrado sin documento (muere en F7).
+    SELECT 'SALDO_ANTERIOR'        AS categoria,
            NULL::varchar           AS codigo,
            NULL::varchar           AS servicio,
-           SUM(m.importe)          AS saldo,
+           SUM(COALESCE(ta.debitos,0) - COALESCE(ta.creditos,0)) AS saldo,
            9000                    AS orden
-    FROM mov m
-    WHERE NOT EXISTS (SELECT 1 FROM cat c WHERE c.codigo = m.tipo_servicio)
-    GROUP BY 1
+    FROM public.vw_transaccion_abonado_vigente ta
+    WHERE ta.company_id      = @CompanyId
+      AND ta.cliente_clave   = @Clave
+      AND ta.tipotransaccion IN ('SALDO_ANTERIOR','SALDO_INICIAL')
+    HAVING COUNT(*) > 0
+    UNION ALL
+    -- Lineas pendientes fuera del catalogo (misc y similares).
+    SELECT 'AJUSTES', NULL, NULL, SUM(l.saldo), 9000
+    FROM lineas l
+    WHERE NOT EXISTS (SELECT 1 FROM cat c WHERE c.codigo = l.tiposervicio)
+    HAVING SUM(l.saldo) <> 0
 )
 SELECT categoria, codigo, servicio, saldo, orden
 FROM (SELECT * FROM servicios UNION ALL SELECT * FROM otros) t
@@ -1641,9 +1648,12 @@ ORDER BY orden, servicio";
     // 1 arg que ignora los abonos vigentes 'C'), por eso NO se usa aqui.
     private async Task<List<MovimientoCalculado>> CargarMovimientosConSaldoAsync(string clave, CancellationToken ct)
     {
+        // F4: el historial es company-scoped (claves de cliente pueden colisionar
+        // entre empresas — regla #1 del repo).
+        var companyId = _currentCompanyService.GetCompanyId();
         var raw = await _context.transaccion_abonados
             .AsNoTracking()
-            .Where(t => t.cliente_clave == clave)
+            .Where(t => t.company_id == companyId && t.cliente_clave == clave)
             .OrderBy(t => t.fecha_docu)
             .ThenBy(t => t.ide)
             .Select(t => new

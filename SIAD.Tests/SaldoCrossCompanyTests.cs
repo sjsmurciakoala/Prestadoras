@@ -48,12 +48,14 @@ public sealed class SaldoCrossCompanyTests : IntegrationTestBase
             ON CONFLICT (company_id) DO NOTHING",
             new { id = EmpresaOtraId }, Transaction));
 
-        // debitos y saldo llevan el mismo valor: la firma de 2 args suma
-        // (debitos - creditos) de los vigentes (fix vigencia 2026-07-16) y la de
-        // 1 arg (deprecated) sigue leyendo la columna saldo del último movimiento.
+        // debitos y saldo llevan el mismo valor. F4: la firma de 2 args suma
+        // documentos pendientes + residuo migrado (SALDO_ANTERIOR), por eso el
+        // movimiento colisionante se inserta como SALDO_ANTERIOR — sigue siendo
+        // el "último" global, que es justo lo que el 1-arg (deprecated) lee de
+        // la columna saldo.
         await Connection.ExecuteAsync(new CommandDefinition(@"
-            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, debitos, saldo, estado, estado_id)
-            VALUES (@id, @clave, @saldo, @saldo, 'A', 1)",
+            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, debitos, saldo, estado, estado_id)
+            VALUES (@id, @clave, 'SALDO_ANTERIOR', @saldo, @saldo, 'A', 1)",
             new { id = EmpresaOtraId, clave, saldo = SaldoOtra }, Transaction));
     }
 
