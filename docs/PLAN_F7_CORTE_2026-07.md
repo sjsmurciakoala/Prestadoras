@@ -29,7 +29,7 @@ los 9 DDL `uc_*` + los de F7.
 | `CobranzaService` | espejo `PLAN-PR` (prima, F6) | Muere: la prima ya es cuota mes 0 (documento). |
 | `FacturacionMiscelaneosService` | espejo del misceláneo | Muere: el misceláneo emite factura (documento) desde F4. |
 | `AbonoService` | **recibos pendientes de banco (estado 'P')** | ÚNICO uso sin casa nueva: se migra a tabla propia `adm_recibo_banco_pendiente` (id, company, cliente, factura_id, monto, estado, generado_por/fecha, anulado_*). La conciliación automática del WS (que hoy los busca por 'P') pasa a leerla. |
-| SPs muertos: `sp_lectura`, `sp_lectura_v2`, `sp_posteo`, `sp_registrar_posteo_manual`, `sp_registrar_posteo_lectoras`, `sp_reversar_posteo_manual`, `sp_actualizar_detalle_posteolectora` | — | DROP (ya sin callers desde F2b/apertura única). |
+| SPs muertos: `sp_lectura`, `sp_lectura_v2`, `sp_posteo`, `sp_registrar_posteo_manual`, `sp_registrar_posteo_lectoras`, `sp_reversar_posteo_manual`, `sp_actualizar_detalle_posteolectora` + los 2 del plan maestro que solo hacen UPDATE: `sp_actualizar_factura_pago`, `sp_actualizar_detalle_posteomanual` | — | DROP (ya sin callers desde F2b/apertura única). **NO** se dropea `fn_getclientesaldos_posteomanual` (viva, mismo archivo fuente — advertencia del plan maestro). |
 
 ## 3. Trabajo de código y DDL (pre-ventana, en rama `feat/uc-f7-corte`)
 
