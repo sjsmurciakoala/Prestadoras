@@ -125,6 +125,10 @@ public class GenerarReciboDto
 
 public class GenerarReciboResponseDto
 {
+    /// <summary>F7 H1: id en adm_recibo_banco_pendiente (para imprimir/anular).</summary>
+    public long PendienteId { get; set; }
+
+    /// <summary>Legacy (espejo 'P') — se retira con el corte de F7.</summary>
     public int TransaccionId { get; set; }
     public string NumFactura { get; set; } = string.Empty;
 }

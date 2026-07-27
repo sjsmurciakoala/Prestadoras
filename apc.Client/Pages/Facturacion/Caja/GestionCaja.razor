@@ -209,7 +209,7 @@
                                                         <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
                                                                   RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
                                                                   title="Reimprimir"
-                                                                  Click="@(() => AbrirRecibo(p.TransaccionId))" />
+                                                                  Click="@(() => AbrirReciboPendiente(p.PendienteId))" />
                                                         <DxButton IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
                                                                   RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
                                                                   title="Anular recibo pendiente"
@@ -282,7 +282,7 @@
                                                     <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
                                                               RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
                                                               title="Reimprimir recibo"
-                                                              Click="@(() => AbrirRecibo(c.TransaccionId.Value))" />
+                                                              Click="@(() => AbrirRecibo(c.PagoId))" />
                                                 }
                                                 @if (c.EstadoId == EstadoPago.Aplicado)
                                                 {
@@ -735,8 +735,8 @@
         {
             _reciboBancoVisible = false;
             var datos = Deserializar<GenerarReciboResponseDto>(result.Data);
-            if (datos?.TransaccionId is > 0)
-                await AbrirRecibo(datos.TransaccionId);
+            if (datos?.PendienteId is > 0)
+                await AbrirReciboPendiente(datos.PendienteId);
             _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave) ?? [];
         }
     }
@@ -767,8 +767,8 @@
         {
             var datos = Deserializar<CobroResultadoDto>(result.Data);
             Notificar(true, $"Recibo cobrado. Folio {datos?.NumeroRecibo}.");
-            if (datos?.TransaccionId is > 0)
-                await AbrirRecibo(datos.TransaccionId);
+            if (datos?.PagoId is > 0)
+                await AbrirRecibo(datos.PagoId);
             await OnClienteSeleccionado(_clienteClave);
             await CargarCobrosDelDiaAsync();
         }
@@ -855,8 +855,8 @@
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 Notificar(true, $"Cobro registrado. Recibo {datos?.NumeroRecibo}.");
-                if (datos?.TransaccionId is > 0)
-                    await AbrirRecibo(datos.TransaccionId);
+                if (datos?.PagoId is > 0)
+                    await AbrirRecibo(datos.PagoId);
 
                 await OnClienteSeleccionado(_clienteClave);
                 await CargarCobrosDelDiaAsync();
@@ -915,8 +915,13 @@
         }
     }
 
-    private async Task AbrirRecibo(int transaccionId)
-        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{transaccionId}", "_blank");
+    // F7 H2c: el recibo se imprime desde el documento del motor (adm_pago);
+    // el papel "para banco" aún no cobrado tiene su propio endpoint.
+    private async Task AbrirRecibo(long pagoId)
+        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{pagoId}", "_blank");
+
+    private async Task AbrirReciboPendiente(long pendienteId)
+        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pendiente-pdf/{pendienteId}", "_blank");
 
     private void Notificar(bool ok, string mensaje)
         => ToastService.ShowToast(new ToastOptions

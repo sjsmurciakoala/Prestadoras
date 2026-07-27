@@ -665,25 +665,55 @@ public class AbonoService : IAbonoService
         return false;
     }
 
-    public async Task<ReciboAbonoDto?> GenerarDatosReciboAsync(int transaccionId, CancellationToken ct = default)
+    /// <summary>
+    /// F7 H2c (2026-07-30): el recibo se arma desde el DOCUMENTO del motor
+    /// (adm_pago + aplicaciones), no desde la fila espejo de
+    /// transaccion_abonado. Para el papel "pendiente de pago" (aún no cobrado)
+    /// existe <see cref="GenerarDatosReciboPendienteAsync"/>.
+    /// </summary>
+    public async Task<ReciboAbonoDto?> GenerarDatosReciboAsync(long pagoId, CancellationToken ct = default)
     {
         var companyId = _currentCompanyService.GetCompanyId();
 
-        var transaccion = await _context.transaccion_abonados
+        var pago = await _context.adm_pagos
             .AsNoTracking()
-            .FirstOrDefaultAsync(t => t.company_id == companyId && t.ide == transaccionId, ct);
+            .Include(p => p.aplicaciones)
+            .FirstOrDefaultAsync(p => p.company_id == companyId && p.pago_id == pagoId, ct);
 
-        if (transaccion is null)
+        if (pago is null)
             return null;
 
-        var numRecibo = (int)(transaccion.recibo ?? 0);
+        // Factura principal del cobro (la de mayor monto aplicado); si el pago
+        // fue solo a cuotas/ND se toma la última factura del cliente para los
+        // datos de encabezado (período, RTN).
+        var facturaId = pago.aplicaciones
+            .Where(a => a.factura_id.HasValue)
+            .GroupBy(a => a.factura_id!.Value)
+            .OrderByDescending(g => g.Sum(a => a.monto_aplicado))
+            .Select(g => (int?)g.Key)
+            .FirstOrDefault();
 
-        var factura = await _context.facturas
-            .AsNoTracking()
-            .FirstOrDefaultAsync(f => f.company_id == companyId && f.numrecibo == numRecibo, ct);
+        var factura = facturaId.HasValue
+            ? await _context.facturas.AsNoTracking()
+                .FirstOrDefaultAsync(f => f.company_id == companyId && f.id == facturaId.Value, ct)
+            : await _context.facturas.AsNoTracking()
+                .Where(f => f.company_id == companyId && f.clientecodigo == pago.cliente_clave)
+                .OrderByDescending(f => f.fechaemision).ThenByDescending(f => f.numrecibo)
+                .FirstOrDefaultAsync(ct);
 
         if (factura is null)
             return null;
+
+        var numRecibo = factura.numrecibo;
+        var transaccion = new transaccion_abonado
+        {
+            cliente_clave = pago.cliente_clave,
+            creditos = pago.monto_total,
+            usuario = pago.usuario,
+            fecha_docu = pago.fecha,
+            recibo = numRecibo
+        };
+        var transaccionId = (int)pago.pago_id;
 
         var detalles = await _context.factura_detalles
             .AsNoTracking()
@@ -711,7 +741,7 @@ public class AbonoService : IAbonoService
         var total = transaccion.creditos ?? lineas.Sum(l => l.Monto);
         var direccion = clienteConDetalle?.cliente_detalles.FirstOrDefault()?.detalle_cliente_direccion ?? string.Empty;
 
-        var esPendiente = transaccion.estado == "P";
+        var esPendiente = false;   // este recibo SIEMPRE es de un cobro aplicado
 
         // Desglose del saldo del cliente (deuda / % de distribución / saldo), el
         // mismo que muestra el estado de cuenta. Refleja el estado ACTUAL, ya con
@@ -744,6 +774,76 @@ public class AbonoService : IAbonoService
             NumeroTransaccion = transaccionId,
             GeneradoPor = transaccion.usuario ?? string.Empty,
             EsPendiente = esPendiente,
+            DesgloseSaldo = desgloseSaldo.ToList()
+        };
+    }
+
+    /// <summary>
+    /// F7 H2c: recibo del papel "para pagar en banco" AÚN NO COBRADO, desde
+    /// adm_recibo_banco_pendiente (antes salía de la fila espejo 202/'P').
+    /// </summary>
+    public async Task<ReciboAbonoDto?> GenerarDatosReciboPendienteAsync(long pendienteId, CancellationToken ct = default)
+    {
+        var companyId = _currentCompanyService.GetCompanyId();
+
+        var pendiente = await _context.adm_recibo_banco_pendientes
+            .AsNoTracking()
+            .FirstOrDefaultAsync(r => r.recibo_pendiente_id == pendienteId, ct);
+        if (pendiente is null)
+            return null;
+
+        var factura = await _context.facturas
+            .AsNoTracking()
+            .FirstOrDefaultAsync(f => f.company_id == companyId && f.id == pendiente.factura_id, ct);
+        if (factura is null)
+            return null;
+
+        var detalles = await _context.factura_detalles
+            .AsNoTracking()
+            .Where(d => d.factura_id == factura.id)
+            .OrderBy(d => d.id)
+            .ToListAsync(ct);
+
+        var clienteConDetalle = await _context.cliente_maestros
+            .AsNoTracking()
+            .Include(m => m.cliente_detalles)
+            .FirstOrDefaultAsync(c => c.maestro_cliente_clave == pendiente.cliente_clave, ct);
+
+        var company = await _context.cfg_companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+
+        var desgloseSaldo = await _clientesService.GetDesglosePorServicioAsync(pendiente.cliente_clave, ct);
+
+        return new ReciboAbonoDto
+        {
+            EmpresaNombre = company?.commercial_name ?? string.Empty,
+            EmpresaLogo = company?.logo,
+            EmpresaLogoMime = company?.logo_mime,
+
+            NumRecibo = pendiente.numrecibo,
+            NumFactura = factura.numfactura ?? pendiente.numrecibo.ToString(),
+            Periodo = factura.periodo ?? string.Empty,
+            FechaEmision = factura.fechaemision?.ToString("dd/MM/yy") ?? string.Empty,
+            RtnCliente = factura.rtn ?? "0",
+            CuentaNo = pendiente.cliente_clave,
+            Propietario = clienteConDetalle?.maestro_cliente_nombre ?? string.Empty,
+            Direccion = clienteConDetalle?.cliente_detalles.FirstOrDefault()?.detalle_cliente_direccion ?? string.Empty,
+
+            Lineas = detalles.Select(d => new ReciboAbonoLineaDto
+            {
+                Descripcion = d.descripcion ?? string.Empty,
+                Moneda = "L.",
+                Monto = d.montovalor ?? 0m
+            }).ToList(),
+            Total = pendiente.monto,
+            TotalEnLetras = NumerosALetras.Convertir(pendiente.monto),
+
+            Cajero = "PENDIENTE DE PAGO",
+            FechaPago = string.Empty,
+            NumeroTransaccion = (int)pendiente.recibo_pendiente_id,
+            GeneradoPor = pendiente.generado_por,
+            EsPendiente = true,
             DesgloseSaldo = desgloseSaldo.ToList()
         };
     }
@@ -943,6 +1043,7 @@ public class AbonoService : IAbonoService
 
         return ResponseModelDto.Ok(new GenerarReciboResponseDto
         {
+            PendienteId = pendiente.recibo_pendiente_id,
             TransaccionId = transaccion.ide,
             NumFactura = factura.numfactura ?? factura.numrecibo.ToString()
         }, "Recibo generado. El cliente puede presentarlo en ventanilla o banco.");
