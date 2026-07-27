@@ -44,6 +44,9 @@ public partial class ban_ws_pago : ICompanyScopedEntity
 
     public long? poliza_id { get; set; }
 
+    /// <summary>F5: documento adm_pago del motor único (1:1; NULL para pagos previos a F5).</summary>
+    public long? adm_pago_id { get; set; }
+
     public short status_id { get; set; } = 1;
 
     public DateTime? reversado_at { get; set; }
