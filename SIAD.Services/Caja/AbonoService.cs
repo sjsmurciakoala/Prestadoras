@@ -36,18 +36,22 @@ public class AbonoService : IAbonoService
     private const string BancoMarkerPrefix = "BANCO_CUENTA:";
     private const string TipoTransaccionBancoDeposito = "DEP";
 
+    private readonly Cobros.ICobroService _cobroService;
+
     public AbonoService(
         SiadDbContext context,
         IBanTransaccionesService banTransaccionesService,
         ICurrentCompanyService currentCompanyService,
         ICorteMasivoService corteMasivoService,
-        IClientesService clientesService)
+        IClientesService clientesService,
+        Cobros.ICobroService cobroService)
     {
         _context = context;
         _banTransaccionesService = banTransaccionesService;
         _currentCompanyService = currentCompanyService;
         _corteMasivoService = corteMasivoService;
         _clientesService = clientesService;
+        _cobroService = cobroService;
     }
 
     public async Task<IReadOnlyList<FacturaConSaldoDto>> BuscarFacturasConSaldoAsync(string term, CancellationToken ct = default)
@@ -170,6 +174,13 @@ public class AbonoService : IAbonoService
         return response;
     }
 
+    // ------------------------------------------------------------------------
+    // FACHADA (unificación cobranza F2b): el registro del abono delega en el
+    // motor único de cobro (CobroService). Se conservan las validaciones
+    // tempranas con sus mensajes exactos; la aplicación, el dual-write, la
+    // contabilidad (REC único) y el kardex viven en el motor. Cambio de regla
+    // aprobado en el plan §4: el abono ahora exige sesión de caja ABIERTA.
+    // ------------------------------------------------------------------------
     public async Task<ResponseModelDto> RegistrarAbonoAsync(AbonoCrearDto dto, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
@@ -179,11 +190,9 @@ public class AbonoService : IAbonoService
         }
 
         var companyId = _currentCompanyService.GetCompanyId();
-        var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
-        var fechaPago = dto.FechaPago?.Date ?? DateTime.UtcNow.Date;
-        var fechaHoy = DateOnly.FromDateTime(fechaPago);
 
         var factura = await _context.facturas
+            .AsNoTracking()
             .FirstOrDefaultAsync(f => f.company_id == companyId && (f.numfactura == dto.NumFactura || f.numrecibo.ToString() == dto.NumFactura), ct);
 
         if (factura is null)
@@ -192,8 +201,8 @@ public class AbonoService : IAbonoService
         }
 
         var detalles = await _context.factura_detalles
+            .AsNoTracking()
             .Where(d => d.factura_id == factura.id)
-            .OrderBy(d => d.id)
             .ToListAsync(ct);
 
         if (detalles.Count == 0)
@@ -213,281 +222,46 @@ public class AbonoService : IAbonoService
             return ResponseModelDto.Fail($"El monto del abono ({dto.Monto:N2}) no puede exceder el saldo pendiente de la factura ({saldoPendiente:N2}).");
         }
 
-        // El período contable ya no se valida acá: sp_con_generar_comprobante_config
-        // encola en con_partida_pendiente o rechaza según encolar_sin_periodo (F4).
-        var periodo = await ObtenerPeriodoActualCodigoAsync(ct);
-
-        var integrarBancos = dto.FormaPago == "BANCO" && dto.BancoCuentaId.HasValue && dto.BancoCuentaId.Value > 0;
-        var banco = await ResolverBancoCodigoAsync(dto.BancoCuentaId, dto.Banco, ct);
-
-        if (dto.ReciboPendienteId.HasValue)
+        var cobro = await _cobroService.RegistrarCobroAsync(new SIAD.Core.DTOs.Cobros.CobroCrearDto
         {
-            var existePendiente = await _context.transaccion_abonados
-                .AnyAsync(t => t.company_id == companyId
-                    && t.ide == dto.ReciboPendienteId.Value
-                    && t.estado == "P", ct);
-            if (!existePendiente)
-                return ResponseModelDto.Fail("El recibo pendiente indicado no existe o ya fue procesado.");
-        }
-
-        var contabilidadDocumentNumber = string.IsNullOrWhiteSpace(factura.numfactura)
-            ? $"ABO-{factura.numrecibo}"
-            : factura.numfactura.Trim();
-        var contabilidadDescription = $"Abono en Caja factura {contabilidadDocumentNumber}";
-
-        // Derrame planificado del abono sobre el detalle (mismo orden FIFO que se
-        // aplica dentro de la transacción): base de las líneas CxC analíticas de
-        // la integración por config (F4 — reemplaza a con_regla_integracion).
-        var aplicacionesContables = new List<(string? ServicioCodigo, decimal Monto)>();
-        var restantePlan = dto.Monto;
-        foreach (var detalle in detalles)
-        {
-            if (restantePlan <= 0) break;
-            var lineSaldo = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
-            if (lineSaldo <= 0) continue;
-
-            var aplicado = Math.Min(restantePlan, lineSaldo);
-            aplicacionesContables.Add((
-                string.IsNullOrWhiteSpace(detalle.tiposervicio) ? detalle.codigo : detalle.tiposervicio,
-                aplicado));
-            restantePlan -= aplicado;
-        }
-
-        // Facturas legacy con saldo solo en el encabezado (detalles en cero o
-        // desfasados): el remanente va a la CxC general para que el comprobante
-        // y las contracuentas cubran el monto completo del abono.
-        if (restantePlan > 0)
-        {
-            aplicacionesContables.Add((null, restantePlan));
-        }
-
-        (long BanKardexId, decimal SaldoResultante)? movimientoBanco = null;
-        if (integrarBancos)
-        {
-            // El movimiento bancario postea su partida sin cola de pendientes
-            // (BanTransaccionesService cae a períodos cerrados): se conserva la
-            // validación de período que el flujo tenía antes de F4.
-            var periodoAbiertoId = await _context.con_periodo_contables
-                .AsNoTracking()
-                .Where(p => p.company_id == companyId
-                    && p.status_id == 0
-                    && p.start_date <= fechaPago
-                    && p.end_date >= fechaPago)
-                .Select(p => (long?)p.period_id)
-                .FirstOrDefaultAsync(ct);
-            if (periodoAbiertoId is null)
-            {
-                return ResponseModelDto.Fail(
-                    $"No hay período contable abierto para la fecha {fechaHoy:dd/MM/yyyy}; los abonos por banco requieren período abierto.");
-            }
-
-            try
-            {
-                var contraCuentasBanco = await ConstruirContraCuentasCxcAsync(
-                    companyId,
-                    aplicacionesContables,
-                    factura.categoria_servicio_id,
-                    factura.con_medicion,
-                    contabilidadDescription,
-                    contabilidadDocumentNumber,
-                    ct);
-
-                movimientoBanco = await RegistrarMovimientoBancarioCaptacionAsync(
-                    dto.BancoCuentaId!.Value,
-                    fechaHoy,
-                    contabilidadDescription,
-                    contabilidadDocumentNumber,
-                    contabilidadDocumentNumber,
-                    dto.Monto,
-                    contraCuentasBanco,
-                    usuario,
-                    ct);
-            }
-            catch (Exception ex)
-            {
-                return ResponseModelDto.Fail($"Error al registrar movimiento bancario: {ex.Message}");
-            }
-        }
-
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-        try
-        {
-            // Derramar el abono en el detalle de la factura
-            var remainingMonto = dto.Monto;
-            foreach (var detalle in detalles)
-            {
-                if (remainingMonto <= 0) break;
-                var lineSaldo = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
-                if (lineSaldo <= 0) continue;
-
-                var applied = Math.Min(remainingMonto, lineSaldo);
-                detalle.montovalor_saldo = lineSaldo - applied;
-                remainingMonto -= applied;
-            }
-
-            var nuevoSaldo = saldoPendiente - dto.Monto;
-            if (nuevoSaldo <= 0)
-            {
-                factura.estado = "C"; // Completamente pagado
-                factura.fechapago = fechaHoy;
-                factura.usuario = usuario;
-                factura.recolectora = banco;
-            }
-            else
-            {
-                factura.estado = "B"; // Parcialmente abonado
-            }
-
-            var clienteInfo = await _context.cliente_maestros
-                .AsNoTracking()
-                .Where(c => c.maestro_cliente_clave == dto.ClienteClave)
-                .Select(c => new
+            Canal = CanalCobro.Caja,
+            ClienteClave = dto.ClienteClave,
+            FormaPago = dto.FormaPago,
+            BancoCuentaId = dto.BancoCuentaId,
+            Banco = dto.Banco,
+            FechaPago = dto.FechaPago,
+            Usuario = dto.Usuario,
+            ReciboPendienteId = dto.ReciboPendienteId,
+            TipoLegacy = "202",
+            TipoPartidaLegacy = "002",
+            Aplicaciones =
+            [
+                new SIAD.Core.DTOs.Cobros.CobroAplicacionDto
                 {
-                    c.ciclos_id,
-                    c.maestro_cliente_indicativo_ruta,
-                    c.maestro_cliente_secuencia,
-                    c.maestro_cliente_tiene_medidor
-                })
-                .FirstOrDefaultAsync(ct);
-
-            var saldoActualCliente = await ObtenerSaldoClienteAsync(dto.ClienteClave, ct);
-
-            transaccion_abonado transaccion;
-            if (dto.ReciboPendienteId.HasValue)
-            {
-                var pendiente = await _context.transaccion_abonados
-                    .FirstOrDefaultAsync(t => t.ide == dto.ReciboPendienteId.Value && t.estado == "P", ct);
-                if (pendiente is null)
-                    return ResponseModelDto.Fail("El recibo pendiente ya fue procesado o no existe.");
-
-                pendiente.estado = "C";
-                pendiente.fecha_docu = fechaHoy;
-                pendiente.banco = banco;
-                pendiente.debitos = 0m;
-                pendiente.creditos = dto.Monto;
-                pendiente.saldo = saldoActualCliente - dto.Monto;
-                pendiente.saldo_detalle = dto.Monto;
-                pendiente.descripcion = $"Abono parcial factura :Recibo # :{factura.numrecibo}";
-                pendiente.usuario = usuario;
-                pendiente.ciclo = clienteInfo?.ciclos_id?.ToString();
-                pendiente.ruta = clienteInfo?.maestro_cliente_indicativo_ruta;
-                pendiente.secuencia = clienteInfo?.maestro_cliente_secuencia;
-                pendiente.tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N";
-                transaccion = pendiente;
-            }
-            else
-            {
-                transaccion = new transaccion_abonado
-                {
-                    company_id = companyId,
-                    caja_id = null,
-                    cliente_clave = dto.ClienteClave,
-                    recibo = factura.numrecibo,
-                    tipotransaccion = "202",
-                    fecha_docu = fechaHoy,
-                    tipo_partida = "002",
-                    banco = banco,
-                    descripcion = $"Abono parcial factura :Recibo # :{factura.numrecibo}",
-                    debitos = 0,
-                    creditos = dto.Monto,
-                    saldo = saldoActualCliente - dto.Monto,
-                    tipo_servicio = "E",
-                    periodo = periodo,
-                    tasa = "0",
-                    estado = "C",
-                    fecha_registro = fechaHoy,
-                    ciclo = clienteInfo?.ciclos_id?.ToString(),
-                    ruta = clienteInfo?.maestro_cliente_indicativo_ruta,
-                    secuencia = clienteInfo?.maestro_cliente_secuencia,
-                    tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N",
-                    usuario = usuario,
-                    saldo_detalle = dto.Monto
-                };
-                _context.transaccion_abonados.Add(transaccion);
-            }
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                AplicarReferenciaMovimientoBancario(transaccion, dto.BancoCuentaId.Value, movimientoBanco.Value.BanKardexId);
-            }
-
-            await _context.SaveChangesAsync(ct);
-
-            // Si el cliente queda sin saldo tras el abono, cancela cualquier orden de
-            // corte (33) pendiente y la saca de la lista de reimpresión del corte.
-            if (saldoActualCliente - dto.Monto <= 0m)
-            {
-                await _corteMasivoService.CancelarOrdenesCorteClienteAsync(dto.ClienteClave, usuario, ct);
-            }
-
-            long? polizaId = null;
-            if (!integrarBancos)
-            {
-                // Comprobante por configuración (F4): Debe caja / Haber CxC
-                // analítica, resuelto vía fn_con_resolver_cuenta[_modo] y posteado
-                // por el motor único; NULL = encolado en con_partida_pendiente.
-                var connection = _context.Database.GetDbConnection();
-                var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
-
-                var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, dbTransaction, ct);
-                if (config is not null && config.ActivoCaja)
-                {
-                    var cuentaCaja = await IntegracionContableConfigSql.ResolverCuentaAsync(
-                        connection, companyId, "CAJA", dbTransaction, ct);
-
-                    var aplicacionesCxc = await IntegracionContableConfigSql.ResolverAplicacionesCxcAsync(
-                        connection,
-                        companyId,
-                        config.ModoCxc,
-                        aplicacionesContables,
-                        factura.categoria_servicio_id,
-                        factura.con_medicion,
-                        dbTransaction,
-                        ct);
-
-                    var lineas = IntegracionContableConfigSql.ArmarLineasCobro(
-                        cuentaCaja,
-                        aplicacionesCxc,
-                        contabilidadDescription);
-
-                    polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
-                        connection,
-                        companyId,
-                        ContabilidadModuloCaja,
-                        ContabilidadDocumentoAbono,
-                        transaccion.ide,
-                        $"ABO-{transaccion.ide}",
-                        fechaHoy,
-                        contabilidadDescription,
-                        usuario,
-                        lineas,
-                        dbTransaction,
-                        ct);
+                    DocumentoTipo = DocumentoCobroTipo.Factura,
+                    FacturaId = factura.id,
+                    Monto = dto.Monto
                 }
-            }
+            ]
+        }, ct);
 
-            await tx.CommitAsync(ct);
-
-            return ResponseModelDto.Ok(new AbonoResponseDto
-            {
-                NumFactura = factura.numfactura ?? factura.numrecibo.ToString(),
-                NumRecibo = factura.numrecibo,
-                MontoAbonado = dto.Monto,
-                NuevoSaldo = nuevoSaldo,
-                PolizaId = polizaId,
-                TransaccionId = transaccion.ide
-            }, "Abono registrado correctamente.");
-        }
-        catch (Exception ex)
+        if (!cobro.Success)
         {
-            await tx.RollbackAsync(ct);
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                await TryCompensarMovimientoBancarioAsync(dto.BancoCuentaId.Value, movimientoBanco.Value.BanKardexId, usuario, ct);
-            }
-            return ResponseModelDto.Fail($"Error al registrar el abono: {ex.Message}");
+            return cobro;
         }
+
+        var resultado = (SIAD.Core.DTOs.Cobros.CobroResultadoDto)cobro.Data!;
+        return ResponseModelDto.Ok(new AbonoResponseDto
+        {
+            NumFactura = factura.numfactura ?? factura.numrecibo.ToString(),
+            NumRecibo = factura.numrecibo,
+            MontoAbonado = dto.Monto,
+            NuevoSaldo = resultado.Aplicaciones.Count > 0 ? resultado.Aplicaciones[0].SaldoRestante : 0m,
+            PolizaId = resultado.PolizaId,
+            TransaccionId = resultado.TransaccionId
+        }, "Abono registrado correctamente.");
     }
+
 
     public async Task<ResponseModelDto> ReversarAbonoAsync(ReversoAbonoRequestDto dto, CancellationToken ct = default)
     {
@@ -517,6 +291,28 @@ public class AbonoService : IAbonoService
         {
             return ResponseModelDto.Fail(
                 "Este pago proviene del canal bancario (WS) y debe reversarse por ese canal, no desde caja.");
+        }
+
+        // FACHADA (F2b): si el abono nació en el motor único (tiene adm_pago),
+        // el reverso va por el motor — restitución exacta por línea desde la
+        // tabla de aplicación, sin DELETE, contabilidad y kardex incluidos.
+        // El camino legacy de abajo queda solo para abonos pre-F2.
+        var pagoMotor = await _context.adm_pagos
+            .AsNoTracking()
+            .Where(p => p.company_id == companyId && p.transaccion_abonado_ide == dto.TransaccionId)
+            .Select(p => (long?)p.pago_id)
+            .FirstOrDefaultAsync(ct);
+        if (pagoMotor.HasValue)
+        {
+            var reversoMotor = await _cobroService.ReversarCobroAsync(new SIAD.Core.DTOs.Cobros.CobroReversoDto
+            {
+                PagoId = pagoMotor.Value,
+                Usuario = dto.Usuario,
+                Motivo = dto.Motivo
+            }, ct);
+            return reversoMotor.Success
+                ? ResponseModelDto.Ok(null, "Abono reversado correctamente.")
+                : reversoMotor;
         }
 
         var factura = await _context.facturas
@@ -987,6 +783,24 @@ public class AbonoService : IAbonoService
         if (dto.Monto > saldoPendiente)
             return ResponseModelDto.Fail($"El monto ({dto.Monto:N2}) excede el saldo pendiente ({saldoPendiente:N2}).");
 
+        // Control de recibos (revisión 2026-07-27): los pendientes vigentes de la
+        // factura se descuentan del disponible — no se puede "recibir" dos veces
+        // el mismo saldo en papeles distintos.
+        var pendientesVigentes = await _context.transaccion_abonados
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId
+                && t.recibo == (decimal)factura.numrecibo
+                && t.tipotransaccion == "202"
+                && t.estado == "P")
+            .SumAsync(t => t.creditos ?? 0m, ct);
+
+        var disponible = saldoPendiente - pendientesVigentes;
+        if (dto.Monto > disponible)
+            return ResponseModelDto.Fail(
+                $"Ya existen recibos pendientes por {pendientesVigentes:N2} sobre esta factura; " +
+                $"el monto disponible para nuevos recibos es {Math.Max(disponible, 0m):N2}. " +
+                "Anule un recibo pendiente si necesita re-emitirlo.");
+
         var hoy = DateOnly.FromDateTime(DateTime.UtcNow.Date);
         var periodo = await ObtenerPeriodoActualCodigoAsync(ct);
 
@@ -1071,6 +885,52 @@ public class AbonoService : IAbonoService
                 Operador = t.usuario ?? string.Empty
             })
             .ToListAsync(ct);
+    }
+
+    public async Task<IReadOnlyList<ReciboPendienteDto>> ListarRecibosPendientesPorClienteAsync(string clienteClave, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(clienteClave))
+            return Array.Empty<ReciboPendienteDto>();
+
+        var companyId = _currentCompanyService.GetCompanyId();
+        var clave = clienteClave.Trim();
+
+        // Facturas del cliente (para resolver numfactura desde el recibo del
+        // pendiente sin joins decimal↔int que EF no traduce).
+        var facturas = await _context.facturas
+            .AsNoTracking()
+            .Where(f => f.company_id == companyId && f.clientecodigo == clave)
+            .Select(f => new { f.numrecibo, f.numfactura })
+            .ToListAsync(ct);
+        if (facturas.Count == 0)
+            return Array.Empty<ReciboPendienteDto>();
+
+        var pendientes = await _context.transaccion_abonados
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId
+                && t.cliente_clave == clave
+                && t.tipotransaccion == "202"
+                && t.estado == "P")
+            .OrderByDescending(t => t.fecha_docu)
+            .ThenByDescending(t => t.ide)
+            .Select(t => new { t.ide, t.recibo, Monto = t.creditos ?? 0m, t.fecha_docu, t.usuario })
+            .ToListAsync(ct);
+
+        var porRecibo = facturas.ToDictionary(f => f.numrecibo, f => f.numfactura);
+        return pendientes.Select(p =>
+        {
+            var numRecibo = p.recibo.HasValue ? (int)p.recibo.Value : 0;
+            return new ReciboPendienteDto
+            {
+                TransaccionId = p.ide,
+                NumRecibo = numRecibo,
+                NumFactura = porRecibo.TryGetValue(numRecibo, out var nf) && !string.IsNullOrWhiteSpace(nf)
+                    ? nf : numRecibo.ToString(),
+                Monto = p.Monto,
+                FechaGenerado = p.fecha_docu?.ToString("dd/MM/yyyy") ?? string.Empty,
+                Operador = p.usuario ?? string.Empty
+            };
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<AbonoHistorialItemDto>> ListarAbonosPorFacturaAsync(string numFactura, CancellationToken ct = default)

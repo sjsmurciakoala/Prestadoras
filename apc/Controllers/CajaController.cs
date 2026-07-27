@@ -54,8 +54,39 @@ public class CajaController : ControllerBase
         => Ok(await _cajaService.ListarHistorialAsync(usuario));
 
     // GET api/caja/cajas — cajas físicas de la empresa con su disponibilidad
-    // (varias cajas simultáneas; la apertura elige una — unificación F2)
     [HttpGet("cajas")]
     public async Task<IActionResult> GetCajas()
         => Ok(await _cajaService.ListarCajasAsync());
+
+    // GET api/caja/mi-caja — la caja ASIGNADA al usuario autenticado (F3)
+    [HttpGet("mi-caja")]
+    public async Task<IActionResult> GetMiCaja()
+        => Ok(await _cajaService.ObtenerMiCajaAsync(User?.Identity?.Name ?? string.Empty));
+
+    // ---- Mantenimiento de cajas + asignación de cajeros (F3) ----
+
+    [HttpGet("cajas/admin")]
+    public async Task<IActionResult> GetCajasAdmin()
+        => Ok(await _cajaService.ListarCajasAdminAsync());
+
+    [HttpPost("cajas")]
+    public async Task<IActionResult> GuardarCaja([FromBody] CajaGuardarDto dto)
+    {
+        var result = await _cajaService.GuardarCajaAsync(dto, User?.Identity?.Name ?? "system");
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpPost("cajas/asignar")]
+    public async Task<IActionResult> AsignarCajero([FromBody] AsignarCajeroDto dto)
+    {
+        var result = await _cajaService.AsignarCajeroAsync(dto, User?.Identity?.Name ?? "system");
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    [HttpDelete("cajas/asignacion/{usuario}")]
+    public async Task<IActionResult> QuitarCajero(string usuario)
+    {
+        var result = await _cajaService.QuitarCajeroAsync(usuario);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
 }

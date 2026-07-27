@@ -1,256 +1,906 @@
-﻿@page "/facturacion/caja"
+@page "/facturacion/caja"
+@using System.Globalization
+@using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Caja
+@using SIAD.Core.DTOs.CaptacionPagos
+@using SIAD.Core.DTOs.Cobros
 @using apc.Client.Services.Caja
+@using apc.Client.Services.CaptacionPagos
+@using apc.Client.Services.Cobros
 @using apc.Client.Services.Tenant
+@using apc.Client.Shared
 @using Microsoft.AspNetCore.Components.Authorization
 @inject CajaClient CajaHttp
+@inject AbonoClient AbonoHttp
+@inject CobrosClient CobrosHttp
+@inject CaptacionPagosClient CaptacionHttp
 @inject IToastNotificationService ToastService
 @inject AuthenticationStateProvider AuthStateProvider
+@inject NavigationManager Nav
+@inject IJSRuntime JS
 @inject TenantState TenantState
 
-<PageTitle>SIAD - Gestión de Caja</PageTitle>
+<PageTitle>SIAD - Caja</PageTitle>
 
-<div class="page-header mb-4">
-    <div class="d-flex justify-content-between align-items-center">
-        <div>
-            <h4 class="mb-0 text-primary fw-bold">Gestión de Caja</h4>
-            <small class="text-muted">Apertura, cierre y control diario de transacciones de caja.</small>
-        </div>
-        <div>
-            <span class="text-muted small">Usuario activo: <strong class="text-dark">@_usuario</strong></span>
-        </div>
-    </div>
-</div>
+<div class="page-container">
 
-@if (_cargando)
-{
-    <div class="d-flex justify-content-center my-5">
-        <div class="spinner-border text-primary" role="status">
-            <span class="visually-hidden">Cargando...</span>
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Caja</h2>
+            <p class="page-subtitle">Cobro de documentos, reversos y control de la sesión de caja.</p>
         </div>
+        <DxButton Text="Mantenimiento de cajas" IconCssClass="bi bi-gear"
+                  RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern"
+                  Click="@(() => Nav.NavigateTo("/facturacion/cajas"))" />
     </div>
-}
-else
-{
-    <!-- Card de Estado Actual -->
-    <DxCard CssClass="mb-4 shadow-sm border-0 bg-white">
-        <div class="p-4 d-flex flex-wrap justify-content-between align-items-center gap-3">
-            <div class="d-flex align-items-center gap-3">
-                <div class="status-indicator">
+
+    @if (_cargando)
+    {
+        <div class="d-flex justify-content-center my-5">
+            <div class="spinner-border text-primary" role="status"><span class="visually-hidden">Cargando...</span></div>
+        </div>
+    }
+    else
+    {
+        @* ---- Estado de MI caja / sesión ---- *@
+        <div class="modern-card mb-3">
+            <div class="p-3 d-flex flex-wrap justify-content-between align-items-center gap-3">
+                <div class="d-flex align-items-center gap-3">
                     @if (_sesionActiva is not null)
                     {
-                        <span class="badge bg-success px-3 py-2 fs-6 shadow-sm">ABIERTA</span>
+                        <span class="badge bg-success px-3 py-2 fs-6">ABIERTA</span>
+                        <div>
+                            <h5 class="mb-0 fw-bold">@(_miCaja?.Nombre ?? "Caja") · Turno #@_sesionActiva.Id</h5>
+                            <small class="text-muted">
+                                Cajero: <strong>@_usuario</strong> · abierto el @_sesionActiva.FechaApertura.ToString("dd/MM/yyyy HH:mm")
+                                @if (_sesionActiva.MontoApertura is > 0)
+                                {
+                                    <text> · fondo inicial: <strong>@_sesionActiva.MontoApertura.Value.ToString("C", Culture)</strong></text>
+                                }
+                            </small>
+                        </div>
                     }
                     else
                     {
-                        <span class="badge bg-danger px-3 py-2 fs-6 shadow-sm">CERRADA</span>
+                        <span class="badge bg-danger px-3 py-2 fs-6">CERRADA</span>
+                        <div>
+                            @if (_miCaja is null)
+                            {
+                                <h5 class="mb-0 fw-bold">Sin caja asignada</h5>
+                                <small class="text-muted">Solicite al administrador que le asigne una caja en el mantenimiento.</small>
+                            }
+                            else
+                            {
+                                <h5 class="mb-0 fw-bold">Su caja: @_miCaja.Nombre (@_miCaja.Codigo)</h5>
+                                <small class="text-muted">
+                                    @(_miCaja.Ocupada ? $"Ocupada por {_miCaja.OcupadaPor}." : "Disponible. Abra la sesión para comenzar a cobrar.")
+                                </small>
+                            }
+                        </div>
                     }
                 </div>
                 <div>
                     @if (_sesionActiva is not null)
                     {
-                        <h5 class="mb-1 fw-bold text-dark">Sesión de Caja #@_sesionActiva.Id</h5>
-                        <p class="mb-0 text-muted small">
-                            Abierta por: <strong class="text-secondary">@_sesionActiva.UsuarioApertura</strong> el @_sesionActiva.FechaApertura.ToString("dd/MM/yyyy HH:mm")
-                        </p>
+                        <DxButton Text="Cerrar caja" RenderStyle="ButtonRenderStyle.Danger"
+                                  IconCssClass="bi bi-lock-fill" Click="AbrirConfirmarCierre" />
                     }
                     else
                     {
-                        <h5 class="mb-1 fw-bold text-dark">No hay ninguna sesión activa</h5>
-                        <p class="mb-0 text-muted small">Debe abrir una sesión para comenzar a registrar transacciones de pago.</p>
+                        <DxButton Text="Abrir caja" RenderStyle="ButtonRenderStyle.Success"
+                                  IconCssClass="bi bi-unlock-fill" Click="AbrirConfirmarApertura"
+                                  Enabled="@(_miCaja is not null && !_miCaja.Ocupada)" />
                     }
                 </div>
             </div>
-            
-            <div class="action-buttons">
-                @if (_sesionActiva is not null)
-                {
-                    <div class="d-flex align-items-center gap-2">
-                        <DxTextBox @bind-Text="@_observacionCierre" NullText="Observaciones de cierre..." CssClass="observacion-input" />
-                        <DxButton Text="Cerrar Caja" 
-                                  RenderStyle="ButtonRenderStyle.Danger" 
-                                  IconCssClass="bi bi-lock-fill"
-                                  Click="OnCerrarCaja"
-                                  CssClass="shadow-sm btn-action" />
-                    </div>
-                }
-                else
-                {
-                    <DxButton Text="Abrir Caja" 
-                              RenderStyle="ButtonRenderStyle.Success" 
-                              IconCssClass="bi bi-unlock-fill"
-                              Click="OnAbrirCaja"
-                              CssClass="shadow-sm btn-action" />
-                }
-            </div>
         </div>
-    </DxCard>
 
-    <DxTabs CssClass="modern-tabs shadow-sm rounded bg-white">
-        <DxTabPage Text="Resumen del Día">
-            <div class="p-4">
-                @if (_sesionActiva is not null && _resumen is not null)
-                {
-                    <div class="row g-4 mb-4">
-                        <div class="col-md-6 col-lg-4">
-                            <div class="summary-metric-card p-3 border rounded bg-light-success d-flex align-items-center justify-content-between">
-                                <div>
-                                    <small class="text-muted d-block text-uppercase fw-bold">Total Cobrado</small>
-                                    <span class="fs-2 fw-bold text-success">
-                                        @_resumen.TotalCreditos.ToString("C", new System.Globalization.CultureInfo("es-HN"))
-                                    </span>
+        <DxTabs @bind-ActiveTabIndex="_tabActiva" CssClass="modern-tabs">
+
+            @* =============================== COBRAR =============================== *@
+            <DxTabPage Text="Cobrar">
+                <div class="p-3">
+                    @if (_sesionActiva is null)
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-lock fs-1 d-block mb-3"></i>
+                            <p class="mb-0">Abra su caja para comenzar a cobrar.</p>
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-5">
+                                <label class="form-label small text-muted fw-bold">CLIENTE</label>
+                                <ClienteLookup Value="@_clienteClave" ValueChanged="OnClienteSeleccionado"
+                                               NullText="Buscar cliente por clave o nombre..." />
+                            </div>
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted fw-bold">FORMA DE PAGO</label>
+                                <DxComboBox Data="@_formasPago" @bind-Value="_formaPago" />
+                            </div>
+                            @if (_formaPago == "BANCO")
+                            {
+                                <div class="col-md-4">
+                                    <label class="form-label small text-muted fw-bold">CUENTA BANCARIA</label>
+                                    <DxComboBox TData="BancoDto" TValue="long?" Data="@_bancos"
+                                                TextFieldName="@nameof(BancoDto.Nombre)"
+                                                ValueFieldName="@nameof(BancoDto.BancoCuentaId)"
+                                                @bind-Value="_bancoCuentaId"
+                                                NullText="Seleccione cuenta..." />
                                 </div>
-                                <div class="metric-icon bg-success-subtle text-success p-3 rounded-circle">
-                                    <i class="bi bi-cash-coin fs-3"></i>
-                                </div>
+                            }
+                        </div>
+
+                        <div class="modern-card position-relative">
+                            <DxLoadingPanel Visible="_cargandoDocs" IsContentBlocked="true" Text="Cargando documentos..." />
+                            <div class="grid-wrapper">
+                                <DxGrid Data="@_documentos" KeyFieldName="FacturaId" PageSize="10"
+                                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                    <Columns>
+                                        <DxGridDataColumn Caption="" Width="52px" AllowSort="false">
+                                            <CellDisplayTemplate>
+                                                @{ var row = (DocumentoCobroRow)context.DataItem; }
+                                                <DxCheckBox Checked="@row.Seleccionado"
+                                                            CheckedChanged="@((bool v) => ToggleSeleccion(row, v))" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="NumFactura" Caption="Factura" />
+                                        <DxGridDataColumn FieldName="NumRecibo" Caption="Recibo" Width="110px" TextAlignment="GridTextAlignment.Center" />
+                                        <DxGridDataColumn FieldName="FechaEmision" Caption="Emisión" DisplayFormat="dd/MM/yyyy" Width="110px" />
+                                        <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="90px" TextAlignment="GridTextAlignment.Center">
+                                            <CellDisplayTemplate>
+                                                @{ var row = (DocumentoCobroRow)context.DataItem; }
+                                                <span class="badge @(row.Estado == "B" ? "bg-warning text-dark" : "bg-primary")">
+                                                    @(row.Estado == "B" ? "PARCIAL" : "PENDIENTE")
+                                                </span>
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="SaldoPendiente" Caption="Saldo" DisplayFormat="{0:N2}" Width="130px" TextAlignment="GridTextAlignment.Right" />
+                                        <DxGridDataColumn Caption="Monto a cobrar" Width="170px" TextAlignment="GridTextAlignment.Right" AllowSort="false">
+                                            <CellDisplayTemplate>
+                                                @{ var row = (DocumentoCobroRow)context.DataItem; }
+                                                <DxSpinEdit Value="@row.MontoCobrar"
+                                                            ValueChanged="@((decimal v) => CambiarMonto(row, v))"
+                                                            ValueExpression="@(() => row.MontoCobrar)"
+                                                            MinValue="0" MaxValue="@row.SaldoPendiente"
+                                                            DisplayFormat="N2" Enabled="@row.Seleccionado" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn Caption="" Width="60px" AllowSort="false" TextAlignment="GridTextAlignment.Center">
+                                            <CellDisplayTemplate>
+                                                @{ var row = (DocumentoCobroRow)context.DataItem; }
+                                                <DxButton IconCssClass="bi bi-bank" RenderStyle="ButtonRenderStyle.Secondary"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                          title="Generar recibo para pagar en banco"
+                                                          Click="@(() => AbrirReciboBanco(row))" />
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                    </Columns>
+                                </DxGrid>
                             </div>
                         </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="summary-metric-card p-3 border rounded bg-light-primary d-flex align-items-center justify-content-between">
-                                <div>
-                                    <small class="text-muted d-block text-uppercase fw-bold">Transacciones</small>
-                                    <span class="fs-2 fw-bold text-primary">
-                                        @_resumen.CantidadTransacciones
-                                    </span>
+
+                        @if (_pendientes.Count > 0)
+                        {
+                            <div class="modern-card mt-3">
+                                <div class="p-2">
+                                    <h6 class="fw-bold mb-2"><i class="bi bi-bank me-1"></i>Recibos pendientes para banco</h6>
+                                    <DxGrid Data="@_pendientes" KeyFieldName="TransaccionId" PageSize="5"
+                                            ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                        <Columns>
+                                            <DxGridDataColumn FieldName="NumFactura" Caption="Factura" />
+                                            <DxGridDataColumn FieldName="Monto" Caption="Monto" DisplayFormat="{0:N2}" Width="130px" TextAlignment="GridTextAlignment.Right" />
+                                            <DxGridDataColumn FieldName="FechaGenerado" Caption="Generado" Width="110px" />
+                                            <DxGridDataColumn FieldName="Operador" Caption="Operador" Width="160px" />
+                                            <DxGridDataColumn Caption="Acciones" Width="160px" AllowSort="false" TextAlignment="GridTextAlignment.Center">
+                                                <CellDisplayTemplate>
+                                                    @{ var p = (ReciboPendienteDto)context.DataItem; }
+                                                    <div class="d-flex gap-1 justify-content-center">
+                                                        <DxButton IconCssClass="bi bi-cash-coin" RenderStyle="ButtonRenderStyle.Success"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  title="Cobrar este recibo en caja"
+                                                                  Click="@(() => CobrarPendiente(p))" />
+                                                        <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  title="Reimprimir"
+                                                                  Click="@(() => AbrirRecibo(p.TransaccionId))" />
+                                                        <DxButton IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
+                                                                  RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                                  title="Anular recibo pendiente"
+                                                                  Click="@(() => AbrirAnularPendiente(p))" />
+                                                    </div>
+                                                </CellDisplayTemplate>
+                                            </DxGridDataColumn>
+                                        </Columns>
+                                    </DxGrid>
                                 </div>
-                                <div class="metric-icon bg-primary-subtle text-primary p-3 rounded-circle">
-                                    <i class="bi bi-receipt-cutoff fs-3"></i>
-                                </div>
+                            </div>
+                        }
+
+                        <div class="d-flex flex-wrap justify-content-between align-items-center mt-3 gap-3">
+                            <div class="text-muted">
+                                Documentos seleccionados: <strong>@_documentos.Count(d => d.Seleccionado)</strong>
+                                · Saldo total del cliente: <strong>@_documentos.Sum(d => d.SaldoPendiente).ToString("C", Culture)</strong>
+                            </div>
+                            <div class="d-flex align-items-center gap-3">
+                                <span class="fs-5">Total a cobrar: <strong class="text-success">@TotalACobrar.ToString("C", Culture)</strong></span>
+                                <DxButton Text="Cobrar" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Large"
+                                          IconCssClass="bi bi-cash-coin" Click="OnCobrar"
+                                          Enabled="@(TotalACobrar > 0 && !_cobrando)" />
                             </div>
                         </div>
-                        <div class="col-md-6 col-lg-4">
-                            <div class="summary-metric-card p-3 border rounded bg-light-warning d-flex align-items-center justify-content-between">
-                                <div>
-                                    <small class="text-muted d-block text-uppercase fw-bold">Total Débitos</small>
-                                    <span class="fs-2 fw-bold text-warning">
-                                        @_resumen.TotalDebitos.ToString("C", new System.Globalization.CultureInfo("es-HN"))
-                                    </span>
-                                </div>
-                                <div class="metric-icon bg-warning-subtle text-warning p-3 rounded-circle">
-                                    <i class="bi bi-wallet2 fs-3"></i>
-                                </div>
-                            </div>
+                    }
+                </div>
+            </DxTabPage>
+
+            @* =========================== COBROS DEL DÍA =========================== *@
+            <DxTabPage Text="Cobros del día">
+                <div class="p-3">
+                    <div class="modern-card position-relative">
+                        <div class="grid-wrapper">
+                            <DxGrid Data="@_cobrosDelDia" KeyFieldName="PagoId" PageSize="15"
+                                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                                    ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                <ToolbarTemplate>
+                                    <div class="d-flex flex-wrap gap-2 align-items-center w-100 p-2">
+                                        <DxCheckBox Checked="@_soloMiCaja" CheckedChanged="@((bool v) => CambiarFiltroCobros(v))"
+                                                    Enabled="@(_miCaja is not null)">Solo mi caja (@(_miCaja?.Nombre ?? "sin asignar"))</DxCheckBox>
+                                        <DxButton Text="Actualizar" IconCssClass="bi bi-arrow-clockwise"
+                                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarCobrosDelDiaAsync" />
+                                        <div class="ms-auto text-muted small">
+                                            Total cobrado (@(_soloMiCaja ? "mi caja" : "todas las cajas")):
+                                            <span class="fw-bold">@_cobrosDelDia.Where(c => c.EstadoId == EstadoPago.Aplicado).Sum(c => c.MontoTotal).ToString("C", Culture)</span>
+                                        </div>
+                                    </div>
+                                </ToolbarTemplate>
+                                <Columns>
+                                    <DxGridDataColumn FieldName="NumeroRecibo" Caption="Recibo" Width="140px" />
+                                    <DxGridDataColumn FieldName="ClienteClave" Caption="Clave" Width="110px" />
+                                    <DxGridDataColumn FieldName="ClienteNombre" Caption="Cliente" />
+                                    <DxGridDataColumn FieldName="MontoTotal" Caption="Monto" DisplayFormat="{0:N2}" Width="120px" TextAlignment="GridTextAlignment.Right" />
+                                    <DxGridDataColumn FieldName="FormaPago" Caption="Forma" Width="100px" TextAlignment="GridTextAlignment.Center" />
+                                    <DxGridDataColumn FieldName="CajaNombre" Caption="Caja" Width="120px" />
+                                    <DxGridDataColumn FieldName="Usuario" Caption="Cajero" Width="140px" />
+                                    <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                                        <CellDisplayTemplate>
+                                            @{ var c = (CobroDelDiaDto)context.DataItem; }
+                                            <span class="badge @(c.EstadoId == EstadoPago.Aplicado ? "bg-success" : "bg-danger")">@c.Estado</span>
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                    <DxGridDataColumn Caption="Acciones" Width="130px" AllowSort="false" TextAlignment="GridTextAlignment.Center">
+                                        <CellDisplayTemplate>
+                                            @{ var c = (CobroDelDiaDto)context.DataItem; }
+                                            <div class="d-flex gap-1 justify-content-center">
+                                                @if (c.TransaccionId is not null)
+                                                {
+                                                    <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                              title="Reimprimir recibo"
+                                                              Click="@(() => AbrirRecibo(c.TransaccionId.Value))" />
+                                                }
+                                                @if (c.EstadoId == EstadoPago.Aplicado)
+                                                {
+                                                    <DxButton IconCssClass="bi bi-arrow-counterclockwise" RenderStyle="ButtonRenderStyle.Danger"
+                                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                              title="Reversar cobro"
+                                                              Click="@(() => AbrirReverso(c))" />
+                                                }
+                                            </div>
+                                        </CellDisplayTemplate>
+                                    </DxGridDataColumn>
+                                </Columns>
+                            </DxGrid>
                         </div>
                     </div>
+                </div>
+            </DxTabPage>
 
-                    <h6 class="fw-bold text-dark mb-3">Detalle de Recaudación por Tipo de Transacción</h6>
-                    <DxGrid Data="_resumen.PorTipo" ShowGroupPanel="false" CssClass="grid-custom border">
+            @* =========================== RESUMEN DEL TURNO ======================== *@
+            <DxTabPage Text="Resumen del turno">
+                <div class="p-3">
+                    @if (_sesionActiva is not null && _resumen is not null)
+                    {
+                        <p class="text-muted small mb-3">
+                            El turno agrupa todo lo cobrado desde que abrió su caja hasta el cierre —
+                            es la base del arqueo: cuánto debe entregar al cerrar.
+                        </p>
+                        <div class="row g-3 mb-3">
+                            <div class="col-md-4">
+                                <div class="p-3 border rounded d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <small class="text-muted d-block text-uppercase fw-bold">Total cobrado</small>
+                                        <span class="fs-3 fw-bold text-success">@_resumen.TotalCreditos.ToString("C", Culture)</span>
+                                    </div>
+                                    <i class="bi bi-cash-coin fs-2 text-success"></i>
+                                </div>
+                            </div>
+                            <div class="col-md-4">
+                                <div class="p-3 border rounded d-flex align-items-center justify-content-between">
+                                    <div>
+                                        <small class="text-muted d-block text-uppercase fw-bold">Cobros</small>
+                                        <span class="fs-3 fw-bold text-primary">@_resumen.CantidadTransacciones</span>
+                                    </div>
+                                    <i class="bi bi-receipt-cutoff fs-2 text-primary"></i>
+                                </div>
+                            </div>
+                            @if (_resumen.TotalDebitos > 0)
+                            {
+                                <div class="col-md-4">
+                                    <div class="p-3 border rounded d-flex align-items-center justify-content-between">
+                                        <div>
+                                            <small class="text-muted d-block text-uppercase fw-bold">Reversado</small>
+                                            <span class="fs-3 fw-bold text-danger">@_resumen.TotalDebitos.ToString("C", Culture)</span>
+                                        </div>
+                                        <i class="bi bi-arrow-counterclockwise fs-2 text-danger"></i>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                        <DxGrid Data="_resumen.PorTipo" ShowGroupPanel="false" CssClass="grid-solicitudes">
+                            <Columns>
+                                <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Tipo)" Caption="Forma de pago" />
+                                <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Cantidad)" Caption="Cobros" Width="120px" TextAlignment="GridTextAlignment.Center" />
+                                <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Creditos)" Caption="Cobrado" DisplayFormat="{0:C}" Width="180px" TextAlignment="GridTextAlignment.Right" />
+                            </Columns>
+                        </DxGrid>
+                    }
+                    else
+                    {
+                        <div class="text-center py-5 text-muted">
+                            <i class="bi bi-inbox fs-1 d-block mb-3"></i>
+                            <p class="mb-0">Abra su caja para ver el resumen del turno.</p>
+                        </div>
+                    }
+                </div>
+            </DxTabPage>
+
+            @* ========================= HISTORIAL DE CIERRES ======================= *@
+            <DxTabPage Text="Historial de cierres">
+                <div class="p-3">
+                    <DxGrid Data="_historial" ShowGroupPanel="false" PageSize="10" CssClass="grid-solicitudes">
                         <Columns>
-                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Tipo)" Caption="Tipo de Transacción" />
-                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Cantidad)" Caption="Cantidad" Width="120px" TextAlignment="GridTextAlignment.Center" />
-                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Debitos)" Caption="Total Débitos" DisplayFormat="{0:C}" Width="180px" TextAlignment="GridTextAlignment.Right" />
-                            <DxGridDataColumn FieldName="@nameof(ResumenPorTipoDto.Creditos)" Caption="Total Créditos (Cobrado)" DisplayFormat="{0:C}" Width="180px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.SesionId)" Caption="Sesión" Width="90px" TextAlignment="GridTextAlignment.Center" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaApertura)" Caption="Apertura" DisplayFormat="dd/MM/yyyy HH:mm" Width="170px" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaCierre)" Caption="Cierre" DisplayFormat="dd/MM/yyyy HH:mm" Width="170px" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.UsuarioApertura)" Caption="Cajero" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.TotalCobrado)" Caption="Total cobrado" DisplayFormat="{0:C}" Width="150px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.MontoApertura)" Caption="Fondo inicial" DisplayFormat="{0:C}" Width="130px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.MontoCierre)" Caption="Efectivo contado" DisplayFormat="{0:C}" Width="140px" TextAlignment="GridTextAlignment.Right" />
+                            <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.Observacion)" Caption="Observación" />
                         </Columns>
                     </DxGrid>
-                }
-                else
-                {
-                    <div class="text-center py-5 text-muted">
-                        <i class="bi bi-inbox fs-1 d-block mb-3"></i>
-                        <p class="mb-0">Abra la sesión de caja para visualizar el resumen de cobros del día en tiempo real.</p>
-                    </div>
-                }
-            </div>
-        </DxTabPage>
+                </div>
+            </DxTabPage>
+        </DxTabs>
+    }
+</div>
 
-        <DxTabPage Text="Historial de Cierres">
-            <div class="p-4">
-                <DxGrid Data="_historial" ShowGroupPanel="false" PageSize="10" CssClass="grid-custom border">
-                    <Columns>
-                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.SesionId)" Caption="Sesión ID" Width="100px" TextAlignment="GridTextAlignment.Center" />
-                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaApertura)" Caption="Apertura" DisplayFormat="dd/MM/yyyy HH:mm" Width="180px" />
-                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.FechaCierre)" Caption="Cierre" DisplayFormat="dd/MM/yyyy HH:mm" Width="180px" />
-                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.UsuarioApertura)" Caption="Usuario Apertura" />
-                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.UsuarioCierre)" Caption="Usuario Cierre" />
-                        <DxGridDataColumn FieldName="@nameof(HistorialCierreDto.TotalCobrado)" Caption="Total Cobrado" DisplayFormat="{0:C}" Width="160px" TextAlignment="GridTextAlignment.Right" />
-                    </Columns>
-                </DxGrid>
+@* ---- Popup confirmar apertura de caja ---- *@
+<DxPopup @bind-Visible="_aperturaVisible" HeaderText="Abrir caja" Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Va a abrir el turno de <strong>@_miCaja?.Nombre (@_miCaja?.Codigo)</strong>
+                como cajero <strong>@_usuario</strong>. Todos los cobros del turno
+                quedarán amarrados a esta caja para el arqueo y el cierre.
+            </p>
+            <label class="form-label small text-muted fw-bold">FONDO INICIAL (OPCIONAL)</label>
+            <DxSpinEdit @bind-Value="_montoApertura" MinValue="0" DisplayFormat="N2" CssClass="w-100"
+                        NullText="Efectivo con el que inicia la caja..." />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _aperturaVisible = false)" />
+                <DxButton Text="Abrir caja" RenderStyle="ButtonRenderStyle.Success" Click="OnAbrirCaja" />
             </div>
-        </DxTabPage>
-    </DxTabs>
-}
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ---- Popup confirmar cierre de caja ---- *@
+<DxPopup @bind-Visible="_cierreVisible" HeaderText="Cerrar caja" Width="460px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Cierre del turno <strong>#@_sesionActiva?.Id</strong> de
+                <strong>@_miCaja?.Nombre</strong>:
+            </p>
+            <ul class="mb-3">
+                <li>Cobros del turno: <strong>@(_resumen?.CantidadTransacciones ?? 0)</strong></li>
+                <li>Total cobrado (sistema): <strong>@((_resumen?.TotalCreditos ?? 0m).ToString("C", Culture))</strong></li>
+                <li>Fondo inicial: <strong>@((_sesionActiva?.MontoApertura ?? 0m).ToString("C", Culture))</strong></li>
+                <li>Efectivo esperado en caja (fondo + efectivo cobrado):
+                    <strong>@EfectivoEsperado.ToString("C", Culture)</strong></li>
+            </ul>
+            <label class="form-label small text-muted fw-bold">EFECTIVO CONTADO (ARQUEO) *</label>
+            <DxSpinEdit @bind-Value="_montoCierre" MinValue="0" DisplayFormat="N2" CssClass="w-100 mb-2"
+                        NullText="Cuente el efectivo físico de la caja..." />
+            @if (_montoCierre is not null)
+            {
+                var dif = _montoCierre.Value - EfectivoEsperado;
+                <p class="mb-2 @(dif == 0 ? "text-success" : "text-danger")">
+                    <i class="bi @(dif == 0 ? "bi-check-circle" : "bi-exclamation-triangle") me-1"></i>
+                    @(dif == 0
+                        ? "El arqueo cuadra con el sistema."
+                        : $"Diferencia contra el sistema: {dif.ToString("C", Culture)} ({(dif > 0 ? "sobrante" : "faltante")}). Explíquela en las observaciones.")
+                </p>
+            }
+            <label class="form-label small text-muted fw-bold">OBSERVACIONES DEL CIERRE</label>
+            <DxMemo @bind-Text="_observacionCierre" Rows="2" CssClass="w-100" NullText="Diferencias, notas del arqueo..." />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _cierreVisible = false)" />
+                <DxButton Text="Confirmar cierre" RenderStyle="ButtonRenderStyle.Danger" Click="OnCerrarCaja"
+                          Enabled="@(_montoCierre is not null)" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ---- Popup recibo para banco ---- *@
+<DxPopup @bind-Visible="_reciboBancoVisible" HeaderText="Recibo para pagar en banco" Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Factura <strong>@_reciboBancoDoc?.NumFactura</strong> ·
+                saldo <strong>@(_reciboBancoDoc?.SaldoPendiente.ToString("C", Culture))</strong>.
+                El recibo NO rebaja la factura: el cliente lo lleva al banco y el
+                pago se aplica cuando el banco lo reporta.
+            </p>
+            @if (_reciboBancoPendientes > 0)
+            {
+                <p class="mb-2 text-warning-emphasis">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Esta factura ya tiene recibos pendientes por
+                    <strong>@_reciboBancoPendientes.ToString("C", Culture)</strong> —
+                    disponible para nuevos recibos: <strong>@_reciboBancoDisponible.ToString("C", Culture)</strong>.
+                </p>
+            }
+            <label class="form-label small text-muted fw-bold">MONTO DEL RECIBO</label>
+            @* MinValue 0 (no 0.01): si el disponible fuera menor al mínimo el
+               rango sería inválido; el botón Generar exige monto > 0. *@
+            <DxSpinEdit @bind-Value="_reciboBancoMonto" MinValue="0"
+                        MaxValue="@Math.Max(_reciboBancoDisponible, 0m)"
+                        DisplayFormat="N2" CssClass="w-100" />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _reciboBancoVisible = false)" />
+                <DxButton Text="Generar recibo" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="OnGenerarReciboBanco" Enabled="@(_reciboBancoMonto > 0)" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ---- Popup anular pendiente ---- *@
+<DxPopup @bind-Visible="_anularPendienteVisible" HeaderText="Anular recibo pendiente" Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Anular el recibo de <strong>@(_anularPendienteRecibo?.Monto.ToString("C", Culture))</strong>
+                de la factura <strong>@_anularPendienteRecibo?.NumFactura</strong>.
+            </p>
+            <label class="form-label small text-muted fw-bold">MOTIVO</label>
+            <DxMemo @bind-Text="_anularPendienteMotivo" Rows="3" CssClass="w-100" NullText="Motivo de la anulación..." />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _anularPendienteVisible = false)" />
+                <DxButton Text="Anular" RenderStyle="ButtonRenderStyle.Danger"
+                          Click="OnAnularPendiente" Enabled="@(!string.IsNullOrWhiteSpace(_anularPendienteMotivo))" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ---- Popup de reverso ---- *@
+<DxPopup @bind-Visible="_reversoVisible" HeaderText="Reversar cobro" Width="420px" ShowCloseButton="true">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="mb-2">
+                Reversar el recibo <strong>@_reversoCobro?.NumeroRecibo</strong>
+                de <strong>@_reversoCobro?.ClienteNombre</strong>
+                por <strong>@_reversoCobro?.MontoTotal.ToString("C", Culture)</strong>.
+            </p>
+            <label class="form-label small text-muted fw-bold">MOTIVO</label>
+            <DxMemo @bind-Text="_reversoMotivo" Rows="3" CssClass="w-100" NullText="Motivo del reverso..." />
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="@(() => _reversoVisible = false)" />
+                <DxButton Text="Reversar" RenderStyle="ButtonRenderStyle.Danger"
+                          Click="OnReversar" Enabled="@(!string.IsNullOrWhiteSpace(_reversoMotivo))" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
 
 @code {
+    private static readonly CultureInfo Culture = new("es-HN");
+    private static readonly string[] _formasPago = ["EFECTIVO", "BANCO"];
+
     private bool _cargando = true;
+    private bool _cargandoDocs;
+    private bool _cobrando;
+    private int _tabActiva;
     private string _usuario = "sistema";
     private string? _observacionCierre;
+    private bool _aperturaVisible;
+    private decimal? _montoApertura;
+    private bool _cierreVisible;
+    private decimal? _montoCierre;
+
+    // Fondo inicial + efectivo cobrado según el sistema (lo que debe haber en el cajón).
+    private decimal EfectivoEsperado =>
+        (_sesionActiva?.MontoApertura ?? 0m) +
+        (_resumen?.PorTipo.FirstOrDefault(t => t.Tipo == "EFECTIVO")?.Creditos ?? 0m);
+
     private SesionCajaDto? _sesionActiva;
+    private MiCajaDto? _miCaja;
     private ResumenCajaDto? _resumen;
     private IReadOnlyList<HistorialCierreDto> _historial = [];
+
+    private string? _clienteClave;
+    private List<DocumentoCobroRow> _documentos = [];
+    private string _formaPago = "EFECTIVO";
+    private long? _bancoCuentaId;
+    private IReadOnlyList<BancoDto> _bancos = [];
+
+    private IReadOnlyList<CobroDelDiaDto> _cobrosDelDia = [];
+    private bool _soloMiCaja = true;
+
+    private bool _reversoVisible;
+    private CobroDelDiaDto? _reversoCobro;
+    private string _reversoMotivo = string.Empty;
+
+    private IReadOnlyList<ReciboPendienteDto> _pendientes = [];
+    private bool _reciboBancoVisible;
+    private DocumentoCobroRow? _reciboBancoDoc;
+    private decimal _reciboBancoMonto;
+    private bool _anularPendienteVisible;
+    private ReciboPendienteDto? _anularPendienteRecibo;
+    private string _anularPendienteMotivo = string.Empty;
+
+    private decimal TotalACobrar => _documentos.Where(d => d.Seleccionado).Sum(d => d.MontoCobrar);
+
+    // Fila del grid de cobro: documento pendiente + selección + monto editable.
+    private sealed class DocumentoCobroRow
+    {
+        public int FacturaId { get; init; }
+        public string NumFactura { get; init; } = string.Empty;
+        public int NumRecibo { get; init; }
+        public DateTime FechaEmision { get; init; }
+        public string Estado { get; init; } = "A";
+        public decimal SaldoPendiente { get; init; }
+        public bool Seleccionado { get; set; }
+        public decimal MontoCobrar { get; set; }
+    }
 
     protected override async Task OnInitializedAsync()
     {
         await TenantState.EnsureCompanyAsync();
-        
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _usuario = authState.User.Identity?.Name ?? "sistema";
 
+        _bancos = await CaptacionHttp.GetBancosAsync();
         await CargarEstadoAsync();
+        await CargarCobrosDelDiaAsync();
         _cargando = false;
     }
 
     private async Task CargarEstadoAsync()
     {
+        _miCaja = await CajaHttp.GetMiCajaAsync();
         _sesionActiva = await CajaHttp.GetSesionActivaAsync(_usuario);
-
         if (_sesionActiva is not null)
             _resumen = await CajaHttp.GetResumenAsync(_sesionActiva.Id);
-
         _historial = await CajaHttp.GetHistorialAsync(_usuario) ?? [];
+    }
+
+    private void AbrirConfirmarApertura()
+    {
+        _montoApertura = null;
+        _aperturaVisible = true;
     }
 
     private async Task OnAbrirCaja()
     {
-        var result = await CajaHttp.AbrirAsync(new AbrirCajaRequestDto(_usuario));
-
+        var result = await CajaHttp.AbrirAsync(new AbrirCajaRequestDto(_usuario, null, _montoApertura));
+        Notificar(result?.Success == true, result?.Message ?? "Error al abrir caja.");
         if (result?.Success == true)
         {
-            ToastService.ShowToast(new ToastOptions 
-            { 
-                Title = "Éxito", 
-                Text = "Caja abierta correctamente.", 
-                RenderStyle = ToastRenderStyle.Success
-            });
+            _aperturaVisible = false;
             await CargarEstadoAsync();
         }
-        else
-        {
-            ToastService.ShowToast(new ToastOptions 
-            { 
-                Title = "Error", 
-                Text = result?.Message ?? "Error al abrir caja.", 
-                RenderStyle = ToastRenderStyle.Danger
-            });
-        }
+    }
+
+    private async Task AbrirConfirmarCierre()
+    {
+        if (_sesionActiva is null) return;
+        // Refrescar el resumen para que el popup muestre los totales al momento.
+        _resumen = await CajaHttp.GetResumenAsync(_sesionActiva.Id);
+        _observacionCierre = null;
+        _montoCierre = null;
+        _cierreVisible = true;
     }
 
     private async Task OnCerrarCaja()
     {
         if (_sesionActiva is null) return;
+        var result = await CajaHttp.CerrarAsync(new CerrarCajaRequestDto(_sesionActiva.Id, _usuario, _observacionCierre, _montoCierre));
+        Notificar(result?.Success == true, result?.Message ?? "Error al cerrar caja.");
+        if (result?.Success == true)
+        {
+            _cierreVisible = false;
+            _observacionCierre = null;
+            _clienteClave = null;
+            _documentos = [];
+            _pendientes = [];
+            await CargarEstadoAsync();
+        }
+    }
 
-        var result = await CajaHttp.CerrarAsync(
-            new CerrarCajaRequestDto(_sesionActiva.Id, _usuario, _observacionCierre));
+    // ---------------- Cobro ----------------
+
+    private async Task OnClienteSeleccionado(string? clave)
+    {
+        _clienteClave = clave;
+        _documentos = [];
+        _pendientes = [];
+        if (string.IsNullOrWhiteSpace(clave)) return;
+
+        _cargandoDocs = true;
+        try
+        {
+            var facturas = await AbonoHttp.ListarFacturasPendientesPorClienteAsync(clave) ?? [];
+            _documentos = facturas
+                .Where(f => f.SaldoPendiente > 0)
+                .Select(f => new DocumentoCobroRow
+                {
+                    FacturaId = f.FacturaId,
+                    NumFactura = f.NumFactura,
+                    NumRecibo = f.NumRecibo,
+                    FechaEmision = f.FechaEmision,
+                    Estado = f.Estado,
+                    SaldoPendiente = f.SaldoPendiente,
+                    MontoCobrar = f.SaldoPendiente
+                })
+                .ToList();
+
+            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(clave) ?? [];
+        }
+        finally
+        {
+            _cargandoDocs = false;
+        }
+    }
+
+    // ---------------- Recibo para banco (pendiente, NO rebaja la factura) ----------------
+
+    private decimal _reciboBancoPendientes;
+    private decimal _reciboBancoDisponible;
+
+    private void AbrirReciboBanco(DocumentoCobroRow doc)
+    {
+        // Control de recibos: lo ya emitido en pendientes descuenta el disponible
+        // (el backend valida lo mismo — esto solo evita el error al usuario).
+        var pendientes = _pendientes.Where(p => p.NumRecibo == doc.NumRecibo).Sum(p => p.Monto);
+        var disponible = Math.Max(doc.SaldoPendiente - pendientes, 0m);
+        if (disponible <= 0)
+        {
+            // Sin disponible no se abre el popup: el DxSpinEdit no admite
+            // MaxValue < MinValue y el saldo ya está cubierto por pendientes.
+            Notificar(false, $"La factura {doc.NumFactura} ya tiene recibos pendientes por todo su saldo ({pendientes.ToString("C", Culture)}). Anule un pendiente si necesita emitir otro.");
+            return;
+        }
+
+        _reciboBancoDoc = doc;
+        _reciboBancoPendientes = pendientes;
+        _reciboBancoDisponible = disponible;
+        _reciboBancoMonto = disponible;
+        _reciboBancoVisible = true;
+    }
+
+    private async Task OnGenerarReciboBanco()
+    {
+        if (_reciboBancoDoc is null || string.IsNullOrWhiteSpace(_clienteClave)) return;
+
+        var result = await AbonoHttp.GenerarReciboPendienteAsync(new GenerarReciboDto
+        {
+            NumFactura = _reciboBancoDoc.NumFactura,
+            ClienteClave = _clienteClave,
+            Monto = _reciboBancoMonto
+        });
+
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo generar el recibo.");
+        if (result?.Success == true)
+        {
+            _reciboBancoVisible = false;
+            var datos = Deserializar<GenerarReciboResponseDto>(result.Data);
+            if (datos?.TransaccionId is > 0)
+                await AbrirRecibo(datos.TransaccionId);
+            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave) ?? [];
+        }
+    }
+
+    private async Task CobrarPendiente(ReciboPendienteDto pendiente)
+    {
+        var doc = _documentos.FirstOrDefault(d => d.NumRecibo == pendiente.NumRecibo);
+        if (doc is null)
+        {
+            Notificar(false, "La factura del recibo ya no tiene saldo pendiente; anule el recibo.");
+            return;
+        }
+
+        var monto = Math.Min(pendiente.Monto, doc.SaldoPendiente);
+        var result = await CobrosHttp.RegistrarAsync(new CobroCrearDto
+        {
+            Canal = CanalCobro.Caja,
+            ClienteClave = _clienteClave!,
+            FormaPago = "EFECTIVO",
+            ReciboPendienteId = pendiente.TransaccionId,
+            Aplicaciones =
+            [
+                new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = doc.FacturaId, Monto = monto }
+            ]
+        });
 
         if (result?.Success == true)
         {
-            ToastService.ShowToast(new ToastOptions 
-            { 
-                Title = "Éxito", 
-                Text = "Caja cerrada correctamente.", 
-                RenderStyle = ToastRenderStyle.Success
-            });
-            _resumen = null;
-            _observacionCierre = null;
-            await CargarEstadoAsync();
+            var datos = Deserializar<CobroResultadoDto>(result.Data);
+            Notificar(true, $"Recibo cobrado. Folio {datos?.NumeroRecibo}.");
+            if (datos?.TransaccionId is > 0)
+                await AbrirRecibo(datos.TransaccionId);
+            await OnClienteSeleccionado(_clienteClave);
+            await CargarCobrosDelDiaAsync();
         }
         else
         {
-            ToastService.ShowToast(new ToastOptions 
-            { 
-                Title = "Error", 
-                Text = result?.Message ?? "Error al cerrar caja.", 
-                RenderStyle = ToastRenderStyle.Danger
-            });
+            Notificar(false, result?.Message ?? "No se pudo cobrar el recibo.");
         }
     }
+
+    private void AbrirAnularPendiente(ReciboPendienteDto pendiente)
+    {
+        _anularPendienteRecibo = pendiente;
+        _anularPendienteMotivo = string.Empty;
+        _anularPendienteVisible = true;
+    }
+
+    private async Task OnAnularPendiente()
+    {
+        if (_anularPendienteRecibo is null) return;
+        var result = await AbonoHttp.AnularReciboPendienteAsync(new AnularReciboPendienteDto
+        {
+            TransaccionId = _anularPendienteRecibo.TransaccionId,
+            Usuario = _usuario,
+            Motivo = _anularPendienteMotivo.Trim()
+        });
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo anular.");
+        if (result?.Success == true)
+        {
+            _anularPendienteVisible = false;
+            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave!) ?? [];
+        }
+    }
+
+    private static T? Deserializar<T>(object? data) where T : class
+        => data is null ? null : System.Text.Json.JsonSerializer.Deserialize<T>(
+            System.Text.Json.JsonSerializer.Serialize(data),
+            new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+    private void ToggleSeleccion(DocumentoCobroRow row, bool valor)
+    {
+        row.Seleccionado = valor;
+        if (valor && row.MontoCobrar <= 0) row.MontoCobrar = row.SaldoPendiente;
+    }
+
+    private void CambiarMonto(DocumentoCobroRow row, decimal valor) => row.MontoCobrar = valor;
+
+    private async Task OnCobrar()
+    {
+        var seleccionados = _documentos.Where(d => d.Seleccionado && d.MontoCobrar > 0).ToList();
+        if (seleccionados.Count == 0) return;
+        if (_formaPago == "BANCO" && _bancoCuentaId is null or <= 0)
+        {
+            Notificar(false, "Seleccione la cuenta bancaria.");
+            return;
+        }
+
+        _cobrando = true;
+        try
+        {
+            var dto = new CobroCrearDto
+            {
+                Canal = CanalCobro.Caja,
+                ClienteClave = _clienteClave!,
+                FormaPago = _formaPago,
+                BancoCuentaId = _formaPago == "BANCO" ? _bancoCuentaId : null,
+                Aplicaciones = seleccionados
+                    .Select(d => new CobroAplicacionDto
+                    {
+                        DocumentoTipo = DocumentoCobroTipo.Factura,
+                        FacturaId = d.FacturaId,
+                        Monto = d.MontoCobrar
+                    })
+                    .ToList()
+            };
+
+            var result = await CobrosHttp.RegistrarAsync(dto);
+            if (result?.Success == true)
+            {
+                var datos = System.Text.Json.JsonSerializer.Deserialize<CobroResultadoDto>(
+                    System.Text.Json.JsonSerializer.Serialize(result.Data),
+                    new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                Notificar(true, $"Cobro registrado. Recibo {datos?.NumeroRecibo}.");
+                if (datos?.TransaccionId is > 0)
+                    await AbrirRecibo(datos.TransaccionId);
+
+                await OnClienteSeleccionado(_clienteClave);
+                await CargarCobrosDelDiaAsync();
+                _resumen = _sesionActiva is not null ? await CajaHttp.GetResumenAsync(_sesionActiva.Id) : null;
+            }
+            else
+            {
+                Notificar(false, result?.Message ?? "No se pudo registrar el cobro.");
+            }
+        }
+        finally
+        {
+            _cobrando = false;
+        }
+    }
+
+    // ---------------- Cobros del día / reverso ----------------
+
+    private async Task CargarCobrosDelDiaAsync()
+    {
+        // El día de la CAJA (no del cajero): con "Solo mi caja" se ven todos los
+        // cobros de la caja asignada sin importar quién los registró; sin el
+        // filtro, todas las cajas de la empresa.
+        _cobrosDelDia = await CobrosHttp.DelDiaAsync(
+            cajaId: _soloMiCaja ? _miCaja?.CajaId : null) ?? [];
+    }
+
+    private async Task CambiarFiltroCobros(bool valor)
+    {
+        _soloMiCaja = valor;
+        await CargarCobrosDelDiaAsync();
+    }
+
+    private void AbrirReverso(CobroDelDiaDto cobro)
+    {
+        _reversoCobro = cobro;
+        _reversoMotivo = string.Empty;
+        _reversoVisible = true;
+    }
+
+    private async Task OnReversar()
+    {
+        if (_reversoCobro is null) return;
+        var result = await CobrosHttp.ReversarAsync(new CobroReversoDto
+        {
+            PagoId = _reversoCobro.PagoId,
+            Motivo = _reversoMotivo.Trim()
+        });
+        Notificar(result?.Success == true, result?.Message ?? "No se pudo reversar.");
+        if (result?.Success == true)
+        {
+            _reversoVisible = false;
+            await CargarCobrosDelDiaAsync();
+            if (!string.IsNullOrWhiteSpace(_clienteClave))
+                await OnClienteSeleccionado(_clienteClave);
+        }
+    }
+
+    private async Task AbrirRecibo(int transaccionId)
+        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{transaccionId}", "_blank");
+
+    private void Notificar(bool ok, string mensaje)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = ok ? "Éxito" : "Error",
+            Text = mensaje,
+            RenderStyle = ok ? ToastRenderStyle.Success : ToastRenderStyle.Danger
+        });
 }

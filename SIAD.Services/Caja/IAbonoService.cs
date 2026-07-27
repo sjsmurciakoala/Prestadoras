@@ -28,6 +28,9 @@ public interface IAbonoService
     // Caja — consultar recibos pendientes de una factura específica
     Task<IReadOnlyList<ReciboPendienteDto>> ListarRecibosPendientesPorFacturaAsync(string numFactura, CancellationToken ct = default);
 
+    // Recibos pendientes (para banco) de todas las facturas del cliente — vista de Caja F3
+    Task<IReadOnlyList<ReciboPendienteDto>> ListarRecibosPendientesPorClienteAsync(string clienteClave, CancellationToken ct = default);
+
     // Caja — historial de abonos ya aplicados de una factura específica
     Task<IReadOnlyList<AbonoHistorialItemDto>> ListarAbonosPorFacturaAsync(string numFactura, CancellationToken ct = default);
 

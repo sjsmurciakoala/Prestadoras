@@ -24,4 +24,13 @@ public interface ICajaService
     // Cajas físicas de la empresa con su disponibilidad (varias cajas
     // simultáneas — unificación cobranza F2)
     Task<IReadOnlyList<CajaFisicaDto>> ListarCajasAsync();
+
+    // F3: la caja asignada al usuario (la apertura la resuelve el sistema)
+    Task<MiCajaDto?> ObtenerMiCajaAsync(string usuario);
+
+    // F3: mantenimiento de cajas + asignación de cajeros
+    Task<IReadOnlyList<CajaAdminDto>> ListarCajasAdminAsync();
+    Task<CajaResponseDto> GuardarCajaAsync(CajaGuardarDto dto, string usuario);
+    Task<CajaResponseDto> AsignarCajeroAsync(AsignarCajeroDto dto, string usuario);
+    Task<CajaResponseDto> QuitarCajeroAsync(string cajero);
 }

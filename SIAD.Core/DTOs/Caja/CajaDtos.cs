@@ -5,6 +5,10 @@ namespace SIAD.Core.DTOs.Caja;
 
 // ------- Sesión activa -------
 
+// NOTA: los records de DTO deben tener UN solo constructor — System.Text.Json
+// no deserializa tipos con varios constructores parametrizados sin
+// [JsonConstructor]. No agregar sobrecargas "de compatibilidad" aquí; ante un
+// cambio de firma, Rebuild Solution.
 public record SesionCajaDto(
     int Id,
     string UsuarioApertura,
@@ -13,21 +17,33 @@ public record SesionCajaDto(
     DateTime? FechaCierre,
     string Estado,
     decimal? TotalCobrado,
-    int? CajaFisicaId = null
+    int? CajaFisicaId = null,
+    decimal? MontoApertura = null
 );
 
 // ------- Apertura / Cierre -------
 
-// CajaFisicaId: caja (ventanilla) donde se abre la sesión. Opcional durante la
-// transición F2; la UI de apertura la exige desde F3 (varias cajas simultáneas,
-// una sesión abierta por caja).
-public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null);
+// F3: la caja NO se elige — la apertura resuelve la caja ASIGNADA al usuario
+// (adm_caja_usuario). CajaFisicaId se conserva solo por compatibilidad de
+// contrato y el servicio lo ignora. MontoApertura = fondo inicial del turno.
+public record AbrirCajaRequestDto(string UsuarioApertura, int? CajaFisicaId = null, decimal? MontoApertura = null);
 
 // ------- Cajas físicas (adm_caja) -------
 
 public record CajaFisicaDto(int CajaId, string Codigo, string Nombre, bool Activo, bool Ocupada);
 
-public record CerrarCajaRequestDto(int SesionId, string UsuarioCierre, string? Observacion);
+// La caja asignada al usuario (F3: la apertura la resuelve el sistema, no un combo)
+public record MiCajaDto(int CajaId, string Codigo, string Nombre, bool Activo, bool Ocupada, string? OcupadaPor);
+
+// Mantenimiento de cajas + asignación de cajeros
+public record CajaAdminDto(int CajaId, string Codigo, string Nombre, bool Activo, bool Ocupada, IReadOnlyList<string> Asignados);
+
+public record CajaGuardarDto(int? CajaId, string Codigo, string Nombre, bool Activo);
+
+public record AsignarCajeroDto(int CajaId, string Usuario);
+
+// MontoCierre = efectivo contado por el cajero en el arqueo del cierre.
+public record CerrarCajaRequestDto(int SesionId, string UsuarioCierre, string? Observacion, decimal? MontoCierre = null);
 
 // ------- Resumen del día -------
 
@@ -49,7 +65,10 @@ public record HistorialCierreDto(
     DateTime? FechaCierre,
     string UsuarioApertura,
     string? UsuarioCierre,
-    decimal? TotalCobrado
+    decimal? TotalCobrado,
+    decimal? MontoApertura = null,
+    decimal? MontoCierre = null,
+    string? Observacion = null
 );
 
 // ------- Response genérico -------

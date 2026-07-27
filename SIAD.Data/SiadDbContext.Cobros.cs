@@ -14,6 +14,7 @@ public partial class SiadDbContext
     public virtual DbSet<adm_pago_aplicacion> adm_pago_aplicaciones { get; set; } = null!;
     public virtual DbSet<adm_documento_secuencia> adm_documento_secuencias { get; set; } = null!;
     public virtual DbSet<adm_caja> adm_cajas { get; set; } = null!;
+    public virtual DbSet<adm_caja_usuario> adm_caja_usuarios { get; set; } = null!;
 
     private void ConfigureCobrosModel(ModelBuilder modelBuilder)
     {
@@ -30,10 +31,23 @@ public partial class SiadDbContext
             entity.Property(e => e.creado_en).HasDefaultValueSql("now()");
         });
 
+        modelBuilder.Entity<adm_caja_usuario>(entity =>
+        {
+            entity.HasKey(e => e.caja_usuario_id).HasName("adm_caja_usuario_pkey");
+            entity.ToTable("adm_caja_usuario", "public");
+            entity.Property(e => e.caja_usuario_id).UseIdentityAlwaysColumn();
+            entity.HasIndex(e => new { e.company_id, e.usuario }, "uq_adm_caja_usuario").IsUnique();
+            entity.Property(e => e.usuario).HasMaxLength(100);
+            entity.Property(e => e.updated_by).HasMaxLength(100);
+            entity.Property(e => e.creado_en).HasDefaultValueSql("now()");
+        });
+
         // La sesión legacy gana la caja física (columna nueva post-scaffold)
         modelBuilder.Entity<sesion_caja>(entity =>
         {
             entity.Property(e => e.caja_fisica_id).IsRequired(false);
+            entity.Property(e => e.monto_apertura).IsRequired(false).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.monto_cierre).IsRequired(false).HasColumnType("numeric(18,2)");
         });
 
         modelBuilder.Entity<adm_pago>(entity =>

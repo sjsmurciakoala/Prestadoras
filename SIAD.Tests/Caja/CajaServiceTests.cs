@@ -1,4 +1,5 @@
 using System;
+using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
@@ -10,6 +11,11 @@ using SIAD.Tests.Infrastructure;
 
 namespace SIAD.Tests.Caja;
 
+/// <summary>
+/// Sesiones de caja (F3, unificación cobranza): la apertura resuelve la caja
+/// ASIGNADA al usuario (adm_caja_usuario) — sin asignación no se puede cobrar;
+/// una sola sesión ABIERTA por caja; varias cajas operan simultáneamente.
+/// </summary>
 [Collection("Postgres")]
 public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
 {
@@ -22,7 +28,6 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
 
     public new async Task InitializeAsync()
     {
-        // First run the base initialization to setup Connection and Transaction
         await base.InitializeAsync();
 
         if (Fixture.Available)
@@ -33,10 +38,8 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
 
             var mockCompanyService = new TestCurrentCompanyService(CompanyId);
             _context = new SiadDbContext(options, mockCompanyService);
-            
-            // EF Core needs to use the transaction initiated by IntegrationTestBase
             _context.Database.UseTransaction(Transaction);
-            
+
             _service = new CajaService(_context);
         }
     }
@@ -47,151 +50,239 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
         return base.DisposeAsync();
     }
 
+    /// <summary>Crea una caja y asigna al usuario (modelo F3: la apertura la exige).</summary>
+    private async Task<int> AsignarCajaAsync(string usuario, string codigo = "CAJA-T1")
+    {
+        var caja = await _context!.adm_cajas.FirstOrDefaultAsync(c => c.codigo == codigo);
+        if (caja is null)
+        {
+            caja = new SIAD.Core.Entities.adm_caja
+            {
+                company_id = CompanyId,
+                codigo = codigo,
+                nombre = $"Caja test {codigo}",
+                activo = true
+            };
+            _context.adm_cajas.Add(caja);
+            await _context.SaveChangesAsync();
+        }
+
+        var resultado = await _service!.AsignarCajeroAsync(new AsignarCajeroDto(caja.caja_id, usuario), "test");
+        Assert.True(resultado.Success, resultado.Message);
+        return caja.caja_id;
+    }
+
     [SkippableFact]
-    public async Task AbrirCaja_CuandoNoHaySesionActiva_DebeCrearSesion()
+    public async Task AbrirCaja_SinAsignacion_DebeRechazar()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
-        // Act
+        var result = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("sin_caja"));
+
+        Assert.False(result.Success);
+        Assert.Contains("No tiene una caja asignada", result.Message);
+    }
+
+    [SkippableFact]
+    public async Task AbrirCaja_ConAsignacion_AbreEnSuCaja()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        var cajaId = await AsignarCajaAsync("test_user");
+
         var result = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("test_user"));
 
-        // Assert
-        Assert.True(result.Success);
-        Assert.NotNull(result.Data);
+        Assert.True(result.Success, result.Message);
 
         var sesionActiva = await _service.ObtenerSesionActivaAsync("test_user");
         Assert.NotNull(sesionActiva);
         Assert.Equal("ABIERTA", sesionActiva.Estado);
-        Assert.Equal("test_user", sesionActiva.UsuarioApertura);
+        Assert.Equal(cajaId, sesionActiva.CajaFisicaId);
     }
 
     [SkippableFact]
     public async Task AbrirCaja_CuandoYaHaySesionAbierta_DebeRechazar()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        // Arrange
+        await AsignarCajaAsync("user1");
         await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("user1"));
 
-        // Act - segunda apertura sobre el mismo usuario
         var result = await _service.AbrirCajaAsync(new AbrirCajaRequestDto("user1"));
 
-        // Assert
         Assert.False(result.Success);
         Assert.Equal("El usuario ya tiene una sesión de caja abierta.", result.Message);
     }
 
     [SkippableFact]
-    public async Task CerrarCaja_DespuesDeAbrir_DebeCerrarConTotal()
+    public async Task Una_caja_no_acepta_segundo_cajero_y_la_reasignacion_es_quitar_y_asignar()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await AsignarCajaAsync("cajero_a", "CAJA-OCUP");
+        var caja = await _context!.adm_cajas.AsNoTracking().FirstAsync(c => c.codigo == "CAJA-OCUP");
 
-        // Arrange
-        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("user1"));
-        var sesionId = (int)apertura.Data!;
+        // Regla 1:1: la caja ya tiene cajero → rechaza al segundo con instrucción
+        var segundo = await _service!.AsignarCajeroAsync(new AsignarCajeroDto(caja.caja_id, "cajero_b"), "test");
+        Assert.False(segundo.Success);
+        Assert.Contains("ya está asignada a cajero_a", segundo.Message);
 
-        // Act
-        var cierre = await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesionId, "user1", "cierre test"));
+        // Flujo correcto de reasignación: quitar la asignación actual y asignar
+        Assert.True((await _service.QuitarCajeroAsync("cajero_a")).Success);
+        var reasignado = await _service.AsignarCajeroAsync(new AsignarCajeroDto(caja.caja_id, "cajero_b"), "test");
+        Assert.True(reasignado.Success, reasignado.Message);
 
-        // Assert
-        Assert.True(cierre.Success);
-
-        var sesionActiva = await _service.ObtenerSesionActivaAsync("user1");
-        Assert.Null(sesionActiva); // ya no hay sesión activa
+        var mia = await _service.ObtenerMiCajaAsync("cajero_b");
+        Assert.NotNull(mia);
+        Assert.Equal(caja.caja_id, mia.CajaId);
     }
 
     [SkippableFact]
-    public async Task CerrarCaja_ConTransaccionesAsociadas_DebeCalcularTotalCorrectamente()
+    public async Task Quitar_o_mover_cajero_con_turno_abierto_se_rechaza()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        // Arrange
-        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("user_trans"));
-        var sesionId = (int)apertura.Data!;
-
-        // Insert a dummy transaccion_abonado linked to this caja
-        var transaccion = new SIAD.Core.Entities.transaccion_abonado
-        {
-            company_id = CompanyId,
-            caja_id = sesionId,
-            creditos = 750.50m,
-            debitos = 0m,
-            estado = "C", // Cobrado
-            descripcion = "Pago Factura Dummy de Prueba"
-        };
-        _context!.transaccion_abonados.Add(transaccion);
-        await _context.SaveChangesAsync();
-
-        // Act
-        var cierre = await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesionId, "user_trans", "cierre con recaudacion"));
-
-        // Assert
-        Assert.True(cierre.Success);
-
-        // Fetch closed session from DB directly to verify total_cobrado
-        var sesionCerrada = await _context.sesion_cajas.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.id == sesionId);
-        Assert.NotNull(sesionCerrada);
-        Assert.Equal("CERRADA", sesionCerrada.estado);
-        Assert.Equal(750.50m, sesionCerrada.total_cobrado);
-    }
-
-    // ------------------------------------------------------------------------
-    // Cajas físicas (unificación cobranza F2): varias cajas simultáneas, una
-    // sesión abierta por caja, disponibilidad visible en el listado.
-    // ------------------------------------------------------------------------
-
-    [SkippableFact]
-    public async Task AbrirCaja_EnCajaFisica_QuedaVinculadaYSoloUnaSesionPorCaja()
-    {
-        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
-
-        var caja = await _context!.adm_cajas.AsNoTracking().FirstOrDefaultAsync(c => c.activo);
-        Assert.NotNull(caja); // seed CAJA-01 del DDL F2
-
-        // Cajero 1 abre en la caja física
-        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero1", caja.caja_id));
+        await AsignarCajaAsync("cajero_turno", "CAJA-TUR");
+        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_turno"));
         Assert.True(apertura.Success, apertura.Message);
 
-        var sesion = await _service.ObtenerSesionActivaAsync("cajero1");
+        // Con el turno abierto no se puede ni quitar ni mover al cajero
+        var quitar = await _service.QuitarCajeroAsync("cajero_turno");
+        Assert.False(quitar.Success);
+        Assert.Contains("turno de caja abierto", quitar.Message);
+
+        var otra = await _service.GuardarCajaAsync(new CajaGuardarDto(null, "CAJA-TUR2", "Otra", true), "admin");
+        var mover = await _service.AsignarCajeroAsync(new AsignarCajeroDto((int)otra.Data!, "cajero_turno"), "admin");
+        Assert.False(mover.Success);
+        Assert.Contains("turno de caja abierto", mover.Message);
+
+        // Cerrado el turno, quitar procede
+        var sesion = await _service.ObtenerSesionActivaAsync("cajero_turno");
+        await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesion!.Id, "cajero_turno", null, 0m));
+        Assert.True((await _service.QuitarCajeroAsync("cajero_turno")).Success);
+    }
+
+    [SkippableFact]
+    public async Task Apertura_guarda_fondo_inicial_del_turno()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await AsignarCajaAsync("cajero_fondo", "CAJA-FON");
+
+        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_fondo", null, 500m));
+        Assert.True(apertura.Success, apertura.Message);
+
+        var sesion = await _service.ObtenerSesionActivaAsync("cajero_fondo");
         Assert.NotNull(sesion);
-        Assert.Equal(caja.caja_id, sesion.CajaFisicaId);
-
-        // Cajero 2 intenta abrir en la MISMA caja → rechazado
-        var ocupada = await _service.AbrirCajaAsync(new AbrirCajaRequestDto("cajero2", caja.caja_id));
-        Assert.False(ocupada.Success);
-        Assert.Contains("ya tiene una sesión abierta", ocupada.Message);
-
-        // El listado refleja la ocupación
-        var cajas = await _service.ListarCajasAsync();
-        var laCaja = Assert.Single(cajas, c => c.CajaId == caja.caja_id);
-        Assert.True(laCaja.Ocupada);
+        Assert.Equal(500m, sesion.MontoApertura);
     }
 
     [SkippableFact]
     public async Task VariasCajas_OperanSimultaneamente_CadaUnaConSuCajero()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await AsignarCajaAsync("cajero_1", "CAJA-S1");
+        await AsignarCajaAsync("cajero_2", "CAJA-S2");
 
-        var caja1 = await _context!.adm_cajas.AsNoTracking().FirstAsync(c => c.activo);
-        _context.adm_cajas.Add(new SIAD.Core.Entities.adm_caja
-        {
-            company_id = CompanyId,
-            codigo = "CAJA-T2",
-            nombre = "Caja test 2",
-            activo = true
-        });
-        await _context.SaveChangesAsync();
-        var caja2 = await _context.adm_cajas.AsNoTracking().FirstAsync(c => c.codigo == "CAJA-T2");
-
-        var a1 = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_a", caja1.caja_id));
-        var a2 = await _service.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_b", caja2.caja_id));
+        var a1 = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_1"));
+        var a2 = await _service.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_2"));
 
         Assert.True(a1.Success, a1.Message);
         Assert.True(a2.Success, a2.Message);
 
         var cajas = await _service.ListarCajasAsync();
-        Assert.True(cajas.Where(c => c.CajaId == caja1.caja_id || c.CajaId == caja2.caja_id)
-            .All(c => c.Ocupada));
+        Assert.True(cajas.Where(c => c.Codigo is "CAJA-S1" or "CAJA-S2").All(c => c.Ocupada));
+    }
+
+    [SkippableFact]
+    public async Task MiCaja_refleja_asignacion_y_ocupacion()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        Assert.Null(await _service!.ObtenerMiCajaAsync("nadie"));
+
+        await AsignarCajaAsync("cajero_mi", "CAJA-MI");
+        var libre = await _service.ObtenerMiCajaAsync("cajero_mi");
+        Assert.NotNull(libre);
+        Assert.False(libre.Ocupada);
+
+        await _service.AbrirCajaAsync(new AbrirCajaRequestDto("cajero_mi"));
+        var ocupada = await _service.ObtenerMiCajaAsync("cajero_mi");
+        Assert.NotNull(ocupada);
+        Assert.True(ocupada.Ocupada);
+        Assert.Equal("cajero_mi", ocupada.OcupadaPor);
+    }
+
+    [SkippableFact]
+    public async Task CerrarCaja_DespuesDeAbrir_DebeCerrarConTotal()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await AsignarCajaAsync("user1");
+
+        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("user1"));
+        var sesionId = (int)apertura.Data!;
+
+        var cierre = await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesionId, "user1", "cierre test"));
+
+        Assert.True(cierre.Success);
+
+        var sesionActiva = await _service.ObtenerSesionActivaAsync("user1");
+        Assert.Null(sesionActiva);
+    }
+
+    [SkippableFact]
+    public async Task CerrarCaja_ConTransaccionesAsociadas_DebeCalcularTotalCorrectamente()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await AsignarCajaAsync("user_trans");
+
+        var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("user_trans"));
+        var sesionId = (int)apertura.Data!;
+
+        var transaccion = new SIAD.Core.Entities.transaccion_abonado
+        {
+            company_id = CompanyId,
+            caja_id = sesionId,
+            creditos = 750.50m,
+            debitos = 0m,
+            estado = "C",
+            descripcion = "Pago Factura Dummy de Prueba"
+        };
+        _context!.transaccion_abonados.Add(transaccion);
+        await _context.SaveChangesAsync();
+
+        var cierre = await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesionId, "user_trans", "cierre con recaudacion", 750.50m));
+
+        Assert.True(cierre.Success);
+
+        var sesionCerrada = await _context.sesion_cajas.IgnoreQueryFilters().FirstOrDefaultAsync(s => s.id == sesionId);
+        Assert.NotNull(sesionCerrada);
+        Assert.Equal("CERRADA", sesionCerrada.estado);
+        Assert.Equal(750.50m, sesionCerrada.total_cobrado);
+        Assert.Equal(750.50m, sesionCerrada.monto_cierre); // arqueo auditable
+    }
+
+    [SkippableFact]
+    public async Task Mantenimiento_crear_caja_y_reasignar_cajero()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.GuardarCajaAsync(new CajaGuardarDto(null, "caja-m1", "Caja mantenimiento", true), "admin");
+        Assert.True(creada.Success, creada.Message);
+
+        var duplicada = await _service.GuardarCajaAsync(new CajaGuardarDto(null, "CAJA-M1", "Otra", true), "admin");
+        Assert.False(duplicada.Success);
+
+        var cajaId = (int)creada.Data!;
+        var asignado = await _service.AsignarCajeroAsync(new AsignarCajeroDto(cajaId, "cajero_m"), "admin");
+        Assert.True(asignado.Success, asignado.Message);
+
+        // Reasignar lo MUEVE de caja (un usuario pertenece a una sola caja)
+        var otra = await _service.GuardarCajaAsync(new CajaGuardarDto(null, "CAJA-M2", "Caja dos", true), "admin");
+        var movido = await _service.AsignarCajeroAsync(new AsignarCajeroDto((int)otra.Data!, "cajero_m"), "admin");
+        Assert.True(movido.Success, movido.Message);
+
+        var admin = await _service.ListarCajasAdminAsync();
+        Assert.DoesNotContain("cajero_m", admin.First(c => c.Codigo == "CAJA-M1").Asignados);
+        Assert.Contains("cajero_m", admin.First(c => c.Codigo == "CAJA-M2").Asignados);
+
+        var quitado = await _service.QuitarCajeroAsync("cajero_m");
+        Assert.True(quitado.Success, quitado.Message);
+        Assert.Null(await _service.ObtenerMiCajaAsync("cajero_m"));
     }
 
     private class TestCurrentCompanyService : ICurrentCompanyService

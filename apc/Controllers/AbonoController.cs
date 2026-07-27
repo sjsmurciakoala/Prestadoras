@@ -107,6 +107,14 @@ public class AbonoController : ControllerBase
         return Ok(result);
     }
 
+    // Recibos pendientes (para banco) de todas las facturas del cliente — Caja F3
+    [HttpGet("recibos-pendientes-cliente")]
+    public async Task<IActionResult> RecibosPendientesCliente([FromQuery] string clave, CancellationToken ct)
+    {
+        var result = await _abonoService.ListarRecibosPendientesPorClienteAsync(clave, ct);
+        return Ok(result);
+    }
+
     [HttpGet("historial-factura/{numFactura}")]
     public async Task<IActionResult> HistorialFactura(string numFactura, CancellationToken ct)
     {

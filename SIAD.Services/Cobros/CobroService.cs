@@ -73,7 +73,9 @@ public class CobroService : ICobroService
 
         var companyId = _currentCompanyService.GetCompanyId();
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
-        var fechaPago = dto.FechaPago?.Date ?? DateTime.UtcNow.Date;
+        // Fecha LOCAL del servidor (Honduras): el "día" de la caja es el día
+        // operativo, no el UTC (con UTC un cobro de las 6pm caía en mañana).
+        var fechaPago = dto.FechaPago?.Date ?? DateTime.Now.Date;
         var fechaHoy = DateOnly.FromDateTime(fechaPago);
         var montoTotal = dto.Aplicaciones.Sum(a => a.Monto);
         var referencia = string.IsNullOrWhiteSpace(dto.ReferenciaExterna) ? null : dto.ReferenciaExterna.Trim();
@@ -126,7 +128,11 @@ public class CobroService : ICobroService
         // ---------- Plan pre-tx (solo lectura): validación y derrame proyectado ----------
         // Base del kardex bancario (que postea su propia transacción, patrón legacy)
         // y validación temprana. El derrame definitivo se recalcula DENTRO de la
-        // transacción con las filas bloqueadas.
+        // transacción con las filas bloqueadas — MISMA estrategia (porcentajes).
+        var porcentajes = await CargarPorcentajesDesgloseAsync(
+            _context.Database.GetDbConnection(), companyId,
+            _context.Database.CurrentTransaction?.GetDbTransaction(), ct);
+
         var planContable = new List<(string? ServicioCodigo, decimal Monto)>();
         int? categoriaServicioId = null;
         bool? conMedicion = null;
@@ -152,11 +158,19 @@ public class CobroService : ICobroService
                 conMedicion = vista.con_medicion;
             }
 
+            // Clones desconectados para proyectar el derrame sin tocar nada.
             var lineas = await _context.factura_detalles
                 .AsNoTracking()
                 .Where(d => d.factura_id == vista.id)
                 .OrderBy(d => d.id)
-                .Select(d => new { d.montovalor_saldo, d.montovalor, d.tiposervicio, d.codigo })
+                .Select(d => new factura_detalle
+                {
+                    id = d.id,
+                    montovalor_saldo = d.montovalor_saldo,
+                    montovalor = d.montovalor,
+                    tiposervicio = d.tiposervicio,
+                    codigo = d.codigo
+                })
                 .ToListAsync(ct);
 
             var saldoDetalles = lineas.Sum(d => d.montovalor_saldo ?? d.montovalor ?? 0m);
@@ -168,20 +182,18 @@ public class CobroService : ICobroService
                 return ResponseModelDto.Fail(
                     $"El monto aplicado ({apl.Monto:N2}) excede el saldo pendiente ({saldoPendiente:N2}) de la factura {vista.numfactura ?? vista.numrecibo.ToString()}.");
 
-            var restantePlan = apl.Monto;
-            foreach (var linea in lineas)
-            {
-                if (restantePlan <= 0) break;
-                var lineSaldo = linea.montovalor_saldo ?? linea.montovalor ?? 0m;
-                if (lineSaldo <= 0) continue;
-                var aplicado = Math.Min(restantePlan, lineSaldo);
-                planContable.Add((
-                    string.IsNullOrWhiteSpace(linea.tiposervicio) ? linea.codigo : linea.tiposervicio,
-                    aplicado));
-                restantePlan -= aplicado;
-            }
+            var lineasPlan = new List<(int, int?, decimal)>();
+            var restantePlan = AplicarMontoALineas(vista.id, lineas, apl.Monto, porcentajes, lineasPlan, planContable);
             if (restantePlan > 0)
                 planContable.Add((null, restantePlan));
+        }
+
+        // Recibos misceláneos legacy: las líneas contables van contra la CxC
+        // GENERAL (servicio null), no la analítica — la aplicación por línea a
+        // los documentos (adm_pago_aplicacion) no cambia.
+        if (dto.CxcGeneral)
+        {
+            planContable = [(null, montoTotal)];
         }
 
         var documentoContable = ResolverDocumentoContable(dto.TipoLegacy);
@@ -289,22 +301,10 @@ public class CobroService : ICobroService
                     return ResponseModelDto.Fail(
                         $"El saldo de la factura {factura.numfactura ?? factura.numrecibo.ToString()} cambió; vuelva a consultar e intente de nuevo.");
 
-                var restante = apl.Monto;
-                foreach (var detalle in detalles)
-                {
-                    if (restante <= 0) break;
-                    var lineSaldo = detalle.montovalor_saldo ?? detalle.montovalor ?? 0m;
-                    if (lineSaldo <= 0) continue;
-
-                    var aplicado = Math.Min(restante, lineSaldo);
-                    detalle.montovalor_saldo = lineSaldo - aplicado;
-                    restante -= aplicado;
-
-                    lineasAplicadas.Add((factura.id, detalle.id, aplicado));
-                    aplicacionesContables.Add((
-                        string.IsNullOrWhiteSpace(detalle.tiposervicio) ? detalle.codigo : detalle.tiposervicio,
-                        aplicado));
-                }
+                // Derrame definitivo: prioridad a otros cargos + distribución por
+                // porcentajes configurados (o FIFO si no hay configuración).
+                var restante = AplicarMontoALineas(
+                    factura.id, detalles, apl.Monto, porcentajes, lineasAplicadas, aplicacionesContables);
 
                 if (restante > 0)
                 {
@@ -336,6 +336,13 @@ public class CobroService : ICobroService
                 });
             }
 
+            if (dto.CxcGeneral)
+            {
+                // La contabilidad va a la CxC general; el detalle por línea de
+                // adm_pago_aplicacion se conserva intacto.
+                aplicacionesContables = [(null, montoTotal)];
+            }
+
             // ---------- Fila espejo legacy (dual-write, muere en F7) ----------
             var saldoActualCliente = await ObtenerSaldoClienteAsync(dto.ClienteClave, ct);
 
@@ -354,7 +361,7 @@ public class CobroService : ICobroService
                 pendiente.creditos = montoTotal;
                 pendiente.saldo = saldoActualCliente - montoTotal;
                 pendiente.saldo_detalle = montoTotal;
-                pendiente.descripcion = $"Abono parcial factura :Recibo # :{numReciboPrincipal}";
+                pendiente.descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}";
                 pendiente.usuario = usuario;
                 pendiente.caja_id = sesionCajaId;
                 pendiente.ciclo = clienteInfo?.ciclos_id?.ToString();
@@ -375,7 +382,7 @@ public class CobroService : ICobroService
                     fecha_docu = fechaHoy,
                     tipo_partida = dto.TipoPartidaLegacy,
                     banco = banco,
-                    descripcion = $"Abono parcial factura :Recibo # :{numReciboPrincipal}",
+                    descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}",
                     debitos = 0,
                     creditos = montoTotal,
                     saldo = saldoActualCliente - montoTotal,
@@ -451,6 +458,7 @@ public class CobroService : ICobroService
 
             // ---------- Comprobante contable (efectivo; banco ya posteó su partida) ----------
             long? polizaId = null;
+            var polizaEncolada = false;
             if (!integrarBancos)
             {
                 var config = await IntegracionContableConfigSql.ObtenerConfigAsync(connection, companyId, dbTransaction, ct);
@@ -488,6 +496,7 @@ public class CobroService : ICobroService
                         dbTransaction,
                         ct);
 
+                    polizaEncolada = polizaId is null;
                     if (polizaId.HasValue)
                     {
                         pago.poliza_id = polizaId;
@@ -505,6 +514,8 @@ public class CobroService : ICobroService
                 MontoTotal = montoTotal,
                 NuevoSaldoCliente = saldoActualCliente - montoTotal,
                 PolizaId = polizaId,
+                PolizaEncolada = polizaEncolada,
+                BanKardexId = movimientoBanco?.BanKardexId,
                 TransaccionId = espejo.ide,
                 Aplicaciones = resultados
             }, "Cobro registrado correctamente.");
@@ -647,9 +658,187 @@ public class CobroService : ICobroService
         }
     }
 
+    public async Task<IReadOnlyList<CobroDelDiaDto>> ListarCobrosDelDiaAsync(
+        DateTime? fecha, string? usuario, int? cajaFisicaId = null, CancellationToken ct = default)
+    {
+        var companyId = _currentCompanyService.GetCompanyId();
+        // Mismo criterio que el registro: día LOCAL del servidor.
+        var dia = DateOnly.FromDateTime(fecha?.Date ?? DateTime.Now.Date);
+
+        var query = from p in _context.adm_pagos.AsNoTracking()
+                    where p.company_id == companyId && p.fecha == dia
+                    join c in _context.cliente_maestros.AsNoTracking()
+                        on p.cliente_clave equals c.maestro_cliente_clave into clientes
+                    from c in clientes.DefaultIfEmpty()
+                    join s in _context.sesion_cajas.AsNoTracking()
+                        on p.sesion_caja_id equals (int?)s.id into sesiones
+                    from s in sesiones.DefaultIfEmpty()
+                    join k in _context.adm_cajas.AsNoTracking()
+                        on s.caja_fisica_id equals (int?)k.caja_id into cajas
+                    from k in cajas.DefaultIfEmpty()
+                    orderby p.pago_id descending
+                    select new
+                    {
+                        p.pago_id,
+                        p.numero_recibo,
+                        p.fecha,
+                        p.cliente_clave,
+                        ClienteNombre = c != null ? c.maestro_cliente_nombre : string.Empty,
+                        p.monto_total,
+                        p.forma_pago,
+                        p.estado_id,
+                        p.usuario,
+                        CajaNombre = k != null ? k.nombre : null,
+                        CajaFisicaId = s != null ? s.caja_fisica_id : null,
+                        p.transaccion_abonado_ide
+                    };
+
+        if (!string.IsNullOrWhiteSpace(usuario))
+        {
+            var u = usuario.Trim();
+            query = query.Where(x => x.usuario == u);
+        }
+
+        if (cajaFisicaId is > 0)
+        {
+            query = query.Where(x => x.CajaFisicaId == cajaFisicaId.Value);
+        }
+
+        var items = await query.Take(500).ToListAsync(ct);
+        return items.Select(x => new CobroDelDiaDto
+        {
+            PagoId = x.pago_id,
+            NumeroRecibo = x.numero_recibo,
+            Fecha = x.fecha.ToDateTime(TimeOnly.MinValue),
+            ClienteClave = x.cliente_clave,
+            ClienteNombre = x.ClienteNombre ?? string.Empty,
+            MontoTotal = x.monto_total,
+            FormaPago = x.forma_pago,
+            EstadoId = x.estado_id,
+            Estado = x.estado_id switch
+            {
+                EstadoPago.Aplicado => "APLICADO",
+                EstadoPago.Pendiente => "PENDIENTE",
+                EstadoPago.Anulado => "ANULADO",
+                EstadoPago.Reversado => "REVERSADO",
+                _ => x.estado_id.ToString()
+            },
+            Usuario = x.usuario,
+            CajaNombre = x.CajaNombre,
+            TransaccionId = x.transaccion_abonado_ide
+        }).ToList();
+    }
+
     // ------------------------------------------------------------------------
     // Helpers
     // ------------------------------------------------------------------------
+
+    /// <summary>
+    /// Porcentajes de aplicación por servicio (adm_desglose_abono_porcentaje,
+    /// mantenimiento /tarifario/desglose-abonos). Solo gobiernan la aplicación
+    /// si suman exactamente 100; sin configuración el derrame es FIFO.
+    /// </summary>
+    private static async Task<Dictionary<string, decimal>> CargarPorcentajesDesgloseAsync(
+        System.Data.Common.DbConnection connection, long companyId, IDbTransaction? transaction, CancellationToken ct)
+    {
+        var filas = await connection.QueryAsync<(string Codigo, decimal Porcentaje)>(new CommandDefinition(
+            "SELECT item_codigo, porcentaje FROM public.adm_desglose_abono_porcentaje WHERE company_id = @CompanyId",
+            new { CompanyId = companyId }, transaction, cancellationToken: ct));
+        return filas.ToDictionary(f => f.Codigo.Trim().ToUpperInvariant(), f => f.Porcentaje);
+    }
+
+    /// <summary>
+    /// Aplica un monto a las líneas de una factura y registra la aplicación.
+    /// Con porcentajes configurados (suma 100): PRIORIDAD a las líneas NO
+    /// configuradas (otros cargos) en FIFO, y el resto se distribuye entre los
+    /// servicios configurados presentes según su porcentaje (renormalizado),
+    /// con redistribución al saturarse una línea y residuo de redondeo en FIFO.
+    /// Sin configuración: FIFO puro (comportamiento previo). Devuelve el
+    /// remanente no aplicable a líneas (facturas legacy con saldo solo en
+    /// encabezado).
+    /// </summary>
+    private static decimal AplicarMontoALineas(
+        int facturaId,
+        IReadOnlyList<factura_detalle> detalles,
+        decimal monto,
+        IReadOnlyDictionary<string, decimal> porcentajes,
+        List<(int FacturaId, int? DetalleId, decimal Monto)> lineasAplicadas,
+        List<(string? ServicioCodigo, decimal Monto)> aplicacionesContables)
+    {
+        var restante = monto;
+
+        static decimal Saldo(factura_detalle d) => d.montovalor_saldo ?? d.montovalor ?? 0m;
+        static string? ServicioCodigo(factura_detalle d) =>
+            string.IsNullOrWhiteSpace(d.tiposervicio) ? d.codigo : d.tiposervicio;
+        static string Clave(factura_detalle d) => ServicioCodigo(d)?.Trim().ToUpperInvariant() ?? string.Empty;
+
+        void Aplicar(factura_detalle d, decimal aplicado)
+        {
+            d.montovalor_saldo = Saldo(d) - aplicado;
+            restante -= aplicado;
+            lineasAplicadas.Add((facturaId, d.id, aplicado));
+            aplicacionesContables.Add((ServicioCodigo(d), aplicado));
+        }
+
+        var usarPorcentajes = porcentajes.Count > 0 && porcentajes.Values.Sum() == 100m;
+
+        if (usarPorcentajes)
+        {
+            // 1) Prioridad: líneas fuera de la configuración (otros cargos) en FIFO.
+            foreach (var d in detalles)
+            {
+                if (restante <= 0) break;
+                var s = Saldo(d);
+                if (s <= 0 || porcentajes.ContainsKey(Clave(d))) continue;
+                Aplicar(d, Math.Min(restante, s));
+            }
+
+            // 2) Distribución porcentual (renormalizada a los servicios presentes),
+            //    con vueltas de redistribución cuando una línea se satura.
+            for (var vuelta = 0; vuelta < 10 && restante > 0m; vuelta++)
+            {
+                var activos = detalles
+                    .Where(d => Saldo(d) > 0 && porcentajes.ContainsKey(Clave(d)))
+                    .GroupBy(Clave)
+                    .ToList();
+                if (activos.Count == 0) break;
+
+                var pesoTotal = activos.Sum(g => porcentajes[g.Key]);
+                if (pesoTotal <= 0) break;
+
+                var presupuesto = restante;
+                var asignado = false;
+                foreach (var grupo in activos)
+                {
+                    var objetivo = decimal.Round(
+                        presupuesto * porcentajes[grupo.Key] / pesoTotal, 2, MidpointRounding.AwayFromZero);
+                    foreach (var d in grupo)
+                    {
+                        if (objetivo <= 0 || restante <= 0) break;
+                        var s = Saldo(d);
+                        if (s <= 0) continue;
+                        var aplicado = Math.Min(Math.Min(objetivo, s), restante);
+                        if (aplicado <= 0) continue;
+                        Aplicar(d, aplicado);
+                        objetivo -= aplicado;
+                        asignado = true;
+                    }
+                }
+                if (!asignado) break;
+            }
+        }
+
+        // FIFO: derrame normal sin configuración, o residuo de redondeo con ella.
+        foreach (var d in detalles)
+        {
+            if (restante <= 0) break;
+            var s = Saldo(d);
+            if (s <= 0) continue;
+            Aplicar(d, Math.Min(restante, s));
+        }
+
+        return restante;
+    }
 
     private async Task<ResponseModelDto?> BuscarCobroPorReferenciaAsync(long companyId, string referencia, CancellationToken ct)
     {

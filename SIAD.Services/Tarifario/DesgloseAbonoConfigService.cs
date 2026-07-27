@@ -36,6 +36,11 @@ public sealed class DesgloseAbonoConfigService : IDesgloseAbonoConfigService
             FROM adm_servicio s
             WHERE s.company_id = @companyId
               AND s.status_id  = 1
+              -- Solo los servicios del ciclo de facturación (revisión 2026-07-27):
+              -- asignables al cliente (agua, alcantarillado) o generados por regla
+              -- (tasas ERSAPS/ambiental). Los colaterales (reconexión, materiales,
+              -- etc.) no participan del desglose porcentual del abono.
+              AND (s.es_asignable_cliente OR s.genera_por_regla)
             UNION ALL
             SELECT @saldoAnterior, 'Saldo anterior', 9000, FALSE
         ) i

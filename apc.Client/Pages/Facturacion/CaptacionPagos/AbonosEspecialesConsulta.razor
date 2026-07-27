@@ -1,4 +1,4 @@
-@page "/facturacion/captacion/abonos-especiales/consulta"
+@page "/facturacion/caja/consulta"
 @attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 
 @using DevExpress.Blazor
@@ -18,17 +18,17 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>SIAD - Consulta de Abonos Especiales</PageTitle>
+<PageTitle>SIAD - Consulta de cobros</PageTitle>
 
 <div class="page-container">
     <DxToastProvider Name="@ToastName" MaxToastCount="4" />
 
     <div class="header-section">
         <div>
-            <h2 class="page-title">Consulta de Abonos Especiales</h2>
-            <p class="page-subtitle">Clientes con abonos especiales pagados, no aplicados o anulados</p>
+            <h2 class="page-title">Consulta de cobros</h2>
+            <p class="page-subtitle">Cobros y abonos registrados: pagados, no aplicados o anulados</p>
         </div>
-        <DxButton Text="Registrar abono" Click="IrARegistrar" IconCssClass="bi bi-plus-lg"
+        <DxButton Text="Ir a caja" Click="IrARegistrar" IconCssClass="bi bi-plus-lg"
                   RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" />
     </div>
 
@@ -537,7 +537,7 @@
 
     // ── Toolbar / layout ──
 
-    private void IrARegistrar() => Navigation.NavigateTo("/facturacion/captacion/abonos-especiales");
+    private void IrARegistrar() => Navigation.NavigateTo("/facturacion/caja");
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 

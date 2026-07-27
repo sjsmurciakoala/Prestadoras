@@ -171,9 +171,10 @@ se numeran igual y **no llevan CAI** (`numfactura` vacío).
 **Qué sigue usando CAI (sin cambios):** factura (FAC), NC y ND, con su flujo
 actual (`adm_cai_facturacion` → correlativo `EEE-PPP-TD-NNNNNNNN`, bloques
 offline para la app, `adm_cai_correlativo_emitido`). Nota aparte: la decisión
-abierta de PLAN_SAR_COMPLIANCE §232 (usar tipo 10 "Recibo de servicio público"
-**en lugar de** factura para el ciclo de agua) es un tema de **facturación**,
-no de cobro, y queda fuera de este plan.
+de PLAN_SAR_COMPLIANCE §232 quedó ✅ **confirmada por el contador (2026-07-27):
+el ciclo de agua usará tipo 10 "Recibo de servicio público" en lugar de
+factura** — sigue siendo un tema de **facturación** (rangos CAI del tipo 10),
+no de cobro, y su implementación queda fuera de este plan.
 
 **Modelo nuevo:** `adm_documento_secuencia` — serie administrable por empresa
 (patrón calcado de `adm_codigo_cliente_config` + `fn_adm_siguiente_codigo_cliente`,
