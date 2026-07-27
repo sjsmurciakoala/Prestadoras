@@ -831,14 +831,12 @@ public class AbonoService : IAbonoService
 
         // Control de recibos (revisión 2026-07-27): los pendientes vigentes de la
         // factura se descuentan del disponible — no se puede "recibir" dos veces
-        // el mismo saldo en papeles distintos.
-        var pendientesVigentes = await _context.transaccion_abonados
+        // el mismo saldo en papeles distintos. F7 H1: la fuente de verdad es
+        // adm_recibo_banco_pendiente.
+        var pendientesVigentes = await _context.adm_recibo_banco_pendientes
             .AsNoTracking()
-            .Where(t => t.company_id == companyId
-                && t.recibo == (decimal)factura.numrecibo
-                && t.tipotransaccion == "202"
-                && t.estado == "P")
-            .SumAsync(t => t.creditos ?? 0m, ct);
+            .Where(r => r.factura_id == factura.id && r.estado_id == 2)
+            .SumAsync(r => r.monto, ct);
 
         var disponible = saldoPendiente - pendientesVigentes;
         if (dto.Monto > disponible)
@@ -888,6 +886,22 @@ public class AbonoService : IAbonoService
         _context.transaccion_abonados.Add(transaccion);
         await _context.SaveChangesAsync(ct);
 
+        // F7 H1: registro formal en la tabla propia (fuente de verdad). La fila
+        // legacy 'P' de arriba queda solo para la impresión hasta F7 H2.
+        var pendiente = new adm_recibo_banco_pendiente
+        {
+            cliente_clave = dto.ClienteClave.Trim(),
+            factura_id = factura.id,
+            numrecibo = factura.numrecibo,
+            monto = dto.Monto,
+            estado_id = 2,
+            descripcion = transaccion.descripcion,
+            generado_por = usuario,
+            transaccion_abonado_ide = transaccion.ide
+        };
+        _context.adm_recibo_banco_pendientes.Add(pendiente);
+        await _context.SaveChangesAsync(ct);
+
         return ResponseModelDto.Ok(new GenerarReciboResponseDto
         {
             TransaccionId = transaccion.ide,
@@ -913,24 +927,23 @@ public class AbonoService : IAbonoService
 
         var numRecibo = factura.numrecibo;
 
-        return await _context.transaccion_abonados
+        // F7 H1: fuente de verdad adm_recibo_banco_pendiente.
+        var filas = await _context.adm_recibo_banco_pendientes
             .AsNoTracking()
-            .Where(t => t.company_id == companyId
-                && t.recibo == numRecibo
-                && t.tipotransaccion == "202"
-                && t.estado == "P")
-            .OrderByDescending(t => t.fecha_docu)
-            .ThenByDescending(t => t.ide)
-            .Select(t => new ReciboPendienteDto
-            {
-                TransaccionId = t.ide,
-                NumFactura = factura.numfactura ?? numRecibo.ToString(),
-                NumRecibo = numRecibo,
-                Monto = t.creditos ?? 0m,
-                FechaGenerado = t.fecha_docu.HasValue ? t.fecha_docu.Value.ToString("dd/MM/yyyy") : string.Empty,
-                Operador = t.usuario ?? string.Empty
-            })
+            .Where(r => r.numrecibo == numRecibo && r.estado_id == 2)
+            .OrderByDescending(r => r.generado_en)
             .ToListAsync(ct);
+
+        return filas.Select(r => new ReciboPendienteDto
+        {
+            PendienteId = r.recibo_pendiente_id,
+            TransaccionId = r.transaccion_abonado_ide ?? 0,
+            NumFactura = factura.numfactura ?? numRecibo.ToString(),
+            NumRecibo = numRecibo,
+            Monto = r.monto,
+            FechaGenerado = r.generado_en.ToLocalTime().ToString("dd/MM/yyyy"),
+            Operador = r.generado_por
+        }).ToList();
     }
 
     public async Task<IReadOnlyList<ReciboPendienteDto>> ListarRecibosPendientesPorClienteAsync(string clienteClave, CancellationToken ct = default)
@@ -941,41 +954,34 @@ public class AbonoService : IAbonoService
         var companyId = _currentCompanyService.GetCompanyId();
         var clave = clienteClave.Trim();
 
-        // Facturas del cliente (para resolver numfactura desde el recibo del
-        // pendiente sin joins decimal↔int que EF no traduce).
-        var facturas = await _context.facturas
-            .AsNoTracking()
-            .Where(f => f.company_id == companyId && f.clientecodigo == clave)
-            .Select(f => new { f.numrecibo, f.numfactura })
-            .ToListAsync(ct);
-        if (facturas.Count == 0)
-            return Array.Empty<ReciboPendienteDto>();
-
-        var pendientes = await _context.transaccion_abonados
-            .AsNoTracking()
-            .Where(t => t.company_id == companyId
-                && t.cliente_clave == clave
-                && t.tipotransaccion == "202"
-                && t.estado == "P")
-            .OrderByDescending(t => t.fecha_docu)
-            .ThenByDescending(t => t.ide)
-            .Select(t => new { t.ide, t.recibo, Monto = t.creditos ?? 0m, t.fecha_docu, t.usuario })
-            .ToListAsync(ct);
-
-        var porRecibo = facturas.ToDictionary(f => f.numrecibo, f => f.numfactura);
-        return pendientes.Select(p =>
-        {
-            var numRecibo = p.recibo.HasValue ? (int)p.recibo.Value : 0;
-            return new ReciboPendienteDto
+        // F7 H1: fuente de verdad adm_recibo_banco_pendiente (join directo a la
+        // factura por id — se acabó el join decimal↔int del modelo legacy).
+        var pendientes = await (
+            from r in _context.adm_recibo_banco_pendientes.AsNoTracking()
+            join f in _context.facturas.AsNoTracking() on r.factura_id equals f.id
+            where r.cliente_clave == clave && r.estado_id == 2
+            orderby r.generado_en descending
+            select new
             {
-                TransaccionId = p.ide,
-                NumRecibo = numRecibo,
-                NumFactura = porRecibo.TryGetValue(numRecibo, out var nf) && !string.IsNullOrWhiteSpace(nf)
-                    ? nf : numRecibo.ToString(),
-                Monto = p.Monto,
-                FechaGenerado = p.fecha_docu?.ToString("dd/MM/yyyy") ?? string.Empty,
-                Operador = p.usuario ?? string.Empty
-            };
+                r.recibo_pendiente_id,
+                r.transaccion_abonado_ide,
+                r.numrecibo,
+                r.monto,
+                r.generado_en,
+                r.generado_por,
+                f.numfactura
+            })
+            .ToListAsync(ct);
+
+        return pendientes.Select(p => new ReciboPendienteDto
+        {
+            PendienteId = p.recibo_pendiente_id,
+            TransaccionId = p.transaccion_abonado_ide ?? 0,
+            NumRecibo = p.numrecibo,
+            NumFactura = string.IsNullOrWhiteSpace(p.numfactura) ? p.numrecibo.ToString() : p.numfactura,
+            Monto = p.monto,
+            FechaGenerado = p.generado_en.ToLocalTime().ToString("dd/MM/yyyy"),
+            Operador = p.generado_por
         }).ToList();
     }
 
@@ -1040,16 +1046,36 @@ public class AbonoService : IAbonoService
 
         var companyId = _currentCompanyService.GetCompanyId();
 
-        var transaccion = await _context.transaccion_abonados
-            .FirstOrDefaultAsync(t => t.company_id == companyId && t.ide == dto.TransaccionId && t.estado == "P", ct);
+        // F7 H1: fuente de verdad adm_recibo_banco_pendiente (por PendienteId;
+        // el TransaccionId legacy se acepta como fallback de compatibilidad).
+        var pendiente = dto.PendienteId > 0
+            ? await _context.adm_recibo_banco_pendientes
+                .FirstOrDefaultAsync(r => r.recibo_pendiente_id == dto.PendienteId && r.estado_id == 2, ct)
+            : await _context.adm_recibo_banco_pendientes
+                .FirstOrDefaultAsync(r => r.transaccion_abonado_ide == dto.TransaccionId && r.estado_id == 2, ct);
 
-        if (transaccion is null)
+        if (pendiente is null)
             return ResponseModelDto.Fail("El recibo pendiente no existe o ya fue procesado/anulado.");
 
-        transaccion.estado = "A";
-        transaccion.motivo = dto.Motivo;
-        transaccion.descripcion = $"ANULADO: {dto.Motivo} — {transaccion.descripcion}";
-        transaccion.usuario = dto.Usuario;
+        pendiente.estado_id = 3; // ANULADO
+        pendiente.anulado_por = dto.Usuario;
+        pendiente.anulado_en = DateTime.UtcNow;
+        pendiente.motivo_anulacion = dto.Motivo;
+
+        // Espejo legacy coherente hasta F7 H2.
+        if (pendiente.transaccion_abonado_ide.HasValue)
+        {
+            var transaccion = await _context.transaccion_abonados
+                .FirstOrDefaultAsync(t => t.company_id == companyId
+                    && t.ide == pendiente.transaccion_abonado_ide.Value && t.estado == "P", ct);
+            if (transaccion is not null)
+            {
+                transaccion.estado = "A";
+                transaccion.motivo = dto.Motivo;
+                transaccion.descripcion = $"ANULADO: {dto.Motivo} — {transaccion.descripcion}";
+                transaccion.usuario = dto.Usuario;
+            }
+        }
 
         await _context.SaveChangesAsync(ct);
         return ResponseModelDto.Ok("Recibo pendiente anulado correctamente.");

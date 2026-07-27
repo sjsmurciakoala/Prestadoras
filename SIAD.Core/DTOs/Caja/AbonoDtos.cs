@@ -128,6 +128,10 @@ public class GenerarReciboResponseDto
 
 public class ReciboPendienteDto
 {
+    /// <summary>F7 H1: id en adm_recibo_banco_pendiente (fuente de verdad — anular/cobrar).</summary>
+    public long PendienteId { get; set; }
+
+    /// <summary>Fila espejo legacy (impresión del recibo hasta F7 H2; 0 si no existe).</summary>
     public int TransaccionId { get; set; }
     public string NumFactura { get; set; } = string.Empty;
     public int NumRecibo { get; set; }
@@ -138,6 +142,10 @@ public class ReciboPendienteDto
 
 public class AnularReciboPendienteDto
 {
+    /// <summary>F7 H1: id en adm_recibo_banco_pendiente (fuente de verdad).</summary>
+    public long PendienteId { get; set; }
+
+    /// <summary>Legacy (compatibilidad hasta F7 H2): ide de la fila 'P' espejo.</summary>
     public int TransaccionId { get; set; }
     public string Usuario { get; set; } = null!;
     public string Motivo { get; set; } = string.Empty;

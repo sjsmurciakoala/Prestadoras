@@ -572,6 +572,26 @@ public class CobroService : ICobroService
             _context.adm_pagos.Add(pago);
             await _context.SaveChangesAsync(ct);
 
+            // F7 H1: si el cobro vino de un recibo-para-banco pendiente, el
+            // registro formal queda APLICADO con el documento que lo cobró.
+            // (El trigger de conciliación pudo marcarlo CUBIERTO un instante
+            // antes si la factura quedó saldada — este es el estado correcto.)
+            if (dto.ReciboPendienteId.HasValue)
+            {
+                var reciboPendiente = await _context.adm_recibo_banco_pendientes
+                    .FirstOrDefaultAsync(r => r.transaccion_abonado_ide == dto.ReciboPendienteId.Value
+                                              && r.cobrado_pago_id == null, ct);
+                if (reciboPendiente is not null)
+                {
+                    reciboPendiente.estado_id = EstadoPago.Aplicado;
+                    reciboPendiente.cobrado_pago_id = pago.pago_id;
+                    reciboPendiente.anulado_por = null;
+                    reciboPendiente.anulado_en = null;
+                    reciboPendiente.motivo_anulacion = null;
+                    await _context.SaveChangesAsync(ct);
+                }
+            }
+
             // ---------- Cortes: cancelar órdenes si el cliente queda en cero ----------
             if (saldoActualCliente - montoTotal <= 0m)
             {

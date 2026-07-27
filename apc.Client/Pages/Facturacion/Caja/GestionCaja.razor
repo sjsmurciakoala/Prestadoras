@@ -785,6 +785,7 @@
         if (_anularPendienteRecibo is null) return;
         var result = await AbonoHttp.AnularReciboPendienteAsync(new AnularReciboPendienteDto
         {
+            PendienteId = _anularPendienteRecibo.PendienteId,
             TransaccionId = _anularPendienteRecibo.TransaccionId,
             Usuario = _usuario,
             Motivo = _anularPendienteMotivo.Trim()

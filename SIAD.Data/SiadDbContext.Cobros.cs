@@ -15,9 +15,29 @@ public partial class SiadDbContext
     public virtual DbSet<adm_documento_secuencia> adm_documento_secuencias { get; set; } = null!;
     public virtual DbSet<adm_caja> adm_cajas { get; set; } = null!;
     public virtual DbSet<adm_caja_usuario> adm_caja_usuarios { get; set; } = null!;
+    public virtual DbSet<adm_recibo_banco_pendiente> adm_recibo_banco_pendientes { get; set; } = null!;
 
     private void ConfigureCobrosModel(ModelBuilder modelBuilder)
     {
+        // F7 H1 (2026-07-30): recibos para banco pendientes en tabla propia.
+        modelBuilder.Entity<adm_recibo_banco_pendiente>(entity =>
+        {
+            entity.HasKey(e => e.recibo_pendiente_id);
+            entity.ToTable("adm_recibo_banco_pendiente", "public");
+            entity.HasIndex(e => new { e.company_id, e.factura_id, e.estado_id },
+                "ix_adm_recibo_pendiente_factura");
+
+            entity.Property(e => e.recibo_pendiente_id).ValueGeneratedOnAdd();
+            entity.Property(e => e.cliente_clave).HasMaxLength(20);
+            entity.Property(e => e.monto).HasColumnType("numeric(18,2)");
+            entity.Property(e => e.estado_id).HasDefaultValue((short)2);
+            entity.Property(e => e.descripcion).HasMaxLength(300);
+            entity.Property(e => e.generado_por).HasMaxLength(100);
+            entity.Property(e => e.generado_en).HasDefaultValueSql("now()");
+            entity.Property(e => e.anulado_por).HasMaxLength(100);
+            entity.Property(e => e.motivo_anulacion).HasMaxLength(300);
+        });
+
         modelBuilder.Entity<adm_caja>(entity =>
         {
             entity.HasKey(e => e.caja_id).HasName("adm_caja_pkey");
