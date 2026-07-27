@@ -1,155 +1,87 @@
 @using System.Linq.Expressions
+@using DevExtreme.AspNet.Data
+@using DevExtreme.AspNet.Data.ResponseModel
 @using SIAD.Core.DTOs.CaptacionPagos
 @using apc.Client.Services.CaptacionPagos
 @inject CaptacionPagosClient CaptacionClient
 
-<DxComboBox TData="ClienteComboDto" TValue="string" Data="@items"
+@* Lookup de cliente con búsqueda REMOTA mientras se escribe (sin perder foco).
+   Patrón oficial DevExpress: CustomData + SearchMode=AutoSearch — el combo
+   invoca LoadCustomData en cada cambio de texto (respetando SearchDelay) con
+   el texto en options.SearchValue, y pagina con Skip/Take al hacer scroll.
+   Docs: DxListEditorBase.CustomData / DxDropDownListEditorBase.SearchMode. *@
+<DxComboBox TData="ClienteComboDto" TValue="string"
+            CustomData="@LoadCustomData"
             TextFieldName="@nameof(ClienteComboDto.NombreCompleto)"
             ValueFieldName="@nameof(ClienteComboDto.Clave)"
-            DropDownStyle="DropDownStyle.DropDown"
-            AllowUserInput="true"
-            Value="@currentValue"
+            SearchMode="ListSearchMode.AutoSearch"
+            SearchFilterCondition="ListSearchFilterCondition.Contains"
+            SearchDelay="@SearchDelay"
+            ListRenderMode="ListRenderMode.Virtual"
+            Value="@Value"
             ValueChanged="OnValueChanged"
             ValueExpression="ValueExpression"
-            Text="@currentText"
-            TextChanged="OnTextChanged"
             NullText="@NullText"
-            FilterCondition="DataEditorFilterCondition.Contains"
-            FilterMinLength="@MinSearchLength"
-            FilterDelay="@SearchDelay"
             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
             Enabled="@(!Disabled)" />
 
 @code {
+    /// <summary>Conservado por compatibilidad de firma; la carga ahora es remota vía CustomData.</summary>
     [Parameter] public IReadOnlyList<ClienteComboDto> Items { get; set; } = Array.Empty<ClienteComboDto>();
     [Parameter] public string? Value { get; set; }
     [Parameter] public EventCallback<string?> ValueChanged { get; set; }
     [Parameter] public Expression<Func<string?>>? ValueExpression { get; set; }
     [Parameter] public string? NullText { get; set; } = "Seleccione cliente...";
+    /// <summary>Conservado por compatibilidad; con carga remota no aplica mínimo.</summary>
     [Parameter] public int MinSearchLength { get; set; } = 0;
-    [Parameter] public int SearchDelay { get; set; } = 250;
+    [Parameter] public int SearchDelay { get; set; } = 300;
     [Parameter] public bool Disabled { get; set; }
 
-    private readonly List<ClienteComboDto> items = new();
-    private string? currentValue;
-    private string? currentText;
-    private bool suppressTextChanged;
-    private CancellationTokenSource? searchCts;
+    private const int PageSize = 50;
 
-    protected override void OnParametersSet()
+    private Task OnValueChanged(string? value) => ValueChanged.InvokeAsync(value);
+
+    private async Task<LoadResult> LoadCustomData(DataSourceLoadOptionsBase options, CancellationToken ct)
     {
-        if (items.Count == 0 && Items.Count > 0)
-        {
-            items.AddRange(Items);
-        }
+        // DevExtreme.AspNet.Data 5.x entrega el texto tecleado como expresión de
+        // filtro (["campo","contains","texto"]); se extrae el primer operando.
+        var query = ExtractSearchText(options.Filter);
+        var skip = options.Skip;
+        var take = options.Take > 0 ? options.Take : PageSize;
 
-        if (!string.Equals(currentValue, Value, StringComparison.Ordinal))
+        // El endpoint filtra por clave/nombre en servidor; se pide una página
+        // extra para saber si hay más resultados (scroll virtual).
+        var items = await CaptacionClient.GetClientesAsync(query, ct, take: skip + take + 1);
+        var page = items.Skip(skip).Take(take).ToList();
+
+        return new LoadResult
         {
-            currentValue = Value;
-            SyncTextFromValue();
-        }
+            data = page,
+            totalCount = items.Count > skip + take ? skip + take + PageSize : skip + page.Count
+        };
     }
 
-    private async Task OnValueChanged(string? value)
+    private static string? ExtractSearchText(System.Collections.IList? filter)
     {
-        currentValue = value;
-        await ValueChanged.InvokeAsync(value);
-        SyncTextFromValue();
-    }
+        if (filter is null) return null;
 
-    private async Task OnTextChanged(string? text)
-    {
-        if (suppressTextChanged)
+        if (filter.Count == 3
+            && filter[1] is string op
+            && op is "contains" or "startswith" or "="
+            && filter[2] is string texto)
         {
-            suppressTextChanged = false;
-            return;
+            return texto;
         }
 
-        if (TrySyncFromText(text))
+        foreach (var item in filter)
         {
-            return;
+            if (item is System.Collections.IList anidado)
+            {
+                var resultado = ExtractSearchText(anidado);
+                if (resultado is not null) return resultado;
+            }
         }
 
-        currentText = text;
-        await LoadAsync(text);
-    }
-
-    private void SyncTextFromValue()
-    {
-        if (string.IsNullOrWhiteSpace(currentValue))
-        {
-            suppressTextChanged = true;
-            currentText = null;
-            return;
-        }
-
-        var match = items.FirstOrDefault(c => string.Equals(c.Clave, currentValue, StringComparison.OrdinalIgnoreCase))
-                    ?? Items.FirstOrDefault(c => string.Equals(c.Clave, currentValue, StringComparison.OrdinalIgnoreCase));
-        if (match is not null)
-        {
-            EnsureItem(match);
-            suppressTextChanged = true;
-            currentText = match.NombreCompleto;
-            return;
-        }
-
-        suppressTextChanged = true;
-        currentText = currentValue;
-    }
-
-    private bool TrySyncFromText(string? text)
-    {
-        if (string.IsNullOrWhiteSpace(text))
-        {
-            currentValue = null;
-            _ = ValueChanged.InvokeAsync(null);
-            suppressTextChanged = true;
-            currentText = text;
-            return true;
-        }
-
-        var match = items.FirstOrDefault(c => string.Equals(c.NombreCompleto, text, StringComparison.OrdinalIgnoreCase)
-                                              || string.Equals(c.Clave, text, StringComparison.OrdinalIgnoreCase))
-                    ?? Items.FirstOrDefault(c => string.Equals(c.NombreCompleto, text, StringComparison.OrdinalIgnoreCase)
-                                                 || string.Equals(c.Clave, text, StringComparison.OrdinalIgnoreCase));
-        if (match is null)
-        {
-            return false;
-        }
-
-        EnsureItem(match);
-        currentValue = match.Clave;
-        _ = ValueChanged.InvokeAsync(match.Clave);
-        suppressTextChanged = true;
-        currentText = match.NombreCompleto;
-        return true;
-    }
-
-    private async Task LoadAsync(string? text)
-    {
-        searchCts?.Cancel();
-        searchCts?.Dispose();
-        searchCts = new CancellationTokenSource();
-
-        try
-        {
-            var results = await CaptacionClient.GetClientesAsync(text, searchCts.Token);
-            items.Clear();
-            items.AddRange(results);
-            SyncTextFromValue();
-        }
-        catch (OperationCanceledException)
-        {
-        }
-    }
-
-    private void EnsureItem(ClienteComboDto match)
-    {
-        if (items.Any(c => string.Equals(c.Clave, match.Clave, StringComparison.OrdinalIgnoreCase)))
-        {
-            return;
-        }
-
-        items.Insert(0, match);
+        return null;
     }
 }
