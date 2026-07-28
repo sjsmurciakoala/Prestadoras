@@ -60,6 +60,9 @@ public class ProcesamientoRetencionesTests : IntegrationTestBase
         var accountFormat = Substitute.For<IAccountFormatService>();
         accountFormat.GetFormatAsync(Arg.Any<CancellationToken>()).Returns(AccountFormat.Default);
         var banTransacciones = Substitute.For<IBanTransaccionesService>();
+        // Sustituto: estos tests no pagan con metodo CHEQUE y la tabla ban_cheque
+        // puede no existir aun en la BD de test (Task 1 pendiente de aplicar).
+        var cheques = Substitute.For<IChequesService>();
 
         return new OrdenesPagoDirectoService(
             context,
@@ -67,7 +70,8 @@ public class ProcesamientoRetencionesTests : IntegrationTestBase
             new TestCurrentCompanyService(CompanyId),
             httpAccessor,
             accountFormat,
-            banTransacciones);
+            banTransacciones,
+            cheques);
     }
 
     // --- Siembra (misma forma que AbonosCompromisoTests.SeedCompromisoAsync) ---
@@ -548,6 +552,210 @@ SELECT monto, banco_cuenta_id FROM public.ban_kardex
             () => service.MarkAsProcessedAsync(orden, dto, CancellationToken.None));
 
         Assert.Contains("neto", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(await StatusTransaccAsync(orden));
+        Assert.Null(await LeerUltimoPolizaIdAsync(orden));
+    }
+
+    // --- Procesamiento con abonos previos: el bruto del pago es el SALDO, no el monto original ---
+
+    /// <summary>Siembra una fila de abono vigente directa (sin partida), para probar el calculo de saldo.</summary>
+    private async Task SeedAbonoDirectoAsync(int numeroOrden, int numeroAbono, decimal monto)
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = @"
+INSERT INTO public.prv_compromiso_abono
+    (company_id, numero_orden, numero_abono, fecha, monto, metodo_pago, estado, usuario_creo)
+VALUES (@c, @n, @a, now(), @m, 'CONTABLE', 'V', 'tester');";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        cmd.Parameters.AddWithValue("n", numeroOrden);
+        cmd.Parameters.AddWithValue("a", numeroAbono);
+        cmd.Parameters.AddWithValue("m", monto);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
+    private async Task<(decimal Monto, string Estado, long? PartidaId)?> LeerAbonoAsync(int numeroOrden, int numeroAbono)
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = @"
+SELECT monto, estado, partida_id FROM public.prv_compromiso_abono
+ WHERE company_id = @c AND numero_orden = @n AND numero_abono = @a;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        cmd.Parameters.AddWithValue("n", numeroOrden);
+        cmd.Parameters.AddWithValue("a", numeroAbono);
+        await using var reader = await cmd.ExecuteReaderAsync();
+        if (!await reader.ReadAsync())
+            return null;
+        return (reader.GetDecimal(0), reader.GetString(1), reader.IsDBNull(2) ? null : reader.GetInt64(2));
+    }
+
+    // (5) Con abono previo: la PRC asienta por el saldo (proveedor Debe = saldo, banco Haber = saldo)
+    // y el pago final queda registrado como abono vigente ligado a esa partida; saldo deriva a 0.
+    [SkippableFact]
+    public async Task Procesar_ConAbonoPrevio_AsientaPorElSaldoYRegistraAbonoFinal()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        const int orden = OrdenBase + 6;
+        var cuentas = await ResolveCuentasProcesoAsync(orden);
+        Skip.If(cuentas is null, "No hay proveedor + cuenta bancaria de procesamiento + 2 cuentas de retencion posting/ACTIVE distintas en el tenant de prueba.");
+
+        await SeedCompromisoAsync(orden, 1000m, cuentas!.Value.CodProveedor, cuentas.Value.CuentaGastoCode);
+
+        await using var context = CreateContext();
+        var service = CreateService(context);
+
+        // Abono previo de 400 por la misma via que usa la pantalla de abonos (crea GEN + ABO1).
+        var abono = await service.RegistrarAbonoAsync(orden, new AbonoCompromisoUpsertDto
+        {
+            Monto = 400m,
+            MetodoPago = OrdenPagoDirectoMetodoPago.Contable,
+            CuentaContraId = cuentas.Value.CuentaRetencion1AccountId,
+            Usuario = "tester",
+            Fecha = DateTime.Now.Date,
+        }, CancellationToken.None);
+        Assert.True(abono.Success, abono.Message);
+
+        // El detalle que consume la pantalla de procesar ya expone abonado y saldo.
+        var detalle = await service.GetByNumeroOrdenAsync(orden, CancellationToken.None);
+        Assert.NotNull(detalle);
+        Assert.Equal(1000m, detalle!.Monto);
+        Assert.Equal(400m, detalle.Abonado);
+        Assert.Equal(600m, detalle.Saldo);
+
+        var dto = new ProcesarOrdenPagoDirectoDto
+        {
+            Usuario = "tester",
+            MetodoPago = OrdenPagoDirectoMetodoPago.Cheque,
+            Lineas = new List<PartidaLineaOrdenPagoDto>
+            {
+                new()
+                {
+                    CuentaId = cuentas.Value.CuentaBancoAccountId,
+                    BancoCuentaId = cuentas.Value.BancoCuentaId,
+                    Descripcion = "pago saldo",
+                    Debito = 0m,
+                    Credito = 600m
+                }
+            }
+        };
+
+        var res = await service.MarkAsProcessedAsync(orden, dto, CancellationToken.None);
+        Assert.True(res.Success, res.Message);
+
+        var polizaId = await LeerUltimoPolizaIdAsync(orden);
+        Assert.NotNull(polizaId);
+        var lineas = await LeerLineasPartidaAsync(polizaId!.Value);
+
+        var lineaProveedor = Assert.Single(lineas.Where(l => l.AccountId == cuentas.Value.CuentaProveedorAccountId));
+        Assert.Equal(600m, lineaProveedor.Debit);
+        Assert.Equal(0m, lineaProveedor.Credit);
+
+        var lineaBanco = Assert.Single(lineas.Where(l => l.AccountId == cuentas.Value.CuentaBancoAccountId));
+        Assert.Equal(600m, lineaBanco.Credit);
+        Assert.Equal(0m, lineaBanco.Debit);
+
+        Assert.Equal(lineas.Sum(l => l.Debit), lineas.Sum(l => l.Credit));
+
+        var movimientos = await LeerMovimientosBancoAsync(polizaId.Value);
+        Assert.Equal(600m, Math.Abs(Assert.Single(movimientos).Monto));
+
+        // El pago final quedo como abono 2: vigente, por el saldo y ligado a la partida PRC.
+        var abonoFinal = await LeerAbonoAsync(orden, 2);
+        Assert.NotNull(abonoFinal);
+        Assert.Equal(600m, abonoFinal!.Value.Monto);
+        Assert.Equal("V", abonoFinal.Value.Estado);
+        Assert.Equal(polizaId, abonoFinal.Value.PartidaId);
+
+        Assert.True(await StatusTransaccAsync(orden));
+
+        var saldoFinal = await service.GetSaldoConAbonosAsync(orden, CancellationToken.None);
+        Assert.NotNull(saldoFinal);
+        Assert.Equal(1000m, saldoFinal!.Abonado);
+        Assert.Equal(0m, saldoFinal.Saldo);
+        Assert.True(saldoFinal.Pagado);
+    }
+
+    // (6) Con abono previo, si el llamador manda el monto TOTAL (pantalla desactualizada), la
+    // partida no cuadra contra el saldo y se rechaza sin asentar nada.
+    [SkippableFact]
+    public async Task Procesar_ConAbonoPrevio_PorElMontoTotal_EsRechazado()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        const int orden = OrdenBase + 7;
+        var cuentas = await ResolveCuentasProcesoAsync(orden);
+        Skip.If(cuentas is null, "No hay proveedor + cuenta bancaria de procesamiento + 2 cuentas de retencion posting/ACTIVE distintas en el tenant de prueba.");
+
+        await SeedCompromisoAsync(orden, 1000m, cuentas!.Value.CodProveedor, cuentas.Value.CuentaGastoCode);
+        await SeedAbonoDirectoAsync(orden, numeroAbono: 1, monto: 400m);
+
+        await using var context = CreateContext();
+        var service = CreateService(context);
+
+        var dto = new ProcesarOrdenPagoDirectoDto
+        {
+            Usuario = "tester",
+            MetodoPago = OrdenPagoDirectoMetodoPago.Cheque,
+            Lineas = new List<PartidaLineaOrdenPagoDto>
+            {
+                new()
+                {
+                    CuentaId = cuentas.Value.CuentaBancoAccountId,
+                    BancoCuentaId = cuentas.Value.BancoCuentaId,
+                    Descripcion = "pago por el total (incorrecto)",
+                    Debito = 0m,
+                    Credito = 1000m
+                }
+            }
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => service.MarkAsProcessedAsync(orden, dto, CancellationToken.None));
+
+        Assert.Contains("no cuadra", ex.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.False(await StatusTransaccAsync(orden));
+        Assert.Null(await LeerUltimoPolizaIdAsync(orden));
+    }
+
+    // (7) Compromiso totalmente abonado (aunque no este marcado procesado): no hay saldo por pagar.
+    [SkippableFact]
+    public async Task Procesar_CompromisoTotalmenteAbonado_EsRechazado()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        const int orden = OrdenBase + 8;
+        var cuentas = await ResolveCuentasProcesoAsync(orden);
+        Skip.If(cuentas is null, "No hay proveedor + cuenta bancaria de procesamiento + 2 cuentas de retencion posting/ACTIVE distintas en el tenant de prueba.");
+
+        await SeedCompromisoAsync(orden, 500m, cuentas!.Value.CodProveedor, cuentas.Value.CuentaGastoCode);
+        await SeedAbonoDirectoAsync(orden, numeroAbono: 1, monto: 500m);
+
+        await using var context = CreateContext();
+        var service = CreateService(context);
+
+        var dto = new ProcesarOrdenPagoDirectoDto
+        {
+            Usuario = "tester",
+            MetodoPago = OrdenPagoDirectoMetodoPago.Cheque,
+            Lineas = new List<PartidaLineaOrdenPagoDto>
+            {
+                new()
+                {
+                    CuentaId = cuentas.Value.CuentaBancoAccountId,
+                    BancoCuentaId = cuentas.Value.BancoCuentaId,
+                    Descripcion = "pago sin saldo",
+                    Debito = 0m,
+                    Credito = 500m
+                }
+            }
+        };
+
+        var res = await service.MarkAsProcessedAsync(orden, dto, CancellationToken.None);
+
+        Assert.False(res.Success);
+        Assert.Contains("saldo", res.Message, StringComparison.OrdinalIgnoreCase);
         Assert.False(await StatusTransaccAsync(orden));
         Assert.Null(await LeerUltimoPolizaIdAsync(orden));
     }

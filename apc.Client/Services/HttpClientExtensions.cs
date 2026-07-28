@@ -151,6 +151,26 @@ public static class HttpClientExtensions
             using var document = JsonDocument.Parse(contenido);
             var root = document.RootElement;
 
+            // ValidationProblemDetails (el 400 que genera [ApiController] al fallar las
+            // DataAnnotations) trae el motivo real en "errors"; su "title" solo dice
+            // "One or more validation errors occurred.", que no le sirve al usuario.
+            if (root.TryGetProperty("errors", out var errors) && errors.ValueKind == JsonValueKind.Object)
+            {
+                var mensajes = errors.EnumerateObject()
+                    .SelectMany(propiedad => propiedad.Value.ValueKind == JsonValueKind.Array
+                        ? propiedad.Value.EnumerateArray().Select(item => item.GetString())
+                        : new[] { propiedad.Value.GetString() })
+                    .Where(mensaje => !string.IsNullOrWhiteSpace(mensaje))
+                    .Select(mensaje => mensaje!.Trim())
+                    .Distinct()
+                    .ToList();
+
+                if (mensajes.Count > 0)
+                {
+                    return string.Join(" ", mensajes);
+                }
+            }
+
             if (root.TryGetProperty("detail", out var detail))
             {
                 return detail.GetString();

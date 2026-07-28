@@ -13,16 +13,18 @@ public sealed class BitacoraMaestrosWriter : IBitacoraMaestrosWriter
 {
     private readonly SiadDbContext _context;
     private readonly IAuditConfigProvider _config;
+    private readonly IAuditableCatalogProvider _catalog;
     private readonly ICurrentCompanyService _company;
     private readonly ICurrentUserAudit _user;
 
-    public BitacoraMaestrosWriter(SiadDbContext context, IAuditConfigProvider config, ICurrentCompanyService company, ICurrentUserAudit user)
-        => (_context, _config, _company, _user) = (context, config, company, user);
+    public BitacoraMaestrosWriter(SiadDbContext context, IAuditConfigProvider config, IAuditableCatalogProvider catalog, ICurrentCompanyService company, ICurrentUserAudit user)
+        => (_context, _config, _catalog, _company, _user) = (context, config, catalog, company, user);
 
     public async Task RegistrarAsync(string tabla, string accion, string? registroId, string entidad, string descripcion,
                                      IReadOnlyList<AuditDiff.Campo>? campos, CancellationToken ct = default)
     {
         var companyId = _company.GetCompanyId();
+        if (!_catalog.EsAuditable(companyId, tabla)) return;
         if (!_config.DebeAuditar(companyId, tabla, accion)) return;
 
         campos ??= Array.Empty<AuditDiff.Campo>();
@@ -32,7 +34,7 @@ public sealed class BitacoraMaestrosWriter : IBitacoraMaestrosWriter
         var fila = new bitacora_maestros
         {
             company_id = companyId,
-            modulo = Truncar(AuditableMaestros.All.FirstOrDefault(x => string.Equals(x.Tabla, tabla, StringComparison.OrdinalIgnoreCase))?.Modulo ?? tabla, 80),
+            modulo = Truncar(_catalog.ModuloDe(companyId, tabla), 80),
             tabla = Truncar(tabla, 128),
             entidad = Truncar(string.IsNullOrWhiteSpace(entidad) ? tabla : entidad, 256),
             registro_id = registroId,

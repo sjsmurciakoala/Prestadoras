@@ -2158,7 +2158,7 @@ public class CaptacionPagosService : ICaptacionPagosService
             sourceDocumentNormalizado = sourceDocumentNormalizado[..120];
         }
 
-        return await _banTransaccionesService.RegistrarMovimientoAsync(
+        var resultado = await _banTransaccionesService.RegistrarMovimientoAsync(
             bancoCuentaId,
             TipoTransaccionBancoDeposito,
             fechaMovimiento,
@@ -2170,6 +2170,7 @@ public class CaptacionPagosService : ICaptacionPagosService
             contraCuentas,
             string.IsNullOrWhiteSpace(usuario) ? "system" : usuario.Trim(),
             ct);
+        return (resultado.BanKardexId, resultado.SaldoResultante);
     }
 
     /// <summary>

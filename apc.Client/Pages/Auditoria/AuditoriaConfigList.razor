@@ -19,6 +19,8 @@
             <p class="page-subtitle">Elegí qué maestros registran bitácora</p>
         </div>
         <div class="d-flex gap-2">
+            <DxButton Text="Agregar maestro" IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirAgregar" Enabled="@(!isSaving && !isLoading)" />
             <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
                       RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" Enabled="@(!isSaving)" />
             <DxButton Text="Guardar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
@@ -73,6 +75,17 @@
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="100px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
+                        <CellDisplayTemplate Context="context">
+                            @if (context.DataItem is AuditoriaConfigItemDto item)
+                            {
+                                <button type="button" class="btn-icon btn-delete" title="Quitar del catálogo"
+                                        @onclick="() => ConfirmarQuitar(item)" @onclick:stopPropagation="true">
+                                    <i class="bi bi-trash"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
                 </Columns>
                 <EmptyDataAreaTemplate>
                     <div class="p-4 text-center text-muted">No hay maestros configurables.</div>
@@ -82,12 +95,89 @@
     </div>
 </div>
 
+<DxPopup @bind-Visible="mostrarAgregar" Width="min(520px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" HeaderText="Agregar maestro al catálogo" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <BodyContentTemplate Context="popup">
+        @if (nuevoLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando tablas..." /><div style="height:80px"></div></div>
+        }
+        else
+        {
+            <p class="text-muted small mb-3">Elegí una tabla del sistema para incorporarla a la bitácora de maestros.</p>
+
+            @if (!string.IsNullOrWhiteSpace(nuevoError))
+            {
+                <div class="alert alert-danger" role="alert">@nuevoError</div>
+            }
+
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Tabla *" ColSpanMd="12">
+                    <DxComboBox TData="CatalogoTablaDisponibleDto" TValue="string"
+                                Data="@tablasDisponibles"
+                                Value="@nuevo.Tabla"
+                                ValueChanged="@((string? v) => OnTablaSeleccionada(v))"
+                                ValueFieldName="@nameof(CatalogoTablaDisponibleDto.Tabla)"
+                                TextFieldName="@nameof(CatalogoTablaDisponibleDto.Tabla)"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="Seleccione una tabla..."
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                CssClass="w-100" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Nombre *" ColSpanMd="12">
+                    <DxTextBox @bind-Text="nuevo.Nombre" NullText="Nombre amigable del maestro" MaxLength="120" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Módulo *" ColSpanMd="12">
+                    <DxTextBox @bind-Text="nuevo.Modulo" NullText="Módulo al que pertenece" MaxLength="60" />
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Guardar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="AgregarConfirmadoAsync" Enabled="@(!isGuardandoNuevo)" />
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="CerrarAgregar" Enabled="@(!isGuardandoNuevo)" />
+            </div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmQuitarVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Quitar del catálogo?</h5>
+            <p class="text-muted">Quitar del catálogo hace que esa tabla deje de auditarse y desaparezca de la lista.</p>
+            @if (paraQuitar is not null) { <div class="fw-semibold">@paraQuitar.Nombre</div> }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarQuitar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" Enabled="@(!isQuitando)" />
+                <DxButton Text="Sí, quitar" Click="QuitarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-trash" Enabled="@(!isQuitando)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
 @code {
     private DxGrid? grid;
     private List<AuditoriaConfigItemDto> items = new();
     private bool isLoading;
     private bool isSaving;
     private string? errorMessage;
+
+    // Agregar maestro
+    private bool mostrarAgregar;
+    private bool nuevoLoading;
+    private bool isGuardandoNuevo;
+    private string? nuevoError;
+    private List<CatalogoTablaDisponibleDto> tablasDisponibles = new();
+    private AgregarMaestroDto nuevo = new();
+
+    // Quitar del catálogo
+    private bool confirmQuitarVisible;
+    private bool isQuitando;
+    private AuditoriaConfigItemDto? paraQuitar;
 
     protected override async Task OnInitializedAsync() => await CargarAsync();
 
@@ -124,6 +214,114 @@
         finally
         {
             isSaving = false;
+        }
+    }
+
+    // ---- Agregar maestro ----
+    private async Task AbrirAgregar()
+    {
+        nuevo = new AgregarMaestroDto();
+        nuevoError = null;
+        mostrarAgregar = true;
+        await CargarTablasDisponiblesAsync();
+    }
+
+    private async Task CargarTablasDisponiblesAsync()
+    {
+        try
+        {
+            nuevoLoading = true;
+            tablasDisponibles = await ConfigClient.TablasDisponiblesAsync();
+        }
+        catch (Exception ex)
+        {
+            nuevoError = $"No se pudieron cargar las tablas disponibles: {ex.Message}";
+            tablasDisponibles = new();
+        }
+        finally
+        {
+            nuevoLoading = false;
+        }
+    }
+
+    private void OnTablaSeleccionada(string? tabla)
+    {
+        nuevo.Tabla = tabla ?? string.Empty;
+        var fila = tablasDisponibles.FirstOrDefault(t => t.Tabla == tabla);
+        if (fila is not null)
+        {
+            nuevo.Modulo = fila.ModuloSugerido;
+            nuevo.Nombre = fila.Tabla;
+        }
+    }
+
+    private void CerrarAgregar()
+    {
+        if (isGuardandoNuevo) return;
+        mostrarAgregar = false;
+        nuevoError = null;
+        nuevo = new AgregarMaestroDto();
+    }
+
+    private async Task AgregarConfirmadoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(nuevo.Tabla) ||
+            string.IsNullOrWhiteSpace(nuevo.Nombre) ||
+            string.IsNullOrWhiteSpace(nuevo.Modulo))
+        {
+            nuevoError = "Complete Tabla, Nombre y Módulo.";
+            return;
+        }
+
+        try
+        {
+            isGuardandoNuevo = true;
+            nuevoError = null;
+            await ConfigClient.AgregarAsync(nuevo);
+            mostrarAgregar = false;
+            nuevo = new AgregarMaestroDto();
+            await CargarAsync();
+            Toast("Auditoría", "Maestro agregado", ToastRenderStyle.Success);
+        }
+        catch (InvalidOperationException ex)
+        {
+            nuevoError = ex.Message;
+            Toast("Auditoría", ex.Message, ToastRenderStyle.Danger);
+        }
+        catch (Exception ex)
+        {
+            nuevoError = ex.Message;
+            Toast("Auditoría", $"No se pudo agregar: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isGuardandoNuevo = false;
+        }
+    }
+
+    // ---- Quitar del catálogo ----
+    private void ConfirmarQuitar(AuditoriaConfigItemDto item) { paraQuitar = item; confirmQuitarVisible = true; }
+    private void CancelarQuitar() { if (isQuitando) return; confirmQuitarVisible = false; paraQuitar = null; }
+
+    private async Task QuitarConfirmadoAsync()
+    {
+        if (paraQuitar is null) { confirmQuitarVisible = false; return; }
+        try
+        {
+            isQuitando = true;
+            await ConfigClient.DesactivarAsync(paraQuitar.Entidad);
+            confirmQuitarVisible = false;
+            paraQuitar = null;
+            await CargarAsync();
+            Toast("Auditoría", "Maestro quitado del catálogo", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Auditoría", $"No se pudo quitar: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isQuitando = false;
         }
     }
 

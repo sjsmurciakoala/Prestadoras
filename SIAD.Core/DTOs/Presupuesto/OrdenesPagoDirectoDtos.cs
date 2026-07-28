@@ -107,6 +107,12 @@ public sealed class OrdenPagoDirectoDetalleDto
 
     public decimal Monto { get; set; }
 
+    /// <summary>Total de abonos vigentes ya aplicados al compromiso.</summary>
+    public decimal Abonado { get; set; }
+
+    /// <summary>Saldo pendiente (Monto - Abonado); el procesamiento paga este saldo, no el monto original.</summary>
+    public decimal Saldo { get; set; }
+
     public string? CuentaContable { get; set; }
 
     public string? CuentaContableProveedor { get; set; }
@@ -162,11 +168,12 @@ public sealed class OrdenPagoDirectoUpsertLineaDto
     [StringLength(20, ErrorMessage = "El codigo presupuestario no puede superar 20 caracteres.")]
     public string CodigoPresupuestario { get; set; } = string.Empty;
 
+    // Colchon de 1000 en el servidor y la BD; la captura la limita la vista a 250 (MaxLength).
     [Required(ErrorMessage = "La descripcion es requerida.")]
-    [StringLength(150, ErrorMessage = "La descripcion no puede superar 150 caracteres.")]
+    [StringLength(1000, ErrorMessage = "La descripcion no puede superar 1000 caracteres.")]
     public string Descripcion { get; set; } = string.Empty;
 
-    [StringLength(100, ErrorMessage = "El concepto detalle no puede superar 100 caracteres.")]
+    [StringLength(1000, ErrorMessage = "El concepto detalle no puede superar 1000 caracteres.")]
     public string? ConceptoDetalle { get; set; }
 
     [Range(typeof(decimal), "0.01", "99999999999999.99", ErrorMessage = "El monto debe ser mayor a cero.")]
@@ -208,6 +215,12 @@ public sealed class OrdenPagoDirectoOperacionResultadoDto
     public int? CorrelativoProveedor { get; set; }
 
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>Numeros de cheque emitidos por la operacion (vacio si el metodo no fue CHEQUE).</summary>
+    public List<decimal> ChequesEmitidos { get; set; } = new();
+
+    /// <summary>cheque_id del cheque emitido (para imprimir); null si no se emitio cheque.</summary>
+    public long? ChequeId { get; set; }
 }
 
 public static class OrdenPagoDirectoMetodoPago

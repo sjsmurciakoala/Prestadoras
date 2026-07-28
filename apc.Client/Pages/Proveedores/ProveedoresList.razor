@@ -1,6 +1,7 @@
 ﻿@page "/proveedores"
 @attribute [Authorize]
 @inject ProveedoresClient ProveedoresClient
+@inject apc.Client.Services.Bancos.ChequeEmisionState ChequeEmision
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject IToastNotificationService ToastService
@@ -9,6 +10,7 @@
 @using Microsoft.JSInterop
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
 @using apc.Client.Services.Proveedores
 
 <PageTitle>SIAD - Proveedores</PageTitle>
@@ -55,20 +57,42 @@
         <div class="modern-card position-relative" style="min-height: 320px;">
             <DxFormLayout CssClass="mb-3">
                 <DxFormLayoutItem Caption="Codigo">
-                    <DxTextBox @bind-Text="filtro.Codigo" />
+                    <DxTextBox @bind-Text="filtro.Codigo"
+                               @bind-Text:after="AplicarFiltros"
+                               BindValueMode="BindValueMode.OnInput"
+                               NullText="Filtrar por codigo" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Nombre">
-                    <DxTextBox @bind-Text="filtro.Nombre" />
+                    <DxTextBox @bind-Text="filtro.Nombre"
+                               @bind-Text:after="AplicarFiltros"
+                               BindValueMode="BindValueMode.OnInput"
+                               NullText="Filtrar por nombre" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="RTN">
-                    <DxTextBox @bind-Text="filtro.Rtn" />
+                    <DxTextBox @bind-Text="filtro.Rtn"
+                               @bind-Text:after="AplicarFiltros"
+                               BindValueMode="BindValueMode.OnInput"
+                               NullText="Filtrar por RTN" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Tipo de proveedor">
+                    <DxComboBox Data="@tipos"
+                                TData="ProveedorTipoLookupDto"
+                                TValue="int?"
+                                @bind-Value="filtro.TipoProveedorId"
+                                @bind-Value:after="AplicarFiltros"
+                                ValueFieldName="@nameof(ProveedorTipoLookupDto.Id)"
+                                TextFieldName="@nameof(ProveedorTipoLookupDto.Nombre)"
+                                NullText="Todos"
+                                SearchMode="ListSearchMode.AutoSearch"
+                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                ValidationEnabled="false" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem Caption="Solo activos">
-                    <DxCheckBox @bind-Checked="filtro.SoloActivos" />
+                    <DxCheckBox @bind-Checked="filtro.SoloActivos" @bind-Checked:after="AplicarFiltros" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem ColSpanMd="12">
-                    <DxButton Text="Buscar" RenderStyle="ButtonRenderStyle.Primary" Click="BuscarAsync" />
-                    <DxButton Text="Limpiar" CssClass="ms-2" Click="LimpiarAsync" />
+                    <DxButton Text="Limpiar" IconCssClass="bi bi-eraser" Click="Limpiar" />
                 </DxFormLayoutItem>
             </DxFormLayout>
 
@@ -78,17 +102,37 @@
             }
 
             <div class="grid-wrapper">
-                <DxGrid Data="@proveedores"
+                <DxGrid @ref="grid"
+                        Data="@proveedoresFiltrados"
                         KeyFieldName="@nameof(ProveedorListItemDto.Codigo)"
-                        PageSize="12"
-                        SizeMode="SizeMode.Large"
-                        CssClass="grid-modern">
+                        PageSize="15"
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        ShowGroupPanel="false"
+                        CssClass="grid-solicitudes"
+                        LayoutAutoSaving="OnLayoutAutoSaving"
+                        LayoutAutoLoading="OnLayoutAutoLoading">
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <DxButton Text="Columnas"
+                                      IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      Click="MostrarColumnChooser"
+                                      CssClass="me-1" />
+                            <div class="ms-auto text-muted small">
+                                Total: <span class="fw-bold">@proveedoresFiltrados.Count.ToString("N0")</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
                     <Columns>
-                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Codigo)" Caption="Codigo" Width="140px" />
-                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Nombre)" Caption="Nombre" />
-                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Direccion)" Caption="Direccion" />
-                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Rtn)" Caption="RTN" Width="140px" />
-                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Telefono)" Caption="Telefono" Width="140px" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Codigo)" Caption="Codigo" Width="140px" MinWidth="140" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Nombre)" Caption="Nombre" MinWidth="320" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.TipoNombre)" Caption="Tipo" Width="170px" MinWidth="150" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Direccion)" Caption="Direccion" MinWidth="280" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Rtn)" Caption="RTN" Width="140px" MinWidth="130" />
+                        <DxGridDataColumn FieldName="@nameof(ProveedorListItemDto.Telefono)" Caption="Telefono" Width="140px" MinWidth="130" />
                         <DxGridDataColumn Caption="Estado" Width="120px">
                             <CellDisplayTemplate Context="cellData">
                                 @if (cellData.DataItem is ProveedorListItemDto item)
@@ -111,6 +155,16 @@
                                                 </button>
                                             </Authorized>
                                         </AuthorizeView>
+                                        @if (ChequeEmision.Disponible)
+                                        {
+                                            <AuthorizeView Policy="@AuthorizationPolicies.Bancos">
+                                                <Authorized>
+                                                    <button class="btn-icon btn-edit" title="Emitir cheque manual" @onclick="@(() => AbrirChequeManual(item))">
+                                                        <i class="bi bi-cash-stack"></i>
+                                                    </button>
+                                                </Authorized>
+                                            </AuthorizeView>
+                                        }
                                         <button class="btn-icon btn-edit" title="Editar" @onclick="@(() => EditarProveedor(item.Codigo))">
                                             <i class="bi bi-pencil-square"></i>
                                         </button>
@@ -122,6 +176,9 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
                     </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">No hay proveedores para mostrar.</div>
+                    </EmptyDataAreaTemplate>
                 </DxGrid>
             </div>
         </div>
@@ -129,14 +186,54 @@
 </DxScrollView>
 
 @code {
-    private readonly List<ProveedorListItemDto> proveedores = new();
+    private readonly List<ProveedorListItemDto> todosProveedores = new();
+    private List<ProveedorListItemDto> proveedoresFiltrados = new();
+    private readonly List<ProveedorTipoLookupDto> tipos = new();
     private ProveedorFilterDto filtro = new();
     private bool isLoading;
     private ErrorNotice errorNotice = default!;
+    private DxGrid? grid;
+
+
+    // Persistencia de layout (ancho/orden/visibilidad de columnas y ordenamiento) en localStorage,
+    // igual que el maestro de clientes. Clave unica por grid en kebab-case.
+    private const string GridLayoutStorageKey = "proveedores-list-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
     protected override async Task OnInitializedAsync()
     {
+        // Sin un tipo de transacción que emita cheques no se ofrece el cheque manual.
+        await ChequeEmision.EnsureLoadedAsync();
+        await CargarTiposAsync();
         await LoadProveedoresAsync();
+    }
+
+    // El cheque manual vive en su propia vista, con el proveedor como beneficiario.
+    private void AbrirChequeManual(ProveedorListItemDto proveedor)
+        => Navigation.NavigateTo(
+            $"/bancos/cheques/manual?proveedor={Uri.EscapeDataString(proveedor.Codigo)}" +
+            $"&beneficiario={Uri.EscapeDataString(proveedor.Nombre ?? string.Empty)}" +
+            $"&originUrl={Uri.EscapeDataString("/proveedores")}");
+
+    private async Task CargarTiposAsync()
+    {
+        try
+        {
+            var data = await ProveedoresClient.ObtenerTiposAsync();
+            tipos.Clear();
+            tipos.AddRange(data ?? Array.Empty<ProveedorTipoLookupDto>());
+        }
+        catch
+        {
+            // Si falla el lookup, el filtro por tipo queda vacio; no bloquea la busqueda de proveedores.
+        }
     }
 
     private async Task LoadProveedoresAsync()
@@ -145,11 +242,14 @@
         {
             isLoading = true;
 
-            var data = await ProveedoresClient.BuscarAsync(filtro);
-            proveedores.Clear();
-            proveedores.AddRange(data ?? Array.Empty<ProveedorListItemDto>());
+            // Traemos el catalogo completo del tenant una sola vez; los filtros se aplican en memoria
+            // de forma reactiva (ver AplicarFiltros), sin re-consultar al servidor por cada cambio.
+            var data = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto());
+            todosProveedores.Clear();
+            todosProveedores.AddRange(data ?? Array.Empty<ProveedorListItemDto>());
+            AplicarFiltros();
         }
-        catch (Exception ex)
+        catch (Exception)
         {
             ToastService.ShowToast(new ToastOptions { Title = "Proveedores", Text = "No se pudo cargar el catálogo de proveedores.", RenderStyle = ToastRenderStyle.Danger });
         }
@@ -160,12 +260,47 @@
         }
     }
 
-    private Task BuscarAsync() => LoadProveedoresAsync();
+    // Filtra en memoria sobre el catalogo cargado. Se invoca desde cada control del panel de filtros
+    // (@bind-...:after) para que la grid reaccione con cada cambio: texto mientras se escribe, combo, check.
+    private void AplicarFiltros()
+    {
+        IEnumerable<ProveedorListItemDto> query = todosProveedores;
 
-    private async Task LimpiarAsync()
+        var codigo = filtro.Codigo?.Trim();
+        if (!string.IsNullOrEmpty(codigo))
+        {
+            query = query.Where(p => p.Codigo.Contains(codigo, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var nombre = filtro.Nombre?.Trim();
+        if (!string.IsNullOrEmpty(nombre))
+        {
+            query = query.Where(p => p.Nombre.Contains(nombre, StringComparison.OrdinalIgnoreCase));
+        }
+
+        var rtn = filtro.Rtn?.Trim();
+        if (!string.IsNullOrEmpty(rtn))
+        {
+            query = query.Where(p => (p.Rtn ?? string.Empty).Contains(rtn, StringComparison.OrdinalIgnoreCase));
+        }
+
+        if (filtro.SoloActivos)
+        {
+            query = query.Where(p => p.Activo);
+        }
+
+        if (filtro.TipoProveedorId is int tipoId && tipoId > 0)
+        {
+            query = query.Where(p => p.TipoId == tipoId);
+        }
+
+        proveedoresFiltrados = query.ToList();
+    }
+
+    private void Limpiar()
     {
         filtro = new ProveedorFilterDto();
-        await LoadProveedoresAsync();
+        AplicarFiltros();
     }
 
     private void NuevoProveedor() => Navigation.NavigateTo("/proveedores/nuevo");
@@ -176,7 +311,7 @@
         Navigation.NavigateTo($"/proveedores/{safeCodigo}/editar");
     }
 
-    private void AbrirTipos() => Navigation.NavigateTo("/proveedores/tipos");
+    private void AbrirTipos() => Navigation.NavigateTo("/mantenimientos/tipos-proveedor");
 
     private void AbrirBancosProveedor() => Navigation.NavigateTo("/proveedores/bancos");
 

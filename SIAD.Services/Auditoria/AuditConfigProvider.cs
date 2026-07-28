@@ -18,7 +18,7 @@ public sealed class AuditConfigProvider : IAuditConfigProvider
 
     public bool DebeAuditar(long companyId, string tabla, string accion)
     {
-        if (companyId <= 0 || !AuditableMaestros.EsAuditable(tabla)) return false;
+        if (companyId <= 0) return false;
         var map = _cache.GetOrCreate(Key(companyId), e =>
         {
             e.AbsoluteExpirationRelativeToNow = System.TimeSpan.FromMinutes(30);

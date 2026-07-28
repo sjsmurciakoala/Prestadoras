@@ -1,0 +1,83 @@
+@using apc.Client.Services.Bancos
+@inject IJSRuntime JS
+
+@* Dialogo reutilizable post-emision de cheque: ofrece imprimir el documento del flujo
+   (compromiso/abono, opcional) y los dos formatos de cheque (corto y con detalle).
+   Se abre solo cuando ChequeId > 0. *@
+<DxPopup Visible="Visible" VisibleChanged="OnPopupVisibleChanged"
+         HeaderText="Imprimir"
+         Width="min(430px, 95vw)"
+         CloseOnOutsideClick="true"
+         ShowFooter="true">
+    <BodyContentTemplate>
+        <p class="mb-3">@Mensaje</p>
+        <div class="d-flex flex-column gap-2">
+            @if (!string.IsNullOrWhiteSpace(DocumentoUrl))
+            {
+                <DxButton Text="@DocumentoTexto" IconCssClass="bi bi-file-earmark-text"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          CssClass="w-100" Click="@(() => AbrirAsync(DocumentoUrl))" />
+            }
+            <DxButton Text="Imprimir cheque" IconCssClass="bi bi-printer"
+                      RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="w-100" Enabled="@(ChequeId > 0)"
+                      Click="@(() => AbrirAsync(ChequesClient.GetChequePdfUrl(ChequeId)))" />
+            <DxButton Text="Imprimir cheque + detalle" IconCssClass="bi bi-printer-fill"
+                      RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="w-100" Enabled="@(ChequeId > 0)"
+                      Click="@(() => AbrirAsync(ChequesClient.GetChequeDetallePdfUrl(ChequeId)))" />
+            @if (MostrarComprobante)
+            {
+                <DxButton Text="Comprobante de cheque" IconCssClass="bi bi-file-earmark-text"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          CssClass="w-100" Enabled="@(ChequeId > 0)"
+                          Click="@(() => AbrirAsync(ChequesClient.GetComprobantePdfUrl(ChequeId)))" />
+            }
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Cerrar" RenderStyle="ButtonRenderStyle.Secondary" Click="CerrarAsync" />
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public bool Visible { get; set; }
+
+    [Parameter] public EventCallback<bool> VisibleChanged { get; set; }
+
+    /// <summary>cheque_id emitido; el dialogo solo tiene sentido si es &gt; 0.</summary>
+    [Parameter] public long ChequeId { get; set; }
+
+    /// <summary>URL del documento propio del flujo (compromiso/abono). Null = no se ofrece.</summary>
+    [Parameter] public string? DocumentoUrl { get; set; }
+
+    [Parameter] public string DocumentoTexto { get; set; } = "Imprimir documento";
+
+    /// <summary>Ofrece tambien el comprobante interno del cheque (voucher COMPAGOL).</summary>
+    [Parameter] public bool MostrarComprobante { get; set; }
+
+    [Parameter] public string Mensaje { get; set; } = "El pago se registró. ¿Qué desea imprimir?";
+
+    private async Task AbrirAsync(string? url)
+    {
+        if (!string.IsNullOrWhiteSpace(url))
+        {
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+    }
+
+    private Task OnPopupVisibleChanged(bool value) => SetVisibleAsync(value);
+
+    private Task CerrarAsync() => SetVisibleAsync(false);
+
+    private async Task SetVisibleAsync(bool value)
+    {
+        if (Visible == value)
+        {
+            return;
+        }
+
+        Visible = value;
+        await VisibleChanged.InvokeAsync(value);
+    }
+}

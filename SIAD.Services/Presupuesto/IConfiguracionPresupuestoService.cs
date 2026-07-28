@@ -58,6 +58,11 @@ public interface IConfiguracionPresupuestoService
         string cuentaContable,
         CancellationToken ct = default);
 
+    Task<PresupuestoImpresionDto?> GetDatosImpresionAsync(
+        string idPresupuesto,
+        string user,
+        CancellationToken ct = default);
+
     Task<ConfiguracionPresupuestoEditDto> CreateAsync(
         ConfiguracionPresupuestoEditDto dto,
         string user,

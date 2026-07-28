@@ -51,15 +51,128 @@
             </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
-        <DxFormLayoutGroup Caption="Contacto" ColSpanXs="12">
-            <DxFormLayoutItem Caption="Nombre contacto" ColSpanXs="12" ColSpanMd="4">
-                <DxTextBox @bind-Text="Model.NombreContacto" MaxLength="150" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Telefono" ColSpanXs="12" ColSpanMd="4">
-                <DxTextBox @bind-Text="Model.Telefono" MaxLength="20" />
-            </DxFormLayoutItem>
-            <DxFormLayoutItem Caption="Email" ColSpanXs="12" ColSpanMd="4">
-                <DxTextBox @bind-Text="Model.Email" MaxLength="150" />
+        <DxFormLayoutGroup Caption="Contactos" ColSpanXs="12">
+            <DxFormLayoutItem ColSpanXs="12">
+                <DxGrid @key="@Model.Contactos.Count"
+                        Data="@Model.Contactos"
+                        ShowFilterRow="false"
+                        ShowGroupPanel="false"
+                        PageSize="10"
+                        CssClass="grid-modern">
+                    <Columns>
+                        @* Nombre y Email no llevan Width: con MinWidth el grid prefiere mostrar
+                           scroll horizontal interno antes que aplastarlos a 38px, que es lo que
+                           pasaba cuando los 7 anchos fijos se comían todo el espacio. *@
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.TipoContactoId)" Caption="Tipo" Width="150px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxComboBox Data="@TiposContacto"
+                                                TData="TipoContactoLookupDto"
+                                                TValue="long?"
+                                                @bind-Value="item.TipoContactoId"
+                                                ValueFieldName="@nameof(TipoContactoLookupDto.Id)"
+                                                TextFieldName="@nameof(TipoContactoLookupDto.Nombre)"
+                                                NullText="Sin tipo"
+                                                DropDownStyle="DropDownStyle.DropDownList"
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.Nombre)" Caption="Nombre" MinWidth="180">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.Nombre"
+                                               MaxLength="150"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.Cargo)" Caption="Cargo" Width="140px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.Cargo"
+                                               MaxLength="100"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.Telefono)" Caption="Telefono" Width="120px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.Telefono"
+                                               MaxLength="30"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.Extension)" Caption="Ext." Width="70px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.Extension"
+                                               MaxLength="10"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.Celular)" Caption="Celular" Width="120px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.Celular"
+                                               MaxLength="30"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.Email)" Caption="Email" MinWidth="200">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.Email"
+                                               MaxLength="150"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(ProveedorContactoDto.Observaciones)" Caption="Observaciones" Width="160px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <DxTextBox @bind-Text="item.Observaciones"
+                                               MaxLength="500"
+                                               Enabled="@(!IsBusy)" />
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="" Width="60px">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is ProveedorContactoDto item)
+                                {
+                                    <button type="button"
+                                            class="btn-icon btn-delete"
+                                            title="Quitar"
+                                            @onclick="() => RemoveContacto(Model.Contactos.IndexOf(item))"
+                                            disabled="@IsBusy">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                </DxGrid>
+
+                <div class="mt-2">
+                    <DxButton Text="Agregar contacto"
+                              IconCssClass="bi bi-plus-lg"
+                              Enabled="@(!IsBusy)"
+                              Click="AddContacto" />
+                </div>
             </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
@@ -144,7 +257,10 @@
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is ProveedorCuentaBancariaDto item)
                                 {
-                                    <button class="btn-icon btn-delete"
+                                    @* type="button": sin él, un <button> dentro de un EditForm
+                                       cuenta como submit y quitar una fila guardaba el proveedor. *@
+                                    <button type="button"
+                                            class="btn-icon btn-delete"
                                             title="Quitar"
                                             @onclick="() => RemoveCuenta(Model.CuentasBancarias.IndexOf(item))"
                                             disabled="@IsBusy">
@@ -191,6 +307,9 @@
 
     [Parameter]
     public IReadOnlyList<CuentaContableLookupDto> CuentasContables { get; set; } = Array.Empty<CuentaContableLookupDto>();
+
+    [Parameter]
+    public IReadOnlyList<TipoContactoLookupDto> TiposContacto { get; set; } = Array.Empty<TipoContactoLookupDto>();
 
     [Parameter]
     public EventCallback OnValidSubmit { get; set; }
@@ -269,6 +388,26 @@
         for (var i = 0; i < Model.CuentasBancarias.Count; i++)
         {
             Model.CuentasBancarias[i].Orden = i + 1;
+        }
+    }
+
+    private void AddContacto()
+    {
+        Model.Contactos.Add(new ProveedorContactoDto { Orden = Model.Contactos.Count + 1 });
+    }
+
+    private void RemoveContacto(int index)
+    {
+        if (index < 0 || index >= Model.Contactos.Count)
+        {
+            return;
+        }
+
+        Model.Contactos.RemoveAt(index);
+
+        for (var i = 0; i < Model.Contactos.Count; i++)
+        {
+            Model.Contactos[i].Orden = i + 1;
         }
     }
 }

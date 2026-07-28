@@ -24,20 +24,13 @@ public class ProveedorUpsertDto
     [StringLength(1000)]
     public string Direccion { get; set; } = string.Empty;
 
-    [StringLength(150)]
-    public string? NombreContacto { get; set; }
-
-    [StringLength(20)]
-    public string? Telefono { get; set; }
-
-    [StringLength(150)]
-    public string? Email { get; set; }
-
     [Required]
     [StringLength(20)]
     public string CuentaContable { get; set; } = string.Empty;
 
     public List<ProveedorCuentaBancariaDto> CuentasBancarias { get; set; } = new();
+
+    public List<ProveedorContactoDto> Contactos { get; set; } = new();
 
     public bool Activo { get; set; } = true;
 }

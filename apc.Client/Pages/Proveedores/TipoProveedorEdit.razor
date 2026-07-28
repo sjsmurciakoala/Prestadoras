@@ -1,5 +1,5 @@
-﻿@page "/proveedores/tipos/nuevo"
-@page "/proveedores/tipos/{id:int}/editar"
+﻿@page "/mantenimientos/tipos-proveedor/nuevo"
+@page "/mantenimientos/tipos-proveedor/{id:int}/editar"
 @attribute [Authorize]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
@@ -135,7 +135,7 @@
                 await ProveedoresClient.CrearTipoAsync(model);
             }
 
-            Navigation.NavigateTo("/proveedores/tipos");
+            Navigation.NavigateTo("/mantenimientos/tipos-proveedor");
         }
         catch (Exception ex)
         {
@@ -148,5 +148,5 @@
         }
     }
 
-    private void Volver() => Navigation.NavigateTo("/proveedores/tipos");
+    private void Volver() => Navigation.NavigateTo("/mantenimientos/tipos-proveedor");
 }

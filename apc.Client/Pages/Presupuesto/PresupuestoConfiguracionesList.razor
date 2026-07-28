@@ -23,7 +23,7 @@
 <PageTitle>SIAD - Presupuesto</PageTitle>
 
 <div class="page-container position-relative">
-    <DxToastProvider Name="PresupuestoToast" MaxToastCount="4" />
+    <DxToastProvider Name="PresupuestoToast" MaxToastCount="4" StickToViewport="true" />
 
     <DxLoadingPanel Visible="@IsBusy"
                     IsContentBlocked="true"
@@ -76,6 +76,11 @@
 
                         <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
                                   RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <DxButton Text="Imprimir" IconCssClass="bi bi-printer"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ImprimirPresupuestoAsync"
+                                  Enabled="@(selectedHeader is not null)" CssClass="me-1"
+                                  title="Imprime el presupuesto seleccionado con todas sus cuentas" />
 
                         <div class="ms-auto text-muted small">
                             Total: <span class="fw-bold">@totalRegistros.ToString("N0")</span>
@@ -219,9 +224,11 @@
             }
 
             <div class="grid-wrapper">
-                <DxGrid Data="@selectedDetalles" TData="ConfiguracionPresupuestoDetalleListItemDto"
+                <DxGrid Data="@detallesFiltrados" TData="ConfiguracionPresupuestoDetalleListItemDto"
                         KeyFieldName="@nameof(ConfiguracionPresupuestoDetalleListItemDto.DetalleId)"
                         PageSize="5" PagerPosition="GridPagerPosition.Bottom"
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                         ShowFilterRow="false" ShowSearchBox="false"
                         ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
                         ShowGroupPanel="false" CssClass="grid-solicitudes">
@@ -232,8 +239,23 @@
                                       RenderStyle="ButtonRenderStyle.Primary"
                                       Click="AbrirNuevoDetalleAsync"
                                       Enabled="@(!detalleSaving && !IsPresupuestoAprobado() && IsPresupuestoVigente())" />
+
+                            <DxTextBox Text="@filtroDetalle"
+                                       TextChanged="@((string v) => OnFiltroDetalleChanged(v))"
+                                       Placeholder="Buscar cuenta (código o descripción)..."
+                                       InputDelay="300"
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       Style="min-width: 300px;" />
+
                             <div class="ms-auto text-muted small">
-                                Registros: <span class="fw-bold">@selectedDetalles.Count.ToString("N0")</span>
+                                @if (EstaFiltrandoDetalle)
+                                {
+                                    <span>Mostrando: <span class="fw-bold">@detallesFiltrados.Count.ToString("N0")</span> de @selectedDetalles.Count.ToString("N0")</span>
+                                }
+                                else
+                                {
+                                    <span>Registros: <span class="fw-bold">@selectedDetalles.Count.ToString("N0")</span></span>
+                                }
                             </div>
                         </div>
                     </ToolbarTemplate>
@@ -301,7 +323,14 @@
                     </Columns>
 
                     <EmptyDataAreaTemplate>
-                        <div class="p-4 text-center text-muted">Este presupuesto aún no tiene líneas de detalle.</div>
+                        @if (EstaFiltrandoDetalle)
+                        {
+                            <div class="p-4 text-center text-muted">Ninguna cuenta del presupuesto coincide con "@filtroDetalle".</div>
+                        }
+                        else
+                        {
+                            <div class="p-4 text-center text-muted">Este presupuesto aún no tiene líneas de detalle.</div>
+                        }
                     </EmptyDataAreaTemplate>
                 </DxGrid>
             </div>
@@ -443,6 +472,8 @@
     private int totalRegistros;
     private ConfiguracionPresupuestoListItemDto? selectedHeader;
     private List<ConfiguracionPresupuestoDetalleListItemDto> selectedDetalles = new();
+    private List<ConfiguracionPresupuestoDetalleListItemDto> detallesFiltrados = new();
+    private string filtroDetalle = string.Empty;
     private bool isLoadingDetalles;
     private string? detalleErrorMessage;
     private bool detalleFormVisible;
@@ -525,6 +556,9 @@
                 ? null
                 : selectedHeader.IdPresupuesto.Trim();
         selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
+        // El filtro es por presupuesto: al cambiar de encabezado se arranca sin filtrar.
+        filtroDetalle = string.Empty;
+        AplicarFiltroDetalle();
         detalleErrorMessage = null;
         detalleFormVisible = false;
         cuentasDisponiblesDetalle = Array.Empty<CuentaContableLookupDto>();
@@ -544,6 +578,8 @@
         selectedHeader = null;
         SelectionState.SelectedPresupuestoId = null;
         selectedDetalles = new List<ConfiguracionPresupuestoDetalleListItemDto>();
+        filtroDetalle = string.Empty;
+        AplicarFiltroDetalle();
         isLoadingDetalles = false;
         detalleErrorMessage = null;
         detalleFormVisible = false;
@@ -958,7 +994,64 @@
         }
         finally
         {
+            AplicarFiltroDetalle();
             isLoadingDetalles = false;
+        }
+    }
+
+    private bool EstaFiltrandoDetalle => !string.IsNullOrWhiteSpace(filtroDetalle);
+
+    private void OnFiltroDetalleChanged(string valor)
+    {
+        filtroDetalle = valor ?? string.Empty;
+        AplicarFiltroDetalle();
+    }
+
+    private void AplicarFiltroDetalle()
+    {
+        var termino = filtroDetalle?.Trim() ?? string.Empty;
+        if (termino.Length == 0)
+        {
+            detallesFiltrados = selectedDetalles;
+            return;
+        }
+
+        // "1010101" también debe encontrar la cuenta que se muestra como "101-01-01".
+        var terminoCompacto = SoloAlfanumerico(termino);
+
+        detallesFiltrados = selectedDetalles
+            .Where(d =>
+                Contiene(d.CuentaContable, termino) ||
+                Contiene(d.CuentaContableCodigo, termino) ||
+                (terminoCompacto.Length > 0 &&
+                 SoloAlfanumerico(d.CuentaContableCodigo).Contains(terminoCompacto, StringComparison.OrdinalIgnoreCase)))
+            .ToList();
+    }
+
+    private static bool Contiene(string? valor, string termino)
+        => !string.IsNullOrWhiteSpace(valor) && valor.Contains(termino, StringComparison.OrdinalIgnoreCase);
+
+    private static string SoloAlfanumerico(string? valor)
+        => string.IsNullOrWhiteSpace(valor)
+            ? string.Empty
+            : new string(valor.Where(char.IsLetterOrDigit).ToArray());
+
+    private async Task ImprimirPresupuestoAsync()
+    {
+        if (selectedHeader is null || string.IsNullOrWhiteSpace(selectedHeader.IdPresupuesto))
+        {
+            ShowToast("Validación", "Seleccione un presupuesto en el grid superior para imprimirlo.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        try
+        {
+            var url = ConfiguracionPresupuestoClient.GetPdfUrl(selectedHeader.IdPresupuesto);
+            await JS.InvokeVoidAsync("open", url, "_blank");
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", $"No se pudo abrir el reporte: {ex.Message}", ToastRenderStyle.Danger);
         }
     }
 

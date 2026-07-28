@@ -24,6 +24,49 @@
         </DxFormLayoutItem>
     </DxFormLayoutGroup>
 
+    <DxFormLayoutGroup Caption="Contactos" ColSpanMd="12">
+        <DxFormLayoutItem ColSpanMd="12">
+            @if (Proveedor.Contactos.Count == 0)
+            {
+                <span class="text-muted">No hay contactos registrados.</span>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th>Tipo</th>
+                                <th>Nombre</th>
+                                <th>Cargo</th>
+                                <th>Telefono</th>
+                                <th>Ext.</th>
+                                <th>Celular</th>
+                                <th>Email</th>
+                                <th>Observaciones</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var contacto in Proveedor.Contactos.OrderBy(x => x.Orden))
+                            {
+                                <tr>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.TipoContacto) ? "-" : contacto.TipoContacto)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.Nombre) ? "-" : contacto.Nombre)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.Cargo) ? "-" : contacto.Cargo)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.Telefono) ? "-" : contacto.Telefono)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.Extension) ? "-" : contacto.Extension)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.Celular) ? "-" : contacto.Celular)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.Email) ? "-" : contacto.Email)</td>
+                                    <td>@(string.IsNullOrWhiteSpace(contacto.Observaciones) ? "-" : contacto.Observaciones)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </DxFormLayoutItem>
+    </DxFormLayoutGroup>
+
     <DxFormLayoutGroup Caption="Cuentas bancarias" ColSpanMd="12">
         <DxFormLayoutItem ColSpanMd="12">
             @if (Proveedor.CuentasBancarias.Count == 0)
