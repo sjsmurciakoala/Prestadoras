@@ -140,6 +140,7 @@ public static class ServiceRegistration
         services.AddScoped<IImpuestosService, ImpuestosService>();
 
         services.AddScoped<ICuentasBancosService, CuentasBancosService>();
+        services.AddScoped<IChequesService, ChequesService>();
         services.AddScoped<IBanMonedasService, BanMonedasService>();
         services.AddScoped<IBanTiposTransaccionesService, BanTiposTransaccionesService>();
         services.AddScoped<IBanTransaccionesService, BanTransaccionesService>();
@@ -162,6 +163,7 @@ public static class ServiceRegistration
         services.AddMemoryCache();
         services.AddScoped<ICurrentUserAudit, SystemUserAudit>();          // fallback; apc lo reemplaza
         services.AddScoped<IAuditConfigProvider, AuditConfigProvider>();
+        services.AddScoped<IAuditableCatalogProvider, AuditableCatalogProvider>();
         services.AddScoped<IBitacoraMaestrosService, BitacoraMaestrosService>();
         services.AddScoped<IAuditoriaConfigService, AuditoriaConfigService>();
         services.AddScoped<IBitacoraMaestrosWriter, BitacoraMaestrosWriter>();

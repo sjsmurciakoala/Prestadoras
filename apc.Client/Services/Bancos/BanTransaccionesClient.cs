@@ -94,7 +94,7 @@ public sealed class BanTransaccionesClient
         return await response.ReadFromJsonAsyncWithAuthCheck<BanTransaccionDetalleDto>(ct);
     }
 
-    public async Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoAsync(
+    public async Task<BanTransaccionResultadoDto> RegistrarMovimientoAsync(
         BanTransaccionCreateDto dto,
         CancellationToken ct = default)
     {
@@ -112,8 +112,8 @@ public sealed class BanTransaccionesClient
             throw new HttpRequestException(detail);
         }
 
-        var result = await response.ReadFromJsonAsyncWithAuthCheck<(long, decimal)>(ct);
-        return result;
+        var result = await response.ReadFromJsonAsyncWithAuthCheck<BanTransaccionResultadoDto>(ct);
+        return result ?? new BanTransaccionResultadoDto();
     }
 
     public async Task<(long BanKardexIdAnulacion, decimal SaldoResultante)> AnularMovimientoAsync(

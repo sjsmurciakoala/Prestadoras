@@ -10,6 +10,7 @@
 @using SIAD.Core.DTOs.Contabilidad
 
 @inject ConfiguracionTransaccionesClient ConfigClient
+@inject apc.Client.Services.Bancos.ChequeEmisionState ChequeEmision
 @inject AccountFormatState AccountFormat
 @inject HttpClient Http
 
@@ -125,7 +126,9 @@
                             @if (cell.DataItem is BancoConfiguracionTransaccionListDto itemFlags)
                             {
                                 <div class="d-flex gap-1 flex-wrap">
-                                    @* EmiteCheque oculto *@
+                                    @* CHQ: el tipo asigna número de cheque al registrar el movimiento
+                                       (lo consumen la transacción bancaria y el cheque manual). *@
+                                    @if (itemFlags.EmiteCheque) { <span class="badge bg-success" title="Emite cheque">CHQ</span> }
                                     @if (itemFlags.Pad) { <span class="badge bg-warning text-dark">PAD</span> }
                                     @if (itemFlags.Pda) { <span class="badge bg-warning text-dark">PDA</span> }
                                     @if (itemFlags.DetalleContable) { <span class="badge bg-primary">DC</span> }
@@ -263,7 +266,9 @@
                             </DxFormLayoutItem>
 
                             <DxFormLayoutGroup Caption="Opciones" ColSpanMd="12">
-                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6" Visible="false">
+                                <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6">
+                                    @* Al activarlo, los movimientos de este tipo consumen el correlativo de
+                                       cheques de la cuenta (ban_cuenta.proximo_cheque) y registran el cheque. *@
                                     <DxCheckBox @bind-Checked="editModel.EmiteCheque" CheckType="CheckType.Switch">Emite cheque</DxCheckBox>
                                 </DxFormLayoutItem>
                                 <DxFormLayoutItem ColSpanMd="3" ColSpanSm="6">
@@ -510,10 +515,11 @@
             return;
         }
 
-        // Campos deshabilitados: forzar a null/false antes de validar/guardar
+        // Campos deshabilitados: forzar a null/false antes de validar/guardar.
+        // EmiteCheque NO va aquí: el switch es editable y su valor lo decide el usuario
+        // (forzarlo apagaba el flag de cualquier tipo al guardarlo).
         editModel.CuentaContable = null;
         editModel.Destino = null;
-        editModel.EmiteCheque = false;
         editModel.UsaCentroCosto = false;
         editModel.CentroCostoId = null;
         editModel.Pda = true;
@@ -537,6 +543,10 @@
             {
                 await ConfigClient.CreateAsync(editModel);
             }
+
+            // "Emite cheque" decide si las vistas ofrecen el cheque manual: se invalida la
+            // caché para que el cambio se refleje sin recargar la aplicación.
+            ChequeEmision.Invalidar();
 
             formVisible = false;
             await LoadAsync();

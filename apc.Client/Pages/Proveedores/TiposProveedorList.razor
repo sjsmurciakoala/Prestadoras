@@ -1,4 +1,4 @@
-﻿@page "/proveedores/tipos"
+﻿@page "/mantenimientos/tipos-proveedor"
 @attribute [Authorize]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
@@ -107,9 +107,9 @@
         }
     }
 
-    private void NuevoTipo() => Navigation.NavigateTo("/proveedores/tipos/nuevo");
+    private void NuevoTipo() => Navigation.NavigateTo("/mantenimientos/tipos-proveedor/nuevo");
 
-    private void EditarTipo(int id) => Navigation.NavigateTo($"/proveedores/tipos/{id}/editar");
+    private void EditarTipo(int id) => Navigation.NavigateTo($"/mantenimientos/tipos-proveedor/{id}/editar");
 
     private void VolverAProveedores() => Navigation.NavigateTo("/proveedores");
 

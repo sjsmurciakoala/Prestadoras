@@ -443,6 +443,11 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
         await ValidarNumeroCuentaAsync(companyId, numeroCuenta, null, ct);
 
         var saldoActual = NormalizeSaldoActual(dto.SaldoActual);
+        var tipoCuenta = NormalizeRequired(dto.TipoCuenta, 20, nameof(BancoCuentaCreateDto.TipoCuenta)).ToUpperInvariant();
+        // Higiene: solo las cuentas tipo CHEQUES llevan numeración; el resto queda en 0.
+        var (proximoCheque, chequeMaximo) = tipoCuenta.Contains("CHEQ", StringComparison.OrdinalIgnoreCase)
+            ? NormalizeNumeracionCheques(dto.ProximoCheque, dto.ChequeMaximo)
+            : (0m, 0m);
 
         var entity = new ban_cuenta
         {
@@ -450,7 +455,7 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
             ban_banco_id = dto.BancoId,
             code = await GenerateAccountCodeAsync(companyId, ct),
             numero_cuenta = numeroCuenta,
-            tipo = NormalizeRequired(dto.TipoCuenta, 20, nameof(BancoCuentaCreateDto.TipoCuenta)).ToUpperInvariant(),
+            tipo = tipoCuenta,
             currency_code = NormalizeCurrency(dto.Moneda),
             nombre = NormalizeOptional(dto.Titular, TitularMaxLength, nameof(BancoCuentaCreateDto.Titular)) ?? string.Empty,
             banco_nombre = NormalizeObservaciones(dto.Observaciones),
@@ -462,7 +467,9 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
             created_at = DateTime.UtcNow,
             created_by = NormalizeUser(user),
             cont_account_id = contAccountId,
-            cta_conc = int.TryParse(ctaConc, out var ctaConcInt) ? ctaConcInt : 0
+            cta_conc = int.TryParse(ctaConc, out var ctaConcInt) ? ctaConcInt : 0,
+            proximo_cheque = proximoCheque,
+            cheque_maximo = chequeMaximo
         };
 
         context.ban_cuenta.Add(entity);
@@ -498,10 +505,15 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
         await ValidarNumeroCuentaAsync(companyId, numeroCuenta, cuentaId, ct);
 
         var saldoActual = NormalizeSaldoActual(dto.SaldoActual);
+        var tipoCuenta = NormalizeRequired(dto.TipoCuenta, 20, nameof(BancoCuentaCreateDto.TipoCuenta)).ToUpperInvariant();
+        // Higiene: solo las cuentas tipo CHEQUES llevan numeración; el resto queda en 0.
+        var (proximoCheque, chequeMaximo) = tipoCuenta.Contains("CHEQ", StringComparison.OrdinalIgnoreCase)
+            ? NormalizeNumeracionCheques(dto.ProximoCheque, dto.ChequeMaximo)
+            : (0m, 0m);
 
         entity.ban_banco_id = dto.BancoId;
         entity.numero_cuenta = numeroCuenta;
-        entity.tipo = NormalizeRequired(dto.TipoCuenta, 20, nameof(BancoCuentaCreateDto.TipoCuenta)).ToUpperInvariant();
+        entity.tipo = tipoCuenta;
         entity.currency_code = NormalizeCurrency(dto.Moneda);
         entity.nombre = NormalizeOptional(dto.Titular, TitularMaxLength, nameof(BancoCuentaCreateDto.Titular)) ?? string.Empty;
         entity.banco_nombre = NormalizeObservaciones(dto.Observaciones);
@@ -512,6 +524,8 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
         entity.updated_by = NormalizeUser(user);
         entity.cont_account_id = contAccountId;
         entity.cta_conc = int.TryParse(ctaConc, out var ctaConcInt) ? ctaConcInt : 0;
+        entity.proximo_cheque = proximoCheque;
+        entity.cheque_maximo = chequeMaximo;
 
         await context.SaveChangesAsync(ct);
         await context.Entry(entity).Reference(e => e.ban_banco).LoadAsync(ct);
@@ -755,8 +769,25 @@ WHERE cpc.account_id IN (SELECT account_id FROM arbol)";
             CreatedBy = entity.created_by,
             UpdatedAt = entity.updated_at,
             UpdatedBy = entity.updated_by,
-            CtaConc = entity.cta_conc.HasValue ? entity.cta_conc.Value.ToString() : null
+            CtaConc = entity.cta_conc.HasValue ? entity.cta_conc.Value.ToString() : null,
+            ProximoCheque = decimal.Truncate(entity.proximo_cheque),
+            ChequeMaximo = decimal.Truncate(entity.cheque_maximo)
         };
+    }
+
+    private static (decimal Proximo, decimal Maximo) NormalizeNumeracionCheques(decimal proximo, decimal maximo)
+    {
+        proximo = decimal.Truncate(proximo);
+        maximo = decimal.Truncate(maximo);
+        if (proximo < 0 || maximo < 0)
+        {
+            throw new ArgumentException("La numeración de cheques no puede ser negativa.");
+        }
+        if (maximo > 0 && proximo > maximo)
+        {
+            throw new ArgumentException("El próximo cheque no puede superar el cheque máximo del talonario.");
+        }
+        return (proximo, maximo);
     }
 
     private static decimal NormalizeSaldoActual(decimal? saldoActual)

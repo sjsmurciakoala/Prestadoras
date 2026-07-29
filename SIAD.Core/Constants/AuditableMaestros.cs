@@ -30,6 +30,8 @@ public static class AuditableMaestros
         // "prv_proveedores". Por eso la clave es la forma plural, no "prv_proveedor".
         new("prv_proveedores",                "Maestro de proveedores",         "Proveedores"),
         new("prv_proveedor_cuenta_bancaria",  "Cuentas bancarias de proveedor", "Proveedores"),
+        new("prv_proveedor_contacto",         "Contactos de proveedor",         "Proveedores"),
+        new("prv_tipo_contacto",              "Tipos de contacto",              "Proveedores"),
     ];
 
     private static readonly HashSet<string> _tablas =

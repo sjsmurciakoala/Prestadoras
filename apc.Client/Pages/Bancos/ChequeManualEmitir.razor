@@ -1,0 +1,765 @@
+@page "/bancos/cheques/manual"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Bancos
+@using apc.Client.Services
+@using apc.Client.Services.Bancos
+@using apc.Client.Services.Contabilidad
+
+@inject ChequesClient ChequesClient
+@inject CuentasBancosClient CuentasBancosClient
+@inject BanTiposTransaccionesClient TiposTransaccionesClient
+@inject AccountFormatState AccountFormat
+@inject TenantState TenantState
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject HttpClient Http
+
+@* Emision de un cheque MANUAL (suelto, sin compromiso ni orden de pago) como vista propia.
+   Se llega desde Cheques emitidos, Bancos, Cuentas bancarias y Proveedores; el numero lo
+   asigna el correlativo de la cuenta y el movimiento afecta el saldo y genera partida. *@
+
+<PageTitle>SIAD - Nuevo cheque manual</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ChequeManualToast" MaxToastCount="3" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Nuevo cheque manual</h2>
+            <p class="page-subtitle">
+                Cheque suelto, sin compromiso ni orden de pago: registra el movimiento bancario,
+                la partida contable y el cheque con el correlativo de la cuenta
+            </p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver" IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern"
+                      Click="Volver" Enabled="@(!isSaving)" />
+        </div>
+    </div>
+
+    @if (emitido is not null)
+    {
+        <div class="modern-card">
+            <div class="alert alert-success" role="alert">
+                <i class="bi bi-check-circle me-2"></i>@emitido.Mensaje
+            </div>
+
+            <div class="d-flex flex-wrap gap-2">
+                <DxButton Text="Imprimir cheque" IconCssClass="bi bi-printer"
+                          RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => AbrirPdfAsync(ChequesClient.GetChequePdfUrl(emitido.ChequeId ?? 0)))"
+                          Enabled="@(emitido.ChequeId is > 0)" />
+                <DxButton Text="Imprimir cheque + detalle" IconCssClass="bi bi-printer-fill"
+                          RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => AbrirPdfAsync(ChequesClient.GetChequeDetallePdfUrl(emitido.ChequeId ?? 0)))"
+                          Enabled="@(emitido.ChequeId is > 0)" />
+                <DxButton Text="Comprobante de cheque" IconCssClass="bi bi-file-earmark-text"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => AbrirPdfAsync(ChequesClient.GetComprobantePdfUrl(emitido.ChequeId ?? 0)))"
+                          Enabled="@(emitido.ChequeId is > 0)" />
+
+                <div class="ms-auto d-flex flex-wrap gap-2">
+                    <DxButton Text="Emitir otro cheque" IconCssClass="bi bi-plus-lg"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="EmitirOtroAsync" />
+                    <DxButton Text="Ir a cheques emitidos" IconCssClass="bi bi-journal-text"
+                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="@(() => Navigation.NavigateTo("/bancos/cheques"))" />
+                </div>
+            </div>
+        </div>
+    }
+    else if (isLoading)
+    {
+        <div class="modern-card">
+            <div class="p-3 text-muted"><i class="bi bi-hourglass-split me-2"></i>Cargando datos...</div>
+        </div>
+    }
+    else
+    {
+        <div class="modern-card">
+            @if (!string.IsNullOrWhiteSpace(errorMensaje))
+            {
+                <div class="alert alert-danger" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>@errorMensaje
+                </div>
+            }
+
+            @if (CuentasCheques.Count == 0)
+            {
+                <div class="alert alert-warning" role="alert">
+                    @(cuentasSinContable > 0
+                        ? "Las cuentas de tipo CHEQUES de esta empresa no tienen cuenta contable asignada. Asígnela en Bancos → Cuentas bancarias para poder emitir cheques."
+                        : "No hay cuentas bancarias de tipo CHEQUES configuradas para esta empresa.")
+                </div>
+            }
+            else if (TiposCheque.Count == 0)
+            {
+                <div class="alert alert-warning" role="alert">
+                    No hay tipos de transacción de salida con <strong>Emite cheque</strong> activado.
+                    Configúrelo en <em>Bancos → Configuración de transacciones</em>.
+                </div>
+            }
+
+            <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Banco *" ColSpanXs="12" ColSpanMd="4" Context="fBanco">
+                    <DxComboBox Data="@BancosDisponibles"
+                                TData="BancoOpcion"
+                                TValue="long?"
+                                Value="@bancoSeleccionado"
+                                ValueChanged="@((long? v) => OnBancoChangedAsync(v))"
+                                ValueFieldName="@nameof(BancoOpcion.BancoId)"
+                                TextFieldName="@nameof(BancoOpcion.Nombre)"
+                                NullText="— Seleccione el banco —"
+                                IncrementalFilteringMode="DataEditorFilteringMode.Contains"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                CssClass="w-100" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Cuenta bancaria *" ColSpanXs="12" ColSpanMd="4" Context="fCuenta">
+                    <DxComboBox Data="@CuentasFiltradas"
+                                TData="BancoCuentaListDto"
+                                TValue="long"
+                                Value="@modelo.BancoCuentaId"
+                                ValueChanged="@((long v) => OnCuentaChangedAsync(v))"
+                                ValueFieldName="@nameof(BancoCuentaListDto.BancoCuentaId)"
+                                TextFieldName="@nameof(BancoCuentaListDto.NumeroCuenta)"
+                                NullText="@(bancoSeleccionado.HasValue ? "— Seleccione la cuenta —" : "— Seleccione primero el banco —")"
+                                Enabled="@(bancoSeleccionado.HasValue)"
+                                IncrementalFilteringMode="DataEditorFilteringMode.Contains"
+                                CssClass="w-100" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Tipo de transacción *" ColSpanXs="12" ColSpanMd="4" Context="fTipo">
+                    <DxComboBox Data="@TiposCheque"
+                                TData="BanTipoTransaccionListDto"
+                                TValue="string"
+                                @bind-Value="modelo.IdTipoTransaccion"
+                                ValueFieldName="@nameof(BanTipoTransaccionListDto.TipoTransaccion)"
+                                TextFieldName="@nameof(BanTipoTransaccionListDto.Nombre)"
+                                NullText="— Seleccione el tipo —"
+                                CssClass="w-100" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Fecha *" ColSpanXs="12" ColSpanMd="3" Context="fFecha">
+                    <DxDateEdit @bind-Date="fechaEmision" CssClass="w-100" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Beneficiario *" ColSpanXs="12" ColSpanMd="6" Context="fBenef">
+                    <DxTextBox @bind-Text="modelo.Beneficiario" MaxLength="200" CssClass="w-100"
+                               NullText="A nombre de quién se emite el cheque" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Referencia *" ColSpanXs="12" ColSpanMd="3" Context="fRef">
+                    <DxTextBox @bind-Text="modelo.Referencia" @bind-Text:after="SincronizarTextosDetalle"
+                               MaxLength="100" CssClass="w-100"
+                               NullText="Documento / referencia" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Monto *" ColSpanXs="12" ColSpanMd="3" Context="fMonto">
+                    <DxSpinEdit TValue="decimal" Value="@modelo.Monto"
+                                ValueChanged="@((decimal v) => OnMontoChanged(v))"
+                                MinValue="0m" Increment="1m" DisplayFormat="N2"
+                                ShowSpinButtons="false" CssClass="w-100" InputCssClass="text-start" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Concepto *" ColSpanXs="12" ColSpanMd="@(EsCuentaUsd ? 6 : 9)" Context="fConcepto">
+                    <DxTextBox @bind-Text="modelo.Concepto" @bind-Text:after="SincronizarTextosDetalle"
+                               MaxLength="250" CssClass="w-100"
+                               NullText="Motivo del pago (se imprime en el cheque)" />
+                </DxFormLayoutItem>
+                @if (EsCuentaUsd)
+                {
+                    <DxFormLayoutItem Caption="Tasa de cambio *" ColSpanXs="12" ColSpanMd="3" Context="fTasa">
+                        <DxSpinEdit TValue="decimal" @bind-Value="modelo.TasaCambio"
+                                    MinValue="0.0001m" Increment="0.0001m" DisplayFormat="N4"
+                                    ShowSpinButtons="false" CssClass="w-100" />
+                    </DxFormLayoutItem>
+                }
+            </DxFormLayout>
+
+            <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+                @if (proximoInfo is not null && !proximoInfo.Agotado)
+                {
+                    <span class="summary-pill">
+                        Se emitirá el cheque <strong>N° @FormatearNumeroCheque(proximoInfo.ProximoCheque)</strong>
+                    </span>
+                }
+                @if (!string.IsNullOrWhiteSpace(Proveedor))
+                {
+                    <span class="summary-pill">Proveedor: <strong>@Proveedor</strong></span>
+                }
+            </div>
+
+            @if (proximoInfo is { Agotado: true })
+            {
+                <div class="alert alert-danger mt-3 mb-0" role="alert">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    La numeración de cheques de esta cuenta está agotada
+                    (máximo @FormatearNumeroCheque(proximoInfo.ChequeMaximo)). Actualícela en la gestión de la cuenta.
+                </div>
+            }
+
+            <div class="border rounded p-3 mt-3">
+                <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                    <label class="form-label mb-0">Detalle contable (partida del cheque) *</label>
+                    <DxButton Text="Agregar línea" IconCssClass="bi bi-plus-lg"
+                              RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="AgregarLinea" Enabled="@(!isSaving)" />
+                </div>
+
+                @if (CuentasContraLookup.Count == 0)
+                {
+                    <div class="text-muted small">No hay cuentas contables disponibles.</div>
+                }
+                else
+                {
+                    <div class="table-responsive">
+                        <table class="table table-sm align-middle mb-0">
+                            <thead>
+                                <tr>
+                                    <th style="width: 30%;">Cuenta contable</th>
+                                    <th>Descripción</th>
+                                    <th style="width: 14%;">Referencia</th>
+                                    <th style="width: 14%;">Debe</th>
+                                    <th style="width: 14%;">Haber</th>
+                                    <th style="width: 6%;"></th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @* Línea del banco: la genera el sistema con la cuenta contable de la
+                                   cuenta bancaria y va al HABER (el cheque es una salida). *@
+                                <tr class="table-secondary">
+                                    <td>
+                                        @if (CuentaSeleccionada is null)
+                                        {
+                                            <span class="text-muted">Seleccione la cuenta bancaria</span>
+                                        }
+                                        else
+                                        {
+                                            <div>@CuentaBancoContableDisplay</div>
+                                            <div class="small text-muted">Cuenta @CuentaSeleccionada.NumeroCuenta</div>
+                                        }
+                                    </td>
+                                    <td>
+                                        <DxTextBox @bind-Text="modelo.BancoDescripcion" MaxLength="500" CssClass="w-100"
+                                                   NullText="Descripción de la línea del banco" />
+                                    </td>
+                                    <td>
+                                        <DxTextBox @bind-Text="modelo.BancoReferencia" MaxLength="120" CssClass="w-100"
+                                                   NullText="Referencia" />
+                                    </td>
+                                    <td>@(0m.ToString("N2"))</td>
+                                    <td class="fw-semibold">@modelo.Monto.ToString("N2")</td>
+                                    <td></td>
+                                </tr>
+
+                                @for (var i = 0; i < modelo.Lineas.Count; i++)
+                                {
+                                    var linea = modelo.Lineas[i];
+                                    <tr @key="linea">
+                                        <td>
+                                            <DxComboBox Data="@CuentasContraLookup"
+                                                        TData="CuentaContableLookupDto"
+                                                        TValue="long"
+                                                        @bind-Value="linea.CuentaId"
+                                                        ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                                                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                        NullText="— Seleccione una cuenta —"
+                                                        DropDownStyle="DropDownStyle.DropDown"
+                                                        SearchMode="ListSearchMode.AutoSearch"
+                                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                        CssClass="w-100" />
+                                        </td>
+                                        <td>
+                                            <DxTextBox @bind-Text="linea.Descripcion" MaxLength="500" CssClass="w-100"
+                                                       NullText="Descripción de la línea" />
+                                        </td>
+                                        <td>
+                                            <DxTextBox @bind-Text="linea.SourceDocument" MaxLength="120" CssClass="w-100"
+                                                       NullText="Referencia" />
+                                        </td>
+                                        <td>
+                                            <DxSpinEdit TValue="decimal" @bind-Value="linea.Monto"
+                                                        MinValue="0m" Increment="1m" DisplayFormat="N2"
+                                                        ShowSpinButtons="false" CssClass="w-100"
+                                                        InputCssClass="text-start" />
+                                        </td>
+                                        <td>@(0m.ToString("N2"))</td>
+                                        <td class="text-center">
+                                            <button type="button" class="btn-icon btn-delete" title="Quitar"
+                                                    @onclick="() => QuitarLinea(linea)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                            <tfoot>
+                                <tr class="fw-semibold">
+                                    <td colspan="3" class="text-end">Total</td>
+                                    <td>@TotalLineas.ToString("N2")</td>
+                                    <td>@modelo.Monto.ToString("N2")</td>
+                                    <td></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+
+                    @if (modelo.Monto > 0 && Math.Abs(TotalLineas - modelo.Monto) > 0.01m)
+                    {
+                        <div class="text-danger small mt-2">
+                            La partida no cuadra: el debe del detalle (@TotalLineas.ToString("N2"))
+                            no coincide con el haber del banco (@modelo.Monto.ToString("N2")).
+                        </div>
+                    }
+                }
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="Volver" Enabled="@(!isSaving)" />
+                <DxButton Text="@(isSaving ? "Emitiendo..." : "Emitir cheque")"
+                          IconCssClass="bi bi-cash-stack"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Click="EmitirAsync" Enabled="@(PuedeEmitir && !isSaving)" />
+            </div>
+        </div>
+    }
+</div>
+
+<!-- Impresión posterior: cheque, cheque + detalle y comprobante -->
+<ChequeImpresionDialog @bind-Visible="impresionVisible"
+                       ChequeId="@(emitido?.ChequeId ?? 0)"
+                       MostrarComprobante="true"
+                       Mensaje="El cheque se emitió. ¿Qué desea imprimir?" />
+
+@code {
+    /// <summary>Cuenta bancaria a preseleccionar (se llega desde la fila de una cuenta).</summary>
+    [SupplyParameterFromQuery(Name = "cuentaId")]
+    public long? CuentaId { get; set; }
+
+    /// <summary>Codigo del proveedor beneficiario (se llega desde Proveedores).</summary>
+    [SupplyParameterFromQuery(Name = "proveedor")]
+    public string? Proveedor { get; set; }
+
+    [SupplyParameterFromQuery(Name = "beneficiario")]
+    public string? Beneficiario { get; set; }
+
+    /// <summary>Codigo de cuenta contable a proponer en la primera linea del detalle.</summary>
+    [SupplyParameterFromQuery(Name = "cuentaContable")]
+    public string? CuentaContable { get; set; }
+
+    /// <summary>Ruta a la que vuelve el botón "Volver"/"Cancelar".</summary>
+    [SupplyParameterFromQuery(Name = "originUrl")]
+    public string? OriginUrl { get; set; }
+
+    private ChequeManualCreateDto modelo = NuevoModelo();
+    private DateTime? fechaEmision = DateTime.Today;
+
+    private readonly List<BancoCuentaListDto> CuentasCheques = new();
+    private readonly List<BanTipoTransaccionListDto> TiposCheque = new();
+    private readonly List<CuentaContableLookupDto> CuentasContraLookup = new();
+
+    private long? bancoSeleccionado;
+    private int cuentasSinContable;
+
+    // Últimos textos propagados al detalle contable: una descripción/referencia de línea
+    // sigue al valor sugerido mientras el usuario no la haya editado a mano.
+    private string descripcionLineaPrevia = string.Empty;
+    private string referenciaLineaPrevia = string.Empty;
+
+    private ProximoChequeDto? proximoInfo;
+    private int proximoSeq;
+    private bool isLoading = true;
+    private bool isSaving;
+    private bool datosCargados;
+    private bool impresionVisible;
+    private string? errorMensaje;
+    private long companyId;
+
+    private ChequeManualResultadoDto? emitido;
+
+    // BancoId = 0 agrupa las cuentas sin banco asociado (migradas de SIMAFI), igual que
+    // en la página de cheques emitidos.
+    private sealed record BancoOpcion(long BancoId, string Nombre);
+
+    private const string SinBancoLabel = "(Sin banco)";
+
+    private IReadOnlyList<BancoOpcion> BancosDisponibles =>
+        CuentasCheques
+            .Select(c => new BancoOpcion(
+                c.BancoId,
+                string.IsNullOrWhiteSpace(c.BancoNombre) ? SinBancoLabel : c.BancoNombre.Trim()))
+            .Distinct()
+            .OrderBy(b => b.Nombre, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private IReadOnlyList<BancoCuentaListDto> CuentasFiltradas =>
+        bancoSeleccionado.HasValue
+            ? CuentasCheques.Where(c => c.BancoId == bancoSeleccionado.Value).ToList()
+            : Array.Empty<BancoCuentaListDto>();
+
+    private BancoCuentaListDto? CuentaSeleccionada =>
+        CuentasCheques.FirstOrDefault(c => c.BancoCuentaId == modelo.BancoCuentaId);
+
+    private bool EsCuentaUsd =>
+        string.Equals(CuentaSeleccionada?.Moneda?.Trim(), "USD", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Cuenta contable del banco (la que el servicio usa para la línea del haber).</summary>
+    private string CuentaBancoContableDisplay =>
+        CuentaSeleccionada is null
+            ? string.Empty
+            : AccountFormat.FormatDisplay(
+                CuentaSeleccionada.CuentaContableCodigo,
+                CuentaSeleccionada.CuentaContableNombre);
+
+    private decimal TotalLineas => modelo.Lineas.Sum(l => l.Monto);
+
+    private bool PuedeEmitir =>
+        modelo.BancoCuentaId > 0
+        && !string.IsNullOrWhiteSpace(modelo.IdTipoTransaccion)
+        && !string.IsNullOrWhiteSpace(modelo.Beneficiario)
+        && !string.IsNullOrWhiteSpace(modelo.Concepto)
+        && !string.IsNullOrWhiteSpace(modelo.Referencia)
+        && modelo.Monto > 0
+        && fechaEmision.HasValue
+        && fechaEmision.Value.Date <= DateTime.Today
+        && modelo.Lineas.Any(l => l.CuentaId > 0 && l.Monto > 0)
+        && Math.Abs(TotalLineas - modelo.Monto) <= 0.01m
+        && proximoInfo is not { Agotado: true }
+        && (!EsCuentaUsd || modelo.TasaCambio > 0m);
+
+    protected override async Task OnInitializedAsync()
+    {
+        ReiniciarModelo();
+        await CargarDatosAsync();
+    }
+
+    private static ChequeManualCreateDto NuevoModelo() => new()
+    {
+        FechaEmision = DateOnly.FromDateTime(DateTime.Today),
+        TasaCambio = 1m,
+        Lineas = new List<BanTransaccionContraLineaDto> { new() }
+    };
+
+    private void ReiniciarModelo()
+    {
+        errorMensaje = null;
+        proximoInfo = null;
+        bancoSeleccionado = null;
+        fechaEmision = DateTime.Today;
+        modelo = NuevoModelo();
+        modelo.Beneficiario = Beneficiario?.Trim() ?? string.Empty;
+        modelo.ProveedorCodigo = string.IsNullOrWhiteSpace(Proveedor) ? null : Proveedor.Trim();
+        modelo.Referencia = string.IsNullOrWhiteSpace(Proveedor)
+            ? string.Empty
+            : $"CHM-{Proveedor.Trim()}";
+
+        // Siembra las descripciones/referencias de las líneas con lo que ya haya.
+        descripcionLineaPrevia = string.Empty;
+        referenciaLineaPrevia = string.Empty;
+        SincronizarTextosDetalle();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        isLoading = !datosCargados;
+        try
+        {
+            companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0)
+            {
+                errorMensaje = "No se pudo determinar la empresa actual.";
+                return;
+            }
+
+            if (!datosCargados)
+            {
+                await AccountFormat.EnsureLoadedAsync();
+
+                var cuentas = await CuentasBancosClient.GetAsync(companyId);
+                var cuentasCheque = cuentas
+                    .Where(c => !string.IsNullOrWhiteSpace(c.TipoCuenta) &&
+                                c.TipoCuenta.Contains("CHEQ", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+                // Solo cuentas con cuenta contable asignada: la partida del cheque se arma
+                // contra ella y sin ella el registro falla al postear (o cae al BANCO_DEFAULT
+                // de Integración Contable, que no es lo esperado al emitir un cheque).
+                CuentasCheques.Clear();
+                CuentasCheques.AddRange(cuentasCheque
+                    .Where(c => !string.IsNullOrWhiteSpace(c.CuentaContableCodigo))
+                    .OrderBy(c => c.NumeroCuenta, StringComparer.OrdinalIgnoreCase));
+
+                cuentasSinContable = cuentasCheque.Count - CuentasCheques.Count;
+
+                var tipos = await TiposTransaccionesClient.GetAsync(companyId);
+                TiposCheque.Clear();
+                TiposCheque.AddRange(tipos.Where(t =>
+                    t.EmiteCheque &&
+                    !string.Equals(t.EntraSale?.Trim(), "E", StringComparison.OrdinalIgnoreCase)));
+
+                await CargarPlanCuentasAsync();
+                datosCargados = true;
+            }
+
+            // Cuenta preseleccionada (se llegó desde la fila de una cuenta bancaria).
+            if (CuentaId is > 0)
+            {
+                var cuentaInicial = CuentasCheques.FirstOrDefault(c => c.BancoCuentaId == CuentaId.Value);
+                if (cuentaInicial is not null)
+                {
+                    bancoSeleccionado = cuentaInicial.BancoId;
+                    modelo.BancoCuentaId = cuentaInicial.BancoCuentaId;
+                }
+            }
+
+            // Defaults: unico banco / unica cuenta / unico tipo / cuenta contable del proveedor.
+            if (bancoSeleccionado is null && BancosDisponibles.Count == 1)
+            {
+                bancoSeleccionado = BancosDisponibles[0].BancoId;
+            }
+            if (modelo.BancoCuentaId <= 0 && CuentasFiltradas.Count == 1)
+            {
+                modelo.BancoCuentaId = CuentasFiltradas[0].BancoCuentaId;
+            }
+            if (string.IsNullOrWhiteSpace(modelo.IdTipoTransaccion) && TiposCheque.Count == 1)
+            {
+                modelo.IdTipoTransaccion = TiposCheque[0].TipoTransaccion;
+            }
+            if (!string.IsNullOrWhiteSpace(CuentaContable) && modelo.Lineas.Count > 0)
+            {
+                var sugerida = CuentasContraLookup.FirstOrDefault(c =>
+                    string.Equals(c.Code?.Trim(), CuentaContable.Trim(), StringComparison.OrdinalIgnoreCase));
+                if (sugerida is not null)
+                {
+                    modelo.Lineas[0].CuentaId = sugerida.AccountId;
+                }
+            }
+
+            if (modelo.BancoCuentaId > 0)
+            {
+                await RefrescarProximoAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMensaje = $"No se pudieron cargar los datos del cheque: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarPlanCuentasAsync()
+    {
+        var cuentas = await Http.GetFromJsonAsync<List<PlanCuentaDto>>("api/contabilidad/catalogos/plan-cuentas");
+        CuentasContraLookup.Clear();
+        CuentasContraLookup.AddRange((cuentas ?? new List<PlanCuentaDto>())
+            .Where(c => c.AllowsPosting && (string.IsNullOrWhiteSpace(c.Status)
+                                            || string.Equals(c.Status, "ACTIVE", StringComparison.OrdinalIgnoreCase)
+                                            || string.Equals(c.Status, "ACTIVO", StringComparison.OrdinalIgnoreCase)))
+            .OrderBy(c => c.Code, StringComparer.OrdinalIgnoreCase)
+            .Select(c => new CuentaContableLookupDto
+            {
+                AccountId = c.AccountId,
+                Code = c.Code ?? string.Empty,
+                Description = c.Name ?? string.Empty,
+                DisplayText = AccountFormat.FormatDisplay(c.Code, c.Name)
+            }));
+    }
+
+    // La cuenta pertenece al banco: al cambiarlo se limpia la selección y su numeración.
+    private async Task OnBancoChangedAsync(long? bancoId)
+    {
+        bancoSeleccionado = bancoId;
+        modelo.BancoCuentaId = 0;
+        modelo.TasaCambio = 1m;
+        proximoSeq++;
+        proximoInfo = null;
+
+        if (bancoId.HasValue && CuentasFiltradas.Count == 1)
+        {
+            await OnCuentaChangedAsync(CuentasFiltradas[0].BancoCuentaId);
+        }
+    }
+
+    private async Task OnCuentaChangedAsync(long bancoCuentaId)
+    {
+        modelo.BancoCuentaId = bancoCuentaId;
+        if (!EsCuentaUsd)
+        {
+            modelo.TasaCambio = 1m;
+        }
+
+        await RefrescarProximoAsync();
+    }
+
+    private async Task RefrescarProximoAsync()
+    {
+        var seq = ++proximoSeq;
+        proximoInfo = null;
+        if (modelo.BancoCuentaId <= 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var info = await ChequesClient.GetProximoAsync(modelo.BancoCuentaId);
+            if (seq == proximoSeq)
+            {
+                proximoInfo = info;
+                // La referencia de las líneas lleva el número de cheque: se rearma al cambiar la cuenta.
+                SincronizarTextosDetalle();
+            }
+        }
+        catch (Exception ex)
+        {
+            if (seq == proximoSeq)
+            {
+                errorMensaje = $"No se pudo consultar la numeración de la cuenta: {ex.Message}";
+            }
+        }
+    }
+
+    // Con una sola linea el detalle sigue al monto del cheque; con varias, el usuario reparte.
+    private void OnMontoChanged(decimal monto)
+    {
+        modelo.Monto = monto;
+        if (modelo.Lineas.Count == 1)
+        {
+            modelo.Lineas[0].Monto = monto;
+        }
+    }
+
+    /// <summary>Referencia de las líneas contables: "Cheque N° X" con el número que se asignará.</summary>
+    private string ReferenciaLineaSugerida =>
+        proximoInfo is { Agotado: false }
+            ? $"Cheque N° {FormatearNumeroCheque(proximoInfo.ProximoCheque)}"
+            : string.Empty;
+
+    /// <summary>
+    /// Descripción de las líneas contables: concepto + la referencia DEL CHEQUE (la de la
+    /// cabecera, no la de la línea, que lleva el número).
+    /// </summary>
+    private string DescripcionLineaSugerida =>
+        string.Join(" - ", new[] { modelo.Concepto?.Trim(), modelo.Referencia?.Trim() }
+            .Where(v => !string.IsNullOrWhiteSpace(v)));
+
+    // Propaga los textos sugeridos a las dos líneas contables (banco y contrapartidas).
+    // La línea que el usuario editó a mano deja de seguirlos y conserva lo suyo.
+    private void SincronizarTextosDetalle()
+    {
+        var descripcion = DescripcionLineaSugerida;
+        var referencia = ReferenciaLineaSugerida;
+
+        if (SigueAlOrigen(modelo.BancoDescripcion, descripcionLineaPrevia))
+        {
+            modelo.BancoDescripcion = descripcion;
+        }
+        if (SigueAlOrigen(modelo.BancoReferencia, referenciaLineaPrevia))
+        {
+            modelo.BancoReferencia = referencia;
+        }
+
+        foreach (var linea in modelo.Lineas)
+        {
+            if (SigueAlOrigen(linea.Descripcion, descripcionLineaPrevia))
+            {
+                linea.Descripcion = descripcion;
+            }
+            if (SigueAlOrigen(linea.SourceDocument, referenciaLineaPrevia))
+            {
+                linea.SourceDocument = referencia;
+            }
+        }
+
+        descripcionLineaPrevia = descripcion;
+        referenciaLineaPrevia = referencia;
+    }
+
+    // El número de cheque es un correlativo, no un importe: se muestra sin separador de miles.
+    private static string FormatearNumeroCheque(decimal numero)
+        => decimal.Truncate(numero).ToString("0");
+
+    private static bool SigueAlOrigen(string? valor, string valorPrevio)
+        => string.IsNullOrWhiteSpace(valor) ||
+           string.Equals(valor.Trim(), valorPrevio, StringComparison.Ordinal);
+
+    private void AgregarLinea() => modelo.Lineas.Add(new BanTransaccionContraLineaDto
+    {
+        Descripcion = DescripcionLineaSugerida,
+        SourceDocument = ReferenciaLineaSugerida
+    });
+
+    private void QuitarLinea(BanTransaccionContraLineaDto linea)
+    {
+        if (modelo.Lineas.Count > 1)
+        {
+            modelo.Lineas.Remove(linea);
+        }
+    }
+
+    private async Task EmitirAsync()
+    {
+        // Guarda de doble submit: la accion consume un correlativo de cheque.
+        if (isSaving || !PuedeEmitir)
+        {
+            return;
+        }
+
+        isSaving = true;
+        errorMensaje = null;
+        try
+        {
+            // El número puede haber avanzado desde que se abrió la vista: se refresca para
+            // que la referencia "Cheque N° X" del detalle salga con el vigente.
+            await RefrescarProximoAsync();
+            if (proximoInfo is { Agotado: true })
+            {
+                return;
+            }
+
+            SincronizarTextosDetalle();
+
+            modelo.FechaEmision = DateOnly.FromDateTime(fechaEmision!.Value.Date);
+            modelo.Beneficiario = modelo.Beneficiario.Trim();
+            modelo.Concepto = modelo.Concepto.Trim();
+            modelo.Referencia = modelo.Referencia.Trim();
+            modelo.Lineas = modelo.Lineas.Where(l => l.CuentaId > 0 && l.Monto > 0).ToList();
+
+            emitido = await ChequesClient.EmitirManualAsync(modelo);
+            impresionVisible = emitido.ChequeId is > 0;
+        }
+        catch (Exception ex)
+        {
+            errorMensaje = ex.Message;
+            // Se reponen las lineas filtradas para no perder lo digitado.
+            if (modelo.Lineas.Count == 0)
+            {
+                modelo.Lineas.Add(new BanTransaccionContraLineaDto());
+            }
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private async Task EmitirOtroAsync()
+    {
+        emitido = null;
+        impresionVisible = false;
+        ReiniciarModelo();
+        await CargarDatosAsync();
+    }
+
+    private async Task AbrirPdfAsync(string url)
+        => await JS.InvokeVoidAsync("open", url, "_blank");
+
+    private void Volver()
+    {
+        var destino = string.IsNullOrWhiteSpace(OriginUrl) ? "/bancos/cheques" : OriginUrl;
+        Navigation.NavigateTo(destino);
+    }
+}

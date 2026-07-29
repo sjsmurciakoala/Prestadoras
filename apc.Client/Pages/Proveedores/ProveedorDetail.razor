@@ -5,6 +5,7 @@
 @using apc.Client.Services.Proveedores
 @using apc.Client.Pages.Proveedores.Components
 @inject ProveedoresClient ProveedoresClient
+@inject apc.Client.Services.Bancos.ChequeEmisionState ChequeEmision
 @inject NavigationManager Navigation
 @inject ILogger<ProveedorDetail> Logger
 
@@ -30,6 +31,15 @@
                                            Click="AbrirCompromisosProveedor" />
                         </Authorized>
                     </AuthorizeView>
+                    @if (ChequeEmision.Disponible)
+                    {
+                        <AuthorizeView Policy="@AuthorizationPolicies.Bancos">
+                            <Authorized>
+                                <DxToolbarItem CssClass="m-2" Text="Emitir cheque manual" IconCssClass="bi bi-cash-stack"
+                                               Click="AbrirChequeManual" Enabled="@(proveedor is not null)" />
+                            </Authorized>
+                        </AuthorizeView>
+                    }
                 </Items>
             </DxToolbar>
 
@@ -79,6 +89,7 @@
     private string? error;
     private int activeTabIndex;
 
+
     protected override async Task OnParametersSetAsync()
     {
         isLoading = true;
@@ -86,6 +97,9 @@
 
         try
         {
+            // Sin un tipo de transacción que emita cheques no se ofrece el cheque manual.
+            await ChequeEmision.EnsureLoadedAsync();
+
             if (string.IsNullOrWhiteSpace(Codigo))
             {
                 error = "Codigo invalido.";
@@ -119,6 +133,28 @@
         var safeCodigo = Uri.EscapeDataString(Codigo);
         var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
         Navigation.NavigateTo($"/proveedores/compromisos-proveedor?proveedor={safeCodigo}&originUrl={originUrl}");
+    }
+
+    // El cheque manual vive en su propia vista, con el proveedor como beneficiario y su
+    // cuenta contable propuesta en el detalle.
+    private void AbrirChequeManual()
+    {
+        if (proveedor is null)
+        {
+            return;
+        }
+
+        var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
+        var url = $"/bancos/cheques/manual?proveedor={Uri.EscapeDataString(proveedor.Codigo)}" +
+                  $"&beneficiario={Uri.EscapeDataString(proveedor.Nombre ?? string.Empty)}" +
+                  $"&originUrl={originUrl}";
+
+        if (!string.IsNullOrWhiteSpace(proveedor.CuentaContable))
+        {
+            url += $"&cuentaContable={Uri.EscapeDataString(proveedor.CuentaContable)}";
+        }
+
+        Navigation.NavigateTo(url);
     }
 
     private string GetCurrentRelativeUrl()

@@ -72,6 +72,32 @@
     color: #084298;
 }
 
+/* Vista previa del asiento del abono y detalle contable de la partida (popup). */
+.partida-preview {
+    padding-top: 1rem;
+    border-top: 1px solid #edf1f4;
+}
+
+.detail-table {
+    border: 1px solid #edf1f4;
+    border-radius: 12px;
+    overflow: hidden;
+}
+
+::deep .detail-table table thead th {
+    background: #f8fafc;
+    color: #44525e;
+    border-bottom-color: #dfe6ec;
+}
+
+.partida-no-cuadra-message td {
+    background-color: #b00020 !important;
+    color: #ffeb3b !important;
+    font-weight: 700;
+    text-align: center;
+    padding: 0.85rem 1rem;
+}
+
 .grid-modern {
     width: 100%;
 }

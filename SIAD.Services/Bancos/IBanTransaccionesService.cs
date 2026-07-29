@@ -34,7 +34,14 @@ public interface IBanTransaccionesService
         DateOnly? fechaHasta = null,
         CancellationToken ct = default);
 
-    Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoAsync(
+    /// <summary>
+    /// Registra el movimiento bancario (partida contable + kardex) y, si el tipo de
+    /// transaccion emite cheque, asigna el siguiente numero de la cuenta.
+    /// <paramref name="beneficiarioCheque"/> / <paramref name="conceptoCheque"/> permiten
+    /// separar el beneficiario del cheque de la descripcion del movimiento (cheque manual);
+    /// si son nulos se usa la descripcion, como en el resto de los flujos.
+    /// </summary>
+    Task<(long BanKardexId, decimal SaldoResultante, long? ChequeId, decimal? NumeroCheque)> RegistrarMovimientoAsync(
         long bancoCuentaId,
         string idTipoTransaccion,
         DateOnly fechaMovimiento,
@@ -44,6 +51,20 @@ public interface IBanTransaccionesService
         decimal tasaCambio,
         decimal monto,
         IReadOnlyList<BanTransaccionContraLineaDto> contraCuentas,
+        string usuario,
+        CancellationToken ct = default,
+        string? beneficiarioCheque = null,
+        string? conceptoCheque = null,
+        string origenCheque = ChequeOrigen.Transaccion,
+        string? descripcionPartidaBanco = null);
+
+    /// <summary>
+    /// Emite un cheque MANUAL (suelto, sin compromiso ni orden de pago): valida la cuenta
+    /// y el tipo de transaccion, y delega en <see cref="RegistrarMovimientoAsync"/> con
+    /// origen <see cref="ChequeOrigen.Manual"/>. El numero lo asigna el correlativo de la cuenta.
+    /// </summary>
+    Task<ChequeManualResultadoDto> RegistrarChequeManualAsync(
+        ChequeManualCreateDto dto,
         string usuario,
         CancellationToken ct = default);
 

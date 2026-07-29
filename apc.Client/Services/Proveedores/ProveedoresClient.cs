@@ -30,6 +30,11 @@ public sealed class ProveedoresClient
             $"&rtn={Uri.EscapeDataString(filtro.Rtn ?? string.Empty)}" +
             $"&soloActivos={filtro.SoloActivos}";
 
+        if (filtro.TipoProveedorId is int tipoId && tipoId > 0)
+        {
+            query += $"&tipoProveedorId={tipoId}";
+        }
+
         return await http.GetFromJsonAsyncWithAuthCheck<ProveedorListItemDto[]>(query, ct)
             ?? Array.Empty<ProveedorListItemDto>();
     }
@@ -157,6 +162,37 @@ public sealed class ProveedoresClient
     public async Task EliminarTipoAsync(int id, CancellationToken ct = default)
     {
         var response = await http.DeleteAsync($"api/proveedores/tipos/{id}", ct);
+        await EnsureSuccessWithDetailsAsync(response, ct);
+    }
+
+    public async Task<TipoContactoLookupDto[]> ObtenerTiposContactoAsync(CancellationToken ct = default)
+        => await http.GetFromJsonAsyncWithAuthCheck<TipoContactoLookupDto[]>("api/proveedores/contactos/tipos", ct)
+           ?? Array.Empty<TipoContactoLookupDto>();
+
+    public async Task<TipoContactoListItemDto[]> ObtenerTiposContactoCatalogoAsync(CancellationToken ct = default)
+        => await http.GetFromJsonAsyncWithAuthCheck<TipoContactoListItemDto[]>("api/proveedores/contactos/tipos/catalogo", ct)
+           ?? Array.Empty<TipoContactoListItemDto>();
+
+    public async Task<TipoContactoDetailDto?> ObtenerTipoContactoAsync(long id, CancellationToken ct = default)
+        => id <= 0
+            ? null
+            : await http.GetFromJsonAsyncWithAuthCheck<TipoContactoDetailDto?>($"api/proveedores/contactos/tipos/{id}", ct);
+
+    public async Task CrearTipoContactoAsync(TipoContactoUpsertDto dto, CancellationToken ct = default)
+    {
+        var response = await http.PostAsJsonAsyncWithAuthCheck("api/proveedores/contactos/tipos", dto, ct);
+        await EnsureSuccessWithDetailsAsync(response, ct);
+    }
+
+    public async Task ActualizarTipoContactoAsync(long id, TipoContactoUpsertDto dto, CancellationToken ct = default)
+    {
+        var response = await http.PutAsJsonAsyncWithAuthCheck($"api/proveedores/contactos/tipos/{id}", dto, ct);
+        await EnsureSuccessWithDetailsAsync(response, ct);
+    }
+
+    public async Task EliminarTipoContactoAsync(long id, CancellationToken ct = default)
+    {
+        var response = await http.DeleteAsync($"api/proveedores/contactos/tipos/{id}", ct);
         await EnsureSuccessWithDetailsAsync(response, ct);
     }
 

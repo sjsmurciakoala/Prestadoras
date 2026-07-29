@@ -321,7 +321,7 @@ public sealed class BanTransaccionesController : ControllerBase
     }
 
     [HttpPost]
-    public async Task<ActionResult<(long, decimal)>> RegistrarMovimiento(
+    public async Task<ActionResult<BanTransaccionResultadoDto>> RegistrarMovimiento(
         [FromBody] BanTransaccionCreateDto dto,
         CancellationToken ct = default)
     {
@@ -382,7 +382,12 @@ public sealed class BanTransaccionesController : ControllerBase
                 usuario,
                 ct);
 
-            return Ok(resultado);
+            return Ok(new BanTransaccionResultadoDto
+            {
+                BanKardexId = resultado.BanKardexId,
+                SaldoResultante = resultado.SaldoResultante,
+                ChequeId = resultado.ChequeId
+            });
         }
         catch (ArgumentNullException ex)
         {

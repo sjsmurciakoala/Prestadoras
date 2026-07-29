@@ -72,9 +72,11 @@ namespace apc.Client
             services.AddScoped<ConfiguracionTransaccionesClient>();
             services.AddScoped<BancosClient>();
             services.AddScoped<CuentasBancosClient>();
+            services.AddScoped<ChequesClient>();
             services.AddScoped<BanMonedasClient>();
             services.AddScoped<BanTiposTransaccionesClient>();
             services.AddScoped<BanTransaccionesClient>();
+            services.AddScoped<ChequeEmisionState>();
             
             // Clientes HTTP para módulo de Clientes
             services.AddScoped<ClientesClient>();

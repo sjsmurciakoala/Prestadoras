@@ -734,7 +734,7 @@ public class AbonoService : IAbonoService
         string usuario,
         CancellationToken ct)
     {
-        return await _banTransaccionesService.RegistrarMovimientoAsync(
+        var resultado = await _banTransaccionesService.RegistrarMovimientoAsync(
             bancoCuentaId,
             TipoTransaccionBancoDeposito,
             fechaMovimiento,
@@ -746,6 +746,7 @@ public class AbonoService : IAbonoService
             contraCuentas,
             usuario,
             ct);
+        return (resultado.BanKardexId, resultado.SaldoResultante);
     }
 
     private async Task TryCompensarMovimientoBancarioAsync(long bancoCuentaId, long banKardexId, string usuario, CancellationToken ct)

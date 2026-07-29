@@ -18,6 +18,8 @@ public class ProveedoresService : IProveedoresService
     private const string ProveedorTableName = "prv_proveedores";
     private const string ProveedorBancoTableName = "prv_bancos";
     private const string ProveedorCuentaBancariaTableName = "prv_proveedor_cuenta_bancaria";
+    private const string ProveedorContactoTableName = "prv_proveedor_contacto";
+    private const string TipoContactoTableName = "prv_tipo_contacto";
     private const int ProveedorCodigoLongitud = 6;
     private const int ProveedorCodigoBase = 1000;
     private const int ProveedorCodigoMaximo = 999999;
@@ -143,6 +145,13 @@ public class ProveedoresService : IProveedoresService
             proveedores = proveedores.Where(p => p.status == true);
         }
 
+        if (filtro.TipoProveedorId is int tipoId && tipoId > 0)
+        {
+            // Se promueve la columna (short) a int en vez de truncar el id a short, para que un id fuera
+            // del rango de short nunca produzca una coincidencia espuria (comparacion int == int).
+            proveedores = proveedores.Where(p => (int)p.cod_tipoproveedor == tipoId);
+        }
+
         return await proveedores
             .OrderBy(p => p.cod_proveedor)
             .Select(p => new ProveedorListItemDto(
@@ -151,7 +160,12 @@ public class ProveedoresService : IProveedoresService
                 p.direccion,
                 p.rtn,
                 p.telefono,
-                p.status == true))
+                p.status == true,
+                _context.prv_tipoproveedors
+                    .Where(t => t.cod_tipoproveedor == p.cod_tipoproveedor)
+                    .Select(t => t.nombre)
+                    .FirstOrDefault(),
+                p.cod_tipoproveedor))
             .ToListAsync(cancellationToken);
     }
 
@@ -212,6 +226,7 @@ public class ProveedoresService : IProveedoresService
             .FirstOrDefaultAsync(cancellationToken);
 
         var cuentasBancarias = await LoadCuentasBancariasAsync(codigoNormalizado, cancellationToken);
+        var contactos = await LoadContactosAsync(codigoNormalizado, cancellationToken);
 
         return new ProveedorDetailDto(
             proveedor.cod_proveedor ?? codigoNormalizado,
@@ -226,6 +241,7 @@ public class ProveedoresService : IProveedoresService
             proveedor.pagina_web,
             proveedor.cuenta_contable,
             cuentasBancarias,
+            contactos,
             proveedor.cod_tipoproveedor,
             tipoProveedor,
             proveedor.compras_acum,
@@ -443,6 +459,8 @@ public class ProveedoresService : IProveedoresService
         var direccion = NormalizeRequired(dto.Direccion);
         var cuentaContable = NormalizeRequired(dto.CuentaContable);
         var cuentasBancarias = PrepareCuentasBancarias(dto);
+        var contactos = ProveedorContactosNormalizer.Normalize(dto.Contactos);
+        var legacyContacto = ProveedorContactosNormalizer.BuildLegacyFields(contactos);
 
         if (dto.CodTipoProveedor <= 0)
         {
@@ -495,9 +513,9 @@ public class ProveedoresService : IProveedoresService
                     0d,
                     OptionalText(NormalizeOptional(dto.RazonSocial)),
                     OptionalText(NormalizeOptional(dto.Rtn)),
-                    OptionalText(NormalizeOptional(dto.NombreContacto)),
-                    OptionalText(NormalizeOptional(dto.Telefono)),
-                    OptionalText(NormalizeOptional(dto.Email)),
+                    OptionalText(legacyContacto.NombreContacto),
+                    OptionalText(legacyContacto.Telefono),
+                    OptionalText(legacyContacto.Email),
                     OptionalText(legacyFields.Banco1),
                     OptionalText(legacyFields.Banco2),
                     companyId
@@ -538,9 +556,9 @@ public class ProveedoresService : IProveedoresService
                     0d,
                     OptionalText(NormalizeOptional(dto.RazonSocial)),
                     OptionalText(NormalizeOptional(dto.Rtn)),
-                    OptionalText(NormalizeOptional(dto.NombreContacto)),
-                    OptionalText(NormalizeOptional(dto.Telefono)),
-                    OptionalText(NormalizeOptional(dto.Email)),
+                    OptionalText(legacyContacto.NombreContacto),
+                    OptionalText(legacyContacto.Telefono),
+                    OptionalText(legacyContacto.Email),
                     companyId
                 });
         }
@@ -549,14 +567,15 @@ public class ProveedoresService : IProveedoresService
         {
             new("nombre", null, nombre), new("direccion", null, direccion), new("cuenta_contable", null, cuentaContable),
             new("cod_tipoproveedor", null, dto.CodTipoProveedor), new("rtn", null, NormalizeOptional(dto.Rtn)),
-            new("razon_social", null, NormalizeOptional(dto.RazonSocial)), new("telefono", null, NormalizeOptional(dto.Telefono)),
-            new("email", null, NormalizeOptional(dto.Email)), new("status", null, dto.Activo)
+            new("razon_social", null, NormalizeOptional(dto.RazonSocial)), new("telefono", null, legacyContacto.Telefono),
+            new("email", null, legacyContacto.Email), new("status", null, dto.Activo)
         };
         await _bitacora.RegistrarAsync("prv_proveedores", AccionesBitacora.Creacion, codigo,
             $"{codigo} - {nombre}", $"Creación del proveedor {codigo} - {nombre}", camposNuevos, cancellationToken);
 
         await SyncBancosCatalogoAsync(cuentasBancarias, user, cancellationToken);
         await SyncCuentasBancariasAsync(codigo, cuentasBancarias, user, cancellationToken);
+        await SyncContactosAsync(codigo, contactos, user, cancellationToken);
         await tx.CommitAsync(cancellationToken);
 
         return codigo;
@@ -575,6 +594,8 @@ public class ProveedoresService : IProveedoresService
         var direccion = NormalizeRequired(dto.Direccion);
         var cuentaContable = NormalizeRequired(dto.CuentaContable);
         var cuentasBancarias = PrepareCuentasBancarias(dto);
+        var contactos = ProveedorContactosNormalizer.Normalize(dto.Contactos);
+        var legacyContacto = ProveedorContactosNormalizer.BuildLegacyFields(contactos);
 
         if (dto.CodTipoProveedor <= 0)
         {
@@ -625,9 +646,9 @@ public class ProveedoresService : IProveedoresService
                     OptionalText(legacyFields.CuentaBancaria),
                     OptionalText(NormalizeOptional(dto.RazonSocial)),
                     OptionalText(NormalizeOptional(dto.Rtn)),
-                    OptionalText(NormalizeOptional(dto.NombreContacto)),
-                    OptionalText(NormalizeOptional(dto.Telefono)),
-                    OptionalText(NormalizeOptional(dto.Email)),
+                    OptionalText(legacyContacto.NombreContacto),
+                    OptionalText(legacyContacto.Telefono),
+                    OptionalText(legacyContacto.Email),
                     OptionalText(legacyFields.Banco1),
                     OptionalText(legacyFields.Banco2)
                 });
@@ -661,9 +682,9 @@ public class ProveedoresService : IProveedoresService
                     dto.Activo,
                     OptionalText(NormalizeOptional(dto.RazonSocial)),
                     OptionalText(NormalizeOptional(dto.Rtn)),
-                    OptionalText(NormalizeOptional(dto.NombreContacto)),
-                    OptionalText(NormalizeOptional(dto.Telefono)),
-                    OptionalText(NormalizeOptional(dto.Email))
+                    OptionalText(legacyContacto.NombreContacto),
+                    OptionalText(legacyContacto.Telefono),
+                    OptionalText(legacyContacto.Email)
                 });
         }
 
@@ -687,8 +708,8 @@ public class ProveedoresService : IProveedoresService
         Diff("cod_tipoproveedor", previo is null ? null : (int)previo.cod_tipoproveedor, dto.CodTipoProveedor);
         Diff("rtn", previo?.rtn, NormalizeOptional(dto.Rtn));
         Diff("razon_social", previo?.razon_social, NormalizeOptional(dto.RazonSocial));
-        Diff("telefono", previo?.telefono, NormalizeOptional(dto.Telefono));
-        Diff("email", previo?.email, NormalizeOptional(dto.Email));
+        Diff("telefono", previo?.telefono, legacyContacto.Telefono);
+        Diff("email", previo?.email, legacyContacto.Email);
         Diff("status", previo?.status, dto.Activo);
 
         await _bitacora.RegistrarAsync("prv_proveedores", AccionesBitacora.Actualizacion, codigoNormalizado,
@@ -696,6 +717,7 @@ public class ProveedoresService : IProveedoresService
 
         await SyncBancosCatalogoAsync(cuentasBancarias, user, cancellationToken);
         await SyncCuentasBancariasAsync(codigoNormalizado, cuentasBancarias, user, cancellationToken);
+        await SyncContactosAsync(codigoNormalizado, contactos, user, cancellationToken);
         await tx.CommitAsync(cancellationToken);
     }
 
@@ -708,6 +730,13 @@ public class ProveedoresService : IProveedoresService
         if (await TableExistsAsync(ProveedorCuentaBancariaTableName, cancellationToken))
         {
             await _context.prv_proveedor_cuentas_bancarias
+                .Where(x => x.cod_proveedor == codigoNormalizado)
+                .ExecuteDeleteAsync(cancellationToken);
+        }
+
+        if (await TableExistsAsync(ProveedorContactoTableName, cancellationToken))
+        {
+            await _context.prv_proveedor_contactos
                 .Where(x => x.cod_proveedor == codigoNormalizado)
                 .ExecuteDeleteAsync(cancellationToken);
         }
@@ -823,6 +852,168 @@ public class ProveedoresService : IProveedoresService
         await _context.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<IReadOnlyList<TipoContactoLookupDto>> GetTiposContactoAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!await TableExistsAsync(TipoContactoTableName, cancellationToken))
+        {
+            return Array.Empty<TipoContactoLookupDto>();
+        }
+
+        return await _context.prv_tipo_contactos
+            .AsNoTracking()
+            .Where(t => t.activo)
+            .OrderBy(t => t.nombre)
+            .Select(t => new TipoContactoLookupDto(t.tipo_contacto_id, t.nombre))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<IReadOnlyList<TipoContactoListItemDto>> GetTiposContactoCatalogoAsync(
+        CancellationToken cancellationToken = default)
+    {
+        if (!await TableExistsAsync(TipoContactoTableName, cancellationToken))
+        {
+            return Array.Empty<TipoContactoListItemDto>();
+        }
+
+        return await _context.prv_tipo_contactos
+            .AsNoTracking()
+            .OrderBy(t => t.nombre)
+            .Select(t => new TipoContactoListItemDto(t.tipo_contacto_id, t.nombre, t.observaciones, t.activo))
+            .ToListAsync(cancellationToken);
+    }
+
+    public async Task<TipoContactoDetailDto?> GetTipoContactoAsync(
+        long id,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+        {
+            return null;
+        }
+
+        return await _context.prv_tipo_contactos
+            .AsNoTracking()
+            .Where(t => t.tipo_contacto_id == id)
+            .Select(t => new TipoContactoDetailDto(t.tipo_contacto_id, t.nombre, t.observaciones, t.activo))
+            .FirstOrDefaultAsync(cancellationToken);
+    }
+
+    public async Task<long> CreateTipoContactoAsync(
+        TipoContactoUpsertDto dto,
+        string user,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+
+        var nombre = NormalizeRequired(dto.Nombre, 60, "nombre");
+        await EnsureNombreTipoContactoDisponibleAsync(nombre, null, cancellationToken);
+
+        var entity = new prv_tipo_contacto
+        {
+            nombre = nombre,
+            observaciones = NormalizeOptional(dto.Observaciones, 250, "observaciones"),
+            activo = dto.Activo,
+            fecha_creacion = await GetCurrentDatabaseTimestampAsync(
+                TipoContactoTableName, "fecha_creacion", cancellationToken),
+            usuario_creo = NormalizeUser(user)
+        };
+
+        _context.prv_tipo_contactos.Add(entity);
+        await _context.SaveChangesAsync(cancellationToken);
+
+        return entity.tipo_contacto_id;
+    }
+
+    public async Task UpdateTipoContactoAsync(
+        long id,
+        TipoContactoUpsertDto dto,
+        string user,
+        CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+        {
+            throw new ArgumentException("El identificador del tipo de contacto no es válido.", nameof(id));
+        }
+
+        ArgumentNullException.ThrowIfNull(dto);
+
+        var entity = await _context.prv_tipo_contactos
+            .FirstOrDefaultAsync(t => t.tipo_contacto_id == id, cancellationToken);
+
+        if (entity is null)
+        {
+            throw new KeyNotFoundException($"No se encontró el tipo de contacto {id}.");
+        }
+
+        var nombre = NormalizeRequired(dto.Nombre, 60, "nombre");
+        await EnsureNombreTipoContactoDisponibleAsync(nombre, id, cancellationToken);
+
+        entity.nombre = nombre;
+        entity.observaciones = NormalizeOptional(dto.Observaciones, 250, "observaciones");
+        entity.activo = dto.Activo;
+        entity.fecha_modificacion = await GetCurrentDatabaseTimestampAsync(
+            TipoContactoTableName, "fecha_modificacion", cancellationToken);
+        entity.usuario_modifica = NormalizeUser(user);
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task DeleteTipoContactoAsync(long id, CancellationToken cancellationToken = default)
+    {
+        if (id <= 0)
+        {
+            throw new ArgumentException("El identificador del tipo de contacto no es válido.", nameof(id));
+        }
+
+        var enUso = await _context.prv_proveedor_contactos
+            .AsNoTracking()
+            .AnyAsync(c => c.tipo_contacto_id == id, cancellationToken);
+
+        if (enUso)
+        {
+            throw new InvalidOperationException(
+                "No se puede eliminar el tipo porque está asignado a uno o más contactos. Puede desactivarlo.");
+        }
+
+        var entity = await _context.prv_tipo_contactos
+            .FirstOrDefaultAsync(t => t.tipo_contacto_id == id, cancellationToken);
+
+        if (entity is null)
+        {
+            throw new KeyNotFoundException($"No se encontró el tipo de contacto {id}.");
+        }
+
+        _context.prv_tipo_contactos.Remove(entity);
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    // La BD garantiza la unicidad con el índice de expresión uq_prv_tipo_contacto_nombre
+    // (company_id, upper(btrim(nombre))). Acá se valida antes para dar un mensaje legible
+    // en vez de una violación de índice cruda.
+    // El Trim() sobre la columna es necesario para que la comparación sea la MISMA que la
+    // del índice: el nombre entrante ya viene recortado por NormalizeRequired, pero una
+    // fila cargada por SQL directo o por una migración puede tener espacios al borde, y
+    // sin el Trim ese duplicado se escaparía hasta reventar contra el índice.
+    // EF/Npgsql traduce string.Trim() a btrim(), así que el predicado se evalúa en la BD.
+    private async Task EnsureNombreTipoContactoDisponibleAsync(
+        string nombre,
+        long? idActual,
+        CancellationToken cancellationToken)
+    {
+        var repetido = await _context.prv_tipo_contactos
+            .AsNoTracking()
+            .AnyAsync(
+                t => t.nombre.Trim().ToUpper() == nombre.ToUpper()
+                    && (idActual == null || t.tipo_contacto_id != idActual),
+                cancellationToken);
+
+        if (repetido)
+        {
+            throw new InvalidOperationException($"Ya existe un tipo de contacto llamado \"{nombre}\".");
+        }
+    }
+
     private async Task<List<ProveedorCuentaBancariaDto>> LoadCuentasBancariasAsync(
         string codigoProveedor,
         CancellationToken cancellationToken)
@@ -846,6 +1037,38 @@ public class ProveedoresService : IProveedoresService
                 Orden = x.orden
             })
             .ToListAsync(cancellationToken);
+    }
+
+    private async Task<List<ProveedorContactoDto>> LoadContactosAsync(
+        string codigoProveedor,
+        CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(ProveedorContactoTableName, cancellationToken))
+        {
+            return new List<ProveedorContactoDto>();
+        }
+
+        return await (
+            from c in _context.prv_proveedor_contactos.AsNoTracking()
+            join t in _context.prv_tipo_contactos.AsNoTracking()
+                on c.tipo_contacto_id equals t.tipo_contacto_id into tipos
+            from t in tipos.DefaultIfEmpty()
+            where c.cod_proveedor == codigoProveedor
+            orderby c.orden, c.proveedor_contacto_id
+            select new ProveedorContactoDto
+            {
+                ProveedorContactoId = c.proveedor_contacto_id,
+                TipoContactoId = c.tipo_contacto_id,
+                TipoContacto = t == null ? null : t.nombre,
+                Nombre = c.nombre,
+                Cargo = c.cargo,
+                Telefono = c.telefono,
+                Extension = c.extension,
+                Celular = c.celular,
+                Email = c.email,
+                Observaciones = c.observaciones,
+                Orden = c.orden
+            }).ToListAsync(cancellationToken);
     }
 
     private async Task<Dictionary<string, int>> BuildBancoUsageCountsAsync(CancellationToken cancellationToken)
@@ -1163,6 +1386,133 @@ LIMIT 1;";
         }
 
         await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    private async Task SyncContactosAsync(
+        string codigoProveedor,
+        IReadOnlyList<ProveedorContactoDto> contactos,
+        string user,
+        CancellationToken cancellationToken)
+    {
+        if (!await TableExistsAsync(ProveedorContactoTableName, cancellationToken))
+        {
+            return;
+        }
+
+        await ValidarTiposContactoAsync(contactos, cancellationToken);
+
+        var usuario = NormalizeUser(user);
+        var fechaCreacion = await GetCurrentDatabaseTimestampAsync(
+            ProveedorContactoTableName, "fecha_creacion", cancellationToken);
+        var fechaModificacion = await GetCurrentDatabaseTimestampAsync(
+            ProveedorContactoTableName, "fecha_modificacion", cancellationToken);
+
+        var existentes = await _context.prv_proveedor_contactos
+            .Where(x => x.cod_proveedor == codigoProveedor)
+            .ToListAsync(cancellationToken);
+
+        var existentesPorId = existentes.ToDictionary(x => x.proveedor_contacto_id);
+        var idsEnviados = contactos
+            .Where(x => x.ProveedorContactoId.HasValue && x.ProveedorContactoId.Value > 0)
+            .Select(x => x.ProveedorContactoId!.Value)
+            .ToHashSet();
+
+        foreach (var existente in existentes.Where(x => !idsEnviados.Contains(x.proveedor_contacto_id)))
+        {
+            _context.prv_proveedor_contactos.Remove(existente);
+        }
+
+        foreach (var item in contactos)
+        {
+            var orden = item.Orden > 0 ? item.Orden : 1;
+
+            if (item.ProveedorContactoId is long id && id > 0)
+            {
+                if (!existentesPorId.TryGetValue(id, out var existente))
+                {
+                    throw new InvalidOperationException(
+                        $"No se encontró el contacto {id} para el proveedor {codigoProveedor}.");
+                }
+
+                var hayCambios = existente.tipo_contacto_id != item.TipoContactoId
+                    || !string.Equals(existente.nombre, item.Nombre, StringComparison.Ordinal)
+                    || !string.Equals(existente.cargo, item.Cargo, StringComparison.Ordinal)
+                    || !string.Equals(existente.telefono, item.Telefono, StringComparison.Ordinal)
+                    || !string.Equals(existente.extension, item.Extension, StringComparison.Ordinal)
+                    || !string.Equals(existente.celular, item.Celular, StringComparison.Ordinal)
+                    || !string.Equals(existente.email, item.Email, StringComparison.Ordinal)
+                    || !string.Equals(existente.observaciones, item.Observaciones, StringComparison.Ordinal)
+                    || existente.orden != orden;
+
+                existente.tipo_contacto_id = item.TipoContactoId;
+                existente.nombre = item.Nombre!;
+                existente.cargo = item.Cargo;
+                existente.telefono = item.Telefono;
+                existente.extension = item.Extension;
+                existente.celular = item.Celular;
+                existente.email = item.Email;
+                existente.observaciones = item.Observaciones;
+                existente.orden = orden;
+
+                if (hayCambios)
+                {
+                    existente.fecha_modificacion = fechaModificacion;
+                    existente.usuario_modifica = usuario;
+                }
+
+                continue;
+            }
+
+            _context.prv_proveedor_contactos.Add(new prv_proveedor_contacto
+            {
+                cod_proveedor = codigoProveedor,
+                tipo_contacto_id = item.TipoContactoId,
+                nombre = item.Nombre!,
+                cargo = item.Cargo,
+                telefono = item.Telefono,
+                extension = item.Extension,
+                celular = item.Celular,
+                email = item.Email,
+                observaciones = item.Observaciones,
+                orden = orden,
+                fecha_creacion = fechaCreacion,
+                usuario_creo = usuario
+            });
+        }
+
+        await _context.SaveChangesAsync(cancellationToken);
+    }
+
+    // Un tipo de otra empresa nunca llega hasta acá (query filter global), pero un id
+    // inventado o de un tipo inactivo sí: se rechaza con mensaje claro en vez de dejar
+    // que reviente la FK.
+    private async Task ValidarTiposContactoAsync(
+        IReadOnlyList<ProveedorContactoDto> contactos,
+        CancellationToken cancellationToken)
+    {
+        var ids = contactos
+            .Where(x => x.TipoContactoId.HasValue)
+            .Select(x => x.TipoContactoId!.Value)
+            .Distinct()
+            .ToList();
+
+        if (ids.Count == 0)
+        {
+            return;
+        }
+
+        var validos = await _context.prv_tipo_contactos
+            .AsNoTracking()
+            .Where(t => ids.Contains(t.tipo_contacto_id) && t.activo)
+            .Select(t => t.tipo_contacto_id)
+            .ToListAsync(cancellationToken);
+
+        var invalido = ids.FirstOrDefault(id => !validos.Contains(id));
+        if (invalido != 0)
+        {
+            throw new ArgumentException(
+                $"El tipo de contacto {invalido} no existe o está inactivo.", nameof(contactos));
+        }
     }
 
     private static List<ProveedorCuentaBancariaDto> PrepareCuentasBancarias(ProveedorUpsertDto dto)

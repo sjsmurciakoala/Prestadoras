@@ -33,6 +33,10 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<ban_banco> ban_banco { get; set; }
 
+    public virtual DbSet<ban_cheque> ban_cheques { get; set; }
+
+    public virtual DbSet<ban_cheque_bitacora> ban_cheque_bitacoras { get; set; }
+
     public virtual DbSet<ban_config> ban_config { get; set;}
  
     public virtual DbSet<ban_cta> ban_cta { get; set;}
@@ -213,9 +217,13 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<prv_kardex> prv_kardices { get; set; }
 
+    public virtual DbSet<prv_proveedor_contacto> prv_proveedor_contactos { get; set; }
+
     public virtual DbSet<prv_proveedor_cuenta_bancaria> prv_proveedor_cuentas_bancarias { get; set; }
 
     public virtual DbSet<prv_proveedore> prv_proveedores { get; set; }
+
+    public virtual DbSet<prv_tipo_contacto> prv_tipo_contactos { get; set; }
 
     public virtual DbSet<prv_tipoproveedor> prv_tipoproveedors { get; set; }
 
@@ -1539,13 +1547,13 @@ public partial class SiadDbContext : DbContext
 
         modelBuilder.Entity<pst_config_presupuesto_dtl>(entity =>
         {
-            entity.HasKey(e => new { e.id_presupuesto, e.con_cuenta_code }).HasName("pk_pst_config_presupuesto_dtl");
+            entity.HasKey(e => new { e.company_id, e.id_presupuesto, e.con_cuenta_code }).HasName("pk_pst_config_presupuesto_dtl");
 
             entity.ToTable("pst_config_presupuesto_dtl");
 
             entity.HasIndex(e => e.con_cuenta_code).HasDatabaseName("ix_pst_config_presupuesto_dtl_con_cuenta_code");
             entity.HasIndex(e => e.id_presupuesto).HasDatabaseName("ix_pst_config_presupuesto_dtl_id_presupuesto");
-            entity.HasIndex(e => new { e.id_presupuesto, e.id_presupuesto_dtl })
+            entity.HasIndex(e => new { e.company_id, e.id_presupuesto, e.id_presupuesto_dtl })
                 .IsUnique()
                 .HasDatabaseName("ux_pst_config_presupuesto_dtl_id_presupuesto_dtl");
 
@@ -1564,14 +1572,14 @@ public partial class SiadDbContext : DbContext
 
             entity.HasOne<pst_config_presupuesto_hdr>()
                 .WithMany()
-                .HasForeignKey(e => e.id_presupuesto)
+                .HasForeignKey(e => new { e.company_id, e.id_presupuesto })
                 .OnDelete(DeleteBehavior.Cascade)
                 .HasConstraintName("fk_pst_config_presupuesto_dtl_hdr");
         });
 
         modelBuilder.Entity<pst_config_presupuesto_hdr>(entity =>
         {
-            entity.HasKey(e => e.id_presupuesto).HasName("pk_pst_config_presupuesto_hdr");
+            entity.HasKey(e => new { e.company_id, e.id_presupuesto }).HasName("pk_pst_config_presupuesto_hdr");
 
             entity.ToTable("pst_config_presupuesto_hdr");
 
@@ -1695,9 +1703,9 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.compromiso_dtl_id).ValueGeneratedOnAdd();
             entity.Property(e => e.actividad).HasMaxLength(2);
             entity.Property(e => e.cod_presupuestario).HasMaxLength(20);
-            entity.Property(e => e.conceptodtl).HasMaxLength(100);
+            entity.Property(e => e.conceptodtl).HasMaxLength(1000);
             entity.Property(e => e.cuenta_gasto).HasMaxLength(20);
-            entity.Property(e => e.descripcion).HasMaxLength(150);
+            entity.Property(e => e.descripcion).HasMaxLength(1000);
             entity.Property(e => e.monto).HasPrecision(18, 2);
             entity.Property(e => e.objeto_gasto).HasMaxLength(100);
             entity.Property(e => e.programa).HasMaxLength(2);
@@ -1841,6 +1849,53 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.orden).HasDefaultValue(1);
             entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
             entity.Property(e => e.tipo_cuenta).HasMaxLength(20);
+            entity.Property(e => e.usuario_creo).HasMaxLength(100);
+            entity.Property(e => e.usuario_modifica).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<prv_tipo_contacto>(entity =>
+        {
+            entity.HasKey(e => e.tipo_contacto_id);
+
+            entity.ToTable("prv_tipo_contacto");
+
+            entity.Property(e => e.tipo_contacto_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.fecha_creacion)
+                .HasDefaultValueSql("now()")
+                .HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.nombre).HasMaxLength(60);
+            entity.Property(e => e.observaciones).HasMaxLength(250);
+            entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.usuario_creo).HasMaxLength(100);
+            entity.Property(e => e.usuario_modifica).HasMaxLength(100);
+        });
+
+        modelBuilder.Entity<prv_proveedor_contacto>(entity =>
+        {
+            entity.HasKey(e => e.proveedor_contacto_id);
+
+            entity.ToTable("prv_proveedor_contacto");
+
+            entity.HasIndex(e => new { e.company_id, e.cod_proveedor, e.orden })
+                .HasDatabaseName("ix_prv_proveedor_contacto_proveedor");
+
+            entity.Property(e => e.proveedor_contacto_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.cargo).HasMaxLength(100);
+            entity.Property(e => e.celular).HasMaxLength(30);
+            entity.Property(e => e.cod_proveedor).HasMaxLength(20);
+            entity.Property(e => e.email).HasMaxLength(150);
+            entity.Property(e => e.extension).HasMaxLength(10);
+            entity.Property(e => e.fecha_creacion)
+                .HasDefaultValueSql("now()")
+                .HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.nombre).HasMaxLength(150);
+            entity.Property(e => e.observaciones).HasMaxLength(500);
+            entity.Property(e => e.orden).HasDefaultValue(1);
+            entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+            entity.Property(e => e.telefono).HasMaxLength(30);
             entity.Property(e => e.usuario_creo).HasMaxLength(100);
             entity.Property(e => e.usuario_modifica).HasMaxLength(100);
         });
@@ -2518,6 +2573,7 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.pdb).HasPrecision(28, 4);
             entity.Property(e => e.proxima_conciliacion).HasDefaultValue(0);
             entity.Property(e => e.proximo_cheque).HasPrecision(28, 4);
+            entity.Property(e => e.cheque_maximo).HasPrecision(28, 0).HasDefaultValue(0m);
             entity.Property(e => e.proximo_nddb).HasDefaultValue(0);
             entity.Property(e => e.r_transf).HasDefaultValue(0);
             entity.Property(e => e.saldo_actual).HasPrecision(28, 4);
@@ -2547,6 +2603,67 @@ public partial class SiadDbContext : DbContext
             entity.HasOne(d => d.company).WithMany(p => p.ban_cuenta)
                 .HasForeignKey(d => d.company_id)
                 .HasConstraintName("ban_cuenta_company_id_fkey");
+        });
+
+        modelBuilder.Entity<ban_cheque>(entity =>
+        {
+            entity.HasKey(e => e.cheque_id).HasName("ban_cheque_pkey");
+
+            entity.ToTable("ban_cheque");
+
+            // Filtro tenant y stamping de company_id: SiadDbContext.Tenancy.cs (ICompanyScopedEntity).
+            entity.HasIndex(e => new { e.company_id, e.banco_cuenta_id, e.estado })
+                .HasDatabaseName("ix_ban_cheque_cuenta_estado");
+            entity.HasIndex(e => new { e.company_id, e.ban_kardex_id })
+                .HasDatabaseName("ix_ban_cheque_kardex");
+            entity.HasIndex(e => new { e.company_id, e.banco_cuenta_id, e.numero_cheque })
+                .IsUnique()
+                .HasDatabaseName("uq_ban_cheque_numero");
+
+            entity.Property(e => e.cheque_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.numero_cheque).HasPrecision(28, 0);
+            entity.Property(e => e.fecha_emision).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.monto).HasPrecision(15, 2).HasDefaultValue(0m);
+            entity.Property(e => e.beneficiario).HasMaxLength(200);
+            entity.Property(e => e.concepto).HasMaxLength(250);
+            entity.Property(e => e.origen).HasMaxLength(20);
+            entity.Property(e => e.origen_documento).HasMaxLength(50);
+            entity.Property(e => e.estado).HasMaxLength(1).HasDefaultValue("E").IsFixedLength();
+            entity.Property(e => e.usuario_emision).HasMaxLength(100);
+            entity.Property(e => e.fecha_creacion)
+                .HasDefaultValueSql("now()")
+                .HasColumnType("timestamp without time zone");
+            entity.Property(e => e.motivo_anulacion).HasMaxLength(250);
+            entity.Property(e => e.usuario_anulacion).HasMaxLength(100);
+            entity.Property(e => e.fecha_anulacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
+        });
+
+        modelBuilder.Entity<ban_cheque_bitacora>(entity =>
+        {
+            entity.HasKey(e => e.bitacora_id).HasName("ban_cheque_bitacora_pkey");
+
+            entity.ToTable("ban_cheque_bitacora");
+
+            // Filtro tenant y stamping de company_id: SiadDbContext.Tenancy.cs (ICompanyScopedEntity).
+            // Tabla APPEND-ONLY: una fila por evento (EMITIDO/ANULADO); nunca se actualiza ni borra.
+            entity.HasIndex(e => new { e.company_id, e.banco_cuenta_id, e.fecha })
+                .HasDatabaseName("ix_ban_cheque_bitacora_cuenta_fecha");
+
+            entity.Property(e => e.bitacora_id).UseIdentityAlwaysColumn();
+            entity.Property(e => e.numero_cheque).HasPrecision(28, 0);
+            entity.Property(e => e.accion).HasMaxLength(10);
+            entity.Property(e => e.fecha)
+                .HasDefaultValueSql("now()")
+                .HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuario).HasMaxLength(100);
+            entity.Property(e => e.monto).HasPrecision(15, 2).HasDefaultValue(0m);
+            entity.Property(e => e.beneficiario).HasMaxLength(200);
+            entity.Property(e => e.concepto).HasMaxLength(250);
+            entity.Property(e => e.motivo).HasMaxLength(250);
+            entity.Property(e => e.origen).HasMaxLength(20);
+            entity.Property(e => e.origen_documento).HasMaxLength(50);
+            entity.Property(e => e.rowid).HasDefaultValueSql("gen_random_uuid()");
         });
 
         modelBuilder.Entity<ban_moneda>(entity =>

@@ -1,10 +1,12 @@
 -- View: public.view_lista_configuracion_presupuesto
+-- Multitenant: expone company_id y une hdr/dtl por empresa (2026-07-24).
 
 -- DROP VIEW public.view_lista_configuracion_presupuesto;
 
 CREATE OR REPLACE VIEW public.view_lista_configuracion_presupuesto
  AS
-SELECT d.id_presupuesto,
+SELECT d.company_id,
+    d.id_presupuesto,
     d.con_cuenta_code,
     h.valor_global,
     h.valor_disponible,
@@ -17,7 +19,9 @@ SELECT d.id_presupuesto,
     h.fecha_inicia,
     h.fecha_finaliza
    FROM public.pst_config_presupuesto_dtl d
-     JOIN public.pst_config_presupuesto_hdr h ON h.id_presupuesto = d.id_presupuesto
+     JOIN public.pst_config_presupuesto_hdr h
+       ON h.company_id = d.company_id
+      AND h.id_presupuesto = d.id_presupuesto
   ORDER BY d.id_presupuesto, d.con_cuenta_code;
 
 ALTER TABLE public.view_lista_configuracion_presupuesto

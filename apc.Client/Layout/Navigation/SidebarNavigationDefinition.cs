@@ -39,12 +39,8 @@ public static class SidebarNavigationDefinition
                     Id = "proveedores",
                     Text = "Proveedores",
                     IconCssClass = "bi bi-truck",
-                    MatchPrefixes = ["/proveedores"],
-                    Children =
-                    [
-                        new SidebarNavItem { Id = "prov-catalogo", Text = "Catálogo proveedores", NavigateUrl = "/proveedores", MatchPrefixes = ["/proveedores"], IconCssClass = "bi bi-list-ul" },
-                        new SidebarNavItem { Id = "prov-tipos", Text = "Tipos de proveedor", NavigateUrl = "/proveedores/tipos", MatchPrefixes = ["/proveedores/tipos"], IconCssClass = "bi bi-tag" }
-                    ]
+                    NavigateUrl = "/proveedores",
+                    MatchPrefixes = ["/proveedores"]
                 },
                 new SidebarNavItem
                 {
@@ -135,7 +131,9 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "mant-barrios", Text = "Barrios", NavigateUrl = "/mantenimientos/barrios", MatchPrefixes = ["/mantenimientos/barrios"], IconCssClass = "bi bi-map-fill" },
                         new SidebarNavItem { Id = "mant-clases-medidor", Text = "Clases de medidor", NavigateUrl = "/mantenimientos/clases-medidor", MatchPrefixes = ["/mantenimientos/clases-medidor"], IconCssClass = "bi bi-speedometer" },
                         new SidebarNavItem { Id = "mant-acciones-cobranza", Text = "Acciones de cobranza", NavigateUrl = "/mantenimientos/acciones-cobranza", MatchPrefixes = ["/mantenimientos/acciones-cobranza"], IconCssClass = "bi bi-journal-check" },
-                        new SidebarNavItem { Id = "mant-observaciones-cobranza", Text = "Observaciones cobranza", NavigateUrl = "/mantenimientos/observaciones-cobranza", MatchPrefixes = ["/mantenimientos/observaciones-cobranza"], IconCssClass = "bi bi-chat-square-text" }
+                        new SidebarNavItem { Id = "mant-observaciones-cobranza", Text = "Observaciones cobranza", NavigateUrl = "/mantenimientos/observaciones-cobranza", MatchPrefixes = ["/mantenimientos/observaciones-cobranza"], IconCssClass = "bi bi-chat-square-text" },
+                        new SidebarNavItem { Id = "mant-tipos-proveedor", Text = "Tipos de proveedor", NavigateUrl = "/mantenimientos/tipos-proveedor", MatchPrefixes = ["/mantenimientos/tipos-proveedor"], IconCssClass = "bi bi-tag" },
+                        new SidebarNavItem { Id = "mant-tipos-contacto", Text = "Tipos de contacto", NavigateUrl = "/mantenimientos/tipos-contacto", MatchPrefixes = ["/mantenimientos/tipos-contacto"], IconCssClass = "bi bi-person-lines-fill" }
                     ]
                 }
             ]
@@ -430,11 +428,14 @@ public static class SidebarNavigationDefinition
                     Id = "cont-bancos",
                     Text = "Bancos",
                     IconCssClass = "bi bi-bank",
-                    MatchPrefixes = ["/contabilidad/bancos", "/bancos/configuracion_transacciones", "/bancos/configuracion"],
+                    MatchPrefixes = ["/contabilidad/bancos", "/bancos/configuracion_transacciones", "/bancos/configuracion", "/bancos/cheques"],
                     Children =
                     [
                         new SidebarNavItem { Id = "bn-gestion", Text = "Gestión de bancos", NavigateUrl = "/contabilidad/bancos", MatchPrefixes = ["/contabilidad/bancos"], IconCssClass = "bi bi-building" },
                         new SidebarNavItem { Id = "bn-transacciones", Text = "Config. transacciones", NavigateUrl = "/bancos/configuracion_transacciones", MatchPrefixes = ["/bancos/configuracion_transacciones"], IconCssClass = "bi bi-sliders" },
+                        // MatchExact: sin esto /bancos/cheques/manual encendería también "Cheques emitidos".
+                        new SidebarNavItem { Id = "bn-cheques", Text = "Cheques emitidos", NavigateUrl = "/bancos/cheques", MatchPrefixes = ["/bancos/cheques"], MatchExact = true, IconCssClass = "bi bi-card-checklist" },
+                        new SidebarNavItem { Id = "bn-cheque-manual", Text = "Nuevo cheque manual", NavigateUrl = "/bancos/cheques/manual", MatchPrefixes = ["/bancos/cheques/manual"], IconCssClass = "bi bi-cash-stack", RequiredCapability = SidebarCapabilities.ChequeManual },
                         new SidebarNavItem { Id = "bn-config", Text = "Configuración", NavigateUrl = "/bancos/configuracion", MatchPrefixes = ["/bancos/configuracion"], IconCssClass = "bi bi-gear" }
                     ]
                 },

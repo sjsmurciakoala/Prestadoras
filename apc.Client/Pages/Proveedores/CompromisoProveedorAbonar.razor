@@ -6,12 +6,17 @@
 @using Microsoft.AspNetCore.Components.Authorization
 @using Microsoft.JSInterop
 @using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Bancos
 @using SIAD.Core.DTOs.Contabilidad
 @using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services.Bancos
 @using apc.Client.Services.Contabilidad
 @using apc.Client.Services.Presupuesto
+@using apc.Client.Pages.Bancos
 
+@inject ChequesClient ChequesClient
 @inject OrdenesPagoDirectoClient OrdenesPagoDirectoClient
+@inject PolizasClient PolizasClient
 @inject AccountFormatState AccountFormat
 @inject NavigationManager Navigation
 @inject AuthenticationStateProvider AuthStateProvider
@@ -101,34 +106,154 @@
                 }
 
                 <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
-                    <DxFormLayoutItem Caption="Monto del abono" ColSpanMd="4">
+                    <DxFormLayoutItem Caption="Monto del abono" ColSpanMd="3">
                         <DxSpinEdit TValue="decimal" @bind-Value="nuevoMonto"
                                     MinValue="0m" MaxValue="@saldo.Saldo" Increment="0.01m"
                                     DisplayFormat="N2" InputCssClass="text-end"
                                     ValidationEnabled="false" Enabled="@PuedeEditarFormulario" />
                     </DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Metodo de pago" ColSpanMd="4">
+                    <DxFormLayoutItem Caption="Metodo de pago" ColSpanMd="3">
                         <DxComboBox Data="@metodosPago" TData="MetodoPagoItem" TValue="string"
-                                    @bind-Value="nuevoMetodo"
+                                    Value="@nuevoMetodo"
+                                    ValueChanged="@((string v) => OnMetodoChangedAsync(v))"
                                     ValueFieldName="@nameof(MetodoPagoItem.Value)"
                                     TextFieldName="@nameof(MetodoPagoItem.Display)"
                                     NullText="Seleccione metodo" DropDownStyle="DropDownStyle.DropDownList"
                                     Enabled="@PuedeEditarFormulario" />
                     </DxFormLayoutItem>
-                    <DxFormLayoutItem Caption="Cuenta de origen" ColSpanMd="4">
-                        <DxComboBox Data="@cuentasContra" TData="CuentaContableLookupDto" TValue="long"
-                                    @bind-Value="cuentaOrigenId"
-                                    ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                    TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                    NullText="Seleccione cuenta de origen"
+                    <DxFormLayoutItem Caption="Banco" ColSpanMd="3">
+                        <DxComboBox Data="@BancosDisponibles"
+                                    TData="string"
+                                    TValue="string"
+                                    Value="@bancoSeleccionadoNombre"
+                                    ValueChanged="@OnBancoChanged"
+                                    NullText="Seleccione el banco"
                                     SearchMode="ListSearchMode.AutoSearch"
                                     SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    SearchDelay="200"
                                     DropDownStyle="DropDownStyle.DropDown"
+                                    DropDownTriggerMode="DropDownTriggerMode.Input"
                                     AllowUserInput="true"
                                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
                                     ValidationEnabled="false" Enabled="@PuedeEditarFormulario" />
                     </DxFormLayoutItem>
+                    <DxFormLayoutItem Caption="Cuenta de origen" ColSpanMd="3">
+                        <DxComboBox Data="@CuentasOrigenFiltradas"
+                                    TData="CuentaContableLookupDto"
+                                    TValue="long?"
+                                    Value="@bancoCuentaSeleccionadaId"
+                                    ValueChanged="@((long? v) => OnCuentaOrigenChangedAsync(v))"
+                                    ValueFieldName="@nameof(CuentaContableLookupDto.BancoCuentaId)"
+                                    TextFieldName="@nameof(CuentaContableLookupDto.NumeroCuenta)"
+                                    NullText="@(string.IsNullOrWhiteSpace(bancoSeleccionadoNombre) ? "Seleccione primero el banco" : "Seleccione la cuenta")"
+                                    SearchMode="ListSearchMode.AutoSearch"
+                                    SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                    SearchDelay="200"
+                                    DropDownStyle="DropDownStyle.DropDown"
+                                    DropDownTriggerMode="DropDownTriggerMode.Input"
+                                    AllowUserInput="true"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValidationEnabled="false"
+                                    Enabled="@(PuedeEditarFormulario && !string.IsNullOrWhiteSpace(bancoSeleccionadoNombre))" />
+                    </DxFormLayoutItem>
                 </DxFormLayout>
+
+                @if (CuentaOrigenSeleccionada is not null)
+                {
+                    <div class="text-muted mt-2">
+                        Tipo de cuenta: <strong>@GetTextOrDash(CuentaOrigenSeleccionada.TipoCuenta)</strong>
+                        &middot; Cuenta contable: <strong>@FormatCuentaOrDash(CuentaOrigenSeleccionada.Code)</strong>
+                        <span>@GetTextOrDash(CuentaOrigenSeleccionada.Description)</span>
+                    </div>
+                }
+
+                @if (EsMetodoCheque && bancoCuentaSeleccionadaId.HasValue)
+                {
+                    @if (proximoCheque is { Agotado: true })
+                    {
+                        <div class="alert alert-danger mt-2 mb-0" role="alert">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            La numeración de cheques de esta cuenta está agotada (máximo @proximoCheque.ChequeMaximo.ToString("N0")).
+                            Actualice la numeración en la gestión de la cuenta.
+                        </div>
+                    }
+                    else if (proximoCheque is not null)
+                    {
+                        <div class="text-muted mt-2">
+                            <i class="bi bi-info-circle me-1"></i>Se emitirá el cheque N° <strong>@proximoCheque.ProximoCheque.ToString("N0")</strong>.
+                        </div>
+                    }
+                }
+
+                <div class="partida-preview mt-3">
+                    <div class="d-flex justify-content-between align-items-center gap-2 mb-2 section-header">
+                        <div>
+                            <h6 class="mb-0">Detalle contable del abono</h6>
+                            <small class="text-muted">Vista previa de la partida que se generara al registrar el abono.</small>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2 align-items-center">
+                            <span class="summary-pill">Debito: <strong>@TotalDebitoPreviewTexto</strong></span>
+                            <span class="summary-pill">Credito: <strong>@TotalCreditoPreviewTexto</strong></span>
+                        </div>
+                    </div>
+
+                    @if (nuevoMonto <= 0m)
+                    {
+                        <div class="alert alert-info mb-0" role="alert">
+                            Capture el monto del abono para ver la partida contable.
+                        </div>
+                    }
+                    else if (CuentaOrigenSeleccionada is null)
+                    {
+                        <div class="alert alert-info mb-0" role="alert">
+                            Seleccione el banco y la cuenta de origen para ver la contrapartida del abono.
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="table-responsive detail-table">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="min-width:260px;">Cuenta</th>
+                                        <th style="min-width:200px;">Descripcion</th>
+                                        <th style="min-width:110px;" class="text-end">Debito</th>
+                                        <th style="min-width:110px;" class="text-end">Credito</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var linea in LineasPartidaPreview)
+                                    {
+                                        <tr>
+                                            <td>
+                                                <div class="d-flex flex-column">
+                                                    <span class="fw-semibold">@linea.CuentaCodigo</span>
+                                                    <small class="text-muted">@linea.CuentaNombre</small>
+                                                </div>
+                                            </td>
+                                            <td>@GetTextOrDash(linea.Descripcion)</td>
+                                            <td class="text-end">@linea.Debito.ToString("N2")</td>
+                                            <td class="text-end">@linea.Credito.ToString("N2")</td>
+                                        </tr>
+                                    }
+                                </tbody>
+                                <tfoot>
+                                    <tr class="fw-semibold">
+                                        <td colspan="2" class="text-end">Totales</td>
+                                        <td class="text-end">@TotalDebitoPreviewTexto</td>
+                                        <td class="text-end">@TotalCreditoPreviewTexto</td>
+                                    </tr>
+                                    @if (PartidaPreviewNoCuadra)
+                                    {
+                                        <tr class="partida-no-cuadra-message">
+                                            <td colspan="4">@PartidaPreviewNoCuadraMensaje</td>
+                                        </tr>
+                                    }
+                                </tfoot>
+                            </table>
+                        </div>
+                    }
+                </div>
 
                 <div class="total-bar mt-3">
                     <div class="text-muted">Usuario: <strong>@UsuarioActualTexto</strong></div>
@@ -182,7 +307,7 @@
                                     }
                                 </CellDisplayTemplate>
                             </DxGridDataColumn>
-                            <DxGridDataColumn Caption="Acciones" Width="130px">
+                            <DxGridDataColumn Caption="Acciones" Width="180px">
                                 <CellDisplayTemplate Context="cell">
                                     @if (cell.DataItem is AbonoCompromisoListItemDto item)
                                     {
@@ -190,6 +315,12 @@
                                             <button type="button" class="btn-icon btn-view" title="Ver comprobante"
                                                     @onclick="@(() => VerComprobanteAsync(item.NumeroAbono))">
                                                 <i class="bi bi-printer"></i>
+                                            </button>
+                                            <button type="button" class="btn-icon btn-view"
+                                                    title="@(item.PartidaId is > 0 ? "Ver detalle contable" : "El abono no tiene partida contable")"
+                                                    disabled="@(item.PartidaId is not > 0)"
+                                                    @onclick="@(() => VerPartidaAsync(item))">
+                                                <i class="bi bi-journal-text"></i>
                                             </button>
                                             <button type="button" class="btn-icon btn-delete" title="Anular abono"
                                                     disabled="@(!item.PuedeAnular || isSaving)"
@@ -206,6 +337,105 @@
             }
         </div>
     }
+
+    <DxPopup @bind-Visible="partidaPopupVisible"
+             HeaderText="@PartidaPopupTitulo"
+             Width="820px"
+             MaxWidth="95vw"
+             Scrollable="true"
+             CloseOnEscape="true"
+             CloseOnOutsideClick="true">
+        <BodyContentTemplate>
+            @if (partidaLoading)
+            {
+                <DxSkeletonLine />
+                <DxSkeletonLine />
+                <DxSkeletonLine />
+            }
+            else if (!string.IsNullOrWhiteSpace(partidaError))
+            {
+                <div class="alert alert-warning mb-0" role="alert">@partidaError</div>
+            }
+            else if (partidaSeleccionada is null)
+            {
+                <div class="alert alert-info mb-0" role="alert">No hay partida contable para este abono.</div>
+            }
+            else
+            {
+                <div class="d-flex flex-wrap gap-3 justify-content-between align-items-center mb-3">
+                    <div class="text-muted">
+                        Partida <strong>@GetTextOrDash(partidaSeleccionada.PolizaNumber)</strong>
+                        &middot; Fecha <strong>@partidaSeleccionada.PolizaDate.ToString("dd/MM/yyyy")</strong>
+                        @if (!string.IsNullOrWhiteSpace(partidaSeleccionada.DocumentNumber))
+                        {
+                            <span> &middot; Documento <strong>@partidaSeleccionada.DocumentNumber</strong></span>
+                        }
+                    </div>
+                    <div class="d-flex flex-wrap gap-2 align-items-center">
+                        <span class="summary-pill">Debito: <strong>@partidaSeleccionada.TotalDebit.ToString("N2")</strong></span>
+                        <span class="summary-pill">Credito: <strong>@partidaSeleccionada.TotalCredit.ToString("N2")</strong></span>
+                    </div>
+                </div>
+
+                @if (!string.IsNullOrWhiteSpace(partidaSeleccionada.Description))
+                {
+                    <div class="text-muted mb-3">@partidaSeleccionada.Description</div>
+                }
+
+                @if (!partidaSeleccionada.IsBalanced)
+                {
+                    <div class="alert alert-warning" role="alert">
+                        Precaucion: la partida no cuadra
+                        (Debito: @partidaSeleccionada.TotalDebit.ToString("N2"),
+                        Credito: @partidaSeleccionada.TotalCredit.ToString("N2")).
+                    </div>
+                }
+
+                <div class="table-responsive detail-table">
+                    <table class="table table-sm align-middle mb-0">
+                        <thead>
+                            <tr>
+                                <th style="min-width:260px;">Cuenta</th>
+                                <th style="min-width:200px;">Descripcion</th>
+                                <th style="min-width:110px;" class="text-end">Debito</th>
+                                <th style="min-width:110px;" class="text-end">Credito</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var linea in partidaSeleccionada.Lineas)
+                            {
+                                <tr>
+                                    <td>
+                                        <div class="d-flex flex-column">
+                                            <span class="fw-semibold">@FormatCuentaOrDash(linea.AccountCode)</span>
+                                            <small class="text-muted">@GetTextOrDash(linea.AccountName)</small>
+                                        </div>
+                                    </td>
+                                    <td>@GetTextOrDash(linea.Description)</td>
+                                    <td class="text-end">@linea.DebitAmount.ToString("N2")</td>
+                                    <td class="text-end">@linea.CreditAmount.ToString("N2")</td>
+                                </tr>
+                            }
+                        </tbody>
+                        <tfoot>
+                            <tr class="fw-semibold">
+                                <td colspan="2" class="text-end">Totales</td>
+                                <td class="text-end">@partidaSeleccionada.TotalDebit.ToString("N2")</td>
+                                <td class="text-end">@partidaSeleccionada.TotalCredit.ToString("N2")</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+            }
+        </BodyContentTemplate>
+    </DxPopup>
+
+    <ChequeImpresionDialog Visible="impresionDialogVisible"
+                           VisibleChanged="OnImpresionDialogVisibleChanged"
+                           ChequeId="chequeIdEmitido"
+                           DocumentoUrl="@documentoImpresionUrl"
+                           DocumentoTexto="Imprimir comprobante de abono"
+                           Mensaje="El abono se registró y se emitió el cheque. ¿Qué desea imprimir?" />
 </div>
 
 @code {
@@ -216,6 +446,10 @@
     public string? ReturnUrl { get; set; }
 
     private readonly List<CuentaContableLookupDto> cuentasContra = new();
+
+    // Plan de cuentas completo: solo se usa para mostrar el nombre de la cuenta del proveedor
+    // en la vista previa del asiento (el compromiso guarda el codigo, no el account_id).
+    private readonly List<CuentaContableLookupDto> cuentasContables = new();
 
     // OrdenPagoDirectoMetodoPago es clase estatica de constantes string (Contable="CONTABLE", ...),
     // NO enum. El Value enviado al backend usa esas constantes para ser compatible con EsBancario.
@@ -230,10 +464,24 @@
     private CompromisoSaldoDto? saldo;
     private OrdenPagoDirectoDetalleDto? detalle;
     private decimal nuevoMonto;
+
+    // Dialogo de impresion post-emision de cheque (abono con metodo CHEQUE).
+    private bool impresionDialogVisible;
+    private long chequeIdEmitido;
+    private string? documentoImpresionUrl;
     private string? nuevoMetodo = OrdenPagoDirectoMetodoPago.Contable;
-    private long cuentaOrigenId;
+    private string? bancoSeleccionadoNombre;
+    private long? bancoCuentaSeleccionadaId;
     private bool isLoading = true;
     private bool isSaving;
+
+    // Detalle contable de un abono ya registrado (partida ABO), leido de la API de partidas.
+    private bool partidaPopupVisible;
+    private bool partidaLoading;
+    private string? partidaError;
+    private int partidaAbonoNumero;
+    private PolizaConLineasDto? partidaSeleccionada;
+
     private ErrorNotice errorNotice = default!;
     private readonly List<string> validationMessages = new();
     private string usuarioActual = "SISTEMA";
@@ -253,8 +501,170 @@
     private bool CanRegistrar => PuedeEditarFormulario &&
                                  nuevoMonto > 0m &&
                                  nuevoMonto <= (saldo?.Saldo ?? 0m) &&
-                                 cuentaOrigenId > 0 &&
-                                 !string.IsNullOrWhiteSpace(nuevoMetodo);
+                                 CuentaOrigenSeleccionada is not null &&
+                                 !string.IsNullOrWhiteSpace(nuevoMetodo) &&
+                                 !ChequeAgotado;
+
+    // Vista previa del asiento del abono. Replica lo que arma el servicio en RegistrarAbonoAsync:
+    // la cuenta de origen va al HABER por el monto del abono y la cuenta del proveedor al DEBE
+    // por el mismo monto (ver BuildProviderProcessingPartidaLineasAsync). Se recalcula en cada
+    // acceso a partir del monto y la cuenta de origen elegidos: no hay estado que sincronizar.
+    private IReadOnlyList<PartidaPreviewLinea> LineasPartidaPreview
+    {
+        get
+        {
+            var cuentaOrigen = CuentaOrigenSeleccionada;
+            if (nuevoMonto <= 0m || cuentaOrigen is null)
+            {
+                return Array.Empty<PartidaPreviewLinea>();
+            }
+
+            var descripcion = DescripcionAbonoPreview;
+            return new List<PartidaPreviewLinea>
+            {
+                new(FormatCuentaOrDash(cuentaOrigen.Code), GetTextOrDash(cuentaOrigen.Description),
+                    descripcion, 0m, nuevoMonto),
+                new(CuentaProveedorCodigoTexto, CuentaProveedorNombreTexto,
+                    descripcion, nuevoMonto, 0m)
+            };
+        }
+    }
+
+    // Misma descripcion que arma el servicio para las lineas del abono ("Abono - <concepto>", 200 chars).
+    private string DescripcionAbonoPreview
+    {
+        get
+        {
+            var concepto = string.IsNullOrWhiteSpace(detalle?.Concepto)
+                ? $"Orden pago directo {NumeroOrden}"
+                : detalle!.Concepto.Trim();
+            var descripcion = $"Abono - {concepto}";
+            return descripcion.Length > 200 ? descripcion[..200] : descripcion;
+        }
+    }
+
+    private decimal TotalDebitoPreview => LineasPartidaPreview.Sum(x => x.Debito);
+    private decimal TotalCreditoPreview => LineasPartidaPreview.Sum(x => x.Credito);
+    private string TotalDebitoPreviewTexto => TotalDebitoPreview.ToString("N2");
+    private string TotalCreditoPreviewTexto => TotalCreditoPreview.ToString("N2");
+    private bool PartidaPreviewNoCuadra =>
+        LineasPartidaPreview.Count > 0 && Math.Abs(TotalDebitoPreview - TotalCreditoPreview) > 0.01m;
+    private string PartidaPreviewNoCuadraMensaje =>
+        $"La partida contable no cuadra. Debito: {TotalDebitoPreviewTexto}, Credito: {TotalCreditoPreviewTexto}.";
+
+    private string CuentaProveedorCodigoTexto => FormatCuentaOrDash(detalle?.CuentaContableProveedor);
+
+    private string CuentaProveedorNombreTexto
+    {
+        get
+        {
+            var codigo = detalle?.CuentaContableProveedor?.Trim();
+            if (string.IsNullOrWhiteSpace(codigo))
+            {
+                return "-";
+            }
+
+            var cuenta = cuentasContables.FirstOrDefault(c =>
+                string.Equals(c.Code?.Trim(), codigo, StringComparison.OrdinalIgnoreCase));
+            return GetTextOrDash(cuenta?.Description);
+        }
+    }
+
+    private string PartidaPopupTitulo => partidaAbonoNumero > 0
+        ? $"Detalle contable del abono #{partidaAbonoNumero}"
+        : "Detalle contable del abono";
+
+    // Numeración de cheques de la cuenta de origen (solo se consulta con método CHEQUE).
+    private ProximoChequeDto? proximoCheque;
+    private int proximoChequeSeq; // Descarta respuestas viejas si cuenta/método cambian en vuelo.
+
+    private bool EsMetodoCheque =>
+        string.Equals(nuevoMetodo, OrdenPagoDirectoMetodoPago.Cheque, StringComparison.OrdinalIgnoreCase);
+
+    private bool ChequeAgotado => EsMetodoCheque && proximoCheque is { Agotado: true };
+
+    private async Task OnMetodoChangedAsync(string? value)
+    {
+        nuevoMetodo = value;
+        await RefrescarProximoChequeAsync();
+    }
+
+    private async Task OnCuentaOrigenChangedAsync(long? value)
+    {
+        bancoCuentaSeleccionadaId = value;
+        await RefrescarProximoChequeAsync();
+    }
+
+    private async Task RefrescarProximoChequeAsync()
+    {
+        var seq = ++proximoChequeSeq;
+        proximoCheque = null;
+        if (!EsMetodoCheque || !bancoCuentaSeleccionadaId.HasValue)
+        {
+            return;
+        }
+
+        try
+        {
+            var info = await ChequesClient.GetProximoAsync(bancoCuentaSeleccionadaId.Value);
+            if (seq == proximoChequeSeq)
+            {
+                proximoCheque = info;
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo consultar el próximo cheque de la cuenta {BancoCuentaId}", bancoCuentaSeleccionadaId);
+        }
+    }
+
+    // Etiqueta para agrupar cuentas cuya ban_cuenta no tiene nombre de banco (p.ej. migradas de
+    // SIMAFI con banco en blanco); sin esto quedarian inseleccionables en la cascada.
+    private const string SinBancoLabel = "(Sin banco)";
+
+    // Lista de bancos (distintos) de las cuentas de origen disponibles; el combo de cuenta filtra por banco.
+    private IReadOnlyList<string> BancosDisponibles
+    {
+        get
+        {
+            var bancos = cuentasContra
+                .Select(c => c.BancoNombre)
+                .Where(n => !string.IsNullOrWhiteSpace(n))
+                .Select(n => n!.Trim())
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .OrderBy(n => n, StringComparer.OrdinalIgnoreCase)
+                .ToList();
+            if (cuentasContra.Any(c => string.IsNullOrWhiteSpace(c.BancoNombre)))
+            {
+                bancos.Add(SinBancoLabel);
+            }
+            return bancos;
+        }
+    }
+
+    // Cuentas del banco elegido. Sin banco seleccionado no se lista ninguna (se elige el banco primero).
+    private IReadOnlyList<CuentaContableLookupDto> CuentasOrigenFiltradas =>
+        string.IsNullOrWhiteSpace(bancoSeleccionadoNombre)
+            ? Array.Empty<CuentaContableLookupDto>()
+            : string.Equals(bancoSeleccionadoNombre, SinBancoLabel, StringComparison.OrdinalIgnoreCase)
+                ? cuentasContra.Where(c => string.IsNullOrWhiteSpace(c.BancoNombre)).ToList()
+                : cuentasContra
+                    .Where(c => string.Equals(c.BancoNombre?.Trim(), bancoSeleccionadoNombre, StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+
+    private CuentaContableLookupDto? CuentaOrigenSeleccionada =>
+        bancoCuentaSeleccionadaId.HasValue
+            ? cuentasContra.FirstOrDefault(c => c.BancoCuentaId == bancoCuentaSeleccionadaId)
+            : null;
+
+    private void OnBancoChanged(string? banco)
+    {
+        bancoSeleccionadoNombre = string.IsNullOrWhiteSpace(banco) ? null : banco.Trim();
+        // La cuenta pertenece al banco: al cambiarlo se limpia la seleccion.
+        bancoCuentaSeleccionadaId = null;
+        proximoChequeSeq++;
+        proximoCheque = null;
+    }
 
     protected override async Task OnParametersSetAsync() => await CargarAsync();
 
@@ -275,12 +685,15 @@
             var saldoTask = OrdenesPagoDirectoClient.GetSaldoConAbonosAsync(NumeroOrden);
             var detalleTask = OrdenesPagoDirectoClient.GetByNumeroOrdenAsync(NumeroOrden);
             var cuentasTask = OrdenesPagoDirectoClient.GetCuentasContraProcesamientoAsync();
-            await Task.WhenAll(saldoTask, detalleTask, cuentasTask);
+            var planCuentasTask = OrdenesPagoDirectoClient.GetCuentasContablesAsync();
+            await Task.WhenAll(saldoTask, detalleTask, cuentasTask, planCuentasTask);
 
             saldo = await saldoTask;
             detalle = await detalleTask;
             cuentasContra.Clear();
             cuentasContra.AddRange(await cuentasTask);
+            cuentasContables.Clear();
+            cuentasContables.AddRange(await planCuentasTask);
 
             if (saldo is null)
             {
@@ -305,7 +718,10 @@
     {
         nuevoMonto = 0m;
         nuevoMetodo = OrdenPagoDirectoMetodoPago.Contable;
-        cuentaOrigenId = 0;
+        bancoSeleccionadoNombre = null;
+        bancoCuentaSeleccionadaId = null;
+        proximoChequeSeq++;
+        proximoCheque = null;
     }
 
     private void AbonarTodoElSaldo()
@@ -334,11 +750,13 @@
         {
             isSaving = true;
 
+            var cuentaOrigen = CuentaOrigenSeleccionada!;
             var dto = new AbonoCompromisoUpsertDto
             {
                 Monto = nuevoMonto,
                 MetodoPago = nuevoMetodo!,
-                CuentaContraId = cuentaOrigenId,
+                CuentaContraId = cuentaOrigen.AccountId,
+                BancoCuentaId = cuentaOrigen.BancoCuentaId,
                 CuentaDestinoProveedorId = null, // informativo; combo de cuenta destino pendiente
                 Usuario = UsuarioActualTexto
             };
@@ -351,13 +769,26 @@
             }
 
             ShowToast("Exito", result.Message, ToastRenderStyle.Success);
-            if (result.NumeroAbono > 0)
-            {
-                await JS.InvokeVoidAsync("open",
-                    OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, result.NumeroAbono), "_blank");
-            }
 
-            await CargarAsync();
+            if (result.ChequeId is > 0)
+            {
+                // Abono con cheque: ofrecer comprobante de abono / cheque / cheque + detalle.
+                chequeIdEmitido = result.ChequeId.Value;
+                documentoImpresionUrl = result.NumeroAbono > 0
+                    ? OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, result.NumeroAbono)
+                    : null;
+                impresionDialogVisible = true;
+            }
+            else
+            {
+                if (result.NumeroAbono > 0)
+                {
+                    await JS.InvokeVoidAsync("open",
+                        OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, result.NumeroAbono), "_blank");
+                }
+
+                await CargarAsync();
+            }
         }
         catch (Exception ex)
         {
@@ -367,6 +798,16 @@
         finally
         {
             isSaving = false;
+        }
+    }
+
+    private async Task OnImpresionDialogVisibleChanged(bool value)
+    {
+        impresionDialogVisible = value;
+        if (!value)
+        {
+            // Al cerrar el dialogo de impresion, recargar el estado del compromiso.
+            await CargarAsync();
         }
     }
 
@@ -407,6 +848,47 @@
     private async Task VerComprobanteAsync(int numeroAbono)
         => await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, numeroAbono), "_blank");
 
+    /// <summary>
+    /// Abre el detalle contable (lineas debito/credito) de la partida ABO que genero el abono.
+    /// El abono guarda partida_id; las lineas se leen de la API de partidas.
+    /// </summary>
+    private async Task VerPartidaAsync(AbonoCompromisoListItemDto item)
+    {
+        if (item.PartidaId is not > 0)
+        {
+            return;
+        }
+
+        partidaAbonoNumero = item.NumeroAbono;
+        partidaSeleccionada = null;
+        partidaError = null;
+        partidaLoading = true;
+        partidaPopupVisible = true;
+
+        try
+        {
+            partidaSeleccionada = await PolizasClient.ObtenerAsync(item.PartidaId.Value);
+            if (partidaSeleccionada is null)
+            {
+                partidaError = "No se encontro la partida contable del abono.";
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            partidaError = "No tiene permisos para consultar el detalle contable.";
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error al cargar la partida {PartidaId} del abono {NumeroAbono} del compromiso {NumeroOrden}",
+                item.PartidaId, item.NumeroAbono, NumeroOrden);
+            partidaError = "No se pudo cargar el detalle contable del abono.";
+        }
+        finally
+        {
+            partidaLoading = false;
+        }
+    }
+
     private bool Validar()
     {
         if (saldo is null)
@@ -429,9 +911,13 @@
             validationMessages.Add($"El monto no puede superar el saldo pendiente ({saldo.Saldo:N2}).");
         }
 
-        if (cuentaOrigenId <= 0)
+        if (string.IsNullOrWhiteSpace(bancoSeleccionadoNombre))
         {
-            validationMessages.Add("Debe seleccionar la cuenta de origen.");
+            validationMessages.Add("Debe seleccionar el banco de origen.");
+        }
+        else if (CuentaOrigenSeleccionada is null)
+        {
+            validationMessages.Add("Debe seleccionar la cuenta de origen del banco.");
         }
 
         if (string.IsNullOrWhiteSpace(nuevoMetodo))
@@ -476,6 +962,12 @@
     private static string GetTextOrDash(string? value)
         => string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
 
+    private string FormatCuentaOrDash(string? cuenta)
+    {
+        var formatted = AccountFormat.Format(cuenta);
+        return string.IsNullOrWhiteSpace(formatted) ? "-" : formatted;
+    }
+
     private static string? NormalizeLocalUrl(string? url)
     {
         if (string.IsNullOrWhiteSpace(url))
@@ -490,4 +982,12 @@
     }
 
     private sealed record MetodoPagoItem(string Value, string Display);
+
+    /// <summary>Linea de la vista previa del asiento (ya resuelta a texto para la tabla).</summary>
+    private sealed record PartidaPreviewLinea(
+        string CuentaCodigo,
+        string CuentaNombre,
+        string Descripcion,
+        decimal Debito,
+        decimal Credito);
 }

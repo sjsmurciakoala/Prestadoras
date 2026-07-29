@@ -17,6 +17,9 @@ public sealed class ConfiguracionPresupuestoClient
         _http = http;
     }
 
+    public static string GetPdfUrl(string idPresupuesto)
+        => $"/api/presupuesto/configuraciones/{Uri.EscapeDataString(idPresupuesto?.Trim() ?? string.Empty)}/pdf";
+
     public async Task<List<ConfiguracionPresupuestoListItemDto>> GetAsync(
         ConfiguracionPresupuestoFilterDto? filtro = null,
         CancellationToken ct = default)

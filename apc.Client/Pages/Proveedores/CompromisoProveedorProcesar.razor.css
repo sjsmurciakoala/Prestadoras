@@ -48,6 +48,11 @@
     padding: 1rem 1.1rem;
 }
 
+/* Tarjeta que ocupa el renglon completo (proveedor): ningun otro summary-card la acompaña. */
+.summary-card.summary-card-full {
+    grid-column: 1 / -1;
+}
+
 .summary-label {
     color: #7f8c8d;
     font-size: 0.78rem;
@@ -121,6 +126,25 @@
     font-weight: 700;
     text-align: center;
     padding: 0.85rem 1rem;
+}
+
+/* Lineas de la partida que provienen de una retencion/deduccion */
+.ded-row td {
+    background-color: #fff8ee;
+}
+
+.ded-tag {
+    display: inline-block;
+    margin-left: 6px;
+    padding: 1px 8px;
+    border-radius: 999px;
+    background: #f8ead2;
+    color: #854f0b;
+    font-size: 0.68rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    vertical-align: middle;
 }
 .total-bar {
     display: flex;

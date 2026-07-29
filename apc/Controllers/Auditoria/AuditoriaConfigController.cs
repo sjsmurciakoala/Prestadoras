@@ -23,4 +23,30 @@ public sealed class AuditoriaConfigController : ControllerBase
         await _service.GuardarAsync(items, User?.Identity?.Name ?? "system", ct);
         return Ok(new { success = true });
     }
+
+    [HttpGet("tablas-disponibles")]
+    public async Task<IActionResult> TablasDisponibles(CancellationToken ct)
+        => Ok(await _service.TablasDisponiblesAsync(ct));
+
+    [HttpPost("catalogo")]
+    public async Task<IActionResult> Agregar([FromBody] AgregarMaestroDto dto, CancellationToken ct)
+    {
+        if (!ModelState.IsValid) return ValidationProblem(ModelState);
+        try
+        {
+            await _service.AgregarAlCatalogoAsync(dto, User?.Identity?.Name ?? "system", ct);
+            return Ok(new { success = true });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    [HttpDelete("catalogo/{tabla}")]
+    public async Task<IActionResult> Desactivar(string tabla, CancellationToken ct)
+    {
+        await _service.DesactivarCatalogoAsync(tabla, User?.Identity?.Name ?? "system", ct);
+        return Ok(new { success = true });
+    }
 }
