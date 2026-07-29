@@ -8,6 +8,17 @@ public sealed class ArticuloEditDto
     public int? Id { get; set; }
 
     /// <summary>
+    /// Token de concurrencia optimista: es el xmin de Postgres que tenía la fila cuando se
+    /// cargó el artículo. Viaja al cliente en el GET y vuelve en el PUT; si otro usuario
+    /// guardó primero, el servidor responde 409 en vez de pisar su cambio en silencio.
+    /// Null al crear (todavía no hay fila).
+    /// </summary>
+    public uint? RowVersion { get; set; }
+
+    /// <summary>Soft-delete: false = descontinuado. Solo lectura desde el form (se cambia con descontinuar/reactivar).</summary>
+    public bool Activo { get; set; } = true;
+
+    /// <summary>
     /// Código del sistema anterior (SIMAFI). OPCIONAL: los artículos nuevos no lo usan
     /// (queda en blanco); el identificador es el Id. Solo referencia en los migrados.
     /// </summary>

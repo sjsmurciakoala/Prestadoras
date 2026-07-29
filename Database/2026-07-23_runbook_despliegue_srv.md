@@ -12,7 +12,7 @@ Orden y guía para aplicar en el **SRV de producción** los scripts SQL de la ta
 features desarrollada en `Cambios_almacen1.0` que —hasta donde está registrado— ya se
 aplicaron en el **mirror `siad_v3_restore` (localhost)** pero **faltan en el SRV**.
 
-Son **19 scripts a aplicar** en orden (pasos 1 a 18, con un 8b intercalado), más
+Son **20 scripts a aplicar** en orden (pasos 1 a 19, con un 8b intercalado), más
 **1 archivo de respaldo que NO se aplica** (es el rollback del paso 6).
 
 > El **código** C#/Blazor de estas features ya está en `main`. Este runbook cubre
@@ -67,6 +67,7 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/<script>.sql
 | ⚠️ | **Los pasos 9 y 10 dependen de `company_id = 2`** y de que existan las cuentas contables `11102010301` / `11102010501` en `con_plan_cuentas`. Ajustá si el tenant difiere. |
 | ⚠️ | **El paso 5 borra 1 artículo de prueba** ("MANTENIMIENTO PREVENTIVO DE BOMBAS - CONTRATADO") **solo si no tiene ningún movimiento** (guardas `NOT EXISTS`). Es intencional. |
 | ⚠️ | **El paso 14 (presupuesto multitenant) va de la mano del binario del portal.** Cambia la firma de `fn_pst_next_id_presupuesto_dtl` (ahora recibe `company_id`): el portal viejo la llama con 1 argumento y **fallaría al agregar detalles de presupuesto** después de aplicar el SQL. Aplicar el script y desplegar el portal **en la misma ventana**. Además el backfill asume `company_id = 2`. |
+| ⚠️ | **El paso 19 (soft-delete de artículos) va de la mano del binario del portal.** El código nuevo lee y escribe `alm_articulo.activo`: si desplegás el portal sin aplicar el script, el maestro de artículos falla al consultar. Aplicá el SQL y desplegá el portal en la misma ventana. (Al revés es inocuo: el SQL sin el binario deja la columna sin usar.) |
 | ⚠️ | **NO apliques `Database/ddl_v3/20260227_presupuesto_valor_real_triggers.sql` tal cual** en una base que ya tiene el paso 14. Sus `CREATE OR REPLACE` de `fn_pst_aplicar_delta_valor_real` (mono-tenant) y `fn_pst_recalcular_valor_disponible(varchar)` **pisan las versiones company-aware del paso 14** y reintroducen fuga entre empresas. Lo que falta de ese ddl_v3 lo repone el **paso 18** sin tocar esas dos. |
 
 ---
@@ -94,6 +95,7 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/<script>.sql
 | 16 | `2026-07-27_proveedor_contactos.sql` | Tablas `prv_tipo_contacto` + `prv_proveedor_contacto`, semilla del catálogo y migración del contacto legacy | Aditivo (2 tablas) + datos idempotentes | Sí |
 | 17 | `2026-07-27_bitacora_config_contactos.sql` | Da de alta las dos tablas de contactos en el catálogo de auditoría y hereda su config de `prv_proveedor_cuenta_bancaria` | Datos idempotentes — **depende de los pasos 8 y 16** | Sí |
 | 18 | `2026-07-28_presupuesto_completar_ddl_valor_real.sql` | Repone las piezas faltantes del mecanismo de valor_real de presupuesto: `fn_pst_resolver_cuenta_code`, `fn_pst_resolver_poliza_fecha`, `fn_pst_aplicar_delta_por_poliza` y el procedimiento `sp_pst_aplicar_partida_presupuesto` | Objetos (funciones + procedimiento) — **depende del paso 14** | Sí |
+| 19 | `2026-07-29_alm_articulo_activo.sql` | `alm_articulo.activo` (soft-delete del maestro de artículos) + índice parcial | Aditivo (columna + índice) · **con binario** | Sí |
 | — | `2026-07-16_backup_sp_obtener_cliente_saldo.sql` | **NO aplicar** — rollback del paso 6 | Respaldo | — |
 
 > **Sin dependencias cruzadas duras entre bloques:** todas las FK apuntan a tablas que
@@ -459,6 +461,47 @@ SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS firma
 -- recalcular_valor_disponible:  p_company_id bigint, p_id_presupuesto character varying
 ```
 
+### Paso 19 — `alm_articulo.activo` (soft-delete del maestro de artículos)
+Agrega la columna de soft-delete al artículo, que era el único catálogo de Almacén que
+todavía borraba **físicamente**. Sus hermanas (`alm_bodega`, `alm_tipo_articulo`,
+`alm_grupo`, `alm_unidad_medida`, `alm_articulo_bodega`, `alm_articulo_proveedor`) ya usan
+`activo`. Desde este cambio el artículo se **descontinúa**: deja de ofrecerse para
+documentos nuevos, pero se conserva y su kardex sigue consultable. Aditivo e idempotente
+(`ADD COLUMN IF NOT EXISTS` + `CREATE INDEX IF NOT EXISTS`), no toca datos: el
+`DEFAULT true` deja todos los artículos existentes activos.
+
+> ⚠️ **Va de la mano del binario del portal.** El código nuevo (`ArticulosService`,
+> `SiadDbContext.Almacen.cs`) **lee y escribe `alm_articulo.activo`**: si se despliega el
+> portal sin aplicar este script, el maestro de artículos falla al consultar. Aplicar el SQL
+> y desplegar el portal **en la misma ventana**. Al revés es inocuo (el SQL sin el binario
+> no rompe nada: la columna queda sin usar).
+
+> **No requiere DDL** para las otras dos piezas de la misma tanda: la **concurrencia
+> optimista** usa la columna de sistema `xmin` (ya existe en toda tabla; solo se mapea en EF)
+> y la **auditoría** ya estaba lista (`alm_articulo` está en `AuditableMaestros` y el
+> interceptor interpreta `activo` true→false como "Eliminación").
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-29_alm_articulo_activo.sql
+```
+¿Ya aplicado?
+```sql
+SELECT count(*) AS tiene_col
+  FROM information_schema.columns
+ WHERE table_name='alm_articulo' AND column_name='activo';
+-- 1 = ya aplicado.
+```
+Verificación posterior (nadie debió quedar descontinuado por la migración):
+```sql
+SELECT count(*) AS total,
+       count(*) FILTER (WHERE activo)     AS activos,
+       count(*) FILTER (WHERE NOT activo) AS descontinuados  -- debe ser 0
+  FROM public.alm_articulo;
+
+SELECT indexname FROM pg_indexes
+ WHERE tablename='alm_articulo' AND indexname='ix_alm_articulo_company_activo';  -- 1 fila
+```
+
 ---
 
 ## 6. Después de aplicar todo
@@ -506,6 +549,13 @@ Según notas internas al 2026-07-23 (point-in-time, **no verificado contra el SR
   `sp_pst_aplicar_partida_presupuesto`) faltaban en mirror y desarrollo mientras el paso 14 ya las
   da por hechas. Repone solo lo faltante sin pisar el paso 14. Va después del paso 14.
 
+- **Paso 19:** creado el 2026-07-29 y **aplicado ese día en el mirror `siad_v3_restore`**
+  (verificado: columna `activo` NOT NULL DEFAULT true, 634 artículos todos activos y 0
+  descontinuados, índice `ix_alm_articulo_company_activo` creado; los 35 tests de Almacén y
+  13 de Auditoría corren en verde contra el mirror). **Pendiente en el SRV.** Va junto con el
+  binario del portal que introduce el soft-delete del maestro de artículos. No tiene
+  dependencias con otros pasos de esta tanda.
+
 ## 8. Nota de versionado (git)
 
 A la fecha, estos 3 scripts + este runbook están **sin commitear** (untracked) en la rama:
@@ -518,6 +568,7 @@ A la fecha, estos 3 scripts + este runbook están **sin commitear** (untracked) 
 - `Database/2026-07-27_proveedor_contactos.sql`
 - `Database/2026-07-27_bitacora_config_contactos.sql`
 - `Database/2026-07-28_presupuesto_completar_ddl_valor_real.sql`
+- `Database/2026-07-29_alm_articulo_activo.sql`
 - `Database/2026-07-23_runbook_despliegue_srv.md` (este archivo)
 
 Conviene versionarlos para que queden reflejados junto al resto de la tanda. **Vos

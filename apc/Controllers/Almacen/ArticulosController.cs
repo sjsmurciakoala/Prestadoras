@@ -1,4 +1,5 @@
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Services.Almacen;
@@ -27,6 +28,32 @@ public sealed class ArticulosController : ControllerBase
     {
         var articulos = await _service.GetAsync(filtro, ct);
         return Ok(articulos);
+    }
+
+    [HttpGet("search-paged")]
+    public async Task<IActionResult> SearchPaged(
+        [FromQuery] ArticuloFilterDto filtro,
+        [FromQuery] int skip,
+        [FromQuery] int take,
+        [FromQuery] string? sortField,
+        [FromQuery] bool sortDesc,
+        CancellationToken ct)
+    {
+        // Sin tope superior a propósito: al exportar a Excel el grid pide TODAS las filas
+        // de una vez, y un clamp truncaría el archivo en silencio. El endpoint sin paginar
+        // (GET api/almacen/articulos) ya devuelve el catálogo completo, así que no abre
+        // una superficie nueva.
+        if (take <= 0) take = 50;
+
+        var result = await _service.SearchPagedAsync(filtro, skip, take, sortField, sortDesc, ct);
+        return Ok(result);
+    }
+
+    [HttpGet("resumen")]
+    public async Task<IActionResult> GetResumen([FromQuery] ArticuloFilterDto filtro, CancellationToken ct)
+    {
+        var resumen = await _service.GetResumenAsync(filtro, ct);
+        return Ok(resumen);
     }
 
     [HttpGet("alertas")]
@@ -61,6 +88,12 @@ public sealed class ArticulosController : ControllerBase
         {
             return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
         }
+        catch (ArgumentException ex)
+        {
+            // NormalizeRequired/NormalizeOptional lanzan ArgumentException (campo vacío o
+            // demasiado largo): también es error del cliente, no un 500.
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     [HttpPut("{id:int}")]
@@ -72,15 +105,62 @@ public sealed class ArticulosController : ControllerBase
         }
 
         var usuario = User?.Identity?.Name ?? "system";
-        var actualizado = await _service.UpdateAsync(id, dto, usuario, ct);
-        return Ok(actualizado);
+        try
+        {
+            var actualizado = await _service.UpdateAsync(id, dto, usuario, ct);
+            return Ok(actualizado);
+        }
+        catch (KeyNotFoundException)
+        {
+            return NotFound();
+        }
+        catch (DbUpdateConcurrencyException)
+        {
+            // Otro usuario guardó el artículo mientras este lo tenía abierto. Se devuelve
+            // 409 para que la UI le diga que recargue en vez de pisar el cambio ajeno.
+            return Problem(
+                detail: "Otro usuario modificó este artículo mientras lo tenías abierto. Recarga la ficha para ver los datos actuales y vuelve a aplicar tus cambios.",
+                statusCode: StatusCodes.Status409Conflict);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+        catch (ArgumentException ex)
+        {
+            // Mismo criterio que en Create: los errores de normalización son 400, no 500.
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
+    // DELETE = descontinuar (soft-delete): el artículo se conserva para histórico y su
+    // kardex sigue consultable. Mismo criterio que ubicaciones y proveedores del artículo.
     [HttpDelete("{id:int}")]
     public async Task<IActionResult> Delete(int id, CancellationToken ct)
     {
-        var ok = await _service.DeleteAsync(id, ct);
-        return ok ? Ok(new { success = true }) : NotFound();
+        try
+        {
+            var ok = await _service.DeleteAsync(id, User?.Identity?.Name ?? "system", ct);
+            return ok ? Ok(new { success = true }) : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
+    }
+
+    [HttpPost("{id:int}/reactivar")]
+    public async Task<IActionResult> Reactivar(int id, CancellationToken ct)
+    {
+        try
+        {
+            var ok = await _service.ReactivarAsync(id, User?.Identity?.Name ?? "system", ct);
+            return ok ? Ok(new { success = true }) : NotFound();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Problem(detail: ex.Message, statusCode: StatusCodes.Status400BadRequest);
+        }
     }
 
     // ── Ubicaciones del artículo por bodega ──────────────────────────────────

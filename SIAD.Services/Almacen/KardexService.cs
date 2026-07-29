@@ -138,6 +138,23 @@ public sealed class KardexService : IKardexService
 
         var lista = filtrados.ToList();
 
+        // Existencia del ámbito consultado. Con bodega filtrada el saldo corrido es el de
+        // ESA bodega, así que la cifra comparable es alm_articulo_bodega.existencia (fila
+        // ACTIVA, mismo contrato de rollup que el maestro) y no alm_articulo.existencia,
+        // que es el total del artículo. Sin fila activa se devuelve null: no hay con qué
+        // comparar (evita reportar descuadre por ausencia de rollup).
+        decimal? existenciaBodega = null;
+        if (filtro.BodegaId.HasValue)
+        {
+            existenciaBodega = await _context.alm_articulo_bodegas
+                .AsNoTracking()
+                .Where(u => u.articulo_id == articuloId
+                         && u.bodega_id == filtro.BodegaId.Value
+                         && u.activo)
+                .Select(u => (decimal?)u.existencia)
+                .FirstOrDefaultAsync(ct);
+        }
+
         return new KardexArticuloDto
         {
             Codigo = articulo.codigo_articulo,
@@ -145,6 +162,8 @@ public sealed class KardexService : IKardexService
             UnidadMedida = articulo.UnidadCodigo ?? articulo.unidad_medida,
             ExistenciaRegistrada = articulo.existencia,
             SaldoCalculado = saldoCalculado,
+            BodegaId = filtro.BodegaId,
+            ExistenciaBodega = existenciaBodega,
             TotalIngresos = lista.Sum(m => m.Ingresos),
             TotalSalidas = lista.Sum(m => m.Salidas),
             Movimientos = lista

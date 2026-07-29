@@ -30,7 +30,7 @@
                 <ValidationMessage For="() => Model.Descripcion" />
             </DxFormLayoutItem>
 
-            <DxFormLayoutItem Caption="Unidad de medida" ColSpanMd="4">
+            <DxFormLayoutItem Caption="Unidad de medida" ColSpanMd="12">
                 <DxComboBox Data="@UnidadesConCategoria" Value="Model.UnidadMedidaId"
                             ValueChanged="@((int? v) => OnUnidadMedidaChanged(v))"
                             ValueExpression="@(() => Model.UnidadMedidaId)"
@@ -42,7 +42,7 @@
                 <ValidationMessage For="() => Model.UnidadMedidaId" />
             </DxFormLayoutItem>
 
-            <DxFormLayoutItem Caption="Unidad de almacenaje" ColSpanMd="4">
+            <DxFormLayoutItem Caption="Unidad de almacenaje" ColSpanMd="12">
                 <DxComboBox Data="@UnidadesCompatibles" @bind-Value="Model.UnidadAlmacenajeId"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
                             TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
@@ -53,7 +53,7 @@
                 <ValidationMessage For="() => Model.UnidadAlmacenajeId" />
             </DxFormLayoutItem>
 
-            <DxFormLayoutItem Caption="Unidad de salidas" ColSpanMd="4">
+            <DxFormLayoutItem Caption="Unidad de salidas" ColSpanMd="12">
                 <DxComboBox Data="@UnidadesCompatibles" @bind-Value="Model.UnidadSalidaId"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
                             TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"

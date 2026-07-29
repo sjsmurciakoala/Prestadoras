@@ -91,14 +91,14 @@
         <div class="row g-3 mb-4">
             <div class="col-6 col-md-3">
                 <div class="modern-card summary-card">
-                    <div class="summary-label">Existencia registrada</div>
-                    <div class="summary-value">@kardex.ExistenciaRegistrada.ToString("N2")</div>
+                    <div class="summary-label" title="@ExistenciaTooltip">@ExistenciaLabel</div>
+                    <div class="summary-value">@ExistenciaTexto</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
-                <div class="modern-card summary-card @(SaldoDescuadrado ? "summary-warning" : "")">
-                    <div class="summary-label">Saldo calculado (kardex)</div>
-                    <div class="summary-value">@kardex.SaldoCalculado.ToString("N2")</div>
+                <div class="modern-card summary-card @(kardex.SaldoDescuadrado ? "summary-warning" : "")">
+                    <div class="summary-label">@(HayBodegaFiltrada ? "Saldo calculado (bodega)" : "Saldo calculado (kardex)")</div>
+                    <div class="summary-value">@kardex.SaldoCalculado.ToString("N2")@UnidadSufijo()</div>
                 </div>
             </div>
             <div class="col-6 col-md-3">
@@ -115,11 +115,30 @@
             </div>
         </div>
 
-        @if (SaldoDescuadrado)
+        @if (string.IsNullOrWhiteSpace(kardex.UnidadMedida))
+        {
+            <div class="text-danger mb-3">
+                <i class="bi bi-exclamation-triangle me-1"></i>Unidad de medida no asignada
+            </div>
+        }
+
+        @if (kardex.SaldoDescuadrado)
         {
             <div class="alert alert-warning mb-3" role="alert">
-                El saldo calculado del kardex (@kardex.SaldoCalculado.ToString("N2")) no coincide con la
-                existencia registrada en el catálogo (@kardex.ExistenciaRegistrada.ToString("N2")).
+                @if (HayBodegaFiltrada)
+                {
+                    <text>
+                        El saldo del kardex de @BodegaTexto (@kardex.SaldoCalculado.ToString("N2")) no coincide con la
+                        existencia registrada de esa bodega (@(kardex.ExistenciaBodega!.Value.ToString("N2"))).
+                    </text>
+                }
+                else
+                {
+                    <text>
+                        El saldo calculado del kardex (@kardex.SaldoCalculado.ToString("N2")) no coincide con la
+                        existencia registrada en el catálogo (@kardex.ExistenciaRegistrada.ToString("N2")).
+                    </text>
+                }
             </div>
         }
 
@@ -275,7 +294,42 @@
     private bool isLoading;
     private string? errorMessage;
 
-    private bool SaldoDescuadrado => kardex is not null && kardex.SaldoCalculado != kardex.ExistenciaRegistrada;
+    /// <summary>
+    /// ¿El kardex cargado está acotado a una bodega? Se lee del DTO (eco del filtro con el
+    /// que respondió el servidor), no de bodegaSeleccionada, que puede haber cambiado antes
+    /// de que termine la consulta.
+    /// </summary>
+    private bool HayBodegaFiltrada => kardex?.BodegaId is not null;
+
+    private string ExistenciaLabel => HayBodegaFiltrada
+        ? "Existencia registrada (bodega)"
+        : "Existencia registrada";
+
+    /// <summary>
+    /// Existencia del mismo ámbito que el saldo (artículo o bodega). Un "—" significa que la
+    /// bodega no tiene ubicación activa para el artículo, así que no hay cifra que comparar.
+    /// </summary>
+    private string ExistenciaTexto => kardex?.ExistenciaComparable?.ToString("N2") ?? "—";
+
+    private string? ExistenciaTooltip => HayBodegaFiltrada
+        ? kardex!.ExistenciaBodega.HasValue
+            ? $"Existencia de {BodegaTexto} (alm_articulo_bodega). El total del artículo es {kardex.ExistenciaRegistrada:N2}."
+            : $"{BodegaTexto} no tiene existencia registrada (ubicación activa) para este artículo. El total del artículo es {kardex.ExistenciaRegistrada:N2}."
+        : null;
+
+    private string BodegaTexto => string.IsNullOrWhiteSpace(bodegaSeleccionada?.Display)
+        ? "la bodega seleccionada"
+        : bodegaSeleccionada!.Display;
+
+    private string? UnidadMedida => kardex?.UnidadMedida;
+
+    /// <summary>
+    /// Sufijo con la unidad de medida del artículo ("286.00 UND"). Si el artículo no tiene
+    /// unidad registrada no se pinta nada; en ese caso se muestra el aviso rojo bajo las tarjetas.
+    /// </summary>
+    private RenderFragment? UnidadSufijo() => string.IsNullOrWhiteSpace(UnidadMedida)
+        ? null
+        : @<span class="fs-6 fw-normal text-muted ms-1">@UnidadMedida</span>;
 
     protected override async Task OnInitializedAsync()
     {
@@ -331,7 +385,10 @@
     {
         try
         {
-            articulos = await ArticulosClient.GetAsync();
+            // El kardex es histórico: debe poder consultarse el de un artículo
+            // DESCONTINUADO (soft-delete, 2026-07-29). Sin IncluirDescontinuados el
+            // maestro devuelve solo activos y su historia quedaría inaccesible.
+            articulos = await ArticulosClient.GetAsync(new ArticuloFilterDto { IncluirDescontinuados = true });
             tipos = await KardexClient.GetTiposMovimientoAsync();
             bodegas = await BodegasClient.GetLookupAsync();
         }
