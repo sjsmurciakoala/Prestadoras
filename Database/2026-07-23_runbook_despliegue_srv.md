@@ -12,7 +12,7 @@ Orden y guía para aplicar en el **SRV de producción** los scripts SQL de la ta
 features desarrollada en `Cambios_almacen1.0` que —hasta donde está registrado— ya se
 aplicaron en el **mirror `siad_v3_restore` (localhost)** pero **faltan en el SRV**.
 
-Son **18 scripts a aplicar** en orden (pasos 1 a 17, con un 8b intercalado), más
+Son **19 scripts a aplicar** en orden (pasos 1 a 18, con un 8b intercalado), más
 **1 archivo de respaldo que NO se aplica** (es el rollback del paso 6).
 
 > El **código** C#/Blazor de estas features ya está en `main`. Este runbook cubre
@@ -67,6 +67,7 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/<script>.sql
 | ⚠️ | **Los pasos 9 y 10 dependen de `company_id = 2`** y de que existan las cuentas contables `11102010301` / `11102010501` en `con_plan_cuentas`. Ajustá si el tenant difiere. |
 | ⚠️ | **El paso 5 borra 1 artículo de prueba** ("MANTENIMIENTO PREVENTIVO DE BOMBAS - CONTRATADO") **solo si no tiene ningún movimiento** (guardas `NOT EXISTS`). Es intencional. |
 | ⚠️ | **El paso 14 (presupuesto multitenant) va de la mano del binario del portal.** Cambia la firma de `fn_pst_next_id_presupuesto_dtl` (ahora recibe `company_id`): el portal viejo la llama con 1 argumento y **fallaría al agregar detalles de presupuesto** después de aplicar el SQL. Aplicar el script y desplegar el portal **en la misma ventana**. Además el backfill asume `company_id = 2`. |
+| ⚠️ | **NO apliques `Database/ddl_v3/20260227_presupuesto_valor_real_triggers.sql` tal cual** en una base que ya tiene el paso 14. Sus `CREATE OR REPLACE` de `fn_pst_aplicar_delta_valor_real` (mono-tenant) y `fn_pst_recalcular_valor_disponible(varchar)` **pisan las versiones company-aware del paso 14** y reintroducen fuga entre empresas. Lo que falta de ese ddl_v3 lo repone el **paso 18** sin tocar esas dos. |
 
 ---
 
@@ -92,11 +93,12 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/<script>.sql
 | 15 | `2026-07-24_fix_fn_pst_next_id_dtl_ids_no_numericos.sql` | `fn_pst_next_id_presupuesto_dtl` deja de exigir id numérico (semilla = MAX por empresa+presupuesto) | Objetos (función) — **depende del paso 14** | Sí |
 | 16 | `2026-07-27_proveedor_contactos.sql` | Tablas `prv_tipo_contacto` + `prv_proveedor_contacto`, semilla del catálogo y migración del contacto legacy | Aditivo (2 tablas) + datos idempotentes | Sí |
 | 17 | `2026-07-27_bitacora_config_contactos.sql` | Da de alta las dos tablas de contactos en el catálogo de auditoría y hereda su config de `prv_proveedor_cuenta_bancaria` | Datos idempotentes — **depende de los pasos 8 y 16** | Sí |
+| 18 | `2026-07-28_presupuesto_completar_ddl_valor_real.sql` | Repone las piezas faltantes del mecanismo de valor_real de presupuesto: `fn_pst_resolver_cuenta_code`, `fn_pst_resolver_poliza_fecha`, `fn_pst_aplicar_delta_por_poliza` y el procedimiento `sp_pst_aplicar_partida_presupuesto` | Objetos (funciones + procedimiento) — **depende del paso 14** | Sí |
 | — | `2026-07-16_backup_sp_obtener_cliente_saldo.sql` | **NO aplicar** — rollback del paso 6 | Respaldo | — |
 
 > **Sin dependencias cruzadas duras entre bloques:** todas las FK apuntan a tablas que
 > ya existen en prod. Los órdenes estrictos son: **interno del bloque almacén
-> (pasos 2→3→4→5)**, **14→15**, **8 + 8b + 16 → 17** (el 17 inserta filas en las tablas
+> (pasos 2→3→4→5)**, **14→15**, **14→18**, **8 + 8b + 16 → 17** (el 17 inserta filas en las tablas
 > que crean el 8/8b y describe las tablas que crea el 16), y **no aplicar el backup del
 > paso 6**. El resto podría reordenarse, pero seguir el orden de arriba es lo más seguro.
 
@@ -419,6 +421,44 @@ SELECT company_id, entidad, habilitado, audita_crear, audita_editar, audita_elim
  ORDER BY company_id, entidad;
 ```
 
+### Paso 18 — Completar el mecanismo de valor_real de presupuesto · depende del paso 14
+Crea las 4 piezas que el ddl_v3 `20260227_presupuesto_valor_real_triggers.sql` define pero que
+**nunca se aplicaron** (verificado 2026-07-28: no existen ni en el mirror ni en desarrollo):
+`fn_pst_resolver_cuenta_code`, `fn_pst_resolver_poliza_fecha`, `fn_pst_aplicar_delta_por_poliza`
+y el procedimiento `sp_pst_aplicar_partida_presupuesto` (lo invoca
+`OrdenesPagoDirectoService.ApplyPresupuestoPartidaAsync`, que hoy lanzaría excepción si el SP
+falta — aunque ese método aún no se cablea). El paso 14 se escribió asumiendo ese ddl_v3: dejó
+`fn_pst_aplicar_delta_valor_real` llamando a `fn_pst_resolver_cuenta_code` (inexistente). Solo
+objetos de código; no toca tablas ni datos. Re-ejecutable.
+
+> ⚠️ **NO uses el ddl_v3 `20260227_presupuesto_valor_real_triggers.sql` para esto.** Su
+> `CREATE OR REPLACE` de `fn_pst_aplicar_delta_valor_real` (mono-tenant) y
+> `fn_pst_recalcular_valor_disponible(varchar)` **pisaría las company-aware del paso 14** y
+> reintroduciría fuga entre empresas. Este paso 18 trae **solo** lo faltante.
+
+**Prerrequisitos:** paso 14 aplicado (firma company-aware de `fn_pst_aplicar_delta_valor_real`)
+y el tipo `public.tipo_linea_partida` debe existir (el script aborta con mensaje claro si falta).
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-28_presupuesto_completar_ddl_valor_real.sql
+```
+¿Ya aplicado? (las 4 NOT NULL = aplicado):
+```sql
+SELECT to_regprocedure('public.fn_pst_resolver_cuenta_code(bigint,bigint)')                          AS resolver_cuenta,
+       to_regprocedure('public.fn_pst_resolver_poliza_fecha(text,bigint,bigint)')                    AS resolver_fecha,
+       to_regprocedure('public.fn_pst_aplicar_delta_por_poliza(text,bigint,bigint,bigint,numeric)')  AS delta_por_poliza,
+       to_regprocedure('public.sp_pst_aplicar_partida_presupuesto(bigint,date,public.tipo_linea_partida[])') AS sp_partida;
+```
+Verificación posterior (el paso 14 NO debe haberse tocado — cada función, una sola fila con firma company-aware):
+```sql
+SELECT p.proname, pg_get_function_identity_arguments(p.oid) AS firma
+  FROM pg_proc p JOIN pg_namespace n ON n.oid=p.pronamespace
+ WHERE n.nspname='public'
+   AND p.proname IN ('fn_pst_aplicar_delta_valor_real','fn_pst_recalcular_valor_disponible')
+ ORDER BY p.proname;
+-- aplicar_delta_valor_real:     p_company_id bigint, p_account_id bigint, p_poliza_date date, p_delta numeric
+-- recalcular_valor_disponible:  p_company_id bigint, p_id_presupuesto character varying
+```
+
 ---
 
 ## 6. Después de aplicar todo
@@ -459,6 +499,12 @@ Según notas internas al 2026-07-23 (point-in-time, **no verificado contra el SR
   contra el mirror, lo que exige que ambas tablas y la semilla de 5 tipos existan).
   **Pendiente en el SRV.** Va junto con el código de contactos de proveedor.
 - **Paso 17:** creado el 2026-07-27. **Sin aplicar en ningún lado** — ni mirror ni SRV.
+- **Paso 18:** creado el 2026-07-28 y **aplicado ese día en el mirror `siad_v3_restore` y en
+  `siad_v3_desarrollo`** (verificado: las 4 piezas existen y el paso 14 quedó intacto, sin
+  versiones mono-tenant duplicadas). **Pendiente en el SRV.** Nace de verificar que las 4 piezas
+  del ddl_v3 de valor_real (`resolver_cuenta_code`, `resolver_poliza_fecha`, `aplicar_delta_por_poliza`,
+  `sp_pst_aplicar_partida_presupuesto`) faltaban en mirror y desarrollo mientras el paso 14 ya las
+  da por hechas. Repone solo lo faltante sin pisar el paso 14. Va después del paso 14.
 
 ## 8. Nota de versionado (git)
 
@@ -471,6 +517,7 @@ A la fecha, estos 3 scripts + este runbook están **sin commitear** (untracked) 
 - `Database/2026-07-24_fix_fn_pst_next_id_dtl_ids_no_numericos.sql`
 - `Database/2026-07-27_proveedor_contactos.sql`
 - `Database/2026-07-27_bitacora_config_contactos.sql`
+- `Database/2026-07-28_presupuesto_completar_ddl_valor_real.sql`
 - `Database/2026-07-23_runbook_despliegue_srv.md` (este archivo)
 
 Conviene versionarlos para que queden reflejados junto al resto de la tanda. **Vos
