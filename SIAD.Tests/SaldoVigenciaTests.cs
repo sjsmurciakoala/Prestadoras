@@ -34,12 +34,23 @@ public sealed class SaldoVigenciaTests : IntegrationTestBase
             new { id = EmpresaSintetica }, Transaction));
     }
 
-    private Task InsertarMovimientoAsync(string tipotransaccion, string estado, decimal debitos, decimal creditos) =>
-        Connection.ExecuteAsync(new CommandDefinition(@"
-            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
-            VALUES (@companyId, @clave, @tipo, @estado, @debitos, @creditos)",
-            new { companyId = EmpresaSintetica, clave = Clave, tipo = tipotransaccion, estado, debitos, creditos },
+    // H4: la tabla está congelada (candado por sesión) y el trigger de
+    // sincronía de F1 se retiró. La siembra emula filas de la era dual-write,
+    // que SÍ llevan los ids estampados: se derivan aquí igual que lo hacía el
+    // trigger (solo pagos 201/202: C→1 aplicado, P→2 pendiente, A→3 anulado).
+    private Task InsertarMovimientoAsync(string tipotransaccion, string estado, decimal debitos, decimal creditos)
+    {
+        short? estadoPagoId = tipotransaccion is "201" or "202"
+            ? estado switch { "C" => (short)1, "P" => (short)2, "A" => (short)3, _ => null }
+            : null;
+
+        return Connection.ExecuteAsync(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';
+            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos, estado_pago_id)
+            VALUES (@companyId, @clave, @tipo, @estado, @debitos, @creditos, @estadoPagoId)",
+            new { companyId = EmpresaSintetica, clave = Clave, tipo = tipotransaccion, estado, debitos, creditos, estadoPagoId },
             Transaction));
+    }
 
     // F4: la regla de vigencia se aserta sobre la vista (los tests del SP de
     // saldo por documentos viven en SaldoDocumentosTests).
@@ -145,70 +156,45 @@ public sealed class SaldoVigenciaTests : IntegrationTestBase
             ORDER BY ide DESC LIMIT 1",
             new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
 
+    // F7 H4 (2026-07-30): los tres tests "Trigger_deriva_*" murieron con el
+    // trigger de sincronía de F1. Desde el congelamiento, lo que se fija es lo
+    // contrario: la tabla NO acepta escritura de operación, y lo poco que entra
+    // (migración) entra tal cual, sin estampado alguno.
+
     [SkippableFact]
-    public async Task Trigger_deriva_espejos_de_abono_de_caja()
+    public async Task Congelada_h4_rechaza_escritura_directa()
     {
         await PrepararEmpresaAsync();
 
-        await InsertarMovimientoAsync("202", "C", 0m, 50m);
-        var (tipoId, estadoPagoId, _) = await UltimoEspejoAsync();
+        // Sin el permiso explícito de migración, el candado revienta cualquier
+        // escritura — incluida la de un superusuario, que el REVOKE no alcanza.
+        var ex = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
+            Connection.ExecuteAsync(new CommandDefinition(@"
+                INSERT INTO public.transaccion_abonado
+                    (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
+                VALUES (@companyId, @clave, '202', 'C', 0, 50)",
+                new { companyId = EmpresaSintetica, clave = Clave }, Transaction)));
 
-        Assert.Equal((short)4, tipoId);       // ABONO (202 caja, sin marker WS)
-        Assert.Equal((short)1, estadoPagoId); // APLICADO
+        Assert.Contains("CONGELADA", ex.MessageText);
     }
 
     [SkippableFact]
-    public async Task Trigger_distingue_anulado_de_caja_y_reversado_del_ws()
+    public async Task Congelada_h4_la_migracion_entra_sin_trigger_de_espejo()
     {
         await PrepararEmpresaAsync();
 
-        // Anulación desde caja: 202 sin marker pasa a 'A' → ANULADO(3)
-        await InsertarMovimientoAsync("202", "C", 0m, 30m);
+        // Con el permiso de migración la fila entra tal cual: el trigger de
+        // sincronía ya no existe, así que nada deriva ids desde las letras.
         await Connection.ExecuteAsync(new CommandDefinition(@"
-            UPDATE public.transaccion_abonado SET estado = 'A'
-            WHERE company_id = @companyId AND cliente_clave = @clave",
-            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        var (_, anulado, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)3, anulado);
-
-        // Pago WS (marker WSBANCO:) → tipo PAGO_BANCO(3); su reverso → REVERSADO(4)
-        await Connection.ExecuteAsync(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';
             INSERT INTO public.transaccion_abonado
-                (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos, trans_aplicar)
-            VALUES (@companyId, @clave, '202', 'C', 0, 40, 'WSBANCO:777')",
+                (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
+            VALUES (@companyId, @clave, '202', 'C', 0, 50)",
             new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        var (tipoWs, aplicadoWs, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)3, tipoWs);
-        Assert.Equal((short)1, aplicadoWs);
 
-        await Connection.ExecuteAsync(new CommandDefinition(@"
-            UPDATE public.transaccion_abonado SET estado = 'A'
-            WHERE company_id = @companyId AND cliente_clave = @clave
-              AND trans_aplicar LIKE 'WSBANCO:%'",
-            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        var (_, reversadoWs, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)4, reversadoWs);
-    }
-
-    [SkippableFact]
-    public async Task Trigger_deriva_espejos_de_cargos_y_planes_sin_estado_pago()
-    {
-        await PrepararEmpresaAsync();
-
-        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 100m, 0m);
-        var (tipoCargo, pagoCargo, estadoCargo) = await UltimoEspejoAsync();
-        Assert.Equal((short)1, tipoCargo);   // CARGO_SERVICIO
-        Assert.Null(pagoCargo);              // no es pago
-        Assert.Equal((short)1, estadoCargo); // Activa
-
-        await InsertarMovimientoAsync("PLAN-CUOTA", "A", 57.31m, 0m);
-        var (tipoCuota, pagoCuota, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)9, tipoCuota);   // PLAN_CUOTA
-        Assert.Null(pagoCuota);
-
-        await InsertarMovimientoAsync("SALDO_ANTERIOR", "A", 500m, 0m);
-        var (tipoSaldo, _, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)11, tipoSaldo);  // SALDO_INICIAL
+        var (tipoId, estadoPagoId, _) = await UltimoEspejoAsync();
+        Assert.Null(tipoId);
+        Assert.Null(estadoPagoId);
     }
 
     [SkippableFact]

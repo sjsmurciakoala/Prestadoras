@@ -397,8 +397,18 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         var numRecibo = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(
             "SELECT numrecibo FROM public.factura WHERE id = @facturaId", new { facturaId }, Transaction));
 
-        // Recibo pendiente "para banco": NO rebaja la factura.
-        var pendienteId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
+        // Papel pendiente REAL (tabla propia de H1). NO rebaja la factura.
+        var pendienteId = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            INSERT INTO public.adm_recibo_banco_pendiente
+                (company_id, cliente_clave, factura_id, numrecibo, monto, estado_id, generado_por)
+            VALUES (@companyId, @clave, @facturaId, @recibo, 50, 2, 'test')
+            RETURNING recibo_pendiente_id",
+            new { companyId = Empresa, clave = Clave, facturaId, recibo = numRecibo }, Transaction));
+
+        // Y una reliquia 202/'P' en el histórico CONGELADO (pre-corte), que la
+        // conciliación de H4 ya no debe tocar.
+        var reliquiaIde = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';
             INSERT INTO public.transaccion_abonado
                 (company_id, cliente_clave, recibo, tipotransaccion, estado, creditos, debitos, descripcion)
             VALUES (@companyId, @clave, @recibo, '202', 'P', 50, 0, 'Recibo pendiente de pago')
@@ -414,12 +424,19 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         var cobro = await _motor!.RegistrarCobroAsync(Cobro(facturaId, 100m));
         Assert.True(cobro.Success, cobro.Message);
 
-        var pendiente = await Connection.QuerySingleAsync<(string estado, short? estadoPago, string desc)>(new CommandDefinition(
-            "SELECT estado, estado_pago_id, descripcion FROM public.transaccion_abonado WHERE ide = @id",
+        // La conciliación cubre el papel en SU tabla...
+        var (estadoPapel, motivo) = await Connection.QuerySingleAsync<(short, string)>(new CommandDefinition(
+            "SELECT estado_id, motivo_anulacion FROM public.adm_recibo_banco_pendiente WHERE recibo_pendiente_id = @id",
             new { id = pendienteId }, Transaction));
-        Assert.Equal("A", pendiente.estado);            // anulado automáticamente
-        Assert.Equal((short)3, pendiente.estadoPago);   // ANULADO
-        Assert.StartsWith("CUBIERTO:", pendiente.desc); // conciliado como cubierto
+        Assert.Equal((short)3, estadoPapel);
+        Assert.StartsWith("CUBIERTO:", motivo);
+
+        // ...y el histórico congelado queda EXACTAMENTE como estaba (F7 H4).
+        var reliquia = await Connection.QuerySingleAsync<(string estado, string desc)>(new CommandDefinition(
+            "SELECT estado, descripcion FROM public.transaccion_abonado WHERE ide = @id",
+            new { id = reliquiaIde }, Transaction));
+        Assert.Equal("P", reliquia.estado);
+        Assert.DoesNotContain("CUBIERTO", reliquia.desc);
     }
 
     // ------------------------------------------------------------------ stubs

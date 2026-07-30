@@ -138,6 +138,7 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
             new { companyId = Empresa, facturaId, m1 = linea1, m2 = linea2 }, Transaction));
 
         await Connection.ExecuteAsync(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';   -- H4: tabla congelada
             INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
             VALUES (@companyId, @clave, 'AGUA_POTABLE', 'A', @total, 0)",
             new { companyId = Empresa, clave = Clave, total = linea1 + linea2 }, Transaction));

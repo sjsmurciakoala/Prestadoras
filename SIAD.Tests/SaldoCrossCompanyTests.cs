@@ -54,6 +54,7 @@ public sealed class SaldoCrossCompanyTests : IntegrationTestBase
         // el "último" global, que es justo lo que el 1-arg (deprecated) lee de
         // la columna saldo.
         await Connection.ExecuteAsync(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';   -- H4: tabla congelada
             INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, debitos, saldo, estado, estado_id)
             VALUES (@id, @clave, 'SALDO_ANTERIOR', @saldo, @saldo, 'A', 1)",
             new { id = EmpresaOtraId, clave, saldo = SaldoOtra }, Transaction));
@@ -67,6 +68,18 @@ public sealed class SaldoCrossCompanyTests : IntegrationTestBase
         Skip.If(saldo2 <= 0m, "El cliente piloto no tiene saldo > 0 en esta BD.");
 
         await InsertarSaldoColisionanteAsync(clave);
+
+        // F7 H4: el SP v7 ya no lee el residuo del histórico — el saldo de la
+        // otra empresa debe existir como DOCUMENTO para probar el aislamiento.
+        var facturaOtraId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
+            INSERT INTO public.factura (clientecodigo, tipofactura, estado, estado_id, tipo_documento_fiscal_id, company_id)
+            VALUES (@clave, 'F', 'A', 1, 1, @id)
+            RETURNING id",
+            new { clave, id = EmpresaOtraId }, Transaction));
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.factura_detalle (factura_id, tiposervicio, montovalor, montovalor_saldo, company_id)
+            VALUES (@facturaOtraId, 'AGUA_POTABLE', @saldo, @saldo, @id)",
+            new { facturaOtraId, saldo = SaldoOtra, id = EmpresaOtraId }, Transaction));
 
         var s2 = await Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
             "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@c, @clave)",
