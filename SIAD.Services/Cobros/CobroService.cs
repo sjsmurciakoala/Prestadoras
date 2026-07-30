@@ -886,8 +886,16 @@ public class CobroService : ICobroService
         // Mismo criterio que el registro: día LOCAL del servidor.
         var dia = DateOnly.FromDateTime(fecha?.Date ?? DateTime.Now.Date);
 
+        // "Cobros del día" = lo REGISTRADO ese día (creado_en), no la fecha valor:
+        // desde H4b la caja puede registrar cobros con fecha retroactiva (la
+        // recaudación del lector llega después) y esos deben verse en el arqueo
+        // del día en que se teclearon, aunque su `fecha` sea anterior.
+        var desde = dia.ToDateTime(TimeOnly.MinValue);
+        var hastaExcl = desde.AddDays(1);
+
         var query = from p in _context.adm_pagos.AsNoTracking()
-                    where p.company_id == companyId && p.fecha == dia
+                    where p.company_id == companyId
+                          && p.creado_en >= desde && p.creado_en < hastaExcl
                     join c in _context.cliente_maestros.AsNoTracking()
                         on p.cliente_clave equals c.maestro_cliente_clave into clientes
                     from c in clientes.DefaultIfEmpty()

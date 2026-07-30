@@ -66,15 +66,37 @@ public class AbonoService : IAbonoService
         var filtroLike = $"%{filtro}%";
         var isNumero = int.TryParse(filtro, out var numero);
 
-        var query = from f in _context.facturas.AsNoTracking()
+        // Con la cartera migrada (3.9M facturas) los ILIKE '%term%' sobre la
+        // tabla tardaban 31.7 s. Regla: contra `factura` solo igualdades
+        // indexables; lo difuso (nombre/clave parcial) se resuelve primero
+        // contra `cliente_maestro` (26K filas) y de ahí a sus facturas.
+        var baseQuery = _context.facturas.AsNoTracking()
+            .Where(f => f.company_id == companyId && (f.estado == "A" || f.estado == "B" || f.estado == "C"));
+
+        IQueryable<Core.Entities.factura> filtrada;
+        if (isNumero)
+        {
+            // N° de recibo, clave de cliente o folio, exactos.
+            filtrada = baseQuery.Where(f =>
+                f.numrecibo == numero || f.clientecodigo == filtro || f.numfactura == filtro);
+        }
+        else
+        {
+            var claves = await _context.cliente_maestros.AsNoTracking()
+                .Where(c => EF.Functions.ILike(c.maestro_cliente_nombre, filtroLike)
+                            || EF.Functions.ILike(c.maestro_cliente_clave, filtroLike))
+                .Select(c => c.maestro_cliente_clave)
+                .Take(25)
+                .ToListAsync(ct);
+
+            filtrada = baseQuery.Where(f =>
+                f.numfactura == filtro || (f.clientecodigo != null && claves.Contains(f.clientecodigo)));
+        }
+
+        var query = from f in filtrada
                     join c in _context.cliente_maestros.AsNoTracking()
                         on f.clientecodigo equals c.maestro_cliente_clave into clientes
                     from c in clientes.DefaultIfEmpty()
-                    where f.company_id == companyId && (f.estado == "A" || f.estado == "B" || f.estado == "C")
-                    where (f.numfactura != null && EF.Functions.ILike(f.numfactura, filtroLike))
-                          || (isNumero && f.numrecibo == numero)
-                          || (f.clientecodigo != null && EF.Functions.ILike(f.clientecodigo, filtroLike))
-                          || (c != null && EF.Functions.ILike(c.maestro_cliente_nombre, filtroLike))
                     orderby f.fechaemision descending, f.numrecibo descending
                     select new
                     {
@@ -89,13 +111,20 @@ public class AbonoService : IAbonoService
                     };
 
         var items = await query.Take(40).ToListAsync(ct);
+
+        // Saldos en una sola consulta agrupada (antes: una por factura).
+        var facturaIds = items.Select(x => x.FacturaId).ToList();
+        var saldos = await _context.factura_detalles.AsNoTracking()
+            .Where(d => d.factura_id != null && facturaIds.Contains(d.factura_id.Value))
+            .GroupBy(d => d.factura_id!.Value)
+            .Select(g => new { FacturaId = g.Key, Saldo = g.Sum(d => d.montovalor_saldo ?? d.montovalor ?? 0m) })
+            .ToDictionaryAsync(x => x.FacturaId, x => x.Saldo, ct);
+
         var response = new List<FacturaConSaldoDto>();
 
         foreach (var x in items)
         {
-            var saldoPendiente = await _context.factura_detalles
-                .Where(d => d.factura_id == x.FacturaId)
-                .SumAsync(d => d.montovalor_saldo ?? d.montovalor ?? 0m, ct);
+            var saldoPendiente = saldos.GetValueOrDefault(x.FacturaId);
 
             // Mostrar si tiene saldo pendiente o si es estado 'B' / 'A'
             if (saldoPendiente > 0 || x.estado == "A" || x.estado == "B")
@@ -732,7 +761,7 @@ public class AbonoService : IAbonoService
 
         var lineas = detalles.Select(d => new ReciboAbonoLineaDto
         {
-            Descripcion = d.descripcion ?? string.Empty,
+            Descripcion = RotuloLineaRecibo(d.tiposervicio, d.descripcion),
             Moneda = "L.",
             Monto = d.montovalor ?? 0m
         }).ToList();
@@ -832,7 +861,7 @@ public class AbonoService : IAbonoService
 
             Lineas = detalles.Select(d => new ReciboAbonoLineaDto
             {
-                Descripcion = d.descripcion ?? string.Empty,
+                Descripcion = RotuloLineaRecibo(d.tiposervicio, d.descripcion),
                 Moneda = "L.",
                 Monto = d.montovalor ?? 0m
             }).ToList(),
@@ -1393,4 +1422,33 @@ public class AbonoService : IAbonoService
         "A" => "Anulado",
         _ => "—"
     };
+
+    // Rotulado de las líneas del recibo. La cartera migrada de SIMAFI trae la
+    // MISMA descripción en todas las líneas de un recibo ("Factura Periodo
+    // AAAA/MM"), así que el rótulo principal es el SERVICIO y la descripción
+    // queda de complemento solo cuando aporta algo distinto.
+    private static readonly Dictionary<string, string> NombresServicio = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["AGUA_POTABLE"] = "Agua Potable",
+        ["ALCANTARILLADO"] = "Alcantarillado",
+        ["TASA_AMBIENTAL"] = "Tasa Ambiental",
+        ["TASA_SVA_ERSAPS"] = "Tasa SVA ERSAPS",
+        ["CORTE_RECONEXION"] = "Corte y Reconexión",
+        ["OTROS_COLATERALES"] = "Otros Colaterales",
+        ["SALDO_ANTERIOR"] = "Saldo Anterior",
+        ["MISC"] = "Misceláneo",
+    };
+
+    private static string RotuloLineaRecibo(string? tipoServicio, string? descripcion)
+    {
+        var servicio = string.IsNullOrWhiteSpace(tipoServicio)
+            ? null
+            : NombresServicio.TryGetValue(tipoServicio.Trim(), out var nombre) ? nombre : tipoServicio.Trim();
+        var desc = descripcion?.Trim();
+
+        if (servicio is null) return desc ?? string.Empty;
+        if (string.IsNullOrEmpty(desc) || string.Equals(desc, servicio, StringComparison.OrdinalIgnoreCase))
+            return servicio;
+        return $"{servicio} · {desc}";
+    }
 }

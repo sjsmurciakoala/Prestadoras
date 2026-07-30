@@ -41,8 +41,22 @@ Orden de hitos, cada uno con suite verde:
 2. **H2 — Apagar espejos**: quitar los INSERT de espejo en los 4 servicios
    C# y 4 SPs vivos del censo. Los tests que asertan "legacy == documentos"
    se convierten en tests de solo-documentos.
-3. **H3 — Re-migración de cartera como documentos**: script
-   `fn_uc_f7_migrar_residuo_a_documentos(company_id)`:
+3. ~~**H3 — Re-migración de cartera como documentos**~~
+   ⚠️ **SUPERSEDED (2026-07-29) — NO IMPLEMENTAR.** La migración total de SIMAFI
+   (ver [PLAN_MIGRACION_SIMAFI_TOTAL_2026-07.md](PLAN_MIGRACION_SIMAFI_TOTAL_2026-07.md)
+   y [M6_VALIDACION_MIGRACION_SIMAFI_2026-07.md](M6_VALIDACION_MIGRACION_SIMAFI_2026-07.md))
+   ya cargó **la historia real completa** con numeración original: 3,896,909
+   facturas, 9,331,049 líneas, 12,173,095 movimientos y **2,837,660 pagos en
+   `adm_pago`** con sus 9,393,969 aplicaciones. Validado en local: 25,530 de
+   25,530 clientes con saldo idéntico a SIMAFI.
+   - **No hay residuo que convertir**, así que las facturas sintéticas
+     `SI-<clave>` no van. Crearlas ahora duplicaría cartera.
+   - La parte que la decisión del 2026-07-30 le sumaba a H3 —escribir los pagos
+     históricos como `adm_pago` para que los reportes no dependan de la tabla
+     congelada— **ya está hecha**.
+
+   Texto original, conservado solo como referencia de lo que se descartó:
+   script `fn_uc_f7_migrar_residuo_a_documentos(company_id)`:
    - Por cada cliente con residuo vigente `SALDO_ANTERIOR/SALDO_INICIAL` ≠ 0:
      una factura `numfactura = 'SI-<clave>'`, `tipofacturacion 'S'`, estado
      `A`, con **una línea** `tiposervicio = 'SALDO_ANTERIOR'` y
@@ -56,6 +70,27 @@ Orden de hitos, cada uno con suite verde:
    (post-migración queda en 0), `REVOKE INSERT/UPDATE/DELETE ON
    transaccion_abonado` salvo rol `siad_migracion`, y trigger de espejos
    numéricos F1 fuera (ya no entran filas).
+4bis. **H4b — Paridad funcional de la caja única (BLOQUEA a H5)**
+
+   Auditoría del 2026-07-29 contra el módulo viejo `CaptacionPagos` (pestañas
+   *Lectoras*, *Misceláneos*, *Manual*): la pantalla `/facturacion/caja` tiene el
+   motor completo detrás, pero **le faltan dos entradas que el propio plan
+   maestro §5.1 pedía** y sin las cuales el flujo de caja no se puede reproducir.
+   H5 retira las pantallas viejas, así que esto debe ir **antes**.
+
+   | Falta | Estado del motor | Por qué importa |
+   |---|---|---|
+   | **Buscar por N° de factura/recibo** | `CobroService` ya cobra por documento | Es el flujo *Lectoras*: el cajero tiene el recibo impreso en la mano y teclea el número. Hoy solo se busca por cliente. |
+   | **Fecha de pago editable** | `CobroCrearDto.FechaPago` existe y el motor la respeta (`?? DateTime.Now.Date`) | Sin esto no se registran cobros de días anteriores — el caso normal cuando el lector entrega la recaudación después. |
+
+   Ambas son trabajo de UI contra un motor que ya las soporta.
+
+   **Decisión del usuario (2026-07-29): la distribución NO se hace editable.**
+   La pestaña *Manual* vieja dejaba al cajero ajustar los montos por servicio;
+   se confirma que alcanza con el reparto automático por
+   `adm_desglose_abono_porcentaje` (hoy 60/30/5/5, administrable en
+   `/tarifario/desglose-abonos`). No se replica esa edición manual.
+
 5. **H5 — Limpieza**: DROP de los 7 SPs muertos + overload 1-arg de
    `sp_obtener_cliente_saldo` (cross-company, documentado en
    `SaldoCrossCompanyTests` que pasa a fijar que YA NO EXISTE) + tabla vacía
