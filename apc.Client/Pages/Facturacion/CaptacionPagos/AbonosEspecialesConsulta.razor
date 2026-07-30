@@ -6,12 +6,12 @@
 @using SIAD.Core.DTOs.Caja
 @using SIAD.Core.DTOs.CaptacionPagos
 @using apc.Client.Services
+@using apc.Client.Services.Cobros
 @using apc.Client.Services.Caja
-@using apc.Client.Services.CaptacionPagos
 @using apc.Client.Pages.Clientes.Components
 
 @inject AbonoClient AbonoClient
-@inject CaptacionPagosClient CaptacionClient
+@inject CobrosClient CobrosHttp
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 @inject TenantState TenantState
@@ -379,7 +379,7 @@
     {
         try
         {
-            bancos = (await CaptacionClient.GetBancosAsync()).ToList();
+            bancos = (await CobrosHttp.GetBancosAsync()).ToList();
         }
         catch
         {

@@ -118,6 +118,14 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
             INSERT INTO public.cliente_maestro (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado)
             VALUES (@id, @clave, '0000000000000', 'CLIENTE PLAN F6', true)",
             new { id = Empresa, clave = Clave }, Transaction));
+
+        // F7 H5: el correlativo del plan sale de la serie atómica.
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.adm_documento_secuencia
+                (company_id, tipo_documento, canal_id, prefijo, longitud_padding, valor_actual, updated_by)
+            VALUES (@id, 'PLAN_PAGO', 0, '', 6, 0, 'test')
+            ON CONFLICT (company_id, tipo_documento, canal_id) DO NOTHING",
+            new { id = Empresa }, Transaction));
     }
 
     /// <summary>Factura activa con dos líneas y su cargo espejo legacy (mismo total).</summary>

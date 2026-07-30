@@ -2,6 +2,7 @@ using System.Data;
 using System.Text;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Cobranza;
 using SIAD.Core.DTOs.Common;
@@ -511,21 +512,22 @@ public class CobranzaService : ICobranzaService
             .FirstOrDefaultAsync(ct);
     }
 
-    private async Task<string> GenerarCorrelativoAsync(CancellationToken ct)
+    private Task<string> GenerarCorrelativoAsync(CancellationToken ct) =>
+        SiguienteCorrelativoAsync(TipoDocumentoSecuencia.PlanPago, ct);
+
+    // F7 H5: correlativos por la serie atómica de adm_documento_secuencia
+    // (UPDATE…RETURNING). El generador anterior (top-1 por string) tenía
+    // carrera entre usuarios y se rompía si cambiaba el ancho D6.
+    private async Task<string> SiguienteCorrelativoAsync(string tipoDocumento, CancellationToken ct)
     {
-        var ultimo = await _context.cln_plan_pago_hdrs
-            .AsNoTracking()
-            .Where(h => h.correlativo != null)
-            .OrderByDescending(h => h.correlativo)
-            .Select(h => h.correlativo)
-            .FirstOrDefaultAsync(ct);
-
-        if (int.TryParse(ultimo, out var numero))
-        {
-            return (numero + 1).ToString("D6");
-        }
-
-        return 1.ToString("D6");
+        var connection = _context.Database.GetDbConnection();
+        var transaction = _context.Database.CurrentTransaction?.GetDbTransaction();
+        var folio = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT public.fn_adm_siguiente_correlativo_documento(@CompanyId, @Tipo, 0::smallint)",
+            new { CompanyId = _currentCompanyService.GetCompanyId(), Tipo = tipoDocumento },
+            transaction, cancellationToken: ct));
+        return folio ?? throw new InvalidOperationException(
+            $"No hay serie de folios {tipoDocumento} activa para la empresa (adm_documento_secuencia).");
     }
 
     // F4 (2026-07-28): antes leia la columna corrida t.saldo del ultimo
@@ -981,20 +983,8 @@ public class CobranzaService : ICobranzaService
         await _context.SaveChangesAsync(ct);
     }
 
-    private async Task<string> GenerarCorrelativoNotaCobroAsync(CancellationToken ct)
-    {
-        var ultimo = await _context.cln_nota_cobros
-            .AsNoTracking()
-            .Where(n => n.correlativo != null)
-            .OrderByDescending(n => n.correlativo)
-            .Select(n => n.correlativo)
-            .FirstOrDefaultAsync(ct);
-
-        if (int.TryParse(ultimo, out var numero))
-            return (numero + 1).ToString("D6");
-
-        return 1.ToString("D6");
-    }
+    private Task<string> GenerarCorrelativoNotaCobroAsync(CancellationToken ct) =>
+        SiguienteCorrelativoAsync(TipoDocumentoSecuencia.NotaCobro, ct);
 
     public async Task<IReadOnlyList<AccionCobranzaCrudDto>> ListarAccionesCrudAsync(CancellationToken ct = default)
         => await _context.axl_accion_cobranzas
@@ -1418,20 +1408,8 @@ public class CobranzaService : ICobranzaService
         return new CartaCobroLoteDto(hdr, empresa, clientes);
     }
 
-    private async Task<string> GenerarCorrelativoCartaCobroAsync(CancellationToken ct)
-    {
-        var ultimo = await _context.cln_carta_cobro_hdrs
-            .AsNoTracking()
-            .Where(h => h.correlativo != null)
-            .OrderByDescending(h => h.correlativo)
-            .Select(h => h.correlativo)
-            .FirstOrDefaultAsync(ct);
-
-        if (int.TryParse(ultimo, out var numero))
-            return (numero + 1).ToString("D6");
-
-        return 1.ToString("D6");
-    }
+    private Task<string> GenerarCorrelativoCartaCobroAsync(CancellationToken ct) =>
+        SiguienteCorrelativoAsync(TipoDocumentoSecuencia.CartaCobro, ct);
 
     private sealed class DatosReqRow
     {

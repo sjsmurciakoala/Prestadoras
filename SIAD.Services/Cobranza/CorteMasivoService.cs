@@ -7,6 +7,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SIAD.Core.DTOs.Cobranza;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
@@ -302,19 +303,19 @@ public class CorteMasivoService : ICorteMasivoService
         return rows.ToList();
     }
 
+    // F7 H5: serie atómica de adm_documento_secuencia. El generador anterior
+    // (top-1 por string) tenía carrera — y aquí era doble: el advisory lock del
+    // corte se tomaba DESPUÉS de generar el correlativo del header.
     private async Task<string> GenerarCorrelativoAsync(CancellationToken ct)
     {
-        var ultimo = await _context.cln_corte_masivo_hdrs
-            .AsNoTracking()
-            .Where(h => h.correlativo != null)
-            .OrderByDescending(h => h.correlativo)
-            .Select(h => h.correlativo)
-            .FirstOrDefaultAsync(ct);
-
-        if (int.TryParse(ultimo, out var numero))
-            return (numero + 1).ToString("D6");
-
-        return 1.ToString("D6");
+        var connection = _context.Database.GetDbConnection();
+        var transaction = _context.Database.CurrentTransaction?.GetDbTransaction();
+        var folio = await connection.ExecuteScalarAsync<string?>(new CommandDefinition(
+            "SELECT public.fn_adm_siguiente_correlativo_documento(@CompanyId, @Tipo, 0::smallint)",
+            new { CompanyId = _currentCompanyService.GetCompanyId(), Tipo = SIAD.Core.Constants.TipoDocumentoSecuencia.CorteMasivo },
+            transaction, cancellationToken: ct));
+        return folio ?? throw new InvalidOperationException(
+            "No hay serie de folios CORTE_MASIVO activa para la empresa (adm_documento_secuencia).");
     }
 
     private static string GenerarDescripcionCriterio(GenerarCorteMasivoRequest req)

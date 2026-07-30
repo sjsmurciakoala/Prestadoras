@@ -5,7 +5,6 @@
 @using SIAD.Core.DTOs.CaptacionPagos
 @using SIAD.Core.DTOs.Cobros
 @using apc.Client.Services.Caja
-@using apc.Client.Services.CaptacionPagos
 @using apc.Client.Services.Cobros
 @using apc.Client.Services.Tenant
 @using apc.Client.Shared
@@ -13,7 +12,6 @@
 @inject CajaClient CajaHttp
 @inject AbonoClient AbonoHttp
 @inject CobrosClient CobrosHttp
-@inject CaptacionPagosClient CaptacionHttp
 @inject IToastNotificationService ToastService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
@@ -654,7 +652,7 @@
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _usuario = authState.User.Identity?.Name ?? "sistema";
 
-        _bancos = await CaptacionHttp.GetBancosAsync();
+        _bancos = await CobrosHttp.GetBancosAsync();
         await CargarEstadoAsync();
         await CargarCobrosDelDiaAsync();
         _cargando = false;

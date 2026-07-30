@@ -4,8 +4,8 @@
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Informes
 @using SIAD.Core.DTOs.CaptacionPagos
-@using apc.Client.Services.CaptacionPagos
-@inject CaptacionPagosClient CaptacionClient
+@using apc.Client.Services.Cobros
+@inject CobrosClient CobrosHttp
 @inject NavigationManager NavigationManager
 @inject IToastNotificationService ToastService
 
@@ -95,7 +95,7 @@
 
         try
         {
-            var items = await CaptacionClient.GetBancosAsync();
+            var items = await CobrosHttp.GetBancosAsync();
             mediosPago =
             [
                 new BancoDto { Codigo = string.Empty, Nombre = "Todos" },
