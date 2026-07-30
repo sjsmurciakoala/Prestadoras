@@ -1,5 +1,28 @@
 # Estados de documentos comerciales (factura, transaccion_abonado, sync CAI)
 
+> ## ⚡ Actualización F7 (2026-07-30) — el corte de la unificación de cobranza
+>
+> Este documento describe el mundo ANTERIOR al corte. Desde F7:
+>
+> - **`transaccion_abonado` está CONGELADA** (H4): histórico de solo lectura con
+>   los 12.17M de movimientos migrados de SIMAFI + la era del dual-write. Un
+>   candado por trigger rechaza toda escritura salvo
+>   `SET LOCAL siad.permitir_escritura_legacy='on'` (solo migración). Sus
+>   letras y espejos numéricos quedan como estaban — nadie los mantiene ya.
+> - **Los estados operativos viven en el modelo nuevo**:
+>   `factura.estado/estado_id` (los pone `CobroService`: `C`=2 saldada, `B`=4
+>   parcial — el gap de la `B` quedó cerrado en F1), `adm_pago.estado_id`
+>   (`adm_estado_pago`: 1 aplicado, 2 pendiente, 3 anulado, 4 reversado) y
+>   `adm_recibo_banco_pendiente.estado_id` (papel para banco).
+> - **La vista `vw_transaccion_abonado_vigente` se retiró** (H5). Los reportes
+>   leen `vw_rep_movimiento_vigente`, construida sobre factura/adm_pago(+
+>   aplicaciones)/NC/ND. La regla de vigencia por letras del §2 es historia.
+> - Los SPs legacy de posteo se droppearon; el saldo es
+>   `sp_obtener_cliente_saldo` v7 = líneas A/B + cuotas activas + ND vivas.
+>
+> Las secciones siguientes se conservan como referencia del histórico congelado
+> (necesarias para leerlo o auditarlo), no como guía de operación.
+
 Fecha: 2026-07-17
 Alcance: facturación/caja/app de lectores. Complementa
 [ESTANDAR_ESTADOS_Y_FLUJO_CONTABLE.md](ESTANDAR_ESTADOS_Y_FLUJO_CONTABLE.md)

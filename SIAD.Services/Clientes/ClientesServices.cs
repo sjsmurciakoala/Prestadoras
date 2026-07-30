@@ -552,25 +552,22 @@ public class ClientesService : IClientesService
                 new { CompanyId = companyId, Clave = clave },
                 cancellationToken: ct)) ?? 0m;
 
-        // Ultimo pago: los migrados de SIMAFI llevan tipotransaccion 'PAGO...'; los de
-        // caja/posteos/WS llevan '201'/'202' y solo son vigentes con estado 'C' (con
-        // estado 'A' estan reversados — convencion invertida de caja).
-        var ultimoPago = await _context.transaccion_abonados
+        // F7 H5: el último pago sale del MODELO NUEVO. adm_pago tiene toda la
+        // historia (la migración cargó los 2.8M de pagos de SIMAFI) y los
+        // cobros del motor entran ahí — el histórico congelado ya no se
+        // consulta para esto. Solo APLICADOS (anulados/reversados fuera).
+        var ultimoPago = await _context.adm_pagos
             .AsNoTracking()
-            .Where(t => t.company_id == companyId
-                        && t.cliente_clave == clave
-                        && t.tipotransaccion != null
-                        && (EF.Functions.ILike(t.tipotransaccion, "%PAGO%")
-                            || ((t.tipotransaccion == "201" || t.tipotransaccion == "202")
-                                && t.estado == "C")))
-            .OrderByDescending(t => t.ide)
-            .Select(t => new { t.fecha_docu, t.creditos, t.debitos })
+            .Where(p => p.company_id == companyId
+                        && p.cliente_clave == clave
+                        && p.estado_id == SIAD.Core.Constants.EstadoPago.Aplicado)
+            .OrderByDescending(p => p.fecha)
+            .ThenByDescending(p => p.pago_id)
+            .Select(p => new { p.fecha, p.monto_total })
             .FirstOrDefaultAsync(ct);
 
-        DateTime? fechaPago = ultimoPago?.fecha_docu.HasValue == true
-            ? ultimoPago.fecha_docu.Value.ToDateTime(TimeOnly.MinValue)
-            : null;
-        decimal? montoPago = ultimoPago?.creditos ?? ultimoPago?.debitos ?? 0m;
+        DateTime? fechaPago = ultimoPago?.fecha.ToDateTime(TimeOnly.MinValue);
+        decimal? montoPago = ultimoPago?.monto_total ?? 0m;
 
         var consumos = await _context.historicomedicions
             .AsNoTracking()
@@ -654,18 +651,8 @@ servicios AS (
     HAVING c.es_recurrente OR COUNT(l.tiposervicio) > 0
 ),
 otros AS (
-    -- Residuo migrado sin documento (muere en F7).
-    SELECT 'SALDO_ANTERIOR'        AS categoria,
-           NULL::varchar           AS codigo,
-           NULL::varchar           AS servicio,
-           SUM(COALESCE(ta.debitos,0) - COALESCE(ta.creditos,0)) AS saldo,
-           9000                    AS orden
-    FROM public.vw_transaccion_abonado_vigente ta
-    WHERE ta.company_id      = @CompanyId
-      AND ta.cliente_clave   = @Clave
-      AND ta.tipotransaccion IN ('SALDO_ANTERIOR','SALDO_INICIAL')
-    HAVING COUNT(*) > 0
-    UNION ALL
+    -- F7 H4/H5: el residuo migrado murió (la cartera vive como documentos) y
+    -- la vista de vigencia se retiró — la rama SALDO_ANTERIOR se eliminó.
     -- Lineas pendientes fuera del catalogo (misc y similares).
     SELECT 'AJUSTES', NULL, NULL, SUM(l.saldo), 9000
     FROM lineas l

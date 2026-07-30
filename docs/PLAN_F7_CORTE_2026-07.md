@@ -66,10 +66,15 @@ Orden de hitos, cada uno con suite verde:
      control (clientes, total migrado, diff contra residuo).
    - **En 0.9 se corre tras re-validar la migración comercial de los 2
      ciclos** — el residuo real es la cartera SIMAFI.
-4. **H4 — SP saldo v5 final + freeze**: quitar el término residuo del SP
-   (post-migración queda en 0), `REVOKE INSERT/UPDATE/DELETE ON
-   transaccion_abonado` salvo rol `siad_migracion`, y trigger de espejos
-   numéricos F1 fuera (ya no entran filas).
+4. ~~**H4 — SP saldo final + freeze**~~ ✅ **HECHO (8f77502, 332 verdes)**.
+   SP v7 sin residuo (control de residuo=0 con abort; en bases de prueba se
+   salta con `-c siad.forzar_freeze=on`), candado por trigger (el REVOKE no
+   alcanza al superusuario con el que conecta el portal) + REVOKE + rol
+   `siad_migracion`, y trigger de sincronía F1 fuera. El candado destapó dos
+   defectos: la CONCILIACIÓN era un escritor del espejo que el censo de H2 no
+   vio (era trigger, no SP) y `CerrarCajaAsync` sumaba el espejo muerto (todo
+   cierre habría dado 0). Además la reconstrucción de `factura` en la migración
+   perdió sus 3 triggers — repuestos; los triggers NO viajan con DROP+RENAME.
 4bis. **H4b — Paridad funcional de la caja única (BLOQUEA a H5)**
 
    Auditoría del 2026-07-29 contra el módulo viejo `CaptacionPagos` (pestañas
@@ -91,7 +96,30 @@ Orden de hitos, cada uno con suite verde:
    `adm_desglose_abono_porcentaje` (hoy 60/30/5/5, administrable en
    `/tarifario/desglose-abonos`). No se replica esa edición manual.
 
-5. **H5 — Limpieza**: DROP de los 7 SPs muertos + overload 1-arg de
+5. **H5 — Limpieza** — **H5a HECHA (1e83e5f, 328 verdes, −3,309 líneas)**:
+   DROP de los SPs muertos (13 firmas) + overload 1-arg + tabla
+   `tipo_transaccion` con su entidad EF; módulo `CaptacionPagos`
+   (service/controller/client) RETIRADO — sus 2 únicos métodos vivos (lookup de
+   clientes y bancos) viven en `CatalogosCobroService` bajo `api/cobros/*`;
+   los 4 correlativos con carrera (§3.8 del plan maestro, pendiente que F6 dejó)
+   migrados a la serie atómica. **H5b HECHA**: vista de vigencia →
+   `vw_rep_movimiento_vigente` (modelo nuevo) con swap de los 9 rep_* y
+   comparación antes/después sobre copia09 (rango 01→29-jul, company 2).
+   Veredicto: `categoria_corte` hash idéntico; TODA otra diferencia quedó
+   explicada al centavo y a favor del modelo nuevo —
+   (a) cobros post-candado H4 que el espejo congelado ya no recibe
+   (4 clientes de las pruebas de caja, exactos), (b) 21 cargos con
+   `recibo=0` del origen SIMAFI sin factura posible (7 clientes,
+   L2,976.30, todos estado C = pagados años atrás, hermanos del hallazgo
+   M6), (c) convenios con cuotas fechadas a FUTURO en el ledger (hasta
+   2027) que el reporte viejo excluía del corte — el nuevo los asienta en
+   la emisión, consistente con `sp_obtener_cliente_saldo`; el reporte
+   viejo mostraba 3,962 para un cliente cuyo saldo oficial es 62,064,
+   (d) reagrupación de ciclos legacy → catálogo en el desglose (total al
+   centavo). Totales all-time por cliente: 25,519/25,530 exactos; los 11
+   restantes = (a) + (b). Residuo `TransaccionId`: resuelto en sesión
+   aparte (`ea77edf`).
+   Detalle original: DROP de los 7 SPs muertos + overload 1-arg de
    `sp_obtener_cliente_saldo` (cross-company, documentado en
    `SaldoCrossCompanyTests` que pasa a fijar que YA NO EXISTE) + tabla vacía
    `tipo_transaccion` (arrastra entidad EF + DbSet) + retiro de

@@ -161,9 +161,13 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
 
     private Task<decimal?> SaldoLegacyAsync() =>
         Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(@"
+            -- H5: la vista de vigencia se retiró; el filtro va inline sobre
+            -- el histórico congelado (misma semántica).
             SELECT COALESCE(SUM(COALESCE(debitos,0) - COALESCE(creditos,0)), 0)
-            FROM public.vw_transaccion_abonado_vigente
-            WHERE company_id = @companyId AND cliente_clave = @clave",
+            FROM public.transaccion_abonado
+            WHERE company_id = @companyId AND cliente_clave = @clave
+              AND COALESCE(estado,'') NOT IN ('N','R','P')
+              AND (estado_pago_id IS NULL OR estado_pago_id = 1)",
             new { companyId = Empresa, clave = Clave }, Transaction));
 
     private static CobranzaPlanGuardarDto Plan(decimal montoFinanciar, decimal prima, int meses) => new()

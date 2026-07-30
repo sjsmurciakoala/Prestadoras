@@ -154,9 +154,13 @@ public sealed class SaldoDocumentosTests : IntegrationTestBase
         await InsertarMovimientoAsync("TASA_AMBIENTAL", "A", 5.90m, 0m);
 
         var legacy = await Connection.ExecuteScalarAsync<decimal>(new CommandDefinition(@"
+            -- H5: la vista de vigencia se retiró; el filtro va inline sobre
+            -- el histórico congelado (misma semántica).
             SELECT COALESCE(SUM(COALESCE(debitos,0) - COALESCE(creditos,0)), 0)
-            FROM public.vw_transaccion_abonado_vigente
-            WHERE company_id = @companyId AND cliente_clave = @clave",
+            FROM public.transaccion_abonado
+            WHERE company_id = @companyId AND cliente_clave = @clave
+              AND COALESCE(estado,'') NOT IN ('N','R','P')
+              AND (estado_pago_id IS NULL OR estado_pago_id = 1)",
             new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
 
         Assert.Equal(205.17m, legacy);
