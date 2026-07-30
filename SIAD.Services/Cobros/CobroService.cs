@@ -688,7 +688,6 @@ public class CobroService : ICobroService
                 PolizaId = polizaId,
                 PolizaEncolada = polizaEncolada,
                 BanKardexId = movimientoBanco?.BanKardexId,
-                TransaccionId = 0,   // F7 H2c: sin espejo legacy (usar PagoId)
                 Aplicaciones = resultados
             }, "Cobro registrado correctamente.");
         }
@@ -918,8 +917,7 @@ public class CobroService : ICobroService
                         p.estado_id,
                         p.usuario,
                         CajaNombre = k != null ? k.nombre : null,
-                        CajaFisicaId = s != null ? s.caja_fisica_id : null,
-                        p.transaccion_abonado_ide
+                        CajaFisicaId = s != null ? s.caja_fisica_id : null
                     };
 
         if (!string.IsNullOrWhiteSpace(usuario))
@@ -953,8 +951,7 @@ public class CobroService : ICobroService
                 _ => x.estado_id.ToString()
             },
             Usuario = x.usuario,
-            CajaNombre = x.CajaNombre,
-            TransaccionId = x.transaccion_abonado_ide
+            CajaNombre = x.CajaNombre
         }).ToList();
     }
 
@@ -1145,7 +1142,7 @@ public class CobroService : ICobroService
         var existente = await _context.adm_pagos
             .AsNoTracking()
             .Where(p => p.company_id == companyId && p.referencia_externa == referencia)
-            .Select(p => new { p.pago_id, p.numero_recibo, p.monto_total, p.transaccion_abonado_ide, p.estado_id })
+            .Select(p => new { p.pago_id, p.numero_recibo, p.monto_total, p.estado_id })
             .FirstOrDefaultAsync(ct);
         if (existente is null) return null;
 
@@ -1158,7 +1155,6 @@ public class CobroService : ICobroService
             PagoId = existente.pago_id,
             NumeroRecibo = existente.numero_recibo,
             MontoTotal = existente.monto_total,
-            TransaccionId = existente.transaccion_abonado_ide ?? 0,
             Idempotente = true
         }, "Cobro ya aplicado con esa referencia (idempotente).");
     }

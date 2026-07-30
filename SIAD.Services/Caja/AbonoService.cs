@@ -1,55 +1,39 @@
 using System;
 using System.Collections.Generic;
 using System.Data;
-using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.EntityFrameworkCore.Storage;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Caja;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.CaptacionPagos;
-using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
 using SIAD.Core.Utilities;
-using SIAD.Services.Bancos;
 using SIAD.Services.Clientes;
-using SIAD.Services.Cobranza;
-using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.Caja;
 
 public class AbonoService : IAbonoService
 {
     private readonly SiadDbContext _context;
-    private readonly IBanTransaccionesService _banTransaccionesService;
     private readonly ICurrentCompanyService _currentCompanyService;
-    private readonly ICorteMasivoService _corteMasivoService;
     private readonly IClientesService _clientesService;
-    private const string ContabilidadModuloCaja = "CAJA";
-    private const string ContabilidadDocumentoAbono = "ABO";
-    private const string BancoMarkerPrefix = "BANCO_CUENTA:";
-    private const string TipoTransaccionBancoDeposito = "DEP";
 
     private readonly Cobros.ICobroService _cobroService;
 
     public AbonoService(
         SiadDbContext context,
-        IBanTransaccionesService banTransaccionesService,
         ICurrentCompanyService currentCompanyService,
-        ICorteMasivoService corteMasivoService,
         IClientesService clientesService,
         Cobros.ICobroService cobroService)
     {
         _context = context;
-        _banTransaccionesService = banTransaccionesService;
         _currentCompanyService = currentCompanyService;
-        _corteMasivoService = corteMasivoService;
         _clientesService = clientesService;
         _cobroService = cobroService;
     }
@@ -372,154 +356,8 @@ public class AbonoService : IAbonoService
             MontoAbonado = dto.Monto,
             NuevoSaldo = resultado.Aplicaciones.Count > 0 ? resultado.Aplicaciones[0].SaldoRestante : 0m,
             PolizaId = resultado.PolizaId,
-            TransaccionId = resultado.TransaccionId
+            PagoId = resultado.PagoId
         }, "Abono registrado correctamente.");
-    }
-
-
-    public async Task<ResponseModelDto> ReversarAbonoAsync(ReversoAbonoRequestDto dto, CancellationToken ct = default)
-    {
-        ArgumentNullException.ThrowIfNull(dto);
-        var companyId = _currentCompanyService.GetCompanyId();
-        var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
-
-        var transaccion = await _context.transaccion_abonados
-            .FirstOrDefaultAsync(t => t.company_id == companyId && t.ide == dto.TransaccionId && t.tipotransaccion == "202", ct);
-
-        if (transaccion is null)
-        {
-            return ResponseModelDto.Fail("No se encontró la transacción de abono indicada.");
-        }
-
-        if (transaccion.estado == "A")
-        {
-            return ResponseModelDto.Fail("El abono ya se encuentra anulado o reversado.");
-        }
-
-        // Los pagos del canal bancario (F8) también son transacciones 202, pero su
-        // reverso debe pasar por sp_ban_ws_reversar (restituye saldos + anula el
-        // kardex DEP + revierte la póliza PGB + marca ban_ws_pago REVERSADO). Si se
-        // reversan desde caja, la factura vuelve a 'A' pero ban_ws_pago queda
-        // APLICADO y un replay del banco respondería "Pago exitoso" sin cobrar.
-        if (transaccion.trans_aplicar is not null && transaccion.trans_aplicar.StartsWith("WSBANCO:"))
-        {
-            return ResponseModelDto.Fail(
-                "Este pago proviene del canal bancario (WS) y debe reversarse por ese canal, no desde caja.");
-        }
-
-        // FACHADA (F2b): si el abono nació en el motor único (tiene adm_pago),
-        // el reverso va por el motor — restitución exacta por línea desde la
-        // tabla de aplicación, sin DELETE, contabilidad y kardex incluidos.
-        // El camino legacy de abajo queda solo para abonos pre-F2.
-        var pagoMotor = await _context.adm_pagos
-            .AsNoTracking()
-            .Where(p => p.company_id == companyId && p.transaccion_abonado_ide == dto.TransaccionId)
-            .Select(p => (long?)p.pago_id)
-            .FirstOrDefaultAsync(ct);
-        if (pagoMotor.HasValue)
-        {
-            var reversoMotor = await _cobroService.ReversarCobroAsync(new SIAD.Core.DTOs.Cobros.CobroReversoDto
-            {
-                PagoId = pagoMotor.Value,
-                Usuario = dto.Usuario,
-                Motivo = dto.Motivo
-            }, ct);
-            return reversoMotor.Success
-                ? ResponseModelDto.Ok(null, "Abono reversado correctamente.")
-                : reversoMotor;
-        }
-
-        var factura = await _context.facturas
-            .FirstOrDefaultAsync(f => f.company_id == companyId && f.numrecibo == (int)transaccion.recibo!, ct);
-
-        if (factura is null)
-        {
-            return ResponseModelDto.Fail("No se encontró la factura relacionada con el abono.");
-        }
-
-        var detalles = await _context.factura_detalles
-            .Where(d => d.factura_id == factura.id)
-            .OrderBy(d => d.id)
-            .ToListAsync(ct);
-
-        var tieneMovimientoBanco = TryObtenerReferenciaMovimientoBancario(transaccion, out var bancoCuentaId, out var banKardexIdOriginal);
-
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
-        try
-        {
-            // Restituir los saldos en los detalles de la factura
-            var remainingMonto = transaccion.creditos ?? 0m;
-            foreach (var detalle in detalles)
-            {
-                if (remainingMonto <= 0) break;
-                var maxRevertible = (detalle.montovalor ?? 0m) - (detalle.montovalor_saldo ?? 0m);
-                if (maxRevertible <= 0) continue;
-
-                var applied = Math.Min(remainingMonto, maxRevertible);
-                detalle.montovalor_saldo = (detalle.montovalor_saldo ?? 0m) + applied;
-                remainingMonto -= applied;
-            }
-
-            // Anular o eliminar transaccion_abonado
-            transaccion.estado = "A"; // Anulado
-            transaccion.usuario = usuario;
-            transaccion.descripcion = $"REVERSADO: {dto.Motivo}";
-
-            // Validar estado de la factura
-            var saldoRestante = detalles.Sum(d => d.montovalor_saldo ?? 0m);
-            var totalFactura = detalles.Sum(d => d.montovalor ?? 0m);
-
-            if (saldoRestante == totalFactura)
-            {
-                factura.estado = "A"; // Regresa a Abierto si no quedan abonos
-                factura.fechapago = null;
-                factura.recolectora = null;
-            }
-            else
-            {
-                factura.estado = "B"; // Sigue siendo Parcial si hay otros abonos vigentes
-            }
-
-            long? polizaId = null;
-            if (tieneMovimientoBanco)
-            {
-                await _banTransaccionesService.AnularMovimientoAsync(
-                    bancoCuentaId,
-                    banKardexIdOriginal,
-                    $"Reverso abono recibo {factura.numrecibo}",
-                    usuario,
-                    ct);
-            }
-            else
-            {
-                // Reverso por documento (F4): localiza la partida del abono, la
-                // revierte vía motor único y descarta la pendiente encolada si
-                // la hubiera. (La versión anterior invocaba una sobrecarga de
-                // sp_con_revertir_poliza por documento que no existe en la BD.)
-                var connection = _context.Database.GetDbConnection();
-                var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
-
-                polizaId = await IntegracionContableConfigSql.RevertirComprobanteAsync(
-                    connection,
-                    companyId,
-                    ContabilidadModuloCaja,
-                    new[] { ContabilidadDocumentoAbono },
-                    transaccion.ide,
-                    usuario,
-                    dbTransaction,
-                    ct);
-            }
-
-            await _context.SaveChangesAsync(ct);
-            await tx.CommitAsync(ct);
-
-            return ResponseModelDto.Ok(null, "Abono reversado correctamente.");
-        }
-        catch (Exception ex)
-        {
-            await tx.RollbackAsync(ct);
-            return ResponseModelDto.Fail($"Error al reversar el abono: {ex.Message}");
-        }
     }
 
     public async Task<IReadOnlyList<ArqueoDto>> ListarAbonosDelDiaAsync(string? usuario, DateTime? fecha, CancellationToken ct = default)
@@ -631,67 +469,6 @@ public class AbonoService : IAbonoService
 
         if (cuenta is null) return bancoNormalizado;
         return cuenta.BancoCode?.Trim() ?? cuenta.code?.Trim() ?? bancoNormalizado;
-    }
-
-    private async Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoBancarioCaptacionAsync(
-        long bancoCuentaId,
-        DateOnly fechaMovimiento,
-        string descripcion,
-        string referencia,
-        string sourceDocument,
-        decimal monto,
-        IReadOnlyList<BanTransaccionContraLineaDto> contraCuentas,
-        string usuario,
-        CancellationToken ct)
-    {
-        return await _banTransaccionesService.RegistrarMovimientoAsync(
-            bancoCuentaId,
-            TipoTransaccionBancoDeposito,
-            fechaMovimiento,
-            descripcion,
-            referencia,
-            sourceDocument,
-            1m,
-            monto,
-            contraCuentas,
-            usuario,
-            ct);
-    }
-
-    private async Task TryCompensarMovimientoBancarioAsync(long bancoCuentaId, long banKardexId, string usuario, CancellationToken ct)
-    {
-        try
-        {
-            await _banTransaccionesService.AnularMovimientoAsync(bancoCuentaId, banKardexId, "Compensación de abono fallido", usuario, ct);
-        }
-        catch
-        {
-            // Fail silent
-        }
-    }
-
-    private static void AplicarReferenciaMovimientoBancario(transaccion_abonado transaccion, long bancoCuentaId, long banKardexId)
-    {
-        transaccion.docuaplicar = Convert.ToDecimal(banKardexId, CultureInfo.InvariantCulture);
-        transaccion.trans_aplicar = $"{BancoMarkerPrefix}{bancoCuentaId.ToString(CultureInfo.InvariantCulture)}";
-    }
-
-    private static bool TryObtenerReferenciaMovimientoBancario(transaccion_abonado transaccion, out long bancoCuentaId, out long banKardexId)
-    {
-        bancoCuentaId = 0;
-        banKardexId = 0;
-        if (string.IsNullOrWhiteSpace(transaccion.trans_aplicar) || !transaccion.docuaplicar.HasValue) return false;
-
-        if (transaccion.trans_aplicar.StartsWith(BancoMarkerPrefix))
-        {
-            var suffix = transaccion.trans_aplicar[BancoMarkerPrefix.Length..];
-            if (long.TryParse(suffix, out bancoCuentaId) && bancoCuentaId > 0)
-            {
-                banKardexId = Convert.ToInt64(transaccion.docuaplicar.Value);
-                return true;
-            }
-        }
-        return false;
     }
 
     /// <summary>
@@ -923,7 +700,6 @@ public class AbonoService : IAbonoService
 
             return new AbonoHistorialItemDto
             {
-                TransaccionId = t.ide,
                 NumFactura = factura?.numfactura ?? numRecibo.ToString(),
                 NumRecibo = numRecibo,
                 FechaPago = t.fecha_docu?.ToString("dd/MM/yyyy") ?? string.Empty,
@@ -939,31 +715,6 @@ public class AbonoService : IAbonoService
                 SaldoRestante = saldoRestante
             };
         }).ToList();
-    }
-
-    /// <summary>
-    /// Contracuentas CxC analíticas del movimiento bancario de un abono,
-    /// resueltas por la matriz de integración según el modo configurado
-    /// (F4 — reemplaza a la cuenta única de con_regla_integracion).
-    /// </summary>
-    private Task<IReadOnlyList<BanTransaccionContraLineaDto>> ConstruirContraCuentasCxcAsync(
-        long companyId,
-        IReadOnlyList<(string? ServicioCodigo, decimal Monto)> aplicaciones,
-        int? categoriaServicioId,
-        bool? conMedicion,
-        string descripcion,
-        string sourceDocument,
-        CancellationToken ct)
-    {
-        return IntegracionContableConfigSql.ConstruirContraCuentasCxcAsync(
-            _context.Database.GetDbConnection(),
-            companyId,
-            aplicaciones,
-            categoriaServicioId,
-            conMedicion,
-            descripcion,
-            sourceDocument,
-            ct);
     }
 
     public async Task<ResponseModelDto> GenerarReciboPendienteAsync(GenerarReciboDto dto, CancellationToken ct = default)
@@ -1046,7 +797,6 @@ public class AbonoService : IAbonoService
         return ResponseModelDto.Ok(new GenerarReciboResponseDto
         {
             PendienteId = pendiente.recibo_pendiente_id,
-            TransaccionId = 0,
             NumFactura = factura.numfactura ?? factura.numrecibo.ToString()
         }, "Recibo generado. El cliente puede presentarlo en ventanilla o banco.");
     }
@@ -1079,7 +829,6 @@ public class AbonoService : IAbonoService
         return filas.Select(r => new ReciboPendienteDto
         {
             PendienteId = r.recibo_pendiente_id,
-            TransaccionId = r.transaccion_abonado_ide ?? 0,
             NumFactura = factura.numfactura ?? numRecibo.ToString(),
             NumRecibo = numRecibo,
             Monto = r.monto,
@@ -1106,7 +855,6 @@ public class AbonoService : IAbonoService
             select new
             {
                 r.recibo_pendiente_id,
-                r.transaccion_abonado_ide,
                 r.numrecibo,
                 r.monto,
                 r.generado_en,
@@ -1118,7 +866,6 @@ public class AbonoService : IAbonoService
         return pendientes.Select(p => new ReciboPendienteDto
         {
             PendienteId = p.recibo_pendiente_id,
-            TransaccionId = p.transaccion_abonado_ide ?? 0,
             NumRecibo = p.numrecibo,
             NumFactura = string.IsNullOrWhiteSpace(p.numfactura) ? p.numrecibo.ToString() : p.numfactura,
             Monto = p.monto,
@@ -1171,7 +918,6 @@ public class AbonoService : IAbonoService
 
         return transacciones.Select(t => new AbonoHistorialItemDto
         {
-            TransaccionId = t.ide,
             NumFactura = factura.numfactura ?? numRecibo.ToString(),
             NumRecibo = numRecibo,
             FechaPago = t.fecha_docu?.ToString("dd/MM/yyyy") ?? string.Empty,
@@ -1186,15 +932,14 @@ public class AbonoService : IAbonoService
     {
         ArgumentNullException.ThrowIfNull(dto);
 
+        if (dto.PendienteId <= 0)
+            return ResponseModelDto.Fail("Debe indicar el recibo pendiente a anular.");
+
         var companyId = _currentCompanyService.GetCompanyId();
 
-        // F7 H1: fuente de verdad adm_recibo_banco_pendiente (por PendienteId;
-        // el TransaccionId legacy se acepta como fallback de compatibilidad).
-        var pendiente = dto.PendienteId > 0
-            ? await _context.adm_recibo_banco_pendientes
-                .FirstOrDefaultAsync(r => r.recibo_pendiente_id == dto.PendienteId && r.estado_id == 2, ct)
-            : await _context.adm_recibo_banco_pendientes
-                .FirstOrDefaultAsync(r => r.transaccion_abonado_ide == dto.TransaccionId && r.estado_id == 2, ct);
+        // F7 H1: fuente de verdad adm_recibo_banco_pendiente, siempre por PendienteId.
+        var pendiente = await _context.adm_recibo_banco_pendientes
+            .FirstOrDefaultAsync(r => r.recibo_pendiente_id == dto.PendienteId && r.estado_id == 2, ct);
 
         if (pendiente is null)
             return ResponseModelDto.Fail("El recibo pendiente no existe o ya fue procesado/anulado.");
@@ -1204,7 +949,10 @@ public class AbonoService : IAbonoService
         pendiente.anulado_en = DateTime.UtcNow;
         pendiente.motivo_anulacion = dto.Motivo;
 
-        // Espejo legacy coherente hasta F7 H2.
+        // Solo pendientes PRE-corte tienen fila espejo 'P' en transaccion_abonado
+        // (congelada en F7 H4): se marca 'A' para que la consulta de abonos
+        // especiales no los siga mostrando como "No aplicado". Los pendientes
+        // nuevos nacen sin espejo y este bloque no aplica.
         if (pendiente.transaccion_abonado_ide.HasValue)
         {
             var transaccion = await _context.transaccion_abonados
@@ -1284,6 +1032,28 @@ public class AbonoService : IAbonoService
             .Select(f => new { f.numrecibo, f.numfactura })
             .ToDictionaryAsync(f => f.numrecibo, f => f.numfactura, ct);
 
+        // La tabla legacy está congelada (F7 H4): las acciones de la vista van
+        // contra el modelo nuevo. Se resuelven por lote el pago del motor
+        // (imprimir recibo) y el pendiente vigente (cobrar) enlazados por
+        // transaccion_abonado_ide.
+        var ides = pageTx.Select(t => t.ide).ToList();
+
+        var pagosMap = (await _context.adm_pagos
+            .AsNoTracking()
+            .Where(p => p.transaccion_abonado_ide != null && ides.Contains(p.transaccion_abonado_ide.Value))
+            .Select(p => new { Ide = p.transaccion_abonado_ide!.Value, p.pago_id })
+            .ToListAsync(ct))
+            .GroupBy(p => p.Ide)
+            .ToDictionary(g => g.Key, g => g.First().pago_id);
+
+        var pendientesMap = (await _context.adm_recibo_banco_pendientes
+            .AsNoTracking()
+            .Where(r => r.estado_id == 2 && r.transaccion_abonado_ide != null && ides.Contains(r.transaccion_abonado_ide.Value))
+            .Select(r => new { Ide = r.transaccion_abonado_ide!.Value, r.recibo_pendiente_id })
+            .ToListAsync(ct))
+            .GroupBy(r => r.Ide)
+            .ToDictionary(g => g.Key, g => g.First().recibo_pendiente_id);
+
         var items = pageTx.Select(t =>
         {
             var numRecibo = (int)(t.recibo ?? 0);
@@ -1292,7 +1062,9 @@ public class AbonoService : IAbonoService
 
             return new AbonoEspecialListItemDto
             {
-                TransaccionId = t.ide,
+                TransaccionAbonadoIde = t.ide,
+                PagoId = pagosMap.TryGetValue(t.ide, out var pagoId) ? pagoId : (long?)null,
+                PendienteId = pendientesMap.TryGetValue(t.ide, out var pendienteId) ? pendienteId : (long?)null,
                 ClienteId = cli?.maestro_cliente_id,
                 ClienteClave = t.cliente_clave ?? string.Empty,
                 ClienteNombre = cli?.maestro_cliente_nombre ?? string.Empty,

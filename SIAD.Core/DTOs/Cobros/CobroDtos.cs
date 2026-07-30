@@ -82,8 +82,6 @@ public class CobroResultadoDto
     public bool PolizaEncolada { get; set; }
     /// <summary>Movimiento bancario (kardex DEP) cuando el cobro fue por banco.</summary>
     public long? BanKardexId { get; set; }
-    /// <summary>[OBSOLETO F7] Espejo legacy; siempre 0 desde el corte — use PagoId.</summary>
-    public int TransaccionId { get; set; }
     /// <summary>True si la referencia_externa ya estaba aplicada y se devolvió el cobro original.</summary>
     public bool Idempotente { get; set; }
     public List<CobroAplicacionResultadoDto> Aplicaciones { get; set; } = new();
@@ -120,6 +118,4 @@ public class CobroDelDiaDto
     public string Estado { get; set; } = string.Empty;
     public string Usuario { get; set; } = string.Empty;
     public string? CajaNombre { get; set; }
-    /// <summary>[OBSOLETO F7] Espejo legacy de cobros pre-corte; el recibo se reimprime por PagoId.</summary>
-    public int? TransaccionId { get; set; }
 }

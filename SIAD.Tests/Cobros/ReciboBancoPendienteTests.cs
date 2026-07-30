@@ -5,6 +5,7 @@ using System.Threading;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Caja;
@@ -56,14 +57,16 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
             new TestCurrentCompanyService(Empresa),
             new StubCorteMasivoService());
 
-        // IClientesService solo se usa al imprimir el recibo (fuera de estos
-        // tests) — null! es seguro aquí.
+        // IClientesService solo se usa al imprimir el recibo (desglose del
+        // saldo del cliente) — basta un stub con desglose vacío.
+        var clientes = Substitute.For<IClientesService>();
+        clientes.GetDesglosePorServicioAsync(Arg.Any<string>(), Arg.Any<CancellationToken>())
+            .Returns(Array.Empty<SaldoServicioDto>());
+
         _abonos = new AbonoService(
             _context,
-            new StubBanTransaccionesService(),
             new TestCurrentCompanyService(Empresa),
-            new StubCorteMasivoService(),
-            null!,
+            clientes,
             _motor);
     }
 
@@ -155,7 +158,7 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
         });
         Assert.False(exceso.Success);
 
-        // Anular por PendienteId: tabla nueva 3 + espejo legacy 'A'.
+        // Anular por PendienteId (único identificador desde el corte F7).
         var anulado = await _abonos.AnularReciboPendienteAsync(new AnularReciboPendienteDto
         {
             PendienteId = fila.id,
@@ -248,6 +251,108 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
             new { C = Empresa, F = facturaId }, Transaction));
         Assert.Equal(3, estado);
         Assert.Contains("CUBIERTO", motivo);
+    }
+
+    /// <summary>
+    /// E2E del papel "para banco" tras el corte F7: nace, se imprime como
+    /// pendiente, se cobra por el motor, se reimprime desde adm_pago, y un
+    /// segundo papel se anula solo por PendienteId.
+    /// </summary>
+    [SkippableFact]
+    public async Task Ciclo_completo_generar_imprimir_cobrar_reimprimir_anular()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await PrepararAsync();
+        var (facturaId, numFactura) = await CrearFacturaAsync(120m, "D");
+
+        // 1) Generar: la respuesta ya solo expone PendienteId.
+        var generado = await _abonos!.GenerarReciboPendienteAsync(new GenerarReciboDto
+        {
+            ClienteClave = Clave,
+            NumFactura = numFactura,
+            Monto = 120m,
+            Usuario = "test-f7"
+        });
+        Assert.True(generado.Success, generado.Message);
+        var pendienteId = ((GenerarReciboResponseDto)generado.Data!).PendienteId;
+        Assert.True(pendienteId > 0);
+
+        // 2) Imprimir el papel pendiente (endpoint recibo-pendiente-pdf).
+        var reciboPendiente = await _abonos.GenerarDatosReciboPendienteAsync(pendienteId);
+        Assert.NotNull(reciboPendiente);
+        Assert.True(reciboPendiente!.EsPendiente);
+        Assert.Equal(120m, reciboPendiente.Total);
+        Assert.Equal((int)pendienteId, reciboPendiente.NumeroTransaccion);
+
+        // 3) Cobrar el papel por el motor único.
+        var cobro = await _motor!.RegistrarCobroAsync(new CobroCrearDto
+        {
+            Canal = CanalCobro.Caja,
+            ClienteClave = Clave,
+            Usuario = "test-f7",
+            FormaPago = "EFECTIVO",
+            ReciboPendienteId = pendienteId,
+            Aplicaciones = [new CobroAplicacionDto
+            {
+                DocumentoTipo = DocumentoCobroTipo.Factura,
+                FacturaId = facturaId,
+                Monto = 120m
+            }]
+        });
+        Assert.True(cobro.Success, cobro.Message);
+        var pagoId = ((CobroResultadoDto)cobro.Data!).PagoId;
+
+        var (estadoPendiente, cobradoPagoId) = await Connection.QueryFirstAsync<(short, long?)>(new CommandDefinition(
+            "SELECT estado_id, cobrado_pago_id FROM public.adm_recibo_banco_pendiente WHERE recibo_pendiente_id = @Id",
+            new { Id = pendienteId }, Transaction));
+        Assert.Equal(1, estadoPendiente);   // APLICADO
+        Assert.Equal(pagoId, cobradoPagoId);
+
+        // 4) Reimprimir el recibo del cobro desde el documento del motor.
+        var reciboCobrado = await _abonos.GenerarDatosReciboAsync(pagoId);
+        Assert.NotNull(reciboCobrado);
+        Assert.False(reciboCobrado!.EsPendiente);
+        Assert.Equal(120m, reciboCobrado.Total);
+
+        // 5) Un segundo papel sobre otra factura se anula solo por PendienteId.
+        var (facturaId2, numFactura2) = await CrearFacturaAsync(45m, "E");
+        var generado2 = await _abonos.GenerarReciboPendienteAsync(new GenerarReciboDto
+        {
+            ClienteClave = Clave,
+            NumFactura = numFactura2,
+            Monto = 45m,
+            Usuario = "test-f7"
+        });
+        Assert.True(generado2.Success, generado2.Message);
+        var pendienteId2 = ((GenerarReciboResponseDto)generado2.Data!).PendienteId;
+
+        var anulado = await _abonos.AnularReciboPendienteAsync(new AnularReciboPendienteDto
+        {
+            PendienteId = pendienteId2,
+            Usuario = "test-f7",
+            Motivo = "cliente desistió"
+        });
+        Assert.True(anulado.Success, anulado.Message);
+
+        var estado2 = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT estado_id FROM public.adm_recibo_banco_pendiente WHERE recibo_pendiente_id = @Id",
+            new { Id = pendienteId2 }, Transaction));
+        Assert.Equal(3, estado2);           // ANULADO
+
+        // Sin id no hay anulación; y un papel ya anulado no se anula dos veces.
+        var sinId = await _abonos.AnularReciboPendienteAsync(new AnularReciboPendienteDto
+        {
+            Usuario = "test-f7",
+            Motivo = "x"
+        });
+        Assert.False(sinId.Success);
+        var repetido = await _abonos.AnularReciboPendienteAsync(new AnularReciboPendienteDto
+        {
+            PendienteId = pendienteId2,
+            Usuario = "test-f7",
+            Motivo = "x"
+        });
+        Assert.False(repetido.Success);
     }
 
     // ------------------------------------------------------------------ stubs

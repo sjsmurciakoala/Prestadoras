@@ -165,7 +165,6 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
 
         // F7 H2c: se acabó el espejo legacy — el cobro vive SOLO como documento
         // del motor (adm_pago con su sesión de caja y estado APLICADO).
-        Assert.Equal(0, data.TransaccionId);
         var doc = await Connection.QuerySingleAsync<(short canal, short estado, int? sesion, int? taIde)>(new CommandDefinition(
             "SELECT canal_id, estado_id, sesion_caja_id, transaccion_abonado_ide FROM public.adm_pago WHERE pago_id = @id",
             new { id = data.PagoId }, Transaction));

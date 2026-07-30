@@ -44,14 +44,6 @@ public class AbonoController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
-    [HttpPost("reversar")]
-    public async Task<IActionResult> Reversar([FromBody] ReversoAbonoRequestDto request, CancellationToken ct)
-    {
-        request.Usuario = User?.Identity?.Name ?? "system";
-        var result = await _abonoService.ReversarAbonoAsync(request, ct);
-        return result.Success ? Ok(result) : BadRequest(result);
-    }
-
     [HttpGet("arqueo")]
     public async Task<IActionResult> ListarAbonosDelDia([FromQuery] string? usuario, [FromQuery] DateTime? fecha, CancellationToken ct)
     {
