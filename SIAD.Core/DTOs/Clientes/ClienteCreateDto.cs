@@ -12,8 +12,11 @@ public sealed class ClienteCreateDto
 
     public string? Apellidos { get; set; }
 
-    [Required(ErrorMessage = "El DNI es obligatorio.")]
-    public string Dni { get; set; } = null!;
+    // Pruebas operativas jul-2026: opcional. Los 25,766 clientes migrados de
+    // SIMAFI vienen con identidad vacía — un DNI [Required] bloqueaba GUARDAR
+    // cualquier edición (el form de editar reusa este DTO). La unicidad se
+    // valida en el servicio solo cuando el DNI viene informado.
+    public string? Dni { get; set; }
 
     public string? Rtn { get; set; }
 

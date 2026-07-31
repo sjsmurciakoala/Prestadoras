@@ -63,6 +63,104 @@ public class ClientesServiceTests : IntegrationTestBase, IAsyncLifetime
         System.Diagnostics.Debug.WriteLine($"Items Count: {result.Items.Count}");
     }
 
+    /// <summary>
+    /// Pruebas operativas jul-2026: los clientes migrados de SIMAFI no traen
+    /// identidad — el DNI obligatorio bloqueaba GUARDAR cualquier edición
+    /// ("error técnico al actualizar clientes existentes"). El DNI es opcional.
+    /// </summary>
+    [SkippableFact]
+    public async Task Actualizar_cliente_migrado_sin_dni_guarda()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var clave = $"MIG-{Guid.NewGuid():N}"[..12];
+        var clienteId = await Dapper.SqlMapper.ExecuteScalarAsync<int>(Connection, new Dapper.CommandDefinition(@"
+            INSERT INTO public.cliente_maestro (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado)
+            VALUES (@companyId, @clave, '', 'Cliente Migrado Sin DNI', true)
+            RETURNING maestro_cliente_id",
+            new { companyId = CompanyId, clave }, Transaction));
+
+        var actualizado = await _service!.ActualizarClienteAsync(clienteId, new SIAD.Core.DTOs.Clientes.ClienteUpdateDto
+        {
+            Clave = clave,
+            Nombre = "Cliente Migrado",
+            Apellidos = "Editado",
+            Dni = null,          // sin identidad, como llegó de SIMAFI
+            Rtn = null,
+            Activo = true
+        }, "test");
+
+        // Lo importante: GUARDÓ sin exigir DNI (antes reventaba aquí).
+        Assert.NotNull(actualizado);
+        Assert.Contains("Editado", $"{actualizado.Nombre} {actualizado.Apellidos}");
+
+        // Y si el DNI viene informado, la unicidad sigue vigente.
+        var otroId = await Dapper.SqlMapper.ExecuteScalarAsync<int>(Connection, new Dapper.CommandDefinition(@"
+            INSERT INTO public.cliente_maestro (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado)
+            VALUES (@companyId, @clave, '0801199912345', 'Cliente Con DNI', true)
+            RETURNING maestro_cliente_id",
+            new { companyId = CompanyId, clave = clave + "B" }, Transaction));
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service!.ActualizarClienteAsync(clienteId, new SIAD.Core.DTOs.Clientes.ClienteUpdateDto
+            {
+                Clave = clave,
+                Nombre = "Cliente Migrado",
+                Dni = "0801199912345",   // duplicado del otro
+                Activo = true
+            }, "test"));
+    }
+
+    /// <summary>
+    /// Pruebas operativas jul-2026: filtro por rango de fechas en movimientos.
+    /// Las facturas del escenario NO tienen espejo congelado, así que además
+    /// fija que los documentos post-corte SÍ aparecen en el estado de cuenta
+    /// (el espejo murió en F7 H4) y que el saldo corrido es el histórico real
+    /// aunque la ventana recorte filas.
+    /// </summary>
+    [SkippableFact]
+    public async Task Movimientos_filtra_por_fechas_e_incluye_documentos_post_corte()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var clave = $"MOV-{Guid.NewGuid():N}"[..12];
+        var clienteId = await Dapper.SqlMapper.ExecuteScalarAsync<int>(Connection, new Dapper.CommandDefinition(@"
+            INSERT INTO public.cliente_maestro (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado)
+            VALUES (@companyId, @clave, '', 'Cliente Movimientos', true)
+            RETURNING maestro_cliente_id",
+            new { companyId = CompanyId, clave }, Transaction));
+
+        // Dos facturas post-corte (sin espejo) en meses distintos, 100 y 50.
+        foreach (var (fecha, monto, suf) in new[] { ("2026-06-10", 100m, "JUN"), ("2026-07-10", 50m, "JUL") })
+        {
+            var facturaId = await Dapper.SqlMapper.ExecuteScalarAsync<int>(Connection, new Dapper.CommandDefinition(@"
+                INSERT INTO public.factura (company_id, numfactura, clientecodigo, tipofactura,
+                    ano, mes, fechaemision, estado, tipofacturacion, tipo_documento_fiscal_id)
+                VALUES (@companyId, @num, @clave, 'F', '2026', '7', @fecha::date, 'A', 'S', 1)
+                RETURNING id",
+                new { companyId = CompanyId, num = $"MOVF-{clave}-{suf}", clave, fecha }, Transaction));
+
+            await Dapper.SqlMapper.ExecuteAsync(Connection, new Dapper.CommandDefinition(@"
+                INSERT INTO public.factura_detalle (company_id, factura_id, codigo, tiposervicio, montovalor, montovalor_saldo)
+                VALUES (@companyId, @facturaId, 'AGUA_POTABLE', 'AGUA_POTABLE', @monto, @monto)",
+                new { companyId = CompanyId, facturaId, monto }, Transaction));
+        }
+
+        // Sin filtro: los dos documentos, saldo corrido 100 → 150.
+        var todo = await _service!.GetMovimientosPagedAsync(clienteId, 0, 20, "Fecha", false);
+        Assert.Equal(2, todo.TotalCount);
+        Assert.Equal(150m, todo.Items[^1].SaldoInline);
+
+        // Ventana de julio: SOLO la factura de julio, pero con el saldo
+        // corrido acumulado real (150), no recalculado desde cero.
+        var julio = await _service!.GetMovimientosPagedAsync(
+            clienteId, 0, 20, "Fecha", false,
+            desde: new DateOnly(2026, 7, 1), hasta: new DateOnly(2026, 7, 31));
+        Assert.Equal(1, julio.TotalCount);
+        Assert.Contains("JUL", julio.Items[0].NumFactura);
+        Assert.Equal(150m, julio.Items[0].SaldoInline);
+    }
+
     private class TestCurrentCompanyService : ICurrentCompanyService
     {
         private readonly long _companyId;

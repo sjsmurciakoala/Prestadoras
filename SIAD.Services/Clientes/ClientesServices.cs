@@ -35,11 +35,9 @@ public class ClientesService : IClientesService
             throw new InvalidOperationException("No se pudo determinar la empresa (tenant) actual.");
         }
 
+        // Pruebas operativas jul-2026: el DNI es OPCIONAL (los clientes migrados
+        // de SIMAFI no traen identidad). La unicidad solo aplica si viene.
         var identidad = Limpiar(dto.Dni);
-        if (string.IsNullOrWhiteSpace(identidad))
-        {
-            throw new ArgumentException("El DNI del cliente es obligatorio.", nameof(dto.Dni));
-        }
 
         var nombreCompleto = ConstruirNombreCompleto(dto.Nombre, dto.Apellidos);
         if (string.IsNullOrWhiteSpace(nombreCompleto))
@@ -47,7 +45,8 @@ public class ClientesService : IClientesService
             throw new ArgumentException("El nombre del cliente es obligatorio.", nameof(dto.Nombre));
         }
 
-        if (await _context.cliente_maestros.AnyAsync(c => c.maestro_cliente_identidad == identidad, ct))
+        if (!string.IsNullOrWhiteSpace(identidad)
+            && await _context.cliente_maestros.AnyAsync(c => c.maestro_cliente_identidad == identidad, ct))
         {
             throw new InvalidOperationException($"Ya existe un cliente con el DNI {identidad}.");
         }
@@ -80,7 +79,7 @@ public class ClientesService : IClientesService
         var maestro = new cliente_maestro
         {
             maestro_cliente_clave = clave!,
-            maestro_cliente_identidad = identidad,
+            maestro_cliente_identidad = identidad ?? string.Empty,
             maestro_cliente_rtn = Limpiar(dto.Rtn),
             maestro_cliente_nombre = nombreCompleto,
             maestro_cliente_tercera_edad = dto.TerceraEdad,
@@ -196,13 +195,13 @@ public class ClientesService : IClientesService
             throw new InvalidOperationException("No se permite modificar la clave del cliente.");
         }
 
+        // Pruebas operativas jul-2026: el DNI es OPCIONAL — un [Required] aquí
+        // bloqueaba la edición de TODOS los clientes migrados (identidad vacía).
+        // La unicidad solo se valida cuando el DNI viene informado y cambia.
         var identidad = Limpiar(dto.Dni);
-        if (string.IsNullOrWhiteSpace(identidad))
-        {
-            throw new ArgumentException("El DNI del cliente es obligatorio.", nameof(dto.Dni));
-        }
 
-        if (!string.Equals(maestro.maestro_cliente_identidad, identidad, StringComparison.OrdinalIgnoreCase))
+        if (!string.IsNullOrWhiteSpace(identidad)
+            && !string.Equals(maestro.maestro_cliente_identidad, identidad, StringComparison.OrdinalIgnoreCase))
         {
             var existeIdentidad = await _context.cliente_maestros
                 .AnyAsync(c => c.maestro_cliente_identidad == identidad && c.maestro_cliente_id != id, ct);
@@ -224,7 +223,9 @@ public class ClientesService : IClientesService
         var numeroConvenio = dto.TieneConvenio == true ? dto.NumeroConvenio : null;
         var numeroContrato = dto.TieneContrato == true ? dto.NumeroContrato : null;
 
-        maestro.maestro_cliente_identidad = identidad;
+        // La columna es NOT NULL; el "sin DNI" se guarda como cadena vacía
+        // (igual que los 6,300 migrados de SIMAFI que vienen así).
+        maestro.maestro_cliente_identidad = identidad ?? string.Empty;
         maestro.maestro_cliente_rtn = Limpiar(dto.Rtn);
         maestro.maestro_cliente_nombre = nombreCompleto;
         maestro.maestro_cliente_tercera_edad = dto.TerceraEdad;
@@ -784,6 +785,8 @@ ORDER BY orden, servicio";
         int take,
         string? sortField,
         bool sortDesc,
+        DateOnly? desde = null,
+        DateOnly? hasta = null,
         CancellationToken ct = default)
     {
         var clave = await _context.cliente_maestros
@@ -798,6 +801,21 @@ ORDER BY orden, servicio";
         }
 
         var movimientos = await CargarMovimientosConSaldoAsync(clave, ct);
+
+        // Filtro por rango de fechas (pedido de pruebas operativas jul-2026).
+        // Se aplica DESPUÉS de calcular el saldo corrido: la ventana limita las
+        // filas mostradas, pero el saldo de cada fila sigue siendo el histórico
+        // real acumulado hasta ese movimiento.
+        if (desde.HasValue)
+        {
+            movimientos = movimientos.Where(m => m.Fecha.HasValue && m.Fecha.Value >= desde.Value).ToList();
+        }
+
+        if (hasta.HasValue)
+        {
+            movimientos = movimientos.Where(m => m.Fecha.HasValue && m.Fecha.Value <= hasta.Value).ToList();
+        }
+
         var totalCount = movimientos.Count;
 
         if (skip < 0)
@@ -1695,25 +1713,127 @@ ORDER BY orden, servicio";
             })
             .ToListAsync(ct);
 
-        var result = new List<MovimientoCalculado>(raw.Count);
-        decimal saldoCorrido = 0m;
+        // F7 H4 (corte 2026-07-30): el espejo quedó CONGELADO, así que los
+        // cobros y facturas posteriores al corte solo existen en el modelo
+        // nuevo. Se anexan aquí con frontera limpia:
+        //   * pagos:    adm_pago con transaccion_abonado_ide IS NULL (los
+        //               migrados/dual-write siempre llevan su ide de espejo);
+        //   * facturas: las del cliente cuyo numrecibo NO tiene cargo en el
+        //               histórico congelado.
+        // Los ide sintéticos van en negativo para no chocar con los del espejo.
+        var pagosNuevos = await _context.adm_pagos
+            .AsNoTracking()
+            .Where(p => p.company_id == companyId
+                        && p.cliente_clave == clave
+                        && p.transaccion_abonado_ide == null)
+            .Select(p => new { p.pago_id, p.fecha, p.numero_recibo, p.monto_total, p.estado_id })
+            .ToListAsync(ct);
+
+        var recibosCongelados = raw
+            .Where(t => t.recibo.HasValue)
+            .Select(t => (int)t.recibo!.Value)
+            .ToHashSet();
+
+        var facturasCliente = await _context.facturas
+            .AsNoTracking()
+            .Where(f => f.company_id == companyId && f.clientecodigo == clave)
+            .Select(f => new { f.id, f.numrecibo, f.numfactura, f.fechaemision, f.estado })
+            .ToListAsync(ct);
+
+        var facturasNuevas = facturasCliente
+            .Where(f => !recibosCongelados.Contains(f.numrecibo))
+            .ToList();
+
+        var totalPorFactura = new Dictionary<int, decimal>();
+        if (facturasNuevas.Count > 0)
+        {
+            var ids = facturasNuevas.Select(f => f.id).ToList();
+            totalPorFactura = await _context.factura_detalles
+                .AsNoTracking()
+                .Where(d => d.factura_id.HasValue && ids.Contains(d.factura_id.Value))
+                .GroupBy(d => d.factura_id!.Value)
+                .Select(g => new { FacturaId = g.Key, Total = g.Sum(d => d.montovalor ?? 0m) })
+                .ToDictionaryAsync(x => x.FacturaId, x => x.Total, ct);
+        }
+
+        // Fila común: (ordenCronologico, ide sintético, fecha, tipo, descripcion,
+        // monto con signo de la columna Monto, vigente, débitos-créditos, recibo).
+        var filas = new List<(long Orden, int Ide, DateOnly? Fecha, string Tipo, string? Descripcion, decimal Monto, bool Vigente, decimal Delta, decimal? Recibo)>(
+            raw.Count + pagosNuevos.Count + facturasNuevas.Count);
+
         foreach (var t in raw)
         {
-            // El saldo (deuda) sube con los debitos (cargos) y baja con los creditos
-            // (abonos); solo los movimientos vigentes lo mueven.
-            if (EsMovimientoVigente(t.estado, t.tipotransaccion))
-            {
-                saldoCorrido += (t.debitos ?? 0m) - (t.creditos ?? 0m);
-            }
-
-            result.Add(new MovimientoCalculado(
+            var vigente = EsMovimientoVigente(t.estado, t.tipotransaccion);
+            filas.Add((
+                t.ide,
                 t.ide,
                 t.fecha_docu,
                 t.tipotransaccion ?? string.Empty,
                 t.descripcion,
                 (t.creditos ?? 0m) - (t.debitos ?? 0m),
-                saldoCorrido,
+                vigente,
+                (t.debitos ?? 0m) - (t.creditos ?? 0m),
                 t.recibo));
+        }
+
+        foreach (var f in facturasNuevas)
+        {
+            var total = totalPorFactura.GetValueOrDefault(f.id);
+            var vigente = !string.Equals(f.estado, "N", StringComparison.Ordinal);
+            var etiqueta = string.IsNullOrWhiteSpace(f.numfactura) ? f.numrecibo.ToString() : f.numfactura;
+            filas.Add((
+                2_000_000_000L + f.id,
+                -(1_000_000_000 + f.id),
+                f.fechaemision,
+                "FACTURA",
+                $"Factura {etiqueta}" + (vigente ? string.Empty : " (anulada)"),
+                -total,
+                vigente,
+                total,
+                f.numrecibo));
+        }
+
+        foreach (var p in pagosNuevos)
+        {
+            var vigente = p.estado_id == SIAD.Core.Constants.EstadoPago.Aplicado;
+            var sufijo = p.estado_id switch
+            {
+                SIAD.Core.Constants.EstadoPago.Anulado => " (anulado)",
+                SIAD.Core.Constants.EstadoPago.Reversado => " (reversado)",
+                SIAD.Core.Constants.EstadoPago.Pendiente => " (pendiente)",
+                _ => string.Empty
+            };
+            filas.Add((
+                3_000_000_000L + p.pago_id,
+                -(int)p.pago_id,
+                p.fecha,
+                "PAGO",
+                $"Recibo {p.numero_recibo}{sufijo}",
+                p.monto_total,
+                vigente,
+                -p.monto_total,
+                null));
+        }
+
+        var result = new List<MovimientoCalculado>(filas.Count);
+        decimal saldoCorrido = 0m;
+        foreach (var fila in filas.OrderBy(x => x.Fecha ?? DateOnly.MinValue).ThenBy(x => x.Orden))
+        {
+            // El saldo (deuda) sube con los debitos (cargos) y baja con los creditos
+            // (abonos); solo los movimientos vigentes lo mueven.
+            if (fila.Vigente)
+            {
+                saldoCorrido += fila.Delta;
+            }
+
+            result.Add(new MovimientoCalculado(
+                fila.Ide,
+                fila.Fecha,
+                fila.Tipo,
+                fila.Descripcion,
+                fila.Monto,
+                saldoCorrido,
+                fila.Recibo));
         }
 
         return result;

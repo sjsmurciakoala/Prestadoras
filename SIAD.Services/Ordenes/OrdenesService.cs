@@ -14,6 +14,29 @@ namespace SIAD.Services.Ordenes;
 
 public class OrdenesService : IOrdenesService
 {
+    // Hora local del negocio (mismo resolver que ContabilidadCatalogosService):
+    // Windows usa "Central America Standard Time", Linux "America/Tegucigalpa".
+    private static readonly TimeZoneInfo BusinessTimeZone = ResolveBusinessTimeZone();
+
+    private static TimeZoneInfo ResolveBusinessTimeZone()
+    {
+        foreach (var timezoneId in new[] { "Central America Standard Time", "America/Tegucigalpa" })
+        {
+            try
+            {
+                return TimeZoneInfo.FindSystemTimeZoneById(timezoneId);
+            }
+            catch (TimeZoneNotFoundException)
+            {
+            }
+            catch (InvalidTimeZoneException)
+            {
+            }
+        }
+
+        return TimeZoneInfo.Utc;
+    }
+
     private readonly SiadDbContext _context;
 
     private sealed record CatalogoItem(string Codigo, string Descripcion);
@@ -373,7 +396,12 @@ public class OrdenesService : IOrdenesService
         }
 
         var fecha = DateOnly.FromDateTime(dto.Fecha.Date);
-        var creacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        // Pruebas operativas jul-2026: la hora de emisión se guardaba en UTC
+        // (+6h vs Honduras), por eso "no coincidía con nada". Hora LOCAL del
+        // negocio, mismo criterio que Cobros del día.
+        var creacion = DateTime.SpecifyKind(
+            TimeZoneInfo.ConvertTimeFromUtc(DateTime.UtcNow, BusinessTimeZone),
+            DateTimeKind.Unspecified);
         var numero = dto.Numero ?? await _context.orden_trabajos.AsNoTracking()
             .Select(o => (int?)o.orden_numero)
             .MaxAsync(cancellationToken) + 1 ?? 1;
