@@ -81,6 +81,37 @@ es el principal foco de confusión:
 - Los pagos del canal bancario (F8) también son 202 pero se reversan por
   `sp_ban_ws_reversar`, nunca desde caja (marca `WSBANCO:` en `trans_aplicar`).
 
+## 2.3) Códigos de `tipotransaccion` del histórico congelado (SIMAFI)
+
+Referencia para leer/auditar el histórico y para la etiqueta que muestra el
+portal (estado de cuenta → columna Tipo). Son los códigos ORIGINALES de
+SIMAFI, congelados con la tabla en F7 H4 — **no** son los tipos numéricos del
+modelo nuevo (esos viven en `adm_tipo_transaccion`, ids 1–11; el mapa
+viejo→nuevo está en `adm_tipo_transaccion_codigo_legacy`).
+
+| Código legacy | Qué es | Etiqueta en el portal |
+|---|---|---|
+| `101` | Cargo de agua potable (línea de factura) | FACTURA |
+| `102` | Cargo de alcantarillado | FACTURA |
+| `103` | Cargo de tasa/fondo (concepto SIMAFI) | FACTURA |
+| `104` | Cargo de tasa/fondo (concepto SIMAFI) | FACTURA |
+| `105` | Otros cargos de facturación | FACTURA |
+| `16` | Cargo suelto/ajuste del origen | CARGO |
+| `11` | Saldo inicial migrado | SALDO INICIAL |
+| `111` | Cuota de convenio de pago (¡fechadas a FUTURO en el origen!) | CUOTA CONVENIO |
+| `201` | Pago (recibo de caja SIMAFI) | PAGO |
+| `202` | Abono de caja / pago del WS bancario | PAGO |
+| `203` | Crédito por traslado a convenio | CONVENIO |
+| `205` | Nota de crédito | NOTA CRÉDITO |
+| `206` | Nota de débito | NOTA DÉBITO |
+| `PLAN*` | Movimientos de planes de pago (era dual-write) | PLAN DE PAGO |
+| `SALDO_ANTERIOR` | Residuo migrado (murió como fuente de saldo en H4) | SALDO ANTERIOR |
+
+La traducción a etiqueta vive en `ClientesServices.EtiquetaTipoMovimiento`.
+Los significados exactos de 103/104 (qué tasa es cada uno) vienen del catálogo
+de conceptos de SIMAFI; si se necesita el desglose fino, la Descripción de la
+fila y el detalle de la factura lo traen.
+
 ## 3) Sincronización CAI de la app (`adm_cai_correlativo_emitido.estado_codigo`)
 
 Catálogo: `cfg_estado_correlativo_cai` / `EstadoCorrelativoCai` (C#).
