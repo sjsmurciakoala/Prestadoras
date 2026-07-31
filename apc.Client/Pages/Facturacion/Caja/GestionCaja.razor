@@ -174,7 +174,7 @@
                                             </CellDisplayTemplate>
                                         </DxGridDataColumn>
                                         <DxGridDataColumn FieldName="NumFactura" Caption="Factura" />
-                                        <DxGridDataColumn FieldName="NumRecibo" Caption="Recibo" Width="110px" TextAlignment="GridTextAlignment.Center" />
+                                        <DxGridDataColumn FieldName="NumRecibo" Caption="Recibo" Width="110px" DisplayFormat="0" TextAlignment="GridTextAlignment.Center" />
                                         <DxGridDataColumn FieldName="FechaEmision" Caption="Emisión" DisplayFormat="dd/MM/yyyy" Width="110px" />
                                         <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="90px" TextAlignment="GridTextAlignment.Center">
                                             <CellDisplayTemplate>
@@ -672,12 +672,19 @@
 
     private async Task OnAbrirCaja()
     {
-        var result = await CajaHttp.AbrirAsync(new AbrirCajaRequestDto(_usuario, null, _montoApertura));
-        Notificar(result?.Success == true, result?.Message ?? "Error al abrir caja.");
-        if (result?.Success == true)
+        try
         {
-            _aperturaVisible = false;
-            await CargarEstadoAsync();
+            var result = await CajaHttp.AbrirAsync(new AbrirCajaRequestDto(_usuario, null, _montoApertura));
+            Notificar(result?.Success == true, result?.Message ?? "Error al abrir caja.");
+            if (result?.Success == true)
+            {
+                _aperturaVisible = false;
+                await CargarEstadoAsync();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Notificar(false, ex.Message);
         }
     }
 
@@ -694,16 +701,23 @@
     private async Task OnCerrarCaja()
     {
         if (_sesionActiva is null) return;
-        var result = await CajaHttp.CerrarAsync(new CerrarCajaRequestDto(_sesionActiva.Id, _usuario, _observacionCierre, _montoCierre));
-        Notificar(result?.Success == true, result?.Message ?? "Error al cerrar caja.");
-        if (result?.Success == true)
+        try
         {
-            _cierreVisible = false;
-            _observacionCierre = null;
-            _clienteClave = null;
-            _documentos = [];
-            _pendientes = [];
-            await CargarEstadoAsync();
+            var result = await CajaHttp.CerrarAsync(new CerrarCajaRequestDto(_sesionActiva.Id, _usuario, _observacionCierre, _montoCierre));
+            Notificar(result?.Success == true, result?.Message ?? "Error al cerrar caja.");
+            if (result?.Success == true)
+            {
+                _cierreVisible = false;
+                _observacionCierre = null;
+                _clienteClave = null;
+                _documentos = [];
+                _pendientes = [];
+                await CargarEstadoAsync();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            Notificar(false, ex.Message);
         }
     }
 
@@ -876,21 +890,28 @@
     {
         if (_reciboBancoDoc is null || string.IsNullOrWhiteSpace(_clienteClave)) return;
 
-        var result = await AbonoHttp.GenerarReciboPendienteAsync(new GenerarReciboDto
+        try
         {
-            NumFactura = _reciboBancoDoc.NumFactura,
-            ClienteClave = _clienteClave,
-            Monto = _reciboBancoMonto
-        });
+            var result = await AbonoHttp.GenerarReciboPendienteAsync(new GenerarReciboDto
+            {
+                NumFactura = _reciboBancoDoc.NumFactura,
+                ClienteClave = _clienteClave,
+                Monto = _reciboBancoMonto
+            });
 
-        Notificar(result?.Success == true, result?.Message ?? "No se pudo generar el recibo.");
-        if (result?.Success == true)
+            Notificar(result?.Success == true, result?.Message ?? "No se pudo generar el recibo.");
+            if (result?.Success == true)
+            {
+                _reciboBancoVisible = false;
+                var datos = Deserializar<GenerarReciboResponseDto>(result.Data);
+                if (datos?.PendienteId is > 0)
+                    await AbrirReciboPendiente(datos.PendienteId);
+                _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave) ?? [];
+            }
+        }
+        catch (HttpRequestException ex)
         {
-            _reciboBancoVisible = false;
-            var datos = Deserializar<GenerarReciboResponseDto>(result.Data);
-            if (datos?.PendienteId is > 0)
-                await AbrirReciboPendiente(datos.PendienteId);
-            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave) ?? [];
+            Notificar(false, ex.Message);
         }
     }
 
@@ -903,31 +924,38 @@
             return;
         }
 
-        var monto = Math.Min(pendiente.Monto, doc.SaldoPendiente);
-        var result = await CobrosHttp.RegistrarAsync(new CobroCrearDto
+        try
         {
-            Canal = CanalCobro.Caja,
-            ClienteClave = _clienteClave!,
-            FormaPago = "EFECTIVO",
-            ReciboPendienteId = pendiente.PendienteId,
-            Aplicaciones =
-            [
-                new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = doc.FacturaId, Monto = monto }
-            ]
-        });
+            var monto = Math.Min(pendiente.Monto, doc.SaldoPendiente);
+            var result = await CobrosHttp.RegistrarAsync(new CobroCrearDto
+            {
+                Canal = CanalCobro.Caja,
+                ClienteClave = _clienteClave!,
+                FormaPago = "EFECTIVO",
+                ReciboPendienteId = pendiente.PendienteId,
+                Aplicaciones =
+                [
+                    new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = doc.FacturaId, Monto = monto }
+                ]
+            });
 
-        if (result?.Success == true)
-        {
-            var datos = Deserializar<CobroResultadoDto>(result.Data);
-            Notificar(true, $"Recibo cobrado. Folio {datos?.NumeroRecibo}.");
-            if (datos?.PagoId is > 0)
-                await AbrirRecibo(datos.PagoId);
-            await OnClienteSeleccionado(_clienteClave);
-            await CargarCobrosDelDiaAsync();
+            if (result?.Success == true)
+            {
+                var datos = Deserializar<CobroResultadoDto>(result.Data);
+                Notificar(true, $"Recibo cobrado. Folio {datos?.NumeroRecibo}.");
+                if (datos?.PagoId is > 0)
+                    await AbrirRecibo(datos.PagoId);
+                await OnClienteSeleccionado(_clienteClave);
+                await CargarCobrosDelDiaAsync();
+            }
+            else
+            {
+                Notificar(false, result?.Message ?? "No se pudo cobrar el recibo.");
+            }
         }
-        else
+        catch (HttpRequestException ex)
         {
-            Notificar(false, result?.Message ?? "No se pudo cobrar el recibo.");
+            Notificar(false, ex.Message);
         }
     }
 
@@ -941,17 +969,24 @@
     private async Task OnAnularPendiente()
     {
         if (_anularPendienteRecibo is null) return;
-        var result = await AbonoHttp.AnularReciboPendienteAsync(new AnularReciboPendienteDto
+        try
         {
-            PendienteId = _anularPendienteRecibo.PendienteId,
-            Usuario = _usuario,
-            Motivo = _anularPendienteMotivo.Trim()
-        });
-        Notificar(result?.Success == true, result?.Message ?? "No se pudo anular.");
-        if (result?.Success == true)
+            var result = await AbonoHttp.AnularReciboPendienteAsync(new AnularReciboPendienteDto
+            {
+                PendienteId = _anularPendienteRecibo.PendienteId,
+                Usuario = _usuario,
+                Motivo = _anularPendienteMotivo.Trim()
+            });
+            Notificar(result?.Success == true, result?.Message ?? "No se pudo anular.");
+            if (result?.Success == true)
+            {
+                _anularPendienteVisible = false;
+                _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave!) ?? [];
+            }
+        }
+        catch (HttpRequestException ex)
         {
-            _anularPendienteVisible = false;
-            _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave!) ?? [];
+            Notificar(false, ex.Message);
         }
     }
 
@@ -1022,6 +1057,13 @@
                 Notificar(false, result?.Message ?? "No se pudo registrar el cobro.");
             }
         }
+        catch (HttpRequestException ex)
+        {
+            // Un 4xx del API (p.ej. cliente BLOQUEADO por cobranza) llega como
+            // excepción desde las extensiones WithAuthCheck; sin este catch
+            // tumbaba el circuito Blazor completo (pruebas 31-jul).
+            Notificar(false, ex.Message);
+        }
         finally
         {
             _cobrando = false;
@@ -1083,18 +1125,25 @@
     private async Task OnReversar()
     {
         if (_reversoCobro is null) return;
-        var result = await CobrosHttp.ReversarAsync(new CobroReversoDto
+        try
         {
-            PagoId = _reversoCobro.PagoId,
-            Motivo = _reversoMotivo.Trim()
-        });
-        Notificar(result?.Success == true, result?.Message ?? "No se pudo reversar.");
-        if (result?.Success == true)
+            var result = await CobrosHttp.ReversarAsync(new CobroReversoDto
+            {
+                PagoId = _reversoCobro.PagoId,
+                Motivo = _reversoMotivo.Trim()
+            });
+            Notificar(result?.Success == true, result?.Message ?? "No se pudo reversar.");
+            if (result?.Success == true)
+            {
+                _reversoVisible = false;
+                await CargarCobrosDelDiaAsync();
+                if (!string.IsNullOrWhiteSpace(_clienteClave))
+                    await OnClienteSeleccionado(_clienteClave);
+            }
+        }
+        catch (HttpRequestException ex)
         {
-            _reversoVisible = false;
-            await CargarCobrosDelDiaAsync();
-            if (!string.IsNullOrWhiteSpace(_clienteClave))
-                await OnClienteSeleccionado(_clienteClave);
+            Notificar(false, ex.Message);
         }
     }
 

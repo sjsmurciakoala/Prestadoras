@@ -1899,12 +1899,35 @@ ORDER BY orden, servicio";
         return new ClienteMovimientoDto(
             m.Ide,
             m.Fecha.HasValue ? m.Fecha.Value.ToDateTime(TimeOnly.MinValue) : DateTime.MinValue,
-            m.Tipo,
+            EtiquetaTipoMovimiento(m.Tipo),
             m.Descripcion,
             m.Monto,
             m.SaldoCorrido,
             m.Recibo,
             numFactura);
+    }
+
+    // Pruebas operativas jul-2026: la columna Tipo mostraba los códigos crudos
+    // del histórico SIMAFI (101/201/205...). Etiqueta legible; el detalle fino
+    // sigue en la Descripción.
+    private static string EtiquetaTipoMovimiento(string tipo)
+    {
+        var t = (tipo ?? string.Empty).Trim();
+        return t switch
+        {
+            "101" or "102" or "103" or "104" or "105" => "FACTURA",
+            "1" or "16" => "CARGO",
+            "11" => "SALDO INICIAL",
+            "111" => "CUOTA CONVENIO",
+            "201" or "202" => "PAGO",
+            "203" => "CONVENIO",
+            "205" => "NOTA CRÉDITO",
+            "206" => "NOTA DÉBITO",
+            _ when t.StartsWith("PLAN", StringComparison.OrdinalIgnoreCase) => "PLAN DE PAGO",
+            _ when t.StartsWith("SALDO", StringComparison.OrdinalIgnoreCase) => "SALDO ANTERIOR",
+            _ when t.Contains("PAGO", StringComparison.OrdinalIgnoreCase) => "PAGO",
+            _ => t
+        };
     }
 
     // Ordena en memoria; el saldo corrido ya viene calculado en orden cronologico, de
