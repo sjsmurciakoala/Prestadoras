@@ -119,6 +119,14 @@ Orden de hitos, cada uno con suite verde:
    centavo). Totales all-time por cliente: 25,519/25,530 exactos; los 11
    restantes = (a) + (b). Residuo `TransaccionId`: resuelto en sesión
    aparte (`ea77edf`).
+   **H5c (perf, `2026-07-30_uc_f7_h5c_perf_reportes.sql`)**: índices por
+   fecha (factura/adm_pago/NC/ND `company_id+fecha`) + filtro
+   `ta.fecha_docu` directo en las 9 funciones (en la vista
+   `fecha_registro` ES `fecha_docu`, y el COALESCE bloqueaba el pushdown
+   del predicado a las ramas del UNION). Hashes idénticos 9/9; en el
+   disco USB local: desglose 14:20→1:14, categoria_detalle 9:52→5:27.
+   La variante LATERAL del remanente se probó y se DESCARTÓ (mejora las
+   ventanas cortas pero duplica los reportes de saldo: 11:13→26:40).
    Detalle original: DROP de los 7 SPs muertos + overload 1-arg de
    `sp_obtener_cliente_saldo` (cross-company, documentado en
    `SaldoCrossCompanyTests` que pasa a fijar que YA NO EXISTE) + tabla vacía
