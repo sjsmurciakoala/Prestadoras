@@ -145,20 +145,86 @@
 
             <div class="modern-card">
                 <div class="detail-section-title"><i class="bi bi-paperclip me-2"></i>Adjuntos</div>
-                <div class="grid-wrapper">
-                    <DxGrid Data="@detalle.Adjuntos" PageSize="10" CssClass="grid-modern">
-                        <Columns>
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Nombre)" Caption="Nombre" />
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Tipo)" Caption="Tipo" />
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Latitud)" Caption="Latitud" />
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.Longitud)" Caption="Longitud" />
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaInicio)" Caption="Fecha inicio" DisplayFormat="g" />
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaFin)" Caption="Fecha fin" DisplayFormat="g" />
-                            <DxGridDataColumn FieldName="@nameof(OrdenTrabajoAdjuntoDto.FechaSincronizacion)" Caption="Fecha sincronización" DisplayFormat="g" />
-                        </Columns>
-                    </DxGrid>
-                </div>
+
+                @if (detalle.Adjuntos is null || detalle.Adjuntos.Count == 0)
+                {
+                    <div class="text-muted">Esta orden no tiene adjuntos.</div>
+                }
+                else
+                {
+                    <div class="adjuntos-galeria">
+                        @foreach (var adjunto in detalle.Adjuntos)
+                        {
+                            <figure class="adjunto-card">
+                                @if (adjunto.TieneContenido)
+                                {
+                                    <button type="button"
+                                            class="adjunto-thumb-btn"
+                                            title="Ampliar"
+                                            @onclick="@(() => AbrirAdjunto(adjunto))">
+                                        <img class="adjunto-thumb"
+                                             src="@UrlContenido(adjunto)"
+                                             alt="@adjunto.Nombre"
+                                             loading="lazy" />
+                                    </button>
+                                }
+                                else
+                                {
+                                    <div class="adjunto-thumb adjunto-thumb-vacio" title="Sin contenido almacenado">
+                                        <i class="bi bi-image-alt"></i>
+                                    </div>
+                                }
+
+                                <figcaption class="adjunto-info">
+                                    <span class="adjunto-nombre" title="@adjunto.Nombre">@adjunto.Nombre</span>
+                                    <span class="adjunto-meta">
+                                        @DescribirTamano(adjunto)
+                                        @if (adjunto.FechaFin is not null)
+                                        {
+                                            <span> · @adjunto.FechaFin.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                        }
+                                    </span>
+                                    @if (!string.IsNullOrWhiteSpace(adjunto.Latitud) && !string.IsNullOrWhiteSpace(adjunto.Longitud))
+                                    {
+                                        <span class="adjunto-meta">@adjunto.Latitud, @adjunto.Longitud</span>
+                                    }
+                                    @if (adjunto.TieneContenido)
+                                    {
+                                        <a class="adjunto-descarga" href="@UrlContenido(adjunto)" download="@adjunto.Nombre">
+                                            <i class="bi bi-download me-1"></i>Descargar
+                                        </a>
+                                    }
+                                </figcaption>
+                            </figure>
+                        }
+                    </div>
+                }
             </div>
+
+            <DxPopup @bind-Visible="@adjuntoVisible"
+                     HeaderText="@(adjuntoSeleccionado?.Nombre ?? "Adjunto")"
+                     ShowCloseButton="true"
+                     CloseOnEscape="true"
+                     Width="min(90vw, 900px)">
+                <BodyContentTemplate>
+                    @if (adjuntoSeleccionado is not null)
+                    {
+                        <div class="adjunto-visor">
+                            <img src="@UrlContenido(adjuntoSeleccionado)" alt="@adjuntoSeleccionado.Nombre" />
+                            <div class="adjunto-visor-pie">
+                                @DescribirTamano(adjuntoSeleccionado)
+                                @if (adjuntoSeleccionado.FechaFin is not null)
+                                {
+                                    <span> · @adjuntoSeleccionado.FechaFin.Value.ToString("dd/MM/yyyy HH:mm")</span>
+                                }
+                                <a class="ms-3" href="@UrlContenido(adjuntoSeleccionado)" download="@adjuntoSeleccionado.Nombre">
+                                    <i class="bi bi-download me-1"></i>Descargar
+                                </a>
+                            </div>
+                        </div>
+                    }
+                </BodyContentTemplate>
+            </DxPopup>
         }
     </div>
 </DxScrollView>
@@ -168,6 +234,40 @@
 
     private OrdenTrabajoDetailDto? detalle;
     private string? error;
+
+    private OrdenTrabajoAdjuntoDto? adjuntoSeleccionado;
+    private bool adjuntoVisible;
+
+    // Ruta absoluta: el navegador la pide directo en el <img>, llevando la cookie de
+    // Identity, que es como se autentica el API del portal.
+    private static string UrlContenido(OrdenTrabajoAdjuntoDto adjunto)
+        => $"/api/ordenes/adjuntos/{adjunto.Id}/contenido";
+
+    private void AbrirAdjunto(OrdenTrabajoAdjuntoDto adjunto)
+    {
+        adjuntoSeleccionado = adjunto;
+        adjuntoVisible = true;
+    }
+
+    private static string DescribirTamano(OrdenTrabajoAdjuntoDto adjunto)
+    {
+        if (!adjunto.TieneContenido || adjunto.TamanoBytes <= 0)
+        {
+            return "sin contenido";
+        }
+
+        if (adjunto.TamanoBytes < 1024)
+        {
+            return $"{adjunto.TamanoBytes} B";
+        }
+
+        if (adjunto.TamanoBytes < 1024 * 1024)
+        {
+            return $"{adjunto.TamanoBytes / 1024} KB";
+        }
+
+        return $"{adjunto.TamanoBytes / (1024d * 1024d):0.0} MB";
+    }
 
     protected override async Task OnParametersSetAsync()
     {

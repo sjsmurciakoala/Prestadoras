@@ -298,3 +298,94 @@
         padding: 0.45rem 0.85rem;
     }
 }
+
+/* ---- Galería de adjuntos ---- */
+
+.adjuntos-galeria {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(190px, 1fr));
+    gap: 1rem;
+}
+
+.adjunto-card {
+    margin: 0;
+    border: 1px solid rgba(0, 0, 0, 0.08);
+    border-radius: 10px;
+    overflow: hidden;
+    background: #fff;
+    display: flex;
+    flex-direction: column;
+}
+
+.adjunto-thumb-btn {
+    padding: 0;
+    border: 0;
+    background: #f1f3f5;
+    cursor: zoom-in;
+    display: block;
+    width: 100%;
+}
+
+.adjunto-thumb {
+    width: 100%;
+    height: 160px;
+    object-fit: contain;
+    background: #f1f3f5;
+    display: block;
+}
+
+.adjunto-thumb-vacio {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #adb5bd;
+    font-size: 2rem;
+}
+
+.adjunto-info {
+    padding: 0.6rem 0.7rem;
+    display: flex;
+    flex-direction: column;
+    gap: 0.15rem;
+}
+
+.adjunto-nombre {
+    font-weight: 600;
+    font-size: 0.82rem;
+    color: #2c3e50;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.adjunto-meta {
+    color: #7f8c8d;
+    font-size: 0.75rem;
+}
+
+.adjunto-descarga {
+    font-size: 0.78rem;
+    margin-top: 0.3rem;
+}
+
+.adjunto-visor {
+    text-align: center;
+}
+
+.adjunto-visor img {
+    max-width: 100%;
+    max-height: 70vh;
+    object-fit: contain;
+}
+
+.adjunto-visor-pie {
+    margin-top: 0.75rem;
+    color: #7f8c8d;
+    font-size: 0.85rem;
+}
+
+@media (max-width: 576px) {
+    .adjuntos-galeria {
+        grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+    }
+}

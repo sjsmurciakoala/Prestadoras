@@ -16,4 +16,5 @@ public interface IOrdenesService
     Task<IReadOnlyList<OrdenTrabajoPropietarioDto>> BuscarPropietariosAsync(string? texto, int take, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<OrdenTrabajoEstadoDto>> BuscarEstadosOrdenAsync(string? texto, int take, CancellationToken cancellationToken = default);
     Task<IReadOnlyList<CoordenadaOrdenDto>> GetCoordenadasAsync(CancellationToken cancellationToken = default);
+    Task<OrdenTrabajoAdjuntoContenidoDto?> GetAdjuntoContenidoAsync(int adjuntoId, CancellationToken cancellationToken = default);
 }
