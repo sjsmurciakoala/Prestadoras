@@ -178,9 +178,12 @@
                                           Width="110px"
                                           DisplayFormat="d" />
 
+                        @* Los números de documento NO llevan separador de miles
+                           (pruebas operativas 31-jul: "4,178,719" no es un monto). *@
                         <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.NumRecibo)"
                                           Caption="Núm. recibo"
                                           Width="110px"
+                                          DisplayFormat="0"
                                           TextAlignment="GridTextAlignment.Right" />
 
                         <DxGridDataColumn FieldName="@nameof(ClienteMovimientoDto.NumFactura)"
