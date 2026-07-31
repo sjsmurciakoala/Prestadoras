@@ -1,12 +1,16 @@
-﻿@page "/mapa"
+@page "/mapa"
 @attribute [Authorize]
+@implements IDisposable
 
 @using System.Globalization
 @using apc.Client.Services.Maps
+@using apc.Client.Services.Ordenes
 @using apc.Services
 @using SIAD.Core.DTOs.Maps
+@using SIAD.Core.DTOs.Ordenes
 
 @inject MapClient MapClient
+@inject OrdenesClient OrdenesClient
 @inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Mapa</PageTitle>
@@ -17,7 +21,19 @@
     <div class="header-section">
         <div>
             <h2 class="page-title">Mapa</h2>
-            <p class="page-subtitle">Visualización inicial del mapa operativo con búsqueda manual</p>
+            <p class="page-subtitle">Ubicación de las cuadrillas reportada por la app Mi Trabajo</p>
+        </div>
+        <div class="header-actions">
+            @if (ultimaActualizacion is not null)
+            {
+                <span class="last-update">Actualizado @ultimaActualizacion.Value.ToString("HH:mm:ss")</span>
+            }
+            <DxButton Text="Actualizar"
+                      IconCssClass="bi bi-arrow-clockwise"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern btn-reset"
+                      Click="RefrescarCoordenadasAsync"
+                      Enabled="@(!isRefreshing)" />
         </div>
     </div>
 
@@ -45,6 +61,24 @@
                       Enabled="@(!isLoading && mapConfiguration is not null)" />
         </div>
 
+        <div class="crew-toolbar">
+            <DxCheckBox @bind-Checked="@mostrarCuadrillas"
+                        LabelPosition="LabelPosition.Right">
+                Mostrar cuadrillas (@CuadrillasVisibles.Count de @cuadrillas.Count)
+            </DxCheckBox>
+
+            @* Binding en dos vías: con Value/ValueChanged por separado el combo puede
+               emitir 0 al inicializarse y dejar el filtro en "sin limite" sin que el
+               usuario lo haya elegido. *@
+            <DxComboBox Data="@VigenciaOpciones"
+                        @bind-Value="@vigenciaHoras"
+                        TextFieldName="@nameof(VigenciaOpcion.Texto)"
+                        ValueFieldName="@nameof(VigenciaOpcion.Horas)"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never"
+                        CssClass="crew-filter"
+                        Enabled="@mostrarCuadrillas" />
+        </div>
+
         <div class="search-help">
             Formatos válidos: <strong>14.0723,-87.1921</strong> o una dirección como
             <strong>Tegucigalpa, Honduras</strong>.
@@ -65,16 +99,55 @@
         }
         else
         {
-            <div class="map-shell">
-                <DxMap Provider="MapProvider.Azure"
+            @if (!string.IsNullOrWhiteSpace(coordenadasError))
+            {
+                <div class="alert alert-warning" role="alert">@coordenadasError</div>
+            }
+            else if (mostrarCuadrillas && CuadrillasVisibles.Count == 0)
+            {
+                <div class="alert alert-info" role="alert">
+                    No hay cuadrillas con ubicación reportada @(vigenciaHoras > 0 ? $"en las últimas {vigenciaHoras} horas" : string.Empty).
+                </div>
+            }
+
+            <div class="map-layout">
+                @if (mostrarCuadrillas && CuadrillasVisibles.Count > 0)
+                {
+                    <aside class="crew-panel">
+                        <div class="crew-panel-title">Cuadrillas en el mapa</div>
+                        @foreach (var cuadrilla in CuadrillasVisibles.OrderByDescending(c => c.Fecha))
+                        {
+                            var seguida = seguirUsuario == cuadrilla.Usuario;
+                            <button type="button"
+                                    class="@($"crew-item {(seguida ? "crew-item-active" : string.Empty)}")"
+                                    @onclick="@(() => AlternarSeguimiento(cuadrilla))">
+                                <span class="@($"crew-dot crew-dot-{EstadoSenal(cuadrilla.Fecha)}")"></span>
+                                <span class="crew-info">
+                                    <span class="crew-name">@(string.IsNullOrWhiteSpace(cuadrilla.Nombre) ? cuadrilla.Usuario : cuadrilla.Nombre)</span>
+                                    <span class="crew-meta">@DescribirAntiguedad(cuadrilla.Fecha)</span>
+                                </span>
+                                @if (seguida)
+                                {
+                                    <i class="bi bi-crosshair crew-follow-icon" title="Siguiendo"></i>
+                                }
+                            </button>
+                        }
+                        <div class="crew-panel-help">
+                            Haz clic en una cuadrilla para seguirla; el mapa se centrará en ella cada @((int)RefreshInterval.TotalSeconds) s.
+                        </div>
+                    </aside>
+                }
+
+                <div class="map-shell">
+                <DxMap Provider="@currentProvider"
                        Type="MapType.Roadmap"
                        Width="100%"
                        Height="560px"
                        Zoom="@currentZoom"
                        ControlsVisible="true"
-                       AutoAdjust="false"
+                       AutoAdjust="@shouldAutoAdjust"
                        CssClass="map-canvas">
-                    <DxMapApiKeys Azure="@mapConfiguration!.ApiKey" />
+                    <DxMapApiKeys Azure="@AzureKey" Google="@GoogleKey" />
                     <DxMapCenter GeoPosition="@currentCenterGeoPosition" />
                     <DxMapMarkers>
                         @if (!string.IsNullOrWhiteSpace(searchMarkerGeoPosition))
@@ -84,8 +157,20 @@
                                 <DxMapMarkerTooltip Text="@searchMarkerTooltip" />
                             </DxMapMarker>
                         }
+
+                        @if (mostrarCuadrillas)
+                        {
+                            @foreach (var cuadrilla in CuadrillasVisibles)
+                            {
+                                <DxMapMarker @key="cuadrilla.Usuario">
+                                    <DxMapMarkerLocation GeoPosition="@BuildGeoPosition(cuadrilla.Latitud!.Value, cuadrilla.Longitud!.Value)" />
+                                    <DxMapMarkerTooltip Text="@BuildCuadrillaTooltip(cuadrilla)" />
+                                </DxMapMarker>
+                            }
+                        }
                     </DxMapMarkers>
                 </DxMap>
+                </div>
             </div>
         }
     </div>
@@ -97,23 +182,80 @@
     private const decimal FallbackLongitude = -87.1921m;
     private const int FallbackZoom = 13;
 
+    /// <summary>
+    /// La app movil reporta cada 30s; refrescando cada 15s la posicion en pantalla
+    /// nunca queda con mas de ~45s de atraso.
+    /// </summary>
+    private static readonly TimeSpan RefreshInterval = TimeSpan.FromSeconds(15);
+
+    /// <summary>Antiguedad a partir de la cual dejamos de considerar el telefono "en linea".</summary>
+    private static readonly TimeSpan UmbralEnLinea = TimeSpan.FromMinutes(5);
+    private static readonly TimeSpan UmbralReciente = TimeSpan.FromMinutes(30);
+    private const int ZoomSeguimiento = 17;
+
     private MapBootstrapDto? mapConfiguration;
+    private MapProvider currentProvider = MapProvider.Azure;
     private string searchText = string.Empty;
     private string currentCenterGeoPosition = BuildGeoPosition(FallbackLatitude, FallbackLongitude);
     private string? searchMarkerGeoPosition;
     private string searchMarkerTooltip = "Resultado de búsqueda";
     private string? loadError;
+    private string? coordenadasError;
     private bool isLoading = true;
+    private bool isRefreshing;
     private int currentZoom = FallbackZoom;
 
+    private IReadOnlyList<CoordenadaOrdenDto> cuadrillas = Array.Empty<CoordenadaOrdenDto>();
+    private bool mostrarCuadrillas = true;
+    private int vigenciaHoras = 24;
+    private DateTime? ultimaActualizacion;
+    private CancellationTokenSource? refreshCts;
+    private string? seguirUsuario;
+
+    private sealed record VigenciaOpcion(int Horas, string Texto);
+
+    private static readonly VigenciaOpcion[] VigenciaOpciones =
+    [
+        new(1, "Última hora"),
+        new(8, "Últimas 8 horas"),
+        new(24, "Últimas 24 horas"),
+        new(72, "Últimos 3 días"),
+        new(0, "Sin límite")
+    ];
+
+    private string AzureKey =>
+        currentProvider == MapProvider.Azure ? (mapConfiguration?.ApiKey ?? string.Empty) : string.Empty;
+
+    private string GoogleKey =>
+        currentProvider == MapProvider.Google ? (mapConfiguration?.ApiKey ?? string.Empty) : string.Empty;
+
     private bool CanRenderMap =>
-        mapConfiguration is not null &&
-        string.Equals(mapConfiguration.Provider, "Azure", StringComparison.OrdinalIgnoreCase) &&
-        !string.IsNullOrWhiteSpace(mapConfiguration.ApiKey);
+        mapConfiguration is not null && !string.IsNullOrWhiteSpace(mapConfiguration.ApiKey);
+
+    // Solo dejamos que el mapa se auto-encuadre cuando mostramos cuadrillas y el usuario
+    // no ha fijado el centro por su cuenta (busqueda manual o seguimiento de un telefono).
+    private bool shouldAutoAdjust =>
+        string.IsNullOrWhiteSpace(searchMarkerGeoPosition)
+        && string.IsNullOrWhiteSpace(seguirUsuario)
+        && mostrarCuadrillas
+        && CuadrillasVisibles.Count > 0;
+
+    private List<CoordenadaOrdenDto> CuadrillasVisibles =>
+        cuadrillas
+            .Where(c => c.Latitud is not null && c.Longitud is not null)
+            .Where(c => vigenciaHoras <= 0
+                        || (c.Fecha is not null && c.Fecha.Value >= DateTime.Now.AddHours(-vigenciaHoras)))
+            .ToList();
 
     protected override async Task OnInitializedAsync()
     {
         await LoadMapConfigurationAsync();
+
+        if (CanRenderMap)
+        {
+            await CargarCoordenadasAsync();
+            IniciarAutoRefresco();
+        }
     }
 
     private async Task LoadMapConfigurationAsync()
@@ -131,15 +273,15 @@
                 return;
             }
 
-            if (!string.Equals(mapConfiguration.Provider, "Azure", StringComparison.OrdinalIgnoreCase))
+            if (!TryParseProvider(mapConfiguration.Provider, out currentProvider))
             {
-                loadError = $"El proveedor configurado '{mapConfiguration.Provider}' no es compatible con este MVP.";
+                loadError = $"El proveedor configurado '{mapConfiguration.Provider}' no es compatible. Use 'Azure' o 'Google'.";
                 return;
             }
 
             if (string.IsNullOrWhiteSpace(mapConfiguration.ApiKey))
             {
-                loadError = "La clave de Azure Maps no está configurada.";
+                loadError = $"La clave de {mapConfiguration.Provider} Maps no está configurada.";
                 return;
             }
 
@@ -155,6 +297,153 @@
         {
             isLoading = false;
         }
+    }
+
+    private async Task CargarCoordenadasAsync()
+    {
+        try
+        {
+            cuadrillas = await OrdenesClient.GetCoordenadasAsync();
+            coordenadasError = null;
+            ultimaActualizacion = DateTime.Now;
+            RecentrarEnSeguimiento();
+        }
+        catch (Exception ex)
+        {
+            coordenadasError = $"No fue posible cargar la ubicación de las cuadrillas: {ex.Message}";
+        }
+    }
+
+    /// <summary>
+    /// Si el usuario eligió seguir un teléfono, movemos el centro del mapa con él en
+    /// cada refresco para que no tenga que ir arrastrando el mapa a mano.
+    /// </summary>
+    private void RecentrarEnSeguimiento()
+    {
+        if (string.IsNullOrWhiteSpace(seguirUsuario))
+        {
+            return;
+        }
+
+        var objetivo = cuadrillas.FirstOrDefault(c =>
+            c.Usuario == seguirUsuario && c.Latitud is not null && c.Longitud is not null);
+
+        if (objetivo is null)
+        {
+            return;
+        }
+
+        currentCenterGeoPosition = BuildGeoPosition(objetivo.Latitud!.Value, objetivo.Longitud!.Value);
+        currentZoom = ZoomSeguimiento;
+    }
+
+    private void AlternarSeguimiento(CoordenadaOrdenDto cuadrilla)
+    {
+        seguirUsuario = seguirUsuario == cuadrilla.Usuario ? null : cuadrilla.Usuario;
+
+        if (seguirUsuario is null)
+        {
+            RestablecerMapa();
+            return;
+        }
+
+        // Seguir un teléfono y mantener un marcador de búsqueda manual se pelean por el
+        // centro del mapa, así que limpiamos la búsqueda al activar el seguimiento.
+        searchMarkerGeoPosition = null;
+        RecentrarEnSeguimiento();
+    }
+
+    private static string DescribirAntiguedad(DateTime? fecha)
+    {
+        if (fecha is null)
+        {
+            return "sin fecha";
+        }
+
+        var transcurrido = DateTime.Now - fecha.Value;
+
+        if (transcurrido < TimeSpan.Zero)
+        {
+            return "ahora";
+        }
+
+        if (transcurrido < TimeSpan.FromMinutes(1))
+        {
+            return "hace segundos";
+        }
+
+        if (transcurrido < TimeSpan.FromHours(1))
+        {
+            return $"hace {(int)transcurrido.TotalMinutes} min";
+        }
+
+        if (transcurrido < TimeSpan.FromDays(1))
+        {
+            return $"hace {(int)transcurrido.TotalHours} h";
+        }
+
+        return fecha.Value.ToString("dd/MM/yyyy HH:mm");
+    }
+
+    private static string EstadoSenal(DateTime? fecha)
+    {
+        if (fecha is null)
+        {
+            return "offline";
+        }
+
+        var transcurrido = DateTime.Now - fecha.Value;
+
+        if (transcurrido <= UmbralEnLinea)
+        {
+            return "online";
+        }
+
+        return transcurrido <= UmbralReciente ? "reciente" : "offline";
+    }
+
+    private async Task RefrescarCoordenadasAsync()
+    {
+        if (isRefreshing || !CanRenderMap)
+        {
+            return;
+        }
+
+        isRefreshing = true;
+        try
+        {
+            await CargarCoordenadasAsync();
+        }
+        finally
+        {
+            isRefreshing = false;
+        }
+    }
+
+    private void IniciarAutoRefresco()
+    {
+        refreshCts = new CancellationTokenSource();
+        var token = refreshCts.Token;
+
+        _ = Task.Run(async () =>
+        {
+            using var timer = new PeriodicTimer(RefreshInterval);
+            try
+            {
+                while (await timer.WaitForNextTickAsync(token))
+                {
+                    await InvokeAsync(async () =>
+                    {
+                        await RefrescarCoordenadasAsync();
+                        StateHasChanged();
+                    });
+                }
+            }
+            catch (OperationCanceledException)
+            {
+                // Salida esperada al abandonar la pagina.
+            }
+        }, token);
     }
 
     private Task BuscarAsync()
@@ -222,6 +511,40 @@
         });
     }
 
+    private static string BuildCuadrillaTooltip(CoordenadaOrdenDto cuadrilla)
+    {
+        var nombre = string.IsNullOrWhiteSpace(cuadrilla.Nombre) ? cuadrilla.Usuario : cuadrilla.Nombre;
+        var partes = new List<string> { nombre };
+
+        if (!string.IsNullOrWhiteSpace(cuadrilla.DescripcionTipo))
+        {
+            partes.Add(cuadrilla.DescripcionTipo);
+        }
+
+        partes.Add(DescribirAntiguedad(cuadrilla.Fecha));
+
+        return string.Join(" · ", partes);
+    }
+
+    private static bool TryParseProvider(string? value, out MapProvider provider)
+    {
+        provider = MapProvider.Azure;
+
+        if (string.Equals(value, "Azure", StringComparison.OrdinalIgnoreCase))
+        {
+            provider = MapProvider.Azure;
+            return true;
+        }
+
+        if (string.Equals(value, "Google", StringComparison.OrdinalIgnoreCase))
+        {
+            provider = MapProvider.Google;
+            return true;
+        }
+
+        return false;
+    }
+
     private static bool TryParseCoordinates(string value, out decimal latitude, out decimal longitude)
     {
         latitude = 0;
@@ -247,4 +570,10 @@
 
     private static string BuildGeoPosition(decimal latitude, decimal longitude)
         => string.Format(CultureInfo.InvariantCulture, "{0:0.#####}, {1:0.#####}", latitude, longitude);
+
+    public void Dispose()
+    {
+        refreshCts?.Cancel();
+        refreshCts?.Dispose();
+    }
 }

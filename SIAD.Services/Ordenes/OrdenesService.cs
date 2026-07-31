@@ -299,7 +299,11 @@ public class OrdenesService : IOrdenesService
                 a.longitud,
                 a.fechainicio,
                 a.fechafin,
-                a.fechaobtenerordenes))
+                a.fechaobtenerordenes,
+                // Se consulta la existencia y el tamano, nunca los bytes: traerlos aqui
+                // cargaria todas las fotos de la orden solo para pintar la lista.
+                a.adjunto != null,
+                a.adjunto == null ? 0 : a.adjunto.Length))
             .ToListAsync(cancellationToken);
 
         var materiales = await _context.ordent_mates.AsNoTracking()
@@ -620,10 +624,97 @@ public class OrdenesService : IOrdenesService
             .ToList();
     }
 
+    public async Task<OrdenTrabajoAdjuntoContenidoDto?> GetAdjuntoContenidoAsync(int adjuntoId, CancellationToken cancellationToken = default)
+    {
+        var adjunto = await _context.orden_trabajo_adjuntos
+            .AsNoTracking()
+            .Where(a => a.id == adjuntoId)
+            .Select(a => new { a.adjunto, a.nombre, a.tipo })
+            .FirstOrDefaultAsync(cancellationToken);
+
+        if (adjunto?.adjunto is null || adjunto.adjunto.Length == 0)
+        {
+            return null;
+        }
+
+        var contentType = DetectarContentType(adjunto.adjunto, adjunto.tipo);
+        var nombreArchivo = ConstruirNombreArchivo(adjuntoId, adjunto.nombre, contentType);
+
+        return new OrdenTrabajoAdjuntoContenidoDto(adjunto.adjunto, contentType, nombreArchivo);
+    }
+
+    /// <summary>
+    /// Determina el tipo real a partir de los bytes y no de la columna 'tipo', que la
+    /// llena la app movil y hoy dice "png" en todas las filas. La app corregida empieza
+    /// a mandar JPEG, asi que confiar en esa columna daria un content-type equivocado
+    /// para las fotos nuevas.
+    /// </summary>
+    private static string DetectarContentType(byte[] contenido, string? tipoDeclarado)
+    {
+        if (contenido.Length >= 8 &&
+            contenido[0] == 0x89 && contenido[1] == 0x50 && contenido[2] == 0x4E && contenido[3] == 0x47)
+        {
+            return "image/png";
+        }
+
+        if (contenido.Length >= 3 &&
+            contenido[0] == 0xFF && contenido[1] == 0xD8 && contenido[2] == 0xFF)
+        {
+            return "image/jpeg";
+        }
+
+        if (contenido.Length >= 12 &&
+            contenido[0] == 0x52 && contenido[1] == 0x49 && contenido[2] == 0x46 && contenido[3] == 0x46 &&
+            contenido[8] == 0x57 && contenido[9] == 0x45 && contenido[10] == 0x42 && contenido[11] == 0x50)
+        {
+            return "image/webp";
+        }
+
+        return (tipoDeclarado?.Trim().ToLowerInvariant()) switch
+        {
+            "png" => "image/png",
+            "jpg" or "jpeg" => "image/jpeg",
+            "webp" => "image/webp",
+            "pdf" => "application/pdf",
+            _ => "application/octet-stream"
+        };
+    }
+
+    private static string ConstruirNombreArchivo(int adjuntoId, string? nombre, string contentType)
+    {
+        var extension = contentType switch
+        {
+            "image/png" => ".png",
+            "image/jpeg" => ".jpg",
+            "image/webp" => ".webp",
+            "application/pdf" => ".pdf",
+            _ => ".bin"
+        };
+
+        var baseNombre = string.IsNullOrWhiteSpace(nombre) ? $"adjunto_{adjuntoId}" : nombre.Trim();
+
+        foreach (var invalido in Path.GetInvalidFileNameChars())
+        {
+            baseNombre = baseNombre.Replace(invalido, '_');
+        }
+
+        return baseNombre + extension;
+    }
+
     public async Task<IReadOnlyList<CoordenadaOrdenDto>> GetCoordenadasAsync(CancellationToken cancellationToken = default)
     {
+        // coordenadas_empleado es un historico: la app movil inserta una fila por cada
+        // reporte de GPS. Para el mapa solo interesa la ultima posicion conocida de cada
+        // empleado, asi que nos quedamos con el id mas alto por nombre (id es identity
+        // ascendente, por lo que equivale a la insercion mas reciente).
+        var ultimosIds = _context.coordenadas_empleados
+            .AsNoTracking()
+            .GroupBy(c => c.nombre)
+            .Select(g => g.Max(c => c.id));
+
         var coordenadas = await (
             from coord in _context.coordenadas_empleados.AsNoTracking()
+            where ultimosIds.Contains(coord.id)
             join usuario in _context.usuarios_miordens.AsNoTracking()
                 on coord.nombre equals usuario.usuario into usuarios
             from usuario in usuarios.DefaultIfEmpty()

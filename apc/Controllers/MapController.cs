@@ -24,9 +24,17 @@ public sealed class MapController : ControllerBase
         var options = _mapsOptions.Value;
         var zoom = options.DefaultZoom > 0 ? options.DefaultZoom : 13;
 
+        // La clave se resuelve segun el proveedor activo para que el cliente no
+        // reciba credenciales de proveedores que no va a usar.
+        var apiKey = options.Provider switch
+        {
+            var p when string.Equals(p, "Google", StringComparison.OrdinalIgnoreCase) => options.GoogleApiKey,
+            _ => options.AzureApiKey
+        };
+
         return Ok(new MapBootstrapDto(
             options.Provider,
-            options.AzureApiKey,
+            apiKey,
             options.DefaultLatitude,
             options.DefaultLongitude,
             zoom));

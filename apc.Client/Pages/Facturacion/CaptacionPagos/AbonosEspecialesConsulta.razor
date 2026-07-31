@@ -6,12 +6,12 @@
 @using SIAD.Core.DTOs.Caja
 @using SIAD.Core.DTOs.CaptacionPagos
 @using apc.Client.Services
+@using apc.Client.Services.Cobros
 @using apc.Client.Services.Caja
-@using apc.Client.Services.CaptacionPagos
 @using apc.Client.Pages.Clientes.Components
 
 @inject AbonoClient AbonoClient
-@inject CaptacionPagosClient CaptacionClient
+@inject CobrosClient CobrosHttp
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 @inject TenantState TenantState
@@ -73,7 +73,7 @@
 
     <div class="modern-card">
         <div class="grid-wrapper">
-            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="TransaccionId" PageSize="15"
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="TransaccionAbonadoIde" PageSize="15"
                     PageSizeSelectorVisible="true"
                     PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                     PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
@@ -212,7 +212,8 @@
                                 var a = (AbonoEspecialListItemDto)cell.DataItem;
                             }
                             <div class="d-flex justify-content-center gap-2 flex-wrap">
-                                @if (a.Estado == EstNoAplicado)
+                                @* Cobrar exige el pendiente VIGENTE en adm_recibo_banco_pendiente (F7 H1). *@
+                                @if (a.Estado == EstNoAplicado && a.PendienteId is not null)
                                 {
                                     <button type="button" class="btn-icon btn-estado" title="Cobrar / aplicar"
                                             @onclick="() => IniciarCobro(a)" @onclick:stopPropagation="true">
@@ -226,8 +227,11 @@
                                     <i class="bi bi-receipt"></i>
                                 </button>
 
+                                @* Imprime desde el modelo nuevo: adm_pago (cobrado) o el papel pendiente.
+                                   Los abonos pre-motor no tienen documento del cual imprimir. *@
                                 <button type="button" class="btn-icon btn-edit" title="Imprimir recibo (PDF)"
-                                        @onclick="() => ImprimirReciboAsync(a.TransaccionId)" @onclick:stopPropagation="true">
+                                        disabled="@(a.PagoId is null && a.PendienteId is null)"
+                                        @onclick="() => ImprimirReciboAsync(a)" @onclick:stopPropagation="true">
                                     <i class="bi bi-printer"></i>
                                 </button>
                             </div>
@@ -379,7 +383,7 @@
     {
         try
         {
-            bancos = (await CaptacionClient.GetBancosAsync()).ToList();
+            bancos = (await CobrosHttp.GetBancosAsync()).ToList();
         }
         catch
         {
@@ -460,8 +464,13 @@
 
     // ── Acciones de fila ──
 
-    private async Task ImprimirReciboAsync(int transaccionId)
-        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{transaccionId}", "_blank");
+    private async Task ImprimirReciboAsync(AbonoEspecialListItemDto a)
+    {
+        if (a.PagoId is not null)
+            await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{a.PagoId}", "_blank");
+        else if (a.PendienteId is not null)
+            await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pendiente-pdf/{a.PendienteId}", "_blank");
+    }
 
     private void AbrirEstadoCuenta(AbonoEspecialListItemDto a)
     {
@@ -510,7 +519,7 @@
                 FormaPago = formaPago,
                 BancoCuentaId = formaPago == "BANCO" ? bancoCuentaIdSeleccionado : null,
                 Banco = formaPago == "BANCO" ? banco?.Codigo : null,
-                ReciboPendienteId = abonoACobrar.TransaccionId
+                ReciboPendienteId = abonoACobrar.PendienteId
             };
 
             var response = await AbonoClient.RegistrarAbonoAsync(request);

@@ -4,18 +4,13 @@ using SIAD.Tests.Infrastructure;
 namespace SIAD.Tests;
 
 /// <summary>
-/// Regla de vigencia de transaccion_abonado (fix 2026-07-16). La convención de
-/// estado está invertida entre módulos: facturación V3 marca vigente = 'A', pero
-/// caja/posteos/WS bancario graban el abono vigente con 'C' y al anular/reversar
-/// ponen 'A'. vw_transaccion_abonado_vigente excluye SOLO lo muerto: 'N'
-/// (anulada), 'R' (reversado legacy), 'P' (recibo pendiente) y los pagos 201/202
-/// con 'A' (anulados por caja/WS). Todo lo demás cuenta, incluido el traslado
-/// 'PLAN' con 'C' de los planes de pago (crédito que compensa las cuotas).
-///
-/// F4 (2026-07-28): sp_obtener_cliente_saldo YA NO suma la vista completa —
-/// pasa a documentos pendientes + residuo migrado (ver SaldoDocumentosTests).
-/// La regla de vigencia sigue gobernando la VISTA (fuente del residuo y de los
-/// lectores legacy hasta F7), así que estos tests asertan la vista directa.
+/// F7 H4/H5 (2026-07-30): transaccion_abonado quedó CONGELADA (histórico de
+/// solo lectura) y la vista de vigencia se retiró — la regla de vigencia que
+/// este archivo asertaba murió con ella; el saldo y los reportes viven en el
+/// modelo nuevo (documentos + adm_pago, ver SaldoDocumentosTests). Lo que se
+/// fija ahora es el CONGELAMIENTO: el candado rechaza la escritura de
+/// operación, la migración entra sin trigger de espejo, y los catálogos de F1
+/// siguen sembrados (los ids estampados del histórico no se pierden).
 /// </summary>
 [Collection("Postgres")]
 public sealed class SaldoVigenciaTests : IntegrationTestBase
@@ -34,109 +29,6 @@ public sealed class SaldoVigenciaTests : IntegrationTestBase
             new { id = EmpresaSintetica }, Transaction));
     }
 
-    private Task InsertarMovimientoAsync(string tipotransaccion, string estado, decimal debitos, decimal creditos) =>
-        Connection.ExecuteAsync(new CommandDefinition(@"
-            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
-            VALUES (@companyId, @clave, @tipo, @estado, @debitos, @creditos)",
-            new { companyId = EmpresaSintetica, clave = Clave, tipo = tipotransaccion, estado, debitos, creditos },
-            Transaction));
-
-    // F4: la regla de vigencia se aserta sobre la vista (los tests del SP de
-    // saldo por documentos viven en SaldoDocumentosTests).
-    private Task<decimal?> SaldoAsync() =>
-        Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(@"
-            SELECT COALESCE(SUM(COALESCE(debitos,0) - COALESCE(creditos,0)), 0)
-            FROM public.vw_transaccion_abonado_vigente
-            WHERE company_id = @companyId AND cliente_clave = @clave",
-            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-
-    [SkippableFact]
-    public async Task Abono_vigente_resta_y_reversado_pendiente_no()
-    {
-        await PrepararEmpresaAsync();
-
-        // Dos cargos de factura (convención facturación: vigente = 'A').
-        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 100m, 0m);
-        await InsertarMovimientoAsync("ALCANTARILLADO", "A", 100m, 0m);
-
-        // Abono vigente (convención caja: vigente = 'C').
-        await InsertarMovimientoAsync("202", "C", 0m, 50m);
-
-        // Abono reversado (caja marca 'A' al anular) — NO debe restar.
-        await InsertarMovimientoAsync("202", "A", 0m, 30m);
-
-        // Recibo pendiente de pago — NO debe restar.
-        await InsertarMovimientoAsync("202", "P", 0m, 20m);
-
-        var saldo = await SaldoAsync();
-
-        Assert.Equal(150m, saldo); // 200 facturado − 50 abonado
-    }
-
-    [SkippableFact]
-    public async Task Factura_anulada_no_suma()
-    {
-        await PrepararEmpresaAsync();
-
-        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 100m, 0m);
-        await InsertarMovimientoAsync("AGUA_POTABLE", "N", 75m, 0m);   // anulada V3
-        await InsertarMovimientoAsync("AGUA_POTABLE", "R", 60m, 0m);   // reversada legacy
-
-        var saldo = await SaldoAsync();
-
-        Assert.Equal(100m, saldo);
-    }
-
-    [SkippableFact]
-    public async Task Cliente_sin_movimientos_devuelve_cero()
-    {
-        await PrepararEmpresaAsync();
-
-        var saldo = await SaldoAsync();
-
-        Assert.Equal(0m, saldo);
-    }
-
-    [SkippableFact]
-    public async Task Plan_de_pago_traslado_C_compensa_las_cuotas()
-    {
-        await PrepararEmpresaAsync();
-
-        // Deuda previa + facturas del mes.
-        await InsertarMovimientoAsync("SALDO_ANTERIOR", "A", 550.84m, 0m);
-        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 171.94m, 0m);
-
-        // Plan de pago (CobranzaService): traslado 'PLAN' con estado 'C' (crédito)
-        // + cuotas 'PLAN-CUOTA' con estado 'A' (débitos por el mismo total).
-        await InsertarMovimientoAsync("PLAN", "C", 0m, 171.94m);
-        await InsertarMovimientoAsync("PLAN-CUOTA", "A", 57.31m, 0m);
-        await InsertarMovimientoAsync("PLAN-CUOTA", "A", 57.31m, 0m);
-        await InsertarMovimientoAsync("PLAN-CUOTA", "A", 57.32m, 0m);
-
-        var saldo = await SaldoAsync();
-
-        Assert.Equal(722.78m, saldo); // 550.84 + 171.94: el plan es neutro (traslado = cuotas)
-    }
-
-    [SkippableFact]
-    public async Task Pago_migrado_de_simafi_con_estado_A_si_resta()
-    {
-        await PrepararEmpresaAsync();
-
-        await InsertarMovimientoAsync("SALDO_ANTERIOR", "A", 500m, 0m);
-        await InsertarMovimientoAsync("PAGO", "A", 0m, 200m); // migrado legacy (no es 201/202)
-
-        var saldo = await SaldoAsync();
-
-        Assert.Equal(300m, saldo);
-    }
-
-    // ------------------------------------------------------------------------
-    // Unificación cobranza F1 (2026-07-26): espejos numéricos derivados por
-    // trigger (tipo_transaccion_id, estado_pago_id) y vista de vigencia sobre
-    // adm_estado_pago. La semántica del saldo NO cambia (tests de arriba).
-    // ------------------------------------------------------------------------
-
     private Task<(short? tipoId, short? estadoPagoId, short? estadoId)> UltimoEspejoAsync() =>
         Connection.QuerySingleAsync<(short?, short?, short?)>(new CommandDefinition(@"
             SELECT tipo_transaccion_id, estado_pago_id, estado_id
@@ -146,94 +38,58 @@ public sealed class SaldoVigenciaTests : IntegrationTestBase
             new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
 
     [SkippableFact]
-    public async Task Trigger_deriva_espejos_de_abono_de_caja()
+    public async Task Congelada_h4_rechaza_escritura_directa()
     {
         await PrepararEmpresaAsync();
 
-        await InsertarMovimientoAsync("202", "C", 0m, 50m);
-        var (tipoId, estadoPagoId, _) = await UltimoEspejoAsync();
+        // Sin el permiso explícito de migración, el candado revienta cualquier
+        // escritura — incluida la de un superusuario, que el REVOKE no alcanza.
+        var ex = await Assert.ThrowsAsync<Npgsql.PostgresException>(() =>
+            Connection.ExecuteAsync(new CommandDefinition(@"
+                INSERT INTO public.transaccion_abonado
+                    (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
+                VALUES (@companyId, @clave, '202', 'C', 0, 50)",
+                new { companyId = EmpresaSintetica, clave = Clave }, Transaction)));
 
-        Assert.Equal((short)4, tipoId);       // ABONO (202 caja, sin marker WS)
-        Assert.Equal((short)1, estadoPagoId); // APLICADO
+        Assert.Contains("CONGELADA", ex.MessageText);
     }
 
     [SkippableFact]
-    public async Task Trigger_distingue_anulado_de_caja_y_reversado_del_ws()
+    public async Task Congelada_h4_la_migracion_entra_sin_trigger_de_espejo()
     {
         await PrepararEmpresaAsync();
 
-        // Anulación desde caja: 202 sin marker pasa a 'A' → ANULADO(3)
-        await InsertarMovimientoAsync("202", "C", 0m, 30m);
+        // Con el permiso de migración la fila entra tal cual: el trigger de
+        // sincronía ya no existe, así que nada deriva ids desde las letras.
         await Connection.ExecuteAsync(new CommandDefinition(@"
-            UPDATE public.transaccion_abonado SET estado = 'A'
-            WHERE company_id = @companyId AND cliente_clave = @clave",
-            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        var (_, anulado, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)3, anulado);
-
-        // Pago WS (marker WSBANCO:) → tipo PAGO_BANCO(3); su reverso → REVERSADO(4)
-        await Connection.ExecuteAsync(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';
             INSERT INTO public.transaccion_abonado
-                (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos, trans_aplicar)
-            VALUES (@companyId, @clave, '202', 'C', 0, 40, 'WSBANCO:777')",
+                (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
+            VALUES (@companyId, @clave, '202', 'C', 0, 50)",
             new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        var (tipoWs, aplicadoWs, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)3, tipoWs);
-        Assert.Equal((short)1, aplicadoWs);
 
-        await Connection.ExecuteAsync(new CommandDefinition(@"
-            UPDATE public.transaccion_abonado SET estado = 'A'
-            WHERE company_id = @companyId AND cliente_clave = @clave
-              AND trans_aplicar LIKE 'WSBANCO:%'",
-            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        var (_, reversadoWs, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)4, reversadoWs);
+        var (tipoId, estadoPagoId, _) = await UltimoEspejoAsync();
+        Assert.Null(tipoId);
+        Assert.Null(estadoPagoId);
     }
 
     [SkippableFact]
-    public async Task Trigger_deriva_espejos_de_cargos_y_planes_sin_estado_pago()
+    public async Task Vista_de_vigencia_ya_no_existe_h5()
     {
         await PrepararEmpresaAsync();
 
-        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 100m, 0m);
-        var (tipoCargo, pagoCargo, estadoCargo) = await UltimoEspejoAsync();
-        Assert.Equal((short)1, tipoCargo);   // CARGO_SERVICIO
-        Assert.Null(pagoCargo);              // no es pago
-        Assert.Equal((short)1, estadoCargo); // Activa
+        // Decisión "nada legacy se conserva": la vista se retiró; los reportes
+        // leen vw_rep_movimiento_vigente (modelo nuevo). Si alguien la recrea,
+        // este test falla.
+        var existe = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM pg_views WHERE viewname = 'vw_transaccion_abonado_vigente'",
+            transaction: Transaction));
+        Assert.Equal(0L, existe);
 
-        await InsertarMovimientoAsync("PLAN-CUOTA", "A", 57.31m, 0m);
-        var (tipoCuota, pagoCuota, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)9, tipoCuota);   // PLAN_CUOTA
-        Assert.Null(pagoCuota);
-
-        await InsertarMovimientoAsync("SALDO_ANTERIOR", "A", 500m, 0m);
-        var (tipoSaldo, _, _) = await UltimoEspejoAsync();
-        Assert.Equal((short)11, tipoSaldo);  // SALDO_INICIAL
-    }
-
-    [SkippableFact]
-    public async Task Vista_de_vigencia_gobierna_pagos_por_estado_pago_id()
-    {
-        await PrepararEmpresaAsync();
-
-        await InsertarMovimientoAsync("AGUA_POTABLE", "A", 200m, 0m);
-        await InsertarMovimientoAsync("202", "C", 0m, 50m);  // APLICADO → cuenta
-        await InsertarMovimientoAsync("202", "P", 0m, 20m);  // PENDIENTE → fuera
-        await InsertarMovimientoAsync("202", "A", 0m, 30m);  // ANULADO → fuera
-
-        var vigentes = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
-            SELECT count(*) FROM public.vw_transaccion_abonado_vigente
-            WHERE company_id = @companyId AND cliente_clave = @clave
-              AND tipotransaccion = '202'",
-            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        Assert.Equal(1L, vigentes);
-
-        var estadoPagoVigente = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(@"
-            SELECT estado_pago_id FROM public.vw_transaccion_abonado_vigente
-            WHERE company_id = @companyId AND cliente_clave = @clave
-              AND tipotransaccion = '202'",
-            new { companyId = EmpresaSintetica, clave = Clave }, Transaction));
-        Assert.Equal((short)1, estadoPagoVigente);
+        var nueva = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM pg_views WHERE viewname = 'vw_rep_movimiento_vigente'",
+            transaction: Transaction));
+        Assert.Equal(1L, nueva);
     }
 
     [SkippableFact]

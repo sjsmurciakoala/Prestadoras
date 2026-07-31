@@ -5,14 +5,14 @@
 @using SIAD.Core.DTOs.Cobranza
 @using SIAD.Core.DTOs.Rutas
 @using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Cobros
 @using apc.Client.Services.Cobranza
 @using apc.Client.Services.Facturacion
 @using apc.Client.Services.Informes
-@using apc.Client.Services.CaptacionPagos
 @inject ClientesCobroClient ClientesCobroClient
 @inject CobranzaClient CobranzaClient
 @inject InformesClient InformesClient
-@inject CaptacionPagosClient CaptacionClient
+@inject CobrosClient CobrosHttp
 @inject IJSRuntime JS
 @inject NavigationManager Navigation
 @inject IToastNotificationService ToastService
@@ -229,7 +229,7 @@
         try
         {
             var tCiclos = InformesClient.GetCiclosAsync();
-            var tClientes = CaptacionClient.GetClientesAsync(take: 100000);
+            var tClientes = CobrosHttp.GetClientesAsync(take: 100000);
             var tAcciones = CobranzaClient.GetCatalogoAccionesAsync();
             var tObs = CobranzaClient.GetCatalogoObservacionesAsync();
             await Task.WhenAll(tCiclos, tClientes, tAcciones, tObs);

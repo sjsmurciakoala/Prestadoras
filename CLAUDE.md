@@ -6,10 +6,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 The current code and `HODSOFT_DEVEXPRESS.sln` are authoritative. `readme.md` and other docs may contradict the live solution — follow the code. The same applies to `docs/` (planning/handoff notes, not specs).
 
+## Git layout — nested repo
+
+This directory is its **own git repository** (remote `origin` = `github.com/sjsmurciakoala/Prestadoras`), nested inside the parent workspace repo `HODSOFT_DEVEXPRESS` (remote `padre`, the org repo). Work happens here: branch from `main`, open PRs against `origin`. Do **not** push to `padre` — syncing the parent repo is a separate, deliberate step.
+
 ## Build / run / publish
 
 - Solution build: `dotnet build HODSOFT_DEVEXPRESS.sln` (the only VS Code task is `dotnet-build-solution`).
 - Run portal locally: `dotnet run --project apc/apc.csproj` (hosts the WASM client at `apc.Client` as a static asset and exposes the API).
+- Run the standalone WS hosts locally: `dotnet run --project apc.BancosWs/apc.BancosWs.csproj` (http://localhost:8087) and `dotnet run --project apc.MobileApi/apc.MobileApi.csproj` (http://localhost:8088).
 - On-prem publish: `./publish-onprem.ps1` (`-Solo portal|ws|bancosws|mobileapi|todos`, default `todos`; `-Output <path>`). Targets `win-x64`, framework-dependent, ReadyToRun. For a real deploy follow [docs/RUNBOOK_DEPLOY_2026-07.md](docs/RUNBOOK_DEPLOY_2026-07.md) and publish each host explicitly rather than relying on `-Solo todos`.
 - Connection string lives in `apc/appsettings.json` under `ConnectionStrings:DefaultConnection` (Npgsql/Azure Postgres). Identity migrations write to schema `identity` (`__IdentityMigrationsHistory`). The SIAD functional DB does **not** use EF migrations — see Database section.
 - Default culture is forced to `es-HN` in `apc/Program.cs`; preserve it.
@@ -85,6 +90,8 @@ When adding a new endpoint, register its permission name in `PermissionNames` an
 ## Statuses and codes
 
 String-based statuses are being migrated to numeric lookups — see [SIAD.Core/Constants/EstadosNumericos.cs](SIAD.Core/Constants/EstadosNumericos.cs). Do not introduce new string-state columns or compare against magic status strings; use the numeric constants.
+
+Reference docs for the existing state machines: [docs/ESTADOS_DOCUMENTOS_COMERCIALES.md](docs/ESTADOS_DOCUMENTOS_COMERCIALES.md) (factura `A`/`B`/`C`/`N`, `transaccion_abonado` 201/202, sync CAI — including the known gap that `B` has no `estado_id` yet) and [docs/ESTANDAR_ESTADOS_Y_FLUJO_CONTABLE.md](docs/ESTANDAR_ESTADOS_Y_FLUJO_CONTABLE.md) (accounting scope). Read them before touching anything that filters or writes document states.
 
 ## Blazor / DevExpress UI conventions
 

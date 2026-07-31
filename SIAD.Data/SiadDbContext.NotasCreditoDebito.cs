@@ -98,6 +98,8 @@ public partial class SiadDbContext
             entity.Property(e => e.monto_aumentar).HasColumnType("numeric(18,4)");
             entity.Property(e => e.isv_aumentar).HasColumnType("numeric(18,4)");
             entity.Property(e => e.total_nota).HasColumnType("numeric(18,4)");
+            // F7 H2b: saldo vivo cobrable (documento_tipo = 3 del motor).
+            entity.Property(e => e.saldo_pendiente).HasColumnType("numeric(18,2)").HasDefaultValue(0m);
 
             entity.HasOne(e => e.motivo_aumento)
                 .WithMany(p => p.adm_nota_debitos)

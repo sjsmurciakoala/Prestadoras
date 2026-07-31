@@ -80,6 +80,27 @@ public class OrdenesController : ControllerBase
         return Ok(estados);
     }
 
+    /// <summary>
+    /// Devuelve la imagen (o archivo) de un adjunto. Va por un endpoint propio para no
+    /// cargar los bytes de todas las fotos dentro del JSON del detalle de la orden.
+    /// </summary>
+    [HttpGet("adjuntos/{adjuntoId:int}/contenido")]
+    public async Task<IActionResult> GetAdjuntoContenido(int adjuntoId, CancellationToken cancellationToken)
+    {
+        var adjunto = await _ordenesService.GetAdjuntoContenidoAsync(adjuntoId, cancellationToken);
+
+        if (adjunto is null)
+        {
+            return NotFound();
+        }
+
+        // Los adjuntos son inmutables: una vez subidos desde la app no cambian, asi que
+        // se pueden cachear en el navegador y evitar re-descargarlos al abrir la orden.
+        Response.Headers.CacheControl = "private, max-age=86400";
+
+        return File(adjunto.Contenido, adjunto.ContentType, adjunto.NombreArchivo);
+    }
+
     [HttpGet("coordenadas")]
     public async Task<IActionResult> GetCoordenadas(CancellationToken cancellationToken)
     {

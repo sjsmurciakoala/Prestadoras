@@ -17,6 +17,9 @@ public class CobroAplicacionDto
     /// <summary>Cuota de plan de pago (cln_plan_pago_dtl.id) cuando DocumentoTipo = 2.</summary>
     public int? PlanCuotaId { get; set; }
 
+    /// <summary>Nota de débito (adm_nota_debito.nota_debito_id) cuando DocumentoTipo = 3 (F7).</summary>
+    public long? NotaDebitoId { get; set; }
+
     /// <summary>Monto a aplicar al documento. Total = parcial con monto igual al saldo.</summary>
     public decimal Monto { get; set; }
 }
@@ -40,8 +43,8 @@ public class CobroCrearDto
     /// <summary>Idempotencia entre canales (referencia bancaria / uuid app). Nullable en ventanilla.</summary>
     public string? ReferenciaExterna { get; set; }
 
-    /// <summary>Recibo pendiente legacy (transaccion_abonado estado 'P') que este cobro liquida.</summary>
-    public int? ReciboPendienteId { get; set; }
+    /// <summary>F7: adm_recibo_banco_pendiente.recibo_pendiente_id del papel que se está cobrando.</summary>
+    public long? ReciboPendienteId { get; set; }
 
     public DateTime? FechaPago { get; set; }
 
@@ -79,8 +82,6 @@ public class CobroResultadoDto
     public bool PolizaEncolada { get; set; }
     /// <summary>Movimiento bancario (kardex DEP) cuando el cobro fue por banco.</summary>
     public long? BanKardexId { get; set; }
-    /// <summary>ide de la fila espejo legacy (dual-write) — para recibos PDF y consultas actuales.</summary>
-    public int TransaccionId { get; set; }
     /// <summary>True si la referencia_externa ya estaba aplicada y se devolvió el cobro original.</summary>
     public bool Idempotente { get; set; }
     public List<CobroAplicacionResultadoDto> Aplicaciones { get; set; } = new();
@@ -117,6 +118,4 @@ public class CobroDelDiaDto
     public string Estado { get; set; } = string.Empty;
     public string Usuario { get; set; } = string.Empty;
     public string? CajaNombre { get; set; }
-    /// <summary>Fila espejo legacy — para reimprimir el recibo PDF actual.</summary>
-    public int? TransaccionId { get; set; }
 }

@@ -17,10 +17,12 @@ namespace apc.Controllers.Cobros;
 public class CobrosController : ControllerBase
 {
     private readonly ICobroService _cobroService;
+    private readonly ICatalogosCobroService _catalogos;
 
-    public CobrosController(ICobroService cobroService)
+    public CobrosController(ICobroService cobroService, ICatalogosCobroService catalogos)
     {
         _cobroService = cobroService;
+        _catalogos = catalogos;
     }
 
     [HttpPost]
@@ -46,4 +48,14 @@ public class CobrosController : ControllerBase
     [HttpGet("del-dia")]
     public async Task<IActionResult> DelDia([FromQuery] DateTime? fecha, [FromQuery] string? usuario, [FromQuery] int? cajaId, CancellationToken ct)
         => Ok(await _cobroService.ListarCobrosDelDiaAsync(fecha, usuario, cajaId, ct));
+
+    // F7 H5: catálogos de apoyo de la caja, mudados del módulo CaptacionPagos
+    // retirado (eran sus dos únicos endpoints con consumidores vivos).
+    [HttpGet("clientes")]
+    public async Task<IActionResult> Clientes([FromQuery] string? q, [FromQuery] int? take, CancellationToken ct)
+        => Ok(await _catalogos.ListarClientesAsync(q, take, ct));
+
+    [HttpGet("bancos")]
+    public async Task<IActionResult> Bancos(CancellationToken ct)
+        => Ok(await _catalogos.ListarBancosAsync(ct));
 }

@@ -4,10 +4,10 @@
 @using SIAD.Core.DTOs.Cobranza
 @using SIAD.Core.DTOs.CaptacionPagos
 @using apc.Client.Services
-@using apc.Client.Services.CaptacionPagos
+@using apc.Client.Services.Cobros
 @inject CobranzaClient CobranzaClient
 @inject NotasCreditoDebitoClient NotasClient
-@inject CaptacionPagosClient CaptacionClient
+@inject CobrosClient CobrosHttp
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
 @inject IJSRuntime JS
@@ -499,7 +499,7 @@
     {
         var auth = await AuthenticationStateProvider.GetAuthenticationStateAsync();
         usuarioActual = auth.User.Identity?.Name ?? "system";
-        var iniciales = await CaptacionClient.GetClientesAsync(null);
+        var iniciales = await CobrosHttp.GetClientesAsync(null);
         clientesCombo = iniciales.ToList();
         await CargarPlanesAsync();
     }

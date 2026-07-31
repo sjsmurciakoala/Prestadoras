@@ -3,13 +3,13 @@ using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Services;
 using SIAD.Services.Clientes;
+using SIAD.Services.Cobros;
 using SIAD.Services.Proveedores;
 using SIAD.Services.Solicitudes;
 using SIAD.Services.Medidores;
 using SIAD.Services.Branding;
 using SIAD.Services.Ordenes;
 using SIAD.Services.Rutas;
-using SIAD.Services.CaptacionPagos;
 using SIAD.Services.FacturacionMiscelaneos;
 using SIAD.Services.NotasCreditoDebito;
 using SIAD.Services.Mantenimientos;
@@ -60,7 +60,7 @@ public static class ServiceRegistration
         services.AddScoped<Libretas.ILibretasService, Libretas.LibretasService>();
         
         // captación de pagos
-        services.AddScoped<ICaptacionPagosService, CaptacionPagosService>();
+        services.AddScoped<ICatalogosCobroService, CatalogosCobroService>();
         
         // gestión de caja
         services.AddScoped<ICajaService, CajaService>();

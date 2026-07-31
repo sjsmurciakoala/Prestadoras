@@ -234,8 +234,6 @@ public partial class SiadDbContext : DbContext
 
     public virtual DbSet<tipo_d> tipo_ds { get; set; }
 
-    public virtual DbSet<tipo_transaccion> tipo_transaccions { get; set; }
-
     public virtual DbSet<tipo_uso_servicio> tipo_uso_servicios { get; set; }
 
     public virtual DbSet<transaccion_abonado> transaccion_abonados { get; set; }
@@ -1999,19 +1997,6 @@ public partial class SiadDbContext : DbContext
             entity.Property(e => e.tipo).HasMaxLength(2);
             entity.Property(e => e.usuariocreacion).HasMaxLength(256);
             entity.Property(e => e.usuariomodificacion).HasMaxLength(256);
-        });
-
-        modelBuilder.Entity<tipo_transaccion>(entity =>
-        {
-            entity.HasKey(e => e.ide).HasName("tipo_transaccion_pkey");
-
-            entity.ToTable("tipo_transaccion");
-
-            entity.Property(e => e.ide).UseIdentityAlwaysColumn();
-            entity.Property(e => e.codigo).HasColumnType("character varying");
-            entity.Property(e => e.descripcion).HasColumnType("character varying");
-            entity.Property(e => e.fecha_actualizacion).HasColumnType("character varying");
-            entity.Property(e => e.usuario_actualizacion).HasColumnType("character varying");
         });
 
         modelBuilder.Entity<tipo_uso_servicio>(entity =>

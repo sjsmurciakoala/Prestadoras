@@ -2,11 +2,11 @@
 @attribute [Authorize]
 @using SIAD.Core.DTOs.Cobranza
 @using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Cobros
 @using apc.Client.Services.Facturacion
-@using apc.Client.Services.CaptacionPagos
 @using DevExpress.Blazor
 @inject CobranzaClient CobranzaClient
-@inject CaptacionPagosClient CaptacionClient
+@inject CobrosClient CobrosHttp
 @inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Historial de Bitácora de Cobranza</PageTitle>
@@ -154,7 +154,7 @@
     {
         try
         {
-            var tareaClientes = CaptacionClient.GetClientesAsync(null);
+            var tareaClientes = CobrosHttp.GetClientesAsync(null);
             var tareaCatalogo = CobranzaClient.GetCatalogoAccionesAsync();
             await Task.WhenAll(tareaClientes, tareaCatalogo);
             clientesCombo = tareaClientes.Result.ToList();

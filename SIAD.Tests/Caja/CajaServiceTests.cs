@@ -1,6 +1,7 @@
 using System;
 using System.Linq;
 using System.Threading.Tasks;
+using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
 using SIAD.Core.Tenancy;
@@ -233,17 +234,16 @@ public class CajaServiceTests : IntegrationTestBase, IAsyncLifetime
         var apertura = await _service!.AbrirCajaAsync(new AbrirCajaRequestDto("user_trans"));
         var sesionId = (int)apertura.Data!;
 
-        var transaccion = new SIAD.Core.Entities.transaccion_abonado
-        {
-            company_id = CompanyId,
-            caja_id = sesionId,
-            creditos = 750.50m,
-            debitos = 0m,
-            estado = "C",
-            descripcion = "Pago Factura Dummy de Prueba"
-        };
-        _context!.transaccion_abonados.Add(transaccion);
-        await _context.SaveChangesAsync();
+        // F7 H4: el total del turno sale de adm_pago (el espejo legacy está
+        // congelado y desde H2 nadie lo escribe).
+        await _context!.Database.GetDbConnection().ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.adm_pago
+                (company_id, numero_recibo, cliente_clave, fecha, canal_id,
+                 tipo_transaccion_id, estado_id, monto_total, forma_pago,
+                 sesion_caja_id, usuario)
+            VALUES (@companyId, 'TEST-CIERRE-1', 'CLI-CIERRE', CURRENT_DATE, 1,
+                    2, 1, 750.50, 'EFECTIVO', @sesionId, 'user_trans')",
+            new { companyId = CompanyId, sesionId }, Transaction));
 
         var cierre = await _service.CerrarCajaAsync(new CerrarCajaRequestDto(sesionId, "user_trans", "cierre con recaudacion", 750.50m));
 

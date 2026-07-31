@@ -54,6 +54,7 @@ public sealed class SaldoCrossCompanyTests : IntegrationTestBase
         // el "último" global, que es justo lo que el 1-arg (deprecated) lee de
         // la columna saldo.
         await Connection.ExecuteAsync(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';   -- H4: tabla congelada
             INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, debitos, saldo, estado, estado_id)
             VALUES (@id, @clave, 'SALDO_ANTERIOR', @saldo, @saldo, 'A', 1)",
             new { id = EmpresaOtraId, clave, saldo = SaldoOtra }, Transaction));
@@ -68,6 +69,18 @@ public sealed class SaldoCrossCompanyTests : IntegrationTestBase
 
         await InsertarSaldoColisionanteAsync(clave);
 
+        // F7 H4: el SP v7 ya no lee el residuo del histórico — el saldo de la
+        // otra empresa debe existir como DOCUMENTO para probar el aislamiento.
+        var facturaOtraId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
+            INSERT INTO public.factura (clientecodigo, tipofactura, estado, estado_id, tipo_documento_fiscal_id, company_id)
+            VALUES (@clave, 'F', 'A', 1, 1, @id)
+            RETURNING id",
+            new { clave, id = EmpresaOtraId }, Transaction));
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.factura_detalle (factura_id, tiposervicio, montovalor, montovalor_saldo, company_id)
+            VALUES (@facturaOtraId, 'AGUA_POTABLE', @saldo, @saldo, @id)",
+            new { facturaOtraId, saldo = SaldoOtra, id = EmpresaOtraId }, Transaction));
+
         var s2 = await Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
             "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@c, @clave)",
             new { c = CompanyId, clave }, Transaction));
@@ -80,22 +93,19 @@ public sealed class SaldoCrossCompanyTests : IntegrationTestBase
     }
 
     [SkippableFact]
-    public async Task Overload_1arg_es_cross_company_documenta_el_bug()
+    public async Task Overload_1arg_ya_no_existe_h5()
     {
         Skip.IfNot(await ClienteExisteAsync(), "Falta el cliente piloto en esta BD.");
-        var (clave, saldo2) = await PrepararAsync();
-        Skip.If(saldo2 <= 0m, "El cliente piloto no tiene saldo > 0 en esta BD.");
 
-        await InsertarSaldoColisionanteAsync(clave);
+        // F7 H5: el overload de 1 argumento era cross-company por diseño (leía
+        // el último movimiento GLOBAL) y se dropeó. Este test fija que no
+        // vuelva: si alguien lo recrea, falla.
+        var firmas = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            SELECT count(*) FROM pg_proc
+            WHERE proname = 'sp_obtener_cliente_saldo'",
+            transaction: Transaction));
 
-        // El overload viejo (1-arg) toma el último movimiento GLOBAL → devuelve el de la otra
-        // empresa. Este test fija POR QUÉ el motor NO debe usarlo (si alguien lo revierte, falla).
-        var s1 = await Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(
-            "SELECT saldo_actual FROM public.sp_obtener_cliente_saldo(@clave)",
-            new { clave }, Transaction));
-
-        Assert.Equal(SaldoOtra, s1);
-        Assert.NotEqual(saldo2, s1);
+        Assert.Equal(1L, firmas); // solo la firma (company_id, cliente)
     }
 
     [SkippableFact]

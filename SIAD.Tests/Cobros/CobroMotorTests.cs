@@ -88,7 +88,7 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         }
     }
 
-    /// <summary>Crea una factura activa con dos líneas (60 + 40 = 100) y su cargo espejo.</summary>
+    /// <summary>Crea una factura activa con dos líneas (60 + 40 = 100).</summary>
     private async Task<int> CrearFacturaAsync(decimal linea1 = 60m, decimal linea2 = 40m, string sufijo = "A")
     {
         var facturaId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
@@ -105,11 +105,7 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
                    (@companyId, @facturaId, 'ALCANTARILLADO', 'ALCANTARILLADO', @m2, @m2)",
             new { companyId = Empresa, facturaId, m1 = linea1, m2 = linea2 }, Transaction));
 
-        // Cargo espejo en el estado de cuenta (como lo haría sp_lectura_v3)
-        await Connection.ExecuteAsync(new CommandDefinition(@"
-            INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
-            VALUES (@companyId, @clave, 'AGUA_POTABLE', 'A', @total, 0)",
-            new { companyId = Empresa, clave = Clave, total = linea1 + linea2 }, Transaction));
+        // F7 H2c: sin cargo espejo — la factura ES el documento.
 
         return facturaId;
     }
@@ -167,14 +163,19 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(2, aplicaciones.Count);          // una por línea (60 + 40)
         Assert.Equal(100m, aplicaciones.Sum());
 
-        // Dual-write: espejo legacy 202 vigente con caja_id (mejora sobre el flujo viejo)
-        var espejo = await Connection.QuerySingleAsync<(string tipo, string estado, short? estadoPago, int? cajaId)>(new CommandDefinition(
-            "SELECT tipotransaccion, estado, estado_pago_id, caja_id FROM public.transaccion_abonado WHERE ide = @ide",
-            new { ide = data.TransaccionId }, Transaction));
-        Assert.Equal("202", espejo.tipo);
-        Assert.Equal("C", espejo.estado);
-        Assert.Equal((short)1, espejo.estadoPago);
-        Assert.NotNull(espejo.cajaId);
+        // F7 H2c: se acabó el espejo legacy — el cobro vive SOLO como documento
+        // del motor (adm_pago con su sesión de caja y estado APLICADO).
+        var doc = await Connection.QuerySingleAsync<(short canal, short estado, int? sesion, int? taIde)>(new CommandDefinition(
+            "SELECT canal_id, estado_id, sesion_caja_id, transaccion_abonado_ide FROM public.adm_pago WHERE pago_id = @id",
+            new { id = data.PagoId }, Transaction));
+        Assert.Equal(CanalCobro.Caja, doc.canal);
+        Assert.Equal(EstadoPago.Aplicado, doc.estado);
+        Assert.NotNull(doc.sesion);
+        Assert.Null(doc.taIde);
+        var espejos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM public.transaccion_abonado WHERE company_id = @id AND tipotransaccion = '202'",
+            new { id = Empresa }, Transaction));
+        Assert.Equal(0L, espejos);
 
         // Saldo del cliente en cero (cargo 100 − pago 100)
         Assert.Equal(0m, data.NuevoSaldoCliente);
@@ -278,7 +279,7 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(2, data.Aplicaciones.Count);
         Assert.All(data.Aplicaciones, a => Assert.Equal("C", a.EstadoFactura));
 
-        // Un solo pago y un solo espejo para todo el cobro
+        // Un solo documento de pago para todo el cobro
         var pagos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
             "SELECT count(*) FROM public.adm_pago WHERE company_id = @id", new { id = Empresa }, Transaction));
         Assert.Equal(1L, pagos);
@@ -306,16 +307,17 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         });
         Assert.True(reverso.Success, reverso.Message);
 
-        // Nunca DELETE: la fila espejo sigue existiendo, marcada anulada
-        var filasDespues = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
-            "SELECT count(*) FROM public.transaccion_abonado WHERE company_id = @id", new { id = Empresa }, Transaction));
-        Assert.Equal(filasAntes, filasDespues);
+        // F7 H2c: nunca DELETE — el documento del motor queda ANULADO y sus
+        // aplicaciones se conservan como auditoría (ya no hay espejo legacy).
+        var estadoPago = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
+            "SELECT estado_id FROM public.adm_pago WHERE pago_id = @id",
+            new { id = datos.PagoId }, Transaction));
+        Assert.Equal(EstadoPago.Anulado, estadoPago);
 
-        var espejo = await Connection.QuerySingleAsync<(string estado, short? estadoPago)>(new CommandDefinition(
-            "SELECT estado, estado_pago_id FROM public.transaccion_abonado WHERE ide = @ide",
-            new { ide = datos.TransaccionId }, Transaction));
-        Assert.Equal("A", espejo.estado);           // convención caja: A = anulado
-        Assert.Equal((short)3, espejo.estadoPago);  // ANULADO (F1)
+        var aplicaciones = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM public.adm_pago_aplicacion WHERE pago_id = @id",
+            new { id = datos.PagoId }, Transaction));
+        Assert.True(aplicaciones > 0);
 
         // Restitución exacta por línea → factura vuelve a Activa con saldo completo
         var factura = await Connection.QuerySingleAsync<(string estado, decimal saldo)>(new CommandDefinition(@"
@@ -394,8 +396,18 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         var numRecibo = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(
             "SELECT numrecibo FROM public.factura WHERE id = @facturaId", new { facturaId }, Transaction));
 
-        // Recibo pendiente "para banco": NO rebaja la factura.
-        var pendienteId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
+        // Papel pendiente REAL (tabla propia de H1). NO rebaja la factura.
+        var pendienteId = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            INSERT INTO public.adm_recibo_banco_pendiente
+                (company_id, cliente_clave, factura_id, numrecibo, monto, estado_id, generado_por)
+            VALUES (@companyId, @clave, @facturaId, @recibo, 50, 2, 'test')
+            RETURNING recibo_pendiente_id",
+            new { companyId = Empresa, clave = Clave, facturaId, recibo = numRecibo }, Transaction));
+
+        // Y una reliquia 202/'P' en el histórico CONGELADO (pre-corte), que la
+        // conciliación de H4 ya no debe tocar.
+        var reliquiaIde = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';
             INSERT INTO public.transaccion_abonado
                 (company_id, cliente_clave, recibo, tipotransaccion, estado, creditos, debitos, descripcion)
             VALUES (@companyId, @clave, @recibo, '202', 'P', 50, 0, 'Recibo pendiente de pago')
@@ -411,12 +423,19 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         var cobro = await _motor!.RegistrarCobroAsync(Cobro(facturaId, 100m));
         Assert.True(cobro.Success, cobro.Message);
 
-        var pendiente = await Connection.QuerySingleAsync<(string estado, short? estadoPago, string desc)>(new CommandDefinition(
-            "SELECT estado, estado_pago_id, descripcion FROM public.transaccion_abonado WHERE ide = @id",
+        // La conciliación cubre el papel en SU tabla...
+        var (estadoPapel, motivo) = await Connection.QuerySingleAsync<(short, string)>(new CommandDefinition(
+            "SELECT estado_id, motivo_anulacion FROM public.adm_recibo_banco_pendiente WHERE recibo_pendiente_id = @id",
             new { id = pendienteId }, Transaction));
-        Assert.Equal("A", pendiente.estado);            // anulado automáticamente
-        Assert.Equal((short)3, pendiente.estadoPago);   // ANULADO
-        Assert.StartsWith("CUBIERTO:", pendiente.desc); // conciliado como cubierto
+        Assert.Equal((short)3, estadoPapel);
+        Assert.StartsWith("CUBIERTO:", motivo);
+
+        // ...y el histórico congelado queda EXACTAMENTE como estaba (F7 H4).
+        var reliquia = await Connection.QuerySingleAsync<(string estado, string desc)>(new CommandDefinition(
+            "SELECT estado, descripcion FROM public.transaccion_abonado WHERE ide = @id",
+            new { id = reliquiaIde }, Transaction));
+        Assert.Equal("P", reliquia.estado);
+        Assert.DoesNotContain("CUBIERTO", reliquia.desc);
     }
 
     // ------------------------------------------------------------------ stubs

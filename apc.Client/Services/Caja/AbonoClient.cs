@@ -30,12 +30,6 @@ public class AbonoClient
         return await response.ReadFromJsonAsyncWithAuthCheck<ResponseModelDto>();
     }
 
-    public async Task<ResponseModelDto?> ReversarAbonoAsync(ReversoAbonoRequestDto request)
-    {
-        var response = await _http.PostAsJsonAsyncWithAuthCheck("api/abono/reversar", request);
-        return await response.ReadFromJsonAsyncWithAuthCheck<ResponseModelDto>();
-    }
-
     public Task<IReadOnlyList<ArqueoDto>?> ListarAbonosDelDiaAsync(string? usuario = null, DateTime? fecha = null)
     {
         var url = "api/abono/arqueo?";

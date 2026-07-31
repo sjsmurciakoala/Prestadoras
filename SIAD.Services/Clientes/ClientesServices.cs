@@ -552,25 +552,22 @@ public class ClientesService : IClientesService
                 new { CompanyId = companyId, Clave = clave },
                 cancellationToken: ct)) ?? 0m;
 
-        // Ultimo pago: los migrados de SIMAFI llevan tipotransaccion 'PAGO...'; los de
-        // caja/posteos/WS llevan '201'/'202' y solo son vigentes con estado 'C' (con
-        // estado 'A' estan reversados — convencion invertida de caja).
-        var ultimoPago = await _context.transaccion_abonados
+        // F7 H5: el último pago sale del MODELO NUEVO. adm_pago tiene toda la
+        // historia (la migración cargó los 2.8M de pagos de SIMAFI) y los
+        // cobros del motor entran ahí — el histórico congelado ya no se
+        // consulta para esto. Solo APLICADOS (anulados/reversados fuera).
+        var ultimoPago = await _context.adm_pagos
             .AsNoTracking()
-            .Where(t => t.company_id == companyId
-                        && t.cliente_clave == clave
-                        && t.tipotransaccion != null
-                        && (EF.Functions.ILike(t.tipotransaccion, "%PAGO%")
-                            || ((t.tipotransaccion == "201" || t.tipotransaccion == "202")
-                                && t.estado == "C")))
-            .OrderByDescending(t => t.ide)
-            .Select(t => new { t.fecha_docu, t.creditos, t.debitos })
+            .Where(p => p.company_id == companyId
+                        && p.cliente_clave == clave
+                        && p.estado_id == SIAD.Core.Constants.EstadoPago.Aplicado)
+            .OrderByDescending(p => p.fecha)
+            .ThenByDescending(p => p.pago_id)
+            .Select(p => new { p.fecha, p.monto_total })
             .FirstOrDefaultAsync(ct);
 
-        DateTime? fechaPago = ultimoPago?.fecha_docu.HasValue == true
-            ? ultimoPago.fecha_docu.Value.ToDateTime(TimeOnly.MinValue)
-            : null;
-        decimal? montoPago = ultimoPago?.creditos ?? ultimoPago?.debitos ?? 0m;
+        DateTime? fechaPago = ultimoPago?.fecha.ToDateTime(TimeOnly.MinValue);
+        decimal? montoPago = ultimoPago?.monto_total ?? 0m;
 
         var consumos = await _context.historicomedicions
             .AsNoTracking()
@@ -654,18 +651,8 @@ servicios AS (
     HAVING c.es_recurrente OR COUNT(l.tiposervicio) > 0
 ),
 otros AS (
-    -- Residuo migrado sin documento (muere en F7).
-    SELECT 'SALDO_ANTERIOR'        AS categoria,
-           NULL::varchar           AS codigo,
-           NULL::varchar           AS servicio,
-           SUM(COALESCE(ta.debitos,0) - COALESCE(ta.creditos,0)) AS saldo,
-           9000                    AS orden
-    FROM public.vw_transaccion_abonado_vigente ta
-    WHERE ta.company_id      = @CompanyId
-      AND ta.cliente_clave   = @Clave
-      AND ta.tipotransaccion IN ('SALDO_ANTERIOR','SALDO_INICIAL')
-    HAVING COUNT(*) > 0
-    UNION ALL
+    -- F7 H4/H5: el residuo migrado murió (la cartera vive como documentos) y
+    -- la vista de vigencia se retiró — la rama SALDO_ANTERIOR se eliminó.
     -- Lineas pendientes fuera del catalogo (misc y similares).
     SELECT 'AJUSTES', NULL, NULL, SUM(l.saldo), 9000
     FROM lineas l
@@ -683,6 +670,17 @@ otros AS (
       AND h.estado_id = 1
       AND dt.estado_id IN (1, 4)
     HAVING SUM(dt.saldo_cuota) <> 0
+    UNION ALL
+    -- F7 H2b: notas de débito vivas (documentos cobrables).
+    SELECT 'NOTAS_DEBITO', NULL, NULL, SUM(nd.saldo_pendiente), 9200
+    FROM public.adm_nota_debito nd
+    JOIN public.cliente_maestro cm ON cm.maestro_cliente_id = nd.cliente_id
+                                  AND cm.company_id = nd.company_id
+    WHERE nd.company_id = @CompanyId
+      AND cm.maestro_cliente_clave = @Clave
+      AND nd.estado_id <> 3
+      AND nd.saldo_pendiente > 0
+    HAVING SUM(nd.saldo_pendiente) <> 0
 )
 SELECT categoria, codigo, servicio, saldo, orden
 FROM (SELECT * FROM servicios UNION ALL SELECT * FROM otros) t
@@ -719,6 +717,14 @@ ORDER BY orden, servicio";
         {
             items.Add(new DesgloseAbonoDistribuidor.ItemDesglose(
                 "CONVENIO", "Convenio de pago", convenio.Saldo, 9100));
+        }
+
+        // F7: notas de débito vivas — parte del saldo del cliente.
+        var notasDebito = desgloseRows.FirstOrDefault(r => r.Categoria == "NOTAS_DEBITO");
+        if (notasDebito is not null)
+        {
+            items.Add(new DesgloseAbonoDistribuidor.ItemDesglose(
+                "NOTAS_DEBITO", "Notas de débito", notasDebito.Saldo, 9200));
         }
 
         var pagos = desgloseRows.FirstOrDefault(r => r.Categoria == "PAGOS")?.Saldo ?? 0m;

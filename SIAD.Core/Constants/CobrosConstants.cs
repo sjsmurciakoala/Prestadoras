@@ -22,4 +22,12 @@ public static class DocumentoCobroTipo
 public static class TipoDocumentoSecuencia
 {
     public const string ReciboPago = "RECIBO_PAGO";
+
+    // F7 H5: los correlativos de cobranza migran a la serie atómica (el top-1
+    // por string tenía carrera y dependía del ancho D6). Series sin prefijo,
+    // padding 6, sembradas desde el MAX vigente por empresa.
+    public const string PlanPago     = "PLAN_PAGO";
+    public const string NotaCobro    = "NOTA_COBRO";
+    public const string CartaCobro   = "CARTA_COBRO";
+    public const string CorteMasivo  = "CORTE_MASIVO";
 }

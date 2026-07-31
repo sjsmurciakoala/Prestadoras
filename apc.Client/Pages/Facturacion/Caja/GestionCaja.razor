@@ -5,7 +5,6 @@
 @using SIAD.Core.DTOs.CaptacionPagos
 @using SIAD.Core.DTOs.Cobros
 @using apc.Client.Services.Caja
-@using apc.Client.Services.CaptacionPagos
 @using apc.Client.Services.Cobros
 @using apc.Client.Services.Tenant
 @using apc.Client.Shared
@@ -13,7 +12,6 @@
 @inject CajaClient CajaHttp
 @inject AbonoClient AbonoHttp
 @inject CobrosClient CobrosHttp
-@inject CaptacionPagosClient CaptacionHttp
 @inject IToastNotificationService ToastService
 @inject AuthenticationStateProvider AuthStateProvider
 @inject NavigationManager Nav
@@ -110,10 +108,36 @@
                     else
                     {
                         <div class="row g-3 mb-3">
-                            <div class="col-md-5">
+                            <div class="col-md-4">
                                 <label class="form-label small text-muted fw-bold">CLIENTE</label>
                                 <ClienteLookup Value="@_clienteClave" ValueChanged="OnClienteSeleccionado"
                                                NullText="Buscar cliente por clave o nombre..." />
+                            </div>
+                            @* Entrada por documento: el cajero tiene el recibo impreso en la mano
+                               y teclea el número (era la pestaña "Lectoras" del módulo viejo).
+                               DxTextBox no tiene evento de tecla Enter (solo TextChanged/TextChanging,
+                               ver docs DX); el Enter se captura con el submit del form y el texto se
+                               mantiene al día con BindValueMode.OnInput. *@
+                            <div class="col-md-3">
+                                <label class="form-label small text-muted fw-bold">FACTURA / RECIBO</label>
+                                <form @onsubmit="OnBuscarDocumento" @onsubmit:preventDefault>
+                                    <div class="d-flex gap-1">
+                                        <div class="flex-grow-1">
+                                            <DxTextBox @bind-Text="_busquedaDocumento"
+                                                       BindValueMode="BindValueMode.OnInput"
+                                                       NullText="N° de factura o recibo..."
+                                                       Enabled="@(!_buscandoDocumento)"
+                                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                                        </div>
+                                        <DxButton IconCssClass="bi bi-search" SubmitFormOnClick="true"
+                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                  Enabled="@(!_buscandoDocumento)" />
+                                    </div>
+                                </form>
+                            </div>
+                            <div class="col-md-2">
+                                <label class="form-label small text-muted fw-bold">FECHA DE PAGO</label>
+                                <DxDateEdit @bind-Date="_fechaPago" NullText="Hoy" />
                             </div>
                             <div class="col-md-3">
                                 <label class="form-label small text-muted fw-bold">FORMA DE PAGO</label>
@@ -133,7 +157,10 @@
                         </div>
 
                         <div class="modern-card position-relative">
-                            <DxLoadingPanel Visible="_cargandoDocs" IsContentBlocked="true" Text="Cargando documentos..." />
+                            @* También cubre la búsqueda por N° de documento, con su propio texto,
+                               para que el cajero vea qué está pasando y no un campo "pegado". *@
+                            @* La señal de carga vive en el overlay modal de página (abajo),
+                               común a búsqueda, carga de documentos, cobro y cobros del día. *@
                             <div class="grid-wrapper">
                                 <DxGrid Data="@_documentos" KeyFieldName="DocKey" PageSize="10"
                                         ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
@@ -191,7 +218,7 @@
                             <div class="modern-card mt-3">
                                 <div class="p-2">
                                     <h6 class="fw-bold mb-2"><i class="bi bi-bank me-1"></i>Recibos pendientes para banco</h6>
-                                    <DxGrid Data="@_pendientes" KeyFieldName="TransaccionId" PageSize="5"
+                                    <DxGrid Data="@_pendientes" KeyFieldName="PendienteId" PageSize="5"
                                             ShowGroupPanel="false" CssClass="grid-solicitudes">
                                         <Columns>
                                             <DxGridDataColumn FieldName="NumFactura" Caption="Factura" />
@@ -209,7 +236,7 @@
                                                         <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
                                                                   RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
                                                                   title="Reimprimir"
-                                                                  Click="@(() => AbrirRecibo(p.TransaccionId))" />
+                                                                  Click="@(() => AbrirReciboPendiente(p.PendienteId))" />
                                                         <DxButton IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
                                                                   RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
                                                                   title="Anular recibo pendiente"
@@ -230,7 +257,8 @@
                             </div>
                             <div class="d-flex align-items-center gap-3">
                                 <span class="fs-5">Total a cobrar: <strong class="text-success">@TotalACobrar.ToString("C", Culture)</strong></span>
-                                <DxButton Text="Cobrar" RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Large"
+                                <DxButton Text="@(_cobrando ? "Registrando..." : "Cobrar")"
+                                          RenderStyle="ButtonRenderStyle.Success" SizeMode="SizeMode.Large"
                                           IconCssClass="bi bi-cash-coin" Click="OnCobrar"
                                           Enabled="@(TotalACobrar > 0 && !_cobrando)" />
                             </div>
@@ -251,6 +279,13 @@
                                     <div class="d-flex flex-wrap gap-2 align-items-center w-100 p-2">
                                         <DxCheckBox Checked="@_soloMiCaja" CheckedChanged="@((bool v) => CambiarFiltroCobros(v))"
                                                     Enabled="@(_miCaja is not null)">Solo mi caja (@(_miCaja?.Nombre ?? "sin asignar"))</DxCheckBox>
+                                        @* Consulta rápida de días anteriores. Lista por fecha de REGISTRO
+                                           (creado_en): lo tecleado ese día, aunque su fecha valor sea otra. *@
+                                        <div class="d-flex align-items-center gap-1">
+                                            <span class="text-muted small">Día:</span>
+                                            <DxDateEdit Date="@_fechaCobrosDia"
+                                                        DateChanged="@((DateTime v) => CambiarFechaCobros(v))" />
+                                        </div>
                                         <DxButton Text="Actualizar" IconCssClass="bi bi-arrow-clockwise"
                                                   RenderStyle="ButtonRenderStyle.Secondary" Click="CargarCobrosDelDiaAsync" />
                                         <div class="ms-auto text-muted small">
@@ -277,13 +312,11 @@
                                         <CellDisplayTemplate>
                                             @{ var c = (CobroDelDiaDto)context.DataItem; }
                                             <div class="d-flex gap-1 justify-content-center">
-                                                @if (c.TransaccionId is not null)
-                                                {
-                                                    <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
-                                                              RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
-                                                              title="Reimprimir recibo"
-                                                              Click="@(() => AbrirRecibo(c.TransaccionId.Value))" />
-                                                }
+                                                @* Siempre disponible: el recibo se imprime desde adm_pago (F7 2c-1). *@
+                                                <DxButton IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline" SizeMode="SizeMode.Small"
+                                                          title="Reimprimir recibo"
+                                                          Click="@(() => AbrirRecibo(c.PagoId))" />
                                                 @if (c.EstadoId == EstadoPago.Aplicado)
                                                 {
                                                     <DxButton IconCssClass="bi bi-arrow-counterclockwise" RenderStyle="ButtonRenderStyle.Danger"
@@ -380,6 +413,18 @@
         </DxTabs>
     }
 </div>
+
+@* ---- Overlay modal de página completa para TODA operación de la caja ----
+     Patrón PositionTarget="body" de la doc de DxLoadingPanel: panel centrado
+     sobre toda la página, no sobre el área del grid. Único punto de señal:
+     cobro, búsqueda por documento, carga de documentos y cobros del día. *@
+<DxLoadingPanel Visible="@(_cobrando || _buscandoDocumento || _cargandoDocs || _cargandoCobrosDia)"
+                PositionTarget="body"
+                ApplyBackgroundShading="true"
+                Text="@(_cobrando ? "Registrando el cobro, un momento..."
+                      : _buscandoDocumento ? "Buscando documento..."
+                      : _cargandoDocs ? "Cargando documentos del cliente..."
+                      : "Cargando cobros del día...")" />
 
 @* ---- Popup confirmar apertura de caja ---- *@
 <DxPopup @bind-Visible="_aperturaVisible" HeaderText="Abrir caja" Width="420px" ShowCloseButton="true">
@@ -545,12 +590,19 @@
 
     private string? _clienteClave;
     private List<DocumentoCobroRow> _documentos = [];
+    // Entrada por documento (flujo "Lectoras") y fecha de cobro retroactiva:
+    // el motor ya soporta ambas (CobroCrearDto.FechaPago); faltaba exponerlas.
+    private string _busquedaDocumento = string.Empty;
+    private bool _buscandoDocumento;
+    private DateTime? _fechaPago = DateTime.Today;
     private string _formaPago = "EFECTIVO";
     private long? _bancoCuentaId;
     private IReadOnlyList<BancoDto> _bancos = [];
 
     private IReadOnlyList<CobroDelDiaDto> _cobrosDelDia = [];
     private bool _soloMiCaja = true;
+    private DateTime _fechaCobrosDia = DateTime.Today;
+    private bool _cargandoCobrosDia;
 
     private bool _reversoVisible;
     private CobroDelDiaDto? _reversoCobro;
@@ -570,9 +622,10 @@
     private sealed class DocumentoCobroRow
     {
         public int FacturaId { get; init; }
-        // F6: la caja también cobra cuotas de plan (DocumentoCobroTipo.CuotaPlan).
+        // F6/F7: la caja también cobra cuotas de plan y notas de débito.
         public short DocumentoTipo { get; init; } = DocumentoCobroTipo.Factura;
         public int? PlanCuotaId { get; init; }
+        public long? NotaDebitoId { get; init; }
         public string NumFactura { get; init; } = string.Empty;
         public int NumRecibo { get; init; }
         public DateTime FechaEmision { get; init; }
@@ -581,10 +634,13 @@
         public bool Seleccionado { get; set; }
         public decimal MontoCobrar { get; set; }
 
-        // Clave única del grid: facturas y cuotas comparten la lista.
-        public string DocKey => DocumentoTipo == DocumentoCobroTipo.CuotaPlan
-            ? $"C{PlanCuotaId}"
-            : $"F{FacturaId}";
+        // Clave única del grid: facturas, cuotas y ND comparten la lista.
+        public string DocKey => DocumentoTipo switch
+        {
+            DocumentoCobroTipo.CuotaPlan => $"C{PlanCuotaId}",
+            DocumentoCobroTipo.NotaDebito => $"D{NotaDebitoId}",
+            _ => $"F{FacturaId}"
+        };
     }
 
     protected override async Task OnInitializedAsync()
@@ -593,7 +649,7 @@
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         _usuario = authState.User.Identity?.Name ?? "sistema";
 
-        _bancos = await CaptacionHttp.GetBancosAsync();
+        _bancos = await CobrosHttp.GetBancosAsync();
         await CargarEstadoAsync();
         await CargarCobrosDelDiaAsync();
         _cargando = false;
@@ -653,6 +709,93 @@
 
     // ---------------- Cobro ----------------
 
+    /// <summary>
+    /// Búsqueda por N° de factura o recibo: carga al cliente dueño del documento
+    /// y deja ese documento preseleccionado con su saldo. Reemplaza la pestaña
+    /// "Lectoras" del módulo viejo, donde se cobraba con el recibo en la mano.
+    /// </summary>
+    private async Task OnBuscarDocumento()
+    {
+        var term = _busquedaDocumento?.Trim();
+        if (string.IsNullOrWhiteSpace(term)) return;
+
+        // El panel de carga aparece solo si la operación supera 200 ms (patrón
+        // anti-parpadeo de la doc de DxLoadingPanel): la búsqueda indexada
+        // resuelve en milisegundos y no amerita flash; una lenta (disco frío)
+        // sí muestra señal en vez de quedarse "pegada".
+        var busqueda = BuscarYSeleccionarDocumentoAsync(term);
+        var umbral = Task.Delay(200);
+        if (await Task.WhenAny(busqueda, umbral) == umbral && !busqueda.IsCompleted)
+        {
+            _buscandoDocumento = true;
+            StateHasChanged();
+        }
+        try
+        {
+            await busqueda;
+        }
+        finally
+        {
+            _buscandoDocumento = false;
+        }
+    }
+
+    private async Task BuscarYSeleccionarDocumentoAsync(string term)
+    {
+        {
+            var encontradas = await AbonoHttp.BuscarFacturasConSaldoAsync(term) ?? [];
+            if (encontradas.Count == 0)
+            {
+                Notificar(false, $"No se encontró ninguna factura o recibo con saldo para «{term}».");
+                return;
+            }
+
+            // Coincidencia exacta por número de factura o de recibo; si no la hay
+            // y el término trajo un solo resultado, se usa ese.
+            var doc = encontradas.FirstOrDefault(f =>
+                          string.Equals(f.NumFactura?.Trim(), term, StringComparison.OrdinalIgnoreCase)
+                          || f.NumRecibo.ToString() == term)
+                      ?? (encontradas.Count == 1 ? encontradas[0] : null);
+
+            if (doc is null)
+            {
+                // Si todo lo hallado pertenece a UN MISMO cliente (p. ej. se
+                // tecleó la clave del cliente en este campo), se carga ese
+                // cliente con todos sus documentos, sin preseleccionar ninguno.
+                var claves = encontradas.Select(f => f.ClienteClave).Distinct().ToList();
+                if (claves.Count == 1)
+                {
+                    await OnClienteSeleccionado(claves[0]);
+                    _busquedaDocumento = string.Empty;
+                    return;
+                }
+
+                Notificar(false, $"«{term}» coincide con {encontradas.Count} documentos de {claves.Count} clientes. Precise el número.");
+                return;
+            }
+
+            await OnClienteSeleccionado(doc.ClienteClave);
+
+            var fila = _documentos.FirstOrDefault(d =>
+                d.DocumentoTipo == doc.DocumentoTipo
+                && d.FacturaId == doc.FacturaId
+                && d.PlanCuotaId == doc.PlanCuotaId
+                && d.NotaDebitoId == doc.NotaDebitoId);
+
+            if (fila is null)
+            {
+                Notificar(false, "El documento ya no tiene saldo pendiente.");
+                return;
+            }
+
+            // Solo el documento buscado queda marcado.
+            foreach (var d in _documentos) d.Seleccionado = false;
+            fila.Seleccionado = true;
+            fila.MontoCobrar = fila.SaldoPendiente;
+            _busquedaDocumento = string.Empty;
+        }
+    }
+
     private async Task OnClienteSeleccionado(string? clave)
     {
         _clienteClave = clave;
@@ -660,8 +803,26 @@
         _pendientes = [];
         if (string.IsNullOrWhiteSpace(clave)) return;
 
-        _cargandoDocs = true;
+        // Mismo umbral anti-parpadeo de 200 ms que la búsqueda por documento.
+        var carga = CargarDocumentosClienteAsync(clave);
+        var umbral = Task.Delay(200);
+        if (await Task.WhenAny(carga, umbral) == umbral && !carga.IsCompleted)
+        {
+            _cargandoDocs = true;
+            StateHasChanged();
+        }
         try
+        {
+            await carga;
+        }
+        finally
+        {
+            _cargandoDocs = false;
+        }
+    }
+
+    private async Task CargarDocumentosClienteAsync(string clave)
+    {
         {
             var facturas = await AbonoHttp.ListarFacturasPendientesPorClienteAsync(clave) ?? [];
             _documentos = facturas
@@ -671,6 +832,7 @@
                     FacturaId = f.FacturaId,
                     DocumentoTipo = f.DocumentoTipo,
                     PlanCuotaId = f.PlanCuotaId,
+                    NotaDebitoId = f.NotaDebitoId,
                     NumFactura = f.NumFactura,
                     NumRecibo = f.NumRecibo,
                     FechaEmision = f.FechaEmision,
@@ -681,10 +843,6 @@
                 .ToList();
 
             _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(clave) ?? [];
-        }
-        finally
-        {
-            _cargandoDocs = false;
         }
     }
 
@@ -730,8 +888,8 @@
         {
             _reciboBancoVisible = false;
             var datos = Deserializar<GenerarReciboResponseDto>(result.Data);
-            if (datos?.TransaccionId is > 0)
-                await AbrirRecibo(datos.TransaccionId);
+            if (datos?.PendienteId is > 0)
+                await AbrirReciboPendiente(datos.PendienteId);
             _pendientes = await AbonoHttp.ListarRecibosPendientesPorClienteAsync(_clienteClave) ?? [];
         }
     }
@@ -751,7 +909,7 @@
             Canal = CanalCobro.Caja,
             ClienteClave = _clienteClave!,
             FormaPago = "EFECTIVO",
-            ReciboPendienteId = pendiente.TransaccionId,
+            ReciboPendienteId = pendiente.PendienteId,
             Aplicaciones =
             [
                 new CobroAplicacionDto { DocumentoTipo = DocumentoCobroTipo.Factura, FacturaId = doc.FacturaId, Monto = monto }
@@ -762,8 +920,8 @@
         {
             var datos = Deserializar<CobroResultadoDto>(result.Data);
             Notificar(true, $"Recibo cobrado. Folio {datos?.NumeroRecibo}.");
-            if (datos?.TransaccionId is > 0)
-                await AbrirRecibo(datos.TransaccionId);
+            if (datos?.PagoId is > 0)
+                await AbrirRecibo(datos.PagoId);
             await OnClienteSeleccionado(_clienteClave);
             await CargarCobrosDelDiaAsync();
         }
@@ -785,7 +943,7 @@
         if (_anularPendienteRecibo is null) return;
         var result = await AbonoHttp.AnularReciboPendienteAsync(new AnularReciboPendienteDto
         {
-            TransaccionId = _anularPendienteRecibo.TransaccionId,
+            PendienteId = _anularPendienteRecibo.PendienteId,
             Usuario = _usuario,
             Motivo = _anularPendienteMotivo.Trim()
         });
@@ -829,12 +987,16 @@
                 ClienteClave = _clienteClave!,
                 FormaPago = _formaPago,
                 BancoCuentaId = _formaPago == "BANCO" ? _bancoCuentaId : null,
+                // Permite registrar la recaudación de días anteriores; el motor
+                // usa hoy solo si viene nula.
+                FechaPago = _fechaPago,
                 Aplicaciones = seleccionados
                     .Select(d => new CobroAplicacionDto
                     {
                         DocumentoTipo = d.DocumentoTipo,
                         FacturaId = d.DocumentoTipo == DocumentoCobroTipo.Factura ? d.FacturaId : null,
                         PlanCuotaId = d.PlanCuotaId,
+                        NotaDebitoId = d.NotaDebitoId,
                         Monto = d.MontoCobrar
                     })
                     .ToList()
@@ -848,8 +1010,8 @@
                     new System.Text.Json.JsonSerializerOptions { PropertyNameCaseInsensitive = true });
 
                 Notificar(true, $"Cobro registrado. Recibo {datos?.NumeroRecibo}.");
-                if (datos?.TransaccionId is > 0)
-                    await AbrirRecibo(datos.TransaccionId);
+                if (datos?.PagoId is > 0)
+                    await AbrirRecibo(datos.PagoId);
 
                 await OnClienteSeleccionado(_clienteClave);
                 await CargarCobrosDelDiaAsync();
@@ -870,11 +1032,39 @@
 
     private async Task CargarCobrosDelDiaAsync()
     {
+        // Mismo umbral anti-parpadeo de 200 ms que las demás cargas de la caja.
+        var carga = CargarCobrosDelDiaInternoAsync();
+        var umbral = Task.Delay(200);
+        if (await Task.WhenAny(carga, umbral) == umbral && !carga.IsCompleted)
+        {
+            _cargandoCobrosDia = true;
+            StateHasChanged();
+        }
+        try
+        {
+            await carga;
+        }
+        finally
+        {
+            _cargandoCobrosDia = false;
+        }
+    }
+
+    private async Task CargarCobrosDelDiaInternoAsync()
+    {
         // El día de la CAJA (no del cajero): con "Solo mi caja" se ven todos los
         // cobros de la caja asignada sin importar quién los registró; sin el
-        // filtro, todas las cajas de la empresa.
+        // filtro, todas las cajas de la empresa. El día es seleccionable para
+        // consultar rápido lo registrado en fechas anteriores.
         _cobrosDelDia = await CobrosHttp.DelDiaAsync(
+            fecha: _fechaCobrosDia,
             cajaId: _soloMiCaja ? _miCaja?.CajaId : null) ?? [];
+    }
+
+    private async Task CambiarFechaCobros(DateTime valor)
+    {
+        _fechaCobrosDia = valor.Date;
+        await CargarCobrosDelDiaAsync();
     }
 
     private async Task CambiarFiltroCobros(bool valor)
@@ -908,8 +1098,13 @@
         }
     }
 
-    private async Task AbrirRecibo(int transaccionId)
-        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{transaccionId}", "_blank");
+    // F7 H2c: el recibo se imprime desde el documento del motor (adm_pago);
+    // el papel "para banco" aún no cobrado tiene su propio endpoint.
+    private async Task AbrirRecibo(long pagoId)
+        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pdf/{pagoId}", "_blank");
+
+    private async Task AbrirReciboPendiente(long pendienteId)
+        => await JS.InvokeVoidAsync("open", $"/api/abono/recibo-pendiente-pdf/{pendienteId}", "_blank");
 
     private void Notificar(bool ok, string mensaje)
         => ToastService.ShowToast(new ToastOptions

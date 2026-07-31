@@ -8,7 +8,6 @@ using apc.Client.Services.Proveedores;
 using apc.Client.Services.Solicitudes;
 using apc.Client.Services.Medidores;
 using apc.Services;
-using apc.Client.Services.CaptacionPagos;
 using apc.Client.Services.Facturacion;
 using apc.Client.Services.Mantenimientos;
 using apc.Client.Services.Contabilidad;
@@ -49,7 +48,6 @@ namespace apc.Client
             services.AddScoped<OrdenesClient>();
             services.AddScoped<RutasClient>();
             services.AddScoped<apc.Client.Services.Libretas.LibretasClient>();
-            services.AddScoped<CaptacionPagosClient>();
             services.AddScoped<CajaClient>();
             services.AddScoped<AbonoClient>();
             services.AddScoped<apc.Client.Services.Cobros.CobrosClient>();

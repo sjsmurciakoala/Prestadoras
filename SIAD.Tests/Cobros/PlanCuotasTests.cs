@@ -118,6 +118,14 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
             INSERT INTO public.cliente_maestro (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado)
             VALUES (@id, @clave, '0000000000000', 'CLIENTE PLAN F6', true)",
             new { id = Empresa, clave = Clave }, Transaction));
+
+        // F7 H5: el correlativo del plan sale de la serie atómica.
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.adm_documento_secuencia
+                (company_id, tipo_documento, canal_id, prefijo, longitud_padding, valor_actual, updated_by)
+            VALUES (@id, 'PLAN_PAGO', 0, '', 6, 0, 'test')
+            ON CONFLICT (company_id, tipo_documento, canal_id) DO NOTHING",
+            new { id = Empresa }, Transaction));
     }
 
     /// <summary>Factura activa con dos líneas y su cargo espejo legacy (mismo total).</summary>
@@ -138,6 +146,7 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
             new { companyId = Empresa, facturaId, m1 = linea1, m2 = linea2 }, Transaction));
 
         await Connection.ExecuteAsync(new CommandDefinition(@"
+            SET LOCAL siad.permitir_escritura_legacy = 'on';   -- H4: tabla congelada
             INSERT INTO public.transaccion_abonado (company_id, cliente_clave, tipotransaccion, estado, debitos, creditos)
             VALUES (@companyId, @clave, 'AGUA_POTABLE', 'A', @total, 0)",
             new { companyId = Empresa, clave = Clave, total = linea1 + linea2 }, Transaction));
@@ -152,9 +161,13 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
 
     private Task<decimal?> SaldoLegacyAsync() =>
         Connection.ExecuteScalarAsync<decimal?>(new CommandDefinition(@"
+            -- H5: la vista de vigencia se retiró; el filtro va inline sobre
+            -- el histórico congelado (misma semántica).
             SELECT COALESCE(SUM(COALESCE(debitos,0) - COALESCE(creditos,0)), 0)
-            FROM public.vw_transaccion_abonado_vigente
-            WHERE company_id = @companyId AND cliente_clave = @clave",
+            FROM public.transaccion_abonado
+            WHERE company_id = @companyId AND cliente_clave = @clave
+              AND COALESCE(estado,'') NOT IN ('N','R','P')
+              AND (estado_pago_id IS NULL OR estado_pago_id = 1)",
             new { companyId = Empresa, clave = Clave }, Transaction));
 
     private static CobranzaPlanGuardarDto Plan(decimal montoFinanciar, decimal prima, int meses) => new()
@@ -208,18 +221,16 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         Assert.All(cuotas, c => Assert.Equal((short)1, c.estadoId));
         Assert.Equal(110m, cuotas.Sum(c => c.saldo));
 
-        // Mueren los asientos PLAN/PLAN-CUOTA; solo queda la prima (deuda nueva).
-        var espejos = (await Connection.QueryAsync<string>(new CommandDefinition(@"
-            SELECT tipotransaccion FROM public.transaccion_abonado
+        // F7 H2c: el plan NO escribe nada en transaccion_abonado (ni traslado,
+        // ni cuotas, ni prima) — vive solo en sus tablas.
+        var espejos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(@"
+            SELECT count(*) FROM public.transaccion_abonado
             WHERE company_id = @C AND cliente_clave = @Clave AND tipotransaccion LIKE 'PLAN%'",
-            new { C = Empresa, Clave }, Transaction))).ToList();
-        Assert.Equal(["PLAN-PR"], espejos);
+            new { C = Empresa, Clave }, Transaction));
+        Assert.Equal(0L, espejos);
 
-        // Equivalencia dual-write: documentos (cuotas 110) == legacy (100 + prima).
-        var saldoDocs = await SaldoDocumentosAsync();
-        var saldoLegacy = await SaldoLegacyAsync();
-        Assert.Equal(110m, saldoDocs);
-        Assert.Equal(saldoLegacy, saldoDocs);
+        // El saldo por documentos son las 4 cuotas (3 x 100/3 + prima 10).
+        Assert.Equal(110m, await SaldoDocumentosAsync());
 
         // El plan queda ACTIVO.
         var estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
@@ -277,7 +288,6 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         });
         Assert.True(cobro1.Success, cobro1.Message);
         Assert.Equal(50m, await SaldoDocumentosAsync());
-        Assert.Equal(await SaldoLegacyAsync(), await SaldoDocumentosAsync());
 
         var estadoPlan = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(
             "SELECT estado_id FROM public.cln_plan_pago_hdr WHERE company_id = @C", new { C = Empresa }, Transaction));
@@ -336,7 +346,6 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal((short)1, estadoPlan);    // reabierto
 
         Assert.Equal(50m, await SaldoDocumentosAsync());
-        Assert.Equal(await SaldoLegacyAsync(), await SaldoDocumentosAsync());
     }
 
     [SkippableFact]

@@ -61,12 +61,15 @@ public class CobroService : ICobroService
         if (dto.Aplicaciones.Any(a => a.Monto <= 0))
             return ResponseModelDto.Fail("Todos los montos aplicados deben ser mayores a cero.");
         if (dto.Aplicaciones.Any(a => a.DocumentoTipo != DocumentoCobroTipo.Factura
-                                       && a.DocumentoTipo != DocumentoCobroTipo.CuotaPlan))
-            return ResponseModelDto.Fail("Tipo de documento no soportado (factura o cuota de plan).");
+                                       && a.DocumentoTipo != DocumentoCobroTipo.CuotaPlan
+                                       && a.DocumentoTipo != DocumentoCobroTipo.NotaDebito))
+            return ResponseModelDto.Fail("Tipo de documento no soportado (factura, cuota de plan o nota de débito).");
         if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.Factura && !a.FacturaId.HasValue))
             return ResponseModelDto.Fail("Cada aplicación a factura debe indicar la factura.");
         if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.CuotaPlan && !a.PlanCuotaId.HasValue))
             return ResponseModelDto.Fail("Cada aplicación a cuota debe indicar la cuota del plan.");
+        if (dto.Aplicaciones.Any(a => a.DocumentoTipo == DocumentoCobroTipo.NotaDebito && !a.NotaDebitoId.HasValue))
+            return ResponseModelDto.Fail("Cada aplicación a nota de débito debe indicar la nota.");
         if (dto.FormaPago != "EFECTIVO" && dto.FormaPago != "BANCO")
             return ResponseModelDto.Fail("Forma de pago inválida (EFECTIVO o BANCO).");
 
@@ -80,6 +83,11 @@ public class CobroService : ICobroService
             .Select(a => a.PlanCuotaId!.Value).ToList();
         if (cuotaIds.Distinct().Count() != cuotaIds.Count)
             return ResponseModelDto.Fail("Hay aplicaciones duplicadas a la misma cuota.");
+        var notaIds = dto.Aplicaciones
+            .Where(a => a.DocumentoTipo == DocumentoCobroTipo.NotaDebito)
+            .Select(a => a.NotaDebitoId!.Value).ToList();
+        if (notaIds.Distinct().Count() != notaIds.Count)
+            return ResponseModelDto.Fail("Hay aplicaciones duplicadas a la misma nota de débito.");
 
         var companyId = _currentCompanyService.GetCompanyId();
         var usuario = string.IsNullOrWhiteSpace(dto.Usuario) ? "system" : dto.Usuario.Trim();
@@ -117,8 +125,9 @@ public class CobroService : ICobroService
 
         if (dto.ReciboPendienteId.HasValue)
         {
-            var existePendiente = await _context.transaccion_abonados
-                .AnyAsync(t => t.company_id == companyId && t.ide == dto.ReciboPendienteId.Value && t.estado == "P", ct);
+            // F7: ReciboPendienteId es adm_recibo_banco_pendiente.recibo_pendiente_id.
+            var existePendiente = await _context.adm_recibo_banco_pendientes
+                .AnyAsync(r => r.recibo_pendiente_id == dto.ReciboPendienteId.Value && r.estado_id == 2, ct);
             if (!existePendiente)
                 return ResponseModelDto.Fail("El recibo pendiente indicado no existe o ya fue procesado.");
         }
@@ -150,6 +159,26 @@ public class CobroService : ICobroService
         var numReciboPrincipal = 0;
         foreach (var apl in dto.Aplicaciones)
         {
+            if (apl.DocumentoTipo == DocumentoCobroTipo.NotaDebito)
+            {
+                // F7 H2b: validación temprana de la ND (bloqueo definitivo en-tx).
+                var ndVista = await _context.adm_nota_debitos
+                    .AsNoTracking()
+                    .Where(n => n.nota_debito_id == apl.NotaDebitoId!.Value && n.company_id == companyId)
+                    .Select(n => new { n.nota_debito_id, n.estado_id, n.saldo_pendiente })
+                    .FirstOrDefaultAsync(ct);
+                if (ndVista is null)
+                    return ResponseModelDto.Fail($"No se encontró la nota de débito {apl.NotaDebitoId}.");
+                if (ndVista.estado_id == 3 || ndVista.saldo_pendiente <= 0)
+                    return ResponseModelDto.Fail("La nota de débito ya está cobrada o anulada.");
+                if (apl.Monto > ndVista.saldo_pendiente)
+                    return ResponseModelDto.Fail(
+                        $"El monto aplicado ({apl.Monto:N2}) excede el saldo de la nota ({ndVista.saldo_pendiente:N2}).");
+
+                planContable.AddRange(await DistribuirNdContableAsync(apl.NotaDebitoId!.Value, apl.Monto, ct));
+                continue;
+            }
+
             if (apl.DocumentoTipo == DocumentoCobroTipo.CuotaPlan)
             {
                 // Validación temprana de la cuota (el bloqueo definitivo es en-tx).
@@ -318,12 +347,40 @@ public class CobroService : ICobroService
             var aplicacionesContables = new List<(string? ServicioCodigo, decimal Monto)>();
             var lineasAplicadas = new List<(int FacturaId, int? DetalleId, decimal Monto)>();
             var cuotasAplicadas = new List<(int PlanCuotaId, decimal Monto)>();
+            var ndsAplicadas = new List<(long NotaDebitoId, decimal Monto)>();
             var planesTocados = new HashSet<int>();
             var resultados = new List<CobroAplicacionResultadoDto>();
             factura? facturaPrincipal = null;
 
             foreach (var apl in dto.Aplicaciones)
             {
+                if (apl.DocumentoTipo == DocumentoCobroTipo.NotaDebito)
+                {
+                    // F7 H2b: la ND es un documento — bloquear y rebajar su
+                    // saldo vivo. El estado FISCAL no cambia por cobros.
+                    var nd = await _context.adm_nota_debitos
+                        .FromSqlInterpolated($"SELECT * FROM public.adm_nota_debito WHERE company_id = {companyId} AND nota_debito_id = {apl.NotaDebitoId!.Value} FOR UPDATE")
+                        .FirstOrDefaultAsync(ct);
+                    if (nd is null)
+                        return ResponseModelDto.Fail($"No se encontró la nota de débito {apl.NotaDebitoId}.");
+                    if (nd.estado_id == 3 || apl.Monto > nd.saldo_pendiente)
+                        return ResponseModelDto.Fail("El saldo de la nota de débito cambió; vuelva a consultar e intente de nuevo.");
+
+                    nd.saldo_pendiente -= apl.Monto;
+                    ndsAplicadas.Add((nd.nota_debito_id, apl.Monto));
+
+                    resultados.Add(new CobroAplicacionResultadoDto
+                    {
+                        FacturaId = 0,
+                        NumFactura = $"ND {nd.numero_documento}",
+                        NumRecibo = 0,
+                        MontoAplicado = apl.Monto,
+                        SaldoRestante = nd.saldo_pendiente,
+                        EstadoFactura = nd.saldo_pendiente <= 0m ? "C" : "B"
+                    });
+                    continue;
+                }
+
                 if (apl.DocumentoTipo == DocumentoCobroTipo.CuotaPlan)
                 {
                     // F6: la cuota es un documento — bloquear, rebajar saldo y
@@ -427,6 +484,11 @@ public class CobroService : ICobroService
                 {
                     aplicacionesContables.AddRange(DistribuirCuotaContable(monto, porcentajes));
                 }
+                // F7 H2b: parte contable de las ND por sus propias líneas.
+                foreach (var (notaDebitoId, monto) in ndsAplicadas)
+                {
+                    aplicacionesContables.AddRange(await DistribuirNdContableAsync(notaDebitoId, monto, ct));
+                }
             }
 
             // F6: si el pago saldó la última cuota viva, el plan se COMPLETA.
@@ -455,68 +517,22 @@ public class CobroService : ICobroService
                 }
             }
 
-            // ---------- Fila espejo legacy (dual-write, muere en F7) ----------
+            // ---------- F7 H2c: SE ACABÓ EL ESPEJO LEGACY ----------
+            // El cobro vive solo como documento del motor (adm_pago +
+            // aplicaciones). transaccion_abonado ya no se escribe: queda
+            // congelada como archivo histórico (freeze en H4).
             var saldoActualCliente = await ObtenerSaldoClienteAsync(dto.ClienteClave, ct);
 
-            transaccion_abonado espejo;
+            // El papel "para banco" que se está cobrando debe seguir vivo
+            // (adm_recibo_banco_pendiente); se marca APLICADO más abajo, con el
+            // pago ya creado.
             if (dto.ReciboPendienteId.HasValue)
             {
-                var pendiente = await _context.transaccion_abonados
-                    .FirstOrDefaultAsync(t => t.ide == dto.ReciboPendienteId.Value && t.estado == "P", ct);
-                if (pendiente is null)
+                var pendienteVivo = await _context.adm_recibo_banco_pendientes
+                    .AsNoTracking()
+                    .AnyAsync(r => r.recibo_pendiente_id == dto.ReciboPendienteId.Value && r.estado_id == 2, ct);
+                if (!pendienteVivo)
                     return ResponseModelDto.Fail("El recibo pendiente ya fue procesado o no existe.");
-
-                pendiente.estado = "C";
-                pendiente.fecha_docu = fechaHoy;
-                pendiente.banco = banco;
-                pendiente.debitos = 0m;
-                pendiente.creditos = montoTotal;
-                pendiente.saldo = saldoActualCliente - montoTotal;
-                pendiente.saldo_detalle = montoTotal;
-                pendiente.descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}";
-                pendiente.usuario = usuario;
-                pendiente.caja_id = sesionCajaId;
-                pendiente.ciclo = clienteInfo?.ciclos_id?.ToString();
-                pendiente.ruta = clienteInfo?.maestro_cliente_indicativo_ruta;
-                pendiente.secuencia = clienteInfo?.maestro_cliente_secuencia;
-                pendiente.tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N";
-                espejo = pendiente;
-            }
-            else
-            {
-                espejo = new transaccion_abonado
-                {
-                    company_id = companyId,
-                    caja_id = sesionCajaId,
-                    cliente_clave = dto.ClienteClave,
-                    recibo = numReciboPrincipal,
-                    tipotransaccion = dto.TipoLegacy,
-                    fecha_docu = fechaHoy,
-                    tipo_partida = dto.TipoPartidaLegacy,
-                    banco = banco,
-                    descripcion = dto.DescripcionLegacy ?? $"Abono parcial factura :Recibo # :{numReciboPrincipal}",
-                    debitos = 0,
-                    creditos = montoTotal,
-                    saldo = saldoActualCliente - montoTotal,
-                    tipo_servicio = "E",
-                    periodo = periodo,
-                    tasa = "0",
-                    estado = "C",
-                    fecha_registro = fechaHoy,
-                    ciclo = clienteInfo?.ciclos_id?.ToString(),
-                    ruta = clienteInfo?.maestro_cliente_indicativo_ruta,
-                    secuencia = clienteInfo?.maestro_cliente_secuencia,
-                    tiene_med = clienteInfo?.maestro_cliente_tiene_medidor == true ? "S" : "N",
-                    usuario = usuario,
-                    saldo_detalle = montoTotal
-                };
-                _context.transaccion_abonados.Add(espejo);
-            }
-
-            if (movimientoBanco.HasValue && dto.BancoCuentaId.HasValue)
-            {
-                espejo.docuaplicar = Convert.ToDecimal(movimientoBanco.Value.BanKardexId, CultureInfo.InvariantCulture);
-                espejo.trans_aplicar = $"{BancoMarkerPrefix}{dto.BancoCuentaId.Value.ToString(CultureInfo.InvariantCulture)}";
             }
 
             await _context.SaveChangesAsync(ct);
@@ -545,7 +561,7 @@ public class CobroService : ICobroService
                 ban_kardex_id = movimientoBanco?.BanKardexId,
                 sesion_caja_id = sesionCajaId,
                 referencia_externa = referencia,
-                transaccion_abonado_ide = espejo.ide,
+                transaccion_abonado_ide = null,   // F7 H2c: sin espejo legacy
                 usuario = usuario
             };
             foreach (var (facturaId, detalleId, monto) in lineasAplicadas)
@@ -569,8 +585,38 @@ public class CobroService : ICobroService
                     monto_aplicado = monto
                 });
             }
+            foreach (var (notaDebitoId, monto) in ndsAplicadas)
+            {
+                pago.aplicaciones.Add(new adm_pago_aplicacion
+                {
+                    company_id = companyId,
+                    documento_tipo = DocumentoCobroTipo.NotaDebito,
+                    nota_debito_id = notaDebitoId,
+                    monto_aplicado = monto
+                });
+            }
             _context.adm_pagos.Add(pago);
             await _context.SaveChangesAsync(ct);
+
+            // F7 H1: si el cobro vino de un recibo-para-banco pendiente, el
+            // registro formal queda APLICADO con el documento que lo cobró.
+            // (El trigger de conciliación pudo marcarlo CUBIERTO un instante
+            // antes si la factura quedó saldada — este es el estado correcto.)
+            if (dto.ReciboPendienteId.HasValue)
+            {
+                var reciboPendiente = await _context.adm_recibo_banco_pendientes
+                    .FirstOrDefaultAsync(r => r.recibo_pendiente_id == dto.ReciboPendienteId.Value
+                                              && r.cobrado_pago_id == null, ct);
+                if (reciboPendiente is not null)
+                {
+                    reciboPendiente.estado_id = EstadoPago.Aplicado;
+                    reciboPendiente.cobrado_pago_id = pago.pago_id;
+                    reciboPendiente.anulado_por = null;
+                    reciboPendiente.anulado_en = null;
+                    reciboPendiente.motivo_anulacion = null;
+                    await _context.SaveChangesAsync(ct);
+                }
+            }
 
             // ---------- Cortes: cancelar órdenes si el cliente queda en cero ----------
             if (saldoActualCliente - montoTotal <= 0m)
@@ -604,13 +650,17 @@ public class CobroService : ICobroService
                         aplicacionesCxc,
                         descripcionContable);
 
+                    // F7 H2c: el comprobante se identifica por el DOCUMENTO del
+                    // motor (pago_id), no por el ide del espejo legacy — el
+                    // espejo muere en este mismo hito y su ide dejaría al
+                    // asiento sin ancla para reversar.
                     polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
                         connection,
                         companyId,
                         documentoContable.Modulo,
                         documentoContable.Documento,
-                        espejo.ide,
-                        $"{documentoContable.Documento}-{espejo.ide}",
+                        pago.pago_id,
+                        $"{documentoContable.Documento}-{pago.pago_id}",
                         fechaHoy,
                         descripcionContable,
                         usuario,
@@ -638,7 +688,6 @@ public class CobroService : ICobroService
                 PolizaId = polizaId,
                 PolizaEncolada = polizaEncolada,
                 BanKardexId = movimientoBanco?.BanKardexId,
-                TransaccionId = espejo.ide,
                 Aplicaciones = resultados
             }, "Cobro registrado correctamente.");
         }
@@ -676,6 +725,8 @@ public class CobroService : ICobroService
             .Distinct()
             .ToList();
 
+        // F7 H2c: los cobros nuevos no tienen espejo; los pre-corte (data de
+        // prueba local) todavía lo traen y se marcan anulados por cortesía.
         transaccion_abonado? espejo = null;
         if (pago.transaccion_abonado_ide.HasValue)
         {
@@ -761,6 +812,18 @@ public class CobroService : ICobroService
                 }
             }
 
+            // F7 H2b: restituir notas de débito aplicadas (documento_tipo = 3).
+            foreach (var apl in pago.aplicaciones.Where(a => a.nota_debito_id.HasValue))
+            {
+                var nd = await _context.adm_nota_debitos
+                    .FromSqlInterpolated($"SELECT * FROM public.adm_nota_debito WHERE company_id = {companyId} AND nota_debito_id = {apl.nota_debito_id!.Value} FOR UPDATE")
+                    .FirstOrDefaultAsync(ct);
+                if (nd is null)
+                    return ResponseModelDto.Fail($"No se encontró la nota de débito {apl.nota_debito_id} del cobro.");
+
+                nd.saldo_pendiente = Math.Min(nd.total_nota, nd.saldo_pendiente + apl.monto_aplicado);
+            }
+
             // Espejo legacy: marcar anulado (NUNCA borrar — regla única del motor).
             if (espejo is not null)
             {
@@ -779,20 +842,21 @@ public class CobroService : ICobroService
                     usuario,
                     ct);
             }
-            else if (espejo is not null)
+            else
             {
                 var connection = _context.Database.GetDbConnection();
                 var dbTransaction = _context.Database.CurrentTransaction?.GetDbTransaction();
 
-                // Documento único del motor (VENTAS/REC). Los ABO históricos
-                // pre-motor se reversan por su camino legacy hasta F2b.
-                var documentoContable = ResolverDocumentoContable(espejo.tipotransaccion ?? "202");
+                // F7 H2c: el comprobante se reversa por el DOCUMENTO del motor
+                // (pago_id), la misma identidad con que se posteó. El tipo
+                // legacy solo resuelve el par módulo/documento contable.
+                var documentoContable = ResolverDocumentoContable(espejo?.tipotransaccion ?? "202");
                 await IntegracionContableConfigSql.RevertirComprobanteAsync(
                     connection,
                     companyId,
                     documentoContable.Modulo,
                     new[] { documentoContable.Documento },
-                    espejo.ide,
+                    pago.pago_id,
                     usuario,
                     dbTransaction,
                     ct);
@@ -821,8 +885,16 @@ public class CobroService : ICobroService
         // Mismo criterio que el registro: día LOCAL del servidor.
         var dia = DateOnly.FromDateTime(fecha?.Date ?? DateTime.Now.Date);
 
+        // "Cobros del día" = lo REGISTRADO ese día (creado_en), no la fecha valor:
+        // desde H4b la caja puede registrar cobros con fecha retroactiva (la
+        // recaudación del lector llega después) y esos deben verse en el arqueo
+        // del día en que se teclearon, aunque su `fecha` sea anterior.
+        var desde = dia.ToDateTime(TimeOnly.MinValue);
+        var hastaExcl = desde.AddDays(1);
+
         var query = from p in _context.adm_pagos.AsNoTracking()
-                    where p.company_id == companyId && p.fecha == dia
+                    where p.company_id == companyId
+                          && p.creado_en >= desde && p.creado_en < hastaExcl
                     join c in _context.cliente_maestros.AsNoTracking()
                         on p.cliente_clave equals c.maestro_cliente_clave into clientes
                     from c in clientes.DefaultIfEmpty()
@@ -845,8 +917,7 @@ public class CobroService : ICobroService
                         p.estado_id,
                         p.usuario,
                         CajaNombre = k != null ? k.nombre : null,
-                        CajaFisicaId = s != null ? s.caja_fisica_id : null,
-                        p.transaccion_abonado_ide
+                        CajaFisicaId = s != null ? s.caja_fisica_id : null
                     };
 
         if (!string.IsNullOrWhiteSpace(usuario))
@@ -880,8 +951,7 @@ public class CobroService : ICobroService
                 _ => x.estado_id.ToString()
             },
             Usuario = x.usuario,
-            CajaNombre = x.CajaNombre,
-            TransaccionId = x.transaccion_abonado_ide
+            CajaNombre = x.CajaNombre
         }).ToList();
     }
 
@@ -918,6 +988,43 @@ public class CobroService : ICobroService
         {
             var ultimo = resultado[^1];
             resultado[^1] = (ultimo.Item1, ultimo.Item2 + resto);
+        }
+
+        return resultado.Where(r => r.Item2 > 0m).ToList();
+    }
+
+    /// <summary>
+    /// F7 H2b: parte contable del cobro de una nota de débito — se distribuye
+    /// por las LÍNEAS propias de la ND (proporción de sus servicios), de modo
+    /// que el Haber acredite la misma CxC analítica que la emisión debitó.
+    /// Sin líneas con servicio, todo a la CxC general (servicio null).
+    /// </summary>
+    private async Task<List<(string? ServicioCodigo, decimal Monto)>> DistribuirNdContableAsync(
+        long notaDebitoId, decimal monto, CancellationToken ct)
+    {
+        var lineas = await _context.adm_nota_debito_detalles
+            .AsNoTracking()
+            .Where(d => d.nota_debito_id == notaDebitoId
+                        && d.servicio_codigo != null
+                        && d.monto_total > 0)
+            .Select(d => new { d.servicio_codigo, d.monto_total })
+            .ToListAsync(ct);
+
+        var total = lineas.Sum(l => l.monto_total);
+        if (lineas.Count == 0 || total <= 0)
+        {
+            return [(null, monto)];
+        }
+
+        var resultado = new List<(string?, decimal)>();
+        var acumulado = 0m;
+        for (var i = 0; i < lineas.Count; i++)
+        {
+            var parte = i == lineas.Count - 1
+                ? monto - acumulado
+                : Math.Round(monto * lineas[i].monto_total / total, 2, MidpointRounding.AwayFromZero);
+            resultado.Add((lineas[i].servicio_codigo, parte));
+            acumulado += parte;
         }
 
         return resultado.Where(r => r.Item2 > 0m).ToList();
@@ -1035,7 +1142,7 @@ public class CobroService : ICobroService
         var existente = await _context.adm_pagos
             .AsNoTracking()
             .Where(p => p.company_id == companyId && p.referencia_externa == referencia)
-            .Select(p => new { p.pago_id, p.numero_recibo, p.monto_total, p.transaccion_abonado_ide, p.estado_id })
+            .Select(p => new { p.pago_id, p.numero_recibo, p.monto_total, p.estado_id })
             .FirstOrDefaultAsync(ct);
         if (existente is null) return null;
 
@@ -1048,7 +1155,6 @@ public class CobroService : ICobroService
             PagoId = existente.pago_id,
             NumeroRecibo = existente.numero_recibo,
             MontoTotal = existente.monto_total,
-            TransaccionId = existente.transaccion_abonado_ide ?? 0,
             Idempotente = true
         }, "Cobro ya aplicado con esa referencia (idempotente).");
     }

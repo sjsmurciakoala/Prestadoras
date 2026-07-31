@@ -373,9 +373,50 @@ Cada fase = 1 PR contra `origin/main` + scripts DDL timestampeados en `Database/
   limpieza.
 - Borrado definitivo de páginas/servicios viejos (`AbonoService`,
   `CaptacionPagosService` — lo vigente ya vive en `CobroService`).
-- Migración de cartera real SIMAFI **como documentos** (`SALDO_INICIAL` con
-  documento por cliente/período), no como bulto de saldo.
+- ~~Migración de cartera real SIMAFI como documentos `SALDO_INICIAL`~~
+  ⚠️ **SUPERSEDED (2026-07-28)** — ver abajo.
 - Actualizar [ESTADOS_DOCUMENTOS_COMERCIALES.md](ESTADOS_DOCUMENTOS_COMERCIALES.md).
+
+#### La cartera SIMAFI ya no se migra como `SALDO_INICIAL`
+
+Decisión del usuario del 2026-07-28, documentada en
+[PLAN_MIGRACION_SIMAFI_TOTAL_2026-07.md](PLAN_MIGRACION_SIMAFI_TOTAL_2026-07.md):
+se migra **todo el histórico con los códigos y la numeración originales**, sin
+documentos sintéticos ni marcas de migración. Eso **anula** el `SALDO_INICIAL`
+por cliente/período que este plan asumía (§9.5) y entrega bastante más:
+
+**Ya hecho y validado en local (M6 aprobada, 2026-07-29 — ver
+[M6_VALIDACION_MIGRACION_SIMAFI_2026-07.md](M6_VALIDACION_MIGRACION_SIMAFI_2026-07.md)):**
+
+| | |
+|---|---|
+| Clientes | 25,934 |
+| Facturas (numeración original SIMAFI) | 3,896,909 |
+| Líneas de detalle | 9,331,049 |
+| Movimientos del libro | 12,173,095 |
+| Pagos en `adm_pago` | 2,837,660 |
+| Aplicaciones en `adm_pago_aplicacion` | 9,393,969 |
+| **Saldo por cliente vs SIMAFI** | **25,530 de 25,530 exactos (L 48,858,786.58)** |
+
+Puntos que tocan a este plan:
+
+- **La cartera nace en el modelo nuevo**: la migración escribe `adm_pago` +
+  `adm_pago_aplicacion` (§3.4/§3.5), no el camino legacy. Los
+  `tipo_transaccion_id` siguen el mapeo de §3.1.
+- **`transaccion_abonado` recibió los 12.2M de movimientos históricos**, coherente
+  con §3.7 (queda como histórico solo-lectura, no se elimina).
+- **`SALDO_INICIAL` (tipo 11) no se usa**: no hay saldo de apertura porque está
+  la historia completa desde 2005.
+- **Los pagos migrados no llevan folio de `adm_documento_secuencia`**: su
+  `numero_recibo` es el id del movimiento original (el recibo de SIMAFI se repite
+  entre pagos y la columna es única). La serie se resembró por encima de todo lo
+  usado — `Database/2026-07-29_m3e_resembrar_secuencia_recibo.sql`.
+- **Los 124 documentos del piloto de julio se borraron** (122 con CAI):
+  duplicaban meses que SIMAFI también tiene. Esto ejecuta de hecho el
+  `wipe_transaccional` que §8 anticipaba como riesgo.
+- **Pendiente sin bloquear**: M5 — las 25,900 NC, 740 convenios y 15,851
+  descuentos de adulto mayor están migrados como créditos aplicados pero aún no
+  como `adm_nota_credito` ni `cln_plan_pago_*`. No mueve ningún saldo.
 
 **Total estimado: 30–40 días hábiles ≈ 6–8 semanas** (ritmo por PRs como la
 integración contable F1–F8), incluyendo pruebas y ventanas de deploy a 0.9.
@@ -431,7 +472,7 @@ embebidos + `CaptacionPagosIndex.razor` huérfano + clientes HTTP),
 | Reportes con salida distinta | Comparación automatizada de las 10 funciones `rep_*` antes/después con la data de prueba |
 | WS bancario en producción | F5 se valida con los golden + réplica del caso real; deploy en ventana propia como F8 |
 | Regresión en app de lectores | `SnapshotMoraTests`/`SnapshotCamposPilotoTests` intocados deben pasar verbatim |
-| Datos de prueba contaminados (`SALDO_ANTERIOR`, 0998) | Son descartables: `wipe_transaccional` + re-seed al llegar a F7. **Ojo**: 0.9 ya tiene migrados los 2 ciclos reales de SIMAFI (base de la demo) — el wipe implica re-correr esa migración comercial sobre el modelo nuevo, no solo re-seed |
+| Datos de prueba contaminados (`SALDO_ANTERIOR`, 0998) | ✅ **RESUELTO en local (2026-07-29)**: la migración total borró los 124 documentos del piloto y cargó la cartera real completa sobre el modelo nuevo. Falta replicarlo en 0.9 cuando se decida el despliegue |
 
 ## 9. Decisiones que este plan asume (confirmar al aprobar)
 
@@ -444,8 +485,11 @@ embebidos + `CaptacionPagosIndex.razor` huérfano + clientes HTTP),
    (módulo VENTAS) para todo cobro del motor — desaparece la distinción
    REC/ABO. Implementado en `CobroService.ResolverDocumentoContable`; los ABO
    históricos no se tocan y se reversan por su camino legacy.
-5. La cartera real SIMAFI se migrará como documentos `SALDO_INICIAL` por
-   cliente/período (no como bulto de saldo).
+5. ~~La cartera real SIMAFI se migrará como documentos `SALDO_INICIAL` por
+   cliente/período~~ ⚠️ **ANULADO (usuario, 2026-07-28)**: se migra **todo el
+   histórico con códigos y numeración originales**, sin documentos sintéticos.
+   Ya ejecutado y validado en local — ver F7 §"La cartera SIMAFI ya no se migra
+   como `SALDO_INICIAL`".
 6. **El recibo de cobro NO lleva CAI** (§3.8): folio interno por empresa vía
    `adm_documento_secuencia`, único por `(company_id, numero_recibo)`. El CAI
    sigue intacto para FAC/NC/ND.

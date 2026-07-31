@@ -13,9 +13,12 @@ public interface IAbonoService
     Task<IReadOnlyList<FacturaConSaldoDto>> BuscarFacturasConSaldoAsync(string term, CancellationToken ct = default);
     Task<IReadOnlyList<FacturaConSaldoDto>> ListarFacturasPendientesPorClienteAsync(string clienteClave, CancellationToken ct = default);
     Task<ResponseModelDto> RegistrarAbonoAsync(AbonoCrearDto dto, CancellationToken ct = default);
-    Task<ResponseModelDto> ReversarAbonoAsync(ReversoAbonoRequestDto dto, CancellationToken ct = default);
     Task<IReadOnlyList<ArqueoDto>> ListarAbonosDelDiaAsync(string? usuario, DateTime? fecha, CancellationToken ct = default);
-    Task<ReciboAbonoDto?> GenerarDatosReciboAsync(int transaccionId, CancellationToken ct = default);
+    /// <summary>F7 H2c: recibo de un cobro aplicado, desde adm_pago (el documento del motor).</summary>
+    Task<ReciboAbonoDto?> GenerarDatosReciboAsync(long pagoId, CancellationToken ct = default);
+
+    /// <summary>F7 H2c: recibo del papel "para banco" aún no cobrado (adm_recibo_banco_pendiente).</summary>
+    Task<ReciboAbonoDto?> GenerarDatosReciboPendienteAsync(long pendienteId, CancellationToken ct = default);
     Task<IReadOnlyList<AbonoHistorialItemDto>> ListarHistorialPorClienteAsync(string clienteClave, CancellationToken ct = default);
 
     // Caja — saldo global (corrido) del cliente, para mostrar como referencia

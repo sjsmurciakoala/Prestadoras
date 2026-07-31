@@ -2,12 +2,12 @@
 @attribute [Authorize]
 @using SIAD.Core.DTOs.Cobranza
 @using SIAD.Core.DTOs.CaptacionPagos
+@using apc.Client.Services.Cobros
 @using apc.Client.Services.Facturacion
-@using apc.Client.Services.CaptacionPagos
 @using DevExpress.Blazor
 @using Microsoft.JSInterop
 @inject CobranzaClient CobranzaClient
-@inject CaptacionPagosClient CaptacionClient
+@inject CobrosClient CobrosHttp
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 @inject IToastNotificationService ToastService
@@ -261,7 +261,7 @@
 
     protected override async Task OnInitializedAsync()
     {
-        var items = await CaptacionClient.GetClientesAsync(null);
+        var items = await CobrosHttp.GetClientesAsync(null);
         clientesCombo = items.ToList();
     }
 

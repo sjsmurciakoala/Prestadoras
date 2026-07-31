@@ -2,8 +2,8 @@
 @using DevExtreme.AspNet.Data
 @using DevExtreme.AspNet.Data.ResponseModel
 @using SIAD.Core.DTOs.CaptacionPagos
-@using apc.Client.Services.CaptacionPagos
-@inject CaptacionPagosClient CaptacionClient
+@using apc.Client.Services.Cobros
+@inject CobrosClient CobrosHttp
 
 @* Lookup de cliente con búsqueda REMOTA mientras se escribe (sin perder foco).
    Patrón oficial DevExpress: CustomData + SearchMode=AutoSearch — el combo
@@ -51,7 +51,7 @@
 
         // El endpoint filtra por clave/nombre en servidor; se pide una página
         // extra para saber si hay más resultados (scroll virtual).
-        var items = await CaptacionClient.GetClientesAsync(query, ct, take: skip + take + 1);
+        var items = await CobrosHttp.GetClientesAsync(query, take: skip + take + 1);
         var page = items.Skip(skip).Take(take).ToList();
 
         return new LoadResult

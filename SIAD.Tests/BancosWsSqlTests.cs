@@ -182,17 +182,20 @@ public sealed class BancosWsSqlTests : IntegrationTestBase
             new { Ids = facturas }, Transaction));
         Assert.Equal(0m, saldoRestante);
 
-        // Una transacción 202 por factura, FIFO (la más vieja primero).
-        var transacciones = (await Connection.QueryAsync<(decimal? creditos, decimal? recibo, string estado)>(new CommandDefinition(@"
-            SELECT creditos, recibo, estado FROM public.transaccion_abonado
-            WHERE company_id = @CompanyId AND trans_aplicar = 'WSBANCO:' || @PagoId
-            ORDER BY ide",
+        // F7 H2c: sin espejo 202 — las aplicaciones del documento del motor
+        // cubren ambas facturas por el total cobrado.
+        var aplicado = (await Connection.QueryAsync<(int facturaId, decimal monto)>(new CommandDefinition(@"
+            SELECT a.factura_id, a.monto_aplicado
+            FROM public.adm_pago_aplicacion a
+            JOIN public.ban_ws_pago b ON b.adm_pago_id = a.pago_id
+            WHERE b.company_id = @CompanyId AND b.pago_id = @PagoId",
             new { CompanyId, PagoId = resultado.pagoId }, Transaction))).ToList();
-        Assert.Equal(2, transacciones.Count);
-        Assert.Equal(100.00m, transacciones[0].creditos);
-        Assert.Equal((decimal)_numRecibos[0], transacciones[0].recibo);
-        Assert.Equal(50.00m, transacciones[1].creditos);
-        Assert.All(transacciones, t => Assert.Equal("C", t.estado));
+        Assert.Equal(150.00m, aplicado.Sum(a => a.monto));
+        Assert.Equal(2, aplicado.Select(a => a.facturaId).Distinct().Count());
+        var espejos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM public.transaccion_abonado WHERE company_id = @CompanyId AND cliente_clave = @Clave",
+            new { CompanyId, Clave }, Transaction));
+        Assert.Equal(0L, espejos);
 
         // Partida BANCOS/PGB posteada y balanceada; Debe = cuenta de la ban_cuenta.
         var partida = await Connection.QueryFirstAsync<(short status, decimal debe, decimal haber, long cuentaDebe)>(new CommandDefinition(@"
@@ -249,12 +252,12 @@ public sealed class BancosWsSqlTests : IntegrationTestBase
 
         var conteos = await Connection.QueryFirstAsync<(long pagos, long transacciones, long polizas, long kardex)>(new CommandDefinition(@"
             SELECT (SELECT COUNT(*) FROM public.ban_ws_pago WHERE company_id = @CompanyId AND referencia = 'F8REF002'),
-                   (SELECT COUNT(*) FROM public.transaccion_abonado WHERE company_id = @CompanyId AND trans_aplicar = 'WSBANCO:' || @PagoId),
+                   (SELECT COUNT(*) FROM public.adm_pago p2 JOIN public.ban_ws_pago b2 ON b2.adm_pago_id = p2.pago_id WHERE b2.company_id = @CompanyId AND b2.pago_id = @PagoId),
                    (SELECT COUNT(*) FROM public.con_partida_hdr WHERE company_id = @CompanyId AND module = 'BANCOS' AND document_type = 'PGB' AND document_id = @PagoId),
                    (SELECT COUNT(*) FROM public.ban_kardex WHERE company_id = @CompanyId AND ban_kardex_id = @KardexId)",
             new { CompanyId, PagoId = primero.pagoId, KardexId = primero.kardexId }, Transaction));
         Assert.Equal(1, conteos.pagos);
-        Assert.Equal(1, conteos.transacciones);
+        Assert.Equal(1, conteos.transacciones);   // F7: un solo documento del motor, sin duplicar
         Assert.Equal(1, conteos.polizas);
         Assert.Equal(1, conteos.kardex);
     }
@@ -303,11 +306,16 @@ public sealed class BancosWsSqlTests : IntegrationTestBase
         Assert.Equal("B", estadoNueva);
         Assert.Equal(30.00m, saldoNueva);
 
-        var creditos = (await Connection.QueryAsync<decimal>(new CommandDefinition(@"
-            SELECT creditos FROM public.transaccion_abonado
-            WHERE company_id = @CompanyId AND trans_aplicar = 'WSBANCO:' || @PagoId ORDER BY ide",
+        // F7 H2c: los montos aplicados salen del documento del motor.
+        var aplicadoPorFactura = (await Connection.QueryAsync<decimal>(new CommandDefinition(@"
+            SELECT SUM(a.monto_aplicado)
+            FROM public.adm_pago_aplicacion a
+            JOIN public.ban_ws_pago b ON b.adm_pago_id = a.pago_id
+            WHERE b.company_id = @CompanyId AND b.pago_id = @PagoId
+            GROUP BY a.factura_id
+            ORDER BY SUM(a.monto_aplicado) DESC",
             new { CompanyId, PagoId = resultado.pagoId }, Transaction))).ToList();
-        Assert.Equal([100.00m, 20.00m], creditos);
+        Assert.Equal([100.00m, 20.00m], aplicadoPorFactura);
     }
 
     [SkippableFact]
@@ -409,13 +417,17 @@ public sealed class BancosWsSqlTests : IntegrationTestBase
             Assert.Equal(f.total, f.saldo);
         });
 
-        // Transacciones 202 anuladas.
-        var estadosTrans = (await Connection.QueryAsync<string>(new CommandDefinition(@"
-            SELECT estado FROM public.transaccion_abonado
-            WHERE company_id = @CompanyId AND trans_aplicar = 'WSBANCO:' || @PagoId",
-            new { CompanyId, PagoId = pago.pagoId }, Transaction))).ToList();
-        Assert.Equal(2, estadosTrans.Count);
-        Assert.All(estadosTrans, e => Assert.Equal("A", e));
+        // F7 H2c: el documento del motor queda REVERSADO, con sus aplicaciones
+        // conservadas como auditoría (ya no hay transacciones espejo).
+        var (estadoDoc, aplicaciones) = await Connection.QueryFirstAsync<(short, long)>(new CommandDefinition(@"
+            SELECT ap.estado_id,
+                   (SELECT COUNT(*) FROM public.adm_pago_aplicacion a WHERE a.pago_id = ap.pago_id)
+            FROM public.adm_pago ap
+            JOIN public.ban_ws_pago b ON b.adm_pago_id = ap.pago_id
+            WHERE b.company_id = @CompanyId AND b.pago_id = @PagoId",
+            new { CompanyId, PagoId = pago.pagoId }, Transaction));
+        Assert.Equal(4, estadoDoc);          // REVERSADO
+        Assert.True(aplicaciones > 0);
 
         // La partida original quedó revertida (el motor la saca de status POSTED).
         var statusPartida = await Connection.ExecuteScalarAsync<short>(new CommandDefinition(

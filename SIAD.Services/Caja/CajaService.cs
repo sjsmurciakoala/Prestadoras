@@ -264,10 +264,12 @@ public class CajaService : ICajaService
         if (sesion is null)
             return new CajaResponseDto(false, "Sesión no encontrada o ya cerrada.");
 
-        // Total = créditos de transacciones que referencian esta sesión (caja_id = sesion.id)
-        var totalCreditos = await _context.transaccion_abonados
-            .Where(t => t.caja_id == sesion.id && t.estado != "N")
-            .SumAsync(t => t.creditos) ?? 0m;
+        // F7 H4: el total del turno sale del motor (adm_pago por sesión, solo
+        // APLICADOS). El cálculo anterior sumaba el espejo legacy por caja_id —
+        // que desde H2 nadie escribe: todo cierre habría dado 0.
+        var totalCreditos = await _context.adm_pagos
+            .Where(p => p.sesion_caja_id == sesion.id && p.estado_id == SIAD.Core.Constants.EstadoPago.Aplicado)
+            .SumAsync(p => (decimal?)p.monto_total) ?? 0m;
 
         sesion.estado         = "CERRADA";
         sesion.usuario_cierre = request.UsuarioCierre;

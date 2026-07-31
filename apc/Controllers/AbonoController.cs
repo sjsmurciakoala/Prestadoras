@@ -44,14 +44,6 @@ public class AbonoController : ControllerBase
         return result.Success ? Ok(result) : BadRequest(result);
     }
 
-    [HttpPost("reversar")]
-    public async Task<IActionResult> Reversar([FromBody] ReversoAbonoRequestDto request, CancellationToken ct)
-    {
-        request.Usuario = User?.Identity?.Name ?? "system";
-        var result = await _abonoService.ReversarAbonoAsync(request, ct);
-        return result.Success ? Ok(result) : BadRequest(result);
-    }
-
     [HttpGet("arqueo")]
     public async Task<IActionResult> ListarAbonosDelDia([FromQuery] string? usuario, [FromQuery] DateTime? fecha, CancellationToken ct)
     {
@@ -73,13 +65,30 @@ public class AbonoController : ControllerBase
         return Ok(new ClienteSaldoDto { ClienteClave = clienteClave, SaldoTotal = saldo });
     }
 
-    [HttpGet("recibo-pdf/{transaccionId:int}")]
-    public async Task<IActionResult> GetReciboPdf(int transaccionId, CancellationToken ct)
+    // F7 H2c: el recibo se arma desde el DOCUMENTO del motor (adm_pago).
+    [HttpGet("recibo-pdf/{pagoId:long}")]
+    public async Task<IActionResult> GetReciboPdf(long pagoId, CancellationToken ct)
     {
-        var datos = await _abonoService.GenerarDatosReciboAsync(transaccionId, ct);
+        var datos = await _abonoService.GenerarDatosReciboAsync(pagoId, ct);
         if (datos is null)
-            return NotFound(new { mensaje = "No se encontró la transacción indicada." });
+            return NotFound(new { mensaje = "No se encontró el cobro indicado." });
 
+        return ReciboPdf(datos, pagoId);
+    }
+
+    // F7 H2c: recibo del papel "para banco" aún no cobrado.
+    [HttpGet("recibo-pendiente-pdf/{pendienteId:long}")]
+    public async Task<IActionResult> GetReciboPendientePdf(long pendienteId, CancellationToken ct)
+    {
+        var datos = await _abonoService.GenerarDatosReciboPendienteAsync(pendienteId, ct);
+        if (datos is null)
+            return NotFound(new { mensaje = "No se encontró el recibo pendiente indicado." });
+
+        return ReciboPdf(datos, pendienteId);
+    }
+
+    private IActionResult ReciboPdf(SIAD.Core.DTOs.Caja.ReciboAbonoDto datos, long id)
+    {
         using var report = new Rpt_Dev_Recibo_Abono(datos);
         report.RequestParameters = false;
 
@@ -88,7 +97,7 @@ public class AbonoController : ControllerBase
 
         // Content-Disposition inline: el navegador muestra el recibo como vista
         // previa en una pestaña en vez de descargarlo (mismo patrón que InformesController).
-        Response.Headers.ContentDisposition = $"inline; filename=Recibo-{datos.NumRecibo}-{transaccionId}.pdf";
+        Response.Headers.ContentDisposition = $"inline; filename=Recibo-{datos.NumRecibo}-{id}.pdf";
         return File(stream.ToArray(), "application/pdf");
     }
 

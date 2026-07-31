@@ -37,4 +37,17 @@ public class CobrosClient
         var qs = query.Count > 0 ? "?" + string.Join("&", query) : string.Empty;
         return _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<CobroDelDiaDto>>($"api/cobros/del-dia{qs}");
     }
+
+    // F7 H5: catálogos de apoyo, mudados del CaptacionPagosClient retirado.
+    public async Task<IReadOnlyList<SIAD.Core.DTOs.CaptacionPagos.ClienteComboDto>> GetClientesAsync(string? query = null, int? take = null)
+    {
+        var qs = new List<string>();
+        if (!string.IsNullOrWhiteSpace(query)) qs.Add($"q={Uri.EscapeDataString(query)}");
+        if (take is > 0) qs.Add($"take={take}");
+        var suffix = qs.Count > 0 ? "?" + string.Join("&", qs) : string.Empty;
+        return await _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<SIAD.Core.DTOs.CaptacionPagos.ClienteComboDto>>($"api/cobros/clientes{suffix}") ?? [];
+    }
+
+    public async Task<IReadOnlyList<SIAD.Core.DTOs.CaptacionPagos.BancoDto>> GetBancosAsync() =>
+        await _http.GetFromJsonAsyncWithAuthCheck<IReadOnlyList<SIAD.Core.DTOs.CaptacionPagos.BancoDto>>("api/cobros/bancos") ?? [];
 }

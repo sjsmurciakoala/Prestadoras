@@ -13,7 +13,9 @@ public class AbonoCrearDto
     public string? Banco { get; set; }
     public DateTime? FechaPago { get; set; }
     public string? Usuario { get; set; }
-    public int? ReciboPendienteId { get; set; }
+
+    /// <summary>adm_recibo_banco_pendiente.recibo_pendiente_id del papel que se está cobrando (F7 H1).</summary>
+    public long? ReciboPendienteId { get; set; }
 }
 
 public class FacturaConSaldoDto
@@ -28,11 +30,14 @@ public class FacturaConSaldoDto
     public decimal SaldoPendiente { get; set; }
     public string Estado { get; set; } = null!;
 
-    /// <summary>DocumentoCobroTipo: 1 = factura, 2 = cuota de plan (F6).</summary>
+    /// <summary>DocumentoCobroTipo: 1 = factura, 2 = cuota de plan (F6), 3 = nota de débito (F7).</summary>
     public short DocumentoTipo { get; set; } = 1;
 
     /// <summary>cln_plan_pago_dtl.id cuando DocumentoTipo = 2.</summary>
     public int? PlanCuotaId { get; set; }
+
+    /// <summary>adm_nota_debito.nota_debito_id cuando DocumentoTipo = 3.</summary>
+    public long? NotaDebitoId { get; set; }
 }
 
 public class ClienteSaldoDto
@@ -48,14 +53,9 @@ public class AbonoResponseDto
     public decimal MontoAbonado { get; set; }
     public decimal NuevoSaldo { get; set; }
     public long? PolizaId { get; set; }
-    public int TransaccionId { get; set; }
-}
 
-public class ReversoAbonoRequestDto
-{
-    public int TransaccionId { get; set; }
-    public string Usuario { get; set; } = null!;
-    public string Motivo { get; set; } = string.Empty;
+    /// <summary>Documento del motor único (adm_pago.pago_id) que respalda el abono.</summary>
+    public long PagoId { get; set; }
 }
 
 public class ReciboAbonoLineaDto
@@ -102,7 +102,6 @@ public class ReciboAbonoDto
 
 public class AbonoHistorialItemDto
 {
-    public int TransaccionId { get; set; }
     public string NumFactura { get; set; } = string.Empty;
     public int NumRecibo { get; set; }
     public string FechaPago { get; set; } = string.Empty;
@@ -122,13 +121,15 @@ public class GenerarReciboDto
 
 public class GenerarReciboResponseDto
 {
-    public int TransaccionId { get; set; }
+    /// <summary>F7 H1: id en adm_recibo_banco_pendiente (para imprimir/anular).</summary>
+    public long PendienteId { get; set; }
     public string NumFactura { get; set; } = string.Empty;
 }
 
 public class ReciboPendienteDto
 {
-    public int TransaccionId { get; set; }
+    /// <summary>F7 H1: id en adm_recibo_banco_pendiente (fuente de verdad — anular/cobrar).</summary>
+    public long PendienteId { get; set; }
     public string NumFactura { get; set; } = string.Empty;
     public int NumRecibo { get; set; }
     public decimal Monto { get; set; }
@@ -138,7 +139,8 @@ public class ReciboPendienteDto
 
 public class AnularReciboPendienteDto
 {
-    public int TransaccionId { get; set; }
+    /// <summary>F7 H1: id en adm_recibo_banco_pendiente (fuente de verdad).</summary>
+    public long PendienteId { get; set; }
     public string Usuario { get; set; } = null!;
     public string Motivo { get; set; } = string.Empty;
 }
@@ -164,7 +166,15 @@ public class AbonoEspecialFiltroDto
 
 public class AbonoEspecialListItemDto
 {
-    public int TransaccionId { get; set; }
+    /// <summary>ide de la fila en transaccion_abonado (tabla congelada en F7 H4) — solo clave de fila.</summary>
+    public int TransaccionAbonadoIde { get; set; }
+
+    /// <summary>adm_pago.pago_id del cobro del motor enlazado al abono (null en abonos pre-motor).</summary>
+    public long? PagoId { get; set; }
+
+    /// <summary>adm_recibo_banco_pendiente.recibo_pendiente_id VIGENTE enlazado (solo estado "P").</summary>
+    public long? PendienteId { get; set; }
+
     public int? ClienteId { get; set; }
     public string ClienteClave { get; set; } = string.Empty;
     public string ClienteNombre { get; set; } = string.Empty;

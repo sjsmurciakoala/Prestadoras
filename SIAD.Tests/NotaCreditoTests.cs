@@ -109,4 +109,63 @@ public sealed class NotaCreditoTests : IntegrationTestBase
         Assert.NotNull(exception);
         Assert.Contains("FACTURA_YA_ANULADA", exception!.Message);
     }
+
+    // ------------------------------------------------------------------------
+    // Unificación cobranza F7 H2a (2026-07-30): la NC PARCIAL aplica al
+    // DOCUMENTO — rebaja montovalor_saldo por derrame FIFO y deja la factura
+    // en 'B' (o 'C' si la cubre). Antes solo escribía el crédito espejo y,
+    // tras el corte, una NC parcial no bajaba la deuda del cliente.
+    // ------------------------------------------------------------------------
+
+    [SkippableFact]
+    public async Task NC_parcial_rebaja_el_saldo_del_documento()
+    {
+        var caiNcId = await Connection.ExecuteScalarAsync<long?>(
+            new CommandDefinition(@"
+                SELECT cai_id FROM public.adm_cai_facturacion
+                WHERE company_id = @CompanyId AND tipo_documento_fiscal_id = 6
+                LIMIT 1",
+                new { CompanyId = CompanyId }, Transaction));
+        Skip.If(caiNcId is null, "No hay CAI tipo NC para esta company.");
+
+        // Factura pendiente con saldo suficiente para una NC parcial de 10.
+        var factura = await Connection.QueryFirstOrDefaultAsync<(int id, decimal saldo)>(
+            new CommandDefinition(@"
+                SELECT f.id,
+                       (SELECT COALESCE(SUM(COALESCE(d.montovalor_saldo, d.montovalor, 0)), 0)
+                        FROM public.factura_detalle d WHERE d.factura_id = f.id) AS saldo
+                FROM public.factura f
+                WHERE f.company_id = @CompanyId AND f.estado = 'A'
+                  AND EXISTS (SELECT 1 FROM public.factura_detalle d
+                              WHERE d.factura_id = f.id
+                                AND COALESCE(d.montovalor_saldo, d.montovalor, 0) > 15)
+                ORDER BY f.id
+                LIMIT 1",
+                new { CompanyId = CompanyId }, Transaction));
+        Skip.If(factura.id == 0, "No hay factura pendiente con saldo > 15 en esta BD.");
+
+        await Connection.QueryAsync(new CommandDefinition(@"
+            SELECT * FROM public.sp_adm_emitir_nota_credito(
+                p_company_id := @CompanyId,
+                p_factura_origen_id := @FacturaId,
+                p_motivo_anulacion_id := 1::smallint,
+                p_motivo_detalle := 'NC parcial F7',
+                p_monto_disminuir := 10.00::numeric,
+                p_lineas := NULL::jsonb,
+                p_usuario_emisor := 'TEST-F7',
+                p_cai_id := @CaiId
+            )",
+            new { CompanyId = CompanyId, FacturaId = factura.id, CaiId = caiNcId }, Transaction));
+
+        var (estado, saldoNuevo) = await Connection.QueryFirstAsync<(string, decimal)>(
+            new CommandDefinition(@"
+                SELECT f.estado,
+                       (SELECT COALESCE(SUM(COALESCE(d.montovalor_saldo, d.montovalor, 0)), 0)
+                        FROM public.factura_detalle d WHERE d.factura_id = f.id)
+                FROM public.factura f WHERE f.id = @Id",
+                new { Id = factura.id }, Transaction));
+
+        Assert.Equal("B", estado);
+        Assert.Equal(factura.saldo - 10.00m, saldoNuevo);
+    }
 }
