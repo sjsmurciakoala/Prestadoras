@@ -183,9 +183,21 @@ public sealed class ClientesClient
         int take,
         string? sortField,
         bool sortDesc,
+        DateTime? desde = null,
+        DateTime? hasta = null,
         CancellationToken ct = default)
     {
         var url = $"api/clientes/{clienteId}/movimientos/paged?skip={skip}&take={take}&sortField={sortField}&sortDesc={sortDesc}";
+        if (desde.HasValue)
+        {
+            url += $"&desde={desde.Value:yyyy-MM-dd}";
+        }
+
+        if (hasta.HasValue)
+        {
+            url += $"&hasta={hasta.Value:yyyy-MM-dd}";
+        }
+
         return await http.GetFromJsonAsync<PagedResult<ClienteMovimientoDto>>(url, ct)
                ?? new PagedResult<ClienteMovimientoDto>();
     }

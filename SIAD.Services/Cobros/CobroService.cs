@@ -140,9 +140,18 @@ public class CobroService : ICobroService
                 c.ciclos_id,
                 c.maestro_cliente_indicativo_ruta,
                 c.maestro_cliente_secuencia,
-                c.maestro_cliente_tiene_medidor
+                c.maestro_cliente_tiene_medidor,
+                c.bloqueado_cobranza
             })
             .FirstOrDefaultAsync(ct);
+
+        // Pruebas operativas jul-2026: un cliente bloqueado por cobranza no
+        // puede cobrar por NINGÚN canal hasta que Cobranza lo desbloquee.
+        if (clienteInfo?.bloqueado_cobranza == true)
+        {
+            return ResponseModelDto.Fail(
+                "El cliente está BLOQUEADO por cobranza. Gestione el desbloqueo en Gestión de Cobranza antes de cobrar.");
+        }
 
         // ---------- Plan pre-tx (solo lectura): validación y derrame proyectado ----------
         // Base del kardex bancario (que postea su propia transacción, patrón legacy)

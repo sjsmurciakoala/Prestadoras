@@ -736,6 +736,18 @@ public class AbonoService : IAbonoService
         if (factura.estado == "C")
             return ResponseModelDto.Fail("La factura ya está completamente pagada.");
 
+        // Pruebas operativas jul-2026: a un cliente bloqueado por cobranza no
+        // se le emite recibo (ni papel para banco) hasta que lo desbloqueen.
+        var bloqueado = await _context.cliente_maestros
+            .AsNoTracking()
+            .Where(c => c.maestro_cliente_clave == factura.clientecodigo)
+            .Select(c => c.bloqueado_cobranza)
+            .FirstOrDefaultAsync(ct);
+
+        if (bloqueado == true)
+            return ResponseModelDto.Fail(
+                "El cliente está BLOQUEADO por cobranza. Gestione el desbloqueo en Gestión de Cobranza antes de generar recibos.");
+
         var saldoDetalles = await _context.factura_detalles
             .Where(d => d.factura_id == factura.id)
             .SumAsync(d => d.montovalor_saldo ?? d.montovalor ?? 0m, ct);

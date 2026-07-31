@@ -190,6 +190,10 @@ public class ClientesController : ControllerBase
 
         [FromQuery] bool sortDesc,
 
+        [FromQuery] DateTime? desde,
+
+        [FromQuery] DateTime? hasta,
+
         CancellationToken cancellationToken)
 
     {
@@ -218,7 +222,11 @@ public class ClientesController : ControllerBase
 
 
 
-            var result = await _clientesService.GetMovimientosPagedAsync(id, skip, take, sortField, sortDesc, cancellationToken);
+            var result = await _clientesService.GetMovimientosPagedAsync(
+                id, skip, take, sortField, sortDesc,
+                desde.HasValue ? DateOnly.FromDateTime(desde.Value) : null,
+                hasta.HasValue ? DateOnly.FromDateTime(hasta.Value) : null,
+                cancellationToken);
 
             return Ok(result);
 

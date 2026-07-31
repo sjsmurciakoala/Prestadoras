@@ -17,15 +17,20 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 | Explicación del módulo Reverso | Integrado en Caja (Cobros del día → reversar con motivo, auditado, sin DELETE) |
 | Prioridad de rebaja "no visible a qué servicio aplica" | `adm_pago_aplicacion` registra la aplicación línea a línea; ver también "aplicación por porcentajes" (en curso) |
 
-## 🔨 En curso (esta iteración)
+## ✅ Resuelto — segunda tanda (2026-07-31, rama fix/pruebas-operativas-lote1)
 
-- **Recibo para banco + conciliación automática**: generar recibo pendiente
-  (parcial/total) desde Caja sin tocar la factura; al saldarse la factura por
-  cualquier canal, los pendientes se anulan como "cubiertos".
-- **Aplicación por porcentajes con prioridad** (hoja "Abono Normal automático":
-  Agua 60 / Alcantarillado 30 / F. Ambiental 5 / Ersaps 5; convenio y otros
-  cargos primero): la config de `/tarifario/desglose-abonos` pasa de
-  presentación a regla de aplicación del motor.
+| Punto | Resolución |
+|---|---|
+| Recibo para banco + conciliación automática | HECHO (F7 H1/H4b): papel pendiente sin tocar la factura; al saldarse por cualquier canal se anula como CUBIERTO |
+| Abono normal automático 60/30/5/5 con prioridad | HECHO: otros cargos primero, resto por `adm_desglose_abono_porcentaje` — regla del motor, no presentación |
+| Estado de cuenta: filtrar por rangos de fecha | Filtro Desde/Hasta en Movimientos; la ventana recorta filas pero el saldo corrido sigue siendo el histórico real. De paso: los cobros/facturas POST-corte ahora aparecen (el espejo congelado ya no los recibía) |
+| Cliente bloqueado por cobranza podía cobrar/recibir recibo | Candado en el motor: ni cobro ni papel para banco con `bloqueado_cobranza`; mensaje dirige a Gestión de Cobranza |
+| Error técnico al actualizar clientes existentes | Causa raíz: DNI obligatorio vs 6,300 clientes migrados con identidad vacía — TODA edición reventaba. DNI ahora opcional (unicidad solo si viene) |
+| RTN obligatorio | Ya estaba resuelto (máscaras con dígitos opcionales); verificado en create/update/solicitud |
+| Hora de emisión de la orden estática/incorrecta | Se guardaba en UTC (+6h) — ahora hora local del negocio |
+| Búsqueda en gestión de cobranza | La causa era el lookup con lista precargada limitada; hoy es búsqueda remota al servidor (clave/nombre). Confirmar en la siguiente prueba |
+| GPS de cuadrillas + foto/coordenadas en portal | HECHO (merge 2026-07-30): mapa con histórico de recorridos + visor de fotos en el detalle de la orden |
+| "Posteo de caja" → renombrar | Obsoleto: la pantalla ya no existe, el flujo vive en la vista única Caja |
 
 ## 📌 Pendiente por módulo
 

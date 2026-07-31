@@ -13,8 +13,8 @@ public sealed class ClienteUpdateDto
 
     public string? Apellidos { get; set; }
 
-    [Required(ErrorMessage = "El DNI es obligatorio.")]
-    public string Dni { get; set; } = null!;
+    // Pruebas operativas jul-2026: opcional (clientes migrados sin identidad).
+    public string? Dni { get; set; }
 
     public string? Rtn { get; set; }
 

@@ -438,6 +438,38 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         Assert.DoesNotContain("CUBIERTO", reliquia.desc);
     }
 
+    [SkippableFact]
+    public async Task Cliente_bloqueado_por_cobranza_no_puede_cobrar()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await PrepararEmpresaAsync();
+        var facturaId = await CrearFacturaAsync(60m, 40m, "BLQ");
+
+        // Pruebas operativas jul-2026: bloqueado por cobranza = ningún canal cobra.
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.cliente_maestro (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado, bloqueado_cobranza)
+            VALUES (@companyId, @clave, 'ID-BLQ', 'Cliente Bloqueado', true, true)",
+            new { companyId = Empresa, clave = Clave }, Transaction));
+
+        var bloqueadoResult = await _motor!.RegistrarCobroAsync(Cobro(facturaId, 100m));
+        Assert.False(bloqueadoResult.Success);
+        Assert.Contains("BLOQUEADO", bloqueadoResult.Message);
+
+        // Nada quedó escrito en el modelo nuevo.
+        var pagos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(
+            "SELECT count(*) FROM public.adm_pago WHERE company_id = @companyId AND cliente_clave = @clave",
+            new { companyId = Empresa, clave = Clave }, Transaction));
+        Assert.Equal(0L, pagos);
+
+        // Al desbloquearlo, el mismo cobro pasa.
+        await Connection.ExecuteAsync(new CommandDefinition(
+            "UPDATE public.cliente_maestro SET bloqueado_cobranza = false WHERE company_id = @companyId AND maestro_cliente_clave = @clave",
+            new { companyId = Empresa, clave = Clave }, Transaction));
+
+        var cobro = await _motor!.RegistrarCobroAsync(Cobro(facturaId, 100m));
+        Assert.True(cobro.Success, cobro.Message);
+    }
+
     // ------------------------------------------------------------------ stubs
 
     private sealed class TestCurrentCompanyService : ICurrentCompanyService

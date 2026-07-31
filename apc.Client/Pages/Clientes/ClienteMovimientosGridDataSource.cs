@@ -21,6 +21,8 @@ public sealed class ClienteMovimientosGridDataSource : GridCustomDataSource
     }
 
     public int ClienteId { get; set; }
+    public DateTime? Desde { get; set; }
+    public DateTime? Hasta { get; set; }
     public int LastTotalCount { get; private set; }
     public string? LastError { get; private set; }
     public bool HasLoaded { get; private set; }
@@ -48,6 +50,8 @@ public sealed class ClienteMovimientosGridDataSource : GridCustomDataSource
                 take: 1,
                 sortField: null,
                 sortDesc: false,
+                desde: Desde,
+                hasta: Hasta,
                 ct: cancellationToken);
 
             SetState(result.TotalCount, null);
@@ -82,6 +86,8 @@ public sealed class ClienteMovimientosGridDataSource : GridCustomDataSource
                 take: options.Count,
                 sortField: sortField,
                 sortDesc: sortDesc,
+                desde: Desde,
+                hasta: Hasta,
                 ct: cancellationToken);
 
             SetState(result.TotalCount, null);
