@@ -1,6 +1,7 @@
 using System.Data;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.NotasCreditoDebito;
@@ -282,6 +283,220 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
         }
     }
 
+    // ── Impresión / vista previa (pruebas operativas jul-2026) ──
+
+    public Task<NotaImpresionDto?> ObtenerNotaImpresionAsync(string tipoNota, long notaId, CancellationToken ct = default)
+        => LeerNotaImpresionAsync(tipoNota, notaId, transaction: null, ct);
+
+    /// <summary>
+    /// Vista previa EXACTA sin persistir: ejecuta el MISMO SP de emisión dentro
+    /// de una transacción, lee el documento resultante y hace ROLLBACK (el
+    /// correlativo del CAI también se revierte). Es la misma técnica con la que
+    /// los tests de NC/ND validan el SP sin ensuciar la base.
+    /// </summary>
+    public async Task<(NotaImpresionDto? Nota, string? Error)> GenerarVistaPreviaCreditoAsync(
+        EmitirNotaCreditoRequestDto dto, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        const string sql = @"
+            SELECT success, codigo, mensaje, nota_credito_id, numero_documento, correlativo
+            FROM public.sp_adm_emitir_nota_credito(
+                @p_company_id, @p_factura_origen_id, @p_motivo_anulacion_id,
+                @p_motivo_detalle, @p_monto_disminuir, @p_lineas::jsonb,
+                @p_usuario_emisor, @p_cai_id)";
+
+        return await VistaPreviaComunAsync("NC", sql, new
+        {
+            p_company_id = CompanyId,
+            p_factura_origen_id = dto.FacturaOrigenId,
+            p_motivo_anulacion_id = dto.MotivoAnulacionId,
+            p_motivo_detalle = (object?)dto.MotivoDetalle ?? DBNull.Value,
+            p_monto_disminuir = (object?)dto.MontoDisminuir ?? DBNull.Value,
+            p_lineas = (object?)null ?? DBNull.Value,
+            p_usuario_emisor = string.IsNullOrWhiteSpace(dto.Usuario) ? "vista-previa" : dto.Usuario.Trim(),
+            p_cai_id = dto.CaiId
+        }, ct);
+    }
+
+    public async Task<(NotaImpresionDto? Nota, string? Error)> GenerarVistaPreviaDebitoAsync(
+        EmitirNotaDebitoRequestDto dto, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        const string sql = @"
+            SELECT success, codigo, mensaje, nota_debito_id, numero_documento, correlativo
+            FROM public.sp_adm_emitir_nota_debito(
+                @p_company_id, @p_factura_origen_id, @p_motivo_aumento_id,
+                @p_motivo_detalle, @p_monto_aumentar, @p_lineas::jsonb,
+                @p_usuario_emisor, @p_cai_id)";
+
+        return await VistaPreviaComunAsync("ND", sql, new
+        {
+            p_company_id = CompanyId,
+            p_factura_origen_id = dto.FacturaOrigenId,
+            p_motivo_aumento_id = dto.MotivoAumentoId,
+            p_motivo_detalle = (object?)dto.MotivoDetalle ?? DBNull.Value,
+            p_monto_aumentar = dto.MontoAumentar,
+            p_lineas = (object?)null ?? DBNull.Value,
+            p_usuario_emisor = string.IsNullOrWhiteSpace(dto.Usuario) ? "vista-previa" : dto.Usuario.Trim(),
+            p_cai_id = dto.CaiId
+        }, ct);
+    }
+
+    private async Task<(NotaImpresionDto? Nota, string? Error)> VistaPreviaComunAsync(
+        string tipoNota, string sql, object args, CancellationToken ct)
+    {
+        var connection = await OpenConnectionAsync(ct);
+
+        // Si ya hay una transacción viva sobre la conexión (arnés de tests, o
+        // un ambiente transaccional), se usa un SAVEPOINT dentro de ella; si
+        // no, transacción propia. En ambos casos SIEMPRE se revierte: la vista
+        // previa no deja rastro (ni consume correlativo del CAI).
+        var efTx = _context.Database.CurrentTransaction?.GetDbTransaction();
+        if (efTx is not null)
+        {
+            await connection.ExecuteAsync(new CommandDefinition(
+                "SAVEPOINT vista_previa_nota", transaction: efTx, cancellationToken: ct));
+            try
+            {
+                return await EjecutarVistaPreviaAsync(connection, efTx, tipoNota, sql, args, ct);
+            }
+            finally
+            {
+                await connection.ExecuteAsync(new CommandDefinition(
+                    "ROLLBACK TO SAVEPOINT vista_previa_nota", transaction: efTx, cancellationToken: ct));
+            }
+        }
+
+        using var tx = connection.BeginTransaction();
+        try
+        {
+            return await EjecutarVistaPreviaAsync(connection, tx, tipoNota, sql, args, ct);
+        }
+        finally
+        {
+            tx.Rollback();
+        }
+    }
+
+    private async Task<(NotaImpresionDto? Nota, string? Error)> EjecutarVistaPreviaAsync(
+        IDbConnection connection, IDbTransaction tx, string tipoNota, string sql, object args, CancellationToken ct)
+    {
+        try
+        {
+            var row = await connection.QueryFirstOrDefaultAsync<SpNotaRow>(
+                new CommandDefinition(sql, args, transaction: tx, cancellationToken: ct));
+
+            if (row is null || !row.success)
+            {
+                return (null, row?.mensaje ?? "El SP no devolvió resultado.");
+            }
+
+            var notaId = tipoNota == "NC" ? row.nota_credito_id : row.nota_debito_id;
+            var nota = await LeerNotaImpresionAsync(tipoNota, notaId, tx, ct);
+            if (nota is null)
+            {
+                return (null, "No se pudo leer la nota generada para la vista previa.");
+            }
+
+            nota.EsVistaPrevia = true;
+            return (nota, null);
+        }
+        catch (PostgresException ex)
+        {
+            return (null, ex.MessageText);
+        }
+    }
+
+    private async Task<NotaImpresionDto?> LeerNotaImpresionAsync(
+        string tipoNota, long notaId, IDbTransaction? transaction, CancellationToken ct)
+    {
+        var companyId = CompanyId;
+        var connection = await OpenConnectionAsync(ct);
+        var esCredito = string.Equals(tipoNota, "NC", StringComparison.OrdinalIgnoreCase);
+
+        var sql = esCredito
+            ? @"
+            SELECT 'NC'                        AS TipoNota,
+                   'NOTA DE CRÉDITO'           AS TituloDocumento,
+                   nc.numero_documento         AS NumeroDocumento,
+                   nc.fecha_emision            AS FechaEmision,
+                   cai.codigo_cai              AS CodigoCai,
+                   nc.leyenda_cai_rango        AS LeyendaCaiRango,
+                   nc.fecha_limite_cai         AS FechaLimiteCai,
+                   nc.razon_social_emisor      AS EmisorNombre,
+                   nc.rtn_emisor               AS EmisorRtn,
+                   nc.direccion_emisor         AS EmisorDireccion,
+                   COALESCE(cm.maestro_cliente_clave, '') AS ClienteClave,
+                   nc.razon_social_receptor    AS ReceptorNombre,
+                   nc.rtn_receptor             AS ReceptorRtn,
+                   nc.direccion_receptor       AS ReceptorDireccion,
+                   nc.factura_origen_numero    AS FacturaOrigenNumero,
+                   nc.factura_origen_fecha     AS FacturaOrigenFecha,
+                   nc.factura_origen_cai       AS FacturaOrigenCai,
+                   COALESCE(man.descripcion, '') AS MotivoDescripcion,
+                   nc.motivo_detalle           AS MotivoDetalle,
+                   nc.monto_disminuir          AS SubTotal,
+                   nc.isv_disminuir            AS Isv,
+                   nc.total_nota               AS Total,
+                   nc.anula_factura_origen     AS AnulaFacturaOrigen,
+                   nc.usuario_emisor           AS UsuarioEmisor
+            FROM public.adm_nota_credito nc
+            LEFT JOIN public.adm_cai_facturacion cai ON cai.cai_id = nc.cai_id
+            LEFT JOIN public.cliente_maestro cm ON cm.maestro_cliente_id = nc.cliente_id AND cm.company_id = nc.company_id
+            LEFT JOIN public.cfg_motivo_anulacion man ON man.motivo_anulacion_id = nc.motivo_anulacion_id
+            WHERE nc.company_id = @CompanyId AND nc.nota_credito_id = @NotaId"
+            : @"
+            SELECT 'ND'                        AS TipoNota,
+                   'NOTA DE DÉBITO'            AS TituloDocumento,
+                   nd.numero_documento         AS NumeroDocumento,
+                   nd.fecha_emision            AS FechaEmision,
+                   cai.codigo_cai              AS CodigoCai,
+                   nd.leyenda_cai_rango        AS LeyendaCaiRango,
+                   nd.fecha_limite_cai         AS FechaLimiteCai,
+                   nd.razon_social_emisor      AS EmisorNombre,
+                   nd.rtn_emisor               AS EmisorRtn,
+                   nd.direccion_emisor         AS EmisorDireccion,
+                   COALESCE(cm.maestro_cliente_clave, '') AS ClienteClave,
+                   nd.razon_social_receptor    AS ReceptorNombre,
+                   nd.rtn_receptor             AS ReceptorRtn,
+                   nd.direccion_receptor       AS ReceptorDireccion,
+                   nd.factura_origen_numero    AS FacturaOrigenNumero,
+                   nd.factura_origen_fecha     AS FacturaOrigenFecha,
+                   nd.factura_origen_cai       AS FacturaOrigenCai,
+                   COALESCE(mau.descripcion, '') AS MotivoDescripcion,
+                   nd.motivo_detalle           AS MotivoDetalle,
+                   nd.monto_aumentar           AS SubTotal,
+                   nd.isv_aumentar             AS Isv,
+                   nd.total_nota               AS Total,
+                   false                       AS AnulaFacturaOrigen,
+                   nd.usuario_emisor           AS UsuarioEmisor
+            FROM public.adm_nota_debito nd
+            LEFT JOIN public.adm_cai_facturacion cai ON cai.cai_id = nd.cai_id
+            LEFT JOIN public.cliente_maestro cm ON cm.maestro_cliente_id = nd.cliente_id AND cm.company_id = nd.company_id
+            LEFT JOIN public.cfg_motivo_aumento mau ON mau.motivo_aumento_id = nd.motivo_aumento_id
+            WHERE nd.company_id = @CompanyId AND nd.nota_debito_id = @NotaId";
+
+        var nota = await connection.QueryFirstOrDefaultAsync<NotaImpresionDto>(
+            new CommandDefinition(sql, new { CompanyId = companyId, NotaId = notaId },
+                transaction: transaction, cancellationToken: ct));
+
+        if (nota is null)
+        {
+            return null;
+        }
+
+        var sqlLineas = esCredito
+            ? "SELECT descripcion AS Descripcion, cantidad AS Cantidad, monto_unitario AS MontoUnitario, monto_total AS MontoTotal FROM public.adm_nota_credito_detalle WHERE nota_credito_id = @NotaId ORDER BY nota_credito_detalle_id"
+            : "SELECT descripcion AS Descripcion, cantidad AS Cantidad, monto_unitario AS MontoUnitario, monto_total AS MontoTotal FROM public.adm_nota_debito_detalle WHERE nota_debito_id = @NotaId ORDER BY nota_debito_detalle_id";
+
+        var lineas = await connection.QueryAsync<NotaImpresionLineaDto>(
+            new CommandDefinition(sqlLineas, new { NotaId = notaId },
+                transaction: transaction, cancellationToken: ct));
+
+        nota.Lineas = lineas.ToList();
+        return nota;
+    }
+
     public async Task<PagedResult<NotaEmitidaListDto>> ListarNotasEmitidasPagedAsync(
         NotaEmitidaFilterDto filtro, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default)
     {
@@ -313,6 +528,7 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
                        nc.numero_documento  AS NumeroDocumento,
                        nc.fecha_emision     AS FechaEmision,
                        nc.cliente_id        AS ClienteId,
+                       COALESCE(cmc.maestro_cliente_clave, '') AS ClienteClave,
                        nc.razon_social_receptor AS ClienteNombre,
                        nc.factura_origen_numero AS FacturaOrigenNumero,
                        nc.motivo_anulacion_id   AS MotivoId,
@@ -325,6 +541,7 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
                        nc.anula_factura_origen AS AnulaFacturaOrigen,
                        nc.usuario_emisor    AS UsuarioEmisor
                 FROM public.adm_nota_credito nc
+                LEFT JOIN public.cliente_maestro cmc ON cmc.maestro_cliente_id = nc.cliente_id AND cmc.company_id = nc.company_id
                 LEFT JOIN public.cfg_motivo_anulacion man ON man.motivo_anulacion_id = nc.motivo_anulacion_id
                 LEFT JOIN public.cfg_estado_documento_fiscal edf ON edf.estado_id = nc.estado_id
                 WHERE nc.company_id = @CompanyId
@@ -334,6 +551,7 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
                        nd.numero_documento  AS NumeroDocumento,
                        nd.fecha_emision     AS FechaEmision,
                        nd.cliente_id        AS ClienteId,
+                       COALESCE(cmd.maestro_cliente_clave, '') AS ClienteClave,
                        nd.razon_social_receptor AS ClienteNombre,
                        nd.factura_origen_numero AS FacturaOrigenNumero,
                        nd.motivo_aumento_id AS MotivoId,
@@ -346,6 +564,7 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
                        false                AS AnulaFacturaOrigen,
                        nd.usuario_emisor    AS UsuarioEmisor
                 FROM public.adm_nota_debito nd
+                LEFT JOIN public.cliente_maestro cmd ON cmd.maestro_cliente_id = nd.cliente_id AND cmd.company_id = nd.company_id
                 LEFT JOIN public.cfg_motivo_aumento mau ON mau.motivo_aumento_id = nd.motivo_aumento_id
                 LEFT JOIN public.cfg_estado_documento_fiscal edf2 ON edf2.estado_id = nd.estado_id
                 WHERE nd.company_id = @CompanyId
@@ -358,7 +577,8 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
               AND (@Search::text IS NULL
                    OR NumeroDocumento ILIKE @Search::text
                    OR FacturaOrigenNumero ILIKE @Search::text
-                   OR ClienteNombre ILIKE @Search::text)
+                   OR ClienteNombre ILIKE @Search::text
+                   OR ClienteClave ILIKE @Search::text)
             {1}";
 
         var countSql = string.Format(cte, "COUNT(*)", string.Empty);

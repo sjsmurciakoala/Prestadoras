@@ -9,6 +9,7 @@
 @inject NotasCreditoDebitoClient Client
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - Notas de Crédito y Débito</PageTitle>
 
@@ -120,6 +121,11 @@
                 <DxGridDataColumn FieldName="@nameof(NotaEmitidaListDto.FechaEmision)" Caption="Fecha"
                                   DisplayFormat="{0:dd/MM/yyyy}" Width="110px" />
 
+                @* Pruebas operativas jul-2026: número de cuenta del cliente visible
+                   (y la búsqueda del toolbar también filtra por esta clave). *@
+                <DxGridDataColumn FieldName="@nameof(NotaEmitidaListDto.ClienteClave)" Caption="Cuenta No." Width="110px"
+                                  TextAlignment="GridTextAlignment.Center" />
+
                 <DxGridDataColumn FieldName="@nameof(NotaEmitidaListDto.ClienteNombre)" Caption="Cliente" MinWidth="180" />
 
                 <DxGridDataColumn FieldName="@nameof(NotaEmitidaListDto.FacturaOrigenNumero)" Caption="Factura origen"
@@ -145,6 +151,20 @@
                 </DxGridDataColumn>
 
                 <DxGridDataColumn FieldName="@nameof(NotaEmitidaListDto.UsuarioEmisor)" Caption="Usuario" Width="130px" Visible="false" />
+
+                <DxGridDataColumn Caption="Acciones" Width="110px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
+                    <CellDisplayTemplate Context="cell">
+                        @if (cell.DataItem is NotaEmitidaListDto n)
+                        {
+                            <DxButton Text="Imprimir"
+                                      IconCssClass="bi bi-printer"
+                                      SizeMode="SizeMode.Small"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                      Click="@(() => ImprimirNotaAsync(n))" />
+                        }
+                    </CellDisplayTemplate>
+                </DxGridDataColumn>
             </Columns>
             <EmptyDataAreaTemplate>
                 <div class="text-center p-5 text-muted">
@@ -279,9 +299,14 @@
                       RenderStyle="ButtonRenderStyle.Secondary"
                       RenderStyleMode="ButtonRenderStyleMode.Outline"
                       Click="@(() => popupVisible = false)" />
+            <DxButton Text="@(isPreviewing ? "Generando..." : "Vista previa")"
+                      IconCssClass="bi bi-eye"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      Enabled="@(PuedeEmitir && !isSaving && !isPreviewing)"
+                      Click="VistaPreviaAsync" />
             <DxButton Text="Emitir"
                       RenderStyle="ButtonRenderStyle.Primary"
-                      Enabled="@(PuedeEmitir && !isSaving)"
+                      Enabled="@(PuedeEmitir && !isSaving && !isPreviewing)"
                       Click="EmitirAsync" />
         </div>
     </FooterContentTemplate>
@@ -293,6 +318,7 @@
     private string? searchText;
     private string? tipoFiltro;
     private bool isSaving;
+    private bool isPreviewing;
     private string usuarioActual = "system";
 
     // Popup emisión
@@ -519,6 +545,63 @@
         finally
         {
             isSaving = false;
+        }
+    }
+
+    // ── Impresión / vista previa (pruebas operativas jul-2026) ──
+
+    private async Task ImprimirNotaAsync(NotaEmitidaListDto nota)
+        => await JS.InvokeVoidAsync("open", NotasCreditoDebitoClient.GetNotaPdfUrl(nota.TipoNota, nota.NotaId), "_blank");
+
+    /// <summary>
+    /// PDF del documento SIN guardarlo (el servidor emite y revierte en la
+    /// misma transacción): el usuario ve el formato exacto antes de emitir.
+    /// </summary>
+    private async Task VistaPreviaAsync()
+    {
+        if (!PuedeEmitir) return;
+        isPreviewing = true;
+        try
+        {
+            byte[] pdf;
+            if (tipoNotaSel == "NC")
+            {
+                pdf = await Client.VistaPreviaCreditoPdfAsync(new EmitirNotaCreditoRequestDto
+                {
+                    FacturaOrigenId = facturaOrigenSel!.Value,
+                    MotivoAnulacionId = motivoSel!.Value,
+                    MotivoDetalle = motivoDetalle,
+                    MontoDisminuir = monto > 0 ? monto : null,
+                    CaiId = caiSel!.Value,
+                    Usuario = usuarioActual
+                });
+            }
+            else
+            {
+                pdf = await Client.VistaPreviaDebitoPdfAsync(new EmitirNotaDebitoRequestDto
+                {
+                    FacturaOrigenId = facturaOrigenSel!.Value,
+                    MotivoAumentoId = motivoSel!.Value,
+                    MotivoDetalle = motivoDetalle,
+                    MontoAumentar = monto,
+                    CaiId = caiSel!.Value,
+                    Usuario = usuarioActual
+                });
+            }
+
+            await JS.InvokeVoidAsync("siad.abrirPdf", Convert.ToBase64String(pdf), "Vista previa de nota");
+        }
+        catch (HttpRequestException ex)
+        {
+            ShowToast("Vista previa", ex.Message, ToastRenderStyle.Warning);
+        }
+        catch (Exception ex)
+        {
+            ShowToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isPreviewing = false;
         }
     }
 
