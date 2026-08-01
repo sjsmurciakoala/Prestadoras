@@ -48,10 +48,15 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 ### Estado de cuenta (va con F4)
 - Filtrar por rangos de fecha.
 
-### Notas de crédito / débito
-- Colocar número de cuenta del cliente.
-- Ver todas las NC/ND de un cliente sin recorrer el estado de cuenta.
-- Reimprimir NC/ND y vista previa del formato antes de guardar.
+### Notas de crédito / débito — ✅ RESUELTO (lote 2, 2026-08-01, PR #54)
+- ~~Colocar número de cuenta del cliente~~ → "Cuenta No." en el documento
+  impreso, columna del listado y la búsqueda filtra por clave.
+- ~~Ver todas las NC/ND de un cliente~~ → buscar la clave en Notas emitidas.
+- ~~Reimprimir NC/ND y vista previa antes de guardar~~ → botón Imprimir por
+  fila + Vista previa en el popup (emite con el mismo SP y revierte: formato
+  exacto con marca de agua, sin persistir ni consumir correlativo).
+- También quedó (2026-07-31): **Informe de banco diario** en Reportería →
+  Cobranza (rep_banco_diario + layout publicado, tope 31 días).
 
 ### Clientes
 - Campo "Acueducto" a nivel de cliente (no del medidor).
