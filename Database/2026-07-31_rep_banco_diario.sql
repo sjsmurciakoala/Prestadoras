@@ -45,12 +45,19 @@ LANGUAGE sql
 STABLE
 AS $function$
 WITH parametros AS (
+    -- Informe OPERATIVO diario: rango tope de 31 días. El viewer de DevExpress
+    -- puede mandar defaults absurdos (se vio 01/01/2025→31/07/2026 = 296k
+    -- pagos migrados → timeout); el tope protege y el título muestra el rango
+    -- efectivo, así el recorte nunca es silencioso.
     SELECT
         p_company_id AS company_id,
         COALESCE(p_fecha_desde, current_date) AS fecha_desde,
-        GREATEST(
-            COALESCE(p_fecha_hasta, COALESCE(p_fecha_desde, current_date)),
-            COALESCE(p_fecha_desde, current_date)
+        LEAST(
+            GREATEST(
+                COALESCE(p_fecha_hasta, COALESCE(p_fecha_desde, current_date)),
+                COALESCE(p_fecha_desde, current_date)
+            ),
+            COALESCE(p_fecha_desde, current_date) + 31
         ) AS fecha_hasta
 ),
 empresa AS (
