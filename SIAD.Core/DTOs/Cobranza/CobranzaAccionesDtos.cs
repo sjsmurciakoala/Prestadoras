@@ -77,7 +77,9 @@ public record AccionCobranzaHistorialDto(
     string? NombreObservacion,  // texto de axl_observacion_cobranza (resultado)
     string? Observacion,        // observación libre adicional
     string? Abogado,
-    string? EjecutadoPor);
+    string? EjecutadoPor,
+    // Pruebas operativas jul-2026: reimprimir la carta archivada desde el historial.
+    int? DocumentoId = null);
 
 public static class CobranzaHistorialConstantes
 {

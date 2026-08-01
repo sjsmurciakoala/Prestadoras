@@ -34,7 +34,9 @@ public sealed class DocumentoCobranzaGenerator : IDocumentoCobranzaGenerator
         return new DocumentoGenerado(nombre, stream.ToArray(), "application/pdf");
     }
 
-    // ── PLACEHOLDER: Carta de Cobranza Prejudicial ───────────────────────────────
+    // ── Carta de Cobranza Prejudicial (formato formal, pruebas operativas
+    //    jul-2026: membrete real de la empresa + correlativo de avisos POR
+    //    CLIENTE, alineado al estilo del requerimiento de pago en mora) ────────
     private static XtraReport BuildCartaPrejudicial(DocumentoCobranzaDatos d)
     {
         var report = new XtraReport
@@ -46,51 +48,62 @@ public sealed class DocumentoCobranzaGenerator : IDocumentoCobranzaGenerator
         report.Bands.Clear();
         report.Bands.AddRange([new TopMarginBand(), new BottomMarginBand()]);
 
-        var detail = new DetailBand { HeightF = 720f };
+        var detail = new DetailBand { HeightF = 740f };
         float w = 700f;
 
-        var fontTitulo = new DXFont("Arial", 16f, DXFontStyle.Bold);
-        var fontBody = new DXFont("Arial", 11f);
-        var fontBold = new DXFont("Arial", 11f, DXFontStyle.Bold);
+        var fontEmpresa = new DXFont("Times New Roman", 15f, DXFontStyle.Bold);
+        var fontMembrete = new DXFont("Times New Roman", 9f);
+        var fontTitulo = new DXFont("Times New Roman", 13f, DXFontStyle.Bold);
+        var fontBody = new DXFont("Times New Roman", 11f);
+        var fontBold = new DXFont("Times New Roman", 11f, DXFontStyle.Bold);
 
         var total = d.TotalAdeudado.ToString("N2", Hn);
         var fecha = d.FechaEmision.ToString("d 'de' MMMM 'de' yyyy", Hn);
 
         var controles = new List<XRControl>
         {
-            // Membrete (placeholder)
-            Label(0, 0, w, 22, "[ MEMBRETE DE LA EMPRESA ]", new DXFont("Arial", 10f, DXFontStyle.Bold),
-                  TextAlignment.MiddleCenter, Color.Gray),
+            // Membrete real de la empresa (mismo espíritu que el requerimiento)
+            Label(0, 0, w, 22, d.EmpresaNombre ?? string.Empty, fontEmpresa, TextAlignment.MiddleCenter),
+            Label(0, 24, w, 14, string.IsNullOrWhiteSpace(d.EmpresaRtn) ? string.Empty : $"RTN: {d.EmpresaRtn}",
+                  fontMembrete, TextAlignment.MiddleCenter, Color.DimGray),
+            Label(0, 38, w, 14, d.EmpresaDireccion ?? string.Empty, fontMembrete, TextAlignment.MiddleCenter, Color.DimGray),
+            Label(0, 56, w, 4, "", fontMembrete, TextAlignment.MiddleCenter, Color.Black, BorderSide.Top),
 
-            // Lugar y fecha
-            Label(0, 50, w, 18, $"Tegucigalpa, {fecha}", fontBody, TextAlignment.MiddleRight),
+            // Título + correlativo de avisos del cliente
+            Label(0, 68, w, 22, "CARTA DE COBRANZA PREJUDICIAL", fontTitulo, TextAlignment.MiddleCenter),
+            Label(0, 90, w, 18, $"AVISO N.º {Math.Max(d.NumeroAviso, 1)}", fontBold, TextAlignment.MiddleCenter),
+
+            // Fecha
+            Label(0, 120, w, 18, fecha, fontBody, TextAlignment.MiddleRight),
 
             // Destinatario
-            Label(0, 95, w, 18, $"Señor(a): {d.ClienteNombre}", fontBody),
-            Label(0, 115, w, 18, $"Clave: {d.ClienteClave}", fontBody),
-            Label(0, 135, w, 18, $"Dirección: {d.Direccion ?? "—"}", fontBody),
-
-            // Título
-            Label(0, 180, w, 26, "CARTA DE COBRANZA PREJUDICIAL", fontTitulo, TextAlignment.MiddleCenter),
+            Label(0, 150, w, 18, $"Señor(a): {d.ClienteNombre}", fontBold),
+            Label(0, 168, w, 18, $"Cuenta No.: {d.ClienteClave}" +
+                  (string.IsNullOrWhiteSpace(d.Medidor) ? string.Empty : $"     Medidor: {d.Medidor}"), fontBody),
+            Label(0, 186, w, 18, $"Dirección: {d.Direccion ?? "—"}", fontBody),
 
             // Cuerpo
-            Multiline(0, 230, w, 90,
-                "Por este medio le comunicamos que a la fecha mantiene una deuda pendiente con " +
-                "nuestra empresa por la suma de:", fontBody),
+            Multiline(0, 222, w, 70,
+                "Por este medio le comunicamos que, a la fecha de la presente, usted mantiene " +
+                "una deuda pendiente con nuestra empresa por la suma de:", fontBody),
 
-            Label(0, 320, w, 24, $"L. {total}", fontBold, TextAlignment.MiddleCenter),
+            Label(0, 292, w, 24, $"L. {total}", new DXFont("Times New Roman", 13f, DXFontStyle.Bold), TextAlignment.MiddleCenter),
 
-            Multiline(0, 360, w, 110,
+            Multiline(0, 330, w, 110,
                 $"Se le concede un plazo de {d.PlazoDias} días hábiles a partir de la presente " +
                 "notificación para regularizar su situación y evitar el inicio de acciones " +
                 "judiciales de cobro. De no atender este requerimiento, su caso será remitido " +
-                "al departamento legal.", fontBody),
+                "al departamento legal para los trámites correspondientes.", fontBody),
+
+            Multiline(0, 445, w, 40,
+                "Si a la fecha de recibo de la presente ya efectuó el pago, haga caso omiso de " +
+                "este aviso y disculpe la molestia.", fontBody),
 
             // Cierre / firma
-            Label(0, 540, w, 18, "Atentamente,", fontBody),
-            Label(0, 610, 280, 1, "", fontBody, TextAlignment.TopLeft, Color.Black, BorderSide.Top),
-            Label(0, 614, 280, 18, d.Firmante ?? "Departamento de Cobranzas", fontBody),
-            Label(0, 632, 280, 18, "Departamento de Cobranzas", new DXFont("Arial", 9f), TextAlignment.TopLeft, Color.DimGray),
+            Label(0, 520, w, 18, "Atentamente,", fontBody),
+            Label(0, 600, 280, 1, "", fontBody, TextAlignment.TopLeft, Color.Black, BorderSide.Top),
+            Label(0, 604, 280, 18, d.Firmante ?? "Departamento de Cobranzas", fontBody),
+            Label(0, 622, 280, 18, "Departamento de Cobranzas", new DXFont("Times New Roman", 9f), TextAlignment.TopLeft, Color.DimGray),
         };
 
         detail.Controls.AddRange(controles.ToArray());

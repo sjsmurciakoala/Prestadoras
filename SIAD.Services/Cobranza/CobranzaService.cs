@@ -692,7 +692,13 @@ public class CobranzaService : ICobranzaService
                     .Where(b => b.abogado_id == a.abogado_id)
                     .Select(b => b.abogado_nombrecorto)
                     .FirstOrDefault(),
-                a.ejecutado_por))
+                a.ejecutado_por,
+                // snapshot archivado más reciente (para reimprimir desde el historial)
+                _context.cln_accion_cobranza_documentos
+                    .Where(doc => doc.accion_id == a.id)
+                    .OrderByDescending(doc => doc.id)
+                    .Select(doc => (int?)doc.id)
+                    .FirstOrDefault()))
             .ToListAsync(ct);
     }
 
@@ -811,8 +817,26 @@ public class CobranzaService : ICobranzaService
         int accionId, string documentoCodigo, string clienteClave,
         string? firmante, string? generadoPor, CancellationToken ct)
     {
+        var companyId = _currentCompanyService.GetCompanyId();
         var cliente = await ObtenerClienteBaseAsync(clienteClave.Trim(), ct);
         var total = await ObtenerSaldoClienteAsync(clienteClave.Trim(), ct);
+        var datosReq = await ObtenerDatosRequerimientoAsync(clienteClave.Trim(), companyId, ct);
+
+        // Pruebas operativas jul-2026: correlativo de avisos POR CLIENTE — cuántas
+        // veces se le ha generado ESTE documento antes (los snapshots archivados
+        // son la bitácora), más el actual.
+        var avisosPrevios = await _context.cln_accion_cobranza_documentos
+            .AsNoTracking()
+            .Where(doc => doc.documento_codigo == documentoCodigo
+                          && _context.cln_accion_cobranzas.Any(a =>
+                                a.id == doc.accion_id && a.codigocliente == clienteClave))
+            .CountAsync(ct);
+
+        var empresa = await _context.cfg_companies
+            .AsNoTracking()
+            .Where(c => c.company_id == companyId)
+            .Select(c => new { c.legal_name, c.commercial_name, c.tax_id, c.address })
+            .FirstOrDefaultAsync(ct);
 
         var datos = new DocumentoCobranzaDatos(
             ClienteClave: clienteClave,
@@ -821,7 +845,12 @@ public class CobranzaService : ICobranzaService
             TotalAdeudado: total,
             Firmante: firmante,
             FechaEmision: DateTime.Today,
-            PlazoDias: 8);
+            PlazoDias: 8,
+            NumeroAviso: avisosPrevios + 1,
+            EmpresaNombre: empresa?.legal_name ?? empresa?.commercial_name,
+            EmpresaRtn: empresa?.tax_id,
+            EmpresaDireccion: empresa?.address,
+            Medidor: datosReq?.Medidor);
 
         var generado = _documentoGenerator.Generar(documentoCodigo, datos);
 

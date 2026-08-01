@@ -22,7 +22,14 @@ public record DocumentoCobranzaDatos(
     decimal TotalAdeudado,
     string? Firmante,
     DateTime FechaEmision,
-    int PlazoDias);
+    int PlazoDias,
+    // Pruebas operativas jul-2026: correlativo de avisos POR CLIENTE (1 = primer
+    // aviso) y membrete real de la empresa en la carta.
+    int NumeroAviso = 1,
+    string? EmpresaNombre = null,
+    string? EmpresaRtn = null,
+    string? EmpresaDireccion = null,
+    string? Medidor = null);
 
 /// <summary>Resultado de la generación: archivo listo para archivar/entregar.</summary>
 public record DocumentoGenerado(string NombreArchivo, byte[] Contenido, string ContentType);
