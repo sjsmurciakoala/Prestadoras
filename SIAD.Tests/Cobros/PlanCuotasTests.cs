@@ -373,4 +373,100 @@ public sealed class PlanCuotasTests : IntegrationTestBase, IAsyncLifetime
         // Y la factura sigue intacta.
         Assert.Equal(100m, await SaldoDocumentosAsync());
     }
+
+    // ------------------------------------------------------------------------
+    // Pruebas operativas jul-2026 (lote 4 convenios):
+    //   * ANTICIPO: una cuota con vencimiento futuro se puede cobrar antes de
+    //     tiempo y fuera de orden (el motor no restringe por fecha).
+    //   * ANULACIÓN: lo cobrado queda como pago histórico; el saldo de las
+    //     cuotas vivas vuelve a las facturas de origen vía el traslado, la
+    //     factura recupera estado pendiente y el plan queda ANULADO.
+    // ------------------------------------------------------------------------
+
+    [SkippableFact]
+    public async Task Anticipo_de_cuota_futura_y_anulacion_restituyen_correctamente()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await PrepararEmpresaYClienteAsync();
+        var facturaId = await CrearFacturaConEspejoAsync(60m, 40m, "ANU");
+
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.adm_documento_secuencia
+                (company_id, tipo_documento, canal_id, prefijo, longitud_padding, valor_actual, updated_by)
+            VALUES (@id, 'RECIBO_PAGO', 0, 'REC-', 8, 0, 'test')
+            ON CONFLICT (company_id, tipo_documento, canal_id) DO NOTHING",
+            new { id = Empresa }, Transaction));
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.sesion_caja (company_id, usuario_apertura, fecha_apertura, estado)
+            VALUES (@id, 'test-f6', now(), 'ABIERTA')",
+            new { id = Empresa }, Transaction));
+
+        var creado = await _servicio!.GuardarPlanPagoAsync(Plan(100m, 0m, 2));
+        Assert.True(creado.Success, creado.Message);
+
+        var cuotas = (await Connection.QueryAsync<int>(new CommandDefinition(
+            "SELECT id FROM public.cln_plan_pago_dtl WHERE company_id = @C ORDER BY mes",
+            new { C = Empresa }, Transaction))).ToList();
+        Assert.Equal(2, cuotas.Count);
+
+        var motor = new CobroService(
+            _context!,
+            new StubBanTransaccionesService(),
+            new TestCurrentCompanyService(Empresa),
+            new StubCorteMasivoService());
+
+        // ANTICIPO: se cobra la SEGUNDA cuota (vence en ~3 meses) antes que la primera.
+        var anticipo = await motor.RegistrarCobroAsync(new CobroCrearDto
+        {
+            Canal = CanalCobro.Caja,
+            ClienteClave = Clave,
+            Usuario = "test-f6",
+            FormaPago = "EFECTIVO",
+            Aplicaciones = [new CobroAplicacionDto
+            {
+                DocumentoTipo = DocumentoCobroTipo.CuotaPlan,
+                PlanCuotaId = cuotas[1],
+                Monto = 50m
+            }]
+        });
+        Assert.True(anticipo.Success, anticipo.Message);
+
+        // ANULACIÓN: la primera cuota (50, viva) vuelve a la factura de origen.
+        var planId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(
+            "SELECT id FROM public.cln_plan_pago_hdr WHERE company_id = @C", new { C = Empresa }, Transaction));
+
+        var anulacion = await _servicio!.AnularPlanPagoAsync(planId, "prueba de anulación lote 4", "test-f6");
+        Assert.True(anulacion.Success, anulacion.Message);
+
+        var (estadoPlan, estadoPagoLegacy) = await Connection.QueryFirstAsync<(short, string)>(new CommandDefinition(
+            "SELECT estado_id, estadopago FROM public.cln_plan_pago_hdr WHERE id = @Id",
+            new { Id = planId }, Transaction));
+        Assert.Equal((short)3, estadoPlan);        // EstadoPlan.Anulado
+        Assert.Equal("Anulado", estadoPagoLegacy);
+
+        var estadosCuotas = (await Connection.QueryAsync<(int? mes, short estadoId)>(new CommandDefinition(
+            "SELECT mes, estado_id FROM public.cln_plan_pago_dtl WHERE idhdr = @Id ORDER BY mes",
+            new { Id = planId }, Transaction))).ToList();
+        Assert.Equal((short)3, estadosCuotas[0].estadoId);   // viva → anulada
+        Assert.Equal((short)2, estadosCuotas[1].estadoId);   // cobrada → intacta
+
+        // La factura recuperó los 50 no cobrados y quedó parcial.
+        var (estadoFactura, saldoLineas) = await Connection.QueryFirstAsync<(string, decimal)>(new CommandDefinition(@"
+            SELECT f.estado,
+                   (SELECT COALESCE(SUM(COALESCE(d.montovalor_saldo, d.montovalor, 0)), 0)
+                    FROM public.factura_detalle d WHERE d.factura_id = f.id)
+            FROM public.factura f WHERE f.id = @Id",
+            new { Id = facturaId }, Transaction));
+        Assert.Equal("B", estadoFactura);
+        Assert.Equal(50m, saldoLineas);
+
+        // Saldo del cliente: ahora por la factura (50), sin cuotas fantasma.
+        Assert.Equal(50m, await SaldoDocumentosAsync());
+
+        // La marca de convenio del cliente se apagó (era su único plan activo).
+        var tieneConvenio = await Connection.ExecuteScalarAsync<bool?>(new CommandDefinition(
+            "SELECT maestro_cliente_tiene_convenio FROM public.cliente_maestro WHERE company_id = @C AND maestro_cliente_clave = @Clave",
+            new { C = Empresa, Clave }, Transaction));
+        Assert.False(tieneConvenio ?? false);
+    }
 }

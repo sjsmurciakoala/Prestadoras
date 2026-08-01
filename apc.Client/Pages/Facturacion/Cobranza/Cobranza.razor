@@ -256,14 +256,24 @@
                                         </CellDisplayTemplate>
                                     </DxGridDataColumn>
                                     <DxGridDataColumn FieldName="@nameof(CobranzaPlanResumenDto.Total)" Caption="Total" DisplayFormat="n2" Width="120px" />
-                                    <DxGridDataColumn Caption="Acciones" Width="140px" TextAlignment="GridTextAlignment.Center">
+                                    <DxGridDataColumn Caption="Acciones" Width="220px" TextAlignment="GridTextAlignment.Center">
                                         <CellDisplayTemplate Context="ctx">
+                                            @{ var plan = (CobranzaPlanResumenDto)ctx.DataItem; }
                                             <DxButton Text="Detalle"
                                                       ButtonType="ButtonType.Normal"
                                                       SizeMode="SizeMode.Small"
-                                                      Click="@(
-                                                          async () => await MostrarDetallePlan(
-                                                              (CobranzaPlanResumenDto)ctx.DataItem))" />
+                                                      Click="@(async () => await MostrarDetallePlan(plan))" />
+                                            @* Pruebas operativas jul-2026: anulación de convenio. *@
+                                            @if (plan.EstadoId == 1 && plan.EncabezadoId is not null)
+                                            {
+                                                <DxButton Text="Anular"
+                                                          IconCssClass="bi bi-x-circle"
+                                                          SizeMode="SizeMode.Small"
+                                                          RenderStyle="ButtonRenderStyle.Danger"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                          CssClass="ms-1"
+                                                          Click="@(() => AbrirAnularPlan(plan))" />
+                                            }
                                         </CellDisplayTemplate>
                                     </DxGridDataColumn>
                                 </Columns>
@@ -412,6 +422,38 @@
     </BodyContentTemplate>
 </DxPopup>
 
+@* Pruebas operativas jul-2026: anulación de convenio con motivo obligatorio. *@
+<DxPopup HeaderText="Anular convenio"
+         @bind-Visible="anularPlanVisible"
+         Width="min(520px, 96vw)"
+         ShowFooter="true">
+    <BodyContentTemplate Context="pop">
+        @if (planAnular is not null)
+        {
+            <div class="alert alert-warning">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Se anulará el convenio <strong>@planAnular.Correlativo</strong> de
+                <strong>@planAnular.Cliente</strong>. Las cuotas <strong>no cobradas</strong> se anulan y su
+                saldo <strong>vuelve a las facturas de origen</strong>; lo ya cobrado queda como pago histórico.
+            </div>
+            <label class="form-label">Motivo (obligatorio)</label>
+            <DxMemo @bind-Text="motivoAnulacionPlan" Rows="3" CssClass="w-100" NullText="Explique por qué se anula el convenio..." />
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate Context="pop">
+        <div class="d-flex gap-2 justify-content-end w-100">
+            <DxButton Text="Cancelar"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => anularPlanVisible = false)" />
+            <DxButton Text="@(anulandoPlan ? "Anulando..." : "Anular convenio")"
+                      RenderStyle="ButtonRenderStyle.Danger"
+                      Enabled="@(!anulandoPlan && !string.IsNullOrWhiteSpace(motivoAnulacionPlan))"
+                      Click="ConfirmarAnularPlanAsync" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
 @code {
     private const string ToastName = "cobranza-plan";
     private const string GridLayoutStorageKey = "cobranza-planes-grid-layout";
@@ -490,6 +532,47 @@
 
     private List<CobranzaPlanResumenDto> planes = new();
     private string planesBusqueda = string.Empty;
+
+    // Anulación de convenio (pruebas operativas jul-2026)
+    private bool anularPlanVisible;
+    private bool anulandoPlan;
+    private CobranzaPlanResumenDto? planAnular;
+    private string? motivoAnulacionPlan;
+
+    private void AbrirAnularPlan(CobranzaPlanResumenDto plan)
+    {
+        planAnular = plan;
+        motivoAnulacionPlan = null;
+        anularPlanVisible = true;
+    }
+
+    private async Task ConfirmarAnularPlanAsync()
+    {
+        if (planAnular?.EncabezadoId is not int planId || string.IsNullOrWhiteSpace(motivoAnulacionPlan))
+            return;
+
+        anulandoPlan = true;
+        try
+        {
+            var result = await CobranzaClient.AnularPlanAsync(planId, motivoAnulacionPlan.Trim());
+            MostrarToast(result.Success ? "Convenio anulado" : "No se pudo anular",
+                         result.Message ?? string.Empty,
+                         result.Success ? ToastRenderStyle.Success : ToastRenderStyle.Warning);
+            if (result.Success)
+            {
+                anularPlanVisible = false;
+                await CargarPlanesAsync();
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            MostrarToast("Anular convenio", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            anulandoPlan = false;
+        }
+    }
     private int totalPlanes;
     private bool cargandoPlanes;
     private CobranzaPlanDetalleDto? detalle;
@@ -779,8 +862,8 @@
 
         return estado.Trim().ToLowerInvariant() switch
         {
-            "pagado" => "paid",
-            "cancelado" => "cancelled",
+            "pagado" or "completado" => "paid",
+            "cancelado" or "anulado" => "cancelled",
             "pendiente" => "pending",
             "activo" => "active",
             _ => "inactive"

@@ -148,6 +148,21 @@ public class CobranzaController : ControllerBase
 
 
 
+    // Pruebas operativas jul-2026: anulación de convenio (restituye el saldo
+    // no cobrado a las facturas de origen; lo cobrado queda como historia).
+    [HttpPost("planes/{planId:int}/anular")]
+    public async Task<IActionResult> AnularPlan(int planId, [FromBody] AnularPlanRequestDto dto, CancellationToken ct)
+    {
+        var usuario = User?.Identity?.Name ?? "system";
+        var result = await _service.AnularPlanPagoAsync(planId, dto?.Motivo, usuario, ct);
+        return result.Success ? Ok(result) : BadRequest(result);
+    }
+
+    public sealed class AnularPlanRequestDto
+    {
+        public string? Motivo { get; set; }
+    }
+
     [HttpGet("planes/{correlativo}")]
 
     public async Task<IActionResult> ObtenerPlan(string correlativo, CancellationToken ct)
