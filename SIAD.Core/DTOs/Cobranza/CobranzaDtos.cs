@@ -96,6 +96,8 @@ public class CobranzaPlanResumenDto
     public string Correlativo { get; set; } = string.Empty;
     public string Cliente { get; set; } = string.Empty;
     public string Estado { get; set; } = string.Empty;
+    /// <summary>Estado REAL del plan (EstadoPlan: 1 activo, 2 completado, 3 anulado).</summary>
+    public short? EstadoId { get; set; }
     public decimal Total { get; set; }
     public DateTime? Fecha { get; set; }
     public int? EncabezadoId { get; set; }

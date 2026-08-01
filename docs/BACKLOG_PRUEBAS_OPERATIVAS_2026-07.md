@@ -34,10 +34,19 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 
 ## 📌 Pendiente por módulo
 
-### Cobranza / convenios (va con F6 del plan de unificación)
-- Anticipo de cuotas en convenio de pago.
-- Anular convenio de pago.
-- Cargar gestión legal al cliente mediante nota de débito.
+### Cobranza / convenios — ✅ RESUELTO (lote 4, 2026-08-01)
+- ~~Anticipo de cuotas en convenio~~ ✅ el motor cobra cuotas futuras y fuera
+  de orden (verificado y fijado con test; la caja las lista todas).
+- ~~Anular convenio de pago~~ ✅ botón Anular en `/facturacion/cobranza`
+  (pestaña planes, con motivo obligatorio): lo cobrado queda como pago
+  histórico; el saldo de las cuotas vivas VUELVE a las facturas de origen vía
+  cln_plan_pago_traslado (FIFO), la factura recupera estado pendiente/parcial
+  y el plan queda ANULADO (el grid ahora muestra el estado numérico real:
+  ACTIVO/COMPLETADO/ANULADO, no el legacy "Pendiente").
+- ~~Cargar gestión legal mediante ND~~ ✅ motivo de aumento GESTION_LEGAL
+  sembrado (`2026-08-01_motivo_nd_gestion_legal.sql`): se emite la ND desde
+  /facturacion/notas contra una factura del cliente con ese motivo y queda
+  cobrable en caja como cualquier ND.
 - ~~Cliente bloqueado por cobranza no debería poder recibir recibo/cobro~~ ✅ lote 1.
 - ~~Carta prejudicial: correlativo de avisos; formato~~ ✅ lote 3 (2026-08-01):
   AVISO N.º por cliente (cuenta los snapshots archivados) + formato formal con

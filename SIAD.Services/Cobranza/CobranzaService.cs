@@ -409,22 +409,180 @@ public class CobranzaService : ICobranzaService
         }
     }
 
+    /// <summary>
+    /// Anulación de convenio (pruebas operativas jul-2026). Regla de negocio:
+    /// lo COBRADO queda cobrado (las cuotas pagadas son historia de pago); lo
+    /// NO cobrado vuelve a las facturas de origen restituyendo el saldo línea
+    /// a línea con la bitácora del traslado (cln_plan_pago_traslado, FIFO).
+    /// Las cuotas vivas quedan ANULADAS y el plan pasa a estado ANULADO — la
+    /// caja deja de listarlas y el saldo del cliente vuelve a ser por facturas.
+    /// </summary>
+    public async Task<ResponseModelDto> AnularPlanPagoAsync(int planId, string? motivo, string usuario, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(motivo))
+            return ResponseModelDto.Fail("Indique el motivo de la anulación.");
+
+        // Con transacción ambiente (tests / llamador transaccional) se ejecuta
+        // dentro de ella; si no, transacción propia.
+        if (_context.Database.CurrentTransaction is not null)
+            return await AnularPlanPagoCoreAsync(planId, motivo!, usuario, ct);
+
+        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        try
+        {
+            var resultado = await AnularPlanPagoCoreAsync(planId, motivo!, usuario, ct);
+            if (resultado.Success)
+                await tx.CommitAsync(ct);
+            else
+                await tx.RollbackAsync(ct);
+            return resultado;
+        }
+        catch (Exception ex)
+        {
+            await tx.RollbackAsync(ct);
+            return ResponseModelDto.Fail($"Error al anular el convenio: {ex.Message}");
+        }
+    }
+
+    private async Task<ResponseModelDto> AnularPlanPagoCoreAsync(int planId, string motivo, string usuario, CancellationToken ct)
+    {
+        {
+            var hdr = await _context.cln_plan_pago_hdrs
+                .FirstOrDefaultAsync(h => h.id == planId, ct);
+            if (hdr is null)
+                return ResponseModelDto.Fail("No se encontró el convenio indicado.");
+            if (hdr.estado_id != EstadoPlan.Activo)
+                return ResponseModelDto.Fail("Solo se puede anular un convenio ACTIVO.");
+
+            var cuotasVivas = await _context.cln_plan_pago_dtls
+                .Where(d => d.idhdr == planId
+                            && (d.estado_id == EstadoDocumentoComercial.Activa
+                                || d.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada)
+                            && d.saldo_cuota > 0)
+                .ToListAsync(ct);
+
+            var montoRestituir = cuotasVivas.Sum(d => d.saldo_cuota);
+
+            // Restituir a las facturas de origen siguiendo el traslado (FIFO).
+            var traslados = await _context.cln_plan_pago_traslados
+                .Where(t => t.plan_id == planId)
+                .OrderBy(t => t.traslado_id)
+                .ToListAsync(ct);
+
+            var restante = montoRestituir;
+            var facturasAfectadas = new HashSet<int>();
+            foreach (var traslado in traslados)
+            {
+                if (restante <= 0) break;
+
+                var linea = await _context.factura_detalles
+                    .FirstOrDefaultAsync(d => d.id == traslado.factura_detalle_id, ct);
+                if (linea is null) continue;
+
+                var montovalor = linea.montovalor ?? 0m;
+                var saldoActual = linea.montovalor_saldo ?? montovalor;
+                var capacidad = montovalor - saldoActual;   // lo que el plan le quitó y aún no volvió
+                var devolver = Math.Min(restante, Math.Min(traslado.monto_trasladado, capacidad));
+                if (devolver <= 0) continue;
+
+                linea.montovalor_saldo = saldoActual + devolver;
+                restante -= devolver;
+                facturasAfectadas.Add(traslado.factura_id);
+            }
+
+            // Recalcular el estado de cada factura afectada (letra; el trigger
+            // de F1 sincroniza estado_id).
+            foreach (var facturaId in facturasAfectadas)
+            {
+                var factura = await _context.facturas.FirstOrDefaultAsync(f => f.id == facturaId, ct);
+                if (factura is null) continue;
+
+                // Con TRACKING: las líneas restituidas arriba aún no están en la
+                // BD (el SaveChanges viene después); el identity map devuelve
+                // las instancias ya modificadas.
+                var lineas = await _context.factura_detalles
+                    .Where(d => d.factura_id == facturaId)
+                    .ToListAsync(ct);
+
+                var total = lineas.Sum(l => l.montovalor ?? 0m);
+                var saldo = lineas.Sum(l => l.montovalor_saldo ?? l.montovalor ?? 0m);
+
+                factura.estado = saldo <= 0 ? "C" : (saldo < total ? "B" : "A");
+            }
+
+            var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+            foreach (var cuota in cuotasVivas)
+            {
+                cuota.estado_id = EstadoDocumentoComercial.Anulada;
+            }
+
+            hdr.estado_id = EstadoPlan.Anulado;
+            hdr.estadopago = "Anulado";   // espejo legacy de solo-lectura (vista)
+            hdr.usuariomodificacion = usuario;
+            hdr.fechamodificacion = ahora;
+            hdr.comentario = string.IsNullOrWhiteSpace(hdr.comentario)
+                ? $"ANULADO {ahora:yyyy-MM-dd} por {usuario}: {motivo!.Trim()}"
+                : $"{hdr.comentario} | ANULADO {ahora:yyyy-MM-dd} por {usuario}: {motivo!.Trim()}";
+
+            // Si el cliente ya no tiene ningún convenio activo, apagar la marca.
+            if (hdr.clienteid is int clienteId)
+            {
+                var tieneOtroActivo = await _context.cln_plan_pago_hdrs
+                    .AnyAsync(h => h.clienteid == clienteId && h.id != planId && h.estado_id == EstadoPlan.Activo, ct);
+                if (!tieneOtroActivo)
+                {
+                    var maestro = await _context.cliente_maestros
+                        .FirstOrDefaultAsync(c => c.maestro_cliente_id == clienteId, ct);
+                    if (maestro is not null)
+                    {
+                        maestro.maestro_cliente_tiene_convenio = false;
+                    }
+                }
+            }
+
+            await _context.SaveChangesAsync(ct);
+
+            var restituido = montoRestituir - restante;
+            return ResponseModelDto.Ok(null,
+                $"Convenio {hdr.correlativo} anulado. Se restituyeron L. {restituido:N2} a las facturas de origen; " +
+                "las cuotas ya cobradas quedan como pagos históricos.");
+        }
+    }
+
     public async Task<IReadOnlyList<CobranzaPlanResumenDto>> ListarPlanesAsync(CancellationToken ct = default)
     {
-        return await _context.vw_listaplanespagos
+        var planes = await _context.vw_listaplanespagos
             .AsNoTracking()
             .OrderByDescending(p => p.fecha)
             .Select(p => new CobranzaPlanResumenDto
             {
                 Correlativo = p.correlativo ?? string.Empty,
                 Cliente = p.nombrecliente ?? string.Empty,
-                Estado = p.estado ?? string.Empty,
+                // El string de la vista es el legacy estadopago; el estado REAL
+                // es el numérico del hdr (regla del repo: estados por id).
+                EstadoId = _context.cln_plan_pago_hdrs
+                    .Where(h => h.id == p.idhdr)
+                    .Select(h => (short?)h.estado_id)
+                    .FirstOrDefault(),
                 Total = p.total ?? 0,
                 Fecha = p.fecha,
                 EncabezadoId = p.idhdr,
                 ClienteClave = p.codcliente ?? string.Empty
             })
             .ToListAsync(ct);
+
+        foreach (var plan in planes)
+        {
+            plan.Estado = plan.EstadoId switch
+            {
+                EstadoPlan.Activo => "ACTIVO",
+                EstadoPlan.Completado => "COMPLETADO",
+                EstadoPlan.Anulado => "ANULADO",
+                _ => "PENDIENTE"
+            };
+        }
+
+        return planes;
     }
 
     public async Task<CobranzaPlanDetalleDto?> ObtenerPlanAsync(string correlativo, CancellationToken ct = default)

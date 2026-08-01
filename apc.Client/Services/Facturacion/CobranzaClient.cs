@@ -59,6 +59,13 @@ public class CobranzaClient
         return await ReadResponseAsync(response, ct);
     }
 
+    /// <summary>Anula un convenio ACTIVO (pruebas operativas jul-2026).</summary>
+    public async Task<ResponseModelDto> AnularPlanAsync(int planId, string motivo, CancellationToken ct = default)
+    {
+        var response = await _http.PostAsJsonAsync($"api/cobranza/planes/{planId}/anular", new { Motivo = motivo }, cancellationToken: ct);
+        return await ReadResponseAsync(response, ct);
+    }
+
     public async Task<IReadOnlyList<CobranzaPlanResumenDto>> ListarPlanesAsync(CancellationToken ct = default)
     {
         var result = await _http.GetFromJsonAsync<List<CobranzaPlanResumenDto>>("api/cobranza/planes", ct);

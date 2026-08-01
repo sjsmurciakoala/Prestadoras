@@ -11,6 +11,9 @@ public interface ICobranzaService
     Task<CobranzaPlanPreviewDto> CalcularCuotasAsync(CobranzaPlanPreviewRequestDto dto, CancellationToken ct = default);
     Task<ResponseModelDto> GuardarPlanPagoAsync(CobranzaPlanGuardarDto dto, CancellationToken ct = default);
     Task<IReadOnlyList<CobranzaPlanResumenDto>> ListarPlanesAsync(CancellationToken ct = default);
+
+    /// <summary>Anula un convenio ACTIVO: cuotas vivas anuladas y su saldo restituido a las facturas de origen (pruebas operativas jul-2026).</summary>
+    Task<ResponseModelDto> AnularPlanPagoAsync(int planId, string? motivo, string usuario, CancellationToken ct = default);
     Task<CobranzaPlanDetalleDto?> ObtenerPlanAsync(string correlativo, CancellationToken ct = default);
     // Acciones de cobranza
     Task<IReadOnlyList<AccionCobranzaDto>> ListarAccionesAsync(string clienteClave, CancellationToken ct = default);
