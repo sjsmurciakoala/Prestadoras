@@ -101,7 +101,9 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
             .Select(f => new FacturaOrigenLookupDto
             {
                 FacturaId = f.id,
-                NumeroFactura = f.numfactura ?? string.Empty,
+                // Migradas de SIMAFI sin numfactura: se identifica por el recibo
+                // (pruebas operativas jul-2026 — el combo salía con el número vacío).
+                NumeroFactura = f.numfactura ?? ("Recibo " + f.numrecibo),
                 FechaEmision = f.fechaemision.HasValue
                     ? f.fechaemision.Value.ToDateTime(TimeOnly.MinValue)
                     : (DateTime?)null,
