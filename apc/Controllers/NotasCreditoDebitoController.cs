@@ -83,6 +83,54 @@ public class NotasCreditoDebitoController : ControllerBase
         return Ok(result);
     }
 
+    // ── Impresión / vista previa (pruebas operativas jul-2026) ──
+
+    [HttpGet("{tipoNota}/{notaId:long}/pdf")]
+    public async Task<IActionResult> GetNotaPdf(string tipoNota, long notaId, CancellationToken ct)
+    {
+        var nota = await _service.ObtenerNotaImpresionAsync(tipoNota, notaId, ct);
+        if (nota is null)
+            return NotFound(new { mensaje = "No se encontró la nota indicada." });
+
+        return NotaPdf(nota);
+    }
+
+    [HttpPost("credito/vista-previa-pdf")]
+    public async Task<IActionResult> VistaPreviaCreditoPdf([FromBody] EmitirNotaCreditoRequestDto dto, CancellationToken ct)
+    {
+        dto.Usuario = UsuarioActual;
+        var (nota, error) = await _service.GenerarVistaPreviaCreditoAsync(dto, ct);
+        if (nota is null)
+            return BadRequest(new { mensaje = error ?? "No se pudo generar la vista previa." });
+
+        return NotaPdf(nota);
+    }
+
+    [HttpPost("debito/vista-previa-pdf")]
+    public async Task<IActionResult> VistaPreviaDebitoPdf([FromBody] EmitirNotaDebitoRequestDto dto, CancellationToken ct)
+    {
+        dto.Usuario = UsuarioActual;
+        var (nota, error) = await _service.GenerarVistaPreviaDebitoAsync(dto, ct);
+        if (nota is null)
+            return BadRequest(new { mensaje = error ?? "No se pudo generar la vista previa." });
+
+        return NotaPdf(nota);
+    }
+
+    private IActionResult NotaPdf(NotaImpresionDto nota)
+    {
+        using var report = new SIAD.Reports.Rpt_Dev_Nota(nota);
+        report.RequestParameters = false;
+
+        using var stream = new System.IO.MemoryStream();
+        report.ExportToPdf(stream);
+
+        // inline: vista previa en pestaña, mismo patrón que el recibo de caja.
+        var sufijo = nota.EsVistaPrevia ? "VistaPrevia" : nota.NumeroDocumento.Replace("/", "-");
+        Response.Headers.ContentDisposition = $"inline; filename=Nota-{nota.TipoNota}-{sufijo}.pdf";
+        return File(stream.ToArray(), "application/pdf");
+    }
+
     // ── Mantenimiento de catálogos de motivos ──
 
     [HttpGet("motivos/anulacion/crud")]

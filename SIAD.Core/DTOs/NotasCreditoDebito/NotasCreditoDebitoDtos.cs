@@ -109,6 +109,8 @@ public class NotaEmitidaListDto
     public string NumeroDocumento { get; set; } = string.Empty;
     public DateTime FechaEmision { get; set; }
     public long ClienteId { get; set; }
+    /// <summary>Número de cuenta (clave) del cliente — pruebas operativas jul-2026.</summary>
+    public string ClienteClave { get; set; } = string.Empty;
     public string ClienteNombre { get; set; } = string.Empty;
     public string FacturaOrigenNumero { get; set; } = string.Empty;
     public short MotivoId { get; set; }
@@ -130,6 +132,60 @@ public class NotaEmitidaFilterDto
     public short? EstadoId { get; set; }
     public DateTime? FechaDesde { get; set; }
     public DateTime? FechaHasta { get; set; }
+}
+
+// ── Impresión / vista previa (pruebas operativas jul-2026) ──
+
+/// <summary>Línea de detalle para el documento impreso de una NC/ND.</summary>
+public class NotaImpresionLineaDto
+{
+    public string Descripcion { get; set; } = string.Empty;
+    public decimal Cantidad { get; set; }
+    public decimal MontoUnitario { get; set; }
+    public decimal MontoTotal { get; set; }
+}
+
+/// <summary>
+/// Datos completos para imprimir (o previsualizar) una NC/ND. Todo lo fiscal
+/// viaja tal como quedó grabado en la nota (emisor, receptor, CAI, leyenda).
+/// </summary>
+public class NotaImpresionDto
+{
+    public string TipoNota { get; set; } = string.Empty;          // "NC" | "ND"
+    public string TituloDocumento { get; set; } = string.Empty;   // "NOTA DE CRÉDITO" | "NOTA DE DÉBITO"
+    public string NumeroDocumento { get; set; } = string.Empty;
+    public DateTime FechaEmision { get; set; }
+    public string? CodigoCai { get; set; }
+    public string? LeyendaCaiRango { get; set; }
+    public DateTime? FechaLimiteCai { get; set; }
+
+    public string EmisorNombre { get; set; } = string.Empty;
+    public string EmisorRtn { get; set; } = string.Empty;
+    public string? EmisorDireccion { get; set; }
+
+    /// <summary>Número de cuenta (clave) del cliente — pedido explícito del equipo.</summary>
+    public string ClienteClave { get; set; } = string.Empty;
+    public string ReceptorNombre { get; set; } = string.Empty;
+    public string? ReceptorRtn { get; set; }
+    public string? ReceptorDireccion { get; set; }
+
+    public string FacturaOrigenNumero { get; set; } = string.Empty;
+    public DateTime? FacturaOrigenFecha { get; set; }
+    public string? FacturaOrigenCai { get; set; }
+
+    public string MotivoDescripcion { get; set; } = string.Empty;
+    public string? MotivoDetalle { get; set; }
+
+    public List<NotaImpresionLineaDto> Lineas { get; set; } = new();
+    public decimal SubTotal { get; set; }
+    public decimal Isv { get; set; }
+    public decimal Total { get; set; }
+
+    public bool AnulaFacturaOrigen { get; set; }
+    public string UsuarioEmisor { get; set; } = string.Empty;
+
+    /// <summary>true = generado SIN guardar (marca de agua, sin valor fiscal).</summary>
+    public bool EsVistaPrevia { get; set; }
 }
 
 // ── Mantenimiento de catálogos de motivos ──

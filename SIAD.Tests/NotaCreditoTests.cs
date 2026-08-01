@@ -1,4 +1,5 @@
 using Dapper;
+using Microsoft.EntityFrameworkCore;
 using SIAD.Tests.Infrastructure;
 
 namespace SIAD.Tests;
@@ -167,5 +168,83 @@ public sealed class NotaCreditoTests : IntegrationTestBase
 
         Assert.Equal("B", estado);
         Assert.Equal(factura.saldo - 10.00m, saldoNuevo);
+    }
+
+    // ------------------------------------------------------------------------
+    // Pruebas operativas jul-2026: la VISTA PREVIA emite con el mismo SP dentro
+    // de un SAVEPOINT y revierte — devuelve el documento completo (con la clave
+    // del cliente) y NO deja rastro: ni fila en adm_nota_credito ni correlativo
+    // consumido en el CAI.
+    // ------------------------------------------------------------------------
+
+    [SkippableFact]
+    public async Task Vista_previa_de_nc_no_persiste_ni_consume_correlativo()
+    {
+        var caiNcId = await Connection.ExecuteScalarAsync<long?>(
+            new CommandDefinition(@"
+                SELECT cai_id FROM public.adm_cai_facturacion
+                WHERE company_id = @CompanyId AND tipo_documento_fiscal_id = 6
+                LIMIT 1",
+                new { CompanyId = CompanyId }, Transaction));
+        Skip.If(caiNcId is null, "No hay CAI tipo NC para esta company.");
+
+        var facturaId = await Connection.ExecuteScalarAsync<int?>(
+            new CommandDefinition(@"
+                SELECT f.id FROM public.factura f
+                WHERE f.company_id = @CompanyId AND f.estado = 'A'
+                  AND EXISTS (SELECT 1 FROM public.factura_detalle d
+                              WHERE d.factura_id = f.id
+                                AND COALESCE(d.montovalor_saldo, d.montovalor, 0) > 15)
+                ORDER BY f.id LIMIT 1",
+                new { CompanyId = CompanyId }, Transaction));
+        Skip.If(facturaId is null, "No hay factura pendiente con saldo > 15 en esta BD.");
+
+        var antes = await Connection.QueryFirstAsync<(long notas, long correlativo)>(
+            new CommandDefinition(@"
+                SELECT (SELECT count(*) FROM public.adm_nota_credito WHERE company_id = @CompanyId),
+                       (SELECT correlativo_actual FROM public.adm_cai_facturacion WHERE cai_id = @CaiId)",
+                new { CompanyId = CompanyId, CaiId = caiNcId }, Transaction));
+
+        var options = new Microsoft.EntityFrameworkCore.DbContextOptionsBuilder<SIAD.Data.SiadDbContext>()
+            .UseNpgsql((Npgsql.NpgsqlConnection)Connection)
+            .Options;
+        using var context = new SIAD.Data.SiadDbContext(options, new CompanyFija(CompanyId));
+        context.Database.UseTransaction(Transaction);
+        var service = new SIAD.Services.NotasCreditoDebito.NotasCreditoDebitoService(context, new CompanyFija(CompanyId));
+
+        var (nota, error) = await service.GenerarVistaPreviaCreditoAsync(
+            new SIAD.Core.DTOs.NotasCreditoDebito.EmitirNotaCreditoRequestDto
+            {
+                FacturaOrigenId = facturaId.Value,
+                MotivoAnulacionId = 1,
+                MotivoDetalle = "vista previa test",
+                MontoDisminuir = 10.00m,
+                CaiId = caiNcId.Value,
+                Usuario = "TEST-PREVIEW"
+            });
+
+        Assert.Null(error);
+        Assert.NotNull(nota);
+        Assert.True(nota!.EsVistaPrevia);
+        Assert.Equal("NC", nota.TipoNota);
+        Assert.False(string.IsNullOrWhiteSpace(nota.ClienteClave));   // Cuenta No. del cliente
+        Assert.NotEmpty(nota.Lineas);
+        Assert.True(nota.Total > 0);
+
+        var despues = await Connection.QueryFirstAsync<(long notas, long correlativo)>(
+            new CommandDefinition(@"
+                SELECT (SELECT count(*) FROM public.adm_nota_credito WHERE company_id = @CompanyId),
+                       (SELECT correlativo_actual FROM public.adm_cai_facturacion WHERE cai_id = @CaiId)",
+                new { CompanyId = CompanyId, CaiId = caiNcId }, Transaction));
+
+        Assert.Equal(antes.notas, despues.notas);              // sin fila nueva
+        Assert.Equal(antes.correlativo, despues.correlativo);  // sin correlativo consumido
+    }
+
+    private sealed class CompanyFija : SIAD.Core.Tenancy.ICurrentCompanyService
+    {
+        private readonly long _companyId;
+        public CompanyFija(long companyId) => _companyId = companyId;
+        public long GetCompanyId() => _companyId;
     }
 }

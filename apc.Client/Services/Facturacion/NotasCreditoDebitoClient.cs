@@ -1,4 +1,5 @@
 using System.Net.Http.Json;
+using apc.Client.Services;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.NotasCreditoDebito;
 
@@ -63,6 +64,30 @@ public class NotasCreditoDebitoClient
     {
         var response = await _http.PostAsJsonAsync("api/facturacion/notas/debito", dto, ct);
         return await ReadNotaResponseAsync(response, ct);
+    }
+
+    // ── Impresión / vista previa (pruebas operativas jul-2026) ──
+
+    /// <summary>URL del PDF de una nota emitida (se abre en pestaña nueva).</summary>
+    public static string GetNotaPdfUrl(string tipoNota, long notaId)
+        => $"api/facturacion/notas/{Uri.EscapeDataString(tipoNota)}/{notaId}/pdf";
+
+    public Task<byte[]> VistaPreviaCreditoPdfAsync(EmitirNotaCreditoRequestDto dto, CancellationToken ct = default)
+        => VistaPreviaPdfAsync("api/facturacion/notas/credito/vista-previa-pdf", dto, ct);
+
+    public Task<byte[]> VistaPreviaDebitoPdfAsync(EmitirNotaDebitoRequestDto dto, CancellationToken ct = default)
+        => VistaPreviaPdfAsync("api/facturacion/notas/debito/vista-previa-pdf", dto, ct);
+
+    private async Task<byte[]> VistaPreviaPdfAsync<T>(string url, T dto, CancellationToken ct)
+    {
+        var response = await _http.PostAsJsonAsync(url, dto, ct);
+        if (!response.IsSuccessStatusCode)
+        {
+            var mensaje = await HttpClientExtensions.ObtenerMensajeErrorAsync(response, ct);
+            throw new HttpRequestException(mensaje ?? "No se pudo generar la vista previa.");
+        }
+
+        return await response.Content.ReadAsByteArrayAsync(ct);
     }
 
     public async Task<PagedResult<NotaEmitidaListDto>> ListarNotasEmitidasPagedAsync(
