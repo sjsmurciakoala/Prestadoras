@@ -38,12 +38,17 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 - Anticipo de cuotas en convenio de pago.
 - Anular convenio de pago.
 - Cargar gestión legal al cliente mediante nota de débito.
-- Cliente **bloqueado por cobranza** no debería poder recibir recibo/cobro.
-- Carta prejudicial: correlativo de avisos enviados al cliente; formato.
-- Carta de cobro: incluir número de medidor.
-- Bitácora: registrar quién ejecutó la acción.
-- Reimprimir cartas ya enviadas.
-- Búsqueda en gestión de cobranza no funciona.
+- ~~Cliente bloqueado por cobranza no debería poder recibir recibo/cobro~~ ✅ lote 1.
+- ~~Carta prejudicial: correlativo de avisos; formato~~ ✅ lote 3 (2026-08-01):
+  AVISO N.º por cliente (cuenta los snapshots archivados) + formato formal con
+  membrete real de la empresa, cuenta y medidor.
+- ~~Carta de cobro: incluir número de medidor~~ ✅ ya estaba (REQUERIMIENTO #N
+  por cliente + medidor/libreta/secuencia en PDF y HTML) — verificado.
+- ~~Bitácora: quién ejecutó la acción~~ ✅ ya estaba (`ejecutado_por` se guarda,
+  se filtra y sale como columna del historial) — verificado.
+- ~~Reimprimir cartas ya enviadas~~ ✅ lote 3: el historial gana botón
+  Reimprimir (snapshot archivado); en Acciones de Cobranza ya existía.
+- ~~Búsqueda en gestión de cobranza no funciona~~ ✅ lote 1 (lookup remoto).
 
 ### Estado de cuenta (va con F4)
 - Filtrar por rangos de fecha.
