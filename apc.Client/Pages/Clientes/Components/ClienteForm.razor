@@ -118,6 +118,11 @@
                                                 NullText="Seleccione..."
                                                 ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
                                 </DxFormLayoutItem>
+                                @* Pruebas operativas jul-2026: el Acueducto se ve y edita
+                                   a nivel de CLIENTE (el del medidor describe al aparato). *@
+                                <DxFormLayoutItem Caption="Acueducto" ColSpanMd="6">
+                                    <DxTextBox @bind-Text="Modelo.Acueducto" NullText="Acueducto que sirve al cliente" />
+                                </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Color Casa" ColSpanMd="6">
                                     <DxComboBox Data="@ColorOptions" @bind-Value="Modelo.ColorCasa" NullText="Seleccione..." />
                                 </DxFormLayoutItem>

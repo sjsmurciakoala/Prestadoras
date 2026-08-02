@@ -20,6 +20,9 @@ public sealed class ClienteCreateDto
 
     public string? Rtn { get; set; }
 
+    /// <summary>Acueducto que sirve al cliente (pruebas operativas jul-2026).</summary>
+    public string? Acueducto { get; set; }
+
     public DateTime? FechaNacimiento { get; set; }
 
     [StringLength(7, ErrorMessage = "El barrio debe tener maximo 7 caracteres.")]

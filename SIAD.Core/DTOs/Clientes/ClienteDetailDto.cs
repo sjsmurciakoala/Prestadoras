@@ -10,6 +10,7 @@ public sealed record ClienteDetailDto
     public string? Apellidos { get; init; }
     public string? Dni { get; init; }
     public string? Rtn { get; init; }
+    public string? Acueducto { get; init; }
     public DateTime? FechaNacimiento { get; init; }
     public bool? TerceraEdad { get; init; }
     public bool? BloqueadoCobranza { get; init; }

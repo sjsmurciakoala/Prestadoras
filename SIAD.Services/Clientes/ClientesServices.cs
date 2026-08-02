@@ -4,6 +4,7 @@ using System.Linq;
 using System.Data;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
 using SIAD.Core.DTOs.Clientes;
 using SIAD.Core.DTOs.Common;
@@ -81,6 +82,7 @@ public class ClientesService : IClientesService
             maestro_cliente_clave = clave!,
             maestro_cliente_identidad = identidad ?? string.Empty,
             maestro_cliente_rtn = Limpiar(dto.Rtn),
+            acueducto = Limpiar(dto.Acueducto),
             maestro_cliente_nombre = nombreCompleto,
             maestro_cliente_tercera_edad = dto.TerceraEdad,
             categoria_servicio_id = dto.CategoriaServicioId,
@@ -184,6 +186,8 @@ public class ClientesService : IClientesService
             throw new KeyNotFoundException("Cliente no encontrado.");
         }
 
+        var categoriaAnterior = maestro.categoria_servicio_id;
+
         var clave = Limpiar(dto.Clave);
         if (string.IsNullOrWhiteSpace(clave))
         {
@@ -227,6 +231,7 @@ public class ClientesService : IClientesService
         // (igual que los 6,300 migrados de SIMAFI que vienen así).
         maestro.maestro_cliente_identidad = identidad ?? string.Empty;
         maestro.maestro_cliente_rtn = Limpiar(dto.Rtn);
+        maestro.acueducto = Limpiar(dto.Acueducto);
         maestro.maestro_cliente_nombre = nombreCompleto;
         maestro.maestro_cliente_tercera_edad = dto.TerceraEdad;
         maestro.categoria_servicio_id = dto.CategoriaServicioId;
@@ -284,7 +289,34 @@ public class ClientesService : IClientesService
         detalle.observaciones = ConstruirObservaciones(dto.Observaciones, numeroConvenio);
         detalle.numero_contrato = Limpiar(numeroContrato);
 
+        // Cambio de categoría (p.ej. Doméstico → Comercial): si la CxC
+        // analítica va por categoría, el saldo pendiente del cliente se
+        // reclasifica de cuenta y las facturas vivas actualizan su snapshot —
+        // atómico con el guardado (transacción propia solo si no hay ambiente).
+        var cambioCategoria = categoriaAnterior != dto.CategoriaServicioId;
+        var ownsTx = cambioCategoria && _context.Database.CurrentTransaction is null;
+        await using var tx = ownsTx ? await _context.Database.BeginTransactionAsync(ct) : null;
+
         await _context.SaveChangesAsync(ct);
+
+        if (cambioCategoria)
+        {
+            await ReclasificacionCxcClienteSql.ReclasificarPorCambioCategoriaAsync(
+                _context.Database.GetDbConnection(),
+                companyId,
+                id,
+                maestro.maestro_cliente_clave,
+                categoriaAnterior,
+                dto.CategoriaServicioId,
+                usuarioModificacion,
+                _context.Database.CurrentTransaction?.GetDbTransaction(),
+                ct);
+        }
+
+        if (tx is not null)
+        {
+            await tx.CommitAsync(ct);
+        }
 
         var actualizado = await GetClienteAsync(id, ct);
         if (actualizado is null)
@@ -402,6 +434,7 @@ public class ClientesService : IClientesService
                 c.maestro_cliente_nombre,
                 c.maestro_cliente_identidad,
                 c.maestro_cliente_rtn,
+                c.acueducto,
                 c.cliente_fecha_nac,
                 c.maestro_cliente_tercera_edad,
                 c.bloqueado_cobranza,
@@ -470,6 +503,7 @@ public class ClientesService : IClientesService
             Apellidos = apellidos,
             Dni = raw.maestro_cliente_identidad,
             Rtn = raw.maestro_cliente_rtn,
+            Acueducto = raw.acueducto,
             FechaNacimiento = raw.cliente_fecha_nac,
             TerceraEdad = raw.maestro_cliente_tercera_edad,
             BloqueadoCobranza = raw.bloqueado_cobranza,

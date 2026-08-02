@@ -62,6 +62,9 @@ public partial class cliente_maestro : ICompanyScopedEntity
 
     public bool? bloqueado_cobranza { get; set; }
 
+    /// <summary>Acueducto que sirve al cliente (pruebas operativas jul-2026).</summary>
+    public string? acueducto { get; set; }
+
     public bool? maestro_cliente_estudio_socioeconomico { get; set; }
 
     public bool? no_cortable { get; set; }
