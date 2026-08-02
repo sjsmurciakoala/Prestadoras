@@ -91,7 +91,21 @@ When adding a new endpoint, register its permission name in `PermissionNames` an
 
 String-based statuses are being migrated to numeric lookups — see [SIAD.Core/Constants/EstadosNumericos.cs](SIAD.Core/Constants/EstadosNumericos.cs). Do not introduce new string-state columns or compare against magic status strings; use the numeric constants.
 
+**Internal codes never reach the user.** The `factura.estado` letters `A`/`B`/`C`/`N` (A=1 pendiente, C=2 pagada, N=3 anulada, B=4 abono parcial) are storage-only; every screen, popup, grid and report shows the human-readable description. The same applies to any numeric state: bind the label, not the code.
+
 Reference docs for the existing state machines: [docs/ESTADOS_DOCUMENTOS_COMERCIALES.md](docs/ESTADOS_DOCUMENTOS_COMERCIALES.md) (factura `A`/`B`/`C`/`N`, `transaccion_abonado` 201/202, sync CAI — including the known gap that `B` has no `estado_id` yet) and [docs/ESTANDAR_ESTADOS_Y_FLUJO_CONTABLE.md](docs/ESTANDAR_ESTADOS_Y_FLUJO_CONTABLE.md) (accounting scope). Read them before touching anything that filters or writes document states.
+
+## Cobros: motor único y legacy congelado (unificación 2026-07, F1–F7)
+
+- **Every payment flows through `CobroService`** ([SIAD.Services/Cobros/](SIAD.Services/Cobros/)): facturas, cuotas de convenio, notas de débito, recibos pendientes, efectivo o banco. It owns idempotency (advisory lock by reference), line spill-over, config-based accounting and the bank kardex. Do **not** create parallel payment flows. `CaptacionPagosService` was **deleted** — never resurrect it; `AbonoService` remains only for receipts/queries and no longer registers bank movements.
+- **`transaccion_abonado` is the ONLY legacy table left**, and it is **FROZEN** by trigger `trg_transaccion_abonado_congelada` ([Database/2026-07-30_uc_f7_h4_freeze_legacy.sql](Database/2026-07-30_uc_f7_h4_freeze_legacy.sql)). Any write fails by design; no espejo rows are written since F7 H2c. The escape hatch `SET LOCAL siad.permitir_escritura_legacy='on'` is for migration scripts only — never use it from application code.
+- Payment documents live in **`adm_pago` + `adm_pago_aplicacion`**. Unified history (old + new) is read through **`vw_rep_movimiento_vigente`**; client balance through **`sp_obtener_cliente_saldo(clave, company_id)`** (always the 2-arg overload — the 1-arg one was cross-company and was retired).
+- `historialmes` and `clientesaldos` no longer exist (table or code). The commercial cycle lives in `adm_periodo_comercial(_ciclo)`.
+- Category is snapshotted on `factura` (`categoria_servicio_id`, `con_medicion`) at emission; recategorizing a client reclassifies pending CxC and updates live-invoice snapshots via `cln_cliente_recategorizacion` — do not update those snapshot columns by hand.
+
+## Secrets
+
+Credentials never enter the repo: real connection strings and API keys live in `appsettings.Local.json` (gitignored). `apc/appsettings.json` carries placeholders (e.g. `__SET_IN_appsettings.Local.json__`). Review every incoming branch/doc for leaked credentials before merging.
 
 ## Blazor / DevExpress UI conventions
 
