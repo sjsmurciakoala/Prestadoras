@@ -80,6 +80,9 @@ public class AbonosCompromisoTests : IntegrationTestBase
         // en BuildCuentaContraProcesamientoDisplay en cuanto exista >=1 fila ban_cuenta valida para la company.
         accountFormat.GetFormatAsync(Arg.Any<CancellationToken>()).Returns(AccountFormat.Default);
         var banTransacciones = Substitute.For<IBanTransaccionesService>();
+        // Sustituto: estos tests no pagan con metodo CHEQUE y la tabla ban_cheque
+        // puede no existir aun en la BD de test (Task 1 pendiente de aplicar).
+        var cheques = Substitute.For<IChequesService>();
 
         return new OrdenesPagoDirectoService(
             context,
@@ -87,7 +90,8 @@ public class AbonosCompromisoTests : IntegrationTestBase
             new TestCurrentCompanyService(CompanyId),
             httpAccessor,
             accountFormat,
-            banTransacciones);
+            banTransacciones,
+            cheques);
     }
 
     // --- Siembra ---

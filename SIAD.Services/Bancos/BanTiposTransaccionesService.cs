@@ -26,22 +26,26 @@ public sealed class BanTiposTransaccionesService : IBanTiposTransaccionesService
             throw new InvalidOperationException("La empresa solicitada no es valida para el usuario actual.");
         }
 
-        var items = await context.ban_tipos_transacciones
+        // emite_cheque es texto libre ('S'/'Y'/'1'/...): se agrupa en memoria (catalogo
+        // pequeno) para poder evaluarlo con ChequeEmisionFlag sin traducirlo a SQL.
+        var filas = await context.ban_tipos_transacciones
             .AsNoTracking()
             .Where(t => t.company_id == companyId)
-            .GroupBy(t => new { t.tipo_transaccion, t.nombre, t.entra_sale })
-            .Select(g => g.Key)
-            .OrderBy(t => t.tipo_transaccion)
-            .ThenBy(t => t.nombre)
-            .Select(t => new BanTipoTransaccionListDto
-            {
-                TipoTransaccion = t.tipo_transaccion,
-                Nombre = t.nombre,
-                EntraSale = t.entra_sale
-            })
+            .Select(t => new { t.tipo_transaccion, t.nombre, t.entra_sale, t.emite_cheque })
             .ToListAsync(ct);
 
-        return items;
+        return filas
+            .GroupBy(t => new { t.tipo_transaccion, t.nombre, t.entra_sale })
+            .Select(g => new BanTipoTransaccionListDto
+            {
+                TipoTransaccion = g.Key.tipo_transaccion,
+                Nombre = g.Key.nombre,
+                EntraSale = g.Key.entra_sale,
+                EmiteCheque = g.Any(x => ChequeEmisionFlag.EsAfirmativo(x.emite_cheque))
+            })
+            .OrderBy(t => t.TipoTransaccion, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(t => t.Nombre, StringComparer.OrdinalIgnoreCase)
+            .ToList();
     }
 
     private long EnsureCompanyId()

@@ -233,10 +233,17 @@
                             <DxMemo Text="@model.Concepto"
                                     TextChanged="@OnConceptoChanged"
                                     TextExpression="@(() => model.Concepto)"
+                                    BindValueMode="BindValueMode.OnInput"
                                     Rows="3"
                                     ResizeMode="MemoResizeMode.Vertical"
-                                    MaxLength="150"
+                                    MaxLength="@ConceptoMaxLength"
                                     Enabled="@CanEditConcepto" />
+                            @if (CanEditConcepto)
+                            {
+                                <div class="d-flex justify-content-end">
+                                    <small class="text-muted">@(model.Concepto?.Length ?? 0)/@ConceptoMaxLength caracteres</small>
+                                </div>
+                            }
                             <ValidationMessage For="() => model.Concepto" />
                         </DxFormLayoutItem>
                         </DxFormLayoutGroup>
@@ -268,7 +275,11 @@
                     else
                     {
                         <div class="table-responsive mb-3 detail-table">
-                            <table class="table table-sm align-middle mb-0">
+                            @* align-top (no align-middle): las celdas con nota debajo (contador de
+                               caracteres, aviso de monto) son mas altas y, centradas, empujaban hacia
+                               abajo al combo y al boton. Alineadas arriba, los 4 controles quedan
+                               siempre en la misma linea y las notas cuelgan sin moverlos. *@
+                            <table class="table table-sm align-top mb-0">
                                 <thead>
                                     <tr>
                                         <th style="min-width: 280px;">Cuenta de gasto</th>
@@ -302,7 +313,7 @@
                                                             Enabled="@(CanEdit && cuentasGasto.Count > 0)">
                                                     <ItemTemplate Context="item">
                                                         <div class="d-flex flex-column">
-                                                            <span class="fw-semibold">@item.Code</span>
+                                                            <span class="fw-semibold">@AccountFormat.Format(item.Code)</span>
                                                             <small class="text-muted">@item.Description</small>
                                                         </div>
                                                     </ItemTemplate>
@@ -310,17 +321,32 @@
                                             </td>
                                             <td>
                                                 <DxTextBox @bind-Text="detalle.Descripcion"
-                                                           MaxLength="150"
+                                                           BindValueMode="BindValueMode.OnInput"
+                                                           MaxLength="@DescripcionDetalleMaxLength"
                                                            Enabled="@CanEdit" />
+                                                @if (CanEdit)
+                                                {
+                                                    <div class="d-flex justify-content-end">
+                                                        <small class="text-muted">@(detalle.Descripcion?.Length ?? 0)/@DescripcionDetalleMaxLength caracteres</small>
+                                                    </div>
+                                                }
                                             </td>
                                             <td>
-                                                <DxSpinEdit TValue="decimal"
-                                                            @bind-Value="detalle.Monto"
-                                                            Min="0.01m"
+                                                <DxSpinEdit TValue="decimal?"
+                                                            Value="@GetMontoValue(detalle)"
+                                                            ValueChanged="@((decimal? value) => OnMontoChanged(rowIndex, value))"
+                                                            Min="0m"
                                                             Increment="0.01m"
                                                             DisplayFormat="N2"
+                                                            NullText="0.00"
                                                             InputCssClass="text-end"
+                                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                            ValidationEnabled="false"
                                                             Enabled="@CanEdit" />
+                                                @if (CanEdit && detalle.Monto <= 0m)
+                                                {
+                                                    <small class="text-danger">Ingrese un monto mayor a cero.</small>
+                                                }
                                             </td>
                                             <td class="text-end">
                                                 <button type="button"
@@ -541,6 +567,14 @@
     public string? OriginUrlQuery { get; set; }
 
     private const string SinCuentaGastoCodigo = "0";
+    private const int ConceptoDetalleMaxLength = 1000;
+    // Tope del concepto del encabezado (prv_compromiso_hdr.concepto es varchar(150)).
+    // Se usa en el MaxLength del editor y en el contador de caracteres de la vista.
+    private const int ConceptoMaxLength = 150;
+    // Tope de captura de la descripcion de cada linea del detalle. La columna
+    // prv_compromiso_dtl.descripcion se amplio a varchar(1000) el 2026-07-23, pero la vista y la
+    // validacion de servicio siguen limitando la captura a 250.
+    private const int DescripcionDetalleMaxLength = 250;
     private readonly List<ProveedorComboItem> proveedores = new();
     private readonly List<CuentaContableLookupDto> cuentasContables = new();
     private readonly List<CuentaContableLookupDto> cuentasGasto = new();
@@ -817,13 +851,18 @@
     private Task OnConceptoChanged(string? concepto)
     {
         var conceptoAnterior = Normalize(model.Concepto);
-        model.Concepto = concepto?.Trim() ?? string.Empty;
+        // Con BindValueMode.OnInput este handler corre en CADA tecla, asi que el valor no se
+        // recorta aqui: un Trim borraria el espacio recien escrito ("Hola " -> "Hola") e impediria
+        // separar palabras. El recorte se aplica al guardar (BuildPayload) y al propagar la
+        // descripcion a las lineas del detalle.
+        model.Concepto = concepto ?? string.Empty;
+        var conceptoSincronizado = model.Concepto.Trim();
 
         foreach (var detalle in model.Detalles)
         {
             if (DebeSincronizarDescripcion(detalle.Descripcion, conceptoAnterior))
             {
-                detalle.Descripcion = model.Concepto;
+                detalle.Descripcion = conceptoSincronizado;
             }
         }
 
@@ -871,8 +910,24 @@
         {
             CodigoPresupuestario = SinCuentaGastoCodigo,
             Descripcion = model.Concepto?.Trim() ?? string.Empty,
-            Monto = 0.01m
+            Monto = 0m
         });
+    }
+
+    // La linea nace sin monto (el editor queda en blanco) y se valida en ValidarDetalle
+    // antes de guardar, para no prellenar un importe que el usuario no digito.
+    private static decimal? GetMontoValue(OrdenPagoDirectoUpsertLineaDto detalle)
+        => detalle.Monto <= 0m ? null : detalle.Monto;
+
+    private void OnMontoChanged(int index, decimal? monto)
+    {
+        if (index < 0 || index >= model.Detalles.Count)
+        {
+            return;
+        }
+
+        var valor = monto.GetValueOrDefault();
+        model.Detalles[index].Monto = valor < 0m ? 0m : valor;
     }
 
     private void EliminarLinea(int index)
@@ -1031,7 +1086,7 @@
                 {
                     CodigoPresupuestario = NormalizeCodigoPresupuestario(x.CodigoPresupuestario),
                     Descripcion = x.Descripcion?.Trim() ?? string.Empty,
-                    ConceptoDetalle = Normalize(x.ConceptoDetalle) ?? Normalize(x.Descripcion),
+                    ConceptoDetalle = DerivarConceptoDetalle(Normalize(x.ConceptoDetalle) ?? x.Descripcion),
                     Monto = x.Monto,
                     Programa = x.Programa,
                     Actividad = x.Actividad,
@@ -1383,6 +1438,17 @@
 
     private static string? Normalize(string? value)
         => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
+
+    // conceptodtl es varchar(1000) y no se captura en la vista: se deriva de la descripcion de la
+    // linea, que admite 250. El recorte queda como salvaguarda de la columna/DTO; en la practica
+    // no recorta porque la descripcion (<=250) siempre cabe. El texto completo ya viaja en Descripcion.
+    private static string? DerivarConceptoDetalle(string? value)
+    {
+        var normalizado = Normalize(value);
+        return normalizado is null || normalizado.Length <= ConceptoDetalleMaxLength
+            ? normalizado
+            : normalizado[..ConceptoDetalleMaxLength];
+    }
 
     private static string? NormalizeProveedorCodigo(string? codigo)
     {

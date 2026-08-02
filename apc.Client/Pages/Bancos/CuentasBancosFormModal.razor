@@ -12,9 +12,9 @@
             <h6 class="tipo-form-title">
                 <i class="@(EditModel.BancoCuentaId > 0 ? "bi bi-pencil-square me-2" : "bi bi-bank me-2")"></i>
                 @PopupTitle
-                @if (EditModel.BancoCuentaId > 0 && !string.IsNullOrWhiteSpace(CuentaIdDisplay))
+                @if (EditModel.BancoCuentaId > 0 && !string.IsNullOrWhiteSpace(CuentaNumeroDisplay))
                 {
-                    <span class="tipo-form-code">#@CuentaIdDisplay</span>
+                    <span class="tipo-form-code"><i class="bi bi-credit-card-2-front me-1"></i>@CuentaNumeroDisplay</span>
                 }
             </h6>
             <p class="tipo-form-subtitle mb-0">
@@ -30,102 +30,141 @@
                 <EditForm EditContext="@EditContext" Context="editCtx">
                     <DataAnnotationsValidator />
 
-                    <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@IsSaving">
-                        <DxFormLayoutItem Caption="Activo" ColSpanMd="3" ColSpanSm="12">
-                            <DxCheckBox @bind-Checked="EditModel.Activo" CheckType="CheckType.Switch" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Banco *" ColSpanMd="6" ColSpanSm="12">
-                            <DxComboBox Data="@Bancos"
-                                        TData="BancoListDto"
-                                        TValue="long"
-                                        @bind-Value="EditModel.BancoId"
-                                        ValueFieldName="@nameof(BancoListDto.BancoId)"
-                                        TextFieldName="@nameof(BancoListDto.Nombre)"
-                                        NullText="Seleccione banco"
-                                        DropDownStyle="DropDownStyle.DropDownList"
-                                        IncrementalFilteringMode="DataEditorFilteringMode.Contains"
-                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                        Enabled="@BancoSelectionEnabled" />
-                            <ValidationMessage For="@(() => EditModel.BancoId)" />
-                        </DxFormLayoutItem>
-
-                        <DxFormLayoutItem Caption="Numero cuenta *" ColSpanMd="6" ColSpanSm="12">
-                            <DxTextBox @bind-Text="EditModel.NumeroCuenta" MaxLength="50" />
-                            <ValidationMessage For="@(() => EditModel.NumeroCuenta)" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Tipo cuenta *" ColSpanMd="6" ColSpanSm="12">
-                            <DxComboBox Data="@TipoCuentaOpciones"
-                                        @bind-Value="EditModel.TipoCuenta"
-                                        NullText="Seleccione tipo"
-                                        DropDownStyle="DropDownStyle.DropDownList" />
-                            <ValidationMessage For="@(() => EditModel.TipoCuenta)" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Moneda" ColSpanMd="4" ColSpanSm="12">
-                            <DxComboBox Data="@Monedas"
-                                        TData="BanMonedaLookupDto"
-                                        TValue="long?"
-                                        @bind-Value="MonedaSeleccionadaId"
-                                        ValueFieldName="@nameof(BanMonedaLookupDto.BanMonedaId)"
-                                        TextFieldName="@nameof(BanMonedaLookupDto.Descripcion)"
-                                        NullText="Seleccione moneda"
-                                        DropDownStyle="DropDownStyle.DropDownList"
-                                        IncrementalFilteringMode="DataEditorFilteringMode.Contains"
-                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                        Enabled="@(Monedas.Count > 0)" />
-                            <ValidationMessage For="@(() => EditModel.Moneda)" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Saldo actual *" ColSpanMd="4" ColSpanSm="12">
-                            <DxSpinEdit TValue="decimal?" @bind-Value="EditModel.SaldoActual"
-                                        Min="0m"
-                                        Increment="100m"
-                                        Decimals="2"
-                                        DisplayFormat="N2"
-                                        NullText="Ingrese saldo actual"
-                                        SpinButtonsVisible="true" />
-                            <ValidationMessage For="@(() => EditModel.SaldoActual)" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="6" ColSpanSm="12">
-                            @if (Consolidado)
-                            {
-                                <DxComboBox Data="@CuentasContables"
-                                            TData="CuentaContableLookupDto"
-                                            TValue="long?"
-                                            @bind-Value="EditModel.ContAccountId"
-                                            ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
-                                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                                            NullText="Sin cuenta contable"
-                                            AllowUserInput="true"
-                                            DropDownStyle="DropDownStyle.DropDown"
-                                            DropDownTriggerMode="DropDownTriggerMode.Input"
-                                            SearchMode="ListSearchMode.AutoSearch"
-                                            SearchFilterCondition="ListSearchFilterCondition.Contains"
-                                            SearchDelay="200"
+                    <div class="form-card">
+                        <div class="form-card-title"><i class="bi bi-bank"></i>Datos generales</div>
+                        <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@IsSaving">
+                            <DxFormLayoutItem Caption="Activo" ColSpanMd="4" ColSpanSm="12">
+                                <DxCheckBox @bind-Checked="EditModel.Activo" CheckType="CheckType.Switch" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Banco *" ColSpanMd="8" ColSpanSm="12">
+                                <DxComboBox Data="@Bancos"
+                                            TData="BancoListDto"
+                                            TValue="long"
+                                            @bind-Value="EditModel.BancoId"
+                                            ValueFieldName="@nameof(BancoListDto.BancoId)"
+                                            TextFieldName="@nameof(BancoListDto.Nombre)"
+                                            NullText="Seleccione banco"
+                                            DropDownStyle="DropDownStyle.DropDownList"
+                                            IncrementalFilteringMode="DataEditorFilteringMode.Contains"
                                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                            Enabled="@(CuentasContables.Count > 0)" />
-                                <ValidationMessage For="@(() => EditModel.ContAccountId)" />
-                            }
-                            else
-                            {
-                                <DxTextBox Text="@AccountFormat.Format(EditModel.CtaConc)"
-                                           TextChanged="@OnCuentaConcChanged"
-                                           TextExpression="@(() => EditModel.CtaConc)"
-                                           NullText="Ingrese cuenta contable"
-                                           MaxLength="255" />
-                                <ValidationMessage For="@(() => EditModel.CtaConc)" />
-                            }
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Titular" ColSpanMd="8" ColSpanSm="12">
-                            <DxTextBox @bind-Text="EditModel.Titular" MaxLength="150" />
-                            <ValidationMessage For="@(() => EditModel.Titular)" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem Caption="Observaciones" ColSpanMd="12" ColSpanSm="12">
-                            <DxMemo @bind-Text="EditModel.Observaciones" Rows="3" />
-                            <ValidationMessage For="@(() => EditModel.Observaciones)" />
-                        </DxFormLayoutItem>
-                        <DxFormLayoutItem ColSpanMd="12">
-                            <ValidationSummary />
-                        </DxFormLayoutItem>
-                    </DxFormLayout>
+                                            Enabled="@BancoSelectionEnabled" />
+                                <ValidationMessage For="@(() => EditModel.BancoId)" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Numero cuenta *" ColSpanMd="6" ColSpanSm="12">
+                                <DxTextBox @bind-Text="EditModel.NumeroCuenta" MaxLength="50" />
+                                <ValidationMessage For="@(() => EditModel.NumeroCuenta)" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Tipo cuenta *" ColSpanMd="6" ColSpanSm="12">
+                                <DxComboBox Data="@TipoCuentaOpciones"
+                                            @bind-Value="EditModel.TipoCuenta"
+                                            NullText="Seleccione tipo"
+                                            DropDownStyle="DropDownStyle.DropDownList" />
+                                <ValidationMessage For="@(() => EditModel.TipoCuenta)" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Moneda" ColSpanMd="6" ColSpanSm="12">
+                                <DxComboBox Data="@Monedas"
+                                            TData="BanMonedaLookupDto"
+                                            TValue="long?"
+                                            @bind-Value="MonedaSeleccionadaId"
+                                            ValueFieldName="@nameof(BanMonedaLookupDto.BanMonedaId)"
+                                            TextFieldName="@nameof(BanMonedaLookupDto.Descripcion)"
+                                            NullText="Seleccione moneda"
+                                            DropDownStyle="DropDownStyle.DropDownList"
+                                            IncrementalFilteringMode="DataEditorFilteringMode.Contains"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                            Enabled="@(Monedas.Count > 0)" />
+                                <ValidationMessage For="@(() => EditModel.Moneda)" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Saldo actual *" ColSpanMd="6" ColSpanSm="12">
+                                <DxSpinEdit TValue="decimal?" @bind-Value="EditModel.SaldoActual"
+                                            Min="0m"
+                                            Increment="100m"
+                                            Decimals="2"
+                                            DisplayFormat="N2"
+                                            NullText="Ingrese saldo actual"
+                                            SpinButtonsVisible="true" />
+                                <ValidationMessage For="@(() => EditModel.SaldoActual)" />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </div>
+
+                    @if (EsCuentaCheques)
+                    {
+                        <div class="form-card form-card-cheques">
+                            <div class="form-card-title"><i class="bi bi-card-checklist"></i>Numeración de cheques</div>
+                            <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@IsSaving">
+                                <DxFormLayoutItem Caption="Próximo cheque" ColSpanMd="6" ColSpanSm="12">
+                                    <DxSpinEdit TValue="decimal" @bind-Value="EditModel.ProximoCheque"
+                                                MinValue="0m" Increment="1m"
+                                                DisplayFormat="N0"
+                                                ShowSpinButtons="true" />
+                                    <ValidationMessage For="@(() => EditModel.ProximoCheque)" />
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Cheque máximo (0 = sin límite)" ColSpanMd="6" ColSpanSm="12">
+                                    <DxSpinEdit TValue="decimal" @bind-Value="EditModel.ChequeMaximo"
+                                                MinValue="0m" Increment="1m"
+                                                DisplayFormat="N0"
+                                                ShowSpinButtons="true" />
+                                    <ValidationMessage For="@(() => EditModel.ChequeMaximo)" />
+                                </DxFormLayoutItem>
+                            </DxFormLayout>
+                            <p class="form-card-hint">
+                                <i class="bi bi-info-circle me-1"></i>El próximo cheque se asigna automáticamente al pagar; se incrementa solo. Cheque máximo 0 = sin límite.
+                            </p>
+                        </div>
+                    }
+
+                    <div class="form-card">
+                        <div class="form-card-title"><i class="bi bi-calculator"></i>Contabilidad</div>
+                        <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@IsSaving">
+                            <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="8" ColSpanSm="12">
+                                @if (Consolidado)
+                                {
+                                    <DxComboBox Data="@CuentasContables"
+                                                TData="CuentaContableLookupDto"
+                                                TValue="long?"
+                                                @bind-Value="EditModel.ContAccountId"
+                                                ValueFieldName="@nameof(CuentaContableLookupDto.AccountId)"
+                                                TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                                                NullText="Sin cuenta contable"
+                                                AllowUserInput="true"
+                                                DropDownStyle="DropDownStyle.DropDown"
+                                                DropDownTriggerMode="DropDownTriggerMode.Input"
+                                                SearchMode="ListSearchMode.AutoSearch"
+                                                SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                                SearchDelay="200"
+                                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                Enabled="@(CuentasContables.Count > 0)" />
+                                    <ValidationMessage For="@(() => EditModel.ContAccountId)" />
+                                }
+                                else
+                                {
+                                    <DxTextBox Text="@AccountFormat.Format(EditModel.CtaConc)"
+                                               TextChanged="@OnCuentaConcChanged"
+                                               TextExpression="@(() => EditModel.CtaConc)"
+                                               NullText="Ingrese cuenta contable"
+                                               MaxLength="255" />
+                                    <ValidationMessage For="@(() => EditModel.CtaConc)" />
+                                }
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </div>
+
+                    <div class="form-card">
+                        <div class="form-card-title"><i class="bi bi-card-text"></i>Información adicional</div>
+                        <DxFormLayout ColumnCountMd="12" ColumnCountSm="1" ReadOnly="@IsSaving">
+                            <DxFormLayoutItem Caption="Titular" ColSpanMd="12" ColSpanSm="12">
+                                <DxTextBox @bind-Text="EditModel.Titular" MaxLength="150" />
+                                <ValidationMessage For="@(() => EditModel.Titular)" />
+                            </DxFormLayoutItem>
+                            <DxFormLayoutItem Caption="Observaciones" ColSpanMd="12" ColSpanSm="12">
+                                <DxMemo @bind-Text="EditModel.Observaciones" Rows="3" />
+                                <ValidationMessage For="@(() => EditModel.Observaciones)" />
+                            </DxFormLayoutItem>
+                        </DxFormLayout>
+                    </div>
+
+                    <ValidationSummary />
                 </EditForm>
             }
         </div>
@@ -156,9 +195,12 @@
     [Parameter] public IReadOnlyList<string> TipoCuentaOpciones { get; set; } = Array.Empty<string>();
     [Parameter] public bool Consolidado { get; set; }
     [Parameter] public string PopupTitle { get; set; } = string.Empty;
-    [Parameter] public string CuentaIdDisplay { get; set; } = string.Empty;
+    [Parameter] public string CuentaNumeroDisplay { get; set; } = string.Empty;
     [Parameter] public EventCallback OnSave { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
+
+    private bool EsCuentaCheques =>
+        EditModel?.TipoCuenta?.Contains("CHEQ", StringComparison.OrdinalIgnoreCase) == true;
 
     protected override async Task OnInitializedAsync()
     {

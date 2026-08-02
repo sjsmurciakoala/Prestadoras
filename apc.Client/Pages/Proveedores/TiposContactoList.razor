@@ -1,0 +1,185 @@
+@page "/mantenimientos/tipos-contacto"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+@inject IToastNotificationService ToastService
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using apc.Client.Services
+@using apc.Client.Services.Proveedores
+@using SIAD.Core.DTOs.Proveedores
+
+<PageTitle>SIAD - Tipos de Contacto</PageTitle>
+
+<DxScrollView Height="100%">
+    <div class="page-container">
+        <ErrorNotice @ref="errorNotice" />
+
+        <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+            <div>
+                <h2 class="page-title">Tipos de contacto</h2>
+                <p class="page-subtitle">Gestión de tipos de contacto de proveedor</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <DxButton Text="Nuevo tipo"
+                          Click="NuevoTipo"
+                          IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          CssClass="btn-modern shadow-sm" />
+                <DxButton Text="Volver a proveedores"
+                          Click="VolverAProveedores"
+                          IconCssClass="oi oi-arrow-left"
+                          RenderStyle="ButtonRenderStyle.Secondary" />
+                <DxButton Text="Actualizar"
+                          Click="LoadTiposAsync"
+                          IconCssClass="bi bi-arrow-clockwise"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          Enabled="@(!isLoading)" />
+            </div>
+        </div>
+
+        <div class="modern-card position-relative" style="min-height: 300px;">
+            @if (isLoading)
+            {
+                <p>Cargando tipos de contacto...</p>
+            }
+
+            <div class="grid-wrapper">
+                <DxGrid @ref="grid"
+                        Data="@tipos"
+                        KeyFieldName="@nameof(TipoContactoListItemDto.Id)"
+                        PageSize="15"
+                        PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        ShowGroupPanel="false"
+                        CssClass="grid-solicitudes"
+                        LayoutAutoSaving="OnLayoutAutoSaving"
+                        LayoutAutoLoading="OnLayoutAutoLoading">
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <DxButton Text="Columnas"
+                                      IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      Click="MostrarColumnChooser"
+                                      CssClass="me-1" />
+                            <div class="ms-auto text-muted small">
+                                Total: <span class="fw-bold">@tipos.Count.ToString("N0")</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(TipoContactoListItemDto.Id)" Caption="Codigo" Width="120px" MinWidth="100" />
+                        <DxGridDataColumn FieldName="@nameof(TipoContactoListItemDto.Nombre)" Caption="Nombre" MinWidth="200" />
+                        <DxGridDataColumn FieldName="@nameof(TipoContactoListItemDto.Observaciones)" Caption="Observaciones" MinWidth="240" />
+                        <DxGridDataColumn FieldName="@nameof(TipoContactoListItemDto.Activo)" Caption="Activo" Width="110px" MinWidth="100">
+                            <CellDisplayTemplate Context="cellData">
+                                @if (cellData.DataItem is TipoContactoListItemDto item)
+                                {
+                                    <span>@(item.Activo ? "Si" : "No")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="150px">
+                            <CellDisplayTemplate Context="cellContext">
+                                @if (cellContext.DataItem is TipoContactoListItemDto item)
+                                {
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn-icon btn-edit" title="Editar" @onclick="@(() => EditarTipo(item.Id))">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button class="btn-icon btn-delete" title="Eliminar" @onclick="@(() => EliminarAsync(item))">
+                                            <i class="bi bi-trash"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">No hay tipos de contacto para mostrar.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        </div>
+    </div>
+</DxScrollView>
+
+@code {
+    private readonly List<TipoContactoListItemDto> tipos = new();
+    private bool isLoading;
+    private ErrorNotice errorNotice = default!;
+    private DxGrid? grid;
+
+    // Persistencia de layout (ancho/orden/visibilidad de columnas y ordenamiento) en localStorage,
+    // igual que el maestro de proveedores. Clave unica por grid en kebab-case.
+    private const string GridLayoutStorageKey = "tipos-contacto-list-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTiposAsync();
+    }
+
+    private async Task LoadTiposAsync()
+    {
+        try
+        {
+            isLoading = true;
+
+            var data = await ProveedoresClient.ObtenerTiposContactoCatalogoAsync();
+            tipos.Clear();
+            tipos.AddRange(data ?? Array.Empty<TipoContactoListItemDto>());
+        }
+        catch (Exception)
+        {
+            ToastService.ShowToast(new ToastOptions { Title = "Tipos de contacto", Text = "No se pudo cargar el catálogo de tipos de contacto.", RenderStyle = ToastRenderStyle.Danger });
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void NuevoTipo() => Navigation.NavigateTo("/mantenimientos/tipos-contacto/nuevo");
+
+    private void EditarTipo(long id) => Navigation.NavigateTo($"/mantenimientos/tipos-contacto/{id}/editar");
+
+    private void VolverAProveedores() => Navigation.NavigateTo("/proveedores");
+
+    private async Task EliminarAsync(TipoContactoListItemDto item)
+    {
+        var confirmado = await JS.InvokeAsync<bool>("confirm",
+            $"Eliminar el tipo de contacto {item.Id} - {item.Nombre}?");
+
+        if (!confirmado)
+        {
+            return;
+        }
+
+        try
+        {
+            await ProveedoresClient.EliminarTipoContactoAsync(item.Id);
+            await LoadTiposAsync();
+        }
+        catch (Exception ex)
+        {
+            // El servicio devuelve el motivo real (tipo en uso, no encontrado); mostrarlo tal cual
+            // en vez de un mensaje generico que obligue a abrir el detalle tecnico.
+            errorNotice.ShowError(MensajeServidor(ex, "No se pudo eliminar el tipo de contacto."), ex);
+        }
+    }
+
+    private static string MensajeServidor(Exception ex, string fallback)
+        => ex is HttpRequestException && !string.IsNullOrWhiteSpace(ex.Message) ? ex.Message : fallback;
+}

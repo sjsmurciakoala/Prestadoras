@@ -36,4 +36,12 @@ public class BancoCuentaCreateDto
 
     [StringLength(255, ErrorMessage = "cta_conc no puede superar 255 caracteres.")]
     public string? CtaConc { get; set; }
+
+    /// <summary>Proximo numero de cheque a emitir (solo cuentas tipo CHEQUES).</summary>
+    [Range(typeof(decimal), "0", "9999999999999999999999999999", ErrorMessage = "El proximo cheque no puede ser negativo.")]
+    public decimal ProximoCheque { get; set; }
+
+    /// <summary>Ultimo numero autorizado del talonario (0 = sin limite).</summary>
+    [Range(typeof(decimal), "0", "9999999999999999999999999999", ErrorMessage = "El cheque maximo no puede ser negativo.")]
+    public decimal ChequeMaximo { get; set; }
 }

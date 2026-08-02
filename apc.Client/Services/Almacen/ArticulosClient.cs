@@ -1,6 +1,7 @@
 using System.Net.Http.Json;
 using apc.Client.Services;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.Contabilidad;
 
 namespace apc.Client.Services.Almacen;
@@ -16,7 +17,53 @@ public sealed class ArticulosClient
 
     public async Task<List<ArticuloListItemDto>> GetAsync(ArticuloFilterDto? filtro = null, CancellationToken ct = default)
     {
-        var filter = filtro ?? new ArticuloFilterDto();
+        var parameters = BuildFilterParams(filtro ?? new ArticuloFilterDto());
+        var url = parameters.Count > 0
+            ? $"api/almacen/articulos?{string.Join("&", parameters)}"
+            : "api/almacen/articulos";
+
+        var response = await _http.GetAsync(url, ct);
+        return await response.ReadFromJsonAsyncWithAuthCheck<List<ArticuloListItemDto>>(ct) ?? new List<ArticuloListItemDto>();
+    }
+
+    /// <summary>Página del catálogo para el grid remoto (server-side paging/sort sobre el filtro).</summary>
+    public async Task<PagedResult<ArticuloListItemDto>> SearchPagedAsync(
+        ArticuloFilterDto? filtro, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default)
+    {
+        skip = Math.Max(skip, 0);
+        take = take <= 0 ? 50 : take;
+
+        var parameters = BuildFilterParams(filtro ?? new ArticuloFilterDto());
+        parameters.Add($"skip={skip}");
+        parameters.Add($"take={take}");
+
+        if (!string.IsNullOrWhiteSpace(sortField))
+        {
+            parameters.Add($"sortField={Uri.EscapeDataString(sortField)}");
+            if (sortDesc)
+            {
+                parameters.Add("sortDesc=true");
+            }
+        }
+
+        var url = $"api/almacen/articulos/search-paged?{string.Join("&", parameters)}";
+        return await _http.GetFromJsonAsyncWithAuthCheck<PagedResult<ArticuloListItemDto>>(url, ct)
+               ?? new PagedResult<ArticuloListItemDto>();
+    }
+
+    /// <summary>KPIs del catálogo (totales) calculados en el servidor con el mismo filtro del grid.</summary>
+    public async Task<ArticulosResumenDto> GetResumenAsync(ArticuloFilterDto? filtro = null, CancellationToken ct = default)
+    {
+        var parameters = BuildFilterParams(filtro ?? new ArticuloFilterDto());
+        var url = parameters.Count > 0
+            ? $"api/almacen/articulos/resumen?{string.Join("&", parameters)}"
+            : "api/almacen/articulos/resumen";
+
+        return await _http.GetFromJsonAsyncWithAuthCheck<ArticulosResumenDto>(url, ct) ?? new ArticulosResumenDto();
+    }
+
+    private static List<string> BuildFilterParams(ArticuloFilterDto filter)
+    {
         var parameters = new List<string>();
 
         if (!string.IsNullOrWhiteSpace(filter.Search))
@@ -29,17 +76,42 @@ public sealed class ArticulosClient
             parameters.Add($"tipoArticuloId={filter.TipoArticuloId.Value}");
         }
 
-        if (filter.SoloBajoMinimo == true)
+        if (filter.GrupoId.HasValue)
         {
-            parameters.Add("soloBajoMinimo=true");
+            parameters.Add($"grupoId={filter.GrupoId.Value}");
         }
 
-        var url = parameters.Count > 0
-            ? $"api/almacen/articulos?{string.Join("&", parameters)}"
-            : "api/almacen/articulos";
+        if (filter.BodegaId.HasValue)
+        {
+            parameters.Add($"bodegaId={filter.BodegaId.Value}");
+        }
 
-        var response = await _http.GetAsync(url, ct);
-        return await response.ReadFromJsonAsyncWithAuthCheck<List<ArticuloListItemDto>>(ct) ?? new List<ArticuloListItemDto>();
+        if (!string.IsNullOrWhiteSpace(filter.EstadoStock))
+        {
+            parameters.Add($"estadoStock={Uri.EscapeDataString(filter.EstadoStock)}");
+        }
+
+        if (filter.SinUnidad == true)
+        {
+            parameters.Add("sinUnidad=true");
+        }
+
+        if (filter.IncluirDescontinuados == true)
+        {
+            parameters.Add("incluirDescontinuados=true");
+        }
+
+        if (filter.SoloDescontinuados == true)
+        {
+            parameters.Add("soloDescontinuados=true");
+        }
+
+        if (filter.ConDescuadre == true)
+        {
+            parameters.Add("conDescuadre=true");
+        }
+
+        return parameters;
     }
 
     public async Task<List<AlertaStockDto>> GetAlertasStockAsync(AlertaStockFilterDto? filtro = null, CancellationToken ct = default)
@@ -139,6 +211,16 @@ public sealed class ArticulosClient
         }
 
         var response = await _http.PutAsJsonAsync($"api/almacen/articulos/{id}", dto, ct);
+
+        // 409 = otro usuario guardó primero (concurrencia optimista); 400 = regla de negocio.
+        // Se extrae el mensaje del ProblemDetails: intentar deserializarlo como artículo daría
+        // un error sin sentido para el usuario.
+        if (!response.IsSuccessStatusCode)
+        {
+            var mensaje = await HttpClientExtensions.ObtenerMensajeErrorAsync(response, ct);
+            throw new InvalidOperationException(mensaje ?? "No se pudo guardar el artículo.");
+        }
+
         var result = await response.ReadFromJsonAsyncWithAuthCheck<ArticuloEditDto>(ct);
         if (result is null)
         {
@@ -148,6 +230,7 @@ public sealed class ArticulosClient
         return result;
     }
 
+    /// <summary>Descontinúa el artículo (soft-delete): se conserva y su kardex sigue consultable.</summary>
     public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
     {
         if (id <= 0)
@@ -164,7 +247,30 @@ public sealed class ArticulosClient
         if (!response.IsSuccessStatusCode)
         {
             var mensaje = await HttpClientExtensions.ObtenerMensajeErrorAsync(response, ct);
-            throw new InvalidOperationException(mensaje ?? "No se pudo eliminar el artículo.");
+            throw new InvalidOperationException(mensaje ?? "No se pudo descontinuar el artículo.");
+        }
+
+        return true;
+    }
+
+    /// <summary>Reactiva un artículo descontinuado.</summary>
+    public async Task<bool> ReactivarAsync(int id, CancellationToken ct = default)
+    {
+        if (id <= 0)
+        {
+            throw new ArgumentException("El ID del artículo debe ser válido.", nameof(id));
+        }
+
+        var response = await _http.PostAsync($"api/almacen/articulos/{id}/reactivar", content: null, ct);
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return false;
+        }
+
+        if (!response.IsSuccessStatusCode)
+        {
+            var mensaje = await HttpClientExtensions.ObtenerMensajeErrorAsync(response, ct);
+            throw new InvalidOperationException(mensaje ?? "No se pudo reactivar el artículo.");
         }
 
         return true;

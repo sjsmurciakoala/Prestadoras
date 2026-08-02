@@ -10,7 +10,10 @@ public interface IArticuloUbicacionService
 
     /// <summary>
     /// Deshabilita (soft-delete) la ubicación para conservar el histórico. No se
-    /// permite deshabilitar la bodega principal ni dejar el artículo sin bodega activa.
+    /// permite deshabilitar la bodega principal ni dejar el artículo sin bodega activa,
+    /// ni deshabilitar una bodega con existencia (o con comprometido / en tránsito):
+    /// saldría del rollup de cabecera sin movimiento de kardex y descuadraría el artículo.
+    /// Lanza <see cref="InvalidOperationException"/> en cualquiera de esos casos.
     /// </summary>
     Task<bool> DeshabilitarAsync(int articuloId, int id, string user, CancellationToken ct = default);
 

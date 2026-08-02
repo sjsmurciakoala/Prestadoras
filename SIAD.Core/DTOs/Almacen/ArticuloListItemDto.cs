@@ -35,9 +35,23 @@ public sealed class ArticuloListItemDto
     public decimal ExistenciaMinima { get; init; }
     public decimal ValorUnitario { get; init; }
 
-    /// <summary>Suma de la existencia de todas las ubicaciones (bodegas) del artículo.</summary>
+    /// <summary>
+    /// Valor de inventario en DINERO: existencia (rollup de cabecera) × valor unitario.
+    /// Misma fórmula que <see cref="ArticulosResumenDto.ValorInventario"/>, así la suma de
+    /// esta columna en el grid cuadra con la tarjeta KPI por construcción.
+    /// (Hasta 2026-07-29 era una CANTIDAD: Σ existencias de ubicaciones.)
+    /// </summary>
     public decimal ValorTotal { get; init; }
+
+    /// <summary>Suma de la existencia de las ubicaciones ACTIVAS (para el detector de descuadre).</summary>
+    public decimal ExistenciaBodegas { get; init; }
+
+    /// <summary>true si la existencia de cabecera no cuadra con la suma de bodegas activas.</summary>
+    public bool Descuadrado => Existencia != ExistenciaBodegas;
 
     /// <summary>true si hay mínimo definido y la existencia cayó por debajo.</summary>
     public bool BajoMinimo => ExistenciaMinima > 0 && Existencia < ExistenciaMinima;
+
+    /// <summary>Soft-delete: false = artículo descontinuado (se conserva, no se ofrece para documentos nuevos).</summary>
+    public bool Activo { get; init; } = true;
 }

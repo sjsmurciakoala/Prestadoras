@@ -48,12 +48,30 @@ public class KardexBodegaTests : IntegrationTestBase, IAsyncLifetime
         return base.DisposeAsync();
     }
 
-    private async Task<int> SeedArticuloAsync(string codigo)
+    private async Task<int> SeedArticuloAsync(string codigo, decimal existencia = 0m)
     {
-        var art = new alm_articulo { codigo_articulo = codigo, descripcion = $"Artículo {codigo}" };
+        var art = new alm_articulo
+        {
+            codigo_articulo = codigo,
+            descripcion = $"Artículo {codigo}",
+            existencia = existencia
+        };
         _context!.alm_articulos.Add(art);
         await _context.SaveChangesAsync();
         return art.id;
+    }
+
+    /// <summary>Fila de existencia por bodega (alm_articulo_bodega), el rollup contra el que cuadra el kardex por bodega.</summary>
+    private async Task SeedUbicacionAsync(int articuloId, int bodegaId, decimal existencia, bool activo = true)
+    {
+        _context!.alm_articulo_bodegas.Add(new alm_articulo_bodega
+        {
+            articulo_id = articuloId,
+            bodega_id = bodegaId,
+            existencia = existencia,
+            activo = activo
+        });
+        await _context.SaveChangesAsync();
     }
 
     private async Task<int> SeedBodegaAsync(string codigo)
@@ -149,6 +167,98 @@ public class KardexBodegaTests : IntegrationTestBase, IAsyncLifetime
         Assert.NotNull(kardex);
         Assert.Equal(6m, kardex!.SaldoCalculado); // 10 - 4
         Assert.Equal(2, kardex.Movimientos.Count);
+    }
+
+    /// <summary>
+    /// El falso positivo de la tarjeta ámbar: con bodega filtrada el saldo es el de ESA
+    /// bodega, así que compararlo contra alm_articulo.existencia (total del artículo)
+    /// marcaba descuadre en todo artículo multi-bodega perfectamente cuadrado.
+    /// </summary>
+    [SkippableFact]
+    public async Task ConBodega_ArticuloMultiBodegaCuadrado_NoReportaDescuadre()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var artId = await SeedArticuloAsync("ZZKDXB1", existencia: 12m); // total = 7 (b1) + 5 (b2)
+        var b1 = await SeedBodegaAsync("ZZKB1");
+        var b2 = await SeedBodegaAsync("ZZKB2");
+        await SeedUbicacionAsync(artId, b1, 7m);
+        await SeedUbicacionAsync(artId, b2, 5m);
+        await SeedMovimientoAsync("ZZKDXB1", b1, new DateOnly(2026, 1, 1), 10, 0, articuloId: artId);
+        await SeedMovimientoAsync("ZZKDXB1", b1, new DateOnly(2026, 1, 2), 0, 3, articuloId: artId);
+        await SeedMovimientoAsync("ZZKDXB1", b2, new DateOnly(2026, 1, 3), 5, 0, articuloId: artId);
+
+        var kardex = await _service!.GetByArticuloAsync(new KardexFilterDto { ArticuloId = artId, BodegaId = b1 });
+
+        Assert.NotNull(kardex);
+        Assert.Equal(b1, kardex!.BodegaId);
+        Assert.Equal(7m, kardex.SaldoCalculado);
+        Assert.Equal(7m, kardex.ExistenciaBodega);
+        Assert.Equal(7m, kardex.ExistenciaComparable);
+        Assert.Equal(12m, kardex.ExistenciaRegistrada); // el total sigue disponible, sólo no se compara
+        Assert.False(kardex.SaldoDescuadrado);
+    }
+
+    [SkippableFact]
+    public async Task ConBodega_BodegaDescuadrada_ReportaDescuadre()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var artId = await SeedArticuloAsync("ZZKDXB2", existencia: 10m);
+        var b1 = await SeedBodegaAsync("ZZKB3");
+        await SeedUbicacionAsync(artId, b1, 4m); // el rollup dice 4, el kardex 10
+        await SeedMovimientoAsync("ZZKDXB2", b1, new DateOnly(2026, 1, 1), 10, 0, articuloId: artId);
+
+        var kardex = await _service!.GetByArticuloAsync(new KardexFilterDto { ArticuloId = artId, BodegaId = b1 });
+
+        Assert.NotNull(kardex);
+        Assert.Equal(10m, kardex!.SaldoCalculado);
+        Assert.Equal(4m, kardex.ExistenciaBodega);
+        Assert.True(kardex.SaldoDescuadrado);
+    }
+
+    /// <summary>
+    /// Ubicación inactiva = fuera del contrato de rollup (Σ activas). Sin cifra comparable
+    /// no se afirma descuadre: la tarjeta muestra "—".
+    /// </summary>
+    [SkippableFact]
+    public async Task ConBodega_SinUbicacionActiva_NoHayExistenciaComparable()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var artId = await SeedArticuloAsync("ZZKDXB3", existencia: 8m);
+        var b1 = await SeedBodegaAsync("ZZKB4");
+        await SeedUbicacionAsync(artId, b1, 8m, activo: false);
+        await SeedMovimientoAsync("ZZKDXB3", b1, new DateOnly(2026, 1, 1), 8, 0, articuloId: artId);
+
+        var kardex = await _service!.GetByArticuloAsync(new KardexFilterDto { ArticuloId = artId, BodegaId = b1 });
+
+        Assert.NotNull(kardex);
+        Assert.Null(kardex!.ExistenciaBodega);
+        Assert.Null(kardex.ExistenciaComparable);
+        Assert.False(kardex.SaldoDescuadrado);
+    }
+
+    [SkippableFact]
+    public async Task SinBodega_ComparaContraExistenciaTotalDelArticulo()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var artId = await SeedArticuloAsync("ZZKDXB4", existencia: 12m);
+        var b1 = await SeedBodegaAsync("ZZKB5");
+        var b2 = await SeedBodegaAsync("ZZKB6");
+        await SeedUbicacionAsync(artId, b1, 7m);
+        await SeedUbicacionAsync(artId, b2, 5m);
+        await SeedMovimientoAsync("ZZKDXB4", b1, new DateOnly(2026, 1, 1), 7, 0, articuloId: artId);
+        await SeedMovimientoAsync("ZZKDXB4", b2, new DateOnly(2026, 1, 2), 5, 0, articuloId: artId);
+
+        var kardex = await _service!.GetByArticuloAsync(new KardexFilterDto { ArticuloId = artId });
+
+        Assert.NotNull(kardex);
+        Assert.Null(kardex!.BodegaId);
+        Assert.Null(kardex.ExistenciaBodega);
+        Assert.Equal(12m, kardex.ExistenciaComparable);
+        Assert.False(kardex.SaldoDescuadrado);
     }
 
     private class TestCurrentCompanyService : ICurrentCompanyService

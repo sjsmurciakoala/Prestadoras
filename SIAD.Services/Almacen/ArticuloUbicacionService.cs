@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Data;
@@ -9,7 +10,10 @@ namespace SIAD.Services.Almacen;
 /// Ubicaciones físicas de un artículo por bodega (bodega + ubicación manual + principal).
 /// La ubicación es texto libre: cinco campos de 20 caracteres (ubicacion1..5).
 /// Las ubicaciones no se eliminan: se DESHABILITAN (activo=false) para conservar el
-/// histórico. El rollup de existencia del artículo suma solo las filas activas.
+/// histórico. El rollup de existencia del artículo suma solo las filas activas, así que
+/// una bodega solo puede deshabilitarse cuando ya quedó en cero (ver DeshabilitarAsync).
+/// Toda operación de escritura es ATÓMICA (fila de bodega + recompute de cabecera): si
+/// se partiera en dos commits, un fallo intermedio dejaría la cabecera descuadrada.
 /// Multiempresa: el filtro y el estampado de company_id los aplica SiadDbContext.
 /// </summary>
 public sealed class ArticuloUbicacionService : IArticuloUbicacionService
@@ -71,6 +75,8 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         await ValidarArticuloAsync(articuloId, ct);
         await ValidarBodegaAsync(dto.BodegaId, ct);
 
+        await using var tx = await IniciarTransaccionAsync(ct);
+
         // Si ya existe una fila para esa bodega: si está activa es un duplicado;
         // si está deshabilitada, se reactiva (respeta el único (company, articulo, bodega)).
         var existente = await _context.alm_articulo_bodegas
@@ -109,6 +115,7 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
             existente.fechamodificacion = ahora;
             await _context.SaveChangesAsync(ct);
             await RecomputeArticuloAsync(articuloId, ct);
+            await ConfirmarAsync(tx, ct);
             dto.Id = existente.id;
             dto.Activo = true;
             CopiarCamposDelMotor(existente, dto);
@@ -138,6 +145,7 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         _context.alm_articulo_bodegas.Add(entity);
         await _context.SaveChangesAsync(ct);
         await RecomputeArticuloAsync(articuloId, ct);
+        await ConfirmarAsync(tx, ct);
         dto.Id = entity.id;
         dto.Activo = true;
         CopiarCamposDelMotor(entity, dto);
@@ -149,6 +157,8 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         ArgumentNullException.ThrowIfNull(dto);
         if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
         await ValidarArticuloAsync(articuloId, ct);
+
+        await using var tx = await IniciarTransaccionAsync(ct);
 
         var entity = await _context.alm_articulo_bodegas.FirstOrDefaultAsync(u => u.id == id && u.articulo_id == articuloId, ct)
                      ?? throw new KeyNotFoundException("La ubicación no existe.");
@@ -188,6 +198,7 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);
         await RecomputeArticuloAsync(articuloId, ct);
+        await ConfirmarAsync(tx, ct);
         dto.Id = entity.id;
         dto.Activo = true;
         CopiarCamposDelMotor(entity, dto);
@@ -206,9 +217,19 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         dto.UltimoCosto = entity.ultimo_costo;
     }
 
+    /// <summary>
+    /// Deshabilita (soft-delete) la ubicación. EXIGE que la bodega esté en cero: deshabilitar
+    /// una fila con stock la saca del rollup de cabecera sin generar ningún movimiento de
+    /// kardex, y ese es el generador más común del descuadre que reporta el filtro
+    /// "Con descuadre" del maestro. La salida del stock debe registrarse antes (traslado a
+    /// otra bodega o ajuste de inventario), y solo entonces se deshabilita la ubicación.
+    /// </summary>
     public async Task<bool> DeshabilitarAsync(int articuloId, int id, string user, CancellationToken ct = default)
     {
         if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+
+        await using var tx = await IniciarTransaccionAsync(ct);
+
         var entity = await _context.alm_articulo_bodegas.FirstOrDefaultAsync(u => u.id == id && u.articulo_id == articuloId, ct);
         if (entity is null) return false;
         if (!entity.activo) return true;
@@ -225,17 +246,41 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
             throw new InvalidOperationException("El artículo debe conservar al menos una bodega activa.");
         }
 
+        // Stock remanente (positivo o negativo): se bloquea. Sin esta guarda la existencia
+        // desaparecería del total del artículo sin rastro en el kardex.
+        if (entity.existencia != 0m)
+        {
+            throw new InvalidOperationException(
+                $"No se puede deshabilitar la ubicación: la bodega todavía tiene existencia ({Cantidad(entity.existencia)}). " +
+                "Traslade el stock a otra bodega o regístrelo con un ajuste de inventario hasta dejarla en 0; " +
+                "deshabilitarla con existencia la saca del total del artículo sin movimiento de kardex.");
+        }
+
+        // Comprometido / en tránsito: la existencia está en 0 pero hay obligaciones abiertas
+        // (requisiciones aprobadas sin despachar, compras o traslados por recibir) que al
+        // liquidarse volverían a mover una fila que ya no está en el rollup.
+        if (entity.existencia_comprometida != 0m || entity.existencia_transito != 0m)
+        {
+            throw new InvalidOperationException(
+                $"No se puede deshabilitar la ubicación: tiene {Cantidad(entity.existencia_comprometida)} comprometida y " +
+                $"{Cantidad(entity.existencia_transito)} en tránsito. Despache o cancele los pendientes primero.");
+        }
+
         entity.activo = false;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);
         await RecomputeArticuloAsync(articuloId, ct);
+        await ConfirmarAsync(tx, ct);
         return true;
     }
 
     public async Task<bool> ReactivarAsync(int articuloId, int id, string user, CancellationToken ct = default)
     {
         if (id <= 0) throw new ArgumentOutOfRangeException(nameof(id));
+
+        await using var tx = await IniciarTransaccionAsync(ct);
+
         var entity = await _context.alm_articulo_bodegas.FirstOrDefaultAsync(u => u.id == id && u.articulo_id == articuloId, ct);
         if (entity is null) return false;
         if (entity.activo) return true;
@@ -250,8 +295,28 @@ public sealed class ArticuloUbicacionService : IArticuloUbicacionService
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);
         await RecomputeArticuloAsync(articuloId, ct);
+        await ConfirmarAsync(tx, ct);
         return true;
     }
+
+    /// <summary>Cantidad para mensajes de error: sin ceros de relleno ni notación científica.</summary>
+    private static string Cantidad(decimal valor) => valor.ToString("0.####");
+
+    /// <summary>
+    /// Abre transacción propia SOLO si no hay una ambiente (los tests de integración corren
+    /// dentro de la transacción del fixture — hay que reusarla, no anidar). El
+    /// <c>await using</c> del llamador hace rollback+dispose si algo lanza entre el guardado
+    /// de la fila de bodega y el recompute de la cabecera; devuelve null cuando reusamos la
+    /// transacción ambiente (ahí la atomicidad la garantiza quien la abrió).
+    /// </summary>
+    private async Task<IDbContextTransaction?> IniciarTransaccionAsync(CancellationToken ct)
+        => _context.Database.CurrentTransaction is null
+            ? await _context.Database.BeginTransactionAsync(ct)
+            : null;
+
+    /// <summary>Commit de la transacción propia; no-op si estamos dentro de una ambiente.</summary>
+    private static Task ConfirmarAsync(IDbContextTransaction? tx, CancellationToken ct)
+        => tx is null ? Task.CompletedTask : tx.CommitAsync(ct);
 
     /// <summary>
     /// Recalcula el rollup de existencia y mínimo del artículo como la suma de sus

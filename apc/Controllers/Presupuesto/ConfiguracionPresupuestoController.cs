@@ -2,6 +2,7 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Presupuesto;
+using SIAD.Reports;
 using SIAD.Services.Presupuesto;
 
 namespace apc.Controllers.Presupuesto;
@@ -277,6 +278,30 @@ public sealed class ConfiguracionPresupuestoController : ControllerBase
     {
         var result = await _service.GetByIdAsync(idPresupuesto, ct);
         return result is null ? NotFound() : Ok(result);
+    }
+
+    [HttpGet("{idPresupuesto}/pdf")]
+    public async Task<IActionResult> GetPdf(string idPresupuesto, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(idPresupuesto))
+        {
+            return BadRequest(new { message = "El ID de presupuesto no es valido." });
+        }
+
+        var user = User?.Identity?.Name ?? "system";
+        var datos = await _service.GetDatosImpresionAsync(idPresupuesto, user, ct);
+        if (datos is null)
+        {
+            return NotFound(new { message = $"No se encontro el presupuesto {idPresupuesto}." });
+        }
+
+        using var report = new Rpt_Dev_Presupuesto(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=Presupuesto-{datos.IdPresupuesto}.pdf";
+
+        return File(stream.ToArray(), "application/pdf");
     }
 
     [HttpGet("{idPresupuesto}/{cuentaContable}")]

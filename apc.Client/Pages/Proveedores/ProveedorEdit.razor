@@ -42,6 +42,7 @@
                            Tipos="tipos"
                            Bancos="bancos"
                            CuentasContables="cuentasContables"
+                           TiposContacto="tiposContacto"
                            IsEdit="IsEdit"
                            OnValidSubmit="GuardarAsync"
                            OnInvalidSubmit="MostrarErroresValidacion"
@@ -60,6 +61,7 @@
     private readonly List<ProveedorTipoLookupDto> tipos = new();
     private readonly List<ProveedorBancoLookupDto> bancos = new();
     private readonly List<CuentaContableLookupDto> cuentasContables = new();
+    private readonly List<TipoContactoLookupDto> tiposContacto = new();
     private ProveedorUpsertDto model = new();
     private bool isLoading = true;
     private bool isSaving;
@@ -104,6 +106,7 @@
         {
             await Task.WhenAll(
                 CargarTiposAsync(),
+                CargarTiposContactoAsync(),
                 CargarBancosAsync(),
                 CargarCuentasContablesAsync());
             if (IsEdit)
@@ -139,6 +142,13 @@
         var data = await ProveedoresClient.ObtenerTiposAsync();
         tipos.Clear();
         tipos.AddRange(data ?? Array.Empty<ProveedorTipoLookupDto>());
+    }
+
+    private async Task CargarTiposContactoAsync()
+    {
+        var data = await ProveedoresClient.ObtenerTiposContactoAsync();
+        tiposContacto.Clear();
+        tiposContacto.AddRange(data ?? Array.Empty<TipoContactoLookupDto>());
     }
 
     private async Task CargarCuentasContablesAsync()
@@ -185,10 +195,23 @@
             RazonSocial = detail.RazonSocial,
             Rtn = detail.Rtn,
             Direccion = detail.Direccion ?? string.Empty,
-            NombreContacto = detail.NombreContacto,
-            Telefono = detail.Telefono,
-            Email = detail.Email,
             CuentaContable = detail.CuentaContable ?? string.Empty,
+            Contactos = detail.Contactos
+                .OrderBy(x => x.Orden)
+                .Select((x, index) => new ProveedorContactoDto
+                {
+                    ProveedorContactoId = x.ProveedorContactoId,
+                    TipoContactoId = x.TipoContactoId,
+                    Nombre = x.Nombre,
+                    Cargo = x.Cargo,
+                    Telefono = x.Telefono,
+                    Extension = x.Extension,
+                    Celular = x.Celular,
+                    Email = x.Email,
+                    Observaciones = x.Observaciones,
+                    Orden = index + 1
+                })
+                .ToList(),
             CuentasBancarias = detail.CuentasBancarias.Count > 0
                 ? detail.CuentasBancarias
                     .OrderBy(x => x.Orden)
@@ -209,6 +232,13 @@
     private async Task GuardarAsync()
     {
         var validationError = NormalizeCuentaBancarias();
+        if (!string.IsNullOrWhiteSpace(validationError))
+        {
+            errorNotice.Show("Validación", validationError, ToastRenderStyle.Warning);
+            return;
+        }
+
+        validationError = NormalizeContactos();
         if (!string.IsNullOrWhiteSpace(validationError))
         {
             errorNotice.Show("Validación", validationError, ToastRenderStyle.Warning);
@@ -291,6 +321,58 @@
         model.CuentasBancarias = cuentas;
         return null;
     }
+
+    private string? NormalizeContactos()
+    {
+        var contactos = new List<ProveedorContactoDto>();
+        var source = model.Contactos ?? new List<ProveedorContactoDto>();
+
+        for (var i = 0; i < source.Count; i++)
+        {
+            var nombre = Normalizar(source[i].Nombre);
+            var cargo = Normalizar(source[i].Cargo);
+            var telefono = Normalizar(source[i].Telefono);
+            var extension = Normalizar(source[i].Extension);
+            var celular = Normalizar(source[i].Celular);
+            var email = Normalizar(source[i].Email);
+            var observaciones = Normalizar(source[i].Observaciones);
+            var tipoContactoId = source[i].TipoContactoId is long tipo && tipo > 0 ? tipo : (long?)null;
+
+            var vacia = nombre is null && cargo is null && telefono is null && extension is null
+                && celular is null && email is null && observaciones is null
+                && tipoContactoId is null;
+
+            if (vacia)
+            {
+                continue;
+            }
+
+            if (nombre is null)
+            {
+                return $"Indique el nombre del contacto en la fila {i + 1}.";
+            }
+
+            contactos.Add(new ProveedorContactoDto
+            {
+                ProveedorContactoId = source[i].ProveedorContactoId,
+                TipoContactoId = tipoContactoId,
+                Nombre = nombre,
+                Cargo = cargo,
+                Telefono = telefono,
+                Extension = extension,
+                Celular = celular,
+                Email = email,
+                Observaciones = observaciones,
+                Orden = contactos.Count + 1
+            });
+        }
+
+        model.Contactos = contactos;
+        return null;
+    }
+
+    private static string? Normalizar(string? value)
+        => string.IsNullOrWhiteSpace(value) ? null : value.Trim();
 
     private static ProveedorCuentaBancariaDto CreateEmptyCuenta(int orden)
     {

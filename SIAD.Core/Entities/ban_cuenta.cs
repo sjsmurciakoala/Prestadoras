@@ -85,6 +85,8 @@ public partial class ban_cuenta
 
     public decimal proximo_cheque { get; set; }
 
+    public decimal cheque_maximo { get; set; }
+
     public int n_comp0 { get; set; }
 
     public int n_comp1 { get; set; }

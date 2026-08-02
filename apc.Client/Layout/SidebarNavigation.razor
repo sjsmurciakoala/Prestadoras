@@ -1,10 +1,12 @@
 @using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Authorization
 @using apc.Client.Layout.Navigation
+@using apc.Client.Services.Bancos
 @using apc.Client.Services.Tenant
 @inject NavigationManager NavigationManager
 @inject AuthenticationStateProvider AuthStateProvider
 @inject TenantCompanyContextClient TenantCompanyContextClient
+@inject ChequeEmisionState ChequeEmision
 @implements IDisposable
 
 <nav class="sidebar-nav @(IsCollapsed ? "sidebar-nav--collapsed" : "") @(IsMobile ? "sidebar-nav--mobile" : "")">
@@ -43,10 +45,18 @@
     protected override void OnInitialized()
     {
         NavigationManager.LocationChanged += HandleLocationChanged;
+        ChequeEmision.Cambiado += HandleCapacidadesCambiadas;
         currentPath = GetCurrentPath();
     }
 
     protected override async Task OnInitializedAsync()
+    {
+        // Capacidades que dependen de la configuración de la empresa (no de permisos).
+        await ChequeEmision.EnsureLoadedAsync();
+        await ConstruirSeccionesAsync();
+    }
+
+    private async Task ConstruirSeccionesAsync()
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
@@ -82,8 +92,96 @@
             }
         }
 
-        visibleSections = sections;
+        visibleSections = FiltrarPorCapacidades(sections);
     }
+
+    // Ítems condicionados a la configuración de la empresa (hoy solo el cheque manual).
+    private IReadOnlyList<SidebarNavSection> FiltrarPorCapacidades(IEnumerable<SidebarNavSection> sections)
+    {
+        var resultado = new List<SidebarNavSection>();
+
+        foreach (var section in sections)
+        {
+            var items = section.Items
+                .Select(FiltrarItemPorCapacidades)
+                .Where(item => item is not null)
+                .Cast<SidebarNavItem>()
+                .ToArray();
+
+            if (items.Length == 0)
+            {
+                continue;
+            }
+
+            resultado.Add(new SidebarNavSection
+            {
+                Label = section.Label,
+                Items = items,
+                RequiredPolicy = section.RequiredPolicy
+            });
+        }
+
+        return resultado;
+    }
+
+    private SidebarNavItem? FiltrarItemPorCapacidades(SidebarNavItem item)
+    {
+        if (!CapacidadDisponible(item.RequiredCapability))
+        {
+            return null;
+        }
+
+        if (!item.HasChildren)
+        {
+            return item;
+        }
+
+        var children = item.Children
+            .Select(FiltrarItemPorCapacidades)
+            .Where(child => child is not null)
+            .Cast<SidebarNavItem>()
+            .ToArray();
+
+        if (children.Length == item.Children.Count)
+        {
+            return item;
+        }
+
+        // Un padre sin hijos visibles y sin ruta propia deja de tener sentido.
+        if (children.Length == 0 && string.IsNullOrWhiteSpace(item.NavigateUrl))
+        {
+            return null;
+        }
+
+        return new SidebarNavItem
+        {
+            Id = item.Id,
+            Text = item.Text,
+            IconCssClass = item.IconCssClass,
+            NavigateUrl = item.NavigateUrl,
+            MatchPrefixes = item.MatchPrefixes,
+            Children = children,
+            MatchExact = item.MatchExact,
+            RequiredCapability = item.RequiredCapability
+        };
+    }
+
+    private bool CapacidadDisponible(string? capability) => capability switch
+    {
+        null or "" => true,
+        SidebarCapabilities.ChequeManual => ChequeEmision.Disponible,
+        _ => true
+    };
+
+    // La configuración de tipos de transacción invalida el estado al guardar: el menú se
+    // rearma sin recargar la aplicación.
+    private void HandleCapacidadesCambiadas()
+        => _ = InvokeAsync(async () =>
+        {
+            await ChequeEmision.EnsureLoadedAsync();
+            await ConstruirSeccionesAsync();
+            StateHasChanged();
+        });
 
     private void HandleLocationChanged(object? sender, LocationChangedEventArgs e)
     {
@@ -112,6 +210,7 @@
     public void Dispose()
     {
         NavigationManager.LocationChanged -= HandleLocationChanged;
+        ChequeEmision.Cambiado -= HandleCapacidadesCambiadas;
     }
 
     private static IReadOnlyList<SidebarNavSection> FilterSectionsForRecovery(IEnumerable<SidebarNavSection> sections)
@@ -168,7 +267,8 @@
             NavigateUrl = allowSelf ? item.NavigateUrl : null,
             MatchPrefixes = filteredPrefixes,
             Children = filteredChildren,
-            MatchExact = item.MatchExact
+            MatchExact = item.MatchExact,
+            RequiredCapability = item.RequiredCapability
         };
     }
 

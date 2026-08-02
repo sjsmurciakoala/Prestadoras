@@ -27,7 +27,7 @@ public class BitacoraMaestrosInterceptorTests : IntegrationTestBase, IAsyncLifet
     {
         await base.InitializeAsync();
         if (!Fixture.Available) return;
-        var interceptor = new BitacoraMaestrosInterceptor(_cfg, new FakeUser("tester"));
+        var interceptor = new BitacoraMaestrosInterceptor(_cfg, new FakeCatalog(), new FakeUser("tester"));
         var options = new DbContextOptionsBuilder<SiadDbContext>()
             .UseNpgsql(Connection).AddInterceptors(interceptor).Options;
         _context = new SiadDbContext(options, new TestCurrentCompanyService(CompanyId));
@@ -91,6 +91,13 @@ public class BitacoraMaestrosInterceptorTests : IntegrationTestBase, IAsyncLifet
         public bool Habilitado;
         public FakeAuditConfig(bool habilitado) => Habilitado = habilitado;
         public bool DebeAuditar(long companyId, string tabla, string accion) => Habilitado && AuditableMaestros.EsAuditable(tabla);
+        public void Invalidar(long companyId) { }
+    }
+    private sealed class FakeCatalog : IAuditableCatalogProvider
+    {
+        public bool EsAuditable(long companyId, string tabla) => SIAD.Core.Constants.AuditableMaestros.EsAuditable(tabla);
+        public string NombreDe(long companyId, string tabla) => SIAD.Core.Constants.AuditableMaestros.NombreDe(tabla);
+        public string ModuloDe(long companyId, string tabla) => SIAD.Core.Constants.AuditableMaestros.All.FirstOrDefault(x => string.Equals(x.Tabla, tabla, System.StringComparison.OrdinalIgnoreCase))?.Modulo ?? tabla;
         public void Invalidar(long companyId) { }
     }
     private sealed class FakeUser : ICurrentUserAudit

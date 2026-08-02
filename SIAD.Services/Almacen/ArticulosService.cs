@@ -1,7 +1,10 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Common;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Core.Utilities;
 using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
@@ -23,19 +26,109 @@ public sealed class ArticulosService : IArticulosService
 
     public async Task<IReadOnlyList<ArticuloListItemDto>> GetAsync(ArticuloFilterDto? filtro, CancellationToken ct = default)
     {
-        filtro ??= new ArticuloFilterDto();
+        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro ?? new ArticuloFilterDto());
 
-        var query = _context.alm_articulos.AsNoTracking().AsQueryable();
+        return await query
+            .OrderBy(a => a.codigo_articulo)
+            .Select(Proyeccion)
+            .ToListAsync(ct);
+    }
+
+    public async Task<PagedResult<ArticuloListItemDto>> SearchPagedAsync(
+        ArticuloFilterDto? filtro, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default)
+    {
+        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro ?? new ArticuloFilterDto());
+
+        var totalCount = await query.CountAsync(ct);
+
+        skip = Math.Max(skip, 0);
+        take = take <= 0 ? 50 : take;
+
+        var items = await AplicarOrden(query, sortField, sortDesc)
+            .Skip(skip)
+            .Take(take)
+            .Select(Proyeccion)
+            .ToListAsync(ct);
+
+        return new PagedResult<ArticuloListItemDto>(items, totalCount);
+    }
+
+    public async Task<ArticulosResumenDto> GetResumenAsync(ArticuloFilterDto? filtro, CancellationToken ct = default)
+    {
+        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro ?? new ArticuloFilterDto());
+
+        // Agregados en el servidor sobre el mismo universo filtrado (no la página visible).
+        var total = await query.CountAsync(ct);
+        var conStock = await query.CountAsync(a => a.existencia > 0, ct);
+        var bajoMinimo = await query.CountAsync(a => a.existencia_minima > 0 && a.existencia < a.existencia_minima, ct);
+        var valorInventario = await query.SumAsync(a => (decimal?)(a.existencia * a.valor_unitario), ct) ?? 0m;
+        var conDescuadre = await query.CountAsync(
+            a => a.existencia != a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia), ct);
+
+        return new ArticulosResumenDto
+        {
+            Total = total,
+            ConStock = conStock,
+            BajoMinimo = bajoMinimo,
+            ValorInventario = valorInventario,
+            ConDescuadre = conDescuadre
+        };
+    }
+
+    /// <summary>Aplica los filtros del grid (search/tipo/categoría/bodega/unidad/estado) a la consulta base.</summary>
+    private IQueryable<alm_articulo> AplicarFiltros(IQueryable<alm_articulo> query, ArticuloFilterDto filtro)
+    {
+        // Soft-delete: por defecto el maestro muestra SOLO los activos. Los descontinuados
+        // se ven únicamente si el usuario los pide (para consultarlos o reactivarlos).
+        if (filtro.SoloDescontinuados == true)
+        {
+            query = query.Where(a => !a.activo);
+        }
+        else if (filtro.IncluirDescontinuados != true)
+        {
+            query = query.Where(a => a.activo);
+        }
 
         if (filtro.TipoArticuloId.HasValue)
         {
             query = query.Where(a => a.tipo_articulo_id == filtro.TipoArticuloId.Value);
         }
 
-        if (filtro.SoloBajoMinimo == true)
+        if (filtro.GrupoId.HasValue)
         {
-            query = query.Where(a => a.existencia_minima > 0 && a.existencia < a.existencia_minima);
+            query = query.Where(a => a.grupo_id == filtro.GrupoId.Value);
         }
+
+        if (filtro.BodegaId.HasValue)
+        {
+            query = query.Where(a => a.ubicaciones.Any(u => u.activo && u.bodega_id == filtro.BodegaId.Value));
+        }
+
+        if (filtro.SinUnidad == true)
+        {
+            query = query.Where(a => a.unidad_medida_id == null);
+        }
+
+        if (filtro.ConDescuadre == true)
+        {
+            // Descuadre = la cabecera no cuadra con la Σ de bodegas ACTIVAS. Comparación
+            // exacta a propósito: el rollup copia las mismas cifras, no debería haber ruido
+            // de redondeo. Se traduce a subconsulta correlacionada cubierta por el índice
+            // parcial ix_alm_articulo_bodega_articulo_activo.
+            query = query.Where(a => a.existencia != a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia));
+        }
+
+        // Estado de existencia: categorías disjuntas (ver EstadoStockFiltro).
+        query = filtro.EstadoStock switch
+        {
+            EstadoStockFiltro.ConStock => query.Where(a =>
+                a.existencia > 0 && !(a.existencia_minima > 0 && a.existencia < a.existencia_minima)),
+            EstadoStockFiltro.BajoMinimo => query.Where(a =>
+                a.existencia > 0 && a.existencia_minima > 0 && a.existencia < a.existencia_minima),
+            EstadoStockFiltro.SinStock => query.Where(a => a.existencia == 0),
+            EstadoStockFiltro.Negativo => query.Where(a => a.existencia < 0),
+            _ => query
+        };
 
         if (!string.IsNullOrWhiteSpace(filtro.Search))
         {
@@ -59,28 +152,61 @@ public sealed class ArticulosService : IArticulosService
             }
         }
 
-        return await query
-            .OrderBy(a => a.codigo_articulo)
-            .Select(a => new ArticuloListItemDto
-            {
-                Id = a.id,
-                Codigo = a.codigo_articulo,
-                Descripcion = a.descripcion,
-                UnidadMedida = a.unidad_medida,
-                UnidadMedidaId = a.unidad_medida_id,
-                UnidadMedidaCodigo = a.unidad_medida_ref != null ? a.unidad_medida_ref.codigo : null,
-                TipoArticuloNombre = a.tipo_articulo_ref != null ? a.tipo_articulo_ref.nombre : null,
-                Grupo = a.grupo,
-                GrupoNombre = a.grupo_ref != null ? a.grupo_ref.nombre : null,
-                Diametro = a.diametro,
-                CuentaContable = a.cuenta_contable,
-                Existencia = a.existencia,
-                ExistenciaMinima = a.existencia_minima,
-                ValorUnitario = a.valor_unitario,
-                ValorTotal = a.ubicaciones.Sum(u => u.existencia)
-            })
-            .ToListAsync(ct);
+        return query;
     }
+
+    /// <summary>Ordena por el campo del grid (FieldName del DTO), con el id como desempate estable.</summary>
+    private static IOrderedQueryable<alm_articulo> AplicarOrden(IQueryable<alm_articulo> query, string? sortField, bool sortDesc)
+    {
+        IOrderedQueryable<alm_articulo> ordered = sortField switch
+        {
+            nameof(ArticuloListItemDto.Id) => sortDesc
+                ? query.OrderByDescending(a => a.id) : query.OrderBy(a => a.id),
+            nameof(ArticuloListItemDto.Descripcion) => sortDesc
+                ? query.OrderByDescending(a => a.descripcion) : query.OrderBy(a => a.descripcion),
+            nameof(ArticuloListItemDto.TipoArticuloDisplay) => sortDesc
+                ? query.OrderByDescending(a => a.tipo_articulo_ref!.nombre) : query.OrderBy(a => a.tipo_articulo_ref!.nombre),
+            nameof(ArticuloListItemDto.UnidadMedidaDisplay) => sortDesc
+                ? query.OrderByDescending(a => a.unidad_medida_ref!.codigo) : query.OrderBy(a => a.unidad_medida_ref!.codigo),
+            nameof(ArticuloListItemDto.GrupoDisplay) => sortDesc
+                ? query.OrderByDescending(a => a.grupo_ref!.nombre) : query.OrderBy(a => a.grupo_ref!.nombre),
+            nameof(ArticuloListItemDto.Existencia) => sortDesc
+                ? query.OrderByDescending(a => a.existencia) : query.OrderBy(a => a.existencia),
+            nameof(ArticuloListItemDto.ValorTotal) => sortDesc
+                ? query.OrderByDescending(a => a.existencia * a.valor_unitario)
+                : query.OrderBy(a => a.existencia * a.valor_unitario),
+            _ => sortDesc
+                ? query.OrderByDescending(a => a.codigo_articulo) : query.OrderBy(a => a.codigo_articulo)
+        };
+
+        return sortDesc ? ordered.ThenByDescending(a => a.id) : ordered.ThenBy(a => a.id);
+    }
+
+    /// <summary>Proyección estándar de artículo a item de lista (reutilizada por GetAsync y SearchPagedAsync).</summary>
+    private static readonly Expression<Func<alm_articulo, ArticuloListItemDto>> Proyeccion = a => new ArticuloListItemDto
+    {
+        Id = a.id,
+        Codigo = a.codigo_articulo,
+        Descripcion = a.descripcion,
+        UnidadMedida = a.unidad_medida,
+        UnidadMedidaId = a.unidad_medida_id,
+        UnidadMedidaCodigo = a.unidad_medida_ref != null ? a.unidad_medida_ref.codigo : null,
+        TipoArticuloNombre = a.tipo_articulo_ref != null ? a.tipo_articulo_ref.nombre : null,
+        Grupo = a.grupo,
+        GrupoNombre = a.grupo_ref != null ? a.grupo_ref.nombre : null,
+        Diametro = a.diametro,
+        CuentaContable = a.cuenta_contable,
+        Existencia = a.existencia,
+        ExistenciaMinima = a.existencia_minima,
+        ValorUnitario = a.valor_unitario,
+        // DINERO, misma fórmula que el KPI ValorInventario: la suma de la columna cuadra
+        // con la tarjeta por construcción. (Antes era Σ existencias de ubicaciones — una
+        // cantidad — y además sumaba las inactivas.)
+        ValorTotal = a.existencia * a.valor_unitario,
+        // Σ de bodegas ACTIVAS (contrato del rollup): alimenta el detector de descuadre.
+        ExistenciaBodegas = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia),
+        Activo = a.activo
+    };
 
     public async Task<IReadOnlyList<AlertaStockDto>> GetAlertasStockAsync(AlertaStockFilterDto? filtro, CancellationToken ct = default)
     {
@@ -88,8 +214,12 @@ public sealed class ArticulosService : IArticulosService
 
         // La existencia y el mínimo son POR BODEGA: una alerta es una fila
         // (artículo, bodega) sin stock (o negativa) o por debajo de su mínimo.
+        // Se excluyen los artículos DESCONTINUADOS (soft-delete, 2026-07-29): pedir
+        // reposición de algo que se dio de baja a propósito es ruido puro. Ojo: u.activo
+        // es la UBICACIÓN; el estado del artículo es u.articulo.activo.
         var query = _context.alm_articulo_bodegas.AsNoTracking()
             .Where(u => u.activo)
+            .Where(u => u.articulo != null && u.articulo.activo)
             .Where(u => u.existencia <= 0
                      || (u.existencia_minima > 0 && u.existencia < u.existencia_minima));
 
@@ -251,6 +381,53 @@ public sealed class ArticulosService : IArticulosService
         }
     }
 
+    /// <summary>
+    /// La cuenta contable del artículo es opcional, pero si viene debe existir en el plan
+    /// de cuentas de la empresa, ser imputable (allows_posting) y estar activa — el MISMO
+    /// criterio con el que el combo del formulario filtra el plan
+    /// (ArticulosClient.GetCuentasContablesAsync), para que el servidor acepte exactamente
+    /// lo que la UI ofrece. Antes esta coherencia vivía solo en la UI: un POST directo
+    /// podía guardar cualquier texto. Los códigos se comparan sin separadores
+    /// (AccountCodeFormatter): puntos/guiones son máscara de presentación, no código.
+    /// </summary>
+    private async Task ValidarCuentaContableAsync(string? cuentaContable, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(cuentaContable))
+        {
+            return; // opcional: los históricos SIMAFI sin cuenta siguen siendo válidos
+        }
+
+        var codigo = AccountCodeFormatter.Normalize(cuentaContable);
+
+        // El filtro global por company_id ya acota el plan al tenant actual.
+        var cuenta = await _context.con_plan_cuentas.AsNoTracking()
+            .Where(c => c.code == codigo)
+            .Select(c => new { c.allows_posting, c.status })
+            .FirstOrDefaultAsync(ct);
+
+        if (cuenta is null)
+        {
+            throw new InvalidOperationException(
+                $"La cuenta contable {cuentaContable} no existe en el plan de cuentas de la empresa.");
+        }
+
+        if (!cuenta.allows_posting)
+        {
+            throw new InvalidOperationException(
+                $"La cuenta contable {cuentaContable} no permite movimientos (no es imputable): elija una cuenta de detalle.");
+        }
+
+        var activa = string.IsNullOrWhiteSpace(cuenta.status)
+            || string.Equals(cuenta.status, "ACTIVE", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(cuenta.status, "ACTIVO", StringComparison.OrdinalIgnoreCase);
+
+        if (!activa)
+        {
+            throw new InvalidOperationException(
+                $"La cuenta contable {cuentaContable} está inactiva en el plan de cuentas.");
+        }
+    }
+
     private async Task ValidarUnidadMedidaAsync(int? unidadMedidaId, CancellationToken ct)
     {
         if (!unidadMedidaId.HasValue)
@@ -344,8 +521,14 @@ public sealed class ArticulosService : IArticulosService
                 CuentaContable = a.cuenta_contable,
                 ExistenciaMinima = a.existencia_minima,
                 ValorUnitario = a.valor_unitario,
-                // La existencia mostrada es el total real: la suma de la existencia de cada ubicación (bodega).
-                Existencia = a.ubicaciones.Sum(u => u.existencia)
+                Activo = a.activo,
+                // xmin es la propiedad sombra del token de concurrencia (UseXminAsConcurrencyToken).
+                // Viaja al cliente para que el PUT pueda detectar que otro usuario guardó primero.
+                RowVersion = EF.Property<uint>(a, "xmin"),
+                // La existencia mostrada es el total real: la suma de las ubicaciones ACTIVAS
+                // (mismo contrato que el rollup de cabecera; antes sumaba también las
+                // deshabilitadas y el form contradecía al maestro).
+                Existencia = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia)
             })
             .FirstOrDefaultAsync(ct);
     }
@@ -363,6 +546,17 @@ public sealed class ArticulosService : IArticulosService
         // directo a la API saltándose la UI también queda rechazado.
         var manejaInventario = await ValidarTipoArticuloAsync(dto.TipoArticuloId, ct);
         await ValidarGrupoAsync(dto.GrupoId, dto.TipoArticuloId!.Value, ct);
+
+        // Un artículo que lleva existencias necesita unidad de medida: sin ella el kardex
+        // muestra cantidades sin unidad y no hay forma de convertir almacenaje/salida.
+        // Se exige SOLO AL CREAR (2026-07-29): los artículos migrados de SIMAFI tienen
+        // unidad_medida_id NULL y exigirla al editar dejaría bloqueado a quien solo quiere
+        // corregirles la descripción. Esos se sanean con el filtro "Sin unidad" del maestro.
+        if (manejaInventario && !dto.UnidadMedidaId.HasValue)
+        {
+            throw new InvalidOperationException(
+                "Debe seleccionar la unidad de medida: el tipo de artículo elegido maneja inventario.");
+        }
 
         var ubicaciones = dto.Ubicaciones ?? new List<ArticuloUbicacionDto>();
 
@@ -411,6 +605,10 @@ public sealed class ArticulosService : IArticulosService
         await ValidarUnidadMedidaAsync(dto.UnidadSalidaId, ct);
         await ValidarCategoriaUnidadesAsync(dto.UnidadMedidaId, dto.UnidadAlmacenajeId, dto.UnidadSalidaId, ct);
 
+        // Al CREAR la cuenta contable se valida siempre (si viene).
+        var cuentaContable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true);
+        await ValidarCuentaContableAsync(cuentaContable, ct);
+
         // Todas las bodegas deben existir y estar activas. (Sin inventario no hay bodegas que validar.)
         if (manejaInventario)
         {
@@ -442,7 +640,7 @@ public sealed class ArticulosService : IArticulosService
             tipo_articulo_id = dto.TipoArticuloId,
             grupo_id = dto.GrupoId,
             diametro = NormalizeOptional(dto.Diametro, 80),
-            cuenta_contable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true),
+            cuenta_contable = cuentaContable,
             valor_unitario = dto.ValorUnitario,
             // Existencia y mínimo son el rollup: suma de las filas por bodega.
             existencia = ubicaciones.Sum(u => u.Existencia),
@@ -560,6 +758,15 @@ public sealed class ArticulosService : IArticulosService
             throw new KeyNotFoundException("El artículo no existe.");
         }
 
+        // Concurrencia optimista: el cliente devuelve el xmin que leyó al abrir el artículo.
+        // Al fijarlo como OriginalValue, EF lo incluye en el WHERE del UPDATE; si otro usuario
+        // guardó en el intervalo, no afecta filas y EF lanza DbUpdateConcurrencyException
+        // (el controlador la traduce a 409) en vez de pisar el cambio ajeno en silencio.
+        if (dto.RowVersion.HasValue)
+        {
+            _context.Entry(entity).Property("xmin").OriginalValue = dto.RowVersion.Value;
+        }
+
         var codigo = NormalizeOptional(dto.Codigo, 20, uppercase: true) ?? string.Empty;
         var descripcion = NormalizeRequired(dto.Descripcion, 120, "descripción");
 
@@ -610,7 +817,22 @@ public sealed class ArticulosService : IArticulosService
         entity.tipo_articulo_id = dto.TipoArticuloId;
         entity.grupo_id = dto.GrupoId;
         entity.diametro = NormalizeOptional(dto.Diametro, 80);
-        entity.cuenta_contable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true);
+
+        // La cuenta se valida SOLO si CAMBIA (comparando ambos lados sin separadores):
+        // un re-save del form —que siempre reenvía CuentaContable— no debe reventar en un
+        // artículo histórico SIMAFI cuya cuenta ya no exista en el plan. Mismo criterio
+        // que la unidad de medida (exigencia solo hacia adelante).
+        var cuentaNueva = NormalizeOptional(dto.CuentaContable, 20, uppercase: true);
+        if (!string.Equals(
+                AccountCodeFormatter.Normalize(cuentaNueva),
+                AccountCodeFormatter.Normalize(entity.cuenta_contable),
+                StringComparison.OrdinalIgnoreCase))
+        {
+            await ValidarCuentaContableAsync(cuentaNueva, ct);
+            entity.cuenta_contable = cuentaNueva;
+        }
+        // Si es la misma cuenta (aunque cambie el formato: guiones/puntos), se conserva
+        // el valor almacenado tal cual: no hay cambio real que validar ni escribir.
         entity.valor_unitario = dto.ValorUnitario;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -623,7 +845,14 @@ public sealed class ArticulosService : IArticulosService
         return dto;
     }
 
-    public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
+    /// <summary>
+    /// DESCONTINÚA el artículo (soft-delete, 2026-07-29). Ya NO borra físicamente: el
+    /// artículo se conserva, su kardex sigue consultable y deja de ofrecerse para
+    /// documentos nuevos. La bitácora lo registra como "Eliminación" porque el
+    /// interceptor de auditoría interpreta el cambio de activo true→false como borrado.
+    /// Devuelve false si el artículo no existe; true si quedó descontinuado.
+    /// </summary>
+    public async Task<bool> DeleteAsync(int id, string user, CancellationToken ct = default)
     {
         if (id <= 0)
         {
@@ -636,22 +865,71 @@ public sealed class ArticulosService : IArticulosService
             return false;
         }
 
-        // No permitir borrar si el artículo tiene movimientos de kardex: se
-        // perdería la trazabilidad de existencias.
-        // Se valida por articulo_id (la FK real), NO por codigo_articulo: el código
-        // es opcional desde 2026-07-13 y los artículos nuevos lo llevan en blanco,
-        // con lo que la comparación por código no encontraría sus movimientos.
-        var tieneMovimientos = await _context.alm_kardexs
-            .AsNoTracking()
-            .AnyAsync(k => k.articulo_id == id, ct);
-
-        if (tieneMovimientos)
+        if (!entity.activo)
         {
-            throw new InvalidOperationException(
-                "No se puede eliminar el artículo porque tiene movimientos de kardex registrados.");
+            throw new InvalidOperationException("El artículo ya está descontinuado.");
         }
 
-        _context.alm_articulos.Remove(entity);
+        // Antes se bloqueaba el borrado cuando había movimientos de kardex, porque el
+        // DELETE físico rompía la trazabilidad. Con soft-delete eso ya no aplica: tener
+        // historia es justamente la razón de conservarlo, así que se descontinúa igual.
+        entity.activo = false;
+        entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        await _context.SaveChangesAsync(ct);
+        return true;
+    }
+
+    /// <summary>
+    /// Reactiva un artículo descontinuado: vuelve a estar disponible para documentos nuevos.
+    /// Valida que su clasificación siga vigente (el tipo pudo desactivarse mientras estaba fuera).
+    /// </summary>
+    public async Task<bool> ReactivarAsync(int id, string user, CancellationToken ct = default)
+    {
+        if (id <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(id), "El artículo no es válido.");
+        }
+
+        var entity = await _context.alm_articulos.FirstOrDefaultAsync(a => a.id == id, ct);
+        if (entity is null)
+        {
+            return false;
+        }
+
+        if (entity.activo)
+        {
+            throw new InvalidOperationException("El artículo ya está activo.");
+        }
+
+        // Si el artículo TIENE tipo, este pudo desactivarse mientras estaba descontinuado:
+        // reactivarlo con un tipo inactivo lo dejaría inconsistente. En cambio, un artículo
+        // histórico SIN tipo (tipo_articulo_id es nullable por los datos migrados) sí se
+        // puede reactivar: exigirle un tipo aquí impediría deshacer un descontinuado por
+        // error, y el tipo ya se exige al editarlo o crearlo.
+        if (entity.tipo_articulo_id.HasValue)
+        {
+            var tipoVigente = await _context.alm_tipo_articulos.AsNoTracking()
+                .Where(t => t.id == entity.tipo_articulo_id.Value)
+                .Select(t => (bool?)t.activo)
+                .FirstOrDefaultAsync(ct);
+
+            if (tipoVigente is null)
+            {
+                throw new InvalidOperationException("No se puede reactivar: el tipo de artículo ya no existe. Edita el artículo y asígnale un tipo vigente.");
+            }
+
+            if (tipoVigente == false)
+            {
+                throw new InvalidOperationException("No se puede reactivar: el tipo de artículo está inactivo. Reactiva el tipo o asígnale otro al artículo.");
+            }
+        }
+
+        entity.activo = true;
+        entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
         await _context.SaveChangesAsync(ct);
         return true;
     }

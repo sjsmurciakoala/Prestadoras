@@ -124,12 +124,13 @@ Backup/restore PowerShell helpers: `Database/backup_bd_simple.ps1`, `Database/re
 
 ## Repo skills
 
-Five skills under [.github/skills/](.github/skills/) — each carries a SKILL.md plus `agents/` and `references/`:
+Six skills under [.github/skills/](.github/skills/) — each carries a SKILL.md; the five `hodsoft-*` also carry `agents/` and `references/`:
 
 - `hodsoft-devexpress-docs` — answers DevExpress questions via the `dxdocs` MCP.
 - `hodsoft-blazor-devexpress-ui` — for `apc.Client` UI work.
 - `hodsoft-siad-backend` — for controller/service/DTO slices.
 - `hodsoft-reporting-devexpress` — for `SIAD.Reports` and report flows.
 - `hodsoft-postgres-ef-scaffold` — for `Database/`, EF scaffold, partial context files.
+- `runbook-despliegue-srv` — registers every new `Database/` SQL script in the SRV deployment runbook (`Database/*_runbook_despliegue_srv.md`). **Versioned backup copy**: the copy Claude Code actually loads and triggers lives in `~/.claude/skills/runbook-despliegue-srv/` — keep both in sync when editing.
 
 Prefer these skills when the task matches.

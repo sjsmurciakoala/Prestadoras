@@ -307,7 +307,9 @@ public class CobroService : ICobroService
                     referenciaContable,
                     ct);
 
-                movimientoBanco = await _banTransaccionesService.RegistrarMovimientoAsync(
+                // Cheques (almacén 2.0): la firma devuelve además ChequeId/NumeroCheque;
+                // un depósito de cobro nunca emite cheque, solo interesan kardex y saldo.
+                var movimiento = await _banTransaccionesService.RegistrarMovimientoAsync(
                     dto.BancoCuentaId!.Value,
                     TipoTransaccionBancoDeposito,
                     fechaHoy,
@@ -319,6 +321,7 @@ public class CobroService : ICobroService
                     contraCuentas,
                     usuario,
                     ct);
+                movimientoBanco = (movimiento.BanKardexId, movimiento.SaldoResultante);
             }
             catch (Exception ex)
             {

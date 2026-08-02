@@ -372,7 +372,9 @@ public sealed class ReciboBancoPendienteTests : IntegrationTestBase, IAsyncLifet
             => throw new NotSupportedException();
         public Task<EstadoCuentaDto?> GetEstadoCuentaAsync(long companyId, long bancoCuentaId, DateOnly? fechaDesde = null, DateOnly? fechaHasta = null, CancellationToken ct = default)
             => throw new NotSupportedException();
-        public Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoAsync(long bancoCuentaId, string idTipoTransaccion, DateOnly fechaMovimiento, string descripcion, string? referencia, string? sourceDocument, decimal tasaCambio, decimal monto, IReadOnlyList<BanTransaccionContraLineaDto> contraCuentas, string usuario, CancellationToken ct = default)
+        public Task<(long BanKardexId, decimal SaldoResultante, long? ChequeId, decimal? NumeroCheque)> RegistrarMovimientoAsync(long bancoCuentaId, string idTipoTransaccion, DateOnly fechaMovimiento, string descripcion, string? referencia, string? sourceDocument, decimal tasaCambio, decimal monto, IReadOnlyList<BanTransaccionContraLineaDto> contraCuentas, string usuario, CancellationToken ct = default, string? beneficiarioCheque = null, string? conceptoCheque = null, string origenCheque = ChequeOrigen.Transaccion, string? descripcionPartidaBanco = null)
+            => throw new NotSupportedException("Los tests del motor F2 cubren solo EFECTIVO.");
+        public Task<ChequeManualResultadoDto> RegistrarChequeManualAsync(ChequeManualCreateDto dto, string usuario, CancellationToken ct = default)
             => throw new NotSupportedException();
         public Task<(long BanKardexIdAnulacion, decimal SaldoResultante)> AnularMovimientoAsync(long bancoCuentaId, long banKardexIdOriginal, string motivo, string usuario, CancellationToken ct = default)
             => throw new NotSupportedException();

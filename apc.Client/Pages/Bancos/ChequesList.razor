@@ -1,0 +1,645 @@
+@page "/bancos/cheques"
+@attribute [Authorize(Policy = PermissionNames.Bancos.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Bancos
+@using apc.Client.Services
+@using apc.Client.Services.Bancos
+
+@inject ChequesClient ChequesClient
+@inject CuentasBancosClient CuentasBancosClient
+@inject ChequeEmisionState ChequeEmision
+@inject TenantState TenantState
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Cheques emitidos</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ChequesListToast" MaxToastCount="4" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Cheques emitidos</h2>
+            <p class="page-subtitle">Eventos de emisión y anulación de cheques por cuenta bancaria (registro inmutable)</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            @if (ChequeEmision.Disponible)
+            {
+                <DxButton Text="Nuevo cheque manual" IconCssClass="bi bi-cash-stack"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          CssClass="btn-modern" Click="AbrirChequeManual"
+                          Enabled="@(!isSaving)" />
+            }
+            <DxButton Text="Anular siguiente número" IconCssClass="bi bi-slash-circle"
+                      RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" Click="AbrirPopupAnular"
+                      Enabled="@(filtroCuentaId is > 0 && !isSaving)" />
+        </div>
+    </div>
+
+    <!-- Filtros -->
+    <div class="modern-card mb-4">
+        <DxFormLayout CaptionPosition="CaptionPosition.Vertical">
+            <DxFormLayoutItem Caption="Banco" ColSpanXs="12" ColSpanMd="3" Context="f1">
+                <DxComboBox Data="@BancosDisponibles"
+                            TData="BancoOpcion"
+                            TValue="long?"
+                            Value="@filtroBancoId"
+                            ValueChanged="@((long? v) => OnBancoChangedAsync(v))"
+                            ValueFieldName="@nameof(BancoOpcion.BancoId)"
+                            TextFieldName="@nameof(BancoOpcion.Nombre)"
+                            NullText="— Todos —"
+                            IncrementalFilteringMode="DataEditorFilteringMode.Contains"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Cuenta (cheques)" ColSpanXs="12" ColSpanMd="3" Context="f2">
+                <DxComboBox Data="@CuentasFiltradas"
+                            TData="BancoCuentaListDto"
+                            TValue="long?"
+                            Value="@filtroCuentaId"
+                            ValueChanged="@((long? v) => OnCuentaChangedAsync(v))"
+                            ValueFieldName="@nameof(BancoCuentaListDto.BancoCuentaId)"
+                            TextFieldName="@nameof(BancoCuentaListDto.NumeroCuenta)"
+                            NullText="— Todas —"
+                            IncrementalFilteringMode="DataEditorFilteringMode.Contains"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Acción" ColSpanXs="6" ColSpanMd="2" Context="f3">
+                <DxComboBox Data="@acciones"
+                            TData="AccionOpcion"
+                            TValue="string"
+                            @bind-Value="filtroAccion"
+                            ValueFieldName="@nameof(AccionOpcion.Valor)"
+                            TextFieldName="@nameof(AccionOpcion.Texto)"
+                            NullText="— Todos —"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Desde" ColSpanXs="6" ColSpanMd="1" Context="f4">
+                <DxDateEdit @bind-Date="filtroDesde" CssClass="w-100"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Hasta" ColSpanXs="6" ColSpanMd="1" Context="f5">
+                <DxDateEdit @bind-Date="filtroHasta" CssClass="w-100"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+            </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="N° cheque" ColSpanXs="6" ColSpanMd="2" Context="f6">
+                <DxSpinEdit TValue="decimal?" @bind-Value="filtroNumero"
+                            MinValue="0m" Increment="1m" DisplayFormat="N0"
+                            NullText="— Todos —" ShowSpinButtons="false"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            CssClass="w-100" />
+            </DxFormLayoutItem>
+        </DxFormLayout>
+
+        <div class="d-flex flex-wrap align-items-center gap-2 mt-3">
+            @if (proximoInfo is not null)
+            {
+                <span class="summary-pill">
+                    Próximo cheque: <strong>N° @proximoInfo.ProximoCheque.ToString("N0")</strong>
+                    &nbsp;&middot;&nbsp; Máximo:
+                    <strong>@(proximoInfo.ChequeMaximo > 0 ? proximoInfo.ChequeMaximo.ToString("N0") : "sin límite")</strong>
+                </span>
+            }
+            <div class="ms-auto d-flex gap-2">
+                <DxButton Text="Buscar" IconCssClass="bi bi-search"
+                          RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                          Click="BuscarAsync" Enabled="@(!isLoading)" />
+            </div>
+        </div>
+
+        @if (proximoInfo is { Agotado: true })
+        {
+            <div class="alert alert-danger mt-3 mb-0" role="alert">
+                <i class="bi bi-exclamation-triangle me-2"></i>
+                La numeración de cheques de esta cuenta está agotada
+                (máximo @proximoInfo.ChequeMaximo.ToString("N0")). Actualice la numeración en la gestión de la cuenta.
+            </div>
+        }
+    </div>
+
+    <!-- Grid -->
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        @if (resultadoTruncado)
+        {
+            <div class="alert alert-warning mb-3" role="alert">
+                <i class="bi bi-exclamation-circle me-2"></i>
+                Se muestran las @MaxFilas.ToString("N0") filas más recientes; afine los filtros.
+            </div>
+        }
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@resultados" KeyFieldName="@nameof(ChequeBitacoraListItemDto.BitacoraId)"
+                    PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@resultados.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.NumeroCheque)" Caption="N° cheque"
+                                      Width="110px" DisplayFormat="N0" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.Fecha)" Caption="Fecha"
+                                      Width="130px" DisplayFormat="dd/MM/yyyy HH:mm" />
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.BancoNombre)" Caption="Banco" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @GetTextOrDash(((ChequeBitacoraListItemDto)cell.DataItem).BancoNombre)
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.NumeroCuenta)" Caption="Cuenta" Width="140px" />
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.Accion)" Caption="Acción"
+                                      Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @{
+                                var b = AccionBadge(((ChequeBitacoraListItemDto)cell.DataItem).Accion);
+                            }
+                            <span class="badge-status" style="background-color:@b.Bg;color:@b.Fg;">@b.Texto</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.Monto)" Caption="Monto"
+                                      Width="120px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.Beneficiario)" Caption="Beneficiario" MinWidth="160">
+                        <CellDisplayTemplate Context="cell">
+                            <div class="text-truncate" title="@(((ChequeBitacoraListItemDto)cell.DataItem).Beneficiario)">
+                                @GetTextOrDash(((ChequeBitacoraListItemDto)cell.DataItem).Beneficiario)
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.Motivo)" Caption="Motivo" MinWidth="160">
+                        <CellDisplayTemplate Context="cell">
+                            <div class="text-truncate text-muted" title="@(((ChequeBitacoraListItemDto)cell.DataItem).Motivo)">
+                                @GetTextOrDash(((ChequeBitacoraListItemDto)cell.DataItem).Motivo)
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.Origen)" Caption="Origen" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @OrigenTexto((ChequeBitacoraListItemDto)cell.DataItem)
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(ChequeBitacoraListItemDto.Usuario)" Caption="Usuario" Width="130px" />
+                    <DxGridDataColumn Caption="" Width="70px" TextAlignment="GridTextAlignment.Center"
+                                      AllowSort="false" AllowGroup="false">
+                        <CellDisplayTemplate Context="cell">
+                            <button type="button" class="btn-icon btn-view" title="Ver detalle"
+                                    @onclick="() => VerDetalle((ChequeBitacoraListItemDto)cell.DataItem)"
+                                    @onclick:stopPropagation="true">
+                                <i class="bi bi-eye"></i>
+                            </button>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        @(busquedaRealizada
+                            ? "No hay eventos para los filtros seleccionados."
+                            : "Defina los filtros y presione Buscar.")
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<!-- Detalle del evento -->
+<DxPopup @bind-Visible="detalleVisible" Width="min(620px, 95vw)" MaxHeight="90vh"
+         Scrollable="true" CloseOnOutsideClick="true" HeaderText="Detalle del evento" ShowFooter="true">
+    <BodyContentTemplate>
+        @if (detalleItem is not null)
+        {
+            <div class="p-1">
+                <div class="d-flex flex-wrap gap-3 mb-3">
+                    <div>
+                        <div class="small text-muted">N° cheque</div>
+                        <div class="fw-semibold">@detalleItem.NumeroCheque.ToString("N0")</div>
+                    </div>
+                    <div>
+                        <div class="small text-muted">Acción</div>
+                        @{
+                            var db = AccionBadge(detalleItem.Accion);
+                        }
+                        <span class="badge-status" style="background-color:@db.Bg;color:@db.Fg;">@db.Texto</span>
+                    </div>
+                    <div>
+                        <div class="small text-muted">Monto</div>
+                        <div class="fw-semibold">@detalleItem.Monto.ToString("N2")</div>
+                    </div>
+                </div>
+
+                <div class="d-flex flex-wrap gap-3 mb-3 small">
+                    <div><span class="text-muted">Banco:</span> <strong>@GetTextOrDash(detalleItem.BancoNombre)</strong></div>
+                    <div><span class="text-muted">Cuenta:</span> <strong>@detalleItem.NumeroCuenta</strong></div>
+                    <div><span class="text-muted">Fecha:</span> <strong>@detalleItem.Fecha.ToString("dd/MM/yyyy HH:mm")</strong> por <strong>@detalleItem.Usuario</strong></div>
+                </div>
+
+                <div class="mb-3 small">
+                    <div><span class="text-muted">Beneficiario:</span> @GetTextOrDash(detalleItem.Beneficiario)</div>
+                    <div><span class="text-muted">Concepto:</span> @GetTextOrDash(detalleItem.Concepto)</div>
+                    <div>
+                        <span class="text-muted">Origen:</span> @OrigenTexto(detalleItem)
+                        @if (!string.IsNullOrWhiteSpace(detalleItem.OrigenDocumento))
+                        {
+                            <span> &middot; Documento: <strong>@detalleItem.OrigenDocumento</strong></span>
+                        }
+                        @if (detalleItem.BanKardexId is > 0)
+                        {
+                            <span> &middot; Movimiento bancario: <strong>#@detalleItem.BanKardexId</strong></span>
+                        }
+                    </div>
+                </div>
+
+                @if (EsAnulado(detalleItem))
+                {
+                    <div class="alert alert-danger mb-0" role="alert">
+                        <div class="fw-semibold mb-1"><i class="bi bi-slash-circle me-1"></i>Cheque anulado</div>
+                        <div class="small">
+                            <div>Motivo: @GetTextOrDash(detalleItem.Motivo)</div>
+                            <div>
+                                Anulado por: <strong>@detalleItem.Usuario</strong>
+                                <span> el @detalleItem.Fecha.ToString("dd/MM/yyyy HH:mm")</span>
+                            </div>
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="d-flex justify-content-between align-items-center gap-2 w-100 flex-wrap">
+            <div class="d-flex gap-2 flex-wrap">
+                <DxButton Text="Cheque" IconCssClass="bi bi-printer"
+                          RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="ImprimirChequeAsync" Enabled="@(detalleItem is { ChequeId: > 0 })" />
+                <DxButton Text="Cheque + detalle" IconCssClass="bi bi-printer-fill"
+                          RenderStyle="ButtonRenderStyle.Primary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="ImprimirChequeDetalleAsync" Enabled="@(detalleItem is { ChequeId: > 0 })" />
+                <DxButton Text="Comprobante" IconCssClass="bi bi-file-earmark-text"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="ImprimirComprobanteAsync" Enabled="@(detalleItem is { ChequeId: > 0 })" />
+            </div>
+            <DxButton Text="Cerrar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => detalleVisible = false)" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+<!-- Anular siguiente número -->
+<DxPopup @bind-Visible="anularVisible" Width="min(520px, 95vw)" ShowFooter="true"
+         CloseOnOutsideClick="false" HeaderText="Anular siguiente número de cheque">
+    <BodyContentTemplate>
+        <div class="p-1">
+            <p class="text-muted small">
+                Consume el siguiente número de la cuenta
+                <strong>@(CuentaSeleccionada?.NumeroCuenta ?? "-")</strong>
+                y lo registra como anulado (cheque dañado), sin generar movimiento bancario.
+                @if (proximoInfo is not null && !proximoInfo.Agotado)
+                {
+                    <span> Se anulará el <strong>N° @proximoInfo.ProximoCheque.ToString("N0")</strong>.</span>
+                }
+            </p>
+            @if (proximoInfo is { Agotado: true })
+            {
+                <div class="alert alert-danger" role="alert">
+                    La numeración de esta cuenta está agotada (máximo @proximoInfo.ChequeMaximo.ToString("N0")).
+                    No hay número disponible para anular.
+                </div>
+            }
+            <label class="form-label small fw-semibold">Motivo de la anulación *</label>
+            <DxMemo @bind-Text="anularMotivo" Rows="3" MaxLength="250" CssClass="w-100"
+                    NullText="Ej.: cheque dañado en la impresión" />
+        </div>
+    </BodyContentTemplate>
+    <FooterContentTemplate>
+        <div class="d-flex justify-content-end gap-2 w-100">
+            <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => anularVisible = false)" Enabled="@(!isSaving)" />
+            <DxButton Text="@(isSaving ? "Anulando..." : "Anular número")"
+                      RenderStyle="ButtonRenderStyle.Danger"
+                      Click="ConfirmarAnularAsync"
+                      Enabled="@(!isSaving && !string.IsNullOrWhiteSpace(anularMotivo) && proximoInfo is not { Agotado: true })" />
+        </div>
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    [SupplyParameterFromQuery(Name = "cuentaId")]
+    public long? CuentaIdParam { get; set; }
+
+    private DxGrid? grid;
+
+    private long companyId;
+    private readonly List<BancoCuentaListDto> cuentasCheques = new();
+    private List<ChequeBitacoraListItemDto> resultados = new();
+
+    private long? filtroBancoId;
+    private long? filtroCuentaId;
+    private string? filtroAccion;
+    private DateTime? filtroDesde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? filtroHasta = DateTime.Today;
+    private decimal? filtroNumero;
+
+    private ProximoChequeDto? proximoInfo;
+    private int proximoSeq; // Descarta respuestas viejas de GetProximoAsync si la selección cambió.
+    private bool isLoading;
+    private bool isSaving;
+    private bool busquedaRealizada;
+    private bool resultadoTruncado;
+
+    // Tope de filas del servicio (ChequesService.MaxFilasBusqueda); solo para el aviso.
+    private const int MaxFilas = 5000;
+
+    private bool detalleVisible;
+    private ChequeBitacoraListItemDto? detalleItem;
+
+    private bool anularVisible;
+    private string? anularMotivo;
+
+
+    private readonly List<AccionOpcion> acciones =
+    [
+        new(ChequeAccion.Emitido, "Emitidos"),
+        new(ChequeAccion.Anulado, "Anulados")
+    ];
+
+    private sealed record AccionOpcion(string Valor, string Texto);
+
+    // BancoId = 0 agrupa cuentas sin banco asociado (migradas de SIMAFI); el API lo
+    // traduce a ban_banco_id IS NULL.
+    private sealed record BancoOpcion(long BancoId, string Nombre);
+
+    private const string SinBancoLabel = "(Sin banco)";
+
+    private IReadOnlyList<BancoOpcion> BancosDisponibles =>
+        cuentasCheques
+            .Select(c => new BancoOpcion(
+                c.BancoId,
+                string.IsNullOrWhiteSpace(c.BancoNombre) ? SinBancoLabel : c.BancoNombre.Trim()))
+            .Distinct()
+            .OrderBy(b => b.Nombre, StringComparer.OrdinalIgnoreCase)
+            .ToList();
+
+    private IReadOnlyList<BancoCuentaListDto> CuentasFiltradas =>
+        filtroBancoId.HasValue
+            ? cuentasCheques.Where(c => c.BancoId == filtroBancoId.Value).ToList()
+            : cuentasCheques;
+
+    private BancoCuentaListDto? CuentaSeleccionada =>
+        cuentasCheques.FirstOrDefault(c => c.BancoCuentaId == filtroCuentaId);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            companyId = await TenantState.EnsureCompanyAsync();
+            if (companyId <= 0)
+            {
+                return;
+            }
+
+            // Sin un tipo de transacción que emita cheques no se ofrece el cheque manual.
+            await ChequeEmision.EnsureLoadedAsync();
+
+            var cuentas = await CuentasBancosClient.GetAsync(companyId);
+            cuentasCheques.Clear();
+            cuentasCheques.AddRange(cuentas.Where(c =>
+                !string.IsNullOrWhiteSpace(c.TipoCuenta) &&
+                c.TipoCuenta.Contains("CHEQ", StringComparison.OrdinalIgnoreCase)));
+
+            // Pre-filtro por cuenta cuando se llega desde la gestión de la cuenta bancaria.
+            if (CuentaIdParam is > 0)
+            {
+                var cuenta = cuentasCheques.FirstOrDefault(c => c.BancoCuentaId == CuentaIdParam.Value);
+                if (cuenta is not null)
+                {
+                    filtroBancoId = cuenta.BancoId;
+                    filtroCuentaId = cuenta.BancoCuentaId;
+                    await RefrescarProximoAsync();
+                }
+            }
+
+            await BuscarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Cheques", $"No se pudo cargar la pantalla de cheques: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private Task OnBancoChangedAsync(long? bancoId)
+    {
+        filtroBancoId = bancoId;
+        // La cuenta pertenece al banco: al cambiarlo se limpia la selección.
+        filtroCuentaId = null;
+        proximoSeq++;
+        proximoInfo = null;
+        return Task.CompletedTask;
+    }
+
+    private async Task OnCuentaChangedAsync(long? cuentaId)
+    {
+        filtroCuentaId = cuentaId;
+        await RefrescarProximoAsync();
+    }
+
+    private async Task RefrescarProximoAsync()
+    {
+        var seq = ++proximoSeq;
+        proximoInfo = null;
+        if (filtroCuentaId is not > 0)
+        {
+            return;
+        }
+
+        try
+        {
+            var info = await ChequesClient.GetProximoAsync(filtroCuentaId.Value);
+            if (seq == proximoSeq)
+            {
+                proximoInfo = info;
+            }
+        }
+        catch (Exception ex)
+        {
+            if (seq == proximoSeq)
+            {
+                Toast("Cheques", $"No se pudo consultar la numeración de la cuenta: {ex.Message}", ToastRenderStyle.Warning);
+            }
+        }
+    }
+
+    private async Task BuscarAsync()
+    {
+        if (filtroDesde is { } d && filtroHasta is { } h && d.Date > h.Date)
+        {
+            Toast("Cheques", "Rango de fechas inválido: 'Desde' debe ser menor o igual a 'Hasta'.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        isLoading = true;
+        resultadoTruncado = false;
+        try
+        {
+            var lista = await ChequesClient.BuscarBitacoraAsync(
+                filtroBancoId, filtroCuentaId, filtroAccion, filtroDesde, filtroHasta, filtroNumero);
+
+            resultados = lista.ToList();
+            resultadoTruncado = resultados.Count >= MaxFilas;
+            busquedaRealizada = true;
+        }
+        catch (Exception ex)
+        {
+            Toast("Cheques", $"No se pudo consultar la bitácora de cheques: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void VerDetalle(ChequeBitacoraListItemDto item)
+    {
+        detalleItem = item;
+        detalleVisible = true;
+    }
+
+    private async Task ImprimirChequeAsync()
+    {
+        if (detalleItem is not { ChequeId: > 0 })
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("open", ChequesClient.GetChequePdfUrl(detalleItem.ChequeId), "_blank");
+    }
+
+    private async Task ImprimirChequeDetalleAsync()
+    {
+        if (detalleItem is not { ChequeId: > 0 })
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("open", ChequesClient.GetChequeDetallePdfUrl(detalleItem.ChequeId), "_blank");
+    }
+
+    private async Task ImprimirComprobanteAsync()
+    {
+        if (detalleItem is not { ChequeId: > 0 })
+        {
+            return;
+        }
+
+        await JS.InvokeVoidAsync("open", ChequesClient.GetComprobantePdfUrl(detalleItem.ChequeId), "_blank");
+    }
+
+    // El cheque manual vive en su propia vista; al volver se regresa a esta página.
+    private void AbrirChequeManual()
+        => Navigation.NavigateTo(
+            $"/bancos/cheques/manual?originUrl={Uri.EscapeDataString("/bancos/cheques")}");
+
+    private void AbrirPopupAnular()
+    {
+        if (filtroCuentaId is not > 0)
+        {
+            return;
+        }
+
+        anularMotivo = null;
+        anularVisible = true;
+    }
+
+    private async Task ConfirmarAnularAsync()
+    {
+        // Guarda de doble submit: la acción consume un correlativo.
+        if (isSaving)
+        {
+            return;
+        }
+
+        if (filtroCuentaId is not > 0 || string.IsNullOrWhiteSpace(anularMotivo))
+        {
+            return;
+        }
+
+        isSaving = true;
+        try
+        {
+            var numero = await ChequesClient.AnularSiguienteAsync(filtroCuentaId.Value, anularMotivo.Trim());
+            anularVisible = false;
+            Toast("Cheques", $"Se anuló el cheque N° {numero:N0}.", ToastRenderStyle.Success);
+            await RefrescarProximoAsync();
+            await BuscarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Cheques", $"No se pudo anular el número: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // Clave nueva: el grid pasó del libro (ban_cheque) a la bitácora de eventos;
+    // un layout persistido del esquema anterior no aplica.
+    private const string GridLayoutStorageKey = "bancos-cheques-bitacora-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private static bool EsAnulado(ChequeBitacoraListItemDto item)
+        => string.Equals(item.Accion, ChequeAccion.Anulado, StringComparison.OrdinalIgnoreCase);
+
+    private static (string Bg, string Fg, string Texto) AccionBadge(string? accion)
+        => string.Equals(accion, ChequeAccion.Anulado, StringComparison.OrdinalIgnoreCase)
+            ? ("#f8d7da", "#842029", "Anulado")
+            : ("#d1e7dd", "#0f5132", "Emitido");
+
+    // MANUAL cubre dos casos: el cheque manual (evento EMITIDO) y la anulación de un
+    // número sin pago (evento ANULADO, cheque dañado).
+    private static string OrigenTexto(ChequeBitacoraListItemDto item)
+        => item.Origen?.Trim().ToUpperInvariant() switch
+        {
+            ChequeOrigen.Procesar => "Procesar compromiso",
+            ChequeOrigen.Abono => "Abono a compromiso",
+            ChequeOrigen.Transaccion => "Transacción bancaria",
+            ChequeOrigen.Manual => EsAnulado(item) ? "Anulación de número" : "Cheque manual",
+            _ => item.Origen ?? "-"
+        };
+
+    private static string GetTextOrDash(string? value)
+        => string.IsNullOrWhiteSpace(value) ? "-" : value.Trim();
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "ChequesListToast"
+        });
+}

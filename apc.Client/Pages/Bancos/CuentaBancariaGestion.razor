@@ -27,6 +27,11 @@
             <p class="page-subtitle">Gestion de cuenta bancaria</p>
         </div>
         <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Cheques emitidos"
+                      IconCssClass="bi bi-card-checklist"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern shadow-sm"
+                      Click="IrAChequesEmitidos" />
             <DxButton Text="Volver"
                       IconCssClass="bi bi-arrow-left"
                       RenderStyle="ButtonRenderStyle.Secondary"
@@ -56,7 +61,7 @@
                             CuentasContables="cuentasContables"
                             Consolidado="consolidado"
                             PopupTitle="@PageTitle"
-                            CuentaIdDisplay="CuentaIdDisplay"
+                            CuentaNumeroDisplay="@CuentaNumeroDisplay"
                             OnCancel="VolverAsync"
                             OnSave="SaveAsync" />
 </div>
@@ -94,7 +99,7 @@
     private long? handledCuentaId;
     private long? handledBancoId;
 
-    private string CuentaIdDisplay => editModel.BancoCuentaId > 0 ? editModel.BancoCuentaId.ToString() : string.Empty;
+    private string CuentaNumeroDisplay => editModel.BancoCuentaId > 0 ? (editModel.NumeroCuenta ?? string.Empty) : string.Empty;
 
     private string PageTitle => editModel.BancoCuentaId > 0
         ? "Editar cuenta bancaria"
@@ -268,6 +273,14 @@
     {
         Volver();
         return Task.CompletedTask;
+    }
+
+    private void IrAChequesEmitidos()
+    {
+        var url = editModel.BancoCuentaId > 0
+            ? $"/bancos/cheques?cuentaId={editModel.BancoCuentaId}"
+            : "/bancos/cheques";
+        NavigationManager.NavigateTo(url);
     }
 
     private void Volver()

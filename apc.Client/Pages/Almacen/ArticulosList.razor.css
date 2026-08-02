@@ -85,6 +85,48 @@
     padding: 8px 10px;
 }
 
+/* Fila de chips de filtros activos (arriba del grid) */
+.filters-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 14px;
+}
+
+.filter-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    background: #eef2ff;
+    color: #3730a3;
+    border-radius: 16px;
+    padding: 4px 6px 4px 12px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.filter-chip button {
+    border: none;
+    background: rgba(55, 48, 163, 0.12);
+    color: inherit;
+    border-radius: 50%;
+    width: 18px;
+    height: 18px;
+    line-height: 1;
+    padding: 0;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.95rem;
+}
+
+.filter-chip button:hover {
+    background: rgba(55, 48, 163, 0.28);
+}
+
 /* ===== Chips / Badges ===== */
 .badge-status {
     padding: 5px 12px;
@@ -109,6 +151,22 @@
 .badge-status.warning {
     background-color: #fff3cd;
     color: #664d03;
+}
+
+/* Descontinuado (soft-delete): gris azulado, distinto de "sin stock" para que no se confundan. */
+.badge-status.descontinuado {
+    background-color: #e6e0f8;
+    color: #3d2a72;
+}
+
+/* La tarjeta "Descuadres" conmuta el filtro al hacer clic. */
+.summary-clickable {
+    cursor: pointer;
+    transition: box-shadow 0.15s ease;
+}
+
+.summary-clickable:hover {
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
 }
 
 /* ===== Tarjetas de resumen ===== */
@@ -161,6 +219,9 @@
 
 .btn-delete { color: #dc3545; background: rgba(220, 53, 69, 0.1); }
 .btn-delete:hover { background: #dc3545; color: white; transform: scale(1.1); }
+
+.btn-reactivar { color: #198754; background: rgba(25, 135, 84, 0.1); }
+.btn-reactivar:hover { background: #198754; color: white; transform: scale(1.1); }
 
 .btn-delete:disabled,
 .btn-delete[disabled] {
