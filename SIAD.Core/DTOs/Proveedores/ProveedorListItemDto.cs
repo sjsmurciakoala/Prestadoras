@@ -6,4 +6,6 @@ public record ProveedorListItemDto(
     string? Direccion,
     string? Rtn,
     string? Telefono,
-    bool Activo);
+    bool Activo,
+    string? TipoNombre = null,
+    int TipoId = 0);

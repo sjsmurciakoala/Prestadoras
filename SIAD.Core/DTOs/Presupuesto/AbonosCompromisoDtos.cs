@@ -104,6 +104,12 @@ public sealed class AbonoCompromisoResultadoDto
     public bool Pagado { get; set; }
 
     public string Message { get; set; } = string.Empty;
+
+    /// <summary>Numero de cheque emitido por el abono (null si el metodo no fue CHEQUE).</summary>
+    public decimal? NumeroCheque { get; set; }
+
+    /// <summary>cheque_id del cheque emitido (para imprimir); null si no se emitio cheque.</summary>
+    public long? ChequeId { get; set; }
 }
 
 /// <summary>Datos de impresion del comprobante de un abono (compone el encabezado del compromiso).</summary>

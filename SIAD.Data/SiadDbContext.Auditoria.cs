@@ -14,6 +14,7 @@ public partial class SiadDbContext
 {
     public virtual DbSet<bitacora_maestros> bitacora_maestros { get; set; } = null!;
     public virtual DbSet<bitacora_maestro_config> bitacora_maestro_configs { get; set; } = null!;
+    public virtual DbSet<bitacora_maestro_catalogo> bitacora_maestro_catalogos { get; set; } = null!;
 
     private void ConfigureAuditoriaModel(ModelBuilder modelBuilder)
     {
@@ -44,6 +45,18 @@ public partial class SiadDbContext
             entity.Property(e => e.audita_crear).HasDefaultValue(true);
             entity.Property(e => e.audita_editar).HasDefaultValue(true);
             entity.Property(e => e.audita_eliminar).HasDefaultValue(true);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+        });
+
+        modelBuilder.Entity<bitacora_maestro_catalogo>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("bitacora_maestro_catalogo_pkey");
+            entity.ToTable("bitacora_maestro_catalogo", "public");
+            entity.Property(e => e.tabla).HasMaxLength(128);
+            entity.Property(e => e.nombre).HasMaxLength(150);
+            entity.Property(e => e.modulo).HasMaxLength(80);
+            entity.Property(e => e.activo).HasDefaultValue(true);
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
         });

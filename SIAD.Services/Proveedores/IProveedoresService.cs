@@ -41,4 +41,16 @@ public interface IProveedoresService
     Task UpdateTipoAsync(int id, TipoProveedorUpsertDto dto, CancellationToken cancellationToken = default);
 
     Task DeleteTipoAsync(int id, CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TipoContactoLookupDto>> GetTiposContactoAsync(CancellationToken cancellationToken = default);
+
+    Task<IReadOnlyList<TipoContactoListItemDto>> GetTiposContactoCatalogoAsync(CancellationToken cancellationToken = default);
+
+    Task<TipoContactoDetailDto?> GetTipoContactoAsync(long id, CancellationToken cancellationToken = default);
+
+    Task<long> CreateTipoContactoAsync(TipoContactoUpsertDto dto, string user, CancellationToken cancellationToken = default);
+
+    Task UpdateTipoContactoAsync(long id, TipoContactoUpsertDto dto, string user, CancellationToken cancellationToken = default);
+
+    Task DeleteTipoContactoAsync(long id, CancellationToken cancellationToken = default);
 }

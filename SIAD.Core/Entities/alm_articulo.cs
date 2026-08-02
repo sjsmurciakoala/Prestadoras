@@ -29,6 +29,12 @@ public partial class alm_articulo : ICompanyScopedEntity
     public string? usuariomodificacion { get; set; }
     public DateTime? fechamodificacion { get; set; }
 
+    /// <summary>
+    /// Soft-delete (2026-07-29): false = artículo descontinuado. Se conserva para histórico
+    /// y su kardex sigue consultable, pero no se ofrece para documentos nuevos.
+    /// </summary>
+    public bool activo { get; set; } = true;
+
     /// <summary>FK opcional al catálogo alm_unidad_medida (convive con el texto libre unidad_medida).</summary>
     public int? unidad_medida_id { get; set; }
     public virtual alm_unidad_medida? unidad_medida_ref { get; set; }

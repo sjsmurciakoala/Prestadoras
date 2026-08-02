@@ -92,6 +92,21 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
         return t.id;
     }
 
+    /// <summary>Tipo que NO maneja inventario (ej. Servicios): sin existencias, bodega ni kardex.</summary>
+    private async Task<int> SeedTipoSinInventarioAsync(string codigo)
+    {
+        var t = new alm_tipo_articulo
+        {
+            codigo = codigo,
+            nombre = $"Tipo {codigo}",
+            activo = true,
+            maneja_inventario = false
+        };
+        _context!.alm_tipo_articulos.Add(t);
+        await _context.SaveChangesAsync();
+        return t.id;
+    }
+
     private static ArticuloEditDto NuevoArticulo(string codigo, int bodegaId, int tipoId, int? medida, int? almacenaje, int? salida)
         => new()
         {
@@ -162,15 +177,78 @@ public class ArticulosServiceUnidadTests : IntegrationTestBase, IAsyncLifetime
             _service!.CreateAsync(NuevoArticulo("ZZUCAT4", bodega, tipo, null, kg, null), "tester"));
     }
 
+    /// <summary>
+    /// CAMBIO 2026-07-29: crear SIN unidad de medida ya NO es válido si el tipo maneja
+    /// inventario — sin unidad el kardex muestra cantidades sin unidad y no hay cómo
+    /// convertir almacenaje/salida. Antes este caso pasaba (test `Create_SinNingunaUnidad_Ok`).
+    /// La exigencia es solo AL CREAR: editar un artículo histórico sin unidad sigue siendo
+    /// posible (ver <see cref="Update_ArticuloHistoricoSinUnidad_NoSeBloquea"/>).
+    /// </summary>
     [SkippableFact]
-    public async Task Create_SinNingunaUnidad_Ok()
+    public async Task Create_SinUnidadMedida_ConTipoQueManejaInventario_Lanza()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bodega = await SeedBodegaAsync("UCB5");
-        var tipo = await SeedTipoAsync("ZT5");
-        var creado = await _service!.CreateAsync(NuevoArticulo("ZZUCAT5", bodega, tipo, null, null, null), "tester");
+        var tipo = await SeedTipoAsync("ZT5"); // maneja_inventario = true
+
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service!.CreateAsync(NuevoArticulo("ZZUCAT5", bodega, tipo, null, null, null), "tester"));
+    }
+
+    /// <summary>
+    /// Un tipo que NO maneja inventario (ej. Servicios) no lleva existencias ni kardex,
+    /// así que tampoco necesita unidad: crearlo sin unidad sigue siendo válido.
+    /// </summary>
+    [SkippableFact]
+    public async Task Create_SinUnidad_TipoSinInventario_Ok()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var tipo = await SeedTipoSinInventarioAsync("ZT5B");
+
+        // Sin inventario el artículo NO puede llevar bodegas: se crea sin ubicaciones.
+        var dto = new ArticuloEditDto
+        {
+            Codigo = "ZZUCAT5B",
+            Descripcion = "Servicio sin unidad",
+            TipoArticuloId = tipo
+        };
+
+        var creado = await _service!.CreateAsync(dto, "tester");
         Assert.NotNull(creado.Id);
+    }
+
+    /// <summary>
+    /// El artículo histórico migrado de SIMAFI tiene unidad_medida_id NULL. Editarlo (por
+    /// ejemplo para corregir la descripción) NO debe quedar bloqueado por la nueva exigencia
+    /// de unidad, que aplica solo al crear. Este es el escenario que se decidió proteger.
+    /// </summary>
+    [SkippableFact]
+    public async Task Update_ArticuloHistoricoSinUnidad_NoSeBloquea()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var tipo = await SeedTipoAsync("ZT5C");
+
+        // Se siembra directo en la tabla para simular el artículo migrado: sin unidad.
+        var historico = new alm_articulo
+        {
+            codigo_articulo = "ZZUCAT5C",
+            descripcion = "Artículo migrado sin unidad",
+            tipo_articulo_id = tipo
+        };
+        _context!.alm_articulos.Add(historico);
+        await _context.SaveChangesAsync();
+
+        var dto = await _service!.GetByIdAsync(historico.id);
+        Assert.NotNull(dto);
+        Assert.Null(dto!.UnidadMedidaId);
+
+        dto.Descripcion = "Descripción corregida";
+        var actualizado = await _service!.UpdateAsync(historico.id, dto, "tester");
+
+        Assert.Equal("Descripción corregida", actualizado.Descripcion);
     }
 
     private class TestCurrentCompanyService : ICurrentCompanyService

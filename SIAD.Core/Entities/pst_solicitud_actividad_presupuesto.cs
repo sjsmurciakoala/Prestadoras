@@ -1,6 +1,8 @@
+using SIAD.Core.Tenancy;
+
 namespace SIAD.Core.Entities;
 
-public partial class pst_solicitud_actividad_presupuesto
+public partial class pst_solicitud_actividad_presupuesto : ICompanyScopedEntity
 {
     public long solicitud_id { get; set; }
 

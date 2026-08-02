@@ -313,10 +313,26 @@
                 <div class="fw-semibold">@paraDeshabilitar.BodegaDisplay</div>
                 @if (!string.IsNullOrWhiteSpace(paraDeshabilitar.UbicacionDisplay))
                 { <div class="text-muted small">@paraDeshabilitar.UbicacionDisplay</div> }
+
+                @* El servidor rechaza deshabilitar una bodega con saldo (saldría del total del
+                   artículo sin movimiento de kardex): se avisa antes de confirmar. *@
+                @if (!PuedeDeshabilitar(paraDeshabilitar))
+                {
+                    <div class="alert alert-warning text-start small mt-3 mb-0">
+                        <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                        La bodega todavía tiene saldo
+                        (existencia @paraDeshabilitar.Existencia.ToString("0.####"),
+                        comprometida @paraDeshabilitar.ExistenciaComprometida.ToString("0.####"),
+                        en tránsito @paraDeshabilitar.ExistenciaTransito.ToString("0.####")).
+                        Traslade o ajuste el stock hasta dejarla en 0 antes de deshabilitarla:
+                        deshabilitarla así descuadraría la existencia del artículo.
+                    </div>
+                }
             }
             <div class="d-flex justify-content-center gap-3 mt-4">
                 <DxButton Text="Cancelar" Click="CancelarDeshabilitar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
-                <DxButton Text="Sí, deshabilitar" Click="DeshabilitarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Warning" IconCssClass="bi bi-slash-circle" />
+                <DxButton Text="Sí, deshabilitar" Click="DeshabilitarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Warning" IconCssClass="bi bi-slash-circle"
+                          Enabled="@(paraDeshabilitar is null || PuedeDeshabilitar(paraDeshabilitar))" />
             </div>
         </div>
     </BodyTemplate>
@@ -571,6 +587,13 @@
             await UbicacionesChanged.InvokeAsync(ubicaciones);
         }
     }
+
+    /// <summary>
+    /// Espejo de la regla del servicio: una ubicación solo se deshabilita cuando quedó en
+    /// cero (existencia, comprometida y tránsito). La validación real es del servidor.
+    /// </summary>
+    private static bool PuedeDeshabilitar(ArticuloUbicacionDto row)
+        => row.Existencia == 0m && row.ExistenciaComprometida == 0m && row.ExistenciaTransito == 0m;
 
     private void ConfirmarDeshabilitar(ArticuloUbicacionDto row)
     {

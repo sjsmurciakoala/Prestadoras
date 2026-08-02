@@ -1,0 +1,157 @@
+@page "/mantenimientos/tipos-contacto/nuevo"
+@page "/mantenimientos/tipos-contacto/{id:long}/editar"
+@attribute [Authorize]
+@inject ProveedoresClient ProveedoresClient
+@inject NavigationManager Navigation
+@inject ILogger<TipoContactoEdit> Logger
+@inject IToastNotificationService ToastService
+@using apc.Client.Services.Proveedores
+@using Microsoft.AspNetCore.Authorization
+@using SIAD.Core.DTOs.Proveedores
+
+<PageTitle>SIAD - Tipo de Contacto</PageTitle>
+
+<div class="page-container">
+    <ErrorNotice @ref="errorNotice" />
+
+    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+        <div>
+            <h2 class="page-title">@TituloPagina</h2>
+            <p class="page-subtitle">@SubtituloPagina</p>
+        </div>
+        <div class="d-flex flex-wrap gap-2">
+            <DxButton Text="Volver"
+                      Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    <div class="modern-card">
+        @if (isLoading)
+        {
+            <DxSkeletonLine />
+            <DxSkeletonLine />
+        }
+        else
+        {
+            <TipoContactoForm Model="model"
+                              OnValidSubmit="GuardarAsync"
+                              OnCancel="Volver"
+                              IsBusy="isSaving" />
+        }
+    </div>
+</div>
+
+@code {
+    [Parameter]
+    public long? Id { get; set; }
+
+    private TipoContactoUpsertDto model = new();
+    private bool isLoading = true;
+    private bool isSaving;
+    private ErrorNotice errorNotice = default!;
+
+    private bool IsEdit => Id.HasValue && Id.Value > 0;
+    private string SubtituloPagina => IsEdit
+        ? "Actualice la informacion del tipo de contacto."
+        : "Registre un nuevo tipo de contacto de proveedor.";
+    private string TituloPagina
+    {
+        get
+        {
+            if (!IsEdit)
+            {
+                return "Nuevo tipo de contacto";
+            }
+
+            var nombreMostrar = model.Nombre?.Trim();
+            if (string.IsNullOrWhiteSpace(nombreMostrar))
+            {
+                return $"Editar tipo de contacto {Id}";
+            }
+
+            return $"Editar tipo de contacto {Id} - {nombreMostrar}";
+        }
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        await CargarDatosAsync();
+    }
+
+    private async Task CargarDatosAsync()
+    {
+        isLoading = true;
+
+        try
+        {
+            if (IsEdit)
+            {
+                var detail = await ProveedoresClient.ObtenerTipoContactoAsync(Id!.Value);
+                if (detail is null)
+                {
+                    ToastService.ShowToast(new ToastOptions { Title = "Tipos de contacto", Text = $"No se encontro el tipo de contacto {Id}.", RenderStyle = ToastRenderStyle.Danger });
+                    model = new TipoContactoUpsertDto();
+                }
+                else
+                {
+                    model = new TipoContactoUpsertDto
+                    {
+                        Nombre = detail.Nombre,
+                        Observaciones = detail.Observaciones,
+                        Activo = detail.Activo
+                    };
+                }
+            }
+            else
+            {
+                model = new TipoContactoUpsertDto();
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions { Title = "Tipos de contacto", Text = "No se pudo cargar la pantalla.", RenderStyle = ToastRenderStyle.Danger });
+            Logger.LogError(ex, "Error al cargar pantalla de tipo de contacto.");
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        try
+        {
+            isSaving = true;
+
+            if (IsEdit)
+            {
+                await ProveedoresClient.ActualizarTipoContactoAsync(Id!.Value, model);
+            }
+            else
+            {
+                await ProveedoresClient.CrearTipoContactoAsync(model);
+            }
+
+            Navigation.NavigateTo("/mantenimientos/tipos-contacto");
+        }
+        catch (Exception ex)
+        {
+            // El servicio devuelve el motivo real (nombre repetido, etc.); mostrarlo tal cual.
+            errorNotice.ShowError(MensajeServidor(ex, "No se pudo guardar el tipo de contacto."), ex);
+            Logger.LogError(ex, "Error al guardar tipo de contacto {TipoContactoId}", Id);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/mantenimientos/tipos-contacto");
+
+    private static string MensajeServidor(Exception ex, string fallback)
+        => ex is HttpRequestException && !string.IsNullOrWhiteSpace(ex.Message) ? ex.Message : fallback;
+}

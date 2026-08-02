@@ -132,6 +132,10 @@
 .btn-view      { color: #0dcaf0; background: rgba(13, 202, 240, 0.10); }
 .btn-view:hover      { background: #0dcaf0; color: white; transform: scale(1.1); }
 
+/* Menú "…" de opciones de fila (mismo color que btn-view). */
+.btn-options   { color: #0dcaf0; background: rgba(13, 202, 240, 0.10); }
+.btn-options:hover   { background: #0dcaf0; color: white; transform: scale(1.1); }
+
 .btn-edit      { color: #ffc107; background: rgba(255, 193, 7, 0.10); }
 .btn-edit:hover      { background: #ffc107; color: white; transform: scale(1.1); }
 

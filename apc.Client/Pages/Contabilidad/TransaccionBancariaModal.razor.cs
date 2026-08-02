@@ -17,6 +17,9 @@ public partial class TransaccionBancariaModal : IDisposable
     private BanTransaccionesClient TransaccionesClient { get; set; } = null!;
 
     [Inject]
+    private ChequesClient ChequesClient { get; set; } = null!;
+
+    [Inject]
     private BanTiposTransaccionesClient TiposTransaccionesClient { get; set; } = null!;
 
     [Inject]
@@ -584,6 +587,44 @@ public partial class TransaccionBancariaModal : IDisposable
         return $"L. {monto.ToString("N2", MontoCulture)}";
     }
 
+    // Dialogo de impresion de cheque (post-emision al guardar, y reimpresion en el detalle).
+    private bool impresionDialogVisible;
+    private long chequeIdEmitido;
+    private string mensajeImpresion = "¿Qué desea imprimir?";
+    // Reimpresion desde el detalle (ReadOnly): cheque_id resuelto por ban_kardex_id.
+    private long chequeIdReimpresion;
+    private long? chequeIdReimpresionKardex;
+
+    // En el detalle (ReadOnly) resuelve el cheque ligado al movimiento, para el boton de reimpresion.
+    protected override async Task OnParametersSetAsync()
+    {
+        if (ReadOnly && TransaccionDetalle is { BanKardexId: > 0 })
+        {
+            if (chequeIdReimpresionKardex != TransaccionDetalle.BanKardexId)
+            {
+                chequeIdReimpresionKardex = TransaccionDetalle.BanKardexId;
+                chequeIdReimpresion = await ChequesClient.GetChequeIdPorKardexAsync(TransaccionDetalle.BanKardexId) ?? 0;
+            }
+        }
+        else
+        {
+            chequeIdReimpresion = 0;
+            chequeIdReimpresionKardex = null;
+        }
+    }
+
+    private void ReimprimirCheque()
+    {
+        if (chequeIdReimpresion <= 0)
+        {
+            return;
+        }
+
+        chequeIdEmitido = chequeIdReimpresion;
+        mensajeImpresion = "¿Qué formato de cheque desea imprimir?";
+        impresionDialogVisible = true;
+    }
+
     protected async Task GuardarAsync()
     {
         if (ReadOnly)
@@ -628,7 +669,18 @@ public partial class TransaccionBancariaModal : IDisposable
 
             // Notificar al componente padre
             await OnTransaccionGuardada.InvokeAsync();
-            await CancelarAsync();
+
+            if (resultado.ChequeId is > 0)
+            {
+                // Movimiento con cheque: ofrecer imprimir cheque / cheque + detalle antes de cerrar.
+                chequeIdEmitido = resultado.ChequeId.Value;
+                mensajeImpresion = "La transacción se registró y se emitió el cheque. ¿Qué desea imprimir?";
+                impresionDialogVisible = true;
+            }
+            else
+            {
+                await CancelarAsync();
+            }
         }
         catch (HttpRequestException ex)
         {
@@ -641,6 +693,16 @@ public partial class TransaccionBancariaModal : IDisposable
         finally
         {
             Guardando = false;
+        }
+    }
+
+    protected async Task OnImpresionDialogVisibleChanged(bool value)
+    {
+        impresionDialogVisible = value;
+        // Post-emision (alta): al cerrar el dialogo se cierra el modal. En el detalle (ReadOnly) no.
+        if (!value && !ReadOnly)
+        {
+            await CancelarAsync();
         }
     }
 

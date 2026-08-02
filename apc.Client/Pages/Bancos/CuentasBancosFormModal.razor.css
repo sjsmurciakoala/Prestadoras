@@ -33,6 +33,49 @@
 
 .tipo-form-body {
     padding: 1.5rem;
+    background-color: #f8fafc;
+}
+
+.form-card {
+    background-color: #ffffff;
+    border: 1px solid #e5e7eb;
+    border-radius: 0.6rem;
+    padding: 1.1rem 1.25rem 0.4rem;
+    margin-bottom: 1.1rem;
+}
+
+.form-card:last-child {
+    margin-bottom: 0;
+}
+
+.form-card-title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.78rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: #475569;
+    margin-bottom: 0.9rem;
+    padding-bottom: 0.55rem;
+    border-bottom: 1px solid #eef2f6;
+}
+
+.form-card-title i {
+    color: #2563eb;
+    font-size: 0.95rem;
+}
+
+.form-card-cheques {
+    border-color: #bfdbfe;
+    background-color: #f5f9ff;
+}
+
+.form-card-hint {
+    margin: 0.25rem 0 0.6rem;
+    color: #64748b;
+    font-size: 0.82rem;
 }
 
 .tipo-form-footer {

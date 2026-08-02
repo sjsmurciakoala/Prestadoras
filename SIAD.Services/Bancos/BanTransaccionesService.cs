@@ -18,17 +18,20 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
     private readonly IMapper mapper;
     private readonly ICurrentCompanyService currentCompanyService;
     private readonly IAccountFormatService accountFormatService;
+    private readonly IChequesService chequesService;
 
     public BanTransaccionesService(
         SiadDbContext context,
         IMapper mapper,
         ICurrentCompanyService currentCompanyService,
-        IAccountFormatService accountFormatService)
+        IAccountFormatService accountFormatService,
+        IChequesService chequesService)
     {
         this.context = context;
         this.mapper = mapper;
         this.currentCompanyService = currentCompanyService;
         this.accountFormatService = accountFormatService;
+        this.chequesService = chequesService;
     }
 
     public async Task<IReadOnlyList<BanTransaccionListDto>> GetTransaccionesAsync(
@@ -398,7 +401,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         };
     }
 
-    public async Task<(long BanKardexId, decimal SaldoResultante)> RegistrarMovimientoAsync(
+    public async Task<(long BanKardexId, decimal SaldoResultante, long? ChequeId, decimal? NumeroCheque)> RegistrarMovimientoAsync(
         long bancoCuentaId,
         string idTipoTransaccion,
         DateOnly fechaMovimiento,
@@ -409,7 +412,11 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         decimal monto,
         IReadOnlyList<BanTransaccionContraLineaDto> contraCuentas,
         string usuario,
-        CancellationToken ct = default)
+        CancellationToken ct = default,
+        string? beneficiarioCheque = null,
+        string? conceptoCheque = null,
+        string origenCheque = ChequeOrigen.Transaccion,
+        string? descripcionPartidaBanco = null)
     {
         var companyId = EnsureCompanyId();
         ArgumentOutOfRangeException.ThrowIfNegativeOrZero(bancoCuentaId);
@@ -484,6 +491,36 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             throw new ArgumentException("La tasa de cambio es obligatoria para cuentas en USD.", nameof(tasaCambio));
         }
 
+        // Config del tipo: si emite_cheque = 'S' (u otro afirmativo), la transaccion
+        // manual asigna el siguiente numero de cheque de la cuenta (ban_cheque).
+        var tipoEmiteCheque = await context.ban_tipos_transacciones
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId && t.tipo_transaccion == idTipoTransaccion.Trim())
+            .Select(t => t.emite_cheque)
+            .FirstOrDefaultAsync(ct);
+        var emiteCheque = ChequeEmisionFlag.EsAfirmativo(tipoEmiteCheque);
+
+        if (emiteCheque)
+        {
+            // Pre-validacion de numeracion ANTES de postear la partida contable: si la
+            // numeracion estuviera agotada, fallar recien en EmitirChequeAsync dejaria la
+            // poliza huerfana (la partida se postea fuera de la transaccion del kardex).
+            // La validacion autoritativa sigue siendo la del FOR UPDATE dentro de la tx.
+            var numeracionCuenta = await context.ban_cuenta
+                .AsNoTracking()
+                .Where(c => c.company_id == companyId && c.banco_cuenta_id == bancoCuentaId)
+                .Select(c => new { c.proximo_cheque, c.cheque_maximo })
+                .FirstOrDefaultAsync(ct);
+
+            if (numeracionCuenta is not null &&
+                ChequeNumeracionCalculator.Compute(numeracionCuenta.proximo_cheque, numeracionCuenta.cheque_maximo).Agotado)
+            {
+                throw new InvalidOperationException(
+                    $"La cuenta bancaria agotó su numeración de cheques (máximo {decimal.Truncate(numeracionCuenta.cheque_maximo):N0}). " +
+                    "Actualice la numeración en la gestión de la cuenta.");
+            }
+        }
+
         var partidaId = await RegistrarPartidaContableAsync(
             companyId,
             bancoCuentaId,
@@ -495,6 +532,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
             sourceDocument,
             totalContra,
             usuario,
+            descripcionPartidaBanco,
             ct);
 
         var connection = (NpgsqlConnection)context.Database.GetDbConnection();
@@ -506,7 +544,12 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         try
         {
+            // Transaccion explicita: kardex + vinculo de partida + emision de cheque
+            // atomicos (sp_ban_kardex_registrar_movimiento no hace COMMIT interno).
+            await using var dbTransaction = await connection.BeginTransactionAsync(ct);
+
             await using var command = connection.CreateCommand();
+            command.Transaction = dbTransaction;
             command.CommandType = CommandType.StoredProcedure;
             command.CommandText = "public.sp_ban_kardex_registrar_movimiento";
 
@@ -553,10 +596,40 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
                     companyId,
                     kardexId,
                     partidaId.Value,
-                    ct);
+                    ct,
+                    dbTransaction);
             }
 
-            return (BanKardexId: kardexId, SaldoResultante: saldoResultante);
+            long? chequeIdEmitido = null;
+            decimal? numeroChequeEmitido = null;
+            if (emiteCheque)
+            {
+                // Beneficiario/concepto propios cuando el llamador los aporta (cheque manual);
+                // el resto de flujos mantiene la descripcion del movimiento.
+                var beneficiario = string.IsNullOrWhiteSpace(beneficiarioCheque)
+                    ? descripcion.Trim()
+                    : beneficiarioCheque.Trim();
+                var concepto = string.IsNullOrWhiteSpace(conceptoCheque)
+                    ? descripcion.Trim()
+                    : conceptoCheque.Trim();
+
+                var cheque = await chequesService.EmitirChequeAsync(
+                    connection, dbTransaction, bancoCuentaId,
+                    monto: totalContra, beneficiario: beneficiario,
+                    concepto: concepto,
+                    origen: origenCheque,
+                    origenDocumento: referencia?.Trim(),
+                    banKardexId: kardexId, partidaId: partidaId,
+                    usuario: usuario.Trim(),
+                    fechaEmision: fechaMovimiento.ToDateTime(TimeOnly.MinValue), ct);
+                chequeIdEmitido = cheque.ChequeId;
+                numeroChequeEmitido = cheque.NumeroCheque;
+            }
+
+            await dbTransaction.CommitAsync(ct);
+
+            return (BanKardexId: kardexId, SaldoResultante: saldoResultante,
+                ChequeId: chequeIdEmitido, NumeroCheque: numeroChequeEmitido);
         }
         finally
         {
@@ -565,6 +638,149 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
                 await connection.CloseAsync();
             }
         }
+    }
+
+    public async Task<ChequeManualResultadoDto> RegistrarChequeManualAsync(
+        ChequeManualCreateDto dto,
+        string usuario,
+        CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(dto);
+        ArgumentException.ThrowIfNullOrWhiteSpace(usuario);
+
+        var companyId = EnsureCompanyId();
+        ArgumentOutOfRangeException.ThrowIfNegativeOrZero(dto.BancoCuentaId);
+
+        var beneficiario = dto.Beneficiario?.Trim() ?? string.Empty;
+        var concepto = dto.Concepto?.Trim() ?? string.Empty;
+        var referencia = dto.Referencia?.Trim() ?? string.Empty;
+        var tipoTransaccion = dto.IdTipoTransaccion?.Trim() ?? string.Empty;
+
+        if (string.IsNullOrWhiteSpace(beneficiario))
+        {
+            throw new ArgumentException("El beneficiario del cheque es obligatorio.", nameof(dto));
+        }
+        if (string.IsNullOrWhiteSpace(concepto))
+        {
+            throw new ArgumentException("El concepto del cheque es obligatorio.", nameof(dto));
+        }
+        if (string.IsNullOrWhiteSpace(referencia))
+        {
+            throw new ArgumentException("La referencia del cheque es obligatoria.", nameof(dto));
+        }
+        if (string.IsNullOrWhiteSpace(tipoTransaccion))
+        {
+            throw new ArgumentException("El tipo de transacción es obligatorio.", nameof(dto));
+        }
+
+        // Solo las cuentas tipo CHEQUES llevan numeracion (misma regla que CuentasBancosService).
+        var cuenta = await context.ban_cuenta
+            .AsNoTracking()
+            .Where(c => c.company_id == companyId && c.banco_cuenta_id == dto.BancoCuentaId)
+            .Select(c => new { c.tipo })
+            .FirstOrDefaultAsync(ct);
+
+        if (cuenta is null)
+        {
+            throw new InvalidOperationException("La cuenta bancaria no existe o no pertenece a la empresa actual.");
+        }
+        if (string.IsNullOrWhiteSpace(cuenta.tipo) ||
+            !cuenta.tipo.Contains("CHEQ", StringComparison.OrdinalIgnoreCase))
+        {
+            throw new InvalidOperationException(
+                "La cuenta seleccionada no es una cuenta de cheques; no tiene numeración de cheques.");
+        }
+
+        // El tipo debe ser de salida y estar configurado para emitir cheque: si no lo
+        // estuviera, el movimiento se registraria sin cheque (y ya con partida posteada).
+        var configTipo = await context.ban_tipos_transacciones
+            .AsNoTracking()
+            .Where(t => t.company_id == companyId && t.tipo_transaccion == tipoTransaccion)
+            .Select(t => new { t.entra_sale, t.emite_cheque })
+            .ToListAsync(ct);
+
+        if (configTipo.Count == 0)
+        {
+            throw new InvalidOperationException($"El tipo de transacción {tipoTransaccion} no existe.");
+        }
+        if (configTipo.Any(t => string.Equals(t.entra_sale?.Trim(), "E", StringComparison.OrdinalIgnoreCase)))
+        {
+            throw new InvalidOperationException(
+                "El tipo de transacción debe ser de salida (egreso) para emitir un cheque.");
+        }
+        if (!configTipo.Any(t => ChequeEmisionFlag.EsAfirmativo(t.emite_cheque)))
+        {
+            throw new InvalidOperationException(
+                "El tipo de transacción seleccionado no emite cheques. " +
+                "Actívelo en Bancos → Configuración de transacciones.");
+        }
+
+        // Descripcion/referencia por defecto de cada linea: el concepto y la referencia
+        // del cheque (RegistrarMovimientoAsync las exige no vacias).
+        var lineas = (dto.Lineas ?? new List<BanTransaccionContraLineaDto>())
+            .Where(l => l is not null && l.CuentaId > 0 && l.Monto > 0)
+            .Select(l => new BanTransaccionContraLineaDto
+            {
+                CuentaId = l.CuentaId,
+                Monto = l.Monto,
+                Descripcion = string.IsNullOrWhiteSpace(l.Descripcion) ? concepto : l.Descripcion.Trim(),
+                SourceDocument = string.IsNullOrWhiteSpace(l.SourceDocument) ? referencia : l.SourceDocument.Trim()
+            })
+            .ToList();
+
+        if (lineas.Count == 0)
+        {
+            throw new ArgumentException("Agregue al menos una línea de detalle contable.", nameof(dto));
+        }
+
+        var proveedor = dto.ProveedorCodigo?.Trim();
+        var descripcionMovimiento = string.IsNullOrWhiteSpace(proveedor)
+            ? $"Cheque a {beneficiario}: {concepto}"
+            : $"Cheque a {beneficiario} ({proveedor}): {concepto}";
+        if (descripcionMovimiento.Length > 500)
+        {
+            descripcionMovimiento = descripcionMovimiento[..500];
+        }
+
+        // Linea contable del banco: descripcion y referencia propias, con el concepto y la
+        // referencia del cheque como valor por defecto.
+        var bancoDescripcion = string.IsNullOrWhiteSpace(dto.BancoDescripcion)
+            ? concepto
+            : dto.BancoDescripcion.Trim();
+        var bancoReferencia = string.IsNullOrWhiteSpace(dto.BancoReferencia)
+            ? referencia
+            : dto.BancoReferencia.Trim();
+
+        var resultado = await RegistrarMovimientoAsync(
+            dto.BancoCuentaId,
+            tipoTransaccion,
+            dto.FechaEmision,
+            descripcionMovimiento,
+            referencia,
+            bancoReferencia,
+            dto.TasaCambio,
+            dto.Monto,
+            lineas,
+            usuario,
+            ct,
+            beneficiarioCheque: beneficiario,
+            conceptoCheque: concepto,
+            origenCheque: ChequeOrigen.Manual,
+            descripcionPartidaBanco: bancoDescripcion);
+
+        // El numero de cheque es correlativo: sin separador de miles.
+        var mensaje = resultado.NumeroCheque is > 0
+            ? $"Se emitió el cheque N° {decimal.Truncate(resultado.NumeroCheque.Value):0} a favor de {beneficiario}."
+            : $"El movimiento se registró a favor de {beneficiario}, pero no se asignó número de cheque.";
+
+        return new ChequeManualResultadoDto
+        {
+            BanKardexId = resultado.BanKardexId,
+            ChequeId = resultado.ChequeId,
+            NumeroCheque = resultado.NumeroCheque,
+            SaldoResultante = resultado.SaldoResultante,
+            Mensaje = mensaje
+        };
     }
 
     private async Task<long?> RegistrarPartidaContableAsync(
@@ -578,6 +794,7 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
         string? sourceDocument,
         decimal monto,
         string usuario,
+        string? descripcionLineaBanco,
         CancellationToken ct)
     {
         var cuentaBanco = await context.ban_cuenta
@@ -710,12 +927,22 @@ public sealed class BanTransaccionesService : IBanTransaccionesService
 
         var accountFormat = await accountFormatService.GetFormatAsync(ct);
 
+        // La linea del banco puede llevar su propia descripcion (el cheque manual la deja
+        // editar); si no viene, se usa la descripcion del movimiento como hasta ahora.
+        var descripcionBanco = string.IsNullOrWhiteSpace(descripcionLineaBanco)
+            ? descripcionNormalizada
+            : descripcionLineaBanco.Trim();
+        if (descripcionBanco.Length > 500)
+        {
+            descripcionBanco = descripcionBanco[..500];
+        }
+
         var lineas = new List<PartidaLinea>
         {
             new PartidaLinea(
                 bancoAccountId,
                 null,
-                descripcionNormalizada,
+                descripcionBanco,
                 bankDebit,
                 bankCredit,
                 null,
@@ -1670,6 +1897,12 @@ WHERE company_id = @company_id
                         dbTransaction);
                 }
             }
+
+            // Si el movimiento original emitio un cheque, queda anulado en la misma
+            // transaccion del reverso (no-op para DEP/TRF y demas sin cheque).
+            await chequesService.AnularPorKardexAsync(
+                connection, dbTransaction, banKardexIdOriginal, kardexId,
+                motivoNormalizado, usuario.Trim(), ct);
 
             await dbTransaction.CommitAsync(ct);
             return (kardexId, saldoResultante);

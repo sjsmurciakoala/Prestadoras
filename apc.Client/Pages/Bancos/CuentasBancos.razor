@@ -15,6 +15,7 @@
 @inject BanMonedasClient MonedasClient
 @inject TenantState TenantState
 @inject AccountFormatState AccountFormat
+@inject ChequeEmisionState ChequeEmision
 @inject NavigationManager NavigationManager
 
 @implements IDisposable
@@ -156,6 +157,12 @@
                                     <button class="btn-icon btn-transactions" title="Transacciones bancarias" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => AbrirTransacciones(itemAccion)">
                                         <i class="bi bi-receipt"></i>
                                     </button>
+                                    @if (PuedeEmitirCheque(itemAccion))
+                                    {
+                                        <button class="btn-icon btn-edit" title="Nuevo cheque manual" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => AbrirChequeManual(itemAccion)">
+                                            <i class="bi bi-cash-stack"></i>
+                                        </button>
+                                    }
                                     <button class="btn-icon btn-consolidate" title="Conciliacion cuenta bancaria" disabled="@(!IsBancoActivo(itemAccion.BancoId))" @onclick="() => AbrirConciliacion(itemAccion)">
                                         <i class="bi bi-clipboard-data"></i>
                                     </button>
@@ -274,6 +281,7 @@
     private long companyId;
     private MessageBoxRenderStyle alertaEstilo = MessageBoxRenderStyle.Info;
     private CancellationTokenSource? loadCts;
+
 
     [Parameter]
     public long? BancoId { get; set; }
@@ -415,6 +423,8 @@
             }
 
             await AccountFormat.EnsureLoadedAsync(loadCts.Token);
+            // Habilita (o no) la acción de cheque manual por fila.
+            await ChequeEmision.EnsureLoadedAsync(loadCts.Token);
             await LoadBancoConfiguracionAsync(companyId, loadCts.Token);
             await LoadMonedasAsync(companyId, loadCts.Token);
 
@@ -756,6 +766,20 @@
     private static bool ContainsValue(string? source, string value)
         => !string.IsNullOrWhiteSpace(source)
            && source.Contains(value, StringComparison.OrdinalIgnoreCase);
+
+    // El cheque solo se puede emitir sobre una cuenta de cheques (la que lleva numeración)
+    // y con cuenta contable asignada (la partida se arma contra ella), y solo si la empresa
+    // tiene un tipo de transacción de salida que emita cheque.
+    private bool PuedeEmitirCheque(BancoCuentaListDto cuenta)
+        => ChequeEmision.Disponible
+           && ContainsValue(cuenta.TipoCuenta, "CHEQ")
+           && !string.IsNullOrWhiteSpace(cuenta.CuentaContableCodigo);
+
+    // El cheque manual vive en su propia vista, con la cuenta ya preseleccionada.
+    private void AbrirChequeManual(BancoCuentaListDto cuenta)
+        => NavigationManager.NavigateTo(
+            $"/bancos/cheques/manual?cuentaId={cuenta.BancoCuentaId}" +
+            $"&originUrl={Uri.EscapeDataString("/bancos/cuentas")}");
 
     private void SetAlert(string message, MessageBoxRenderStyle style)
     {

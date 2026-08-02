@@ -16,6 +16,7 @@ public record ProveedorDetailDto(
     string? PaginaWeb,
     string? CuentaContable,
     IReadOnlyList<ProveedorCuentaBancariaDto> CuentasBancarias,
+    IReadOnlyList<ProveedorContactoDto> Contactos,
     int CodTipoProveedor,
     string? TipoProveedor,
     double? ComprasAcum,

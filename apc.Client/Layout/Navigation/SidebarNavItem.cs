@@ -10,5 +10,12 @@ public sealed class SidebarNavItem
     public IReadOnlyList<SidebarNavItem> Children { get; init; } = Array.Empty<SidebarNavItem>();
     public bool MatchExact { get; init; }
 
+    /// <summary>
+    /// Capacidad que debe estar disponible para mostrar el item (ver <see cref="SidebarCapabilities"/>).
+    /// Null = siempre visible. Es distinto del permiso: aqui se filtra por configuracion de la
+    /// empresa, no por rol.
+    /// </summary>
+    public string? RequiredCapability { get; init; }
+
     public bool HasChildren => Children.Count > 0;
 }

@@ -17,4 +17,21 @@ public sealed class AuditoriaConfigClient
         if (!r.IsSuccessStatusCode)
             throw new InvalidOperationException(await HttpClientExtensions.ObtenerMensajeErrorAsync(r, ct));
     }
+
+    public async Task<List<CatalogoTablaDisponibleDto>> TablasDisponiblesAsync(CancellationToken ct = default)
+        => await _http.GetFromJsonAsyncWithAuthCheck<List<CatalogoTablaDisponibleDto>>("api/auditoria/configuracion/tablas-disponibles", ct) ?? new();
+
+    public async Task AgregarAsync(AgregarMaestroDto dto, CancellationToken ct = default)
+    {
+        var r = await _http.PostAsJsonAsyncWithAuthCheck("api/auditoria/configuracion/catalogo", dto, ct);
+        if (!r.IsSuccessStatusCode)
+            throw new InvalidOperationException(await HttpClientExtensions.ObtenerMensajeErrorAsync(r, ct));
+    }
+
+    public async Task DesactivarAsync(string tabla, CancellationToken ct = default)
+    {
+        var r = await _http.DeleteAsync($"api/auditoria/configuracion/catalogo/{Uri.EscapeDataString(tabla)}", ct);
+        if (!r.IsSuccessStatusCode)
+            throw new InvalidOperationException(await HttpClientExtensions.ObtenerMensajeErrorAsync(r, ct));
+    }
 }

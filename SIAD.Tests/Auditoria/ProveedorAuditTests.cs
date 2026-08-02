@@ -37,7 +37,7 @@ public class ProveedorAuditTests : IntegrationTestBase, IAsyncLifetime
         _companyService = new TestCurrentCompanyService(CompanyId);
         _context = new SiadDbContext(options, _companyService);
         _context.Database.UseTransaction(Transaction);
-        _writer = new BitacoraMaestrosWriter(_context, new FakeAuditConfig(), _companyService, new FakeUser("tester"));
+        _writer = new BitacoraMaestrosWriter(_context, new FakeAuditConfig(), new FakeCatalog(), _companyService, new FakeUser("tester"));
         _service = new ProveedoresService(_context, _companyService, _writer);
     }
 
@@ -121,6 +121,14 @@ public class ProveedorAuditTests : IntegrationTestBase, IAsyncLifetime
     private sealed class FakeAuditConfig : IAuditConfigProvider
     {
         public bool DebeAuditar(long companyId, string tabla, string accion) => AuditableMaestros.EsAuditable(tabla);
+        public void Invalidar(long companyId) { }
+    }
+
+    private sealed class FakeCatalog : IAuditableCatalogProvider
+    {
+        public bool EsAuditable(long companyId, string tabla) => SIAD.Core.Constants.AuditableMaestros.EsAuditable(tabla);
+        public string NombreDe(long companyId, string tabla) => SIAD.Core.Constants.AuditableMaestros.NombreDe(tabla);
+        public string ModuloDe(long companyId, string tabla) => SIAD.Core.Constants.AuditableMaestros.All.FirstOrDefault(x => string.Equals(x.Tabla, tabla, System.StringComparison.OrdinalIgnoreCase))?.Modulo ?? tabla;
         public void Invalidar(long companyId) { }
     }
 

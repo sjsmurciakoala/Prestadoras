@@ -2,6 +2,7 @@
 @using Microsoft.AspNetCore.Components.Forms
 @using SIAD.Core.DTOs.Bancos
 @using SIAD.Core.DTOs.Contabilidad
+@using apc.Client.Pages.Bancos
 
 <div class="@ModalBodyClass">
 @if (CuentasFiltradas != null && CuentasFiltradas.Count > 0)
@@ -324,8 +325,14 @@
                            href="@ReporteUrl"
                            target="_blank"
                            rel="noopener">
-                            <i class="bi bi-printer me-1"></i>Imprimir
+                            <i class="bi bi-printer me-1"></i>Imprimir comprobante
                         </a>
+                    }
+                    @if (ReadOnly && chequeIdReimpresion > 0)
+                    {
+                        <button type="button" class="btn btn-primary" @onclick="ReimprimirCheque">
+                            <i class="bi bi-cash-coin me-1"></i>Reimprimir cheque
+                        </button>
                     }
                     <button type="button" class="btn btn-secondary" @onclick="CancelarAsync">@((ReadOnly ? "Cerrar" : "Cancelar"))</button>
                     @if (!ReadOnly)
@@ -350,4 +357,9 @@ else
         No hay cuentas disponibles para este banco.
     </div>
 }
+
+<ChequeImpresionDialog Visible="impresionDialogVisible"
+                       VisibleChanged="OnImpresionDialogVisibleChanged"
+                       ChequeId="chequeIdEmitido"
+                       Mensaje="@mensajeImpresion" />
 </div>

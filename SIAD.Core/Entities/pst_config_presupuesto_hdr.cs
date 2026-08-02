@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using SIAD.Core.Tenancy;
 
 namespace SIAD.Core.Entities;
 
-public partial class pst_config_presupuesto_hdr
+public partial class pst_config_presupuesto_hdr : ICompanyScopedEntity
 {
+    public long company_id { get; set; }
+
     public string id_presupuesto { get; set; } = null!;
 
     public decimal valor_global { get; set; }

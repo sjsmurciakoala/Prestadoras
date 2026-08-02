@@ -35,7 +35,25 @@ public partial class SiadDbContext
                 "uq_alm_articulo_company_codigo").IsUnique()
                 .HasFilter("codigo_articulo IS NOT NULL AND codigo_articulo <> ''");
             entity.HasIndex(e => e.company_id, "ix_alm_articulo_company");
+            // Índice parcial del soft-delete (2026-07-29_alm_articulo_activo.sql).
+            entity.HasIndex(e => e.company_id, "ix_alm_articulo_company_activo").HasFilter("activo");
 
+            // Concurrencia optimista sobre la columna de SISTEMA xmin de Postgres: no
+            // necesita DDL (toda tabla la tiene). Se declara como propiedad SOMBRA para no
+            // ensuciar la entidad scaffolded, y EF la incluye en el WHERE del UPDATE: si
+            // otro usuario guardó primero, el segundo recibe DbUpdateConcurrencyException
+            // (el controlador la traduce a 409) en vez de pisarlo en silencio. El token
+            // viaja al cliente en ArticuloEditDto.RowVersion.
+            // El azúcar UseXminAsConcurrencyToken() se removió en Npgsql 9; esta es la
+            // configuración explícita equivalente. ValueGeneratedOnAddOrUpdate mantiene la
+            // columna fuera del INSERT/UPDATE (la genera Postgres).
+            entity.Property<uint>("xmin")
+                .HasColumnName("xmin")
+                .HasColumnType("xid")
+                .ValueGeneratedOnAddOrUpdate()
+                .IsConcurrencyToken();
+
+            entity.Property(e => e.activo).HasDefaultValue(true);
             entity.Property(e => e.codigo_articulo).HasMaxLength(20);
             entity.Property(e => e.descripcion).HasMaxLength(120).HasDefaultValue("");
             entity.Property(e => e.fecha_registro).HasColumnType("date");

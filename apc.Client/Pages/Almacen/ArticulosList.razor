@@ -9,6 +9,8 @@
 @inject IJSRuntime JS
 @inject ArticulosClient ArticulosClient
 @inject TiposArticuloClient TiposClient
+@inject GruposClient GruposClient
+@inject BodegasClient BodegasClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -31,28 +33,36 @@
     </div>
 
     <div class="row g-3 mb-4">
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="modern-card summary-card">
                 <div class="summary-label">Artículos</div>
-                <div class="summary-value">@totalArticulos.ToString("N0")</div>
+                <div class="summary-value">@resumen.Total.ToString("N0")</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="modern-card summary-card">
                 <div class="summary-label">Con existencia</div>
-                <div class="summary-value">@conStock.ToString("N0")</div>
+                <div class="summary-value">@resumen.ConStock.ToString("N0")</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
             <div class="modern-card summary-card summary-warning">
                 <div class="summary-label">Bajo mínimo</div>
-                <div class="summary-value">@bajoMinimo.ToString("N0")</div>
+                <div class="summary-value">@resumen.BajoMinimo.ToString("N0")</div>
             </div>
         </div>
-        <div class="col-6 col-md-3">
+        <div class="col-6 col-md">
+            <div class="modern-card summary-card summary-warning summary-clickable"
+                 title="Artículos cuya existencia de cabecera no cuadra con la suma de sus bodegas activas. Clic para filtrarlos."
+                 @onclick="ToggleDescuadreDesdeTarjeta">
+                <div class="summary-label">Descuadres</div>
+                <div class="summary-value">@resumen.ConDescuadre.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md">
             <div class="modern-card summary-card">
                 <div class="summary-label">Valor inventario</div>
-                <div class="summary-value">@valorInventario.ToString("N2")</div>
+                <div class="summary-value">@resumen.ValorInventario.ToString("N2")</div>
             </div>
         </div>
     </div>
@@ -65,8 +75,60 @@
     <div class="modern-card position-relative">
         <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
 
+        @if (TieneFiltrosActivos)
+        {
+            <div class="filters-row">
+                <span class="text-muted small fw-semibold me-1"><i class="bi bi-funnel me-1"></i>Filtros:</span>
+
+                @if (!string.IsNullOrWhiteSpace(filtroBusqueda))
+                {
+                    <span class="filter-chip">Búsqueda: @filtroBusqueda
+                        <button type="button" title="Quitar" @onclick="QuitarBusqueda">×</button></span>
+                }
+                @if (filtroTipoArticuloId.HasValue)
+                {
+                    <span class="filter-chip">Tipo: @NombreTipo(filtroTipoArticuloId)
+                        <button type="button" title="Quitar" @onclick="QuitarTipo">×</button></span>
+                }
+                @if (filtroGrupoId.HasValue)
+                {
+                    <span class="filter-chip">Categoría: @NombreGrupo(filtroGrupoId)
+                        <button type="button" title="Quitar" @onclick="QuitarGrupo">×</button></span>
+                }
+                @if (filtroBodegaId.HasValue)
+                {
+                    <span class="filter-chip">Bodega: @NombreBodega(filtroBodegaId)
+                        <button type="button" title="Quitar" @onclick="QuitarBodega">×</button></span>
+                }
+                @if (!string.IsNullOrWhiteSpace(filtroEstadoStock))
+                {
+                    <span class="filter-chip">Estado: @NombreEstado(filtroEstadoStock)
+                        <button type="button" title="Quitar" @onclick="QuitarEstado">×</button></span>
+                }
+                @if (filtroSinUnidad)
+                {
+                    <span class="filter-chip">Sin unidad
+                        <button type="button" title="Quitar" @onclick="QuitarSinUnidad">×</button></span>
+                }
+                @if (filtroVerDescontinuados)
+                {
+                    <span class="filter-chip">Incluye descontinuados
+                        <button type="button" title="Quitar" @onclick="QuitarVerDescontinuados">×</button></span>
+                }
+                @if (filtroConDescuadre)
+                {
+                    <span class="filter-chip">Con descuadre
+                        <button type="button" title="Quitar" @onclick="QuitarConDescuadre">×</button></span>
+                }
+
+                <button type="button" class="filters-link ms-1" @onclick="LimpiarFiltros">
+                    <i class="bi bi-x-circle me-1"></i>Limpiar todo
+                </button>
+            </div>
+        }
+
         <div class="grid-wrapper">
-            <DxGrid @ref="grid" Data="@articulos" KeyFieldName="@nameof(ArticuloListItemDto.Id)" PageSize="15"
+            <DxGrid @ref="grid" Data="@dataSource" KeyFieldName="@nameof(ArticuloListItemDto.Id)" PageSize="15"
                     PageSizeSelectorVisible="true"
                     PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
                     PagerPosition="GridPagerPosition.Bottom" ShowFilterRow="false" ShowSearchBox="false"
@@ -89,12 +151,48 @@
                                     NullText="Todos los tipos"
                                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
                                     ValueChanged="@((int? v) => OnTipoArticuloChanged(v))"
-                                    Style="min-width: 220px;" CssClass="me-1" />
+                                    Style="min-width: 200px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@GruposFiltrados" Value="@filtroGrupoId"
+                                    ValueFieldName="@nameof(GrupoLookupDto.Id)"
+                                    TextFieldName="@nameof(GrupoLookupDto.Display)"
+                                    NullText="Todas las categorías"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((int? v) => OnGrupoChanged(v))"
+                                    Style="min-width: 200px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@bodegas" Value="@filtroBodegaId"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)"
+                                    TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Todas las bodegas"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((int? v) => OnBodegaChanged(v))"
+                                    Style="min-width: 190px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@EstadosStock" Value="@filtroEstadoStock"
+                                    ValueFieldName="@nameof(EstadoStockOpcion.Valor)"
+                                    TextFieldName="@nameof(EstadoStockOpcion.Texto)"
+                                    NullText="Cualquier estado"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((string? v) => OnEstadoStockChanged(v))"
+                                    Style="min-width: 170px;" CssClass="me-1" />
 
                         <div class="d-flex align-items-center me-2">
-                            <DxCheckBox Checked="@filtroSoloBajoMinimo"
-                                        CheckedChanged="@((bool v) => OnBajoMinimoChanged(v))"
-                                        CheckType="CheckType.Switch">Sólo bajo mínimo</DxCheckBox>
+                            <DxCheckBox Checked="@filtroSinUnidad"
+                                        CheckedChanged="@((bool v) => OnSinUnidadChanged(v))"
+                                        CheckType="CheckType.Switch">Sin unidad</DxCheckBox>
+                        </div>
+
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@filtroVerDescontinuados"
+                                        CheckedChanged="@((bool v) => OnVerDescontinuadosChanged(v))"
+                                        CheckType="CheckType.Switch">Ver descontinuados</DxCheckBox>
+                        </div>
+
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@filtroConDescuadre"
+                                        CheckedChanged="@((bool v) => OnConDescuadreChanged(v))"
+                                        CheckType="CheckType.Switch">Con descuadre</DxCheckBox>
                         </div>
 
                         <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
@@ -155,6 +253,15 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UnidadMedidaDisplay)" Caption="Unidad" Width="100px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted">@item.UnidadMedidaDisplay</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
                     <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.GrupoDisplay)" Caption="Categoría" MinWidth="140" Visible="false">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
@@ -169,11 +276,18 @@
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
                                 <span class="@(item.BajoMinimo ? "text-danger fw-bold" : "text-dark")">@item.Existencia.ToString("N2")</span>
+                                @if (item.Descuadrado)
+                                {
+                                    <i class="bi bi-exclamation-triangle-fill text-warning ms-1"
+                                       title="@($"Descuadre: cabecera {item.Existencia:N2} ≠ suma de bodegas activas {item.ExistenciaBodegas:N2}")"></i>
+                                }
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorTotal)" Caption="Valor total" Width="140px" TextAlignment="GridTextAlignment.Right">
+                    @* DINERO (existencia × valor unitario): la suma de esta columna cuadra con la
+                       tarjeta "Valor inventario". El FieldName no cambia (sort remoto y layouts guardados). *@
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorTotal)" Caption="Valor inventario" Width="140px" TextAlignment="GridTextAlignment.Right">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
@@ -182,11 +296,17 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
+                    <DxGridDataColumn Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
-                                @if (item.Existencia <= 0)
+                                @* El artículo descontinuado no compite con el estado de stock:
+                                   su existencia ya no importa para operar. *@
+                                @if (!item.Activo)
+                                {
+                                    <span class="badge-status descontinuado" title="Artículo descontinuado: no se ofrece para documentos nuevos, pero su kardex sigue consultable">DESCONTINUADO</span>
+                                }
+                                else if (item.Existencia <= 0)
                                 {
                                     <span class="badge-status inactive">SIN STOCK</span>
                                 }
@@ -217,10 +337,20 @@
                                         <i class="bi bi-pencil-square"></i>
                                     </button>
 
-                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
-                                            @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
-                                        <i class="bi bi-trash"></i>
-                                    </button>
+                                    @if (item.Activo)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Descontinuar"
+                                                @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-slash-circle"></i>
+                                        </button>
+                                    }
+                                    else
+                                    {
+                                        <button type="button" class="btn-icon btn-reactivar" title="Reactivar"
+                                                @onclick="() => ReactivarAsync(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    }
                                 </div>
                             }
                         </CellDisplayTemplate>
@@ -238,9 +368,13 @@
 <DxPopup @bind-Visible="confirmVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
     <BodyTemplate>
         <div class="text-center p-4">
-            <div class="mb-3 text-danger"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
-            <h5 class="fw-bold">¿Eliminar artículo?</h5>
-            <p class="text-muted">Esta acción no se puede deshacer. Sólo se permite si el artículo no tiene movimientos de kardex.</p>
+            <div class="mb-3 text-warning"><i class="bi bi-slash-circle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Descontinuar artículo?</h5>
+            <p class="text-muted mb-2">
+                El artículo <strong>no se borra</strong>: deja de ofrecerse para documentos nuevos,
+                pero se conserva y su kardex sigue consultable.
+            </p>
+            <p class="text-muted small">Puedes reactivarlo después con el switch «Ver descontinuados».</p>
             @if (articuloParaEliminar is not null)
             {
                 <div class="fw-semibold">@articuloParaEliminar.Codigo - @articuloParaEliminar.Descripcion</div>
@@ -250,10 +384,10 @@
                           Click="CancelarEliminar"
                           RenderStyle="ButtonRenderStyle.Secondary"
                           RenderStyleMode="ButtonRenderStyleMode.Outline" />
-                <DxButton Text="Sí, eliminar"
+                <DxButton Text="Sí, descontinuar"
                           Click="EliminarConfirmadoAsync"
-                          RenderStyle="ButtonRenderStyle.Danger"
-                          IconCssClass="bi bi-trash" />
+                          RenderStyle="ButtonRenderStyle.Warning"
+                          IconCssClass="bi bi-slash-circle" />
             </div>
         </div>
     </BodyTemplate>
@@ -261,28 +395,74 @@
 
 @code {
     private DxGrid? grid;
-    private List<ArticuloListItemDto> articulos = new();
+
+    // El grid pagina/ordena/filtra en el servidor: ya no se carga el catálogo completo en memoria.
+    private ArticulosGridDataSource dataSource = default!;
+
     private List<TipoArticuloLookupDto> tipos = new();
+    private List<GrupoLookupDto> grupos = new();
+    private List<BodegaLookupDto> bodegas = new();
 
     private string filtroBusqueda = string.Empty;
     private int? filtroTipoArticuloId;
-    private bool filtroSoloBajoMinimo;
+    private int? filtroGrupoId;
+    private int? filtroBodegaId;
+    private string? filtroEstadoStock;
+    private bool filtroSinUnidad;
+    private bool filtroVerDescontinuados;
+    private bool filtroConDescuadre;
+
+    // Categorías del combo: se acotan al tipo elegido (cascada tipo→categoría).
+    private IEnumerable<GrupoLookupDto> GruposFiltrados =>
+        filtroTipoArticuloId.HasValue
+            ? grupos.Where(g => g.TipoArticuloId == filtroTipoArticuloId.Value)
+            : grupos;
+
+    private sealed record EstadoStockOpcion(string Valor, string Texto);
+
+    private static readonly List<EstadoStockOpcion> EstadosStock = new()
+    {
+        new(EstadoStockFiltro.ConStock, "Con stock"),
+        new(EstadoStockFiltro.BajoMinimo, "Bajo mínimo"),
+        new(EstadoStockFiltro.SinStock, "Sin stock"),
+        new(EstadoStockFiltro.Negativo, "Existencia negativa")
+    };
+
+    private bool TieneFiltrosActivos =>
+        !string.IsNullOrWhiteSpace(filtroBusqueda)
+        || filtroTipoArticuloId.HasValue
+        || filtroGrupoId.HasValue
+        || filtroBodegaId.HasValue
+        || !string.IsNullOrWhiteSpace(filtroEstadoStock)
+        || filtroSinUnidad
+        || filtroVerDescontinuados
+        || filtroConDescuadre;
 
     private bool isLoading;
     private string? errorMessage;
 
+    /// <summary>KPIs del catálogo; los calcula el servidor sobre el filtro activo (no sobre la página visible).</summary>
+    private ArticulosResumenDto resumen = new();
+
+    /// <summary>Total de filas del filtro actual, informado por el data source remoto.</summary>
     private int totalArticulos;
-    private int conStock;
-    private int bajoMinimo;
-    private decimal valorInventario;
 
     private bool confirmVisible;
     private ArticuloListItemDto? articuloParaEliminar;
 
     protected override async Task OnInitializedAsync()
     {
-        await CargarTiposAsync();
-        await CargarAsync();
+        dataSource = new ArticulosGridDataSource(ArticulosClient, total =>
+        {
+            totalArticulos = total;
+            InvokeAsync(StateHasChanged);
+        })
+        {
+            Filtro = BuildFilter()
+        };
+
+        await CargarCatalogosAsync();
+        await CargarResumenAsync();
     }
 
     private ArticuloFilterDto BuildFilter()
@@ -291,47 +471,58 @@
         {
             Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
             TipoArticuloId = filtroTipoArticuloId,
-            SoloBajoMinimo = filtroSoloBajoMinimo ? true : null
+            GrupoId = filtroGrupoId,
+            BodegaId = filtroBodegaId,
+            EstadoStock = string.IsNullOrWhiteSpace(filtroEstadoStock) ? null : filtroEstadoStock,
+            SinUnidad = filtroSinUnidad ? true : null,
+            IncluirDescontinuados = filtroVerDescontinuados ? true : null,
+            ConDescuadre = filtroConDescuadre ? true : null
         };
     }
 
-    private async Task CargarTiposAsync()
+    private async Task CargarCatalogosAsync()
     {
         try
         {
             tipos = await TiposClient.GetLookupAsync();
+            grupos = await GruposClient.GetLookupAsync();
+            bodegas = await BodegasClient.GetLookupAsync();
         }
         catch
         {
             tipos = new List<TipoArticuloLookupDto>();
+            grupos = new List<GrupoLookupDto>();
+            bodegas = new List<BodegaLookupDto>();
         }
     }
 
+    /// <summary>
+    /// Aplica el filtro actual: lo pasa al data source remoto, repagina el grid en el
+    /// servidor y refresca los KPIs. No trae el catálogo completo al cliente.
+    /// </summary>
     private async Task CargarAsync()
+    {
+        dataSource.Filtro = BuildFilter();
+        grid?.Reload();
+        await CargarResumenAsync();
+    }
+
+    private async Task CargarResumenAsync()
     {
         try
         {
             isLoading = true;
             errorMessage = null;
-            articulos = await ArticulosClient.GetAsync(BuildFilter());
-            RecalcularResumen();
+            resumen = await ArticulosClient.GetResumenAsync(BuildFilter());
         }
         catch (Exception ex)
         {
-            errorMessage = $"No se pudieron cargar los artículos: {ex.Message}";
+            errorMessage = $"No se pudieron cargar los totales: {ex.Message}";
         }
         finally
         {
             isLoading = false;
         }
-    }
-
-    private void RecalcularResumen()
-    {
-        totalArticulos = articulos.Count;
-        conStock = articulos.Count(a => a.Existencia > 0);
-        bajoMinimo = articulos.Count(a => a.BajoMinimo);
-        valorInventario = articulos.Sum(a => a.Existencia * a.ValorUnitario);
     }
 
     private async Task OnBusquedaChanged(string valor)
@@ -343,12 +534,78 @@
     private async Task OnTipoArticuloChanged(int? valor)
     {
         filtroTipoArticuloId = valor;
+        // Si la categoría elegida ya no pertenece al nuevo tipo, se descarta.
+        if (filtroGrupoId.HasValue && !GruposFiltrados.Any(g => g.Id == filtroGrupoId.Value))
+        {
+            filtroGrupoId = null;
+        }
         await CargarAsync();
     }
 
-    private async Task OnBajoMinimoChanged(bool valor)
+    private async Task OnGrupoChanged(int? valor)
     {
-        filtroSoloBajoMinimo = valor;
+        filtroGrupoId = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnBodegaChanged(int? valor)
+    {
+        filtroBodegaId = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnEstadoStockChanged(string? valor)
+    {
+        filtroEstadoStock = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnSinUnidadChanged(bool valor)
+    {
+        filtroSinUnidad = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnVerDescontinuadosChanged(bool valor)
+    {
+        filtroVerDescontinuados = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnConDescuadreChanged(bool valor)
+    {
+        filtroConDescuadre = valor;
+        await CargarAsync();
+    }
+
+    /// <summary>La tarjeta "Descuadres" conmuta el filtro (atajo de saneo).</summary>
+    private Task ToggleDescuadreDesdeTarjeta() => OnConDescuadreChanged(!filtroConDescuadre);
+
+    // ── Chips de filtros activos ─────────────────────────────────────────────
+    private string NombreTipo(int? id) => tipos.FirstOrDefault(t => t.Id == id)?.Nombre ?? "—";
+    private string NombreGrupo(int? id) => grupos.FirstOrDefault(g => g.Id == id)?.Nombre ?? "—";
+    private string NombreBodega(int? id) => bodegas.FirstOrDefault(b => b.Id == id)?.Nombre ?? "—";
+    private static string NombreEstado(string? v) => EstadosStock.FirstOrDefault(e => e.Valor == v)?.Texto ?? "—";
+
+    private Task QuitarBusqueda() { filtroBusqueda = string.Empty; return CargarAsync(); }
+    private Task QuitarTipo() { filtroTipoArticuloId = null; filtroGrupoId = null; return CargarAsync(); }
+    private Task QuitarGrupo() { filtroGrupoId = null; return CargarAsync(); }
+    private Task QuitarBodega() { filtroBodegaId = null; return CargarAsync(); }
+    private Task QuitarEstado() { filtroEstadoStock = null; return CargarAsync(); }
+    private Task QuitarSinUnidad() { filtroSinUnidad = false; return CargarAsync(); }
+    private Task QuitarVerDescontinuados() { filtroVerDescontinuados = false; return CargarAsync(); }
+    private Task QuitarConDescuadre() { filtroConDescuadre = false; return CargarAsync(); }
+
+    private async Task LimpiarFiltros()
+    {
+        filtroBusqueda = string.Empty;
+        filtroTipoArticuloId = null;
+        filtroGrupoId = null;
+        filtroBodegaId = null;
+        filtroEstadoStock = null;
+        filtroSinUnidad = false;
+        filtroVerDescontinuados = false;
+        filtroConDescuadre = false;
         await CargarAsync();
     }
 
@@ -378,6 +635,30 @@
         confirmVisible = true;
     }
 
+    /// <summary>
+    /// Reactiva un artículo descontinuado. No pide confirmación: es una acción aditiva
+    /// y reversible (volver a descontinuarlo es un clic).
+    /// </summary>
+    private async Task ReactivarAsync(ArticuloListItemDto articulo)
+    {
+        try
+        {
+            var ok = await ArticulosClient.ReactivarAsync(articulo.Id);
+            if (!ok)
+            {
+                MostrarToast("Error", "No se pudo reactivar el artículo.", ToastRenderStyle.Danger);
+                return;
+            }
+
+            MostrarToast("Éxito", "Artículo reactivado: vuelve a estar disponible.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            MostrarToast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
     private void CancelarEliminar()
     {
         confirmVisible = false;
@@ -397,11 +678,11 @@
             var ok = await ArticulosClient.DeleteAsync(articuloParaEliminar.Id);
             if (!ok)
             {
-                MostrarToast("Error", "No se pudo eliminar el artículo.", ToastRenderStyle.Danger);
+                MostrarToast("Error", "No se pudo descontinuar el artículo.", ToastRenderStyle.Danger);
             }
             else
             {
-                MostrarToast("Éxito", "Artículo eliminado correctamente.", ToastRenderStyle.Success);
+                MostrarToast("Éxito", "Artículo descontinuado. Se conserva y su kardex sigue consultable.", ToastRenderStyle.Success);
                 await CargarAsync();
             }
         }
@@ -433,6 +714,10 @@
         {
             return;
         }
+
+        // Con fuente de datos remota el grid carga por porciones: hay que esperar a que
+        // termine de cargar antes de leer sus datos, si no el Excel sale incompleto.
+        await grid.WaitForDataLoadAsync();
 
         var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
         await grid.ExportToXlsxAsync($"articulos_{stamp}.xlsx", new GridXlExportOptions());

@@ -302,6 +302,101 @@ public class ProveedoresController : ControllerBase
             return NotFound(new { detail = ex.Message });
         }
     }
+
+    [HttpGet("contactos/tipos")]
+    public async Task<IActionResult> GetTiposContacto(CancellationToken cancellationToken)
+    {
+        var tipos = await _proveedoresService.GetTiposContactoAsync(cancellationToken);
+        return Ok(tipos);
+    }
+
+    [HttpGet("contactos/tipos/catalogo")]
+    public async Task<IActionResult> GetTiposContactoCatalogo(CancellationToken cancellationToken)
+    {
+        var tipos = await _proveedoresService.GetTiposContactoCatalogoAsync(cancellationToken);
+        return Ok(tipos);
+    }
+
+    [HttpGet("contactos/tipos/{id:long}")]
+    public async Task<IActionResult> GetTipoContacto(long id, CancellationToken cancellationToken)
+    {
+        var tipo = await _proveedoresService.GetTipoContactoAsync(id, cancellationToken);
+        return tipo is null ? NotFound() : Ok(tipo);
+    }
+
+    [HttpPost("contactos/tipos")]
+    public async Task<IActionResult> PostTipoContacto([FromBody] TipoContactoUpsertDto dto, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            var usuario = User?.Identity?.Name ?? "system";
+            var id = await _proveedoresService.CreateTipoContactoAsync(dto, usuario, cancellationToken);
+            return CreatedAtAction(nameof(GetTipoContacto), new { id }, null);
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { detail = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { detail = ex.Message });
+        }
+    }
+
+    [HttpPut("contactos/tipos/{id:long}")]
+    public async Task<IActionResult> PutTipoContacto(long id, [FromBody] TipoContactoUpsertDto dto, CancellationToken cancellationToken)
+    {
+        if (!ModelState.IsValid)
+        {
+            return BadRequest(ModelState);
+        }
+
+        try
+        {
+            var usuario = User?.Identity?.Name ?? "system";
+            await _proveedoresService.UpdateTipoContactoAsync(id, dto, usuario, cancellationToken);
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { detail = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { detail = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { detail = ex.Message });
+        }
+    }
+
+    [HttpDelete("contactos/tipos/{id:long}")]
+    public async Task<IActionResult> DeleteTipoContacto(long id, CancellationToken cancellationToken)
+    {
+        try
+        {
+            await _proveedoresService.DeleteTipoContactoAsync(id, cancellationToken);
+            return NoContent();
+        }
+        catch (ArgumentException ex)
+        {
+            return BadRequest(new { detail = ex.Message });
+        }
+        catch (InvalidOperationException ex)
+        {
+            return Conflict(new { detail = ex.Message });
+        }
+        catch (KeyNotFoundException ex)
+        {
+            return NotFound(new { detail = ex.Message });
+        }
+    }
 }
 
 

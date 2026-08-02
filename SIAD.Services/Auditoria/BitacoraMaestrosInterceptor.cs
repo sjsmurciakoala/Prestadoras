@@ -15,12 +15,13 @@ namespace SIAD.Services.Auditoria;
 public sealed class BitacoraMaestrosInterceptor : SaveChangesInterceptor
 {
     private readonly IAuditConfigProvider _config;
+    private readonly IAuditableCatalogProvider _catalog;
     private readonly ICurrentUserAudit _user;
     private readonly List<PendienteAdd> _pendientesAdd = new();
     private bool _reentrada;
 
-    public BitacoraMaestrosInterceptor(IAuditConfigProvider config, ICurrentUserAudit user)
-        => (_config, _user) = (config, user);
+    public BitacoraMaestrosInterceptor(IAuditConfigProvider config, IAuditableCatalogProvider catalog, ICurrentUserAudit user)
+        => (_config, _catalog, _user) = (config, catalog, user);
 
     private sealed record PendienteAdd(EntityEntry Entry, string Tabla, long CompanyId);
 
@@ -46,11 +47,12 @@ public sealed class BitacoraMaestrosInterceptor : SaveChangesInterceptor
         {
             var tabla = entry.Metadata.GetTableName();
             if (tabla is null) continue;
-            if (tabla is "bitacora_maestros" or "bitacora_maestro_config") continue;
+            if (tabla is "bitacora_maestros" or "bitacora_maestro_config" or "bitacora_maestro_catalogo") continue;
             if (entry.State is not (EntityState.Added or EntityState.Modified or EntityState.Deleted)) continue;
 
             var accion = ResolverAccion(entry);
             var companyId = LeerCompanyId(entry);
+            if (!_catalog.EsAuditable(companyId, tabla)) continue;
             if (!_config.DebeAuditar(companyId, tabla, accion)) continue;
 
             if (entry.State == EntityState.Added)
@@ -95,7 +97,7 @@ public sealed class BitacoraMaestrosInterceptor : SaveChangesInterceptor
         => new()
         {
             company_id = companyId,
-            modulo = Truncar(AuditableMaestros.All.FirstOrDefault(x => string.Equals(x.Tabla, tabla, StringComparison.OrdinalIgnoreCase))?.Modulo ?? tabla, 80),
+            modulo = Truncar(_catalog.ModuloDe(companyId, tabla), 80),
             tabla = Truncar(tabla, 128),
             entidad = Truncar(Descriptor(entry, tabla), 256),
             registro_id = registroId,

@@ -1,6 +1,7 @@
 ﻿@page "/contabilidad/bancos"
 @attribute [Authorize(Policy = PermissionNames.Bancos.View)]
 
+@using apc.Client.Services
 @using apc.Client.Services.Bancos
 @using apc.Client.Services.Tenant
 @using DevExpress.Blazor
@@ -10,8 +11,10 @@
 
 @inject BancosClient BancosClient
 @inject CuentasBancosClient CuentasClient
+@inject ChequeEmisionState ChequeEmision
 @inject TenantState TenantState
 @inject NavigationManager NavigationManager
+@inject IJSRuntime JS
 
 @implements IDisposable
 
@@ -20,18 +23,27 @@
 <div class="page-container">
     <ErrorNotice @ref="errorNotice" />
 
-    <div class="d-flex justify-content-between align-items-center mb-4 header-section">
+    <div class="header-section">
         <div>
             <h2 class="page-title">Bancos</h2>
             <p class="page-subtitle">Gestion de bancos registrados</p>
         </div>
-                                <div class="d-flex flex-wrap gap-2">
+        <div class="d-flex flex-wrap gap-2">
             <DxButton Text="Nuevo Banco"
                       Click="@(() => OpenFormAsync(null))"
                       IconCssClass="bi bi-plus-lg"
                       RenderStyle="ButtonRenderStyle.Primary"
                       CssClass="btn-modern shadow-sm"
                       Enabled="@(!isLoading)" />
+            @if (ChequeEmision.Disponible)
+            {
+                <DxButton Text="Nuevo cheque manual"
+                          Click="AbrirChequeManual"
+                          IconCssClass="bi bi-cash-stack"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          CssClass="btn-modern shadow-sm"
+                          Enabled="@(!isLoading)" />
+            }
             <DxButton Text="Actualizar"
                       Click="LoadBancosAsync"
                       IconCssClass="bi bi-arrow-clockwise"
@@ -50,18 +62,36 @@
                       Visible="true" />
     }
 
-    <div class="modern-card position-relative" style="min-height: 300px;">
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
         <div class="grid-wrapper">
-            <DxGrid Data="@bancos"
+            <DxGrid @ref="grid" Data="@bancos"
                     KeyFieldName="@nameof(BancoListDto.BancoId)"
-                    PageSize="12"
-                    SizeMode="SizeMode.Large"
-                    CssClass="grid-modern">
+                    PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@bancos.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
                 <Columns>
                     <DxGridDataColumn FieldName="@nameof(BancoListDto.BancoId)" Caption="ID" Width="90px" />
                     <DxGridDataColumn FieldName="@nameof(BancoListDto.Nombre)"
                                       Caption="Nombre"
-                                      Width="260px"/>
+                                      MinWidth="260" />
                     <DxGridDataColumn FieldName="@nameof(BancoListDto.Activo)" Caption="Estado" Width="120px">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is BancoListDto item)
@@ -72,42 +102,41 @@
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
-                    <!-- Opción 1: Aumentar ancho de la columna de acciones -->
-                    <DxGridCommandColumn Caption="Acciones"
-                                         Width="220px"
-                                         NewButtonVisible="false">
+                    <DxGridDataColumn Caption="Acciones" Width="160px"
+                                      TextAlignment="GridTextAlignment.Center"
+                                      AllowSort="false" AllowGroup="false">
                         <CellDisplayTemplate Context="cellContext">
                             @if (cellContext.DataItem is BancoListDto item)
                             {
-                                <div class="d-flex flex-wrap gap-2">
-                                    <button class="btn-icon btn-edit" title="Editar" @onclick="() => OpenFormAsync(item)">
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => OpenFormAsync(item)" @onclick:stopPropagation="true">
                                         <i class="bi bi-pencil-square"></i>
                                     </button>
-                                    <button id="@($"opciones-btn-{item.BancoId}")"
+                                    <button type="button" id="@($"opciones-btn-{item.BancoId}")"
                                             class="btn-icon btn-options"
                                             title="Opciones"
-                                            @onclick="(MouseEventArgs args) => ShowOpcionesMenuAsync(item, args)">
+                                            @onclick="(MouseEventArgs args) => ShowOpcionesMenuAsync(item, args)"
+                                            @onclick:stopPropagation="true">
                                         <i class="bi bi-three-dots-vertical"></i>
                                     </button>
-                                    <button class="btn-icon btn-delete" title="Eliminar" @onclick="() => ConfirmDelete(item)">
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmDelete(item)" @onclick:stopPropagation="true">
                                         <i class="bi bi-trash"></i>
                                     </button>
                                 </div>
                             }
                         </CellDisplayTemplate>
-                    </DxGridCommandColumn>
+                    </DxGridDataColumn>
                 </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay bancos registrados.</div>
+                </EmptyDataAreaTemplate>
             </DxGrid>
         </div>
     </div>
 </div>
-
-<DxLoadingPanel Visible="isLoading"
-                PositionTarget="body"
-                ApplyBackgroundShading="false"
-                IsContentBlocked="true"
-                Text="Cargando..."
-                ZIndex="2000" />
 
 <BancosFormModal @bind-Visible="formVisible"
                  EditContext="editContext"
@@ -185,7 +214,7 @@
          Height="min(850px, 92vh)"
          HeaderText="Nueva Transacción Bancaria"
          ShowCloseButton="true">
-    <TransaccionBancariaModal CuentasBancarias="@cuentasBancarias" 
+    <TransaccionBancariaModal CuentasBancarias="@cuentasBancarias"
                               BancoId="@transaccionesBancoId"
                               OnClose="@(async (bool result) => { mostrarFormulario = false; await Task.CompletedTask; })"
                               OnTransaccionGuardada="@(async () => { mostrarFormulario = false; await LoadBancosAsync(); })"/>
@@ -193,6 +222,7 @@
 
 @code {
     private readonly List<BancoListDto> bancos = new();
+    private DxGrid? grid;
     private BancoEditDto editModel = new();
     private EditContext? editContext;
     private bool isLoading;
@@ -210,6 +240,11 @@
     private BancoListDto? bancoAEliminar;
     private CancellationTokenSource? loadCts;
 
+    // El cheque manual vive en su propia vista; la cuenta se elige allí.
+    private void AbrirChequeManual()
+        => NavigationManager.NavigateTo(
+            $"/bancos/cheques/manual?originUrl={Uri.EscapeDataString("/contabilidad/bancos")}");
+
     // Asegúrate de declarar e inicializar la variable cuentasBancarias
     private List<BancoCuentaListDto> cuentasBancarias = new();
 
@@ -217,6 +252,16 @@
     private bool mostrarFormulario = false;
 
     private string Title => editModel.BancoId > 0 ? "Editar banco" : "Nuevo banco";
+
+    private const string GridLayoutStorageKey = "contabilidad-bancos-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
     private string BancoIdDisplay => editModel.BancoId > 0 ? editModel.BancoId.ToString() : "Autoincremental";
     private string DeleteMessage => bancoAEliminar is null
         ? "Seleccione un banco para eliminar."
@@ -244,6 +289,9 @@
                 SetAlert("No hay empresa seleccionada.", MessageBoxRenderStyle.Info);
                 return;
             }
+
+            // Habilita (o no) el botón de cheque manual.
+            await ChequeEmision.EnsureLoadedAsync(loadCts.Token);
 
             var data = await BancosClient.GetAsync(null, loadCts.Token);
             bancos.Clear();

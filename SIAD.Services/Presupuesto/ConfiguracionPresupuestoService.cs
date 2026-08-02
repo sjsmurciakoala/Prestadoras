@@ -462,6 +462,68 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
         return await GetByIdAsync(idPresupuesto, ct);
     }
 
+    public async Task<PresupuestoImpresionDto?> GetDatosImpresionAsync(
+        string idPresupuesto,
+        string user,
+        CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(idPresupuesto))
+        {
+            return null;
+        }
+
+        var id = idPresupuesto.Trim();
+        var header = await _context.pst_config_presupuesto_hdrs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(h => h.id_presupuesto == id, ct);
+
+        if (header is null)
+        {
+            return null;
+        }
+
+        // GetDetailsByPresupuestoAsync ya deja CuentaContable con la mascara de la empresa.
+        var detalles = await GetDetailsByPresupuestoAsync(id, ct);
+
+        var companyId = EnsureCompanyId();
+        var company = await _context.cfg_companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+
+        var format = await _accountFormatService.GetFormatAsync(ct);
+
+        return new PresupuestoImpresionDto
+        {
+            EmpresaNombre = company?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = company?.legal_name,
+            EmpresaRtn = company?.tax_id,
+            EmpresaDireccion = company?.address,
+            EmpresaTelefono = company?.phone,
+            EmpresaEmail = company?.email,
+            EmpresaLogo = company?.logo,
+            IdPresupuesto = header.id_presupuesto,
+            RangoPeriodo = header.rango_periodo,
+            FechaInicia = header.fecha_inicia,
+            FechaFinaliza = header.fecha_finaliza,
+            EstadoAprobado = header.estado_aprobado,
+            ValorGlobal = header.valor_global,
+            ValorDisponible = header.valor_disponible,
+            Detalles = detalles
+                .Select(d => new PresupuestoImpresionLineaDto
+                {
+                    CuentaContableCodigo = d.CuentaContableCodigo,
+                    CuentaContable = d.CuentaContable,
+                    ValorProyeccion = d.ValorProyeccion,
+                    ValorReal = d.ValorReal,
+                    ValorDisponible = d.ValorDisponible
+                })
+                .ToList(),
+            ImpresoPor = string.IsNullOrWhiteSpace(user) ? "system" : user.Trim(),
+            FormatoCuentas = format.Mask,
+            SeparadorCodigo = format.Separator
+        };
+    }
+
     public async Task<ConfiguracionPresupuestoEditDto> CreateAsync(
         ConfiguracionPresupuestoEditDto dto,
         string user,
@@ -1500,13 +1562,19 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
         try
         {
             await using var command = connection.CreateCommand();
-            command.CommandText = "SELECT public.fn_pst_next_id_presupuesto_dtl(@idPresupuesto);";
+            command.CommandText = "SELECT public.fn_pst_next_id_presupuesto_dtl(@companyId, @idPresupuesto);";
 
             var currentTransaction = _context.Database.CurrentTransaction;
             if (currentTransaction is not null)
             {
                 command.Transaction = currentTransaction.GetDbTransaction();
             }
+
+            var companyParameter = command.CreateParameter();
+            companyParameter.ParameterName = "@companyId";
+            companyParameter.DbType = DbType.Int64;
+            companyParameter.Value = EnsureCompanyId();
+            command.Parameters.Add(companyParameter);
 
             var idParameter = command.CreateParameter();
             idParameter.ParameterName = "@idPresupuesto";
@@ -1534,13 +1602,12 @@ public sealed class ConfiguracionPresupuestoService : IConfiguracionPresupuestoS
 
     private static long ParsePresupuestoDetailBaseId(string idPresupuesto)
     {
-        if (!long.TryParse(idPresupuesto.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var baseId))
-        {
-            throw new InvalidOperationException(
-                $"El presupuesto {idPresupuesto} no es numerico. No se puede generar id_presupuesto_dtl.");
-        }
-
-        return baseId;
+        // Misma regla que fn_pst_next_id_presupuesto_dtl: los ids numericos ('60000')
+        // conservan su semilla historica como piso; los no numericos ('PRE-2026')
+        // usan semilla 0 y manda el MAX existente del presupuesto.
+        return long.TryParse(idPresupuesto.Trim(), NumberStyles.None, CultureInfo.InvariantCulture, out var baseId)
+            ? baseId
+            : 0L;
     }
 
     private async Task ValidateNoStartDateOverlapAsync(
