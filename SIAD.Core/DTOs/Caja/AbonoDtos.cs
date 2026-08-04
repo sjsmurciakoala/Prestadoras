@@ -28,7 +28,12 @@ public class FacturaConSaldoDto
     public DateTime FechaEmision { get; set; }
     public decimal SaldoTotal { get; set; }
     public decimal SaldoPendiente { get; set; }
+
+    /// <summary>Descripción legible (fase 2 estados: la letra interna ya no viaja).</summary>
     public string Estado { get; set; } = null!;
+
+    /// <summary>EstadoDocumentoComercial (1 activa, 2 pagada, 3 anulada, 4 parcial).</summary>
+    public short? EstadoId { get; set; }
 
     /// <summary>DocumentoCobroTipo: 1 = factura, 2 = cuota de plan (F6), 3 = nota de débito (F7).</summary>
     public short DocumentoTipo { get; set; } = 1;

@@ -438,9 +438,22 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
         if (!string.IsNullOrWhiteSpace(filtro.ClienteClave))
             query = query.Where(f => f.clientecodigo == filtro.ClienteClave.Trim());
 
-        return await query
+        var filas = await query
             .OrderByDescending(f => f.fechaemision)
             .ThenByDescending(f => f.id)
+            .Select(f => new
+            {
+                f.numrecibo,
+                f.numfactura,
+                f.fechaemision,
+                f.clientecodigo,
+                f.saldototal,
+                f.estado_id
+            })
+            .ToListAsync(ct);
+
+        // Fase 2 estados: el DTO manda la descripción, no la letra interna.
+        return filas
             .Select(f => new MiscelaneoConsultaDto(
                 f.numrecibo,
                 f.numfactura ?? string.Empty,
@@ -449,8 +462,8 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
                     : DateTime.MinValue,
                 f.clientecodigo ?? string.Empty,
                 f.saldototal ?? 0m,
-                f.estado ?? string.Empty))
-            .ToListAsync(ct);
+                EstadoDocumentoComercial.Descripcion(f.estado_id)))
+            .ToList();
     }
 
     private async Task<string> ObtenerPeriodoActualAsync(CancellationToken ct)

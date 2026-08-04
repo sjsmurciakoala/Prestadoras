@@ -478,7 +478,11 @@ public class CobroService : ICobroService
                     NumRecibo = factura.numrecibo,
                     MontoAplicado = apl.Monto,
                     SaldoRestante = nuevoSaldoFactura,
-                    EstadoFactura = factura.estado!
+                    // Fase 2 estados: descripción legible. Se deriva de la letra
+                    // recién ESCRITA (la entidad tiene estado_id viejo: el
+                    // trigger sincroniza la BD, no el objeto en memoria).
+                    EstadoFactura = EstadoDocumentoComercial.Descripcion(
+                        EstadoDocumentoComercial.FromCodigo(factura.estado))
                 });
             }
 

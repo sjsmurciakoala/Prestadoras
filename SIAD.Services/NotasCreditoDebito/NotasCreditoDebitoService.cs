@@ -92,12 +92,17 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
         var clave = clienteClave.Trim();
         var companyId = CompanyId;
 
-        return await _context.facturas
+        var filas = await _context.facturas
             .AsNoTracking()
             .Where(f => f.company_id == companyId && f.clientecodigo == clave)
             .OrderByDescending(f => f.fechaemision)
             .ThenByDescending(f => f.id)
             .Take(50)
+            .Select(f => new { f.id, f.numfactura, f.numrecibo, f.fechaemision, f.periodo, f.saldototal, f.estado_id })
+            .ToListAsync(ct);
+
+        // Fase 2 estados: el DTO manda la descripción legible, no la letra.
+        return filas
             .Select(f => new FacturaOrigenLookupDto
             {
                 FacturaId = f.id,
@@ -109,9 +114,9 @@ public class NotasCreditoDebitoService : INotasCreditoDebitoService
                     : (DateTime?)null,
                 Periodo = f.periodo,
                 SaldoTotal = f.saldototal ?? 0m,
-                Estado = f.estado
+                Estado = SIAD.Core.Constants.EstadoDocumentoComercial.Descripcion(f.estado_id)
             })
-            .ToListAsync(ct);
+            .ToList();
     }
 
     public async Task<IReadOnlyList<MotivoLookupDto>> ListarMotivosAnulacionAsync(CancellationToken ct = default)

@@ -24,6 +24,33 @@ public static class EstadoDocumentoComercial
         ParcialmenteAbonada => "B",
         _ => string.Empty
     };
+
+    /// <summary>
+    /// Descripción para el usuario final (fase 2 estados: los DTOs mandan
+    /// texto, nunca la letra interna). Único punto de traducción en C#.
+    /// </summary>
+    public static string Descripcion(short? id) => id switch
+    {
+        Cobrada             => "PAGADA",
+        Anulada             => "ANULADA",
+        ParcialmenteAbonada => "ABONO PARCIAL",
+        _                   => "PENDIENTE"
+    };
+
+    /// <summary>
+    /// Puente del lado ESCRITOR (fase 3 lo retira): mientras la letra siga
+    /// siendo la fuente de escritura, la entidad EF en memoria tiene el
+    /// estado_id VIEJO tras asignar la letra (el trigger lo sincroniza en la
+    /// BD, no en el objeto). Este helper deriva el id de la letra recién
+    /// escrita sin releer la fila.
+    /// </summary>
+    public static short FromCodigo(string? codigo) => (codigo ?? string.Empty).Trim().ToUpperInvariant() switch
+    {
+        "C" => Cobrada,
+        "N" => Anulada,
+        "B" => ParcialmenteAbonada,
+        _   => Activa
+    };
 }
 
 // Estados de PAGO (adm_estado_pago) — catálogo separado del de documentos
