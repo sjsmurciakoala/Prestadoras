@@ -1,10 +1,12 @@
 using System.Data;
+using System.Data.Common;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.DTOs.Tarifario;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
+using SIAD.Services.Clientes;
 
 namespace SIAD.Services.Tarifario;
 
@@ -106,7 +108,12 @@ public class ClienteServicioTarifarioService : IClienteServicioTarifarioService
         if (conn.State != ConnectionState.Open)
             await conn.OpenAsync(ct);
 
-        using var tx = await conn.BeginTransactionAsync(ct);
+        // Transacción propia salvo que ya exista una ambiente (tests con
+        // BEGIN...ROLLBACK): las órdenes se unen a la ambiente si tx es null.
+        DbTransaction? tx = null;
+        try { tx = await conn.BeginTransactionAsync(ct); }
+        catch (InvalidOperationException) { /* transacción ambiente activa */ }
+
         try
         {
             // Resolver cuadro tarifario automáticamente
@@ -192,14 +199,81 @@ public class ClienteServicioTarifarioService : IClienteServicioTarifarioService
                 }, transaction: tx, cancellationToken: ct));
             }
 
-            await tx.CommitAsync(ct);
-            return ResponseModelDto.Ok(message: "Servicio guardado correctamente.");
+            // La categoría regulatoria manda la TARIFA; su equivalente contable
+            // (adm_categoria_regulatoria.categoria_servicio_id) sincroniza el
+            // maestro del cliente y reclasifica el saldo CxC pendiente — misma
+            // mecánica y bitácora que el cambio desde Editar Cliente.
+            var avisoContable = await SincronizarCategoriaContableAsync(
+                conn, tx, companyId, clienteId, request.CategoriaRegulatoriaId, usuario, ct);
+
+            if (tx is not null)
+                await tx.CommitAsync(ct);
+            return ResponseModelDto.Ok(message: "Servicio guardado correctamente." + avisoContable);
         }
         catch
         {
-            await tx.RollbackAsync(ct);
+            if (tx is not null)
+                await tx.RollbackAsync(ct);
             throw;
         }
+    }
+
+    /// <summary>
+    /// Sincroniza cliente_maestro.categoria_servicio_id con el equivalente
+    /// contable de la categoría regulatoria guardada y, si el cliente tiene
+    /// saldo pendiente, genera la partida de reclasificación de CxC
+    /// (DEBE cuenta nueva / HABER cuenta vieja) con su bitácora. Devuelve el
+    /// texto para el aviso al usuario (vacío si no hubo nada que sincronizar).
+    /// </summary>
+    private static async Task<string> SincronizarCategoriaContableAsync(
+        DbConnection conn,
+        DbTransaction? tx,
+        long companyId,
+        int clienteId,
+        long? categoriaRegulatoriaId,
+        string usuario,
+        CancellationToken ct)
+    {
+        if (categoriaRegulatoriaId is null)
+            return string.Empty;
+
+        var equivalente = await conn.ExecuteScalarAsync<int?>(new CommandDefinition(@"
+            SELECT categoria_servicio_id
+            FROM public.adm_categoria_regulatoria
+            WHERE company_id = @companyId AND categoria_regulatoria_id = @id",
+            new { companyId, id = categoriaRegulatoriaId.Value }, transaction: tx, cancellationToken: ct));
+        if (equivalente is null)
+            return string.Empty; // categoría sin equivalencia contable configurada
+
+        var cliente = await conn.QueryFirstOrDefaultAsync<(string Clave, int? CategoriaActual)>(new CommandDefinition(@"
+            SELECT maestro_cliente_clave, categoria_servicio_id
+            FROM public.cliente_maestro
+            WHERE company_id = @companyId AND maestro_cliente_id = @clienteId
+            FOR UPDATE",
+            new { companyId, clienteId }, transaction: tx, cancellationToken: ct));
+        if (cliente.Clave is null || cliente.CategoriaActual == equivalente)
+            return string.Empty;
+
+        await conn.ExecuteAsync(new CommandDefinition(@"
+            UPDATE public.cliente_maestro
+            SET categoria_servicio_id = @nueva,
+                usuariomodificacion = @usuario,
+                fechamodificacion = now()
+            WHERE company_id = @companyId AND maestro_cliente_id = @clienteId",
+            new { nueva = equivalente, usuario, companyId, clienteId }, transaction: tx, cancellationToken: ct));
+
+        var recla = await ReclasificacionCxcClienteSql.ReclasificarPorCambioCategoriaAsync(
+            conn, companyId, clienteId, cliente.Clave, cliente.CategoriaActual, equivalente, usuario, tx, ct);
+
+        if (recla is { MontoReclasificado: > 0 })
+        {
+            var poliza = recla.PolizaId is not null
+                ? $" (póliza N° {recla.PolizaId})"
+                : " (partida en cola por período contable)";
+            return $" Categoría contable sincronizada: se reclasificó L. {recla.MontoReclasificado:N2} de CxC{poliza}; facturas actualizadas: {recla.FacturasActualizadas}.";
+        }
+
+        return " Categoría contable del cliente sincronizada.";
     }
 
     public async Task<ResponseModelDto> DesactivarAsync(int clienteId, ClienteServicioDesactivarRequest request, string usuario, CancellationToken ct = default)

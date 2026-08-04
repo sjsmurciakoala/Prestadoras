@@ -59,8 +59,9 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
   Reimprimir (snapshot archivado); en Acciones de Cobranza ya existía.
 - ~~Búsqueda en gestión de cobranza no funciona~~ ✅ lote 1 (lookup remoto).
 
-### Estado de cuenta (va con F4)
-- Filtrar por rangos de fecha.
+### Estado de cuenta — ✅ RESUELTO (lote 1)
+- ~~Filtrar por rangos de fecha~~ ✅ filtro Desde/Hasta en la pestaña
+  Movimientos de la ficha del cliente (`/clientes/{id}`).
 
 ### Notas de crédito / débito — ✅ RESUELTO (lote 2, 2026-08-01, PR #54)
 - ~~Colocar número de cuenta del cliente~~ → "Cuenta No." en el documento
@@ -72,23 +73,38 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 - También quedó (2026-07-31): **Informe de banco diario** en Reportería →
   Cobranza (rep_banco_diario + layout publicado, tope 31 días).
 
-### Clientes
-- Campo "Acueducto" a nivel de cliente (no del medidor).
-- RTN no obligatorio al crear.
-- Error técnico al guardar/actualizar clientes existentes (reproducir y corregir).
-- Maestro: abogado asignado; casilla de estudio socioeconómico.
+### Clientes — ✅ RESUELTO (PRs #48, #59, #63)
+- ~~Campo "Acueducto" a nivel de cliente~~ ✅ columna `cliente_maestro.acueducto`
+  + backfill desde medidor; visible en la FICHA (`/clientes/{id}`), crear y
+  editar. Nota: los migrados salen vacíos — SIMAFI no traía el dato.
+- ~~RTN no obligatorio al crear~~ ✅ verificado (lote 1).
+- ~~Error técnico al guardar/actualizar clientes~~ ✅ causa raíz DNI
+  obligatorio vs 6,300 migrados sin identidad (lote 1).
+- ~~Maestro: abogado asignado; estudio socioeconómico~~ ✅ ya existían; se
+  muestran en la ficha (Abogado, Estudio socioeconómico, No cortable).
 
 ### Facturación / tarifario
-- Renombrar "Posteo de caja" → nomenclatura acordada (la vista ya es "Caja").
-- Cambio de categoría (Doméstico→Comercial) debe generar partida contable.
+- ~~Renombrar "Posteo de caja"~~ ✅ obsoleto: la pantalla ya no existe, el
+  flujo vive en la vista única Caja.
+- ~~Cambio de categoría (Doméstico→Comercial) debe generar partida contable~~
+  ✅ RESUELTO COMPLETO (2026-08-04): funciona en LOS DOS flujos —
+  `/tarifario/cliente-servicio-v3` (categoría regulatoria: sincroniza el
+  equivalente contable vía `adm_categoria_regulatoria.categoria_servicio_id` y
+  reclasifica) y Editar Cliente. La partida es DEBE CxC nueva / HABER CxC
+  vieja del saldo pendiente, bitácora en `cln_cliente_recategorizacion`, y el
+  usuario VE el aviso con monto y N° de póliza al guardar. Solo aplica con
+  integración contable en modo POR_SERVICIO_CATEGORIA.
 - Condición de lectura nueva no genera efecto (gap conocido codigo→tipo, L8).
 - Dudas de tasas (fondo ambiental / ERSAPS) al crear cliente y sección "No aplica" — sesión de aclaración de configuración tarifaria.
 
-### Reportes
-- **Informe de banco diario** (indispensable para operación) — nueva función `rep_*` + plantilla.
+### Reportes — ✅ RESUELTO (2026-07-31/08-01)
+- ~~Informe de banco diario~~ ✅ Reportería → Cobranza → "Banco diario"
+  (`rep_banco_diario`, layout diseñado, tope 31 días por rendimiento).
 
 ### Órdenes de trabajo
-- Módulo de mantenimiento/creación de usuarios.
-- Reactivar ubicación GPS de cuadrillas (existía contra SIMAFI).
-- Hora de emisión de la orden estática/incorrecta.
-- Foto y coordenadas GPS no visibles en el portal.
+- Módulo de mantenimiento/creación de usuarios — PENDIENTE (bloqueado por el
+  backend legacy 8086; se resuelve cuando se reemplace ese servicio).
+- ~~Reactivar ubicación GPS de cuadrillas~~ ✅ segunda tanda (mapa con histórico).
+- ~~Hora de emisión estática/incorrecta~~ ✅ segunda tanda (era UTC+6).
+- ~~Foto y coordenadas GPS no visibles en el portal~~ ✅ segunda tanda (visor
+  en el detalle de la orden).
