@@ -241,6 +241,82 @@ public sealed class NotaCreditoTests : IntegrationTestBase
         Assert.Equal(antes.correlativo, despues.correlativo);  // sin correlativo consumido
     }
 
+    /// <summary>
+    /// Hallazgo pruebas operativas 2026-08-04: las 3.9M facturas migradas de
+    /// SIMAFI no traen número fiscal (numfactura NULL) y la emisión de NC/ND
+    /// reventaba con 23502 (factura_origen_numero NOT NULL). El fix cae al
+    /// número de recibo — este test emite AMBAS notas contra una factura
+    /// "migrada" y verifica el respaldo.
+    /// </summary>
+    [SkippableFact]
+    public async Task NC_y_ND_se_emiten_contra_factura_migrada_sin_numero_fiscal()
+    {
+        var cais = await Connection.QueryFirstOrDefaultAsync<(long? CaiNc, long? CaiNd)>(new CommandDefinition(@"
+            SELECT (SELECT cai_id FROM public.adm_cai_facturacion WHERE company_id = @CompanyId AND tipo_documento_fiscal_id = 6 LIMIT 1),
+                   (SELECT cai_id FROM public.adm_cai_facturacion WHERE company_id = @CompanyId AND tipo_documento_fiscal_id = 7 LIMIT 1)",
+            new { CompanyId }, Transaction));
+        Skip.If(cais.CaiNc is null || cais.CaiNd is null, "Faltan CAIs tipo NC (6) / ND (7) en la BD de pruebas.");
+
+        var clave = $"MG{Guid.NewGuid():N}"[..12];
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.cliente_maestro
+                (company_id, maestro_cliente_clave, maestro_cliente_identidad, maestro_cliente_nombre, estado)
+            VALUES (@CompanyId, @Clave, '', 'CLIENTE MIGRADO SIN NUMFACTURA', true)",
+            new { CompanyId, Clave = clave }, Transaction));
+
+        // Factura estilo SIMAFI: SIN numfactura (la clave del bug).
+        var factura = await Connection.QueryFirstAsync<(int Id, int NumRecibo)>(new CommandDefinition(@"
+            INSERT INTO public.factura
+                (company_id, numfactura, clientecodigo, tipofactura, tipofacturacion,
+                 fechaemision, periodo, saldototal, usuario, estado, estado_id)
+            VALUES (@CompanyId, NULL, @Clave, 'F', 'S',
+                    current_date, '2026/8', 300.00, 'test-migrada', 'A', 1)
+            RETURNING id, numrecibo",
+            new { CompanyId, Clave = clave }, Transaction));
+
+        await Connection.ExecuteAsync(new CommandDefinition(@"
+            INSERT INTO public.factura_detalle
+                (company_id, factura_id, codigo, tiposervicio, descripcion, montovalor, montovalor_saldo)
+            VALUES (@CompanyId, @FacturaId, '', 'AGUA_POTABLE', 'Agua', 300.00, 300.00)",
+            new { CompanyId, FacturaId = factura.Id }, Transaction));
+
+        // ND (antes: 23502 null value in column factura_origen_numero).
+        await Connection.QueryAsync(new CommandDefinition(@"
+            SELECT * FROM public.sp_adm_emitir_nota_debito(
+                p_company_id := @CompanyId,
+                p_factura_origen_id := @FacturaId,
+                p_motivo_aumento_id := (SELECT motivo_aumento_id FROM public.cfg_motivo_aumento WHERE activo LIMIT 1)::smallint,
+                p_motivo_detalle := 'test factura migrada',
+                p_monto_aumentar := 50.00,
+                p_lineas := NULL::jsonb,
+                p_usuario_emisor := 'TEST',
+                p_cai_id := @CaiNd)",
+            new { CompanyId, FacturaId = factura.Id, CaiNd = cais.CaiNd }, Transaction));
+
+        var origenNd = await Connection.ExecuteScalarAsync<string>(new CommandDefinition(
+            "SELECT factura_origen_numero FROM public.adm_nota_debito WHERE company_id = @CompanyId AND factura_origen_id = @FacturaId",
+            new { CompanyId, FacturaId = factura.Id }, Transaction));
+        Assert.Equal(factura.NumRecibo.ToString(), origenNd);
+
+        // NC parcial contra la misma factura migrada.
+        await Connection.QueryAsync(new CommandDefinition(@"
+            SELECT * FROM public.sp_adm_emitir_nota_credito(
+                p_company_id := @CompanyId,
+                p_factura_origen_id := @FacturaId,
+                p_motivo_anulacion_id := 1::smallint,
+                p_motivo_detalle := 'test factura migrada',
+                p_monto_disminuir := 30.00,
+                p_lineas := NULL::jsonb,
+                p_usuario_emisor := 'TEST',
+                p_cai_id := @CaiNc)",
+            new { CompanyId, FacturaId = factura.Id, CaiNc = cais.CaiNc }, Transaction));
+
+        var origenNc = await Connection.ExecuteScalarAsync<string>(new CommandDefinition(
+            "SELECT factura_origen_numero FROM public.adm_nota_credito WHERE company_id = @CompanyId AND factura_origen_id = @FacturaId",
+            new { CompanyId, FacturaId = factura.Id }, Transaction));
+        Assert.Equal(factura.NumRecibo.ToString(), origenNc);
+    }
+
     private sealed class CompanyFija : SIAD.Core.Tenancy.ICurrentCompanyService
     {
         private readonly long _companyId;
