@@ -4,6 +4,7 @@
 @using DevExpress.Blazor
 @inject ClientesClient ClientesClient
 @inject IToastNotificationService ToastService
+@inject IJSRuntime JS
 
 <div class="cliente-estado-cuenta-container">
     <!-- ENCABEZADO -->
@@ -136,6 +137,12 @@
                       IconCssClass="bi bi-funnel"
                       RenderStyle="ButtonRenderStyle.Primary"
                       Click="AplicarFiltroFechas" />
+            @* Pruebas operativas ago-2026: PDF del estado de cuenta con el rango vigente. *@
+            <DxButton Text="Imprimir PDF"
+                      IconCssClass="bi bi-printer"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="AbrirEstadoCuentaPdf" />
             <DxButton Text="Limpiar"
                       RenderStyle="ButtonRenderStyle.Secondary"
                       RenderStyleMode="ButtonRenderStyleMode.Outline"
@@ -309,6 +316,16 @@
     }
 
     private void RecargarMovimientos() => movimientosGrid?.Reload();
+
+    private async Task AbrirEstadoCuentaPdf()
+    {
+        var url = $"api/clientes/{ClienteId}/estado-cuenta/pdf";
+        var query = new List<string>();
+        if (filtroDesde.HasValue) query.Add($"desde={filtroDesde.Value:yyyy-MM-dd}");
+        if (filtroHasta.HasValue) query.Add($"hasta={filtroHasta.Value:yyyy-MM-dd}");
+        if (query.Count > 0) url += "?" + string.Join("&", query);
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
 
     private void AplicarFiltroFechas()
     {

@@ -242,7 +242,34 @@ public class ClientesController : ControllerBase
 
     }
 
-    
+    /// <summary>PDF del estado de cuenta (pruebas operativas ago-2026).</summary>
+    [HttpGet("{id:int}/estado-cuenta/pdf")]
+    public async Task<IActionResult> EstadoCuentaPdf(
+        int id,
+        [FromQuery] DateTime? desde,
+        [FromQuery] DateTime? hasta,
+        CancellationToken cancellationToken)
+    {
+        var estado = await _clientesService.ObtenerEstadoCuentaImpresionAsync(
+            id,
+            desde.HasValue ? DateOnly.FromDateTime(desde.Value) : null,
+            hasta.HasValue ? DateOnly.FromDateTime(hasta.Value) : null,
+            cancellationToken);
+
+        if (estado is null)
+        {
+            return NotFound(new { mensaje = "No se encontró el cliente." });
+        }
+
+        using var report = new SIAD.Reports.Rpt_Dev_EstadoCuenta(estado);
+        report.RequestParameters = false;
+
+        using var stream = new System.IO.MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=EstadoCuenta-{estado.ClienteClave}.pdf";
+        return File(stream.ToArray(), "application/pdf");
+    }
 
 
 
