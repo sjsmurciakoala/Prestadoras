@@ -34,6 +34,9 @@ public sealed class ClienteCreateDto
 
     public bool? NoCortable { get; set; }
 
+    /// <summary>Pruebas operativas ago-2026: el cliente tiene estudio socioeconómico.</summary>
+    public bool? EstudioSocioeconomico { get; set; }
+
     public int? AbogadoId { get; set; }
 
     public string? Telefono { get; set; }

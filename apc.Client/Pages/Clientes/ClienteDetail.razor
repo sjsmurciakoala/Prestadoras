@@ -219,6 +219,14 @@
                                     <div class="@GetBooleanClass(cliente.BloqueadoCobranza)">
                                         @MostrarBooleano(cliente.BloqueadoCobranza)</div>
                                 </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="Estudio socioeconómico" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="@GetBooleanClass(cliente.EstudioSocioeconomico)">
+                                        @MostrarBooleano(cliente.EstudioSocioeconomico)</div>
+                                </DxFormLayoutItem>
+                                <DxFormLayoutItem Caption="No cortable" ColSpanXs="12" ColSpanMd="6">
+                                    <div class="@GetBooleanClass(cliente.NoCortable)">
+                                        @MostrarBooleano(cliente.NoCortable)</div>
+                                </DxFormLayoutItem>
                                 <DxFormLayoutItem Caption="Abogado" ColSpanXs="12" ColSpanMd="12">
                                     <div class="field-value">@MostrarAbogado(cliente)</div>
                                 </DxFormLayoutItem>
