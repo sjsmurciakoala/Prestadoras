@@ -53,12 +53,12 @@ BEGIN
     END IF;
 
     IF COALESCE(v_factura.estado, '') = 'N' THEN
-        RAISE EXCEPTION 'FACTURA_YA_ANULADA: la factura origen % ya estÃ¡ anulada.', v_factura.numfactura;
+        RAISE EXCEPTION 'FACTURA_YA_ANULADA: la factura origen % ya está anulada.', v_factura.numfactura;
     END IF;
 
     -- 2. Validar CAI emitible y que sea tipo NC (6)
     IF NOT public.fn_adm_validar_cai_emitible(p_company_id, p_cai_id) THEN
-        RAISE EXCEPTION 'CAI_NO_EMITIBLE: el CAI % no estÃ¡ vigente o pasÃ³ su fecha lÃ­mite de emisiÃ³n.', p_cai_id;
+        RAISE EXCEPTION 'CAI_NO_EMITIBLE: el CAI % no está vigente o pasó su fecha límite de emisión.', p_cai_id;
     END IF;
 
     SELECT c.cai_id, c.prefijo_documento, c.correlativo_actual, c.rango_hasta,
@@ -69,14 +69,14 @@ BEGIN
     WHERE c.company_id = p_company_id AND c.cai_id = p_cai_id;
 
     IF v_cai.tipo_documento_fiscal_id <> 6 THEN
-        RAISE EXCEPTION 'CAI_TIPO_INCORRECTO: el CAI % es tipo %, se requiere tipo 6 (Nota de CrÃ©dito).',
+        RAISE EXCEPTION 'CAI_TIPO_INCORRECTO: el CAI % es tipo %, se requiere tipo 6 (Nota de Crédito).',
             p_cai_id, v_cai.tipo_documento_fiscal_id;
     END IF;
 
     -- 3. Tomar correlativo siguiente
     v_correlativo := v_cai.correlativo_actual + 1;
     IF v_correlativo > v_cai.rango_hasta THEN
-        RAISE EXCEPTION 'CAI_AGOTADO: el CAI % alcanzÃ³ su rango mÃ¡ximo (%).', p_cai_id, v_cai.rango_hasta;
+        RAISE EXCEPTION 'CAI_AGOTADO: el CAI % alcanzó su rango máximo (%).', p_cai_id, v_cai.rango_hasta;
     END IF;
 
     v_numero := concat(COALESCE(v_cai.prefijo_documento, ''), lpad(v_correlativo::text, 8, '0'));
@@ -129,7 +129,7 @@ BEGIN
     RETURNING adm_nota_credito.nota_credito_id INTO v_nota_id;
 
     IF v_nota_id IS NULL THEN
-        RAISE EXCEPTION 'CLIENTE_NO_EXISTE: no se encontrÃ³ cliente % para la factura origen.',
+        RAISE EXCEPTION 'CLIENTE_NO_EXISTE: no se encontró cliente % para la factura origen.',
             v_factura.clientecodigo;
     END IF;
 
@@ -199,10 +199,10 @@ BEGIN
         WHERE id = v_factura.id;
     ELSE
         -- F7 H2a (2026-07-30): la NC PARCIAL aplica al DOCUMENTO â€” rebaja
-        -- montovalor_saldo de las lÃ­neas por derrame FIFO (mismo clamp que los
-        -- pagos: nunca deja una lÃ­nea negativa; el excedente sobre lo pendiente
+        -- montovalor_saldo de las líneas por derrame FIFO (mismo clamp que los
+        -- pagos: nunca deja una línea negativa; el excedente sobre lo pendiente
         -- no tiene destino y se pierde, igual que el sobrepago del WS). Antes
-        -- solo se escribÃ­a el crÃ©dito espejo y, tras el corte de F7, una NC
+        -- solo se escribía el crédito espejo y, tras el corte de F7, una NC
         -- parcial no bajaba la deuda del cliente.
         WITH lineas AS (
             SELECT d.id,
@@ -237,12 +237,12 @@ BEGIN
 
     -- F7 H2c: sin espejo 205 — la NC ya aplica al documento (H2a).
 
-    -- 9c. Posteo contable por configuraciÃ³n (plan F5, D1/D2/D10): partida
-    -- espejo de la factura origen â€” Debe Ingresos (o DEVOLUCION_NC si estÃ¡
-    -- configurado) / Haber CxC analÃ­tica â€” SOLO si activo_notas estÃ¡
-    -- encendido. Misma transacciÃ³n: si el posteo falla (sin asiento NOTAS,
-    -- cuenta sin resolver, sin perÃ­odo y sin encolar), la emisiÃ³n completa se
-    -- revierte. Devuelve NULL si quedÃ³ encolada en con_partida_pendiente.
+    -- 9c. Posteo contable por configuración (plan F5, D1/D2/D10): partida
+    -- espejo de la factura origen â€” Debe Ingresos (o DEVOLUCION_NC si está
+    -- configurado) / Haber CxC analítica â€” SOLO si activo_notas está
+    -- encendido. Misma transacción: si el posteo falla (sin asiento NOTAS,
+    -- cuenta sin resolver, sin período y sin encolar), la emisión completa se
+    -- revierte. Devuelve NULL si quedó encolada en con_partida_pendiente.
     SELECT c.activo_notas INTO v_activo_notas
     FROM public.con_integracion_config c
     WHERE c.company_id = p_company_id;
@@ -269,8 +269,8 @@ BEGIN
         true,
         'OK'::text,
         CASE WHEN v_anula
-             THEN 'Nota de crÃ©dito emitida y factura origen anulada.'
-             ELSE 'Nota de crÃ©dito parcial emitida (factura origen sigue activa).'
+             THEN 'Nota de crédito emitida y factura origen anulada.'
+             ELSE 'Nota de crédito parcial emitida (factura origen sigue activa).'
         END::text,
         v_nota_id,
         v_numero,

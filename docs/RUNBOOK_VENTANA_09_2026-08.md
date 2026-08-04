@@ -23,6 +23,12 @@ Referencia del procedimiento general (publish por host, IIS/servicios, humo):
 
 ## 1. DDLs en orden (33 scripts + 1 vista)
 
+⚠️ **OBLIGATORIO antes del primer psql**: `set PGCLIENTENCODING=UTF8` (o
+`$env:PGCLIENTENCODING='UTF8'` en PowerShell). Sin esto, psql en Windows
+interpreta los scripts con la codificación de la consola y los ACENTOS de los
+mensajes de los SPs quedan corruptos en la base (bug real del 04-08: "Nota de
+crÃ©dito emitida" — costó re-aplicar 3 scripts en orden para reparar).
+
 Aplicar con `psql --set ON_ERROR_STOP=1 -f <script>` en este orden. Todos son
 idempotentes o transaccionales; si uno falla, PARAR y evaluar (no saltar).
 
