@@ -93,8 +93,7 @@ public class AbonoService : IAbonoService
                         ClienteNombre = c != null ? c.maestro_cliente_nombre : string.Empty,
                         FechaEmision = f.fechaemision,
                         SaldoTotal = f.saldototal ?? 0m,
-                        f.estado,      // pass-through al DTO (fase 2: DTO numérico)
-                        f.estado_id    // fuente de la lógica
+                        f.estado_id
                     };
 
         var items = await query.Take(40).ToListAsync(ct);
@@ -126,7 +125,9 @@ public class AbonoService : IAbonoService
                     FechaEmision = x.FechaEmision.HasValue ? x.FechaEmision.Value.ToDateTime(TimeOnly.MinValue) : DateTime.MinValue,
                     SaldoTotal = x.SaldoTotal,
                     SaldoPendiente = saldoPendiente > 0 ? saldoPendiente : x.SaldoTotal,
-                    Estado = x.estado ?? "A"
+                    // Fase 2 estados: texto legible + id — la letra ya no viaja.
+                    Estado = EstadoDocumentoComercial.Descripcion(x.estado_id),
+                    EstadoId = x.estado_id
                 });
             }
         }
@@ -161,7 +162,7 @@ public class AbonoService : IAbonoService
                         ClienteNombre = c != null ? c.maestro_cliente_nombre : string.Empty,
                         FechaEmision = f.fechaemision,
                         SaldoTotal = f.saldototal ?? 0m,
-                        f.estado
+                        f.estado_id
                     };
 
         var items = await query.Take(200).ToListAsync(ct);
@@ -183,7 +184,9 @@ public class AbonoService : IAbonoService
                 FechaEmision = x.FechaEmision.HasValue ? x.FechaEmision.Value.ToDateTime(TimeOnly.MinValue) : DateTime.MinValue,
                 SaldoTotal = x.SaldoTotal,
                 SaldoPendiente = saldoPendiente > 0 ? saldoPendiente : x.SaldoTotal,
-                Estado = x.estado ?? "A"
+                // Fase 2 estados: texto legible + id — la letra ya no viaja.
+                Estado = EstadoDocumentoComercial.Descripcion(x.estado_id),
+                EstadoId = x.estado_id
             });
         }
 

@@ -277,7 +277,8 @@ public sealed class CobroMotorTests : IntegrationTestBase, IAsyncLifetime
         var data = Assert.IsType<CobroResultadoDto>(result.Data);
         Assert.Equal(150m, data.MontoTotal);
         Assert.Equal(2, data.Aplicaciones.Count);
-        Assert.All(data.Aplicaciones, a => Assert.Equal("C", a.EstadoFactura));
+        // Fase 2 estados: el DTO manda la descripción legible, no la letra.
+        Assert.All(data.Aplicaciones, a => Assert.Equal("PAGADA", a.EstadoFactura));
 
         // Un solo documento de pago para todo el cobro
         var pagos = await Connection.ExecuteScalarAsync<long>(new CommandDefinition(

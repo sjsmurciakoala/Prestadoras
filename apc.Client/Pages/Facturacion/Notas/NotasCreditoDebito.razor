@@ -286,7 +286,7 @@
                             Factura <strong>@facturaOrigenInfo.NumeroFactura</strong> ·
                             Periodo @facturaOrigenInfo.Periodo ·
                             Saldo <strong>L. @facturaOrigenInfo.SaldoTotal.ToString("N2")</strong> ·
-                            Estado <strong>@EstadoFacturaTexto(facturaOrigenInfo.Estado)</strong>
+                            Estado <strong>@facturaOrigenInfo.Estado</strong>
                         </div>
                     </Template>
                 </DxFormLayoutItem>
@@ -649,19 +649,9 @@
         public FacturaOrigenLookupDto Source { get; }
         public int FacturaId => Source.FacturaId;
         public string DisplayFactura =>
-            $"{Source.NumeroFactura} · {Source.Periodo} · L. {Source.SaldoTotal:N2} · {EstadoFacturaTexto(Source.Estado)}";
+            $"{Source.NumeroFactura} · {Source.Periodo} · L. {Source.SaldoTotal:N2} · {Source.Estado}";
     }
 
-    // Estados de factura para el usuario final — las letras internas (A/B/C/N)
-    // no se muestran en pantalla (pruebas operativas jul-2026: confundían).
-    // Referencia: docs/ESTADOS_DOCUMENTOS_COMERCIALES.md §1.
-    private static string EstadoFacturaTexto(string? estado) => (estado ?? "").Trim().ToUpperInvariant() switch
-    {
-        "A" => "PENDIENTE",
-        "B" => "ABONO PARCIAL",
-        "C" => "PAGADA",
-        "N" => "ANULADA",
-        "" => "PENDIENTE",
-        var otro => otro
-    };
+    // Fase 2 estados: el servidor ya manda la descripción legible en
+    // FacturaOrigenLookupDto.Estado — el mapeo local de letras se retiró.
 }

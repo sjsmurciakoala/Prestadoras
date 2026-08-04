@@ -179,8 +179,9 @@
                                         <DxGridDataColumn FieldName="Estado" Caption="Estado" Width="90px" TextAlignment="GridTextAlignment.Center">
                                             <CellDisplayTemplate>
                                                 @{ var row = (DocumentoCobroRow)context.DataItem; }
-                                                <span class="badge @(row.Estado == "B" ? "bg-warning text-dark" : "bg-primary")">
-                                                    @(row.Estado == "B" ? "PARCIAL" : "PENDIENTE")
+                                                @* Fase 2 estados: decisión por id numérico, texto del servidor. *@
+                                                <span class="badge @(row.EstadoId == SIAD.Core.Constants.EstadoDocumentoComercial.ParcialmenteAbonada ? "bg-warning text-dark" : "bg-primary")">
+                                                    @(row.EstadoId == SIAD.Core.Constants.EstadoDocumentoComercial.ParcialmenteAbonada ? "PARCIAL" : "PENDIENTE")
                                                 </span>
                                             </CellDisplayTemplate>
                                         </DxGridDataColumn>
@@ -629,7 +630,8 @@
         public string NumFactura { get; init; } = string.Empty;
         public int NumRecibo { get; init; }
         public DateTime FechaEmision { get; init; }
-        public string Estado { get; init; } = "A";
+        public string Estado { get; init; } = string.Empty;
+        public short? EstadoId { get; init; }
         public decimal SaldoPendiente { get; init; }
         public bool Seleccionado { get; set; }
         public decimal MontoCobrar { get; set; }
@@ -851,6 +853,7 @@
                     NumRecibo = f.NumRecibo,
                     FechaEmision = f.FechaEmision,
                     Estado = f.Estado,
+                    EstadoId = f.EstadoId,
                     SaldoPendiente = f.SaldoPendiente,
                     MontoCobrar = f.SaldoPendiente
                 })

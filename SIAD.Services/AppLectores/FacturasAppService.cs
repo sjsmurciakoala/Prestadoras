@@ -108,7 +108,12 @@ public sealed class FacturasAppService : IFacturasAppService
                 f.fechaemision                                      AS FechaEmision,
                 f.fechavence                                        AS FechaVence,
                 COALESCE(f.saldototal, 0)                           AS Total,
-                f.estado                                            AS EstadoFactura,
+                CASE f.estado_id
+                    WHEN 2 THEN 'PAGADA'
+                    WHEN 3 THEN 'ANULADA'
+                    WHEN 4 THEN 'ABONO PARCIAL'
+                    ELSE 'PENDIENTE'
+                END                                                 AS EstadoFactura,
                 f.con_medicion                                      AS ConMedicion,
                 f.usuario                                           AS Lector,
                 hm.condicion                                        AS Condicion,
