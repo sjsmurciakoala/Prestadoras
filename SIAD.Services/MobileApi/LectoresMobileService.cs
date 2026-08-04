@@ -193,8 +193,7 @@ public sealed class LectoresMobileService : ILectoresMobileService
                                where btrim(f.clientecodigo) = btrim(rc.maestro_cliente_clave)
                                  and f.tipofacturacion = 'S'
                                  and f.tipofactura = 'F'
-                                 and coalesce(f.estado_id, 1) <> 3
-                                 and coalesce(f.estado, 'A') <> 'N'
+                                 and coalesce(f.estado_id, 1) <> 3  -- Anulada (EstadoDocumentoComercial)
                                  and btrim(f.ano) ~ '^[0-9]+$' and btrim(f.ano)::int = pa.ano
                                  and btrim(f.mes) ~ '^[0-9]+$' and btrim(f.mes)::int = pa.mes
                            )

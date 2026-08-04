@@ -55,7 +55,9 @@ public class AbonoService : IAbonoService
         // indexables; lo difuso (nombre/clave parcial) se resuelve primero
         // contra `cliente_maestro` (26K filas) y de ahí a sus facturas.
         var baseQuery = _context.facturas.AsNoTracking()
-            .Where(f => f.company_id == companyId && (f.estado == "A" || f.estado == "B" || f.estado == "C"));
+            .Where(f => f.company_id == companyId && (f.estado_id == EstadoDocumentoComercial.Activa
+                || f.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada
+                || f.estado_id == EstadoDocumentoComercial.Cobrada));
 
         IQueryable<Core.Entities.factura> filtrada;
         if (isNumero)
@@ -91,7 +93,8 @@ public class AbonoService : IAbonoService
                         ClienteNombre = c != null ? c.maestro_cliente_nombre : string.Empty,
                         FechaEmision = f.fechaemision,
                         SaldoTotal = f.saldototal ?? 0m,
-                        f.estado
+                        f.estado,      // pass-through al DTO (fase 2: DTO numérico)
+                        f.estado_id    // fuente de la lógica
                     };
 
         var items = await query.Take(40).ToListAsync(ct);
@@ -110,8 +113,8 @@ public class AbonoService : IAbonoService
         {
             var saldoPendiente = saldos.GetValueOrDefault(x.FacturaId);
 
-            // Mostrar si tiene saldo pendiente o si es estado 'B' / 'A'
-            if (saldoPendiente > 0 || x.estado == "A" || x.estado == "B")
+            // Mostrar si tiene saldo pendiente o si está activa / parcialmente abonada
+            if (saldoPendiente > 0 || x.estado_id == EstadoDocumentoComercial.Activa || x.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada)
             {
                 response.Add(new FacturaConSaldoDto
                 {
@@ -147,7 +150,7 @@ public class AbonoService : IAbonoService
                     from c in clientes.DefaultIfEmpty()
                     where f.company_id == companyId
                           && f.clientecodigo == clave
-                          && (f.estado == "A" || f.estado == "B")
+                          && (f.estado_id == EstadoDocumentoComercial.Activa || f.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada)
                     orderby f.fechaemision descending, f.numrecibo descending
                     select new
                     {
@@ -705,11 +708,11 @@ public class AbonoService : IAbonoService
                 FechaPago = t.fecha_docu?.ToString("dd/MM/yyyy") ?? string.Empty,
                 MontoAbonado = t.creditos ?? 0m,
                 Cajero = t.usuario ?? string.Empty,
-                EstadoFactura = factura?.estado switch
+                EstadoFactura = factura?.estado_id switch
                 {
-                    "A" => "Abierta",
-                    "B" => "Parcial",
-                    "C" => "Cobrada",
+                    EstadoDocumentoComercial.Activa => "Abierta",
+                    EstadoDocumentoComercial.ParcialmenteAbonada => "Parcial",
+                    EstadoDocumentoComercial.Cobrada => "Cobrada",
                     _ => "—"
                 },
                 SaldoRestante = saldoRestante
@@ -733,7 +736,7 @@ public class AbonoService : IAbonoService
         if (factura is null)
             return ResponseModelDto.Fail("No se encontró la factura indicada.");
 
-        if (factura.estado == "C")
+        if (factura.estado_id == EstadoDocumentoComercial.Cobrada)
             return ResponseModelDto.Fail("La factura ya está completamente pagada.");
 
         // Pruebas operativas jul-2026: a un cliente bloqueado por cobranza no
@@ -896,7 +899,7 @@ public class AbonoService : IAbonoService
         var factura = await _context.facturas
             .AsNoTracking()
             .Where(f => f.company_id == companyId && (f.numfactura == numFactura || f.numrecibo.ToString() == numFactura))
-            .Select(f => new { f.id, f.numrecibo, f.numfactura, f.estado })
+            .Select(f => new { f.id, f.numrecibo, f.numfactura, f.estado_id })
             .FirstOrDefaultAsync(ct);
 
         if (factura is null)
@@ -921,10 +924,10 @@ public class AbonoService : IAbonoService
             .Where(d => d.factura_id == factura.id)
             .SumAsync(d => d.montovalor_saldo ?? d.montovalor ?? 0m, ct);
 
-        var estadoFacturaStr = factura.estado switch
+        var estadoFacturaStr = factura.estado_id switch
         {
-            "C" => "Cobrada",
-            "B" => "Parcial",
+            EstadoDocumentoComercial.Cobrada => "Cobrada",
+            EstadoDocumentoComercial.ParcialmenteAbonada => "Parcial",
             _ => "Abierta"
         };
 

@@ -427,7 +427,7 @@ public class FacturacionMiscelaneosService : IFacturacionMiscelaneosService
     {
         var query = _context.facturas
             .AsNoTracking()
-            .Where(f => f.tipofactura == "R" && f.estado == "A");
+            .Where(f => f.tipofactura == "R" && f.estado_id == EstadoDocumentoComercial.Activa);
 
         if (filtro.FechaDesde.HasValue)
             query = query.Where(f => f.fechaemision >= filtro.FechaDesde.Value);

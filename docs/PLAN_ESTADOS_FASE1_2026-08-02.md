@@ -132,6 +132,28 @@ reversar`, anulación). El trigger sigue derivando el id de estas escrituras.
   dirección del trigger o escribir solo `estado_id`; al final `DROP COLUMN estado`
   con la vista de compatibilidad que haga falta.
 
+## Ejecución (2026-08-02) — bitácora y hallazgos
+
+- Paso 0 ejecutado: `Database/2026-08-02_saneo_factura_estado_id.sql` aplicado a
+  copia09 y test. Las 11 filas descuadradas tenían `updated_at` NULL → causa
+  confirmada: **carga masiva con triggers deshabilitados** (regla nueva para el
+  runbook de migración: toda carga con triggers off recalcula `estado_id` al
+  final). Auditoría post-código: **0 descuadres**.
+- El barrido final encontró **5 lecturas más** que el inventario inicial (los
+  greps no cazaban `switch` sobre la letra ni proyecciones): `AbonoService`
+  switch de historial ×2 (líneas ~710 y ~926), `ClientesServices` movimientos
+  (`vigente = estado != "N"` + proyección), `CobranzaService` SQL cartera
+  (`COALESCE(estado,'A') <> 'N'` → `estado_id <> 3`), `LectoresMobileService`
+  (tenía doble check letra+id; quedó solo id). Total migrado: **16 sitios**.
+- **Pass-throughs detectados y DIFERIDOS a fase 2** (la letra viaja en el DTO y
+  el cliente la traduce a texto; cambiarlos exige DTO+servidor+cliente):
+  `FacturaConSaldoDto.Estado` (AbonoService popup), `CobroAplicacionResultadoDto
+  .EstadoFactura` (CobroService), `FacturacionMiscelaneosService` consulta,
+  `NotasCreditoDebitoService.FacturaOrigenLookupDto.Estado`, `FacturasAppService`
+  vista app. En el sitio del popup la proyección conserva AMBOS campos
+  (`estado` para el DTO, `estado_id` para la lógica) con comentario.
+- Build 0 errores · suite **407 verdes / 411** con build fresco.
+
 ## Criterio de éxito y rollback
 
 - Éxito: 0 descuadres, build limpio, suite verde, cero cambio visible.
