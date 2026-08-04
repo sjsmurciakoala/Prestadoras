@@ -894,6 +894,60 @@ ORDER BY orden, servicio";
         return new PagedResult<ClienteMovimientoDto>(items, totalCount);
     }
 
+    /// <summary>
+    /// Estado de cuenta imprimible (pruebas operativas ago-2026): mismos
+    /// movimientos y saldo corrido de la pestaña Movimientos, en orden
+    /// cronológico, con membrete de la empresa.
+    /// </summary>
+    public async Task<EstadoCuentaImpresionDto?> ObtenerEstadoCuentaImpresionAsync(
+        int clienteId, DateOnly? desde, DateOnly? hasta, CancellationToken ct = default)
+    {
+        var companyId = _currentCompanyService.GetCompanyId();
+
+        var cliente = await _context.cliente_maestros
+            .AsNoTracking()
+            .Where(c => c.maestro_cliente_id == clienteId)
+            .Select(c => new
+            {
+                c.maestro_cliente_clave,
+                c.maestro_cliente_nombre,
+                Direccion = c.cliente_detalles
+                    .OrderByDescending(d => d.fechamodificacion ?? d.fechacreacion)
+                    .Select(d => d.detalle_cliente_direccion)
+                    .FirstOrDefault()
+            })
+            .FirstOrDefaultAsync(ct);
+
+        if (cliente is null)
+        {
+            return null;
+        }
+
+        var empresa = await _context.cfg_companies
+            .AsNoTracking()
+            .Where(c => c.company_id == companyId)
+            .Select(c => new { c.legal_name, c.commercial_name, c.tax_id, c.address })
+            .FirstOrDefaultAsync(ct);
+
+        // Misma fuente que la pestaña Movimientos (orden cronológico asc).
+        var pagina = await GetMovimientosPagedAsync(
+            clienteId, skip: 0, take: int.MaxValue, sortField: null, sortDesc: false, desde, hasta, ct);
+
+        return new EstadoCuentaImpresionDto
+        {
+            ClienteClave = cliente.maestro_cliente_clave,
+            ClienteNombre = cliente.maestro_cliente_nombre ?? string.Empty,
+            ClienteDireccion = cliente.Direccion,
+            EmpresaNombre = empresa?.legal_name ?? empresa?.commercial_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            Desde = desde,
+            Hasta = hasta,
+            SaldoFinal = pagina.Items.Count > 0 ? pagina.Items[^1].SaldoInline : 0m,
+            Movimientos = pagina.Items
+        };
+    }
+
     public async Task<ClienteHistoricoConsumoResponseDto> GetHistoricoConsumoAsync(int clienteId, DateTime desde, DateTime hasta, CancellationToken ct = default)
     {
         var clave = await _context.cliente_maestros
