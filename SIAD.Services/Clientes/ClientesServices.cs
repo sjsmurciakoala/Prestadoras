@@ -1806,10 +1806,35 @@ ORDER BY orden, servicio";
                 .ToDictionaryAsync(x => x.FacturaId, x => x.Total, ct);
         }
 
+        // Pruebas operativas ago-2026: las NC/ND emitidas no aparecían en el
+        // estado de cuenta — solo el efecto de sus cobros. La ND es un CARGO
+        // (sube la deuda) y la NC un CRÉDITO (la baja); las anuladas se listan
+        // sin mover el saldo, igual que las facturas anuladas. El cobro de una
+        // ND ya sale como PAGO (adm_pago), así que no hay doble conteo.
+        var clienteIdNotas = await _context.cliente_maestros
+            .AsNoTracking()
+            .Where(c => c.maestro_cliente_clave == clave)
+            .Select(c => (long?)c.maestro_cliente_id)
+            .FirstOrDefaultAsync(ct);
+
+        var clienteIdFiltro = clienteIdNotas ?? -1;
+
+        var notasDebito = await _context.adm_nota_debitos
+            .AsNoTracking()
+            .Where(n => n.company_id == companyId && n.cliente_id == clienteIdFiltro)
+            .Select(n => new { n.nota_debito_id, n.numero_documento, n.fecha_emision, n.total_nota, n.estado_id })
+            .ToListAsync(ct);
+
+        var notasCredito = await _context.adm_nota_creditos
+            .AsNoTracking()
+            .Where(n => n.company_id == companyId && n.cliente_id == clienteIdFiltro)
+            .Select(n => new { n.nota_credito_id, n.numero_documento, n.fecha_emision, n.total_nota, n.estado_id })
+            .ToListAsync(ct);
+
         // Fila común: (ordenCronologico, ide sintético, fecha, tipo, descripcion,
         // monto con signo de la columna Monto, vigente, débitos-créditos, recibo).
         var filas = new List<(long Orden, int Ide, DateOnly? Fecha, string Tipo, string? Descripcion, decimal Monto, bool Vigente, decimal Delta, decimal? Recibo)>(
-            raw.Count + pagosNuevos.Count + facturasNuevas.Count);
+            raw.Count + pagosNuevos.Count + facturasNuevas.Count + notasDebito.Count + notasCredito.Count);
 
         foreach (var t in raw)
         {
@@ -1841,6 +1866,36 @@ ORDER BY orden, servicio";
                 vigente,
                 total,
                 f.numrecibo));
+        }
+
+        foreach (var nd in notasDebito)
+        {
+            var vigente = nd.estado_id != EstadoDocumentoComercial.Anulada;
+            filas.Add((
+                4_000_000_000L + nd.nota_debito_id,
+                -(int)(600_000_000 + nd.nota_debito_id),
+                DateOnly.FromDateTime(nd.fecha_emision),
+                "NOTA_DEBITO",
+                $"Nota de débito {nd.numero_documento}" + (vigente ? string.Empty : " (anulada)"),
+                -nd.total_nota,
+                vigente,
+                nd.total_nota,
+                null));
+        }
+
+        foreach (var nc in notasCredito)
+        {
+            var vigente = nc.estado_id != EstadoDocumentoComercial.Anulada;
+            filas.Add((
+                5_000_000_000L + nc.nota_credito_id,
+                -(int)(700_000_000 + nc.nota_credito_id),
+                DateOnly.FromDateTime(nc.fecha_emision),
+                "NOTA_CREDITO",
+                $"Nota de crédito {nc.numero_documento}" + (vigente ? string.Empty : " (anulada)"),
+                nc.total_nota,
+                vigente,
+                -nc.total_nota,
+                null));
         }
 
         foreach (var p in pagosNuevos)
@@ -1971,8 +2026,8 @@ ORDER BY orden, servicio";
             "111" => "CUOTA CONVENIO",
             "201" or "202" => "PAGO",
             "203" => "CONVENIO",
-            "205" => "NOTA CRÉDITO",
-            "206" => "NOTA DÉBITO",
+            "205" or "NOTA_CREDITO" => "NOTA CRÉDITO",
+            "206" or "NOTA_DEBITO" => "NOTA DÉBITO",
             _ when t.StartsWith("PLAN", StringComparison.OrdinalIgnoreCase) => "PLAN DE PAGO",
             _ when t.StartsWith("SALDO", StringComparison.OrdinalIgnoreCase) => "SALDO ANTERIOR",
             _ when t.Contains("PAGO", StringComparison.OrdinalIgnoreCase) => "PAGO",
