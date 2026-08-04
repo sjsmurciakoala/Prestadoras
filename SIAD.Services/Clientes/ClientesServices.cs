@@ -300,9 +300,10 @@ public class ClientesService : IClientesService
 
         await _context.SaveChangesAsync(ct);
 
+        ReclasificacionCxcClienteSql.Resultado? reclasificacion = null;
         if (cambioCategoria)
         {
-            await ReclasificacionCxcClienteSql.ReclasificarPorCambioCategoriaAsync(
+            reclasificacion = await ReclasificacionCxcClienteSql.ReclasificarPorCambioCategoriaAsync(
                 _context.Database.GetDbConnection(),
                 companyId,
                 id,
@@ -323,6 +324,20 @@ public class ClientesService : IClientesService
         if (actualizado is null)
         {
             throw new KeyNotFoundException("Cliente no encontrado.");
+        }
+
+        // El aviso al usuario solo aplica cuando la reclasificación movió saldo.
+        if (reclasificacion is { MontoReclasificado: > 0 })
+        {
+            return actualizado with
+            {
+                Reclasificacion = new ClienteReclasificacionInfoDto
+                {
+                    MontoReclasificado = reclasificacion.MontoReclasificado,
+                    PolizaId = reclasificacion.PolizaId,
+                    FacturasActualizadas = reclasificacion.FacturasActualizadas
+                }
+            };
         }
 
         return actualizado;

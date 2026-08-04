@@ -104,7 +104,24 @@
         try
         {
             var dto = MapearEdicionAUpdate(_modelo);
-            _ = await ClientesClient.ActualizarAsync(Id, dto);
+            var actualizado = await ClientesClient.ActualizarAsync(Id, dto);
+
+            // Cambio de categoría con saldo pendiente: la reclasificación de
+            // CxC es automática — avisar al usuario en vez de hacerla en silencio.
+            if (actualizado?.Reclasificacion is { MontoReclasificado: > 0 } recla)
+            {
+                ToastService.ShowToast(new ToastOptions
+                {
+                    Title = "Cambio de categoría",
+                    Text = $"Se reclasificó L. {recla.MontoReclasificado:N2} de CxC a las cuentas de la nueva categoría"
+                        + (recla.PolizaId is not null ? $" (póliza N° {recla.PolizaId})" : " (partida en cola por período)")
+                        + $". Facturas actualizadas: {recla.FacturasActualizadas}.",
+                    RenderStyle = ToastRenderStyle.Info,
+                    ProviderName = "EditClienteToast"
+                });
+                await Task.Delay(2500);
+            }
+
             Navigation.NavigateTo($"/clientes/{Id}");
         }
         catch (Exception ex)

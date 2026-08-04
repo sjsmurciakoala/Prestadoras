@@ -60,4 +60,19 @@ public sealed record ClienteDetailDto
     public bool? NoCortable { get; init; }
 
     public bool Activo { get; init; }
+
+    /// <summary>
+    /// Solo viene poblado en la respuesta de ACTUALIZAR cuando el cambio de
+    /// categoría reclasificó CxC (partida por config POR_SERVICIO_CATEGORIA).
+    /// Null en consultas normales.
+    /// </summary>
+    public ClienteReclasificacionInfoDto? Reclasificacion { get; init; }
+}
+
+/// <summary>Resultado visible de la reclasificación contable por cambio de categoría.</summary>
+public sealed record ClienteReclasificacionInfoDto
+{
+    public decimal MontoReclasificado { get; init; }
+    public long? PolizaId { get; init; }
+    public int FacturasActualizadas { get; init; }
 }
