@@ -58,8 +58,10 @@ public class CorteMasivoService : ICorteMasivoService
         };
         // Todo el lote (header + detalles + órdenes de trabajo) se persiste de forma
         // atómica: si algo falla, el `await using` revierte la transacción y no queda
-        // un corte a medias.
-        await using var tx = await _context.Database.BeginTransactionAsync(ct);
+        // un corte a medias. Transacción propia solo si no hay una ambiente
+        // (tests con BEGIN...ROLLBACK la reutilizan).
+        var ownsTx = _context.Database.CurrentTransaction is null;
+        await using var tx = ownsTx ? await _context.Database.BeginTransactionAsync(ct) : null;
 
         _context.cln_corte_masivo_hdrs.Add(hdr);
         await _context.SaveChangesAsync(ct);
@@ -123,7 +125,8 @@ public class CorteMasivoService : ICorteMasivoService
 
         await _context.SaveChangesAsync(ct);
 
-        await tx.CommitAsync(ct);
+        if (tx is not null)
+            await tx.CommitAsync(ct);
 
         return ToHdrDto(hdr);
     }
