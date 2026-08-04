@@ -163,6 +163,25 @@ public class CobranzaController : ControllerBase
         public string? Motivo { get; set; }
     }
 
+    /// <summary>PDF del convenio de pago (pruebas operativas ago-2026).</summary>
+    [HttpGet("planes/{planId:int}/pdf")]
+    public async Task<IActionResult> ConvenioPdf(int planId, CancellationToken ct)
+    {
+        var convenio = await _service.ObtenerConvenioImpresionAsync(planId, ct);
+        if (convenio is null)
+            return NotFound(new { mensaje = "No se encontró el convenio." });
+
+        using var report = new Rpt_Dev_Convenio(convenio);
+        report.RequestParameters = false;
+
+        using var stream = new System.IO.MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition =
+            $"inline; filename=Convenio-{convenio.Correlativo ?? convenio.PlanId.ToString()}.pdf";
+        return File(stream.ToArray(), "application/pdf");
+    }
+
     [HttpGet("planes/{correlativo}")]
 
     public async Task<IActionResult> ObtenerPlan(string correlativo, CancellationToken ct)

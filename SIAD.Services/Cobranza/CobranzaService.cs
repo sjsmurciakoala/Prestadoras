@@ -585,6 +585,89 @@ public class CobranzaService : ICobranzaService
         return planes;
     }
 
+    /// <summary>
+    /// Datos del convenio para su documento imprimible (pruebas operativas
+    /// ago-2026: no existía PDF del convenio). Null si el plan no existe.
+    /// </summary>
+    public async Task<ConvenioImpresionDto?> ObtenerConvenioImpresionAsync(int planId, CancellationToken ct = default)
+    {
+        var companyId = _currentCompanyService.GetCompanyId();
+
+        var hdr = await _context.cln_plan_pago_hdrs
+            .AsNoTracking()
+            .FirstOrDefaultAsync(h => h.id == planId && h.company_id == companyId, ct);
+        if (hdr is null)
+        {
+            return null;
+        }
+
+        var cliente = await _context.cliente_maestros
+            .AsNoTracking()
+            .Where(c => c.maestro_cliente_id == hdr.clienteid)
+            .Select(c => new { c.maestro_cliente_clave, c.maestro_cliente_nombre })
+            .FirstOrDefaultAsync(ct);
+
+        var empresa = await _context.cfg_companies
+            .AsNoTracking()
+            .Where(c => c.company_id == companyId)
+            .Select(c => new { c.legal_name, c.commercial_name, c.tax_id, c.address })
+            .FirstOrDefaultAsync(ct);
+
+        var cuotasRaw = await _context.cln_plan_pago_dtls
+            .AsNoTracking()
+            .Where(d => d.idhdr == hdr.id)
+            .OrderBy(d => d.mes).ThenBy(d => d.id)
+            .Select(d => new { d.mes, d.fechacuota, d.valorcuota, d.saldo_cuota, d.estado_id })
+            .ToListAsync(ct);
+
+        var cuotas = cuotasRaw
+            .Select((d, i) => new ConvenioCuotaImpresionDto
+            {
+                Numero = d.mes is > 0 ? d.mes.Value : i + 1,
+                FechaVencimiento = d.fechacuota,
+                Monto = d.valorcuota ?? 0m,
+                Saldo = d.saldo_cuota,
+                EstadoTexto = d.estado_id switch
+                {
+                    EstadoDocumentoComercial.Cobrada => "PAGADA",
+                    EstadoDocumentoComercial.Anulada => "ANULADA",
+                    EstadoDocumentoComercial.ParcialmenteAbonada => "ABONO PARCIAL",
+                    _ => "PENDIENTE"
+                }
+            })
+            .ToList();
+
+        return new ConvenioImpresionDto
+        {
+            PlanId = hdr.id,
+            Correlativo = hdr.correlativo,
+            EstadoTexto = hdr.estado_id switch
+            {
+                EstadoPlan.Activo => "ACTIVO",
+                EstadoPlan.Completado => "COMPLETADO",
+                EstadoPlan.Anulado => "ANULADO",
+                _ => "PENDIENTE"
+            },
+            FechaCreacion = hdr.fecha ?? hdr.fechacreacion,
+            FechaPrimerPago = hdr.fechappago,
+            ClienteClave = cliente?.maestro_cliente_clave ?? hdr.clienteid.ToString() ?? string.Empty,
+            ClienteNombre = cliente?.maestro_cliente_nombre ?? string.Empty,
+            ClienteDireccion = hdr.direccion,
+            Representante = hdr.representante,
+            DocRepresentante = hdr.docrepresentante,
+            MontoTotal = hdr.monto ?? 0m,
+            Prima = hdr.vprima ?? 0m,
+            MontoFinanciado = hdr.montofinanc ?? 0m,
+            Meses = hdr.meses ?? cuotas.Count,
+            Comentario = hdr.comentario,
+            EmpresaNombre = empresa?.legal_name ?? empresa?.commercial_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            Cuotas = cuotas,
+            SaldoPendiente = cuotas.Where(c => c.EstadoTexto is "PENDIENTE" or "ABONO PARCIAL").Sum(c => c.Saldo)
+        };
+    }
+
     public async Task<CobranzaPlanDetalleDto?> ObtenerPlanAsync(string correlativo, CancellationToken ct = default)
     {
         if (string.IsNullOrWhiteSpace(correlativo))

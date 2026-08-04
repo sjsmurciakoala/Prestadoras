@@ -263,6 +263,17 @@
                                                       ButtonType="ButtonType.Normal"
                                                       SizeMode="SizeMode.Small"
                                                       Click="@(async () => await MostrarDetallePlan(plan))" />
+                                            @* Pruebas operativas ago-2026: PDF del convenio. *@
+                                            @if (plan.EncabezadoId is not null)
+                                            {
+                                                <DxButton Text="Imprimir"
+                                                          IconCssClass="bi bi-printer"
+                                                          SizeMode="SizeMode.Small"
+                                                          RenderStyle="ButtonRenderStyle.Secondary"
+                                                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                          CssClass="ms-1"
+                                                          Click="@(async () => await JS.InvokeVoidAsync("open", CobranzaClient.ConvenioPdfUrl(plan.EncabezadoId.Value), "_blank"))" />
+                                            }
                                             @* Pruebas operativas jul-2026: anulación de convenio. *@
                                             @if (plan.EstadoId == 1 && plan.EncabezadoId is not null)
                                             {
