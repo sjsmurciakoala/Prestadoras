@@ -103,6 +103,7 @@ public class ClientesService : IClientesService
             contador = Limpiar(dto.Contador),
             letracodigo = Limpiar(dto.LetraCodigo),
             bloqueado_cobranza = dto.BloqueadoCobranza,
+            maestro_cliente_estudio_socioeconomico = dto.EstudioSocioeconomico,
             abogado = dto.AbogadoId
         };
 
@@ -252,6 +253,7 @@ public class ClientesService : IClientesService
         maestro.contador = Limpiar(dto.Contador);
         maestro.letracodigo = Limpiar(dto.LetraCodigo);
         maestro.bloqueado_cobranza = dto.BloqueadoCobranza;
+        maestro.maestro_cliente_estudio_socioeconomico = dto.EstudioSocioeconomico;
         maestro.abogado = dto.AbogadoId;
 
         var detalle = maestro.cliente_detalles
