@@ -5,6 +5,12 @@ del nuevo sistema" (incluye pruebas del 16-07-2026) entregadas el 27-07-2026.
 Triage contra el estado real del código a esa fecha. Se trabaja por fases; lo
 marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 
+> **Verificación final 2026-08-04**: cada ✅ de este documento fue re-verificado
+> contra la PANTALLA REAL y los datos (no solo contra el código) tras las
+> pruebas en vivo del usuario. Criterio: "resuelto" = se ve y funciona donde el
+> usuario lo busca. Los hallazgos nuevos de esas pruebas están al final del
+> documento.
+
 ## ✅ Resuelto (verificar en la siguiente prueba operativa)
 
 | Punto | Resolución |
@@ -80,20 +86,26 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 - ~~RTN no obligatorio al crear~~ ✅ verificado (lote 1).
 - ~~Error técnico al guardar/actualizar clientes~~ ✅ causa raíz DNI
   obligatorio vs 6,300 migrados sin identidad (lote 1).
-- ~~Maestro: abogado asignado; estudio socioeconómico~~ ✅ ya existían; se
-  muestran en la ficha (Abogado, Estudio socioeconómico, No cortable).
+- Maestro: **abogado asignado** ✅ (ficha + editable en el formulario) y **No
+  cortable** ✅ editable con confirmación (falta mostrarlo en la ficha).
+  **Estudio socioeconómico: PENDIENTE** — el dato existe en la BD pero no se
+  muestra ni se edita en las pantallas reales (quedó en un componente huérfano;
+  corrección corta programada).
 
 ### Facturación / tarifario
 - ~~Renombrar "Posteo de caja"~~ ✅ obsoleto: la pantalla ya no existe, el
   flujo vive en la vista única Caja.
 - ~~Cambio de categoría (Doméstico→Comercial) debe generar partida contable~~
-  ✅ RESUELTO COMPLETO (2026-08-04): funciona en LOS DOS flujos —
-  `/tarifario/cliente-servicio-v3` (categoría regulatoria: sincroniza el
-  equivalente contable vía `adm_categoria_regulatoria.categoria_servicio_id` y
-  reclasifica) y Editar Cliente. La partida es DEBE CxC nueva / HABER CxC
-  vieja del saldo pendiente, bitácora en `cln_cliente_recategorizacion`, y el
-  usuario VE el aviso con monto y N° de póliza al guardar. Solo aplica con
-  integración contable en modo POR_SERVICIO_CATEGORIA.
+  ✅ RESUELTO Y **VERIFICADO EN VIVO** (2026-08-04): el usuario cambió la
+  categoría del cliente 090103219 en `/tarifario/cliente-servicio-v3` y se
+  generaron y postearon las pólizas 36378 (Dom→Com) y 36379 (Com→Dom, reversa
+  natural), L. 149.45 c/u, con bitácora en `cln_cliente_recategorizacion` y
+  snapshot de factura actualizado. Funciona en LOS DOS flujos (tarifario V3
+  vía equivalencia `adm_categoria_regulatoria.categoria_servicio_id`, y
+  Editar Cliente). El aviso al guardar es un **alert fijo** con monto y N° de
+  póliza (PR #66 — el toast original moría con el re-render del panel). Solo
+  aplica con integración contable en modo POR_SERVICIO_CATEGORIA. Las pólizas
+  se consultan en `/contabilidad/partidas`.
 - Condición de lectura nueva no genera efecto (gap conocido codigo→tipo, L8).
 - Dudas de tasas (fondo ambiental / ERSAPS) al crear cliente y sección "No aplica" — sesión de aclaración de configuración tarifaria.
 
@@ -108,3 +120,24 @@ marcado ✅ ya quedó resuelto por la unificación de cobranza (PRs #40–#42).
 - ~~Hora de emisión estática/incorrecta~~ ✅ segunda tanda (era UTC+6).
 - ~~Foto y coordenadas GPS no visibles en el portal~~ ✅ segunda tanda (visor
   en el detalle de la orden).
+
+## Hallazgos de las pruebas en vivo de agosto (2026-08-04)
+
+Cosas que las pruebas del usuario destaparon y no estaban en las hojas
+originales. Los ✅ ya están mergeados a main; los ⏳ son la cola de trabajo.
+
+| Estado | Hallazgo | Detalle |
+|---|---|---|
+| ✅ | NC/ND no aparecían en el estado de cuenta | PR #65: la ND entra como CARGO y la NC como CRÉDITO en la pestaña Movimientos, con número de documento; anuladas se listan sin mover el saldo |
+| ✅ | El aviso de la reclasificación no se veía | PR #66: alert fijo dismissible en vez de toast (el re-render lo mataba) |
+| ✅ | Acueducto/partida "no funcionaban" | Causas raíz: campo en componente huérfano (PR #63), flujo real en tarifario no en Editar Cliente (PR #64), período contable de agosto sin abrir en la BD local (las partidas quedaban encoladas), y base caída por el disco USB durante las pruebas |
+| ⏳ | **ND contra facturas migradas truena** | Las 3.9M facturas de SIMAFI no tienen número fiscal y `adm_nota_debito.factura_origen_numero` es NOT NULL — el SP debe usar el número de recibo como respaldo |
+| ⏳ | **Estudio socioeconómico invisible** | Mostrarlo en la ficha real y hacerlo editable (formulario + DTOs); mostrar también "No cortable" en la ficha |
+| ⏳ | **PDF del convenio de pago** | No existe; imprimir desde la pestaña de planes (membrete, cuotas, firmas) |
+| ⏳ | **PDF del estado de cuenta** | No existe; hoy solo en pantalla (pestaña Movimientos) |
+| ⚠️ | Cortes masivos sin tests automáticos | El flujo completo existe (lote → órdenes reales → impresión → cancelación al pagar) pero nadie lo ha validado punta a punta; probar con lote chico |
+
+Recordatorios operativos de la BD local (`siad_v3_copia09`): abrir el período
+contable de cada mes nuevo (sin él las partidas se encolan) — igual en
+`siad_v3_test` o los tests de Presupuesto fallan; el disco USB E: sigue siendo
+frágil (si Postgres "no levanta", suele ser eso + ~4 min de recovery).
