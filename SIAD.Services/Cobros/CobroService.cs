@@ -220,11 +220,11 @@ public class CobroService : ICobroService
             var vista = await _context.facturas
                 .AsNoTracking()
                 .Where(f => f.company_id == companyId && f.id == apl.FacturaId!.Value)
-                .Select(f => new { f.id, f.estado, f.numfactura, f.numrecibo, f.saldototal, f.categoria_servicio_id, f.con_medicion })
+                .Select(f => new { f.id, f.estado_id, f.numfactura, f.numrecibo, f.saldototal, f.categoria_servicio_id, f.con_medicion })
                 .FirstOrDefaultAsync(ct);
             if (vista is null)
                 return ResponseModelDto.Fail($"No se encontró la factura {apl.FacturaId}.");
-            if (vista.estado == "N")
+            if (vista.estado_id == EstadoDocumentoComercial.Anulada)
                 return ResponseModelDto.Fail($"La factura {vista.numfactura ?? vista.numrecibo.ToString()} está anulada.");
 
             if (numFacturaPrincipal is null)

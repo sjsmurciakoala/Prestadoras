@@ -67,7 +67,7 @@ internal static class ReclasificacionCxcClienteSql
                 FROM public.factura f
                 WHERE f.company_id = @CompanyId
                   AND f.clientecodigo = @Clave
-                  AND f.estado IN ('A', 'B')
+                  AND f.estado_id IN (1, 4)  -- Activa / ParcialmenteAbonada (EstadoDocumentoComercial)
                 FOR UPDATE
             ),
             lineas AS (

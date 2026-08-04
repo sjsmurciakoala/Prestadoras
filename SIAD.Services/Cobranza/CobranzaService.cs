@@ -54,7 +54,7 @@ public class CobranzaService : ICobranzaService
             join d in _context.factura_detalles.AsNoTracking() on f.id equals d.factura_id
             where f.company_id == companyId
                   && f.clientecodigo == cliente.Clave
-                  && (f.estado == "A" || f.estado == "B")
+                  && (f.estado_id == EstadoDocumentoComercial.Activa || f.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada)
                   && (d.montovalor_saldo ?? d.montovalor ?? 0m) != 0m
             orderby f.fechaemision descending, f.numrecibo descending
             select new
@@ -253,7 +253,7 @@ public class CobranzaService : ICobranzaService
                 join d in _context.factura_detalles on f.id equals d.factura_id
                 where f.company_id == companyId
                       && f.clientecodigo == cliente.Clave
-                      && (f.estado == "A" || f.estado == "B")
+                      && (f.estado_id == EstadoDocumentoComercial.Activa || f.estado_id == EstadoDocumentoComercial.ParcialmenteAbonada)
                       && (d.montovalor_saldo ?? d.montovalor ?? 0m) > 0m
                 orderby f.fechaemision, f.numrecibo, d.id
                 select new { Factura = f, Detalle = d, Saldo = d.montovalor_saldo ?? d.montovalor ?? 0m })
@@ -714,7 +714,7 @@ public class CobranzaService : ICobranzaService
             .Where(f =>
                 f.clientecodigo == clienteClave &&
                 f.numrecibo > 0 &&
-                f.estado == "A" &&
+                f.estado_id == EstadoDocumentoComercial.Activa &&
                 (f.saldototal ?? 0) > 0)
             .OrderByDescending(f => f.fechaemision)
             .ThenByDescending(f => f.numrecibo)
@@ -1380,7 +1380,7 @@ public class CobranzaService : ICobranzaService
             WHERE f.company_id = @CompanyId
               AND f.fechaemision IS NOT NULL
               AND f.fechaemision <= pc.corte
-              AND COALESCE(f.estado, 'A') <> 'N'
+              AND f.estado_id <> 3  -- Anulada (EstadoDocumentoComercial)
               AND COALESCE(f.saldototal, 0) <> 0
             """);
 

@@ -6,6 +6,7 @@ using Dapper;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Npgsql;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Clientes;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.Entities;
@@ -662,7 +663,7 @@ WITH lineas AS (
     JOIN public.factura_detalle d ON d.factura_id = f.id
     WHERE f.company_id    = @CompanyId
       AND f.clientecodigo = @Clave
-      AND f.estado IN ('A','B')
+      AND f.estado_id IN (1, 4)  -- Activa / ParcialmenteAbonada (EstadoDocumentoComercial)
     GROUP BY d.tiposervicio
 ),
 cat AS (
@@ -1771,7 +1772,7 @@ ORDER BY orden, servicio";
         var facturasCliente = await _context.facturas
             .AsNoTracking()
             .Where(f => f.company_id == companyId && f.clientecodigo == clave)
-            .Select(f => new { f.id, f.numrecibo, f.numfactura, f.fechaemision, f.estado })
+            .Select(f => new { f.id, f.numrecibo, f.numfactura, f.fechaemision, f.estado_id })
             .ToListAsync(ct);
 
         var facturasNuevas = facturasCliente
@@ -1813,7 +1814,7 @@ ORDER BY orden, servicio";
         foreach (var f in facturasNuevas)
         {
             var total = totalPorFactura.GetValueOrDefault(f.id);
-            var vigente = !string.Equals(f.estado, "N", StringComparison.Ordinal);
+            var vigente = f.estado_id != EstadoDocumentoComercial.Anulada;
             var etiqueta = string.IsNullOrWhiteSpace(f.numfactura) ? f.numrecibo.ToString() : f.numfactura;
             filas.Add((
                 2_000_000_000L + f.id,
