@@ -1989,6 +1989,7 @@ ORDER BY orden, servicio";
 
             result.Add(new MovimientoCalculado(
                 fila.Ide,
+                fila.Orden,
                 fila.Fecha,
                 fila.Tipo,
                 fila.Descripcion,
@@ -2101,28 +2102,33 @@ ORDER BY orden, servicio";
         return sortField switch
         {
             "Fecha" => sortDesc
-                ? movimientos.OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Ide)
-                : movimientos.OrderBy(m => m.Fecha).ThenBy(m => m.Ide),
+                ? movimientos.OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Orden)
+                : movimientos.OrderBy(m => m.Fecha).ThenBy(m => m.Orden),
             "Tipo" => sortDesc
-                ? movimientos.OrderByDescending(m => m.Tipo).ThenByDescending(m => m.Ide)
-                : movimientos.OrderBy(m => m.Tipo).ThenBy(m => m.Ide),
+                ? movimientos.OrderByDescending(m => m.Tipo).ThenByDescending(m => m.Orden)
+                : movimientos.OrderBy(m => m.Tipo).ThenBy(m => m.Orden),
             "Descripcion" => sortDesc
-                ? movimientos.OrderByDescending(m => m.Descripcion).ThenByDescending(m => m.Ide)
-                : movimientos.OrderBy(m => m.Descripcion).ThenBy(m => m.Ide),
+                ? movimientos.OrderByDescending(m => m.Descripcion).ThenByDescending(m => m.Orden)
+                : movimientos.OrderBy(m => m.Descripcion).ThenBy(m => m.Orden),
             "Monto" => sortDesc
-                ? movimientos.OrderByDescending(m => m.Monto).ThenByDescending(m => m.Ide)
-                : movimientos.OrderBy(m => m.Monto).ThenBy(m => m.Ide),
+                ? movimientos.OrderByDescending(m => m.Monto).ThenByDescending(m => m.Orden)
+                : movimientos.OrderBy(m => m.Monto).ThenBy(m => m.Orden),
             "Saldo" => sortDesc
-                ? movimientos.OrderByDescending(m => m.SaldoCorrido).ThenByDescending(m => m.Ide)
-                : movimientos.OrderBy(m => m.SaldoCorrido).ThenBy(m => m.Ide),
+                ? movimientos.OrderByDescending(m => m.SaldoCorrido).ThenByDescending(m => m.Orden)
+                : movimientos.OrderBy(m => m.SaldoCorrido).ThenBy(m => m.Orden),
             _ => sortDesc
-                ? movimientos.OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Ide)
-                : movimientos.OrderBy(m => m.Fecha).ThenBy(m => m.Ide)
+                ? movimientos.OrderByDescending(m => m.Fecha).ThenByDescending(m => m.Orden)
+                : movimientos.OrderBy(m => m.Fecha).ThenBy(m => m.Orden)
         };
     }
 
+    // Orden = clave cronológica REAL (la misma con la que se calculó el saldo
+    // corrido). El Ide sintético de pagos/notas es negativo y NO sirve como
+    // desempate del mismo día (bug 2026-08-04: recibos del mismo día salían
+    // invertidos y el saldo "no se leía").
     private sealed record MovimientoCalculado(
         int Ide,
+        long Orden,
         DateOnly? Fecha,
         string Tipo,
         string? Descripcion,
