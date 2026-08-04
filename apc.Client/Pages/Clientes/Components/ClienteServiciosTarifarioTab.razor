@@ -24,6 +24,19 @@
     else
     {
         <div class="p-3">
+            @* El toast moría con el re-render post-guardado (cerrar formulario +
+               recarga del panel) y el usuario nunca veía la reclasificación
+               contable. Aviso FIJO hasta que se cierre o se navegue. *@
+            @if (!string.IsNullOrWhiteSpace(ultimoMensajeExito))
+            {
+                <div class="alert alert-success alert-dismissible d-flex align-items-start mb-3" role="alert">
+                    <i class="bi bi-check-circle-fill me-2 mt-1"></i>
+                    <div>@ultimoMensajeExito</div>
+                    <button type="button" class="btn-close" aria-label="Cerrar"
+                            @onclick="@(() => ultimoMensajeExito = null)"></button>
+                </div>
+            }
+
             <!-- GRILLA DE SERVICIOS ASIGNADOS -->
             <div class="d-flex justify-content-between align-items-center mb-3">
                 <h6 class="mb-0">
@@ -214,6 +227,7 @@
     private bool isLoading = true;
     private bool isSaving;
     private string? error;
+    private string? ultimoMensajeExito;
 
     // Formulario
     private bool mostrarFormulario;
@@ -323,7 +337,9 @@
 
             if (response?.Success == true)
             {
-                ShowToast("Éxito", response.Message, ToastRenderStyle.Success);
+                // Fijo, no toast: el re-render de LoadAsync se lo comía y la
+                // reclasificación contable pasaba desapercibida.
+                ultimoMensajeExito = response.Message;
                 CerrarFormulario();
                 await LoadAsync();
                 await NotifyChangedAsync();
