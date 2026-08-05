@@ -12,6 +12,10 @@ using SIAD.Services.MobileApi;
 // de la sesión, nunca de un parámetro del cliente).
 var builder = WebApplication.CreateBuilder(args);
 
+// Misma convención que el portal: la conexión real vive en el servidor
+// (appsettings.Local.json, gitignored) — el publish viaja sin credenciales.
+builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
+
 builder.Services.AddDbContext<SiadDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
