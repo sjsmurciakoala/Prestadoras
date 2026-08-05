@@ -12,6 +12,7 @@
 @inject MapClient MapClient
 @inject OrdenesClient OrdenesClient
 @inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
 
 <PageTitle>SIAD - Mapa</PageTitle>
 
@@ -138,6 +139,25 @@
                     </aside>
                 }
 
+                @* Clic en un marcador de cuadrilla → tarjeta con acción directa
+                   (dxdocs: DxMap.MarkerClick + IMapMarker.MarkerId). *@
+                @if (cuadrillaSeleccionada is not null)
+                {
+                    <div class="alert alert-info d-flex flex-wrap align-items-center gap-3 mb-2" role="alert">
+                        <i class="bi bi-person-badge fs-4"></i>
+                        <div class="flex-grow-1">
+                            <strong>@(string.IsNullOrWhiteSpace(cuadrillaSeleccionada.Nombre) ? cuadrillaSeleccionada.Usuario : cuadrillaSeleccionada.Nombre)</strong>
+                            <span class="text-muted ms-2">(@cuadrillaSeleccionada.Usuario) · última señal @DescribirAntiguedad(cuadrillaSeleccionada.Fecha)</span>
+                        </div>
+                        <DxButton Text="Crear orden de trabajo"
+                                  IconCssClass="bi bi-clipboard-plus"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Click="@(() => Navigation.NavigateTo($"/ordenes?crearPara={Uri.EscapeDataString(cuadrillaSeleccionada.Usuario)}"))" />
+                        <button type="button" class="btn-close" aria-label="Cerrar"
+                                @onclick="() => cuadrillaSeleccionada = null"></button>
+                    </div>
+                }
+
                 <div class="map-shell">
                 <DxMap Provider="@currentProvider"
                        Type="MapType.Roadmap"
@@ -146,13 +166,14 @@
                        Zoom="@currentZoom"
                        ControlsVisible="true"
                        AutoAdjust="@shouldAutoAdjust"
+                       MarkerClick="OnMarkerClick"
                        CssClass="map-canvas">
                     <DxMapApiKeys Azure="@AzureKey" Google="@GoogleKey" />
                     <DxMapCenter GeoPosition="@currentCenterGeoPosition" />
                     <DxMapMarkers>
                         @if (!string.IsNullOrWhiteSpace(searchMarkerGeoPosition))
                         {
-                            <DxMapMarker>
+                            <DxMapMarker MarkerId="busqueda">
                                 <DxMapMarkerLocation GeoPosition="@searchMarkerGeoPosition" />
                                 <DxMapMarkerTooltip Text="@searchMarkerTooltip" />
                             </DxMapMarker>
@@ -162,7 +183,7 @@
                         {
                             @foreach (var cuadrilla in CuadrillasVisibles)
                             {
-                                <DxMapMarker @key="cuadrilla.Usuario">
+                                <DxMapMarker @key="cuadrilla.Usuario" MarkerId="@("cuadrilla:" + cuadrilla.Usuario)">
                                     <DxMapMarkerLocation GeoPosition="@BuildGeoPosition(cuadrilla.Latitud!.Value, cuadrilla.Longitud!.Value)" />
                                     <DxMapMarkerTooltip Text="@BuildCuadrillaTooltip(cuadrilla)" />
                                 </DxMapMarker>
@@ -206,6 +227,20 @@
     private int currentZoom = FallbackZoom;
 
     private IReadOnlyList<CoordenadaOrdenDto> cuadrillas = Array.Empty<CoordenadaOrdenDto>();
+    private CoordenadaOrdenDto? cuadrillaSeleccionada;
+
+    // dxdocs: DxMap.MarkerClick entrega IMapMarker.MarkerId del marcador clicado.
+    private void OnMarkerClick(MapMarkerClickEventArgs e)
+    {
+        const string prefijo = "cuadrilla:";
+        var id = e.Marker?.MarkerId;
+        if (id is not null && id.StartsWith(prefijo, StringComparison.Ordinal))
+        {
+            var usuario = id[prefijo.Length..];
+            cuadrillaSeleccionada = cuadrillas.FirstOrDefault(c => c.Usuario == usuario);
+            StateHasChanged();
+        }
+    }
     private bool mostrarCuadrillas = true;
     private int vigenciaHoras = 24;
     private DateTime? ultimaActualizacion;
