@@ -14,6 +14,7 @@
 @inject ArticulosClient ArticulosClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
+@inject IJSRuntime JS
 
 <PageTitle>SIAD - @(EsLectura ? "Detalle de movimiento" : "Nuevo movimiento")</PageTitle>
 
@@ -25,8 +26,15 @@
             <h2 class="page-title">@(EsLectura ? $"Movimiento {modelo.Numero:00000}" : "Nuevo movimiento de almacén")</h2>
             <p class="page-subtitle">Entrada o salida manual de inventario</p>
         </div>
-        <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
-                  Click="@(() => Navigation.NavigateTo("/almacen/movimientos"))" />
+        <div class="d-flex gap-2">
+            @if (EsLectura)
+            {
+                <DxButton Text="Imprimir comprobante" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirAsync" />
+            }
+            <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => Navigation.NavigateTo("/almacen/movimientos"))" />
+        </div>
     </div>
 
     @if (cargando)
@@ -375,6 +383,9 @@
         ClaseAjusteInventario.Valor => "Corrección de valor: ajusta sólo el costo, sin mover existencia. Cantidad 0.",
         _ => ""
     };
+
+    private async Task ImprimirAsync()
+        => await JS.InvokeVoidAsync("open", MovimientosAlmacenClient.GetComprobantePdfUrl(modelo.Id ?? 0), "_blank");
 
     private void Toast(string title, string text, ToastRenderStyle style)
         => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "MovFormToast" });

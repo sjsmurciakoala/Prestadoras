@@ -42,3 +42,16 @@ public sealed class DescargoImpresionDto : ComprobanteAlmacenImpresionBase
     /// <summary>Total del descargo en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
     public string MontoEnLetras { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Datos de impresión del comprobante de un movimiento de almacén genérico (entrada / salida /
+/// ajuste de valor). El movimiento SÍ postea al kardex; el vale lo respalda con su concepto, los
+/// renglones y —cuando hay valor— el total y su expresión en letras.
+/// </summary>
+public sealed class MovimientoImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public MovimientoAlmacenDto Documento { get; set; } = new();
+
+    /// <summary>Total del movimiento en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}

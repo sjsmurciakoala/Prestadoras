@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Reports;
 using SIAD.Services.Almacen;
 using apc.Security;
 
@@ -32,6 +33,22 @@ public sealed class MovimientosAlmacenController : ControllerBase
     {
         var doc = await _service.GetByIdAsync(id, ct);
         return doc is null ? NotFound() : Ok(doc);
+    }
+
+    /// <summary>Comprobante del movimiento en PDF, para imprimir/firmar.</summary>
+    [HttpGet("{id:int}/comprobante/pdf")]
+    public async Task<IActionResult> GetComprobantePdf(int id, CancellationToken ct)
+    {
+        var datos = await _service.GetDatosImpresionAsync(id, UsuarioActual, ct);
+        if (datos is null)
+            return NotFound(new { message = $"No se encontró el movimiento {id}." });
+
+        using var report = new Rpt_Dev_Comprobante_Movimiento(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=Movimiento-{datos.Documento.Numero:00000}.pdf";
+        return File(stream.ToArray(), "application/pdf");
     }
 
     [HttpPost]

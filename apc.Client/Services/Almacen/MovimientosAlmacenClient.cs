@@ -14,6 +14,9 @@ public sealed class MovimientosAlmacenClient
 
     public MovimientosAlmacenClient(HttpClient http) => _http = http;
 
+    /// <summary>URL del comprobante del movimiento en PDF, para abrirlo en una pestaña nueva.</summary>
+    public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
+
     public async Task<List<MovimientoAlmacenListItemDto>> GetAsync(
         MovimientoAlmacenFilterDto? filtro = null, CancellationToken ct = default)
     {

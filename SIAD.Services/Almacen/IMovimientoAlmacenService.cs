@@ -19,6 +19,9 @@ public interface IMovimientoAlmacenService
 
     Task<MovimientoAlmacenDto?> GetByIdAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Datos de impresión del comprobante del movimiento (empresa + documento + total en letras).</summary>
+    Task<MovimientoImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default);
+
     /// <summary>
     /// Crea el documento Y postea todos sus renglones en la MISMA transacción: o se registran
     /// todos los asientos o no se registra ninguno. Un documento sin asiento sería un papel
