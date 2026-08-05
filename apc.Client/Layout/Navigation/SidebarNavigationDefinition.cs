@@ -280,6 +280,22 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
+                    Id = "alm-existencias-bodega",
+                    Text = "Existencias por bodega",
+                    IconCssClass = "bi bi-clipboard-data",
+                    NavigateUrl = "/almacen/existencias-bodega",
+                    MatchPrefixes = ["/almacen/existencias-bodega"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-valuacion-inventario",
+                    Text = "Valuación de inventario",
+                    IconCssClass = "bi bi-cash-stack",
+                    NavigateUrl = "/almacen/valuacion-inventario",
+                    MatchPrefixes = ["/almacen/valuacion-inventario"]
+                },
+                new SidebarNavItem
+                {
                     Id = "alm-movimientos",
                     Text = "Movimientos de almacén",
                     IconCssClass = "bi bi-arrow-down-up",
@@ -297,10 +313,21 @@ public static class SidebarNavigationDefinition
                 new SidebarNavItem
                 {
                     Id = "alm-kardex",
-                    Text = "Kardex",
+                    Text = "Kardex por artículo",
                     IconCssClass = "bi bi-journal-arrow-down",
                     NavigateUrl = "/almacen/kardex",
+                    // MatchExact: sin esto "/almacen/kardex" encendería también "Movimientos por
+                    // bodega" (/almacen/kardex-bodega cuelga de ese mismo prefijo).
+                    MatchExact = true,
                     MatchPrefixes = ["/almacen/kardex"]
+                },
+                new SidebarNavItem
+                {
+                    Id = "alm-kardex-bodega",
+                    Text = "Movimientos por bodega",
+                    IconCssClass = "bi bi-card-list",
+                    NavigateUrl = "/almacen/kardex-bodega",
+                    MatchPrefixes = ["/almacen/kardex-bodega"]
                 },
                 new SidebarNavItem
                 {

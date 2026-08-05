@@ -103,6 +103,8 @@ namespace apc.Client
             services.AddScoped<IsvCompraConfigClient>();
             services.AddScoped<GruposClient>();
             services.AddScoped<BodegasClient>();
+            services.AddScoped<ExistenciasBodegaClient>();
+            services.AddScoped<ValuacionInventarioClient>();
             // Carga inicial de existencias y ajustes de inventario (Fase 4).
             services.AddScoped<CargaInicialClient>();
             services.AddScoped<AjusteInventarioClient>();

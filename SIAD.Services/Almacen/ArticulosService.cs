@@ -45,17 +45,21 @@ public sealed class ArticulosService : IArticulosService
     public async Task<PagedResult<ArticuloListItemDto>> SearchPagedAsync(
         ArticuloFilterDto? filtro, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default)
     {
-        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro ?? new ArticuloFilterDto());
+        filtro ??= new ArticuloFilterDto();
+        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro);
 
         var totalCount = await query.CountAsync(ct);
 
         skip = Math.Max(skip, 0);
         take = take <= 0 ? 50 : take;
 
-        var items = await AplicarOrden(query, sortField, sortDesc)
+        // Vista por bodega: con una bodega elegida, la fila muestra las cifras de ESA bodega
+        // (existencia, mínimo y valor a costo promedio). El orden remoto y la proyección usan
+        // la misma base para que columna, sort y Excel coincidan. Sin bodega, rollup de cabecera.
+        var items = await AplicarOrden(query, sortField, sortDesc, filtro.BodegaId)
             .Skip(skip)
             .Take(take)
-            .Select(ProyeccionLista(null))
+            .Select(ProyeccionLista(filtro.BodegaId, bodegaComoAlcance: true))
             .ToListAsync(ct);
 
         return new PagedResult<ArticuloListItemDto>(items, totalCount);
@@ -63,10 +67,37 @@ public sealed class ArticulosService : IArticulosService
 
     public async Task<ArticulosResumenDto> GetResumenAsync(ArticuloFilterDto? filtro, CancellationToken ct = default)
     {
-        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro ?? new ArticuloFilterDto());
+        filtro ??= new ArticuloFilterDto();
+        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro);
 
         // Agregados en el servidor sobre el mismo universo filtrado (no la página visible).
         var total = await query.CountAsync(ct);
+
+        if (filtro.BodegaId is int bod)
+        {
+            // Vista por bodega: los KPIs se miden sobre la existencia/valor de ESA bodega, igual
+            // que las columnas del grid. Hay una sola fila activa por (artículo, bodega), así que
+            // Sum devuelve su valor. El descuadre (cabecera vs Σ bodegas) no aplica a una sola
+            // bodega: se informa en 0 (la tarjeta se oculta en la vista por bodega).
+            var conStockBod = await query.CountAsync(a =>
+                a.ubicaciones.Where(u => u.activo && u.bodega_id == bod).Sum(u => u.existencia) > 0, ct);
+            var bajoMinimoBod = await query.CountAsync(a =>
+                a.ubicaciones.Where(u => u.activo && u.bodega_id == bod).Sum(u => u.existencia_minima) > 0
+                && a.ubicaciones.Where(u => u.activo && u.bodega_id == bod).Sum(u => u.existencia)
+                   < a.ubicaciones.Where(u => u.activo && u.bodega_id == bod).Sum(u => u.existencia_minima), ct);
+            var valorBod = await query.SumAsync(a => (decimal?)
+                a.ubicaciones.Where(u => u.activo && u.bodega_id == bod).Sum(u => u.existencia * u.costo_promedio), ct) ?? 0m;
+
+            return new ArticulosResumenDto
+            {
+                Total = total,
+                ConStock = conStockBod,
+                BajoMinimo = bajoMinimoBod,
+                ValorInventario = valorBod,
+                ConDescuadre = 0
+            };
+        }
+
         var conStock = await query.CountAsync(a => a.existencia > 0, ct);
         var bajoMinimo = await query.CountAsync(a => a.existencia_minima > 0 && a.existencia < a.existencia_minima, ct);
         var valorInventario = await query.SumAsync(a => (decimal?)(a.existencia * a.valor_unitario), ct) ?? 0m;
@@ -126,17 +157,46 @@ public sealed class ArticulosService : IArticulosService
             query = query.Where(a => a.existencia != a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia));
         }
 
-        // Estado de existencia: categorías disjuntas (ver EstadoStockFiltro).
-        query = filtro.EstadoStock switch
+        // Estado de existencia: categorías disjuntas (ver EstadoStockFiltro). En vista por bodega
+        // el estado se evalúa sobre la existencia/mínimo de ESA bodega (no el rollup de cabecera),
+        // para que el filtro concuerde con lo que muestran la columna y los KPIs.
+        if (!string.IsNullOrWhiteSpace(filtro.EstadoStock))
         {
-            EstadoStockFiltro.ConStock => query.Where(a =>
-                a.existencia > 0 && !(a.existencia_minima > 0 && a.existencia < a.existencia_minima)),
-            EstadoStockFiltro.BajoMinimo => query.Where(a =>
-                a.existencia > 0 && a.existencia_minima > 0 && a.existencia < a.existencia_minima),
-            EstadoStockFiltro.SinStock => query.Where(a => a.existencia == 0),
-            EstadoStockFiltro.Negativo => query.Where(a => a.existencia < 0),
-            _ => query
-        };
+            if (filtro.BodegaId is int bodEstado)
+            {
+                query = filtro.EstadoStock switch
+                {
+                    EstadoStockFiltro.ConStock => query.Where(a =>
+                        a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia) > 0
+                        && !(a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia_minima) > 0
+                             && a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia)
+                                < a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia_minima))),
+                    EstadoStockFiltro.BajoMinimo => query.Where(a =>
+                        a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia) > 0
+                        && a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia_minima) > 0
+                        && a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia)
+                           < a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia_minima)),
+                    EstadoStockFiltro.SinStock => query.Where(a =>
+                        a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia) == 0),
+                    EstadoStockFiltro.Negativo => query.Where(a =>
+                        a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEstado).Sum(u => u.existencia) < 0),
+                    _ => query
+                };
+            }
+            else
+            {
+                query = filtro.EstadoStock switch
+                {
+                    EstadoStockFiltro.ConStock => query.Where(a =>
+                        a.existencia > 0 && !(a.existencia_minima > 0 && a.existencia < a.existencia_minima)),
+                    EstadoStockFiltro.BajoMinimo => query.Where(a =>
+                        a.existencia > 0 && a.existencia_minima > 0 && a.existencia < a.existencia_minima),
+                    EstadoStockFiltro.SinStock => query.Where(a => a.existencia == 0),
+                    EstadoStockFiltro.Negativo => query.Where(a => a.existencia < 0),
+                    _ => query
+                };
+            }
+        }
 
         if (!string.IsNullOrWhiteSpace(filtro.Search))
         {
@@ -163,8 +223,10 @@ public sealed class ArticulosService : IArticulosService
         return query;
     }
 
-    /// <summary>Ordena por el campo del grid (FieldName del DTO), con el id como desempate estable.</summary>
-    private static IOrderedQueryable<alm_articulo> AplicarOrden(IQueryable<alm_articulo> query, string? sortField, bool sortDesc)
+    /// <summary>Ordena por el campo del grid (FieldName del DTO), con el id como desempate estable.
+    /// En vista por bodega (<paramref name="bodegaId"/> no null) la existencia y el valor se ordenan
+    /// por las cifras de esa bodega, para que el orden remoto coincida con lo que muestra la columna.</summary>
+    private static IOrderedQueryable<alm_articulo> AplicarOrden(IQueryable<alm_articulo> query, string? sortField, bool sortDesc, int? bodegaId = null)
     {
         IOrderedQueryable<alm_articulo> ordered = sortField switch
         {
@@ -178,11 +240,19 @@ public sealed class ArticulosService : IArticulosService
                 ? query.OrderByDescending(a => a.unidad_medida_ref!.nombre) : query.OrderBy(a => a.unidad_medida_ref!.nombre),
             nameof(ArticuloListItemDto.GrupoDisplay) => sortDesc
                 ? query.OrderByDescending(a => a.grupo_ref!.nombre) : query.OrderBy(a => a.grupo_ref!.nombre),
-            nameof(ArticuloListItemDto.Existencia) => sortDesc
-                ? query.OrderByDescending(a => a.existencia) : query.OrderBy(a => a.existencia),
-            nameof(ArticuloListItemDto.ValorTotal) => sortDesc
-                ? query.OrderByDescending(a => a.existencia * a.valor_unitario)
-                : query.OrderBy(a => a.existencia * a.valor_unitario),
+            nameof(ArticuloListItemDto.Existencia) => bodegaId is int bodEx
+                ? (sortDesc
+                    ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEx).Sum(u => u.existencia))
+                    : query.OrderBy(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEx).Sum(u => u.existencia)))
+                : (sortDesc
+                    ? query.OrderByDescending(a => a.existencia) : query.OrderBy(a => a.existencia)),
+            nameof(ArticuloListItemDto.ValorTotal) => bodegaId is int bodVal
+                ? (sortDesc
+                    ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodVal).Sum(u => u.existencia * u.costo_promedio))
+                    : query.OrderBy(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodVal).Sum(u => u.existencia * u.costo_promedio)))
+                : (sortDesc
+                    ? query.OrderByDescending(a => a.existencia * a.valor_unitario)
+                    : query.OrderBy(a => a.existencia * a.valor_unitario)),
             _ => sortDesc
                 ? query.OrderByDescending(a => a.codigo_articulo) : query.OrderBy(a => a.codigo_articulo)
         };
@@ -192,8 +262,13 @@ public sealed class ArticulosService : IArticulosService
 
     /// <summary>Proyección estándar de artículo a item de lista (reutilizada por GetAsync y SearchPagedAsync).
     /// Cuando <paramref name="bodegaId"/> no es null (la consulta filtró por bodega), llena
-    /// <see cref="ArticuloListItemDto.ExistenciaEnBodega"/> con el stock de esa bodega; si es null lo deja en null.</summary>
-    private static Expression<Func<alm_articulo, ArticuloListItemDto>> ProyeccionLista(int? bodegaId) => a => new ArticuloListItemDto
+    /// <see cref="ArticuloListItemDto.ExistenciaEnBodega"/> con el stock de esa bodega; si es null lo deja en null.
+    /// Cuando además <paramref name="bodegaComoAlcance"/> es true (grid del maestro en "vista por bodega"),
+    /// las cifras de la fila —existencia, mínimo y valor— pasan a ser las de ESA bodega (de
+    /// <c>alm_articulo_bodega</c>) en vez del rollup de cabecera, y el descuadre se neutraliza.
+    /// GetAsync lo deja en false para no alterar la semántica de <see cref="ArticuloListItemDto.Existencia"/>
+    /// que consumen los formularios de movimiento/traslado.</summary>
+    private static Expression<Func<alm_articulo, ArticuloListItemDto>> ProyeccionLista(int? bodegaId, bool bodegaComoAlcance = false) => a => new ArticuloListItemDto
     {
         Id = a.id,
         Codigo = a.codigo_articulo,
@@ -207,15 +282,28 @@ public sealed class ArticulosService : IArticulosService
         Grupo = a.grupo,
         GrupoNombre = a.grupo_ref != null ? a.grupo_ref.nombre : null,
         Diametro = a.diametro,
-        Existencia = a.existencia,
-        ExistenciaMinima = a.existencia_minima,
+        // En "vista por bodega" (bodegaComoAlcance con una bodega elegida) existencia y mínimo
+        // salen de ESA bodega —una sola fila activa por (artículo, bodega), garantizada por el
+        // filtro BodegaId; Sum devuelve su valor o 0—. Si no, el rollup de cabecera de siempre.
+        Existencia = bodegaComoAlcance && bodegaId != null
+            ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia)
+            : a.existencia,
+        ExistenciaMinima = bodegaComoAlcance && bodegaId != null
+            ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia_minima)
+            : a.existencia_minima,
         ValorUnitario = a.valor_unitario,
-        // DINERO, misma fórmula que el KPI ValorInventario: la suma de la columna cuadra
-        // con la tarjeta por construcción. (Antes era Σ existencias de ubicaciones — una
-        // cantidad — y además sumaba las inactivas.)
-        ValorTotal = a.existencia * a.valor_unitario,
-        // Σ de bodegas ACTIVAS (contrato del rollup): alimenta el detector de descuadre.
-        ExistenciaBodegas = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia),
+        // DINERO. Vista global: existencia × valor unitario (la suma cuadra con el KPI
+        // ValorInventario). Vista por bodega: existencia de la bodega × su costo promedio
+        // ponderado (la valuación real de lo que hay físicamente en esa bodega).
+        ValorTotal = bodegaComoAlcance && bodegaId != null
+            ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia * u.costo_promedio)
+            : a.existencia * a.valor_unitario,
+        // Σ de bodegas ACTIVAS (contrato del rollup): alimenta el detector de descuadre. En vista
+        // por bodega el descuadre (cabecera vs Σ bodegas) no aplica: se iguala a la existencia
+        // mostrada para que Descuadrado quede en false y no salga el ícono de advertencia.
+        ExistenciaBodegas = bodegaComoAlcance && bodegaId != null
+            ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia)
+            : a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia),
         // Stock EN la bodega filtrada (para movimientos que salen de una sola bodega, como el
         // traslado). null si la consulta no filtró por bodega, para no confundirlo con "0 aquí".
         ExistenciaEnBodega = bodegaId == null

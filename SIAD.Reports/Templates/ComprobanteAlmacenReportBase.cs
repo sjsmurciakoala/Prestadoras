@@ -85,6 +85,60 @@ public abstract class ComprobanteAlmacenReportBase : XtraReport
         return Math.Max(Math.Max(yEmpresa, 50f), altoCaja) + 10f;
     }
 
+    // ── Encabezado de LISTADO: logo + datos de empresa a lo ancho, sin la caja de documento ──
+    // (los reportes de listado —existencias, movimientos de kardex— no tienen "No. de documento").
+    // Devuelve la Y siguiente para seguir dibujando el título del reporte debajo.
+    protected static float BuildEncabezadoEmpresa(Band band, ComprobanteAlmacenImpresionBase datos)
+    {
+        var textoX = 0f;
+
+        if (datos.EmpresaLogo is { Length: > 0 })
+        {
+            using var stream = new MemoryStream(datos.EmpresaLogo);
+            band.Controls.Add(new XRPictureBox
+            {
+                BoundsF = new RectangleF(0f, 0f, 110f, 46f),
+                Sizing = ImageSizeMode.ZoomImage,
+                Image = Image.FromStream(stream)
+            });
+            textoX = 122f;
+        }
+
+        var anchoTexto = ContentWidth - textoX;
+        var y = 0f;
+
+        AddLabel(band, datos.EmpresaNombre, textoX, y, anchoTexto, 20f, 14f, bold: true);
+        y += 21f;
+
+        var razonSocial = string.Equals(datos.EmpresaRazonSocial?.Trim(), datos.EmpresaNombre?.Trim(), StringComparison.OrdinalIgnoreCase)
+            ? null : datos.EmpresaRazonSocial;
+        var legal = JoinNonEmpty(" - ",
+            razonSocial,
+            string.IsNullOrWhiteSpace(datos.EmpresaRtn) ? null : $"R.T.N. {datos.EmpresaRtn.Trim()}");
+        if (!string.IsNullOrWhiteSpace(legal))
+        {
+            AddLabel(band, legal, textoX, y, anchoTexto, 13f, 8.5f, color: Color.DimGray);
+            y += 13f;
+        }
+
+        if (!string.IsNullOrWhiteSpace(datos.EmpresaDireccion))
+        {
+            AddLabel(band, datos.EmpresaDireccion.Trim(), textoX, y, anchoTexto, 13f, 8.5f, color: Color.DimGray);
+            y += 13f;
+        }
+
+        var contacto = JoinNonEmpty(" - ",
+            string.IsNullOrWhiteSpace(datos.EmpresaTelefono) ? null : $"Tel. {datos.EmpresaTelefono.Trim()}",
+            datos.EmpresaEmail);
+        if (!string.IsNullOrWhiteSpace(contacto))
+        {
+            AddLabel(band, contacto, textoX, y, anchoTexto, 13f, 8.5f, color: Color.DimGray);
+            y += 13f;
+        }
+
+        return Math.Max(y, 50f);
+    }
+
     private static float BuildCajaDocumento(
         Band band, string titulo, string numero, IReadOnlyList<string> metaLineas, string estadoTexto)
     {

@@ -120,6 +120,10 @@ public static class ServiceRegistration
         services.AddScoped<IOrdenCompraService, OrdenCompraService>();
         services.AddScoped<IRecepcionCompraService, RecepcionCompraService>();
         services.AddScoped<IGrupoService, GrupoService>();
+        // Reporte de existencias por bodega (valorado) — alimenta pantalla y PDF.
+        services.AddScoped<IExistenciasBodegaService, ExistenciasBodegaService>();
+        // Valuación de inventario a una fecha (reconstruye el saldo desde el kardex) — pantalla y PDF.
+        services.AddScoped<IValuacionInventarioService, ValuacionInventarioService>();
 
         // Motor de movimientos (Fase 1): rollup compartido de cabecera + posteo al kardex.
         services.AddScoped<IArticuloRollupService, ArticuloRollupService>();

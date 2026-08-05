@@ -157,8 +157,10 @@
                     <ToolbarTemplate>
                         <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                             <span class="fw-bold">@kardex.Codigo — @kardex.Descripcion</span>
+                            <DxButton Text="Imprimir PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="ImprimirPdfAsync" CssClass="ms-auto me-1" />
                             <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
-                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="ms-auto me-1" />
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
                             <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
                                       RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-3" />
 
@@ -503,6 +505,25 @@
         "202" => "mov-salida",
         _ => "mov-otro"
     };
+
+    private async Task ImprimirPdfAsync()
+    {
+        if (articuloSeleccionado is null)
+        {
+            return;
+        }
+
+        var filtro = new KardexFilterDto
+        {
+            ArticuloId = articuloSeleccionado.Id,
+            FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+            FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null,
+            TipoTransaccion = tipoSeleccionado?.Codigo,
+            BodegaId = bodegaSeleccionada?.Id
+        };
+
+        await JS.InvokeVoidAsync("open", KardexClient.GetPdfArticuloUrl(filtro), "_blank");
+    }
 
     private async Task ExportExcelAsync()
     {

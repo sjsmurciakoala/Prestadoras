@@ -356,6 +356,11 @@
         {
             var creado = await MovClient.CrearAsync(modelo);
             Toast("Éxito", $"Movimiento {creado.Numero:00000} registrado.", ToastRenderStyle.Success);
+            // Navegar a /{id} reusa este mismo componente (no re-ejecuta OnInitializedAsync): sin esto la
+            // vista de lectura mostraría el modelo a medio construir (Numero 0, sin costos reales) y el
+            // botón de comprobante imprimiría con Id 0. Ya tenemos el documento posteado: lo mostramos directo.
+            modelo = creado;
+            fecha = creado.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today;
             Navigation.NavigateTo($"/almacen/movimientos/{creado.Id}");
         }
         catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
@@ -385,7 +390,8 @@
     };
 
     private async Task ImprimirAsync()
-        => await JS.InvokeVoidAsync("open", MovimientosAlmacenClient.GetComprobantePdfUrl(modelo.Id ?? 0), "_blank");
+        // El botón solo aparece en modo lectura (Id de ruta presente); se usa ese Id, con respaldo en el modelo.
+        => await JS.InvokeVoidAsync("open", MovimientosAlmacenClient.GetComprobantePdfUrl(Id ?? modelo.Id ?? 0), "_blank");
 
     private void Toast(string title, string text, ToastRenderStyle style)
         => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "MovFormToast" });

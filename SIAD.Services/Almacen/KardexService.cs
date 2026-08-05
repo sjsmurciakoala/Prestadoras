@@ -1,6 +1,10 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Common;
+using SIAD.Core.Entities;
+using SIAD.Core.Tenancy;
 using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
@@ -15,10 +19,12 @@ namespace SIAD.Services.Almacen;
 public sealed class KardexService : IKardexService
 {
     private readonly SiadDbContext _context;
+    private readonly ICurrentCompanyService _company;
 
-    public KardexService(SiadDbContext context)
+    public KardexService(SiadDbContext context, ICurrentCompanyService company)
     {
         _context = context;
+        _company = company;
     }
 
     public async Task<KardexArticuloDto?> GetByArticuloAsync(KardexFilterDto filtro, CancellationToken ct = default)
@@ -265,4 +271,293 @@ public sealed class KardexService : IKardexService
             .Select(c => new TipoMovimientoDto { Codigo = c, Descripcion = TipoMovimientoKardex.Describir(c) })
             .ToList();
     }
+
+    // ── Libro de movimientos de bodega ───────────────────────────────────────
+    // A diferencia del kardex por artículo, aquí el eje es la BODEGA: una página de todos
+    // los asientos de la bodega (cualquier artículo). No hay saldo corrido "mezclado" —cada
+    // fila trae su existencia_resultante materializada—, así que se pagina en el servidor
+    // sin recomputar nada (el kardex de una bodega puede tener decenas de miles de filas).
+
+    public async Task<PagedResult<MovimientoBodegaItemDto>> GetMovimientosBodegaPagedAsync(
+        MovimientosBodegaFilterDto filtro, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        // La bodega es el eje del libro: sin ella no hay universo que paginar.
+        if (!filtro.BodegaId.HasValue)
+        {
+            return new PagedResult<MovimientoBodegaItemDto>();
+        }
+
+        var query = AplicarFiltrosBodega(filtro);
+        var total = await query.CountAsync(ct);
+
+        skip = Math.Max(skip, 0);
+        take = take <= 0 ? 50 : take;
+
+        var items = await AplicarOrdenBodega(query, sortField, sortDesc)
+            .Skip(skip)
+            .Take(take)
+            .Select(ProyeccionBodega())
+            .ToListAsync(ct);
+
+        return new PagedResult<MovimientoBodegaItemDto>(items, total);
+    }
+
+    public async Task<MovimientosBodegaResumenDto> GetResumenBodegaAsync(MovimientosBodegaFilterDto filtro, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        if (!filtro.BodegaId.HasValue)
+        {
+            return new MovimientosBodegaResumenDto();
+        }
+
+        // Agregados en el servidor sobre TODO el universo filtrado (no la página visible).
+        // Consultas separadas (como el resumen del maestro) en vez de GroupBy: garantiza la
+        // traducción a SQL. El (decimal?) ... ?? 0m evita el fallo de Sum sobre secuencia vacía.
+        var query = AplicarFiltrosBodega(filtro);
+
+        var totalMovimientos = await query.CountAsync(ct);
+        var totalIngresos = await query.SumAsync(k => (decimal?)k.ingresos, ct) ?? 0m;
+        var totalSalidas = await query.SumAsync(k => (decimal?)k.salidas, ct) ?? 0m;
+        var valorMovido = await query.SumAsync(k => (decimal?)k.total, ct) ?? 0m;
+
+        return new MovimientosBodegaResumenDto
+        {
+            TotalMovimientos = totalMovimientos,
+            TotalIngresos = totalIngresos,
+            TotalSalidas = totalSalidas,
+            ValorMovido = valorMovido
+        };
+    }
+
+    /// <summary>Universo del libro: asientos de la bodega, acotados por período/tipo/artículo/búsqueda.</summary>
+    private IQueryable<alm_kardex> AplicarFiltrosBodega(MovimientosBodegaFilterDto filtro)
+    {
+        var query = _context.alm_kardexs
+            .AsNoTracking()
+            .Where(k => k.bodega_id == filtro.BodegaId!.Value);
+
+        if (filtro.ArticuloId.HasValue)
+        {
+            query = query.Where(k => k.articulo_id == filtro.ArticuloId.Value);
+        }
+
+        if (filtro.FechaDesde.HasValue)
+        {
+            query = query.Where(k => k.fecha != null && k.fecha >= filtro.FechaDesde.Value);
+        }
+
+        if (filtro.FechaHasta.HasValue)
+        {
+            query = query.Where(k => k.fecha != null && k.fecha <= filtro.FechaHasta.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.TipoTransaccion))
+        {
+            var tipo = filtro.TipoTransaccion.Trim();
+            query = query.Where(k => k.tipo_transaccion == tipo);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.Search))
+        {
+            var term = filtro.Search.Trim();
+            var likePattern = $"%{term}%";
+
+            if (_context.Database.IsRelational())
+            {
+                query = query.Where(k =>
+                    EF.Functions.ILike(k.codigo_articulo ?? string.Empty, likePattern)
+                    || EF.Functions.ILike(k.descripcion ?? string.Empty, likePattern)
+                    || (k.articulo_ref != null && (
+                        EF.Functions.ILike(k.articulo_ref.codigo_articulo ?? string.Empty, likePattern)
+                        || EF.Functions.ILike(k.articulo_ref.descripcion, likePattern))));
+            }
+            else
+            {
+                var lowered = term.ToLowerInvariant();
+                query = query.Where(k =>
+                    (k.codigo_articulo ?? string.Empty).ToLowerInvariant().Contains(lowered)
+                    || (k.descripcion ?? string.Empty).ToLowerInvariant().Contains(lowered)
+                    || (k.articulo_ref != null && (
+                        (k.articulo_ref.codigo_articulo ?? string.Empty).ToLowerInvariant().Contains(lowered)
+                        || k.articulo_ref.descripcion.ToLowerInvariant().Contains(lowered))));
+            }
+        }
+
+        return query;
+    }
+
+    /// <summary>Orden del grid remoto. Por defecto: cronológico DESCENDENTE (lo más reciente primero).</summary>
+    private static IQueryable<alm_kardex> AplicarOrdenBodega(IQueryable<alm_kardex> query, string? sortField, bool sortDesc)
+        => sortField switch
+        {
+            nameof(MovimientoBodegaItemDto.Fecha) => sortDesc
+                ? query.OrderByDescending(k => k.fecha).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.fecha).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.ArticuloDescripcion) => sortDesc
+                ? query.OrderByDescending(k => k.articulo_ref!.descripcion).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.articulo_ref!.descripcion).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.Ingresos) => sortDesc
+                ? query.OrderByDescending(k => k.ingresos).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.ingresos).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.Salidas) => sortDesc
+                ? query.OrderByDescending(k => k.salidas).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.salidas).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.Total) => sortDesc
+                ? query.OrderByDescending(k => k.total).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.total).ThenBy(k => k.id),
+            _ => query.OrderByDescending(k => k.fecha).ThenByDescending(k => k.id)
+        };
+
+    private static Expression<Func<alm_kardex, MovimientoBodegaItemDto>> ProyeccionBodega() => k => new MovimientoBodegaItemDto
+    {
+        Id = k.id,
+        Fecha = k.fecha,
+        NumeroDocumento = k.numero_documento,
+        TipoTransaccion = k.tipo_transaccion,
+        ArticuloId = k.articulo_id,
+        // Código del catálogo si está enlazado; si no, el snapshot SIMAFI (histórico sin re-enlazar).
+        ArticuloCodigo = k.articulo_ref != null ? k.articulo_ref.codigo_articulo : k.codigo_articulo,
+        ArticuloDescripcion = k.articulo_ref != null ? k.articulo_ref.descripcion : null,
+        Descripcion = k.descripcion,
+        Ingresos = k.ingresos,
+        Salidas = k.salidas,
+        ValorUnitario = k.valor_unitario,
+        Total = k.total,
+        ExistenciaResultante = k.existencia_resultante,
+        CostoPromedioResultante = k.costo_promedio_resultante,
+        DocumentoTipo = k.documento_tipo,
+        DocumentoId = k.documento_id,
+        UsuarioCreacion = k.usuariocreacion,
+        FechaCreacion = k.fechacreacion
+    };
+
+    // ── Impresión (PDF) del kardex ───────────────────────────────────────────
+
+    public async Task<IReadOnlyList<MovimientoBodegaItemDto>> GetMovimientosBodegaAsync(
+        MovimientosBodegaFilterDto filtro, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+        if (!filtro.BodegaId.HasValue)
+        {
+            return new List<MovimientoBodegaItemDto>();
+        }
+
+        // Para el PDF (libro imprimible) el orden es cronológico ASCENDENTE, y sin paginar.
+        return await AplicarFiltrosBodega(filtro)
+            .OrderBy(k => k.fecha).ThenBy(k => k.id)
+            .Select(ProyeccionBodega())
+            .ToListAsync(ct);
+    }
+
+    public async Task<MovimientosKardexImpresionDto> GetDatosImpresionArticuloAsync(
+        KardexFilterDto filtro, string impresoPor, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        var empresa = await CargarEmpresaAsync(ct);
+        var kardex = await GetByArticuloAsync(filtro, ct);
+
+        if (kardex is null)
+        {
+            return BuildImpresion(empresa, impresoPor, "KARDEX POR ARTÍCULO", "Artículo no encontrado",
+                "Bodega", string.Empty, new List<MovimientoKardexImpresionRow>(), 0m, 0m);
+        }
+
+        var filas = kardex.Movimientos.Select(x => new MovimientoKardexImpresionRow
+        {
+            Fecha = x.Fecha.HasValue ? x.Fecha.Value.ToString("dd/MM/yyyy") : "—",
+            Documento = x.NumeroDocumento.HasValue ? x.NumeroDocumento.Value.ToString("0") : "—",
+            Tipo = x.TipoDescripcion,
+            Contexto = string.IsNullOrWhiteSpace(x.BodegaCodigo) ? (x.BodegaNombre ?? "—") : x.BodegaCodigo,
+            Descripcion = x.Descripcion ?? string.Empty,
+            Entradas = x.Ingresos,
+            Salidas = x.Salidas,
+            ValorUnitario = x.ValorUnitario,
+            Saldo = x.Saldo
+        }).ToList();
+
+        var subtitulo = string.IsNullOrWhiteSpace(kardex.Codigo) ? kardex.Descripcion : $"{kardex.Codigo} — {kardex.Descripcion}";
+        var bodegaTxt = filtro.BodegaId.HasValue
+            ? (kardex.Movimientos.FirstOrDefault(m => m.BodegaId == filtro.BodegaId)?.BodegaNombre ?? "bodega filtrada")
+            : "todas las bodegas";
+        var filtroTexto = $"{PeriodoTexto(filtro.FechaDesde, filtro.FechaHasta)} · {bodegaTxt}";
+
+        return BuildImpresion(empresa, impresoPor, "KARDEX POR ARTÍCULO", subtitulo,
+            "Bodega", filtroTexto, filas, kardex.TotalIngresos, kardex.TotalSalidas);
+    }
+
+    public async Task<MovimientosKardexImpresionDto> GetDatosImpresionBodegaAsync(
+        MovimientosBodegaFilterDto filtro, string impresoPor, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        var empresa = await CargarEmpresaAsync(ct);
+        var movs = await GetMovimientosBodegaAsync(filtro, ct);
+
+        var bodega = filtro.BodegaId.HasValue
+            ? await _context.alm_bodegas.AsNoTracking()
+                .Where(b => b.id == filtro.BodegaId.Value)
+                .Select(b => new { b.codigo, b.nombre })
+                .FirstOrDefaultAsync(ct)
+            : null;
+        var subtitulo = bodega != null ? $"Bodega: {bodega.codigo} — {bodega.nombre}" : "Bodega";
+
+        var filas = movs.Select(x => new MovimientoKardexImpresionRow
+        {
+            Fecha = x.Fecha.HasValue ? x.Fecha.Value.ToString("dd/MM/yyyy") : "—",
+            Documento = x.NumeroDocumento.HasValue ? x.NumeroDocumento.Value.ToString("0") : "—",
+            Tipo = x.TipoDescripcion,
+            Contexto = string.IsNullOrWhiteSpace(x.ArticuloCodigo) ? "—" : x.ArticuloCodigo,
+            Descripcion = x.ArticuloDescripcion ?? string.Empty,
+            Entradas = x.Ingresos,
+            Salidas = x.Salidas,
+            ValorUnitario = x.ValorUnitario,
+            Saldo = x.ExistenciaResultante
+        }).ToList();
+
+        return BuildImpresion(empresa, impresoPor, "MOVIMIENTOS POR BODEGA", subtitulo,
+            "Artículo", PeriodoTexto(filtro.FechaDesde, filtro.FechaHasta), filas,
+            movs.Sum(x => x.Ingresos), movs.Sum(x => x.Salidas));
+    }
+
+    private async Task<cfg_company?> CargarEmpresaAsync(CancellationToken ct)
+    {
+        var companyId = _company.GetCompanyId();
+        return await _context.cfg_companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+    }
+
+    private static string PeriodoTexto(DateOnly? desde, DateOnly? hasta)
+    {
+        if (desde.HasValue && hasta.HasValue) return $"Del {desde.Value:dd/MM/yyyy} al {hasta.Value:dd/MM/yyyy}";
+        if (desde.HasValue) return $"Desde {desde.Value:dd/MM/yyyy}";
+        if (hasta.HasValue) return $"Hasta {hasta.Value:dd/MM/yyyy}";
+        return "Todas las fechas";
+    }
+
+    private static MovimientosKardexImpresionDto BuildImpresion(
+        cfg_company? empresa, string impresoPor, string titulo, string subtitulo,
+        string columnaContexto, string filtroTexto, List<MovimientoKardexImpresionRow> filas,
+        decimal totalEntradas, decimal totalSalidas)
+        => new()
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = string.IsNullOrWhiteSpace(impresoPor) ? "sistema" : impresoPor.Trim(),
+            Titulo = titulo,
+            Subtitulo = subtitulo,
+            ColumnaContexto = columnaContexto,
+            FiltroTexto = filtroTexto,
+            Filas = filas,
+            TotalEntradas = totalEntradas,
+            TotalSalidas = totalSalidas
+        };
 }
