@@ -5,4 +5,5 @@ public sealed record MapBootstrapDto(
     string ApiKey,
     decimal DefaultLatitude,
     decimal DefaultLongitude,
-    int DefaultZoom);
+    int DefaultZoom,
+    string GoogleMapId = "");
