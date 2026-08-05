@@ -60,6 +60,7 @@
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
+        esSuperAdmin = user.IsInRole(SIAD.Core.Constants.RoleNames.SuperAdministrador);
 
         var sections = new List<SidebarNavSection>();
         foreach (var section in SidebarNavigationDefinition.Sections)
@@ -124,8 +125,15 @@
         return resultado;
     }
 
+    private bool esSuperAdmin;
+
     private SidebarNavItem? FiltrarItemPorCapacidades(SidebarNavItem item)
     {
+        if (item.SoloSuperAdmin && !esSuperAdmin)
+        {
+            return null;
+        }
+
         if (!CapacidadDisponible(item.RequiredCapability))
         {
             return null;
@@ -162,7 +170,8 @@
             MatchPrefixes = item.MatchPrefixes,
             Children = children,
             MatchExact = item.MatchExact,
-            RequiredCapability = item.RequiredCapability
+            RequiredCapability = item.RequiredCapability,
+            SoloSuperAdmin = item.SoloSuperAdmin
         };
     }
 

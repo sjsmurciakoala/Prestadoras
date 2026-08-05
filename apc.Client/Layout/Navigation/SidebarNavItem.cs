@@ -17,5 +17,12 @@ public sealed class SidebarNavItem
     /// </summary>
     public string? RequiredCapability { get; init; }
 
+    /// <summary>
+    /// Reorganización 2026-08-05 (5 secciones): las opciones que antes vivían
+    /// en la sección Parámetros (solo Super Administrador) ahora conviven en
+    /// Configuración — este flag conserva esa restricción a nivel de opción.
+    /// </summary>
+    public bool SoloSuperAdmin { get; init; }
+
     public bool HasChildren => Children.Count > 0;
 }
