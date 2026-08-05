@@ -32,11 +32,17 @@ public sealed class MapController : ControllerBase
             _ => options.AzureApiKey
         };
 
+        // El Map ID solo tiene sentido en Google (Advanced Markers de DX 25.2).
+        var googleMapId = string.Equals(options.Provider, "Google", StringComparison.OrdinalIgnoreCase)
+            ? options.GoogleMapId
+            : string.Empty;
+
         return Ok(new MapBootstrapDto(
             options.Provider,
             apiKey,
             options.DefaultLatitude,
             options.DefaultLongitude,
-            zoom));
+            zoom,
+            googleMapId));
     }
 }

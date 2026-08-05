@@ -160,6 +160,7 @@
 
                 <div class="map-shell">
                 <DxMap Provider="@currentProvider"
+                       GoogleMapId="@GoogleMapId"
                        Type="MapType.Roadmap"
                        Width="100%"
                        Height="560px"
@@ -263,6 +264,10 @@
 
     private string GoogleKey =>
         currentProvider == MapProvider.Google ? (mapConfiguration?.ApiKey ?? string.Empty) : string.Empty;
+
+    // DevExpress 25.2 usa Advanced Markers de Google → requieren Map ID.
+    private string GoogleMapId =>
+        currentProvider == MapProvider.Google ? (mapConfiguration?.GoogleMapId ?? string.Empty) : string.Empty;
 
     private bool CanRenderMap =>
         mapConfiguration is not null && !string.IsNullOrWhiteSpace(mapConfiguration.ApiKey);
