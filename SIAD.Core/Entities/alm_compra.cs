@@ -91,8 +91,28 @@ public partial class alm_compra : ICompanyScopedEntity
     /// </summary>
     public string origen { get; set; } = OrigenDocumento.Siad;
 
+    /// <summary>
+    /// Cabecera (factura de proveedor) a la que pertenece esta línea. NULL en el histórico
+    /// SIMAFI y en cualquier línea sin documento de recepción. La línea sigue siendo la
+    /// unidad de posteo al kardex: la cabecera agrupa, no postea.
+    /// </summary>
+    public int? compra_hdr_id { get; set; }
+
+    /// <summary>
+    /// Renglón de la O/C que originó esta línea (modo Con orden de compra). NULL = compra
+    /// directa o histórico SIMAFI. Es lo que permite descargar la orden
+    /// (<c>alm_orden_compra_detalle.cantidad_aplicada</c>) al recibir.
+    /// </summary>
+    public int? orden_compra_detalle_id { get; set; }
+
     /// <summary>Artículo de la compra (FK a alm_articulo). El código legacy se conserva como referencia.</summary>
     public virtual alm_articulo? articulo_ref { get; set; }
+
+    /// <summary>Factura de proveedor que agrupa esta línea (alm_compra_hdr).</summary>
+    public virtual alm_compra_hdr? cabecera { get; set; }
+
+    /// <summary>Renglón de la O/C que se está recibiendo con esta línea.</summary>
+    public virtual alm_orden_compra_detalle? orden_detalle { get; set; }
 
     /// <summary>Bodega de entrada de la compra (FK a alm_bodega).</summary>
     public virtual alm_bodega? bodega_ref { get; set; }

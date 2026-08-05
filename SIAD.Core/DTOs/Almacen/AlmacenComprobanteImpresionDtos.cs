@@ -1,0 +1,44 @@
+namespace SIAD.Core.DTOs.Almacen;
+
+/// <summary>
+/// Base de impresión de los comprobantes de almacén (requisición y descargo): el encabezado de la
+/// empresa emisora + quién imprime. Los datos de empresa salen de <c>cfg_company</c> (igual que el
+/// comprobante de compromiso). El comprobante concreto agrega su documento y el total en letras.
+/// </summary>
+public abstract class ComprobanteAlmacenImpresionBase
+{
+    public string EmpresaNombre { get; set; } = string.Empty;
+    public string? EmpresaRazonSocial { get; set; }
+    public string? EmpresaRtn { get; set; }
+    public string? EmpresaDireccion { get; set; }
+    public string? EmpresaTelefono { get; set; }
+    public string? EmpresaEmail { get; set; }
+    public byte[]? EmpresaLogo { get; set; }
+
+    /// <summary>Usuario que solicitó la impresión (aparece en el pie del comprobante).</summary>
+    public string ImpresoPor { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Datos de impresión del comprobante (vale) de una requisición de materiales. La requisición es la
+/// solicitud: se imprime para firmarla y darle seguimiento al despacho, no mueve inventario.
+/// </summary>
+public sealed class RequisicionImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public RequisicionDocumentoDto Documento { get; set; } = new();
+
+    /// <summary>Total de la requisición en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Datos de impresión del comprobante (vale de salida) de un descargo. El descargo es la entrega real:
+/// el total y su expresión en letras corresponden al valor de la mercadería que salió del kardex.
+/// </summary>
+public sealed class DescargoImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public DescargoDocumentoDto Documento { get; set; } = new();
+
+    /// <summary>Total del descargo en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}

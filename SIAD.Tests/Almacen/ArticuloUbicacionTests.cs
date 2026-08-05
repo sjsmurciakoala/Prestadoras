@@ -4,6 +4,7 @@ using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
+using SIAD.Core.Constants;
 using SIAD.Core.Tenancy;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
@@ -33,9 +34,14 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
                 .UseNpgsql(Connection)
                 .Options;
 
-            _context = new SiadDbContext(options, new TestCurrentCompanyService(CompanyId));
+            var company = new TestCurrentCompanyService(CompanyId);
+            _context = new SiadDbContext(options, company);
             _context.Database.UseTransaction(Transaction);
-            _service = new ArticuloUbicacionService(_context);
+
+            var rollup = new ArticuloRollupService(_context);
+            var motor = new InventarioPostingService(_context, company, rollup);
+            var carga = new CargaInicialInventarioService(_context, company, motor);
+            _service = new ArticuloUbicacionService(_context, rollup, carga, motor);
         }
     }
 
@@ -43,6 +49,58 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
     {
         _context?.Dispose();
         return base.DisposeAsync();
+    }
+
+    /// <summary>
+    /// Vacía una bodega con un ajuste de SALIDA: desde la Fase 6 es la ÚNICA vía para bajar
+    /// la existencia desde el maestro (el DTO ya no la escribe). Sustituye al viejo
+    /// "poner Existencia = 0 y llamar a UpdateAsync", que hoy es un no-op.
+    /// </summary>
+    private async Task VaciarBodegaAsync(int articuloId, int bodegaId)
+    {
+        var fila = await _context!.alm_articulo_bodegas.AsNoTracking()
+            .FirstAsync(u => u.articulo_id == articuloId && u.bodega_id == bodegaId);
+
+        if (fila.existencia <= 0m) return;
+
+        await CrearAjustesService().CrearYPostearAsync(new AjusteInventarioDto
+        {
+            ArticuloId = articuloId,
+            BodegaId = bodegaId,
+            Clase = ClaseAjusteInventario.Salida,
+            Cantidad = fila.existencia,
+            Motivo = "Vaciado de bodega (prueba)"
+        }, "tester");
+    }
+
+    /// <summary>
+    /// Deshabilita la fila por EF sin pasar por el servicio: DeshabilitarAsync exige bodega
+    /// en cero, y lo que estas pruebas montan es justo el estado que la guarda de
+    /// reactivación tiene que rechazar (fila deshabilitada CON saldo).
+    /// </summary>
+    private async Task DeshabilitarDirectoAsync(int ubicacionId)
+    {
+        var fila = await _context!.alm_articulo_bodegas.FirstAsync(u => u.id == ubicacionId);
+        fila.activo = false;
+        await _context.SaveChangesAsync();
+    }
+
+    private AjusteInventarioService CrearAjustesService()
+    {
+        var company = new TestCurrentCompanyService(CompanyId);
+        var rollup = new ArticuloRollupService(_context!);
+        var motor = new InventarioPostingService(_context!, company, rollup);
+        return new AjusteInventarioService(_context!, company, motor);
+    }
+
+    /// <summary>ArticulosService con toda su cadena de dependencias sobre el contexto del test.</summary>
+    private ArticulosService CrearArticulosService()
+    {
+        var company = new TestCurrentCompanyService(CompanyId);
+        var rollup = new ArticuloRollupService(_context!);
+        var motor = new InventarioPostingService(_context!, company, rollup);
+        var carga = new CargaInicialInventarioService(_context!, company, motor);
+        return new ArticulosService(_context!, company, rollup, carga);
     }
 
     private async Task<int> SeedArticuloAsync(string codigo)
@@ -313,6 +371,145 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal("Rack 9", todas.Single(u => u.BodegaId == bB).Ubicacion1);
     }
 
+    // ── Fase 6: la existencia deja de escribirse desde el DTO ────────────────────
+    // Toda cantidad que entre al inventario tiene que dejar asiento. Al alta del par se
+    // postea como CARGA_INICIAL (con su costo); después, solo documentos.
+
+    [SkippableFact]
+    public async Task Add_ConExistencia_PosteaCargaInicialYSiembraElCosto()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ZZF6AP1");
+        var bodegaId = await SeedBodegaAsync("ZZF6A1");
+
+        var creada = await _service!.AddAsync(
+            articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId, Existencia = 12m, CostoApertura = 3.5m }, "tester");
+
+        Assert.Equal(12m, creada.Existencia);
+        Assert.Equal(3.5m, creada.CostoPromedio);
+        Assert.Equal(3.5m, creada.UltimoCosto);
+
+        var asiento = await _context!.alm_kardexs.AsNoTracking()
+            .SingleAsync(k => k.articulo_id == articuloId && k.bodega_id == bodegaId);
+        Assert.Equal(TipoDocumentoInventario.CargaInicial, asiento.documento_tipo);
+        Assert.Equal(12m, asiento.ingresos);
+        Assert.Equal(12m, asiento.existencia_resultante);
+        Assert.NotNull(asiento.uuid);
+
+        Assert.Equal(12m, await CabeceraExistenciaAsync(articuloId));
+    }
+
+    [SkippableFact]
+    public async Task Add_ConExistenciaSinCosto_LanzaYNoCreaLaFila()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ZZF6AP2");
+        var bodegaId = await SeedBodegaAsync("ZZF6A2");
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId, Existencia = 5m }, "tester"));
+        Assert.Contains("costo de apertura", ex.Message);
+
+        // Se valida antes de escribir: no queda una ubicación huérfana en 0.
+        Assert.Empty(await _service!.GetAsync(articuloId, incluirInactivas: true));
+    }
+
+    [SkippableFact]
+    public async Task Update_NoEscribeLaExistenciaDelDto()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ZZF6UP1");
+        var bodegaId = await SeedBodegaAsync("ZZF6U1");
+        var fila = await _service!.AddAsync(
+            articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId, Existencia = 8m, CostoApertura = 1m }, "tester");
+
+        // El cliente manda 999: se ignora. Sin esto la carga inicial caducaría con la
+        // primera edición del maestro.
+        fila.Existencia = 999m;
+        fila.Ubicacion1 = "Pasillo 3";
+        var actualizada = await _service.UpdateAsync(articuloId, fila.Id!.Value, fila, "tester");
+
+        Assert.Equal(8m, actualizada.Existencia);
+        Assert.Equal("Pasillo 3", actualizada.Ubicacion1);
+        Assert.Equal(8m, await CabeceraExistenciaAsync(articuloId));
+    }
+
+    // ── Guarda de reactivación (decisión 13), en las DOS rutas ───────────────────
+    // Reactivar devuelve la fila al rollup: si su existencia no tiene apertura que la
+    // respalde, la cabecera crece sin movimiento de kardex. Es la simétrica de la guarda
+    // de DeshabilitarAsync.
+
+    [SkippableFact]
+    public async Task Reactivar_ConExistenciaSinApertura_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ZZF6RE1");
+        var bA = await SeedBodegaAsync("ZZF6R1A");
+        var bB = await SeedBodegaAsync("ZZF6R1B");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Principal = true }, "tester");
+
+        // Fila deshabilitada CON saldo y sin apertura: el estado que dejó la captura manual
+        // de antes del corte. Se siembra directo porque el servicio ya no lo permite.
+        var idB = await SeedUbicacionDirectaAsync(articuloId, bB, existencia: 6m);
+        await DeshabilitarDirectoAsync(idB);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.ReactivarAsync(articuloId, idB, "tester"));
+        Assert.Contains("carga inicial", ex.Message);
+
+        // Nada volvió al rollup.
+        Assert.Equal(0m, await CabeceraExistenciaAsync(articuloId));
+    }
+
+    [SkippableFact]
+    public async Task Add_ReactivandoConExistenciaSinApertura_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ZZF6RE2");
+        var bA = await SeedBodegaAsync("ZZF6R2A");
+        var bB = await SeedBodegaAsync("ZZF6R2B");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Principal = true }, "tester");
+
+        var idB = await SeedUbicacionDirectaAsync(articuloId, bB, existencia: 6m);
+        await DeshabilitarDirectoAsync(idB);
+
+        // La SEGUNDA puerta: re-agregar la misma bodega reactiva la fila. Hasta la Fase 6
+        // esta ruta quedaba tapada por accidente (sobrescribía la existencia con la del
+        // DTO); al quitar esa escritura, sin la guarda quedaría abierta.
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB }, "tester"));
+        Assert.Contains("carga inicial", ex.Message);
+
+        Assert.Equal(0m, await CabeceraExistenciaAsync(articuloId));
+    }
+
+    [SkippableFact]
+    public async Task Reactivar_ConExistenciaYAperturaVigente_Ok()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var articuloId = await SeedArticuloAsync("ZZF6RE3");
+        var bA = await SeedBodegaAsync("ZZF6R3A");
+        var bB = await SeedBodegaAsync("ZZF6R3B");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Principal = true }, "tester");
+
+        // Con apertura posteada sí hay respaldo: la guarda deja pasar. (Se deshabilita por
+        // SQL porque DeshabilitarAsync exige bodega en cero; lo que se prueba es la guarda
+        // de reactivación, no la de deshabilitación.)
+        var enB = await _service.AddAsync(
+            articuloId, new ArticuloUbicacionDto { BodegaId = bB, Existencia = 9m, CostoApertura = 2m }, "tester");
+        await DeshabilitarDirectoAsync(enB.Id!.Value);
+
+        Assert.True(await _service.ReactivarAsync(articuloId, enB.Id!.Value, "tester"));
+        Assert.Equal(9m, await CabeceraExistenciaAsync(articuloId));
+        Assert.Equal(await SumaActivasAsync(articuloId), await CabeceraExistenciaAsync(articuloId));
+    }
+
     [SkippableFact]
     public async Task Create_SinUbicaciones_Lanza()
     {
@@ -322,7 +519,7 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         // Con unidad válida, para que lo que dispare la excepción sea la falta de bodega
         // (sin ella lanzaría antes la regla de unidad obligatoria y el test probaría otra cosa).
         var unidad = await SeedUnidadAsync("ZUC1");
-        var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
+        var articulos = CrearArticulosService();
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             articulos.CreateAsync(new ArticuloEditDto { Codigo = "ZZCRE1", Descripcion = "Sin bodega", TipoArticuloId = tipo, UnidadMedidaId = unidad }, "tester"));
     }
@@ -336,7 +533,7 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var bB = await SeedBodegaAsync("CRB");
         var tipo = await SeedTipoAsync("ZTC2");
         var unidad = await SeedUnidadAsync("ZUC2");
-        var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
+        var articulos = CrearArticulosService();
 
         var creado = await articulos.CreateAsync(new ArticuloEditDto
         {
@@ -346,8 +543,8 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
             UnidadMedidaId = unidad,
             Ubicaciones =
             {
-                new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, ExistenciaMinima = 3 },
-                new ArticuloUbicacionDto { BodegaId = bB, Existencia = 5, ExistenciaMinima = 2 }
+                new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, CostoApertura = 2m, ExistenciaMinima = 3 },
+                new ArticuloUbicacionDto { BodegaId = bB, Existencia = 5, CostoApertura = 2m, ExistenciaMinima = 2 }
             }
         }, "tester");
 
@@ -358,6 +555,39 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var ubic = await _service!.GetAsync(creado.Id!.Value);
         Assert.Equal(2, ubic.Count);
         Assert.Equal(bA, ubic.Single(u => u.Principal).BodegaId);
+
+        // La existencia ya no se escribe: entró por dos asientos de carga inicial, y el
+        // costo tecleado quedó sembrado como costo promedio de cada bodega.
+        var asientos = await _context!.alm_kardexs.AsNoTracking()
+            .Where(k => k.articulo_id == creado.Id!.Value)
+            .ToListAsync();
+        Assert.Equal(2, asientos.Count);
+        Assert.All(asientos, k => Assert.Equal(TipoDocumentoInventario.CargaInicial, k.documento_tipo));
+        Assert.All(ubic, u => Assert.Equal(2m, u.CostoPromedio));
+    }
+
+    [SkippableFact]
+    public async Task Create_ConExistenciaSinCostoDeApertura_LanzaYNoCreaElArticulo()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var bA = await SeedBodegaAsync("CRSC");
+        var tipo = await SeedTipoAsync("ZTC3");
+        var unidad = await SeedUnidadAsync("ZUC3");
+        var articulos = CrearArticulosService();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            articulos.CreateAsync(new ArticuloEditDto
+            {
+                Codigo = "ZZCRE3",
+                Descripcion = "Sin costo de apertura",
+                TipoArticuloId = tipo,
+                UnidadMedidaId = unidad,
+                Ubicaciones = { new ArticuloUbicacionDto { BodegaId = bA, Existencia = 4m } }
+            }, "tester"));
+
+        Assert.Contains("costo de apertura", ex.Message);
+        Assert.False(await _context!.alm_articulos.AsNoTracking().AnyAsync(a => a.codigo_articulo == "ZZCRE3"));
     }
 
     [SkippableFact]
@@ -369,17 +599,16 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var bodegaA = await SeedBodegaAsync("ZZRA");
         var bodegaB = await SeedBodegaAsync("ZZRB");
 
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaA, Existencia = 10, ExistenciaMinima = 3 }, "tester");
-        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaB, Existencia = 5, ExistenciaMinima = 2 }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaA, Existencia = 10, CostoApertura = 2m, ExistenciaMinima = 3 }, "tester");
+        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaB, Existencia = 5, CostoApertura = 2m, ExistenciaMinima = 2 }, "tester");
 
         var art = await _context!.alm_articulos.AsNoTracking().FirstAsync(a => a.id == articuloId);
         Assert.Equal(15m, art.existencia);
         Assert.Equal(5m, art.existencia_minima);
 
-        // Vaciar B (equivalente al traslado/ajuste previo que ahora exige la regla de
-        // deshabilitación) también recalcula la cabecera: 15 → 10, el mínimo no cambia.
-        enB.Existencia = 0m;
-        await _service.UpdateAsync(articuloId, enB.Id!.Value, enB, "tester");
+        // Vaciar B con un AJUSTE de salida (el DTO ya no escribe existencia) también
+        // recalcula la cabecera: 15 → 10, el mínimo no cambia.
+        await VaciarBodegaAsync(articuloId, bodegaB);
 
         var artVaciada = await _context.alm_articulos.AsNoTracking().FirstAsync(a => a.id == articuloId);
         Assert.Equal(10m, artVaciada.existencia);
@@ -407,8 +636,8 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var articuloId = await SeedArticuloAsync("ZZDESH1");
         var bA = await SeedBodegaAsync("ZZD1A");
         var bB = await SeedBodegaAsync("ZZD1B");
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, Principal = true }, "tester");
-        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB, Existencia = 7 }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, CostoApertura = 2m, Principal = true }, "tester");
+        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB, Existencia = 7, CostoApertura = 2m }, "tester");
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _service.DeshabilitarAsync(articuloId, enB.Id!.Value, "tester"));
@@ -429,7 +658,7 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var articuloId = await SeedArticuloAsync("ZZDESH2");
         var bA = await SeedBodegaAsync("ZZD2A");
         var bB = await SeedBodegaAsync("ZZD2B");
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, Principal = true }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, CostoApertura = 2m, Principal = true }, "tester");
 
         // Negativa: no se puede teclear por el DTO, la deja un kardex mal cuadrado.
         // Deshabilitarla SUBIRÍA la cabecera en silencio, así que también se bloquea.
@@ -451,7 +680,7 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var articuloId = await SeedArticuloAsync("ZZDESH3");
         var bA = await SeedBodegaAsync("ZZD3A");
         var bB = await SeedBodegaAsync("ZZD3B");
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, Principal = true }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, CostoApertura = 2m, Principal = true }, "tester");
 
         // Existencia en 0 pero con reserva pendiente de despacho.
         var idB = await SeedUbicacionDirectaAsync(articuloId, bB, existencia: 0m, comprometida: 4m);
@@ -469,7 +698,7 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var articuloId = await SeedArticuloAsync("ZZDESH4");
         var bA = await SeedBodegaAsync("ZZD4A");
         var bB = await SeedBodegaAsync("ZZD4B");
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, Principal = true }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, CostoApertura = 2m, Principal = true }, "tester");
 
         // Existencia en 0 pero con mercadería en camino a esa bodega.
         var idB = await SeedUbicacionDirectaAsync(articuloId, bB, existencia: 0m, transito: 2m);
@@ -488,11 +717,10 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
         var articuloId = await SeedArticuloAsync("ZZDESH5");
         var bA = await SeedBodegaAsync("ZZD5A");
         var bB = await SeedBodegaAsync("ZZD5B");
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, Principal = true }, "tester");
-        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB, Existencia = 7 }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, CostoApertura = 2m, Principal = true }, "tester");
+        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB, Existencia = 7, CostoApertura = 2m }, "tester");
 
-        enB.Existencia = 0m;
-        await _service.UpdateAsync(articuloId, enB.Id!.Value, enB, "tester");
+        await VaciarBodegaAsync(articuloId, bB);
 
         Assert.True(await _service.DeshabilitarAsync(articuloId, enB.Id!.Value, "tester"));
 
@@ -529,15 +757,19 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
             Assert.Same(Transaction, _context!.Database.CurrentTransaction!.GetDbTransaction());
         }
 
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, Principal = true }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bA, Existencia = 10, CostoApertura = 2m, Principal = true }, "tester");
         await AssertCuadradaAsync("add-A");
 
-        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB, Existencia = 4 }, "tester");
+        var enB = await _service.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bB, Existencia = 4, CostoApertura = 2m }, "tester");
         await AssertCuadradaAsync("add-B");
 
-        enB.Existencia = 0m;
         await _service.UpdateAsync(articuloId, enB.Id!.Value, enB, "tester");
         await AssertCuadradaAsync("update-B");
+
+        // La existencia solo baja con un documento: el ajuste de salida deja B en 0 y la
+        // cabecera cuadrada, que es lo que permite deshabilitarla en el paso siguiente.
+        await VaciarBodegaAsync(articuloId, bB);
+        await AssertCuadradaAsync("ajuste-salida-B");
 
         await _service.DeshabilitarAsync(articuloId, enB.Id!.Value, "tester");
         await AssertCuadradaAsync("deshabilitar-B");
@@ -555,9 +787,9 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
 
         var articuloId = await SeedArticuloAsync("ZZALERTA1");
         var bodegaId = await SeedBodegaAsync("ZZALRT");
-        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId, Existencia = 2, ExistenciaMinima = 5 }, "tester");
+        await _service!.AddAsync(articuloId, new ArticuloUbicacionDto { BodegaId = bodegaId, Existencia = 2, CostoApertura = 2m, ExistenciaMinima = 5 }, "tester");
 
-        var articulos = new ArticulosService(_context!, new TestCurrentCompanyService(CompanyId));
+        var articulos = CrearArticulosService();
         var alertas = await articulos.GetAlertasStockAsync(new AlertaStockFilterDto { Search = "ZZALERTA1" });
 
         var alerta = Assert.Single(alertas);

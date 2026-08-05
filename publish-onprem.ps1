@@ -8,7 +8,12 @@
 #   .\publish-onprem.ps1 -Solo ws        # solo ws
 #   .\publish-onprem.ps1 -Solo bancosws  # solo WS bancario (apc.BancosWs, F8)
 #   .\publish-onprem.ps1 -Solo mobileapi # solo API movil de lectores (apc.MobileApi, L3)
-#   .\publish-onprem.ps1 -Output D:\deploy\apc\2026-05-09  # carpeta custom
+#   .\publish-onprem.ps1 -Output D:\deploy\apc\2026-05-09  # carpeta custom (una sola publicacion)
+#
+# Por defecto TODAS las publicaciones se concentran en -PublishRoot:
+#   E:\Koala\Users\Dell\Documents\Publicaciones\APC
+# y cada corrida crea ahi una subcarpeta publish_<timestamp> (ej.:
+#   ...\Publicaciones\APC\publish_20260728_131608\portal).
 #
 # NOTA: bancosws y mobileapi NO entran en "todos" a proposito — son hosts
 # independientes con su propia ventana de deploy (el canal del banco es 24/7;
@@ -18,7 +23,10 @@
 param(
     [ValidateSet("portal", "ws", "bancosws", "mobileapi", "todos")]
     [string]$Solo = "todos",
-    [string]$Output = ""
+    [string]$Output = "",
+    # Carpeta raiz donde se concentran TODAS las publicaciones de este proyecto.
+    # Cada corrida crea aqui una subcarpeta publish_<timestamp>. Sobreescribible con -PublishRoot.
+    [string]$PublishRoot = "E:\Koala\Users\Dell\Documents\Publicaciones\APC"
 )
 
 $ErrorActionPreference = "Stop"
@@ -26,7 +34,11 @@ $repoRoot = Split-Path $PSScriptRoot -Parent
 $timestamp = Get-Date -Format "yyyyMMdd_HHmmss"
 
 if ([string]::IsNullOrWhiteSpace($Output)) {
-    $Output = Join-Path $repoRoot "publish_$timestamp"
+    # Todas las publicaciones se concentran en $PublishRoot, una subcarpeta por corrida.
+    if (-not (Test-Path $PublishRoot)) {
+        New-Item -ItemType Directory -Path $PublishRoot -Force | Out-Null
+    }
+    $Output = Join-Path $PublishRoot "publish_$timestamp"
 }
 
 Write-Host "Repo root: $repoRoot"

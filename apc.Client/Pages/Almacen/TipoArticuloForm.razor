@@ -91,6 +91,34 @@
             </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
+        <DxFormLayoutItem Caption="ISV en compras" ColSpanMd="12">
+            <DxComboBox Data="@TasasIsv" TData="TasaIsvOpcionDto" TValue="int?"
+                        @bind-Value="Model.ImpuestoTasaId"
+                        ValueFieldName="@nameof(TasaIsvOpcionDto.Id)"
+                        TextFieldName="@nameof(TasaIsvOpcionDto.Display)"
+                        NullText="No registra ISV"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                        Enabled="@(TasasIsv.Count > 0)" />
+            @if (TasasIsv.Count == 0)
+            {
+                <div class="form-hint text-warning small mt-1">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    No hay tasas de ISV vigentes. Definilas en Mantenimientos &rarr; Impuestos
+                    y luego volvé a este formulario.
+                </div>
+            }
+            else
+            {
+                <div class="form-hint text-muted small mt-1">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Elegí una tasa <strong>gravada</strong> (ej. ISV 15%) para que las compras de este
+                    tipo sumen el ISV al costo del artículo; <strong>Exento</strong> o vacío = no registra
+                    ISV. Sin efecto contable.
+                </div>
+            }
+            <ValidationMessage For="() => Model.ImpuestoTasaId" />
+        </DxFormLayoutItem>
+
         <DxFormLayoutItem Caption="Maneja inventario" ColSpanMd="8">
             <Template>
                 <div class="pt-2">
@@ -126,6 +154,7 @@
 @code {
     [Parameter, EditorRequired] public TipoArticuloEditDto Model { get; set; } = default!;
     [Parameter] public IReadOnlyList<CuentaContableLookupDto> CuentasContables { get; set; } = Array.Empty<CuentaContableLookupDto>();
+    [Parameter] public IReadOnlyList<TasaIsvOpcionDto> TasasIsv { get; set; } = Array.Empty<TasaIsvOpcionDto>();
     [Parameter] public EventCallback OnValidSubmit { get; set; }
     [Parameter] public EventCallback OnCancel { get; set; }
     [Parameter] public bool IsBusy { get; set; }

@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
 using SIAD.Core.Entities;
 
 namespace SIAD.Data;
@@ -15,6 +16,12 @@ public partial class SiadDbContext
     public virtual DbSet<alm_compra> alm_compras { get; set; } = null!;
     public virtual DbSet<alm_requisicion> alm_requisicions { get; set; } = null!;
     public virtual DbSet<alm_descargo> alm_descargos { get; set; } = null!;
+    // Cabecera y correlativo de la requisición (Fase 6, 2026-08-01_alm_requisicion_descargo.sql).
+    public virtual DbSet<alm_requisicion_hdr> alm_requisicion_hdrs { get; set; } = null!;
+    public virtual DbSet<alm_requisicion_correlativo> alm_requisicion_correlativos { get; set; } = null!;
+    // Cabecera y correlativo del descargo (Fase 6).
+    public virtual DbSet<alm_descargo_hdr> alm_descargo_hdrs { get; set; } = null!;
+    public virtual DbSet<alm_descargo_correlativo> alm_descargo_correlativos { get; set; } = null!;
     public virtual DbSet<af_activo_fijo> af_activo_fijos { get; set; } = null!;
     public virtual DbSet<af_activo_fijo_depreciacion> af_activo_fijo_depreciacions { get; set; } = null!;
     public virtual DbSet<alm_unidad_medida> alm_unidad_medidas { get; set; } = null!;
@@ -24,9 +31,238 @@ public partial class SiadDbContext
     public virtual DbSet<alm_bodega> alm_bodegas { get; set; } = null!;
     public virtual DbSet<alm_articulo_bodega> alm_articulo_bodegas { get; set; } = null!;
     public virtual DbSet<alm_articulo_proveedor> alm_articulo_proveedors { get; set; } = null!;
+    public virtual DbSet<alm_orden_compra> alm_orden_compras { get; set; } = null!;
+    public virtual DbSet<alm_orden_compra_detalle> alm_orden_compra_detalles { get; set; } = null!;
+    public virtual DbSet<alm_orden_compra_correlativo> alm_orden_compra_correlativos { get; set; } = null!;
+    public virtual DbSet<alm_compra_hdr> alm_compra_hdrs { get; set; } = null!;
+    public virtual DbSet<alm_compra_correlativo> alm_compra_correlativos { get; set; } = null!;
+    public virtual DbSet<alm_config_inventario> alm_config_inventarios { get; set; } = null!;
+    public virtual DbSet<alm_ajuste_inventario> alm_ajuste_inventarios { get; set; } = null!;
+    public virtual DbSet<alm_tipo_movimiento> alm_tipo_movimientos { get; set; } = null!;
+    // Documento de movimiento de almacén (2026-08-03_alm_movimiento.sql).
+    public virtual DbSet<alm_movimiento_hdr> alm_movimiento_hdrs { get; set; } = null!;
+    public virtual DbSet<alm_movimiento_dtl> alm_movimiento_dtls { get; set; } = null!;
+    public virtual DbSet<alm_movimiento_correlativo> alm_movimiento_correlativos { get; set; } = null!;
+    // Recepciones del traslado entre bodegas (2026-08-04_alm_traslado.sql, Fase 5).
+    public virtual DbSet<alm_traslado_recepcion> alm_traslado_recepcions { get; set; } = null!;
+    public virtual DbSet<alm_traslado_recepcion_dtl> alm_traslado_recepcion_dtls { get; set; } = null!;
+    // Política del ISV en compras por empresa (2026-07-30_cfg_compra_isv.sql). NO es de almacén
+    // (es config de empresa); se mapea aquí solo por conveniencia de encadenamiento del modelo.
+    public virtual DbSet<cfg_compra_isv> cfg_compra_isvs { get; set; } = null!;
 
     private void ConfigureAlmacenModel(ModelBuilder modelBuilder)
     {
+        // ── Carga inicial de inventario (2026-07-30_alm_carga_inicial.sql) ──────
+        modelBuilder.Entity<alm_config_inventario>(entity =>
+        {
+            // La PK ES el company_id: una sola configuración por empresa.
+            entity.HasKey(e => e.company_id).HasName("alm_config_inventario_pkey");
+            entity.ToTable("alm_config_inventario", "public");
+
+            entity.Property(e => e.company_id).ValueGeneratedNever();
+            entity.Property(e => e.base_costo_apertura).HasMaxLength(20);
+            entity.Property(e => e.fecha_corte_apertura).HasColumnType("date");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            // Siguiendo el precedente de cfg_impuesto_tasa: los booleanos y los campos con
+            // CHECK NO llevan HasDefaultValue, para que el INSERT lleve el valor explícito
+            // y no dependa del default de la BD.
+        });
+
+        modelBuilder.Entity<alm_ajuste_inventario>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_ajuste_inventario_pkey");
+            entity.ToTable("alm_ajuste_inventario", "public");
+            entity.HasIndex(e => e.company_id, "ix_alm_ajuste_inventario_company");
+            entity.HasIndex(e => new { e.company_id, e.articulo_id, e.bodega_id }, "ix_alm_ajuste_inventario_par");
+
+            entity.Property(e => e.clase).HasMaxLength(10);
+            entity.Property(e => e.cantidad).HasPrecision(15, 2);
+            entity.Property(e => e.costo_unitario).HasPrecision(12, 4);
+            entity.Property(e => e.motivo).HasMaxLength(120);
+            entity.Property(e => e.observacion).HasMaxLength(254);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+
+            // Las FK son COMPUESTAS por tenant en la BD ((company_id, articulo_id) y
+            // (company_id, bodega_id) contra las claves alternas). EF las mapea simples,
+            // igual que el resto del módulo: un bug de tenant saldría como 23503 desde la
+            // BD, no lo atrapa EF. Por eso el servicio valida el tenant antes de insertar.
+            entity.HasOne(e => e.articulo).WithMany()
+                .HasForeignKey(e => e.articulo_id)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.bodega).WithMany()
+                .HasForeignKey(e => e.bodega_id)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Catálogo de tipos de movimiento (2026-08-01_alm_tipo_movimiento.sql) ─────────
+        modelBuilder.Entity<alm_tipo_movimiento>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_tipo_movimiento_pkey");
+            entity.ToTable("alm_tipo_movimiento", "public");
+            entity.HasIndex(e => new { e.company_id, e.codigo }, "uq_alm_tipo_movimiento_codigo").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_tipo_movimiento_tenant").IsUnique();
+            entity.HasIndex(e => e.company_id, "ix_alm_tipo_movimiento_company");
+
+            entity.Property(e => e.codigo).HasMaxLength(20);
+            entity.Property(e => e.nombre).HasMaxLength(80);
+            entity.Property(e => e.clase).HasMaxLength(10);
+            entity.Property(e => e.requiere_autorizacion).HasDefaultValue(false);
+            entity.Property(e => e.cuenta_contable).HasMaxLength(20);
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.orden).HasDefaultValue((short)0);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+        });
+
+        // ── Documento de movimiento de almacén (2026-08-03_alm_movimiento.sql) ───────────
+        modelBuilder.Entity<alm_movimiento_correlativo>(entity =>
+        {
+            // La PK ES el company_id: un contador por empresa.
+            entity.HasKey(e => e.company_id).HasName("alm_movimiento_correlativo_pkey");
+            entity.ToTable("alm_movimiento_correlativo", "public");
+            entity.Property(e => e.company_id).ValueGeneratedNever();
+        });
+
+        modelBuilder.Entity<alm_movimiento_hdr>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_movimiento_hdr_pkey");
+            entity.ToTable("alm_movimiento_hdr", "public");
+            entity.HasIndex(e => new { e.company_id, e.numero }, "uq_alm_movimiento_hdr_numero").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_movimiento_hdr_tenant").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.fecha }, "ix_alm_movimiento_hdr_company_fecha");
+            entity.HasIndex(e => new { e.company_id, e.tipo_movimiento_id }, "ix_alm_movimiento_hdr_tipo");
+            entity.HasIndex(e => new { e.company_id, e.bodega_id }, "ix_alm_movimiento_hdr_bodega");
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.motivo).HasMaxLength(120);
+            entity.Property(e => e.documento_referencia).HasMaxLength(30);
+            entity.Property(e => e.observaciones).HasMaxLength(1000);
+            entity.Property(e => e.total).HasPrecision(14, 2);
+            entity.Property(e => e.anulado_por).HasMaxLength(100);
+            entity.Property(e => e.motivo_anulacion).HasMaxLength(500);
+            entity.Property(e => e.fecha_posteo).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_anulacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            // Traslado entre bodegas (2026-08-04_alm_traslado.sql).
+            entity.Property(e => e.requiere_recepcion).HasDefaultValue(true);
+            entity.Property(e => e.recibido_por).HasMaxLength(100);
+            entity.Property(e => e.fecha_recepcion).HasColumnType("timestamp without time zone");
+            // bodega_destino_id es escalar (int?): la FK vive en la BD; no se modela como navegación
+            // (el servicio resuelve la bodega por id, como en bodega_id).
+
+            // Sin HasDefaultValue en estado/posteado: los campos con CHECK van explícitos en
+            // el INSERT y no dependen del default de la BD (mismo criterio que alm_compra_hdr).
+        });
+
+        modelBuilder.Entity<alm_movimiento_dtl>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_movimiento_dtl_pkey");
+            entity.ToTable("alm_movimiento_dtl", "public");
+            entity.HasIndex(e => new { e.company_id, e.uuid }, "uq_alm_movimiento_dtl_uuid").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_movimiento_dtl_tenant").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.movimiento_hdr_id }, "ix_alm_movimiento_dtl_hdr");
+            entity.HasIndex(e => new { e.company_id, e.articulo_id }, "ix_alm_movimiento_dtl_articulo");
+
+            entity.Property(e => e.id).ValueGeneratedOnAdd();
+            entity.Property(e => e.codigo_articulo).HasMaxLength(20);
+            entity.Property(e => e.cantidad).HasPrecision(15, 2);
+            entity.Property(e => e.cantidad_recibida).HasPrecision(15, 2);
+            entity.Property(e => e.costo_unitario).HasPrecision(12, 4);
+            entity.Property(e => e.costo_real).HasPrecision(12, 4);
+            entity.Property(e => e.total).HasPrecision(14, 2);
+
+            // FK compuesta tenant-safe: la relación viaja por (company_id, hdr_id), no por el
+            // id a secas, para que EF no pueda enlazar con una cabecera de otra empresa.
+            entity.HasOne(d => d.cabecera)
+                  .WithMany(h => h.lineas)
+                  .HasForeignKey(d => new { d.company_id, d.movimiento_hdr_id })
+                  .HasPrincipalKey(h => new { h.company_id, h.id })
+                  .HasConstraintName("fk_alm_movimiento_dtl_hdr")
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── Recepciones del traslado entre bodegas (2026-08-04_alm_traslado.sql, Fase 5) ────
+        modelBuilder.Entity<alm_traslado_recepcion>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_traslado_recepcion_pkey");
+            entity.ToTable("alm_traslado_recepcion", "public");
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_traslado_recepcion_tenant").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.uuid }, "uq_alm_traslado_recepcion_uuid").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.movimiento_hdr_id }, "ix_alm_traslado_recepcion_hdr");
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.observaciones).HasMaxLength(500);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+
+            entity.HasOne(d => d.cabecera)
+                  .WithMany(h => h.recepciones)
+                  .HasForeignKey(d => new { d.company_id, d.movimiento_hdr_id })
+                  .HasPrincipalKey(h => new { h.company_id, h.id })
+                  .HasConstraintName("fk_alm_traslado_recepcion_hdr")
+                  .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<alm_traslado_recepcion_dtl>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_traslado_recepcion_dtl_pkey");
+            entity.ToTable("alm_traslado_recepcion_dtl", "public");
+            entity.HasIndex(e => new { e.company_id, e.uuid }, "uq_alm_traslado_recepcion_dtl_uuid").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_traslado_recepcion_dtl_tenant").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.recepcion_id }, "ix_alm_traslado_recepcion_dtl_rec");
+            entity.HasIndex(e => new { e.company_id, e.movimiento_dtl_id }, "ix_alm_traslado_recepcion_dtl_dtl");
+            entity.HasIndex(e => new { e.company_id, e.articulo_id }, "ix_alm_traslado_recepcion_dtl_articulo");
+
+            entity.Property(e => e.id).ValueGeneratedOnAdd();
+            entity.Property(e => e.cantidad).HasPrecision(15, 2);
+            entity.Property(e => e.costo_real).HasPrecision(12, 4);
+            entity.Property(e => e.total).HasPrecision(14, 2);
+
+            entity.HasOne(d => d.recepcion)
+                  .WithMany(r => r.lineas)
+                  .HasForeignKey(d => new { d.company_id, d.recepcion_id })
+                  .HasPrincipalKey(r => new { r.company_id, r.id })
+                  .HasConstraintName("fk_alm_traslado_recepcion_dtl_rec")
+                  .OnDelete(DeleteBehavior.Cascade);
+
+            // FK compuesta tenant-safe al renglón del traslado. Sin cascada: el renglón no se borra.
+            entity.HasOne(d => d.renglonTraslado)
+                  .WithMany()
+                  .HasForeignKey(d => new { d.company_id, d.movimiento_dtl_id })
+                  .HasPrincipalKey(l => new { l.company_id, l.id })
+                  .HasConstraintName("fk_alm_traslado_recepcion_dtl_dtl")
+                  .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Política del ISV en compras, por empresa (2026-07-30_cfg_compra_isv.sql) ──────
+        modelBuilder.Entity<cfg_compra_isv>(entity =>
+        {
+            // La PK ES el company_id: una sola configuración por empresa.
+            entity.HasKey(e => e.company_id).HasName("cfg_compra_isv_pkey");
+            entity.ToTable("cfg_compra_isv", "public");
+
+            entity.Property(e => e.company_id).ValueGeneratedNever();
+            entity.Property(e => e.tratamiento).HasMaxLength(10);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            // Sin HasDefaultValue en 'tratamiento': el INSERT lleva SIEMPRE el valor explícito
+            // (COSTO/FISCAL), mismo criterio que alm_config_inventario y cfg_impuesto_tasa.
+        });
+
         modelBuilder.Entity<alm_articulo>(entity =>
         {
             entity.HasKey(e => e.id).HasName("alm_articulo_pkey");
@@ -214,6 +450,18 @@ public partial class SiadDbContext
             entity.HasOne(e => e.bodega_ref).WithMany()
                 .HasForeignKey(e => e.bodega_id)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Enlaces de la recepción (2026-07-30_alm_orden_compra.sql y
+            // 2026-07-31_alm_compra_recepcion.sql). Ambas FK son compuestas tenant-safe en la
+            // BD (company_id, …); EF las mapea simples, igual que el resto del módulo — el
+            // servicio valida el tenant antes de insertar y la BD es la red de seguridad.
+            entity.HasIndex(e => new { e.company_id, e.orden_compra_detalle_id }, "ix_alm_compra_oc_detalle");
+            entity.HasOne(e => e.orden_detalle).WithMany()
+                .HasForeignKey(e => e.orden_compra_detalle_id)
+                .OnDelete(DeleteBehavior.Restrict);
+
+            entity.HasIndex(e => new { e.company_id, e.compra_hdr_id }, "ix_alm_compra_hdr_id");
+            // La relación con la cabecera se declara desde alm_compra_hdr (HasMany → WithOne).
         });
 
         modelBuilder.Entity<alm_requisicion>(entity =>
@@ -260,6 +508,15 @@ public partial class SiadDbContext
             // origen sin HasDefaultValue: la columna no tiene DEFAULT en la BD (ver script).
             entity.Property(e => e.origen).HasMaxLength(10);
 
+            // Columnas de la Fase 6 (2026-08-01_alm_requisicion_descargo.sql).
+            entity.Property(e => e.cantidad_despachada).HasPrecision(12, 2).HasDefaultValue(0m);
+            entity.Property(e => e.aplicado_en_oc).HasDefaultValue(false);
+            entity.HasOne(e => e.cabecera).WithMany(h => h.lineas)
+                .HasForeignKey(e => new { e.company_id, e.requisicion_hdr_id })
+                .HasPrincipalKey(h => new { h.company_id, h.id })
+                .HasConstraintName("fk_alm_requisicion_hdr")
+                .OnDelete(DeleteBehavior.Restrict);
+
             entity.HasIndex(e => e.articulo_id, "ix_alm_requisicion_articulo");
             entity.HasOne(e => e.articulo_ref).WithMany()
                 .HasForeignKey(e => e.articulo_id)
@@ -268,12 +525,52 @@ public partial class SiadDbContext
             entity.HasIndex(e => new { e.company_id, e.uuid },
                 "uq_alm_requisicion_company_uuid").IsUnique()
                 .HasFilter("uuid IS NOT NULL");
-            entity.HasIndex(e => e.company_id, "ix_alm_requisicion_pendiente")
-                .HasFilter("origen = 'SIAD' AND posteado = false");
+            // ix_alm_requisicion_pendiente lo DROPEA a propósito 2026-08-01_alm_requisicion_descargo.sql
+            // (la requisición nunca postea): no se declara aquí para no divergir del esquema real.
             entity.HasIndex(e => e.bodega_id, "ix_alm_requisicion_bodega");
             entity.HasOne(e => e.bodega_ref).WithMany()
                 .HasForeignKey(e => e.bodega_id)
                 .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Cabecera de requisición (Fase 6, 2026-08-01_alm_requisicion_descargo.sql) ──────
+        modelBuilder.Entity<alm_requisicion_hdr>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_requisicion_hdr_pkey");
+            entity.ToTable("alm_requisicion_hdr", "public");
+            entity.HasIndex(e => new { e.company_id, e.numero }, "uq_alm_requisicion_hdr_numero").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_requisicion_hdr_tenant").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.uuid }, "uq_alm_requisicion_hdr_company_uuid")
+                .IsUnique().HasFilter("uuid IS NOT NULL");
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.fecha_requerida).HasColumnType("date");
+            entity.Property(e => e.departamento).HasMaxLength(3);
+            entity.Property(e => e.solicitante).HasMaxLength(120);
+            entity.Property(e => e.cargo_solicitante).HasMaxLength(80);
+            entity.Property(e => e.usuario_solicita).HasMaxLength(100);
+            entity.Property(e => e.aplicacion).HasMaxLength(254);
+            entity.Property(e => e.observacion).HasMaxLength(1000);
+            entity.Property(e => e.aprobado_por).HasMaxLength(100);
+            entity.Property(e => e.rechazado_por).HasMaxLength(100);
+            entity.Property(e => e.motivo_rechazo).HasMaxLength(500);
+            entity.Property(e => e.anulado_por).HasMaxLength(100);
+            entity.Property(e => e.motivo_anulacion).HasMaxLength(500);
+            entity.Property(e => e.total).HasPrecision(14, 2);
+            entity.Property(e => e.fecha_aprobacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_rechazo).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_anulacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+        });
+
+        modelBuilder.Entity<alm_requisicion_correlativo>(entity =>
+        {
+            entity.HasKey(e => e.company_id).HasName("alm_requisicion_correlativo_pkey");
+            entity.ToTable("alm_requisicion_correlativo", "public");
+            entity.Property(e => e.company_id).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<alm_descargo>(entity =>
@@ -318,6 +615,48 @@ public partial class SiadDbContext
             entity.HasOne(e => e.bodega_ref).WithMany()
                 .HasForeignKey(e => e.bodega_id)
                 .OnDelete(DeleteBehavior.Restrict);
+
+            // Cabecera del documento nuevo (Fase 6). El renglón es la unidad de posteo.
+            entity.HasOne(e => e.cabecera).WithMany(h => h.lineas)
+                .HasForeignKey(e => new { e.company_id, e.descargo_hdr_id })
+                .HasPrincipalKey(h => new { h.company_id, h.id })
+                .HasConstraintName("fk_alm_descargo_hdr")
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        // ── Cabecera de descargo (Fase 6) ─────────────────────────────────────────────────
+        modelBuilder.Entity<alm_descargo_hdr>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_descargo_hdr_pkey");
+            entity.ToTable("alm_descargo_hdr", "public");
+            entity.HasIndex(e => new { e.company_id, e.numero }, "uq_alm_descargo_hdr_numero").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_descargo_hdr_tenant").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.uuid }, "uq_alm_descargo_hdr_company_uuid")
+                .IsUnique().HasFilter("uuid IS NOT NULL");
+            entity.HasIndex(e => new { e.company_id, e.requisicion_hdr_id }, "ix_alm_descargo_hdr_requisicion");
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.departamento).HasMaxLength(3);
+            entity.Property(e => e.entregado_por).HasMaxLength(100);
+            entity.Property(e => e.recibido_por).HasMaxLength(120);
+            entity.Property(e => e.motivo).HasMaxLength(120);
+            entity.Property(e => e.observaciones).HasMaxLength(1000);
+            entity.Property(e => e.total).HasPrecision(14, 2);
+            entity.Property(e => e.motivo_anulacion).HasMaxLength(500);
+            entity.Property(e => e.anulado_por).HasMaxLength(100);
+            entity.Property(e => e.fecha_anulacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.fecha_posteo).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+        });
+
+        modelBuilder.Entity<alm_descargo_correlativo>(entity =>
+        {
+            entity.HasKey(e => e.company_id).HasName("alm_descargo_correlativo_pkey");
+            entity.ToTable("alm_descargo_correlativo", "public");
+            entity.Property(e => e.company_id).ValueGeneratedNever();
         });
 
         modelBuilder.Entity<af_activo_fijo>(entity =>
@@ -448,6 +787,9 @@ public partial class SiadDbContext
             entity.HasIndex(e => new { e.company_id, e.codigo },
                 "uq_alm_tipo_articulo_company_codigo").IsUnique();
             entity.HasIndex(e => e.company_id, "ix_alm_tipo_articulo_company");
+            // Índice parcial: solo los tipos con tasa de ISV asignada (2026-07-30).
+            entity.HasIndex(e => e.impuesto_tasa_id, "ix_alm_tipo_articulo_impuesto_tasa")
+                .HasFilter("impuesto_tasa_id IS NOT NULL");
 
             entity.Property(e => e.codigo).HasMaxLength(10);
             entity.Property(e => e.nombre).HasMaxLength(100);
@@ -463,6 +805,15 @@ public partial class SiadDbContext
             entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            // ISV de compras por tipo: FK al catálogo GLOBAL cfg_impuesto_tasa (2026-07-30).
+            // ON DELETE RESTRICT, igual criterio que cfg_impuesto_tasa -> cfg_impuesto: una
+            // tasa referida por un tipo no puede borrarse en cascada. La tabla destino es
+            // global (sin company_id), así que el join no lo filtra el tenant.
+            entity.HasOne(e => e.impuesto_tasa)
+                .WithMany()
+                .HasForeignKey(e => e.impuesto_tasa_id)
+                .OnDelete(DeleteBehavior.Restrict);
         });
 
         modelBuilder.Entity<alm_grupo>(entity =>
@@ -560,6 +911,147 @@ public partial class SiadDbContext
 
             entity.HasOne(e => e.articulo).WithMany(p => p.proveedores)
                 .HasForeignKey(e => e.articulo_id).OnDelete(DeleteBehavior.Cascade);
+        });
+
+        // ── Órdenes de compra (2026-07-30_alm_orden_compra.sql) ──────────────────
+        modelBuilder.Entity<alm_orden_compra>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_orden_compra_pkey");
+            entity.ToTable("alm_orden_compra", "public");
+            entity.HasIndex(e => e.company_id, "ix_alm_orden_compra_company");
+            entity.HasIndex(e => new { e.company_id, e.cod_proveedor }, "ix_alm_orden_compra_proveedor");
+            entity.HasIndex(e => new { e.company_id, e.estado }, "ix_alm_orden_compra_estado");
+            entity.HasIndex(e => new { e.company_id, e.numero }, "uq_alm_orden_compra_numero").IsUnique();
+            // Clave alterna por tenant: respaldo de las FK compuestas (detalle -> cabecera).
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_orden_compra_tenant").IsUnique();
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.fecha_emision).HasColumnType("date");
+            entity.Property(e => e.cod_proveedor).HasMaxLength(20);
+            entity.Property(e => e.terminos_pago).HasMaxLength(100);
+            entity.Property(e => e.destino_uso).HasMaxLength(250);
+            entity.Property(e => e.calcula_isv).HasDefaultValue(true);
+            entity.Property(e => e.descuento).HasPrecision(12, 4).HasDefaultValue(0m);
+            entity.Property(e => e.otros_gastos).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.sub_total).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.impuesto).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.total).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.estado).HasDefaultValue((short)1);
+            entity.Property(e => e.observaciones).HasMaxLength(1000);
+            entity.Property(e => e.aprobado_por).HasMaxLength(100);
+            entity.Property(e => e.fecha_aprobacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            // FK compuesta tenant en la BD (company_id, orden_compra_id); EF la mapea simple,
+            // igual que el resto del módulo — el servicio valida el tenant antes de insertar.
+            entity.HasMany(e => e.detalles).WithOne(d => d.orden)
+                .HasForeignKey(d => d.orden_compra_id)
+                .OnDelete(DeleteBehavior.Cascade);
+        });
+
+        modelBuilder.Entity<alm_orden_compra_detalle>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_orden_compra_detalle_pkey");
+            entity.ToTable("alm_orden_compra_detalle", "public");
+            entity.HasIndex(e => e.company_id, "ix_alm_orden_compra_detalle_company");
+            entity.HasIndex(e => new { e.company_id, e.orden_compra_id }, "ix_alm_orden_compra_detalle_oc");
+            entity.HasIndex(e => e.articulo_id, "ix_alm_orden_compra_detalle_articulo");
+            // Clave alterna por tenant: respaldo de la FK compuesta desde alm_compra (recepción).
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_orden_compra_detalle_tenant").IsUnique();
+
+            entity.Property(e => e.codigo_upc).HasMaxLength(40);
+            entity.Property(e => e.centro_costo).HasMaxLength(40);
+            entity.Property(e => e.descripcion).HasMaxLength(250);
+            entity.Property(e => e.cantidad_pedida).HasPrecision(14, 4).HasDefaultValue(0m);
+            entity.Property(e => e.costo_unitario).HasPrecision(14, 4).HasDefaultValue(0m);
+            entity.Property(e => e.impuesto).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.total).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.cantidad_aplicada).HasPrecision(14, 4).HasDefaultValue(0m);
+
+            entity.HasOne(e => e.articulo).WithMany()
+                .HasForeignKey(e => e.articulo_id)
+                .OnDelete(DeleteBehavior.Restrict);
+            // La relación con la cabecera se declara desde alm_orden_compra (HasMany → WithOne).
+        });
+
+        modelBuilder.Entity<alm_orden_compra_correlativo>(entity =>
+        {
+            // La PK ES el company_id: un solo contador por empresa.
+            entity.HasKey(e => e.company_id).HasName("alm_orden_compra_correlativo_pkey");
+            entity.ToTable("alm_orden_compra_correlativo", "public");
+            entity.Property(e => e.company_id).ValueGeneratedNever();
+        });
+
+        // ── Recepción de compra (2026-07-31_alm_compra_recepcion.sql) ────────────
+        modelBuilder.Entity<alm_compra_hdr>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_compra_hdr_pkey");
+            entity.ToTable("alm_compra_hdr", "public");
+            entity.HasIndex(e => e.company_id, "ix_alm_compra_hdr_company");
+            entity.HasIndex(e => new { e.company_id, e.cod_proveedor }, "ix_alm_compra_hdr_proveedor");
+            entity.HasIndex(e => new { e.company_id, e.fecha }, "ix_alm_compra_hdr_fecha");
+            entity.HasIndex(e => new { e.company_id, e.orden_compra_id }, "ix_alm_compra_hdr_oc");
+            entity.HasIndex(e => e.bodega_id, "ix_alm_compra_hdr_bodega");
+            entity.HasIndex(e => new { e.company_id, e.numero }, "uq_alm_compra_hdr_numero").IsUnique();
+            // Clave alterna por tenant: respaldo de la FK compuesta desde alm_compra (las líneas).
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_compra_hdr_tenant").IsUnique();
+            // Idempotencia del alta.
+            entity.HasIndex(e => new { e.company_id, e.uuid }, "uq_alm_compra_hdr_company_uuid").IsUnique()
+                .HasFilter("uuid IS NOT NULL");
+            // La misma factura del mismo proveedor no se captura dos veces; anular la libera.
+            entity.HasIndex(e => new { e.company_id, e.cod_proveedor, e.numero_factura_sar },
+                    "uq_alm_compra_hdr_factura_prov").IsUnique()
+                .HasFilter("numero_factura_sar IS NOT NULL AND estado <> 9");
+            entity.HasIndex(e => e.company_id, "ix_alm_compra_hdr_pendiente")
+                .HasFilter("posteado = false AND estado = 1");
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.fecha_factura).HasColumnType("date");
+            entity.Property(e => e.fecha_vencimiento).HasColumnType("date");
+            entity.Property(e => e.cod_proveedor).HasMaxLength(20);
+            entity.Property(e => e.proveedor).HasMaxLength(100);
+            entity.Property(e => e.numero_factura_sar).HasMaxLength(30);
+            entity.Property(e => e.cai).HasMaxLength(50);
+            entity.Property(e => e.terminos_pago).HasMaxLength(100);
+            entity.Property(e => e.tipo_compra).HasDefaultValue((short)0);
+            entity.Property(e => e.moneda).HasMaxLength(3).HasDefaultValue(MonedaCompra.Lempira);
+            entity.Property(e => e.tasa_cambio).HasPrecision(14, 6).HasDefaultValue(1m);
+            entity.Property(e => e.consumo_interno).HasDefaultValue(false);
+            entity.Property(e => e.descuento).HasPrecision(12, 4).HasDefaultValue(0m);
+            entity.Property(e => e.otros_gastos).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.flete_seguro).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.sub_total).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.impuesto).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.total).HasPrecision(14, 2).HasDefaultValue(0m);
+            entity.Property(e => e.observaciones).HasMaxLength(1000);
+            entity.Property(e => e.estado).HasDefaultValue(EstadoRecepcionCompra.Registrada);
+            entity.Property(e => e.posteado).HasDefaultValue(false);
+            entity.Property(e => e.fecha_posteo).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            entity.HasOne(e => e.bodega_ref).WithMany()
+                .HasForeignKey(e => e.bodega_id)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.orden).WithMany()
+                .HasForeignKey(e => e.orden_compra_id)
+                .OnDelete(DeleteBehavior.Restrict);
+            entity.HasMany(e => e.lineas).WithOne(l => l.cabecera)
+                .HasForeignKey(l => l.compra_hdr_id)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<alm_compra_correlativo>(entity =>
+        {
+            // La PK ES el company_id: un solo contador por empresa.
+            entity.HasKey(e => e.company_id).HasName("alm_compra_correlativo_pkey");
+            entity.ToTable("alm_compra_correlativo", "public");
+            entity.Property(e => e.company_id).ValueGeneratedNever();
         });
     }
 }

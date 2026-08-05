@@ -117,8 +117,9 @@ Backup/restore PowerShell helpers: `Database/backup_bd_simple.ps1`, `Database/re
 
 ## Repo skills
 
-Six skills under [.github/skills/](.github/skills/) — each carries a SKILL.md; the five `hodsoft-*` also carry `agents/` and `references/`:
+Seven skills under [.github/skills/](.github/skills/) — each carries a SKILL.md; the `hodsoft-*` ones also carry `agents/` and/or `references/`:
 
+- `hodsoft-sin-linq` — **LINQ está prohibido en todo el proyecto**; todo acceso a datos va por stored procedures, funciones y vistas de Postgres. Aplica a cualquier C# que lea/escriba datos o que filtre, ordene, agrupe o proyecte una colección.
 - `hodsoft-devexpress-docs` — answers DevExpress questions via the `dxdocs` MCP.
 - `hodsoft-blazor-devexpress-ui` — for `apc.Client` UI work.
 - `hodsoft-siad-backend` — for controller/service/DTO slices.

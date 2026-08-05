@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Data;
 
@@ -103,19 +104,15 @@ public sealed class KardexService : IKardexService
                 ValorUnitario = k.valor_unitario,
                 Total = k.total,
                 UsuarioCreacion = k.usuariocreacion,
-                FechaCreacion = k.fechacreacion
+                FechaCreacion = k.fechacreacion,
+                DocumentoTipo = k.documento_tipo,
+                DocumentoId = k.documento_id,
+                ExistenciaResultante = k.existencia_resultante,
+                CostoPromedioResultante = k.costo_promedio_resultante
             })
             .ToListAsync(ct);
 
-        // Saldo corrido sobre TODOS los movimientos.
-        decimal saldo = 0m;
-        foreach (var m in movimientos)
-        {
-            saldo += m.Ingresos - m.Salidas;
-            m.Saldo = saldo;
-        }
-
-        var saldoCalculado = saldo;
+        var saldoCalculado = AplicarPuntoDeCorte(movimientos);
 
         // Filtro de presentación (no afecta el saldo histórico ya calculado).
         IEnumerable<KardexMovimientoDto> filtrados = movimientos;
@@ -168,6 +165,90 @@ public sealed class KardexService : IKardexService
             TotalSalidas = lista.Sum(m => m.Salidas),
             Movimientos = lista
         };
+    }
+
+    /// <summary>
+    /// Aplica el PUNTO DE CORTE al saldo corrido y devuelve el saldo final.
+    /// <para>
+    /// Sin esto, postear la carga inicial <b>empeoraría</b> la pantalla: el saldo sumaría
+    /// los ~47 mil asientos migrados de SIMAFI MÁS la apertura, y nunca cuadraría contra la
+    /// existencia registrada. La regla: el saldo <b>arranca en cero en el asiento de carga
+    /// inicial</b> de cada par (artículo, bodega); todo lo anterior es histórico informativo
+    /// y se devuelve con <c>Saldo = null</c>.
+    /// </para>
+    /// <para>
+    /// Compatibilidad hacia atrás: un par SIN carga inicial se comporta como siempre —el
+    /// saldo corre desde el primer movimiento—, que es lo que mantiene usable la pantalla
+    /// durante la transición, mientras unos pares ya tienen apertura y otros no.
+    /// </para>
+    /// </summary>
+    private static decimal AplicarPuntoDeCorte(List<KardexMovimientoDto> movimientos)
+    {
+        // El corte es POR PAR (artículo, bodega): en una consulta sin filtro de bodega
+        // conviven varios pares y cada uno tiene su propia apertura.
+        // Los movimientos ya vienen en orden cronológico (fecha, id).
+        var corteDeBodega = new Dictionary<int, int>();
+        foreach (var m in movimientos)
+        {
+            if (m.DocumentoTipo != TipoDocumentoInventario.CargaInicial || m.Ingresos <= 0)
+            {
+                continue;
+            }
+
+            // La apertura vigente es la PRIMERA no revertida. Una apertura revertida tiene
+            // su REVERSA en la lista; ambas quedan del lado pre-corte y no se cuentan dos veces.
+            var clave = m.BodegaId ?? 0;
+            var revertida = movimientos.Any(r =>
+                r.DocumentoTipo == TipoDocumentoInventario.Reversa && r.DocumentoId == m.Id);
+
+            if (!revertida && !corteDeBodega.ContainsKey(clave))
+            {
+                corteDeBodega[clave] = m.Id;
+                m.EsLineaDeCorte = true;
+            }
+        }
+
+        var saldoPorBodega = new Dictionary<int, decimal>();
+        var alcanzoCorte = new Dictionary<int, bool>();
+        decimal saldoTotal = 0m;
+
+        foreach (var m in movimientos)
+        {
+            var clave = m.BodegaId ?? 0;
+            var tieneCorte = corteDeBodega.TryGetValue(clave, out var corteId);
+
+            if (tieneCorte)
+            {
+                if (!alcanzoCorte.GetValueOrDefault(clave))
+                {
+                    if (m.Id == corteId)
+                    {
+                        // La línea de corte ABRE el saldo: arranca en cero y suma su apertura.
+                        alcanzoCorte[clave] = true;
+                    }
+                    else
+                    {
+                        // Anterior al corte: histórico informativo, sin saldo.
+                        m.EsPreCorte = true;
+                        m.Saldo = null;
+                        continue;
+                    }
+                }
+            }
+
+            var saldo = saldoPorBodega.GetValueOrDefault(clave) + m.Ingresos - m.Salidas;
+            saldoPorBodega[clave] = saldo;
+            m.Saldo = saldo;
+        }
+
+        // El saldo comparable contra la existencia es la suma de los saldos por bodega
+        // (con una sola bodega filtrada, es el de esa bodega).
+        foreach (var s in saldoPorBodega.Values)
+        {
+            saldoTotal += s;
+        }
+
+        return saldoTotal;
     }
 
     public async Task<IReadOnlyList<TipoMovimientoDto>> GetTiposMovimientoAsync(CancellationToken ct = default)

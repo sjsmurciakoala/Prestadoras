@@ -1,0 +1,446 @@
+@page "/almacen/ordenes-compra"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject IJSRuntime JS
+@inject OrdenesCompraClient OrdenesClient
+@inject ProveedoresClient ProveedoresClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - Órdenes de compra</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="OrdenesCompraToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Órdenes de compra</h2>
+            <p class="page-subtitle">Pedidos a proveedores: se aprueban y luego se reciben</p>
+        </div>
+
+        <DxButton Text="Nueva orden"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="@(() => Navigation.NavigateTo("/almacen/ordenes-compra/nueva"))" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Órdenes</div>
+                <div class="summary-value">@ordenes.Count.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-warning">
+                <div class="summary-label">En borrador</div>
+                <div class="summary-value">@ordenes.Count(o => o.Estado == EstadoOrdenCompra.Borrador).ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Aprobadas</div>
+                <div class="summary-value">@ordenes.Count(o => o.Estado == EstadoOrdenCompra.Aprobada).ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Monto total</div>
+                <div class="summary-value">@ordenes.Sum(o => o.Total).ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@ordenes" KeyFieldName="@nameof(OrdenCompraListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar número, proveedor, observaciones..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@proveedores" Value="@filtroProveedor"
+                                    ValueChanged="@((string? v) => OnProveedorChanged(v))"
+                                    ValueFieldName="@nameof(ProveedorComboItem.Codigo)"
+                                    TextFieldName="@nameof(ProveedorComboItem.Display)"
+                                    NullText="Todos los proveedores"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 240px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@estadosFiltro" Value="@estadoSeleccionado"
+                                    ValueChanged="@((EstadoOpcion? e) => OnEstadoChanged(e))"
+                                    TextFieldName="@nameof(EstadoOpcion.Etiqueta)"
+                                    NullText="Todos los estados"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 170px;" CssClass="me-1" />
+
+                        <DxDateEdit @bind-Date="fechaDesde" NullText="Desde"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+                        <DxDateEdit @bind-Date="fechaHasta" NullText="Hasta"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+
+                        <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@ordenes.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Numero)" Caption="No." Width="90px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span class="fw-semibold">@item.Numero.ToString("00000")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Fecha)" Caption="Fecha" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span>@(item.Fecha.HasValue ? item.Fecha.Value.ToString("dd/MM/yyyy") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.ProveedorNombre)" Caption="Proveedor" MinWidth="240">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span class="text-dark fw-semibold">@(string.IsNullOrWhiteSpace(item.ProveedorNombre) ? item.CodProveedor : item.ProveedorNombre)</span>
+                                    <span class="text-muted small">@item.CodProveedor</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Renglones)" Caption="Renglones" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span class="text-muted">@item.Renglones.ToString("N0")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Total)" Caption="Total" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Total.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.Estado)" Caption="Estado" Width="140px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <span class="badge-estado-oc @ClaseEstado(item.Estado)">@item.EstadoDescripcion</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit"
+                                            title="@(item.Estado == EstadoOrdenCompra.Borrador ? "Editar" : "Ver")"
+                                            @onclick="() => Abrir(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="@(item.Estado == EstadoOrdenCompra.Borrador ? "bi bi-pencil-square" : "bi bi-eye")"></i>
+                                    </button>
+
+                                    @if (item.Estado == EstadoOrdenCompra.Borrador)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Aprobar"
+                                                @onclick="() => ConfirmarAprobar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-check-lg"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado is EstadoOrdenCompra.Borrador or EstadoOrdenCompra.Aprobada)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Anular"
+                                                @onclick="() => ConfirmarAnular(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay órdenes de compra para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(430px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 @(accionEsAprobar ? "text-success" : "text-warning")">
+                <i class="@(accionEsAprobar ? "bi bi-check-circle" : "bi bi-x-circle")" style="font-size: 3rem;"></i>
+            </div>
+            <h5 class="fw-bold">@(accionEsAprobar ? "¿Aprobar la orden?" : "¿Anular la orden?")</h5>
+            <p class="text-muted">
+                @(accionEsAprobar
+                    ? "Una vez aprobada ya no se puede editar. Quedará lista para recibirse."
+                    : "La orden quedará anulada. Sólo se puede anular si no tiene recepciones.")
+            </p>
+            @if (ordenAccion is not null)
+            {
+                <div class="fw-semibold">
+                    O/C @ordenAccion.Numero.ToString("00000") — @(string.IsNullOrWhiteSpace(ordenAccion.ProveedorNombre) ? ordenAccion.CodProveedor : ordenAccion.ProveedorNombre)
+                </div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarAccion"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!procesando)" />
+                <DxButton Text="@(accionEsAprobar ? "Sí, aprobar" : "Sí, anular")"
+                          Click="EjecutarAccionAsync" Enabled="@(!procesando)"
+                          RenderStyle="@(accionEsAprobar ? ButtonRenderStyle.Success : ButtonRenderStyle.Warning)"
+                          IconCssClass="@(accionEsAprobar ? "bi bi-check-lg" : "bi bi-x-circle")" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private sealed class EstadoOpcion
+    {
+        public short Codigo { get; init; }
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    /// <summary>Item del combo de proveedores: código + "código — nombre" (para buscar por ambos).</summary>
+    private sealed class ProveedorComboItem
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Display => $"{Codigo} — {Nombre}";
+    }
+
+    private const string GridLayoutStorageKey = "almacen-ordenes-compra-grid-layout";
+
+    private DxGrid? grid;
+    private List<OrdenCompraListItemDto> ordenes = new();
+    private List<ProveedorComboItem> proveedores = new();
+
+    private readonly List<EstadoOpcion> estadosFiltro = new()
+    {
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Borrador,        Etiqueta = "Borrador" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Aprobada,        Etiqueta = "Aprobada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.RecibidaParcial, Etiqueta = "Recibida parcial" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Cerrada,         Etiqueta = "Cerrada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Anulada,         Etiqueta = "Anulada" }
+    };
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroProveedor;
+    private EstadoOpcion? estadoSeleccionado;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool confirmVisible;
+    private bool accionEsAprobar;
+    private bool procesando;
+    private OrdenCompraListItemDto? ordenAccion;
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarProveedoresAsync();
+        await CargarAsync();
+    }
+
+    private OrdenCompraFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        CodProveedor = string.IsNullOrWhiteSpace(filtroProveedor) ? null : filtroProveedor,
+        Estado = estadoSeleccionado?.Codigo,
+        FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+        FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null
+    };
+
+    private async Task CargarProveedoresAsync()
+    {
+        try
+        {
+            var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+            proveedores = lista
+                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+                .OrderBy(p => p.Codigo)
+                .ToList();
+        }
+        catch
+        {
+            proveedores = new List<ProveedorComboItem>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            ordenes = await OrdenesClient.GetAsync(BuildFilter());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las órdenes de compra: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnProveedorChanged(string? valor)
+    {
+        filtroProveedor = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnEstadoChanged(EstadoOpcion? valor)
+    {
+        estadoSeleccionado = valor;
+        await CargarAsync();
+    }
+
+    private void Abrir(int id) => Navigation.NavigateTo($"/almacen/ordenes-compra/{id}/editar");
+
+    private void ConfirmarAprobar(OrdenCompraListItemDto item)
+    {
+        ordenAccion = item;
+        accionEsAprobar = true;
+        confirmVisible = true;
+    }
+
+    private void ConfirmarAnular(OrdenCompraListItemDto item)
+    {
+        ordenAccion = item;
+        accionEsAprobar = false;
+        confirmVisible = true;
+    }
+
+    private void CancelarAccion()
+    {
+        if (procesando) return;
+        confirmVisible = false;
+        ordenAccion = null;
+    }
+
+    private async Task EjecutarAccionAsync()
+    {
+        if (ordenAccion is null) { confirmVisible = false; return; }
+
+        procesando = true;
+        try
+        {
+            var ok = accionEsAprobar
+                ? await OrdenesClient.AprobarAsync(ordenAccion.Id)
+                : await OrdenesClient.AnularAsync(ordenAccion.Id);
+
+            if (!ok)
+            {
+                Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+            else
+            {
+                Toast("Éxito", accionEsAprobar ? "Orden aprobada." : "Orden anulada.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            procesando = false;
+            confirmVisible = false;
+            ordenAccion = null;
+        }
+    }
+
+    private static string ClaseEstado(short estado) => estado switch
+    {
+        EstadoOrdenCompra.Borrador        => "estado-borrador",
+        EstadoOrdenCompra.Aprobada        => "estado-aprobada",
+        EstadoOrdenCompra.RecibidaParcial => "estado-parcial",
+        EstadoOrdenCompra.Cerrada         => "estado-cerrada",
+        EstadoOrdenCompra.Anulada         => "estado-anulada",
+        _ => "estado-borrador"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "OrdenesCompraToast"
+        });
+}

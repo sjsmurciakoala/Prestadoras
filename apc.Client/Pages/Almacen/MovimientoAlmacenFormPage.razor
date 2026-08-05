@@ -1,0 +1,381 @@
+@page "/almacen/movimientos/nuevo"
+@page "/almacen/movimientos/{Id:int}"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.Constants
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject MovimientosAlmacenClient MovClient
+@inject TiposMovimientoClient TiposClient
+@inject BodegasClient BodegasClient
+@inject ArticulosClient ArticulosClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - @(EsLectura ? "Detalle de movimiento" : "Nuevo movimiento")</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="MovFormToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">@(EsLectura ? $"Movimiento {modelo.Numero:00000}" : "Nuevo movimiento de almacén")</h2>
+            <p class="page-subtitle">Entrada o salida manual de inventario</p>
+        </div>
+        <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="@(() => Navigation.NavigateTo("/almacen/movimientos"))" />
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:120px"></div></div>
+    }
+    else
+    {
+        @if (EsLectura && modelo.Estado == EstadoMovimientoAlmacen.Anulado)
+        {
+            <div class="alert alert-warning" role="alert">
+                <i class="bi bi-x-circle me-2"></i>
+                <strong>Anulado</strong> por @modelo.AnuladoPor el @modelo.FechaAnulacion?.ToString("dd/MM/yyyy HH:mm").
+                Motivo: @modelo.MotivoAnulacion
+            </div>
+        }
+
+        <div class="modern-card mb-3">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Concepto de movimiento *</label>
+                    <DxComboBox Data="@tipos" TData="TipoMovimientoAlmacenListItemDto" TValue="int?"
+                                Value="@modelo.TipoMovimientoId" ValueChanged="@((int? v) => OnTipoChanged(v))"
+                                ValueFieldName="@nameof(TipoMovimientoAlmacenListItemDto.Id)"
+                                TextFieldName="@nameof(TipoMovimientoAlmacenListItemDto.Nombre)"
+                                NullText="Seleccione..." Enabled="@(!EsLectura)" CssClass="w-100" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Bodega *</label>
+                    <DxComboBox Data="@bodegas" TData="BodegaLookupDto" TValue="int?"
+                                Value="@modelo.BodegaId" ValueChanged="@((int? v) => OnBodegaChanged(v))"
+                                ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                NullText="Seleccione..." Enabled="@(!EsLectura && modelo.Detalles.Count == 0)" CssClass="w-100" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Fecha *</label>
+                    <DxDateEdit @bind-Date="fecha" Enabled="@(!EsLectura)" CssClass="w-100" />
+                </div>
+                <div class="col-md-8">
+                    <label class="form-label small fw-semibold">Motivo *</label>
+                    <DxTextBox @bind-Text="modelo.Motivo" NullText="Razón del movimiento" MaxLength="120"
+                               Enabled="@(!EsLectura)" CssClass="w-100" />
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">N.º de documento</label>
+                    <DxTextBox @bind-Text="modelo.DocumentoReferencia" NullText="Acta, memo… (opcional)" MaxLength="30"
+                               Enabled="@(!EsLectura)" CssClass="w-100" />
+                </div>
+            </div>
+
+            @if (claseActual is not null)
+            {
+                <div class="d-flex align-items-center gap-2 mt-3 p-2 rounded @ClaseHintClass">
+                    <i class="bi @ClaseHintIcon"></i>
+                    <span class="small">@ClaseHintTexto</span>
+                </div>
+            }
+        </div>
+
+        @if (!EsLectura)
+        {
+            <div class="modern-card mb-3">
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div style="flex:1; min-width:240px;">
+                        <label class="form-label small fw-semibold">Agregar artículo</label>
+                        <DxComboBox Data="@articulos" @bind-Value="articuloSeleccionado" TData="ArticuloListItemDto" TValue="int?"
+                                    ValueFieldName="@nameof(ArticuloListItemDto.Id)" TextFieldName="ComboTexto"
+                                    FilteringMode="DataGridFilteringMode.Contains" NullText="Busque por código o descripción..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Enabled="@(modelo.BodegaId > 0 && articulos.Count > 0)" CssClass="w-100" />
+                    </div>
+                    <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="AgregarRenglon" Enabled="@(articuloSeleccionado.HasValue)" />
+                    @if (modelo.BodegaId <= 0)
+                    {
+                        <span class="text-muted small ms-2"><i class="bi bi-info-circle me-1"></i>Elija primero la bodega.</span>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Renglones</span>
+                <span class="text-muted small">@modelo.Detalles.Count renglón(es)</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr class="text-muted small">
+                            <th style="min-width:220px;">Artículo</th>
+                            <th class="text-end" style="width:120px;">Cantidad</th>
+                            <th class="text-end" style="width:110px;">Existencia</th>
+                            <th class="text-end" style="width:130px;">Costo unit.</th>
+                            <th class="text-end" style="width:130px;">Valor</th>
+                            @if (!EsLectura) { <th style="width:50px;"></th> }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (modelo.Detalles.Count == 0)
+                        {
+                            <tr><td colspan="@(EsLectura ? 5 : 6)" class="text-center text-muted p-3">Sin renglones.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var d in modelo.Detalles)
+                            {
+                                <tr>
+                                    <td>
+                                        @* Se muestra el id interno, no el código SIMAFI (igual que el buscador).
+                                           codigo_articulo se sigue guardando en la BD como snapshot del renglón. *@
+                                        <span class="fw-semibold">@d.ArticuloId</span>
+                                        <span class="text-muted"> — @d.NombreArticulo</span>
+                                    </td>
+                                    <td class="text-end">
+                                        @if (EsLectura) { @d.Cantidad.ToString("N2") }
+                                        else { <DxSpinEdit @bind-Value="d.Cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" /> }
+                                    </td>
+                                    <td class="text-end text-muted">@(d.ExistenciaActual?.ToString("N2") ?? "—")</td>
+                                    <td class="text-end">
+                                        @if (EsLectura)
+                                        {
+                                            @((d.CostoReal ?? d.CostoUnitario).ToString("N4"))
+                                        }
+                                        else if (CosteaEntrada)
+                                        {
+                                            <DxSpinEdit @bind-Value="d.CostoUnitario" DisplayFormat="N4" MinValue="0" CssClass="w-100" />
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted" title="En salida el costo lo pone el sistema: el costo promedio ponderado vigente de la bodega">
+                                                <i class="bi bi-lock"></i>
+                                                @if (d.CostoPromedioActual is > 0m)
+                                                {
+                                                    <text>auto · L. @d.CostoPromedioActual.Value.ToString("N4")</text>
+                                                }
+                                                else
+                                                {
+                                                    <text>auto</text>
+                                                }
+                                            </span>
+                                        }
+                                    </td>
+                                    <td class="text-end">@ValorRenglon(d).ToString("N2")</td>
+                                    @if (!EsLectura)
+                                    {
+                                        <td class="text-center">
+                                            <button type="button" class="btn-icon btn-delete" title="Quitar" @onclick="() => QuitarRenglon(d)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-semibold">
+                            <td colspan="4" class="text-end">Valor del movimiento</td>
+                            <td class="text-end">L. @TotalDocumento.ToString("N2")</td>
+                            @if (!EsLectura) { <td></td> }
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+
+            @if (!EsLectura)
+            {
+                <div class="d-flex justify-content-end gap-2 mt-3">
+                    <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                              Click="@(() => Navigation.NavigateTo("/almacen/movimientos"))" Enabled="@(!guardando)" />
+                    <DxButton Text="Registrar y postear" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="GuardarAsync" Enabled="@(!guardando)" />
+                </div>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    // Precarga desde la ficha del artículo (atajo «Registrar ajuste», Fase 4): abre el form nuevo
+    // con la bodega y el artículo ya puestos; el usuario elige el concepto y la cantidad.
+    [Parameter, SupplyParameterFromQuery(Name = "bodega")] public int? BodegaParam { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "articulo")] public int? ArticuloParam { get; set; }
+
+    private MovimientoAlmacenDto modelo = new();
+    private DateTime? fecha = DateTime.Today;
+
+    private List<TipoMovimientoAlmacenListItemDto> tipos = new();
+    private List<BodegaLookupDto> bodegas = new();
+    private List<ArticuloListItemDto> articulos = new();
+    private int? articuloSeleccionado;
+
+    private bool cargando = true, guardando;
+
+    private bool EsLectura => Id.HasValue;
+    private TipoMovimientoAlmacenListItemDto? claseActual =>
+        tipos.FirstOrDefault(t => t.Id == modelo.TipoMovimientoId);
+    // Sólo las entradas piden costo (equivale a PIDE_COSTO de INV_TRANSACC_AXL). En VALOR
+    // también se teclea; en SALIDA no.
+    private bool CosteaEntrada => claseActual?.Clase is ClaseAjusteInventario.Entrada or ClaseAjusteInventario.Valor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { tipos = await TiposClient.GetAsync(soloActivos: true); } catch { tipos = new(); }
+        try { bodegas = await BodegasClient.GetLookupAsync(); } catch { bodegas = new(); }
+
+        if (EsLectura)
+        {
+            var doc = await MovClient.GetByIdAsync(Id!.Value);
+            if (doc is null) { Toast("Error", "El movimiento no existe.", ToastRenderStyle.Danger); }
+            else { modelo = doc; fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today; }
+        }
+        else if (BodegaParam is > 0)
+        {
+            // Precarga desde la ficha del artículo: bodega + (opcional) un renglón del artículo.
+            modelo.BodegaId = BodegaParam.Value;
+            articulos = await CargarArticulosAsync(modelo.BodegaId);
+            if (ArticuloParam is > 0)
+            {
+                var art = articulos.FirstOrDefault(a => a.Id == ArticuloParam.Value);
+                if (art is not null)
+                    modelo.Detalles.Add(new MovimientoAlmacenDetalleDto
+                    {
+                        ArticuloId = art.Id,
+                        CodigoArticulo = art.Codigo,
+                        NombreArticulo = art.Descripcion,
+                        Cantidad = 0m,
+                        CostoUnitario = 0m,
+                        ExistenciaActual = art.ExistenciaEnBodega ?? art.Existencia,
+                        CostoPromedioActual = art.CostoPromedioEnBodega
+                    });
+            }
+        }
+        cargando = false;
+    }
+
+    private async Task OnTipoChanged(int? v)
+    {
+        modelo.TipoMovimientoId = v ?? 0;
+        // Si pasa a salida, el costo tecleado deja de tener efecto; lo limpio para no confundir.
+        if (!CosteaEntrada)
+            foreach (var d in modelo.Detalles) d.CostoUnitario = 0m;
+        await Task.CompletedTask;
+    }
+
+    private async Task OnBodegaChanged(int? v)
+    {
+        modelo.BodegaId = v ?? 0;
+        modelo.Detalles.Clear();          // los renglones eran de otra bodega
+        articuloSeleccionado = null;
+        articulos = modelo.BodegaId > 0 ? await CargarArticulosAsync(modelo.BodegaId) : new();
+    }
+
+    private async Task<List<ArticuloListItemDto>> CargarArticulosAsync(int bodegaId)
+    {
+        try
+        {
+            // Sólo los que tienen ubicación en esa bodega: es donde el movimiento puede operar.
+            return await ArticulosClient.GetAsync(new ArticuloFilterDto { BodegaId = bodegaId });
+        }
+        catch { return new(); }
+    }
+
+    private void AgregarRenglon()
+    {
+        if (!articuloSeleccionado.HasValue) return;
+        if (modelo.Detalles.Any(d => d.ArticuloId == articuloSeleccionado.Value))
+        {
+            Toast("Aviso", "Ese artículo ya está en un renglón.", ToastRenderStyle.Warning);
+            return;
+        }
+        var art = articulos.FirstOrDefault(a => a.Id == articuloSeleccionado.Value);
+        if (art is null) return;
+
+        modelo.Detalles.Add(new MovimientoAlmacenDetalleDto
+        {
+            ArticuloId = art.Id,
+            CodigoArticulo = art.Codigo,
+            NombreArticulo = art.Descripcion,
+            Cantidad = 0m,
+            CostoUnitario = 0m,
+            // Existencia EN la bodega elegida (los artículos se cargan filtrando por ella),
+            // no el rollup global, para orientar la captura del movimiento.
+            ExistenciaActual = art.ExistenciaEnBodega ?? art.Existencia,
+            // Costo promedio de esa bodega: referencia del costo con el que saldría en una salida.
+            CostoPromedioActual = art.CostoPromedioEnBodega
+        });
+        articuloSeleccionado = null;
+    }
+
+    private void QuitarRenglon(MovimientoAlmacenDetalleDto d) => modelo.Detalles.Remove(d);
+
+    private decimal ValorRenglon(MovimientoAlmacenDetalleDto d)
+    {
+        if (EsLectura) return d.Total;
+        // En salida no conocemos el costo hasta postear; se muestra 0 como estimación.
+        var costo = CosteaEntrada ? d.CostoUnitario : 0m;
+        return Math.Round(d.Cantidad * costo, 2, MidpointRounding.AwayFromZero);
+    }
+
+    private decimal TotalDocumento =>
+        EsLectura ? modelo.Total : modelo.Detalles.Sum(ValorRenglon);
+
+    private async Task GuardarAsync()
+    {
+        if (modelo.TipoMovimientoId <= 0) { Toast("Error", "Seleccione el concepto de movimiento.", ToastRenderStyle.Warning); return; }
+        if (modelo.BodegaId <= 0) { Toast("Error", "Seleccione la bodega.", ToastRenderStyle.Warning); return; }
+        if (string.IsNullOrWhiteSpace(modelo.Motivo)) { Toast("Error", "El motivo es obligatorio.", ToastRenderStyle.Warning); return; }
+        if (modelo.Detalles.Count == 0) { Toast("Error", "Agregue al menos un renglón.", ToastRenderStyle.Warning); return; }
+
+        modelo.Fecha = DateOnly.FromDateTime(fecha ?? DateTime.Today);
+        modelo.Uuid = Guid.NewGuid();     // idempotencia: reintento del mismo envío no duplica
+
+        guardando = true;
+        try
+        {
+            var creado = await MovClient.CrearAsync(modelo);
+            Toast("Éxito", $"Movimiento {creado.Numero:00000} registrado.", ToastRenderStyle.Success);
+            Navigation.NavigateTo($"/almacen/movimientos/{creado.Id}");
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { guardando = false; }
+    }
+
+    private string ClaseHintClass => claseActual?.Clase switch
+    {
+        ClaseAjusteInventario.Entrada => "bg-success-subtle text-success-emphasis",
+        ClaseAjusteInventario.Salida => "bg-danger-subtle text-danger-emphasis",
+        ClaseAjusteInventario.Valor => "bg-info-subtle text-info-emphasis",
+        _ => "bg-light"
+    };
+    private string ClaseHintIcon => claseActual?.Clase switch
+    {
+        ClaseAjusteInventario.Entrada => "bi-arrow-down-right",
+        ClaseAjusteInventario.Salida => "bi-arrow-up-right",
+        ClaseAjusteInventario.Valor => "bi-cash-coin",
+        _ => "bi-info-circle"
+    };
+    private string ClaseHintTexto => claseActual?.Clase switch
+    {
+        ClaseAjusteInventario.Entrada => "Entrada: suma existencia y recalcula el costo promedio. Se teclea el costo de lo que ingresa.",
+        ClaseAjusteInventario.Salida => "Salida: resta existencia al costo promedio vigente. El costo lo pone el sistema.",
+        ClaseAjusteInventario.Valor => "Corrección de valor: ajusta sólo el costo, sin mover existencia. Cantidad 0.",
+        _ => ""
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "MovFormToast" });
+}

@@ -4,7 +4,6 @@ using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.DTOs.Common;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
-using SIAD.Core.Utilities;
 using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
@@ -17,20 +16,29 @@ public sealed class ArticulosService : IArticulosService
 {
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _company;
+    private readonly IArticuloRollupService _rollup;
+    private readonly ICargaInicialInventarioService _carga;
 
-    public ArticulosService(SiadDbContext context, ICurrentCompanyService company)
+    public ArticulosService(
+        SiadDbContext context,
+        ICurrentCompanyService company,
+        IArticuloRollupService rollup,
+        ICargaInicialInventarioService carga)
     {
         _context = context;
         _company = company;
+        _rollup = rollup;
+        _carga = carga;
     }
 
     public async Task<IReadOnlyList<ArticuloListItemDto>> GetAsync(ArticuloFilterDto? filtro, CancellationToken ct = default)
     {
-        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro ?? new ArticuloFilterDto());
+        filtro ??= new ArticuloFilterDto();
+        var query = AplicarFiltros(_context.alm_articulos.AsNoTracking(), filtro);
 
         return await query
             .OrderBy(a => a.codigo_articulo)
-            .Select(Proyeccion)
+            .Select(ProyeccionLista(filtro.BodegaId))
             .ToListAsync(ct);
     }
 
@@ -47,7 +55,7 @@ public sealed class ArticulosService : IArticulosService
         var items = await AplicarOrden(query, sortField, sortDesc)
             .Skip(skip)
             .Take(take)
-            .Select(Proyeccion)
+            .Select(ProyeccionLista(null))
             .ToListAsync(ct);
 
         return new PagedResult<ArticuloListItemDto>(items, totalCount);
@@ -167,7 +175,7 @@ public sealed class ArticulosService : IArticulosService
             nameof(ArticuloListItemDto.TipoArticuloDisplay) => sortDesc
                 ? query.OrderByDescending(a => a.tipo_articulo_ref!.nombre) : query.OrderBy(a => a.tipo_articulo_ref!.nombre),
             nameof(ArticuloListItemDto.UnidadMedidaDisplay) => sortDesc
-                ? query.OrderByDescending(a => a.unidad_medida_ref!.codigo) : query.OrderBy(a => a.unidad_medida_ref!.codigo),
+                ? query.OrderByDescending(a => a.unidad_medida_ref!.nombre) : query.OrderBy(a => a.unidad_medida_ref!.nombre),
             nameof(ArticuloListItemDto.GrupoDisplay) => sortDesc
                 ? query.OrderByDescending(a => a.grupo_ref!.nombre) : query.OrderBy(a => a.grupo_ref!.nombre),
             nameof(ArticuloListItemDto.Existencia) => sortDesc
@@ -182,8 +190,10 @@ public sealed class ArticulosService : IArticulosService
         return sortDesc ? ordered.ThenByDescending(a => a.id) : ordered.ThenBy(a => a.id);
     }
 
-    /// <summary>Proyección estándar de artículo a item de lista (reutilizada por GetAsync y SearchPagedAsync).</summary>
-    private static readonly Expression<Func<alm_articulo, ArticuloListItemDto>> Proyeccion = a => new ArticuloListItemDto
+    /// <summary>Proyección estándar de artículo a item de lista (reutilizada por GetAsync y SearchPagedAsync).
+    /// Cuando <paramref name="bodegaId"/> no es null (la consulta filtró por bodega), llena
+    /// <see cref="ArticuloListItemDto.ExistenciaEnBodega"/> con el stock de esa bodega; si es null lo deja en null.</summary>
+    private static Expression<Func<alm_articulo, ArticuloListItemDto>> ProyeccionLista(int? bodegaId) => a => new ArticuloListItemDto
     {
         Id = a.id,
         Codigo = a.codigo_articulo,
@@ -191,11 +201,12 @@ public sealed class ArticulosService : IArticulosService
         UnidadMedida = a.unidad_medida,
         UnidadMedidaId = a.unidad_medida_id,
         UnidadMedidaCodigo = a.unidad_medida_ref != null ? a.unidad_medida_ref.codigo : null,
+        UnidadMedidaNombre = a.unidad_medida_ref != null ? a.unidad_medida_ref.nombre : null,
+        UnidadMedidaAbreviatura = a.unidad_medida_ref != null ? a.unidad_medida_ref.abreviatura : null,
         TipoArticuloNombre = a.tipo_articulo_ref != null ? a.tipo_articulo_ref.nombre : null,
         Grupo = a.grupo,
         GrupoNombre = a.grupo_ref != null ? a.grupo_ref.nombre : null,
         Diametro = a.diametro,
-        CuentaContable = a.cuenta_contable,
         Existencia = a.existencia,
         ExistenciaMinima = a.existencia_minima,
         ValorUnitario = a.valor_unitario,
@@ -205,6 +216,16 @@ public sealed class ArticulosService : IArticulosService
         ValorTotal = a.existencia * a.valor_unitario,
         // Σ de bodegas ACTIVAS (contrato del rollup): alimenta el detector de descuadre.
         ExistenciaBodegas = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia),
+        // Stock EN la bodega filtrada (para movimientos que salen de una sola bodega, como el
+        // traslado). null si la consulta no filtró por bodega, para no confundirlo con "0 aquí".
+        ExistenciaEnBodega = bodegaId == null
+            ? (decimal?)null
+            : a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia),
+        // Costo promedio de esa misma bodega: hay una sola fila por (artículo, bodega), así que
+        // Max devuelve su costo (o null si el artículo no tiene ubicación activa en esa bodega).
+        CostoPromedioEnBodega = bodegaId == null
+            ? (decimal?)null
+            : a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Max(u => (decimal?)u.costo_promedio),
         Activo = a.activo
     };
 
@@ -381,53 +402,6 @@ public sealed class ArticulosService : IArticulosService
         }
     }
 
-    /// <summary>
-    /// La cuenta contable del artículo es opcional, pero si viene debe existir en el plan
-    /// de cuentas de la empresa, ser imputable (allows_posting) y estar activa — el MISMO
-    /// criterio con el que el combo del formulario filtra el plan
-    /// (ArticulosClient.GetCuentasContablesAsync), para que el servidor acepte exactamente
-    /// lo que la UI ofrece. Antes esta coherencia vivía solo en la UI: un POST directo
-    /// podía guardar cualquier texto. Los códigos se comparan sin separadores
-    /// (AccountCodeFormatter): puntos/guiones son máscara de presentación, no código.
-    /// </summary>
-    private async Task ValidarCuentaContableAsync(string? cuentaContable, CancellationToken ct)
-    {
-        if (string.IsNullOrWhiteSpace(cuentaContable))
-        {
-            return; // opcional: los históricos SIMAFI sin cuenta siguen siendo válidos
-        }
-
-        var codigo = AccountCodeFormatter.Normalize(cuentaContable);
-
-        // El filtro global por company_id ya acota el plan al tenant actual.
-        var cuenta = await _context.con_plan_cuentas.AsNoTracking()
-            .Where(c => c.code == codigo)
-            .Select(c => new { c.allows_posting, c.status })
-            .FirstOrDefaultAsync(ct);
-
-        if (cuenta is null)
-        {
-            throw new InvalidOperationException(
-                $"La cuenta contable {cuentaContable} no existe en el plan de cuentas de la empresa.");
-        }
-
-        if (!cuenta.allows_posting)
-        {
-            throw new InvalidOperationException(
-                $"La cuenta contable {cuentaContable} no permite movimientos (no es imputable): elija una cuenta de detalle.");
-        }
-
-        var activa = string.IsNullOrWhiteSpace(cuenta.status)
-            || string.Equals(cuenta.status, "ACTIVE", StringComparison.OrdinalIgnoreCase)
-            || string.Equals(cuenta.status, "ACTIVO", StringComparison.OrdinalIgnoreCase);
-
-        if (!activa)
-        {
-            throw new InvalidOperationException(
-                $"La cuenta contable {cuentaContable} está inactiva en el plan de cuentas.");
-        }
-    }
-
     private async Task ValidarUnidadMedidaAsync(int? unidadMedidaId, CancellationToken ct)
     {
         if (!unidadMedidaId.HasValue)
@@ -518,7 +492,6 @@ public sealed class ArticulosService : IArticulosService
                 TipoArticuloId = a.tipo_articulo_id,
                 GrupoId = a.grupo_id,
                 Diametro = a.diametro,
-                CuentaContable = a.cuenta_contable,
                 ExistenciaMinima = a.existencia_minima,
                 ValorUnitario = a.valor_unitario,
                 Activo = a.activo,
@@ -536,6 +509,11 @@ public sealed class ArticulosService : IArticulosService
     public async Task<ArticuloEditDto> CreateAsync(ArticuloEditDto dto, string user, CancellationToken ct = default)
     {
         ArgumentNullException.ThrowIfNull(dto);
+
+        // La transacción abre AQUÍ, no junto al INSERT: entre las validaciones de abajo y el
+        // posteo de las aperturas hay lecturas que deciden qué se escribe, y el alta debe ser
+        // todo o nada — si una apertura falla, el artículo no se crea.
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
 
         var codigo = NormalizeOptional(dto.Codigo, 20, uppercase: true) ?? string.Empty;
         var descripcion = NormalizeRequired(dto.Descripcion, 120, "descripción");
@@ -586,6 +564,17 @@ public sealed class ArticulosService : IArticulosService
             {
                 throw new InvalidOperationException("No puede repetir la misma bodega en las ubicaciones del artículo.");
             }
+
+            // La existencia inicial ya no se teclea: se postea como carga inicial, y una
+            // apertura sin costo entraría a costo 0 y corrompería el promedio ponderado de
+            // la primera compra que llegue después (el kardex es inmutable).
+            var sinCosto = ubicaciones.FirstOrDefault(u => u.Existencia > 0m && u.CostoApertura <= 0m);
+            if (sinCosto is not null)
+            {
+                throw new InvalidOperationException(
+                    "Debe indicar el costo de apertura (mayor que cero) de cada bodega con existencia inicial. " +
+                    "Si no lo conoce, deje la bodega en 0 y registre el ingreso con un ajuste de inventario.");
+            }
         }
 
         if (!string.IsNullOrWhiteSpace(codigo))
@@ -604,10 +593,6 @@ public sealed class ArticulosService : IArticulosService
         await ValidarUnidadMedidaAsync(dto.UnidadAlmacenajeId, ct);
         await ValidarUnidadMedidaAsync(dto.UnidadSalidaId, ct);
         await ValidarCategoriaUnidadesAsync(dto.UnidadMedidaId, dto.UnidadAlmacenajeId, dto.UnidadSalidaId, ct);
-
-        // Al CREAR la cuenta contable se valida siempre (si viene).
-        var cuentaContable = NormalizeOptional(dto.CuentaContable, 20, uppercase: true);
-        await ValidarCuentaContableAsync(cuentaContable, ct);
 
         // Todas las bodegas deben existir y estar activas. (Sin inventario no hay bodegas que validar.)
         if (manejaInventario)
@@ -640,12 +625,10 @@ public sealed class ArticulosService : IArticulosService
             tipo_articulo_id = dto.TipoArticuloId,
             grupo_id = dto.GrupoId,
             diametro = NormalizeOptional(dto.Diametro, 80),
-            cuenta_contable = cuentaContable,
             valor_unitario = dto.ValorUnitario,
-            // Existencia y mínimo son el rollup: suma de las filas por bodega.
-            existencia = ubicaciones.Sum(u => u.Existencia),
-            existencia_minima = ubicaciones.Sum(u => u.ExistenciaMinima),
-            cantidad = ubicaciones.Sum(u => u.Existencia),
+            // Existencia, mínimo y cantidad NO se calculan aquí: son el rollup de las filas
+            // por bodega y los fija _rollup.RecomputeAsync al final, cuando las aperturas ya
+            // están posteadas. Nacen en 0.
             fecha_registro = DateOnly.FromDateTime(DateTime.Today),
             usuariocreacion = usuario,
             fechacreacion = ahora
@@ -664,7 +647,9 @@ public sealed class ArticulosService : IArticulosService
                 ubicacion3 = ClasificacionNormalizer.Opcional(u.Ubicacion3, 20),
                 ubicacion4 = ClasificacionNormalizer.Opcional(u.Ubicacion4, 20),
                 ubicacion5 = ClasificacionNormalizer.Opcional(u.Ubicacion5, 20),
-                existencia = u.Existencia,
+                // Nace en CERO: la existencia entra por el asiento de carga inicial que se
+                // postea más abajo, dentro de esta misma transacción.
+                existencia = 0m,
                 existencia_minima = u.ExistenciaMinima,
                 existencia_maxima = u.ExistenciaMaxima,
                 punto_reorden = u.PuntoReorden,
@@ -682,6 +667,22 @@ public sealed class ArticulosService : IArticulosService
 
         _context.alm_articulos.Add(entity);
         await _context.SaveChangesAsync(ct);
+
+        // Aperturas: una por bodega con existencia inicial. Van DESPUÉS del SaveChanges que
+        // asigna los ids, y dentro de la misma transacción: si una falla, el artículo no se
+        // crea. Un tipo sin inventario (ej. Servicios) no llega aquí — no lleva bodegas.
+        if (manejaInventario)
+        {
+            foreach (var u in ubicaciones.Where(u => u.Existencia > 0m))
+            {
+                await _carga.PostearAperturaAsync(entity.id, u.BodegaId, u.Existencia, u.CostoApertura, user, ct);
+            }
+        }
+
+        // SIEMPRE, haya o no aperturas: es quien fija existencia, existencia_minima y
+        // cantidad de la cabecera (nacieron en 0).
+        await _rollup.RecomputeAsync(entity.id, ct);
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
 
         dto.Id = entity.id;
         return dto;
@@ -817,22 +818,9 @@ public sealed class ArticulosService : IArticulosService
         entity.tipo_articulo_id = dto.TipoArticuloId;
         entity.grupo_id = dto.GrupoId;
         entity.diametro = NormalizeOptional(dto.Diametro, 80);
-
-        // La cuenta se valida SOLO si CAMBIA (comparando ambos lados sin separadores):
-        // un re-save del form —que siempre reenvía CuentaContable— no debe reventar en un
-        // artículo histórico SIMAFI cuya cuenta ya no exista en el plan. Mismo criterio
-        // que la unidad de medida (exigencia solo hacia adelante).
-        var cuentaNueva = NormalizeOptional(dto.CuentaContable, 20, uppercase: true);
-        if (!string.Equals(
-                AccountCodeFormatter.Normalize(cuentaNueva),
-                AccountCodeFormatter.Normalize(entity.cuenta_contable),
-                StringComparison.OrdinalIgnoreCase))
-        {
-            await ValidarCuentaContableAsync(cuentaNueva, ct);
-            entity.cuenta_contable = cuentaNueva;
-        }
-        // Si es la misma cuenta (aunque cambie el formato: guiones/puntos), se conserva
-        // el valor almacenado tal cual: no hay cambio real que validar ni escribir.
+        // La cuenta contable ya no es propia del artículo: se hereda del tipo (alm_tipo_articulo).
+        // La columna alm_articulo.cuenta_contable queda deprecada; no se toca aquí (se conserva
+        // el histórico SIMAFI) hasta que se decida eliminarla de la BD.
         entity.valor_unitario = dto.ValorUnitario;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);

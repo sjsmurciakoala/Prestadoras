@@ -51,15 +51,75 @@
     padding: 0.1rem 0;
 }
 
+/* Es un <button>: además de lo visual lleva el reset, mismo criterio que ::deep .nav-item */
 ::deep .nav-section__label {
     font-size: 0.65rem;
-    color: rgba(255, 255, 255, 0.4);
+    color: rgba(255, 255, 255, 0.45);
     font-weight: 700;
     text-transform: uppercase;
     letter-spacing: 0.1em;
     padding: 0.85rem 1rem 0.3rem 1.5rem;
     white-space: nowrap;
     user-select: none;
+    -webkit-appearance: none;
+    appearance: none;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+    box-sizing: border-box;
+    margin: 0;
+    border: 0;
+    background: transparent;
+    font-family: inherit;
+    line-height: 1.2;
+    text-align: left;
+    cursor: pointer;
+    transition: color 0.15s ease, background-color 0.15s ease;
+}
+
+::deep .nav-section__label-text {
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+::deep .nav-section__label:hover {
+    color: rgba(255, 255, 255, 0.75);
+    background-color: rgba(255, 255, 255, 0.06);
+}
+
+/* Rótulo sin acordeón (SSR estático): es un encabezado, no debe parecer pulsable. */
+::deep .nav-section__label--estatico,
+::deep .nav-section__label--estatico:hover {
+    cursor: default;
+    background-color: transparent;
+    color: rgba(255, 255, 255, 0.45);
+}
+
+/* Espejo de la rotación del chevron de los grupos */
+::deep .nav-section--abierta > .nav-section__label .nav-item__chevron {
+    transform: rotate(180deg);
+    opacity: 0.7;
+}
+
+/* El panel siempre está en el DOM (lo exige aria-controls, y quitarlo destruiría los
+   SidebarNavNode); se pliega sólo visualmente. */
+::deep .nav-section__items {
+    display: none;
+}
+
+::deep .nav-section--abierta > .nav-section__items {
+    display: block;
+}
+
+/* El sidebar no tenía ningún estilo de foco: sin esto el acordeón es inoperable a ciegas. */
+::deep .nav-item:focus-visible,
+::deep .nav-section__label:focus-visible {
+    outline: 2px solid rgba(255, 255, 255, 0.85);
+    outline-offset: -2px;
+    border-radius: 6px;
 }
 
 /* ===== NAV ITEM (links & group headers) ===== */
@@ -219,6 +279,16 @@
     padding: 0.15rem 0;
 }
 
+/* En 64px el acordeón no aplica: se ven los iconos de todas las secciones. Este selector
+   pesa más que .nav-section--abierta > .nav-section__items, así que gana sin !important.
+   También recentra los círculos, porque ahora hay un wrapper entre .nav-section y los items. */
+.sidebar-nav--collapsed ::deep .nav-section > .nav-section__items {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    width: 100%;
+}
+
 .sidebar-nav--collapsed ::deep .nav-group {
     display: flex;
     flex-direction: column;
@@ -264,7 +334,8 @@
 /* ===== REDUCED MOTION ===== */
 @media (prefers-reduced-motion: reduce) {
     ::deep .nav-item,
-    ::deep .nav-item__chevron {
+    ::deep .nav-item__chevron,
+    ::deep .nav-section__label {
         transition: none;
     }
 }
@@ -289,8 +360,9 @@
 }
 
 .sidebar-nav--mobile ::deep .nav-section__label {
-    padding: 1rem 1rem 0.35rem 1.25rem;
+    padding: 0.75rem 1rem 0.5rem 1.25rem;
     font-size: 0.7rem;
+    min-height: 44px;
 }
 
 .sidebar-nav--mobile ::deep .nav-group__children .nav-item {

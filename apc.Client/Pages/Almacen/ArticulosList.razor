@@ -244,20 +244,28 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.TipoArticuloDisplay)" Caption="Tipo" MinWidth="150">
+                    @* DxGrid usa layout de tabla fijo: la columna no se ajusta sola al contenido.
+                       Los nombres de tipo son largos ("INVENTARIO DE MATERIALES Y ACCESORIOS
+                       ALCANTARILLADO SANITARIO"), así que se topa en 2 renglones con elipsis en
+                       vez de 1: a una sola línea dos tipos distintos se veían idénticos. *@
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.TipoArticuloDisplay)" Caption="Tipo" MinWidth="230">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
-                                <span class="text-muted" title="@item.TipoArticuloDisplay">@item.TipoArticuloDisplay</span>
+                                <span class="text-muted celda-dos-lineas" title="@item.TipoArticuloDisplay">@item.TipoArticuloDisplay</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UnidadMedidaDisplay)" Caption="Unidad" Width="100px" TextAlignment="GridTextAlignment.Center">
+                    @* Descripción de la unidad (alm_unidad_medida.nombre), no el código.
+                       El ancho sube de 100px porque "Kilogramo" o "Metro cúbico" no caben.
+                       Sin unidad de catálogo la celda queda vacía (no "—"): así se distingue
+                       de un vistazo qué artículos falta sanear. *@
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UnidadMedidaDisplay)" Caption="Unidad" Width="150px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is ArticuloListItemDto item)
+                            @if (cell.DataItem is ArticuloListItemDto item && !string.IsNullOrEmpty(item.UnidadMedidaDisplay))
                             {
-                                <span class="text-muted">@item.UnidadMedidaDisplay</span>
+                                <span class="text-muted celda-una-linea" title="@item.UnidadMedidaDisplay">@item.UnidadMedidaDisplay</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -271,11 +279,18 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Existencia)" Caption="Existencia" Width="130px" TextAlignment="GridTextAlignment.Right">
+                    @* La cantidad va acompañada de la unidad en forma corta (abreviatura del
+                       catálogo). El Excel sigue exportando el número puro: el sufijo es del
+                       template y la exportación toma el valor del campo. *@
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Existencia)" Caption="Existencia" Width="165px" TextAlignment="GridTextAlignment.Right">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
                                 <span class="@(item.BajoMinimo ? "text-danger fw-bold" : "text-dark")">@item.Existencia.ToString("N2")</span>
+                                @if (!string.IsNullOrEmpty(item.UnidadMedidaCorta))
+                                {
+                                    <span class="unidad-sufijo" title="@item.UnidadMedidaDisplay">@item.UnidadMedidaCorta</span>
+                                }
                                 @if (item.Descuadrado)
                                 {
                                     <i class="bi bi-exclamation-triangle-fill text-warning ms-1"

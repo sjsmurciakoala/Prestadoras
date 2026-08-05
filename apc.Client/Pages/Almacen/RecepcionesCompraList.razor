@@ -1,0 +1,463 @@
+@page "/almacen/compras/recepciones"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject IJSRuntime JS
+@inject RecepcionesCompraClient RecepcionesClient
+@inject ProveedoresClient ProveedoresClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - Recepción de compras</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="RecepcionesCompraToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Recepción de compras</h2>
+            <p class="page-subtitle">Facturas de proveedor que entran mercadería al inventario</p>
+        </div>
+
+        <DxButton Text="Nueva factura"
+                  IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern"
+                  Click="@(() => Navigation.NavigateTo("/almacen/compras/recepciones/nueva"))" />
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Facturas</div>
+                <div class="summary-value">@recepciones.Count.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Contra orden</div>
+                <div class="summary-value">@recepciones.Count(r => r.OrdenCompraNumero.HasValue).ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card summary-warning">
+                <div class="summary-label">Anuladas</div>
+                <div class="summary-value">@recepciones.Count(r => r.Estado == EstadoRecepcionCompra.Anulada).ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Monto total</div>
+                <div class="summary-value">@recepciones.Where(r => r.Estado != EstadoRecepcionCompra.Anulada).Sum(r => r.Total).ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@recepciones" KeyFieldName="@nameof(RecepcionCompraListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar número, proveedor, factura..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@proveedores" Value="@filtroProveedor"
+                                    ValueChanged="@((string? v) => OnProveedorChanged(v))"
+                                    ValueFieldName="@nameof(ProveedorComboItem.Codigo)"
+                                    TextFieldName="@nameof(ProveedorComboItem.Display)"
+                                    NullText="Todos los proveedores"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 240px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@estadosFiltro" Value="@estadoSeleccionado"
+                                    ValueChanged="@((EstadoOpcion? e) => OnEstadoChanged(e))"
+                                    TextFieldName="@nameof(EstadoOpcion.Etiqueta)"
+                                    NullText="Todos los estados"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 160px;" CssClass="me-1" />
+
+                        <DxDateEdit @bind-Date="fechaDesde" NullText="Desde"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+                        <DxDateEdit @bind-Date="fechaHasta" NullText="Hasta"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+
+                        <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@recepciones.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.Numero)" Caption="No." Width="90px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <span class="fw-semibold">@item.Numero.ToString("00000")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.Fecha)" Caption="Fecha" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <span>@item.Fecha.ToString("dd/MM/yyyy")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.ProveedorNombre)" Caption="Proveedor" MinWidth="220">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span class="text-dark fw-semibold">@(string.IsNullOrWhiteSpace(item.ProveedorNombre) ? item.CodProveedor : item.ProveedorNombre)</span>
+                                    <span class="text-muted small">@item.CodProveedor</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.NumeroFacturaSar)" Caption="Factura" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <span>@(string.IsNullOrWhiteSpace(item.NumeroFacturaSar) ? "—" : item.NumeroFacturaSar)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.OrdenCompraNumero)" Caption="O/C" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                @if (item.OrdenCompraNumero.HasValue)
+                                {
+                                    <span class="fw-semibold">@item.OrdenCompraNumero.Value.ToString("00000")</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted small">Directa</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.BodegaNombre)" Caption="Bodega" MinWidth="140">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(item.BodegaNombre) ? "—" : item.BodegaNombre)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.Renglones)" Caption="Renglones" Width="105px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <span class="text-muted">@item.Renglones.ToString("N0")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.Total)" Caption="Total" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Total.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionCompraListItemDto.Estado)" Caption="Estado" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <span class="badge-estado-rec @ClaseEstado(item.Estado)">@item.EstadoDescripcion</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionCompraListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button type="button" class="btn-icon btn-edit" title="Ver"
+                                            @onclick="() => Abrir(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+
+                                    @if (item.Estado == EstadoRecepcionCompra.Registrada)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Anular"
+                                                @onclick="() => ConfirmarAnular(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-x-circle"></i>
+                                        </button>
+                                    }
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay facturas de proveedor para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(460px, 90vw)" HeaderText="Anular factura" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-4">
+            <div class="text-center mb-3 text-warning">
+                <i class="bi bi-x-circle" style="font-size: 3rem;"></i>
+            </div>
+            <h5 class="fw-bold text-center">¿Anular esta factura?</h5>
+
+            @if (recepcionAccion is not null)
+            {
+                <div class="fw-semibold text-center mb-3">
+                    Factura @recepcionAccion.Numero.ToString("00000") —
+                    @(string.IsNullOrWhiteSpace(recepcionAccion.ProveedorNombre) ? recepcionAccion.CodProveedor : recepcionAccion.ProveedorNombre)
+                    <div class="text-muted small">@recepcionAccion.Total.ToString("N2") HNL</div>
+                </div>
+            }
+
+            <div class="alert alert-warning py-2 small" role="alert">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Se revertirá en el kardex lo que entró y, si vino de una orden de compra, la
+                cantidad volverá a quedar pendiente. <strong>Sólo se puede anular si la mercadería
+                sigue en la bodega</strong>: si ya salió, hay que corregir con un ajuste.
+            </div>
+
+            <label class="form-label fw-semibold">Motivo (opcional)</label>
+            <DxMemo @bind-Text="motivoAnulacion" Rows="2" MaxLength="400"
+                    NullText="Ej. la factura se capturó dos veces" CssClass="w-100" />
+
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarAccion"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!procesando)" />
+                <DxButton Text="Sí, anular" Click="AnularAsync" Enabled="@(!procesando)"
+                          RenderStyle="ButtonRenderStyle.Warning" IconCssClass="bi bi-x-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private sealed class EstadoOpcion
+    {
+        public short Codigo { get; init; }
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    /// <summary>Item del combo de proveedores: código + "código — nombre" (para buscar por ambos).</summary>
+    private sealed class ProveedorComboItem
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Display => $"{Codigo} — {Nombre}";
+    }
+
+    private const string GridLayoutStorageKey = "almacen-recepciones-compra-grid-layout";
+
+    private DxGrid? grid;
+    private List<RecepcionCompraListItemDto> recepciones = new();
+    private List<ProveedorComboItem> proveedores = new();
+
+    private readonly List<EstadoOpcion> estadosFiltro = new()
+    {
+        new EstadoOpcion { Codigo = EstadoRecepcionCompra.Registrada, Etiqueta = "Registrada" },
+        new EstadoOpcion { Codigo = EstadoRecepcionCompra.Anulada,    Etiqueta = "Anulada" }
+    };
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroProveedor;
+    private EstadoOpcion? estadoSeleccionado;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool confirmVisible;
+    private bool procesando;
+    private string? motivoAnulacion;
+    private RecepcionCompraListItemDto? recepcionAccion;
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarProveedoresAsync();
+        await CargarAsync();
+    }
+
+    private RecepcionCompraFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        CodProveedor = string.IsNullOrWhiteSpace(filtroProveedor) ? null : filtroProveedor,
+        Estado = estadoSeleccionado?.Codigo,
+        FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+        FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null
+    };
+
+    private async Task CargarProveedoresAsync()
+    {
+        try
+        {
+            var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+            proveedores = lista
+                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+                .OrderBy(p => p.Codigo)
+                .ToList();
+        }
+        catch
+        {
+            proveedores = new List<ProveedorComboItem>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            recepciones = await RecepcionesClient.GetAsync(BuildFilter());
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las facturas de compra: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnProveedorChanged(string? valor)
+    {
+        filtroProveedor = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnEstadoChanged(EstadoOpcion? valor)
+    {
+        estadoSeleccionado = valor;
+        await CargarAsync();
+    }
+
+    private void Abrir(int id) => Navigation.NavigateTo($"/almacen/compras/recepciones/{id}");
+
+    private void ConfirmarAnular(RecepcionCompraListItemDto item)
+    {
+        recepcionAccion = item;
+        motivoAnulacion = null;
+        confirmVisible = true;
+    }
+
+    private void CancelarAccion()
+    {
+        if (procesando) return;
+        confirmVisible = false;
+        recepcionAccion = null;
+    }
+
+    private async Task AnularAsync()
+    {
+        if (recepcionAccion is null) { confirmVisible = false; return; }
+
+        procesando = true;
+        try
+        {
+            var ok = await RecepcionesClient.AnularAsync(recepcionAccion.Id, motivoAnulacion);
+            if (!ok)
+            {
+                Toast("Error", "La factura ya no existe.", ToastRenderStyle.Danger);
+            }
+            else
+            {
+                Toast("Éxito", "Factura anulada: el inventario quedó revertido.", ToastRenderStyle.Success);
+                await CargarAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("No se pudo anular", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            procesando = false;
+            confirmVisible = false;
+            recepcionAccion = null;
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "RecepcionesCompraToast"
+        });
+
+    private static string ClaseEstado(short estado) => estado switch
+    {
+        EstadoRecepcionCompra.Registrada => "estado-registrada",
+        EstadoRecepcionCompra.Anulada    => "estado-anulada",
+        _ => "estado-registrada"
+    };
+}

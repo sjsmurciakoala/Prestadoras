@@ -149,8 +149,16 @@
                     <CellDisplayTemplate Context="cell">
                         @if (cell.DataItem is KardexMovimientoDto m)
                         {
-                            <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
-                            @UnidadSufijo()
+                            @if (m.Saldo.HasValue)
+                            {
+                                <span class="text-dark fw-bold">@m.Saldo.Value.ToString("N2")</span>
+                                @UnidadSufijo()
+                            }
+                            else
+                            {
+                                @* Movimiento anterior a la carga inicial: histórico sin saldo. *@
+                                <span class="text-muted" title="Anterior a la carga inicial">—</span>
+                            }
                         }
                     </CellDisplayTemplate>
                 </DxGridDataColumn>

@@ -241,11 +241,42 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
+                        @* Documento origen: sin esta columna, una carga inicial y una entrada
+                           cualquiera se rotulan igual ("Entrada") y son indistinguibles. *@
+                        <DxGridDataColumn Caption="Documento" Width="130px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    @if (m.EsLineaDeCorte)
+                                    {
+                                        <span class="badge-mov mov-corte" title="Saldo inicial: desde aquí corre el saldo">CARGA INICIAL</span>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(m.DocumentoTipo))
+                                    {
+                                        <span class="text-muted small">@m.DocumentoTipo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="Histórico migrado de SIMAFI, no posteado por el motor">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
                         <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Saldo)" Caption="Saldo" Width="120px" TextAlignment="GridTextAlignment.Right">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
-                                    <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
+                                    @if (m.Saldo.HasValue)
+                                    {
+                                        <span class="text-dark fw-bold">@m.Saldo.Value.ToString("N2")</span>
+                                    }
+                                    else
+                                    {
+                                        @* Pre-corte: antes de la apertura no hay un saldo con
+                                           significado (el histórico SIMAFI no arranca de cero). *@
+                                        <span class="text-muted" title="Anterior a la carga inicial: histórico informativo">—</span>
+                                    }
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
