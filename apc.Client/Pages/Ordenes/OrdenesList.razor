@@ -404,11 +404,27 @@
     private CancellationTokenSource? clientesFiltroCts;
     private CancellationTokenSource? estadosFiltroCts;
 
+    /// <summary>
+    /// Usuario de la app al que se le creará la orden cuando se llega desde el
+    /// mapa de cuadrillas (marcador → "Crear orden de trabajo").
+    /// </summary>
+    [SupplyParameterFromQuery(Name = "crearPara")]
+    public string? CrearPara { get; set; }
+
     protected override async Task OnInitializedAsync()
     {
         await CargarUsuarioActualAsync();
         await CargarCatalogosInicialesAsync();
         await BuscarAsync();
+
+        // Desde el mapa: abrir el popup de Nueva orden ya asignada al empleado
+        // (contrato de la app: la orden baja solo si empleado == usuario app).
+        if (!string.IsNullOrWhiteSpace(CrearPara))
+        {
+            AbrirCrear();
+            nuevo.Empleado = CrearPara.Trim();
+            empleadoCrearTexto = CrearPara.Trim();
+        }
     }
 
     private async Task CargarUsuarioActualAsync()
