@@ -87,13 +87,26 @@ namespace apc.Client
             services.AddScoped<ArticulosClient>();
             services.AddScoped<KardexClient>();
             services.AddScoped<ComprasClient>();
+            services.AddScoped<OrdenesCompraClient>();
+            services.AddScoped<RecepcionesCompraClient>();
             services.AddScoped<RequisicionesClient>();
             services.AddScoped<DescargosClient>();
             services.AddScoped<UnidadesMedidaClient>();
             services.AddScoped<CategoriasUnidadClient>();
             services.AddScoped<TiposArticuloClient>();
+            services.AddScoped<TiposMovimientoClient>();
+            services.AddScoped<MovimientosAlmacenClient>();
+            services.AddScoped<TrasladosClient>();
+            services.AddScoped<RequisicionesDocumentoClient>();
+            services.AddScoped<DescargosDocumentoClient>();
+            services.AddScoped<IsvCompraConfigClient>();
             services.AddScoped<GruposClient>();
             services.AddScoped<BodegasClient>();
+            services.AddScoped<ExistenciasBodegaClient>();
+            services.AddScoped<ValuacionInventarioClient>();
+            // Carga inicial de existencias y ajustes de inventario (Fase 4).
+            services.AddScoped<CargaInicialClient>();
+            services.AddScoped<AjusteInventarioClient>();
             services.AddScoped<BitacoraMaestrosClient>();
             services.AddScoped<AuditoriaConfigClient>();
             services.AddScoped<CiclosClient>();

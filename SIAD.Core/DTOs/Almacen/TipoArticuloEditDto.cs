@@ -39,5 +39,12 @@ public sealed class TipoArticuloEditDto
     /// </summary>
     public bool ManejaInventario { get; set; } = true;
 
+    /// <summary>
+    /// Tasa de ISV (cfg_impuesto_tasa) que aplica a las compras de artículos de este tipo.
+    /// Null = no registra ISV. La UI la elige de un selector de tasas del ISV: una tasa
+    /// gravada hace que el ISV se sume al costo; una exenta o null, no. Sin efecto contable.
+    /// </summary>
+    public int? ImpuestoTasaId { get; set; }
+
     public bool Activo { get; set; } = true;
 }

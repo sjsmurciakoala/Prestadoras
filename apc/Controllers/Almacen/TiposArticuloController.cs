@@ -21,6 +21,9 @@ public sealed class TiposArticuloController : ControllerBase
     [HttpGet("lookup")]
     public async Task<IActionResult> GetLookup(CancellationToken ct) => Ok(await _service.GetLookupAsync(ct));
 
+    [HttpGet("tasas-isv")]
+    public async Task<IActionResult> GetTasasIsv(CancellationToken ct) => Ok(await _service.GetTasasIsvAsync(ct));
+
     [HttpGet("{id:int}")]
     public async Task<IActionResult> GetById(int id, CancellationToken ct)
     { var x = await _service.GetByIdAsync(id, ct); return x is null ? NotFound() : Ok(x); }

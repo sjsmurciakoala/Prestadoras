@@ -12,7 +12,7 @@ Orden y guía para aplicar en el **SRV de producción** los scripts SQL de la ta
 features desarrollada en `Cambios_almacen1.0` que —hasta donde está registrado— ya se
 aplicaron en el **mirror `siad_v3_restore` (localhost)** pero **faltan en el SRV**.
 
-Son **20 scripts a aplicar** en orden (pasos 1 a 19, con un 8b intercalado), más
+Son **24 scripts a aplicar** en orden (pasos 1 a 23, con un 8b y un 21b intercalados), más
 **1 archivo de respaldo que NO se aplica** (es el rollback del paso 6).
 
 > El **código** C#/Blazor de estas features ya está en `main`. Este runbook cubre
@@ -68,6 +68,7 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/<script>.sql
 | ⚠️ | **El paso 5 borra 1 artículo de prueba** ("MANTENIMIENTO PREVENTIVO DE BOMBAS - CONTRATADO") **solo si no tiene ningún movimiento** (guardas `NOT EXISTS`). Es intencional. |
 | ⚠️ | **El paso 14 (presupuesto multitenant) va de la mano del binario del portal.** Cambia la firma de `fn_pst_next_id_presupuesto_dtl` (ahora recibe `company_id`): el portal viejo la llama con 1 argumento y **fallaría al agregar detalles de presupuesto** después de aplicar el SQL. Aplicar el script y desplegar el portal **en la misma ventana**. Además el backfill asume `company_id = 2`. |
 | ⚠️ | **El paso 19 (soft-delete de artículos) va de la mano del binario del portal.** El código nuevo lee y escribe `alm_articulo.activo`: si desplegás el portal sin aplicar el script, el maestro de artículos falla al consultar. Aplicá el SQL y desplegá el portal en la misma ventana. (Al revés es inocuo: el SQL sin el binario deja la columna sin usar.) |
+| ⚠️ | **El paso 20 (ISV por tipo de artículo) depende de `cfg_impuesto_tasa`**, del catálogo del ISV (`2026-07-14_cfg_impuestos.sql`) que **no figura en este runbook** y cuyo estado en el SRV no consta. El script del paso 20 **se detiene con mensaje claro** si esa tabla falta: aplicá/verificá el catálogo del ISV primero. Va con el binario del portal (el código nuevo lee/escribe la columna). |
 | ⚠️ | **NO apliques `Database/ddl_v3/20260227_presupuesto_valor_real_triggers.sql` tal cual** en una base que ya tiene el paso 14. Sus `CREATE OR REPLACE` de `fn_pst_aplicar_delta_valor_real` (mono-tenant) y `fn_pst_recalcular_valor_disponible(varchar)` **pisan las versiones company-aware del paso 14** y reintroducen fuga entre empresas. Lo que falta de ese ddl_v3 lo repone el **paso 18** sin tocar esas dos. |
 
 ---
@@ -96,13 +97,29 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/<script>.sql
 | 17 | `2026-07-27_bitacora_config_contactos.sql` | Da de alta las dos tablas de contactos en el catálogo de auditoría y hereda su config de `prv_proveedor_cuenta_bancaria` | Datos idempotentes — **depende de los pasos 8 y 16** | Sí |
 | 18 | `2026-07-28_presupuesto_completar_ddl_valor_real.sql` | Repone las piezas faltantes del mecanismo de valor_real de presupuesto: `fn_pst_resolver_cuenta_code`, `fn_pst_resolver_poliza_fecha`, `fn_pst_aplicar_delta_por_poliza` y el procedimiento `sp_pst_aplicar_partida_presupuesto` | Objetos (funciones + procedimiento) — **depende del paso 14** | Sí |
 | 19 | `2026-07-29_alm_articulo_activo.sql` | `alm_articulo.activo` (soft-delete del maestro de artículos) + índice parcial | Aditivo (columna + índice) · **con binario** | Sí |
+| 20 | `2026-07-30_alm_tipo_articulo_impuesto_tasa.sql` | `alm_tipo_articulo.impuesto_tasa_id` (FK a `cfg_impuesto_tasa`) + índice: ISV de compras por tipo | Aditivo (columna + FK + índice) · **con binario** · **depende de `cfg_impuesto_tasa`** | Sí |
+| 21 | `2026-07-30_alm_carga_inicial.sql` | `alm_config_inventario` + `alm_ajuste_inventario` + `REVERSA` en el CHECK de `documento_tipo` + 2 CHECK `NOT VALID` + 2 índices parciales del kardex | Aditivo (2 tablas + constraints) · **con binario** · **⚠️ exige la infra de kardex de jul** | Sí |
+| 21b | *(mismo script, paso aparte)* | `VALIDATE CONSTRAINT` de `ck_alm_kardex_libro_nuevo` y `ck_alm_kardex_fecha_si_uuid` | Validación (escanea `alm_kardex`) | Sí |
+| 22 | `2026-07-30_cfg_compra_isv.sql` | Tabla `cfg_compra_isv` (tratamiento del ISV en compras por empresa: COSTO/FISCAL) + semilla | Aditivo (tabla) · **con binario** · **independiente** | Sí |
+| 23 | `2026-07-30_alm_orden_compra.sql` | `alm_orden_compra` + `alm_orden_compra_detalle` + `alm_orden_compra_correlativo` + `alm_compra.orden_compra_detalle_id` (módulo de órdenes de compra) | Aditivo (3 tablas + columna + FK) · **con binario** · **independiente** | Sí |
+| 24 | `2026-07-31_alm_articulo_bodega_mover_a_bodega_01.sql` | Muda las 634 filas de `alm_articulo_bodega` de la bodega `PRIN` a la `01`, donde vive el kardex histórico, y resuelve 1 colisión del índice único | **Datos destructivo/one-shot** (UPDATE masivo + 1 DELETE) · **⚠️ NO re-ejecutable a ciegas** · **antes del corte de inventario** | Sí |
+| 25 | `2026-07-31_alm_compra_recepcion.sql` | `alm_compra_hdr` (cabecera de la factura de proveedor) + `alm_compra_correlativo` + `alm_compra.compra_hdr_id` (captura de recepción de compras) | Aditivo (2 tablas + columna + 2 FK) · **con binario** · **depende del paso 23** | Sí |
+| 26 | `2026-08-01_alm_requisicion_descargo.sql` | `alm_requisicion_hdr` + `alm_descargo_hdr` + 2 correlativos sembrados en 17124 + columnas de parcialidad y enlace en las dos tablas planas + `DROP` de `ix_alm_requisicion_pendiente` | Aditivo (4 tablas + 5 columnas + 6 FK) **con backfill** y **1 DROP INDEX deliberado** · **con binario** · **⚠️ exige el script de documentos (§3.1b de pendientes)** | Sí |
+| 27 | `2026-08-01_alm_tipo_movimiento.sql` | `alm_tipo_movimiento`: catálogo de tipos de movimiento de almacén + semilla de **los 12 tipos reales importados de `INV_TIPOSTRANSACC` de MERENDON** (2026-08-03) | Aditivo (1 tabla + índice) + ⚠️ **DELETE acotado** de la semilla genérica anterior + semilla idempotente · **con binario** · **independiente** | Sí |
+| 28 | `2026-08-03_alm_movimiento.sql` | Documento de movimiento de almacén: `alm_movimiento_hdr` + `alm_movimiento_dtl` + `alm_movimiento_correlativo` (entradas y salidas manuales, equivalente de `dlgTransaccionesGenericasINV`) | Aditivo (3 tablas + índices) + siembra del correlativo · **con binario** · **depende del paso 27** | Sí |
+| 29 | `2026-08-04_alm_traslado.sql` | Traslado entre bodegas (Fase 5): columnas de traslado en `alm_movimiento_hdr`/`_dtl`, 2 tablas nuevas `alm_traslado_recepcion`/`_dtl`, widening de 2 CHECK (estado→1/2/3/9; clase→+TRASLADO), CHECK `existencia_transito>=0` y semilla del tipo `TRF` | Aditivo (2 tablas + 6 columnas + 4 FK) + **widening de 2 CHECK** + semilla idempotente · **con binario** · **depende de los pasos 27 y 28** | Sí |
+| 30 | `2026-08-05_con_integracion_config_activo_almacen.sql` | Integración contable de almacén (F0): `con_integracion_config.activo_almacen` (bandera de activación por empresa; DEFAULT false = no postea) | Aditivo (columna) · **con binario** · **independiente** | Sí |
+| 31 | `2026-08-05_con_integracion_asiento_module_almacen.sql` | Integración contable de almacén (F0): amplía `ck_con_integracion_asiento_module` con `'ALMACEN'` (permite configurar el asiento del módulo por empresa) | Widening de CHECK · **con binario** · **independiente** | Sí |
 | — | `2026-07-16_backup_sp_obtener_cliente_saldo.sql` | **NO aplicar** — rollback del paso 6 | Respaldo | — |
 
-> **Sin dependencias cruzadas duras entre bloques:** todas las FK apuntan a tablas que
-> ya existen en prod. Los órdenes estrictos son: **interno del bloque almacén
-> (pasos 2→3→4→5)**, **14→15**, **14→18**, **8 + 8b + 16 → 17** (el 17 inserta filas en las tablas
-> que crean el 8/8b y describe las tablas que crea el 16), y **no aplicar el backup del
-> paso 6**. El resto podría reordenarse, pero seguir el orden de arriba es lo más seguro.
+> **Casi sin dependencias cruzadas duras entre bloques:** salvo el paso 20, todas las FK
+> apuntan a tablas que ya existen en prod. **El paso 20 es la excepción:** su FK apunta a
+> `cfg_impuesto_tasa` (catálogo del ISV, `2026-07-14_cfg_impuestos.sql`), que **no está en
+> esta tanda** — aplicá ese catálogo antes. Los órdenes estrictos son: **interno del bloque
+> almacén (pasos 2→3→4→5)**, **14→15**, **14→18**, **8 + 8b + 16 → 17** (el 17 inserta filas en las
+> tablas que crean el 8/8b y describe las tablas que crea el 16), **23 → 25** (la cabecera de
+> recepción lleva FK a `alm_orden_compra`), y **no aplicar el backup del paso 6**. El resto podría
+> reordenarse, pero seguir el orden de arriba es lo más seguro.
 
 ---
 
@@ -502,6 +519,523 @@ SELECT indexname FROM pg_indexes
  WHERE tablename='alm_articulo' AND indexname='ix_alm_articulo_company_activo';  -- 1 fila
 ```
 
+### Paso 20 — `alm_tipo_articulo.impuesto_tasa_id` (ISV de compras por tipo) · con binario
+Agrega la columna `impuesto_tasa_id` (FK a `cfg_impuesto_tasa`, `ON DELETE RESTRICT`) + índice
+parcial. Permite configurar **por tipo de artículo** si sus compras registran ISV (una tasa
+gravada se suma al costo) o no (tasa exenta o NULL). Aditivo e idempotente; nace **NULL** en
+todos los tipos, así que ninguno cambia de comportamiento hasta que se le asigne una tasa desde
+Mantenimientos → Tipos de artículo. **Sin parte contable** (crédito fiscal fuera de alcance).
+
+> ⚠️ **Prerrequisito externo a esta tanda:** la FK apunta a `cfg_impuesto_tasa`
+> (`2026-07-14_cfg_impuestos.sql`), que **no figura en este runbook** y cuyo estado en el SRV
+> no consta. El script del paso 20 trae una guarda que lo **detiene con mensaje claro** si esa
+> tabla falta, sin dejar nada a medias. Verificá/aplicá el catálogo del ISV primero (requiere
+> además la extensión `btree_gist`).
+
+> ⚠️ **Va con el binario del portal.** El código nuevo (`TipoArticuloService`,
+> `SiadDbContext.Almacen.cs`, `TipoArticuloForm`) lee y escribe la columna. El SQL sin el binario
+> es inocuo (columna sin usar); el binario sin el SQL rompe el mantenimiento de tipos.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-30_alm_tipo_articulo_impuesto_tasa.sql
+```
+¿Ya aplicado?
+```sql
+SELECT count(*) AS tiene_col
+  FROM information_schema.columns
+ WHERE table_name='alm_tipo_articulo' AND column_name='impuesto_tasa_id';
+-- 1 = ya aplicado.
+```
+Verificación posterior (todos los tipos nacen sin tasa; FK e índice existen):
+```sql
+SELECT count(*) AS total, count(impuesto_tasa_id) AS con_tasa FROM public.alm_tipo_articulo;
+-- con_tasa = 0 recién aplicado.
+SELECT conname FROM pg_constraint WHERE conname='fk_alm_tipo_articulo_impuesto_tasa';   -- 1 fila
+SELECT indexname FROM pg_indexes WHERE indexname='ix_alm_tipo_articulo_impuesto_tasa';  -- 1 fila
+```
+
+### Paso 21 — Infraestructura de la carga inicial de existencias · con binario
+Crea `alm_config_inventario` (política del corte, una fila por empresa, con semilla) y
+`alm_ajuste_inventario` (documento de ajuste: la vía legítima de mover stock cuando se cierre
+la captura manual). Sobre `alm_kardex`: amplía el CHECK de `documento_tipo` con **`REVERSA`**
+(superconjunto del vigente), agrega dos CHECK **`NOT VALID`** y dos índices parciales
+(`ix_alm_kardex_carga_inicial`, `ix_alm_kardex_reversa`). Aditivo e idempotente; **no toca
+ningún dato de negocio**.
+
+> ⚠️ **Prerrequisito duro — verificar ANTES.** Este paso asume aplicados en el SRV
+> `2026-07-09_alm_kardex_bodega_id.sql`, `2026-07-13_alm_kardex_articulo_id.sql` y los cuatro
+> de `2026-07-14` (trazabilidad, ampliar precisiones, FK RESTRICT, FK compuestas).
+> **Ninguno figura en este runbook** y su estado en el SRV no consta. El script trae guardas
+> que lo **detienen con mensaje claro** si falta algo, sin dejar nada a medias. Ojo además:
+> esos scripts **dejan de ser re-ejecutables** una vez activo `trg_alm_kardex_inmutable`
+> (hacen UPDATE de backfill y fallan con `K0001`).
+
+> ⚠️ **Va con el binario del portal**: el motor de posteo (`InventarioPostingService`) escribe
+> `documento_tipo = 'REVERSA'`, que el CHECK viejo rechaza. El SQL sin el binario es inocuo.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-30_alm_carga_inicial.sql
+```
+¿Ya aplicado?
+```sql
+SELECT count(*) AS tiene_tablas FROM information_schema.tables
+ WHERE table_name IN ('alm_config_inventario','alm_ajuste_inventario');
+-- 2 = ya aplicado.
+```
+Verificación posterior:
+```sql
+SELECT company_id, base_costo_apertura, costo_apertura_incluye_isv, apertura_cerrada
+  FROM public.alm_config_inventario ORDER BY company_id;   -- una fila por empresa con artículos
+SELECT pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conname='ck_alm_kardex_documento_tipo';             -- debe incluir 'REVERSA'
+SELECT conname, convalidated FROM pg_constraint
+ WHERE conname IN ('ck_alm_kardex_libro_nuevo','ck_alm_kardex_fecha_si_uuid');
+-- convalidated = false: se validan en el paso 21b.
+```
+
+### Paso 21b — Validar los dos CHECK del kardex ⚠️ fuera de la ventana crítica
+Los CHECK del paso 21 nacen `NOT VALID` **a propósito**: la afirmación "todo el histórico tiene
+`documento_tipo` NULL" es plausible pero **no está comprobada contra el SRV**, y una sola fila
+incompatible abortaría el `ALTER` —y con él toda la transacción— en plena ventana de despliegue.
+Con `NOT VALID` el `ALTER` es instantáneo. La validación escanea `alm_kardex` (~47 mil filas):
+corrédla después, con calma.
+
+**Pre-chequeo (los tres deben dar 0). Si alguno no da 0, NO valides: investigá primero.**
+```sql
+SELECT count(*) FROM alm_kardex WHERE documento_tipo IS NOT NULL AND uuid IS NULL;
+SELECT count(*) FROM alm_kardex WHERE uuid IS NOT NULL AND documento_tipo IS NULL;
+SELECT count(*) FROM alm_kardex WHERE uuid IS NOT NULL AND fecha IS NULL;
+```
+```sql
+ALTER TABLE public.alm_kardex VALIDATE CONSTRAINT ck_alm_kardex_libro_nuevo;
+ALTER TABLE public.alm_kardex VALIDATE CONSTRAINT ck_alm_kardex_fecha_si_uuid;
+```
+¿Ya aplicado?
+```sql
+SELECT conname, convalidated FROM pg_constraint
+ WHERE conname IN ('ck_alm_kardex_libro_nuevo','ck_alm_kardex_fecha_si_uuid');
+-- convalidated = true en ambos = ya validado.
+```
+
+### Paso 22 — `cfg_compra_isv` (tratamiento del ISV en compras, por empresa) · con binario
+Crea la tabla `cfg_compra_isv` (una fila por empresa, PK = `company_id`) con `tratamiento` ∈
+('COSTO','FISCAL') y una semilla `COSTO` por empresa con artículos. Es la **segunda capa** de la
+configuración del ISV: el paso 20 dice —por tipo— cuánto ISV lleva cada compra; este dice qué se
+hace con ese ISV (al costo vs. impuesto fiscal). **Sin parte contable** (solo guarda la decisión).
+Aditivo e idempotente, tabla nueva sin FK, no toca ningún dato existente. **Independiente de los
+demás pasos.**
+
+> ⚠️ **Va con el binario del portal**: el código nuevo (`IsvCompraConfigService` y la pantalla de
+> configuración) lee y escribe la tabla. El SQL sin el binario es inocuo (tabla sin usar).
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-30_cfg_compra_isv.sql
+```
+¿Ya aplicado?
+```sql
+SELECT to_regclass('public.cfg_compra_isv');   -- NOT NULL = ya aplicado.
+```
+Verificación posterior:
+```sql
+SELECT company_id, tratamiento FROM public.cfg_compra_isv ORDER BY company_id;
+-- una fila por empresa con artículos, todas en COSTO recién aplicado.
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='ck_cfg_compra_isv_tratamiento';
+```
+
+### Paso 23 — Órdenes de compra (módulo nuevo) · con binario · independiente
+Crea el modelo de órdenes de compra que el portal no tenía: `alm_orden_compra` (cabecera),
+`alm_orden_compra_detalle` (renglones; FK compuesta tenant-safe a la cabecera y a `alm_articulo`)
+y `alm_orden_compra_correlativo` (numeración por empresa). Además agrega
+`alm_compra.orden_compra_detalle_id` (+ FK compuesta tenant-safe e índice) para enlazar la
+recepción con su O/C (modo Con orden de compra). Estados numéricos (1 Borrador · 2 Aprobada ·
+3 Recibida parcial · 4 Cerrada · 9 Anulada). Aditivo e idempotente (`CREATE TABLE/INDEX IF NOT
+EXISTS`, `ADD COLUMN IF NOT EXISTS`, la FK dentro de un `DO` block guardado por `pg_constraint`);
+**no toca ningún dato existente** (la columna nueva de `alm_compra` es NULL).
+
+> ⚠️ **Va con el binario del portal**: el código nuevo del módulo de O/C (entidades, servicio,
+> pantalla) lee y escribe estas tablas. El SQL sin el binario es inocuo (tablas/columna sin usar).
+
+> **Dependencias:** solo `alm_articulo` y `alm_compra`, ambas preexistentes en prod. Independiente
+> de los demás pasos de esta tanda. No asume ningún `company_id` (el correlativo se crea on-demand
+> por empresa desde el servicio).
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-30_alm_orden_compra.sql
+```
+¿Ya aplicado?
+```sql
+SELECT to_regclass('public.alm_orden_compra')             AS cabecera,
+       to_regclass('public.alm_orden_compra_detalle')     AS detalle,
+       to_regclass('public.alm_orden_compra_correlativo') AS correlativo;
+-- las tres NOT NULL = aplicado.
+```
+Verificación posterior:
+```sql
+SELECT count(*) AS col_enlace FROM information_schema.columns
+ WHERE table_name='alm_compra' AND column_name='orden_compra_detalle_id';    -- 1 = aplicado
+SELECT conname FROM pg_constraint WHERE conname='fk_alm_compra_oc_detalle';   -- 1 fila
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='ck_alm_orden_compra_estado';
+-- CHECK (estado IN (1, 2, 3, 4, 9))
+```
+
+---
+
+### Paso 24 — El stock se muda a la bodega de su kardex (`PRIN` → `01`) ⚠️ one-shot
+El kardex histórico y el stock quedaron en bodegas distintas: **47,213 de 47,215 asientos** de
+`alm_kardex` están en `bodega_id = 2` (código `01`), mientras `alm_articulo_bodega` tiene **634
+filas en `bodega_id = 1`** (`PRIN`) y una sola en la 2. Son la misma bodega física con dos
+identidades — el saldo del histórico de la bodega 2 coincide **exacto** con la existencia de la
+bodega 1 en **585 de 587 artículos (99.7%)**. El causante probable es
+`2026-07-07_alm_articulo_bodega_backfill_existencia.sql`, que sembró las filas por bodega desde
+la cabecera sin mirar de qué bodega hablaba el kardex.
+
+El script mueve las filas (conservan id, existencia, costos, mínimos, máximos, punto de reorden,
+ubicación y la marca de principal: **solo cambia `bodega_id`**) y resuelve la única colisión con
+`uq (company, artículo, bodega)`: el artículo `0030` ya tenía fila en la bodega 01 (existencia 0,
+creada el 2026-07-29 por `admin@siad-demo.com`); se conserva el mayor de los dos mínimos y se
+elimina la duplicada. Al final **rehace el rollup de cabecera** de los artículos que quedaron
+desalineados: eliminar una fila de bodega cambia la Σ de mínimos y sin ese paso
+`alm_articulo.existencia_minima` queda stale (medido: el `0030` quedaba con 50 en la cabecera
+contra 30 en sus bodegas).
+
+> ⚠️ **PRERREQUISITO DEL CORTE DE INVENTARIO.** Sin esta mudanza, el punto de corte del kardex
+> no empareja: filtrando por bodega el descuadre queda mudo (falso negativo) y **sin filtrar, el
+> saldo DUPLICA la existencia**. Medido en el mirror tras un ensayo del corte: el artículo `0001`
+> mostraba saldo 572.00 contra existencia 286.00, y 8 de los 12 artículos con más histórico
+> quedaron descuadrados. Va **antes** de ejecutar el corte
+> (`docs/plans/2026-07-31-fase8-ejecucion-corte-inventario.md`).
+
+> ⚠️ **NO re-ejecutable a ciegas** y **asume `company_id = 2`**. El script trae un `DO` block que
+> aborta si los ids de bodega no son `PRIN = 1` y `01 = 2`: **los ids se asignan por secuencia y
+> no tienen por qué coincidir entre mirror y producción.** Si en el SRV son otros, hay que
+> ajustar el script antes de correrlo.
+
+> **No toca `alm_kardex`** (no se deshabilita ningún trigger; mover el histórico habría exigido
+> apagar `trg_alm_kardex_inmutable`), **no usa disparadores**, **no es DDL**, y **no toca**
+> compras, descargos ni requisiciones: sus 90,107 filas tienen `bodega_id` en NULL.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-31_alm_articulo_bodega_mover_a_bodega_01.sql
+```
+¿Ya aplicado?
+```sql
+SELECT b.id, b.codigo, count(ab.id) AS filas
+FROM alm_bodega b
+LEFT JOIN alm_articulo_bodega ab ON ab.company_id = b.company_id AND ab.bodega_id = b.id
+WHERE b.company_id = 2 GROUP BY b.id, b.codigo ORDER BY b.id;
+-- PRIN con 0 filas y '01' con las 634 = ya aplicado.
+```
+Verificación posterior:
+```sql
+-- 1. La cabecera sigue cuadrada contra la suma de bodegas activas. Esperado: 0 filas.
+SELECT a.id FROM alm_articulo a
+LEFT JOIN alm_articulo_bodega ab ON ab.company_id=a.company_id AND ab.articulo_id=a.id AND ab.activo
+WHERE a.company_id = 2 GROUP BY a.id, a.existencia
+HAVING a.existencia <> COALESCE(SUM(ab.existencia), 0);
+
+-- 2. El objetivo: histórico y stock en el mismo par. Esperado: ~585 de 587 coinciden.
+WITH hist AS (
+  SELECT articulo_id, SUM(COALESCE(ingresos,0)-COALESCE(salidas,0)) AS saldo_hist
+  FROM alm_kardex WHERE company_id=2 AND uuid IS NULL AND bodega_id=2 AND articulo_id IS NOT NULL
+  GROUP BY articulo_id
+), stock AS (SELECT articulo_id, existencia FROM alm_articulo_bodega WHERE company_id=2 AND bodega_id=2)
+SELECT count(*) AS comparados, count(*) FILTER (WHERE h.saldo_hist = s.existencia) AS coinciden
+FROM hist h JOIN stock s USING (articulo_id);
+
+-- 3. Exactamente una bodega principal por artículo. Esperado: 0 filas.
+SELECT articulo_id FROM alm_articulo_bodega WHERE company_id=2 AND activo AND principal
+GROUP BY articulo_id HAVING count(*) <> 1;
+
+-- 4. Rollup de MÍNIMOS al día (es lo que arregla el paso 4 del script). Esperado: 0 filas.
+SELECT a.id, a.codigo_articulo FROM alm_articulo a
+LEFT JOIN alm_articulo_bodega ab ON ab.company_id=a.company_id AND ab.articulo_id=a.id AND ab.activo
+WHERE a.company_id = 2 GROUP BY a.id, a.codigo_articulo, a.existencia_minima
+HAVING a.existencia_minima <> COALESCE(SUM(ab.existencia_minima), 0);
+```
+
+---
+
+### Paso 25 — Recepción de compra: cabecera de la factura de proveedor · con binario · depende del 23
+Crea la pieza que consume las órdenes de compra: `alm_compra_hdr`, la **cabecera** de la recepción
+(un documento = una factura de proveedor), y `alm_compra_correlativo` (numeración interna por
+empresa, mismo patrón de `UPDATE ... RETURNING` que la O/C). Además agrega
+`alm_compra.compra_hdr_id` (+ FK compuesta tenant-safe e índice) para colgar los N renglones de su
+factura. La cabecera lleva lo que es del documento y no del renglón: proveedor, factura SAR
+(`numero_factura_sar`, texto — `alm_compra.numero_factura` es `NUMERIC` y no admite guiones), CAI,
+bodega que recibe, O/C recibida, términos, moneda/tasa, consumo interno, override de ISV,
+descuento global, otros gastos, flete y totales.
+
+Cierra tres decisiones abiertas del diseño (`docs/centura-flujos/README_compras_recepcion_proveedor.md`):
+**D-3** agrupador de documento = cabecera real (no un campo dentro de la tabla plana), **D-4**
+numeración = contador por `company_id`, **D-5** factura SAR = columna nueva de texto.
+
+> ⚠️ **Va con el binario del portal**: la pantalla y el servicio de recepción escriben estas tablas.
+> El SQL sin el binario es inocuo (tablas vacías y una columna NULL sin usar).
+
+> **Dependencias:** el **paso 23** (`alm_orden_compra` y su clave alterna `uq_alm_orden_compra_tenant`)
+> y la clave alterna `uq_alm_bodega_company_id` de `2026-07-14_alm_fk_compuestas_tenant.sql`. El
+> script verifica ambas al inicio y **aborta con mensaje claro** si faltan. No asume ningún
+> `company_id` (el correlativo se crea on-demand por empresa desde el servicio).
+
+> **No toca datos existentes:** `alm_compra` solo recibe una columna NULL, así que el histórico
+> SIMAFI queda intacto y sigue blindado por `trg_alm_compra_blindaje`. Ningún tipo cambia y nada
+> pasa a `NOT NULL`. El motor de posteo **no cambia**: la unidad de posteo sigue siendo la línea
+> de `alm_compra` con su `uuid`.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-07-31_alm_compra_recepcion.sql
+```
+¿Ya aplicado?
+```sql
+SELECT to_regclass('public.alm_compra_hdr')         AS cabecera,
+       to_regclass('public.alm_compra_correlativo') AS correlativo;
+-- las dos NOT NULL = aplicado.
+```
+Verificación posterior:
+```sql
+-- 1. Columna de enlace y FK compuesta en alm_compra.
+SELECT count(*) AS col_enlace FROM information_schema.columns
+ WHERE table_name='alm_compra' AND column_name='compra_hdr_id';           -- 1 = aplicado
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='fk_alm_compra_hdr';
+-- FOREIGN KEY (company_id, compra_hdr_id) REFERENCES alm_compra_hdr(company_id, id) ...
+
+-- 2. Las dos FK de la cabecera deben ser COMPUESTAS (company_id, ...).
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conrelid='alm_compra_hdr'::regclass AND contype='f';
+
+-- 3. El histórico NO se tocó: ninguna línea SIMAFI quedó con cabecera.
+SELECT origen, count(*) AS lineas, count(compra_hdr_id) AS con_cabecera
+  FROM alm_compra GROUP BY origen ORDER BY origen;   -- con_cabecera = 0 en SIMAFI
+
+-- 4. Los CHECK vigentes.
+SELECT conname, pg_get_constraintdef(oid) FROM pg_constraint
+ WHERE conrelid='alm_compra_hdr'::regclass AND contype='c' ORDER BY conname;
+-- ck_alm_compra_hdr_estado (1,9) · _moneda (HNL,USD) · _posteo · _tasa (>0)
+```
+
+---
+
+### Paso 26 — Requisiciones y descargos: cabeceras, correlativos y parcialidad · con binario · depende del script de documentos
+Crea la estructura que le faltaba al módulo para **capturar** requisiciones y descargos, que hoy
+son sólo consulta sobre el histórico migrado de SIMAFI: `alm_requisicion_hdr` (la solicitud) y
+`alm_descargo_hdr` (la entrega), sus dos correlativos por empresa **sembrados desde el máximo
+histórico (17124)**, las columnas de parcialidad y enlace sobre las dos tablas planas
+(`requisicion_hdr_id`, `cantidad_despachada`, `aplicado_en_oc`, `descargo_hdr_id`,
+`requisicion_id`) y las claves alternas por tenant que no existían. Diseño completo en
+[docs/centura-flujos/README_requisiciones_descargos.md](../docs/centura-flujos/README_requisiciones_descargos.md).
+
+> **La regla que fija este paso:** requisición, descargo y kardex tipo 202 son **el mismo hecho**
+> (42.866 / 42.757 / 42.698 líneas, **42.653 pares comunes**, medido en el mirror). Por eso **sólo el
+> descargo postea** y el histórico **no se migra ni se re-postea**. El `CHECK ck_alm_requisicion_no_postea`
+> y el `DROP` de `ix_alm_requisicion_pendiente` existen para que ningún barrido futuro convierta
+> solicitudes en salidas duplicadas.
+
+> ⚠️ **No es puramente aditivo.** Hace `UPDATE` de backfill sobre las **42.866** líneas de
+> `alm_requisicion` (`cantidad_despachada`, `aplicado_en_oc`) y **elimina** el índice
+> `ix_alm_requisicion_pendiente`. Ambas cosas son deliberadas y están en el bloque de rollback.
+
+> **Dependencias:** el script de documentos de almacén (`2026-07-14_alm_documentos_bodega_posteo.sql`,
+> §3.1b del registro de pendientes), las dos claves alternas de `2026-07-14_alm_fk_compuestas_tenant.sql`
+> y `2026-07-14_alm_kardex_trazabilidad.sql`. El script **verifica las cuatro y aborta con mensaje
+> claro** si falta alguna. También aborta si encuentra documentos con `origen = 'SIAD'` en las planas.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-01_alm_requisicion_descargo.sql
+```
+¿Ya aplicado?
+```sql
+SELECT to_regclass('public.alm_requisicion_hdr') AS req_hdr,
+       to_regclass('public.alm_descargo_hdr')    AS des_hdr,
+       to_regclass('public.alm_requisicion_correlativo') AS req_corr,
+       to_regclass('public.alm_descargo_correlativo')    AS des_corr;
+-- las cuatro NOT NULL = aplicado.
+```
+Verificación posterior: V1–V8 del propio script (final del archivo). Las dos críticas:
+```sql
+-- El histórico NO cambió: 42.866 y 42.757, todo SIMAFI/posteado.
+SELECT 'req' AS t, origen, posteado, count(*) FROM alm_requisicion GROUP BY 1,2,3
+UNION ALL SELECT 'des', origen, posteado, count(*) FROM alm_descargo GROUP BY 1,2,3;
+
+-- Los correlativos continúan la numeración vieja (empresa 2 → 17124 en ambos).
+SELECT 'req' AS t, company_id, ultimo_numero FROM alm_requisicion_correlativo
+UNION ALL SELECT 'des', company_id, ultimo_numero FROM alm_descargo_correlativo ORDER BY 1,2;
+```
+
+### Paso 27 — Catálogo de tipos de movimiento de almacén · con binario · independiente
+Crea `alm_tipo_movimiento`, el catálogo **configurable por el usuario** de motivos de entrada y
+salida de almacén, y lo siembra con **los 12 tipos reales del legacy**, importados de
+`dbo.INV_TIPOSTRANSACC` de MERENDON (SQL Server) el 2026-08-03, para **cada empresa que tenga
+bodegas**. Diseño en
+[docs/plans/2026-08-01-movimientos-almacen-catalogo-diseno.md](../docs/plans/2026-08-01-movimientos-almacen-catalogo-diseno.md).
+
+> ⚠️ **Contiene un `DELETE` acotado.** La primera versión del script (2026-08-01) sembraba 3 tipos
+> **inventados** a partir de `ClaseAjusteInventario` (`SOBRANTE_CONTEO`, `MERMA`,
+> `CORRECCION_COSTO`) que no salían de ningún dato real. El script los retira **sólo si ningún
+> documento los referencia** (aborta con mensaje si los hay). Aprobado por el usuario el
+> 2026-08-03, incluida la pérdida de la única clase `VALOR` — Centura no tiene equivalente.
+
+> **Qué se importó y qué no:** código y nombre **verbatim**; `ENTRA_SALE` → `clase`
+> (`E`→ENTRADA, `S`→SALIDA; resultado real **7 ENTRADA / 5 SALIDA**). **No** se importaron:
+> `CUENTA_CONTABLE` (las 7 cuentas son de Merendón y **ninguna existe** en `con_plan_cuentas` de
+> SIAD — quedan NULL, que es heredar del tipo de artículo), `CAMBIA_COSTO` (no vive por tipo sino
+> en `INV_TRANSACC_AXL` por `(AREA_AFECTADA, ENTRA_SALE)`, y su regla real —toda entrada cambia
+> costo, ninguna salida— ya es lo que hace el motor) ni `CORRELATIVO`. `AREA_AFECTADA` no se
+> importó pero determinó el `activo`.
+
+> **Sólo 4 quedan activos:** `AIE`, `AIS`, `NPG`, `APL` (área `D`, captura manual). Los 8 restantes
+> entran **inactivos**: `FAC`/`CAN`/`DPI`/`DEP` y `COM`/`TTR` los postea automáticamente su propio
+> flujo en SIAD, y `TFE`/`TFS` necesitan la clase `TRASLADO` de la Fase 5 (activarlos hoy
+> permitiría registrar media transferencia).
+
+> **Qué resuelve:** hoy agregar un motivo de movimiento exige recompilar y migrar un `CHECK`. Con
+> este catálogo es un `INSERT` desde la pantalla. La lógica de inventario **no** se mueve a la
+> tabla: la gobierna la `clase` (`ENTRADA` / `SALIDA` / `VALOR`), que el motor de posteo ya sabe
+> ejecutar y **no cambia una sola línea**. La tabla sólo aporta el nombre de negocio, la cuenta
+> contable de override y la bandera de autorización.
+
+> **100% aditivo, idempotente y reversible.** `CREATE TABLE IF NOT EXISTS` + `INSERT … ON CONFLICT
+> DO NOTHING`: re-ejecutarlo no duplica la semilla ni pisa lo que el usuario ya haya editado. El
+> bloque de rollback está al final del propio script.
+
+> **Sin dependencias duras.** Sólo lee `alm_bodega` para saber a qué empresas sembrar. Trae la clave
+> alterna `uq_alm_tipo_movimiento_tenant (company_id, id)` que la **Fase 2** necesitará para su FK
+> compuesta; no hace falta nada más hoy.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-01_alm_tipo_movimiento.sql
+```
+¿Ya aplicado?
+```sql
+SELECT to_regclass('public.alm_tipo_movimiento') AS existe;   -- NULL = falta
+```
+
+### Paso 28 — Documento de movimiento de almacén · con binario · depende del paso 27
+Crea las tres tablas que le faltaban al portal para **capturar** entradas y salidas manuales
+multi-renglón: `alm_movimiento_hdr` (cabecera), `alm_movimiento_dtl` (renglón, unidad de posteo)
+y `alm_movimiento_correlativo` (consecutivo por empresa, sembrado en 0). Es el equivalente
+funcional de `dlgTransaccionesGenericasINV` de Centura. Diseño en
+[docs/plans/2026-08-01-movimientos-almacen-catalogo-diseno.md](../docs/plans/2026-08-01-movimientos-almacen-catalogo-diseno.md).
+
+> **100% aditivo, idempotente y reversible.** `CREATE TABLE IF NOT EXISTS` + siembra del
+> correlativo con `ON CONFLICT DO NOTHING`. Rollback propio al final del script (3 `DROP TABLE`).
+
+> **Depende del paso 27** (`alm_tipo_movimiento` y su clave alterna) y de las claves alternas de
+> `alm_bodega` y `alm_articulo` (`2026-07-14_alm_fk_compuestas_tenant.sql`). El script **verifica
+> las tres y aborta con mensaje claro** si falta alguna: sus 4 FK son compuestas `(company_id, …)`.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-03_alm_movimiento.sql
+```
+¿Ya aplicado?
+```sql
+SELECT to_regclass('public.alm_movimiento_hdr') AS hdr,
+       to_regclass('public.alm_movimiento_dtl') AS dtl;   -- ambas NOT NULL = aplicado
+```
+Verificación posterior: V1–V8 del propio script (incluye tres pruebas negativas — anular sin
+motivo, posteado sin uuid, fuga de tenant — que deben fallar dentro de `ROLLBACK`).
+Verificación posterior: V1–V6 del propio script (incluye dos pruebas negativas). Las esenciales:
+```sql
+-- Una fila por (empresa, código); esperado hoy: company_id 2 → 12 filas.
+SELECT company_id, count(*), string_agg(codigo, ', ' ORDER BY orden)
+  FROM alm_tipo_movimiento GROUP BY company_id ORDER BY company_id;
+
+-- La semilla genérica vieja ya no existe (esperado: 0 filas).
+SELECT codigo FROM alm_tipo_movimiento
+ WHERE codigo IN ('SOBRANTE_CONTEO','MERMA','CORRECCION_COSTO');
+
+-- Sólo 4 activos (esperado: AIE, AIS, NPG, APL).
+SELECT codigo, clase FROM alm_tipo_movimiento WHERE activo ORDER BY orden;
+```
+
+### Paso 29 — Traslado entre bodegas (tránsito + directo) · con binario · depende de los pasos 27 y 28
+Fase 5 del módulo de movimientos. Sobre el documento del paso 28 agrega el **traslado entre bodegas**:
+columnas de traslado en `alm_movimiento_hdr` (`bodega_destino_id`, `requiere_recepcion`, `recibido_por`,
+`fecha_recepcion`) y `alm_movimiento_dtl` (`cantidad_recibida`), dos tablas nuevas de recepción parcial
+(`alm_traslado_recepcion` / `alm_traslado_recepcion_dtl`, con FK compuestas tenant-safe), y la semilla
+del tipo `TRF` «Traslado entre bodegas» (clase `TRASLADO`). Diseño en
+[docs/plans/2026-08-04-traslado-bodegas-transito-diseno.md](../docs/plans/2026-08-04-traslado-bodegas-transito-diseno.md).
+
+> **Aditivo + *widening* de dos CHECK, idempotente y reversible.** `ADD COLUMN IF NOT EXISTS` /
+> `CREATE TABLE IF NOT EXISTS` / `DO` blocks / `ON CONFLICT DO NOTHING`. Los dos CHECK se **amplían**
+> (más permisivos, sin pérdida de datos): `ck_alm_movimiento_hdr_estado` de `(1,9)` a `(1,2,3,9)` y
+> `ck_alm_tipo_movimiento_clase` a `+TRASLADO`, cada uno con `DROP … IF EXISTS` + `ADD` (seguro al
+> re-correr). Rollback propio al final del script. **No** hay `DROP` de columnas ni `DELETE`/`TRUNCATE`.
+
+> **Depende de los pasos 27 y 28** (`alm_tipo_movimiento`, `alm_movimiento_hdr`/`_dtl` y sus claves
+> alternas) y de `alm_articulo_bodega.existencia_transito` (`2026-07-13`) y `alm_kardex.bodega_destino_id`
+> (ya en el scaffold). El script **verifica los prerrequisitos y aborta con mensaje claro** si falta alguno.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-04_alm_traslado.sql
+```
+¿Ya aplicado?
+```sql
+SELECT to_regclass('public.alm_traslado_recepcion')     AS rec,
+       to_regclass('public.alm_traslado_recepcion_dtl') AS rec_dtl,
+       (SELECT count(*) FROM alm_tipo_movimiento WHERE codigo='TRF') AS trf;  -- rec/rec_dtl NOT NULL y trf>0 = aplicado
+```
+Verificación posterior: V1–V8 del propio script (incluye dos pruebas negativas — destino = origen y
+tránsito negativo — que deben fallar dentro de `ROLLBACK`).
+
+---
+
+### Paso 30 — Integración contable de almacén: bandera `activo_almacen` (F0) · con binario · independiente
+F0 de [docs/plans/2026-08-05-integracion-contable-almacen-diseno.md](../docs/plans/2026-08-05-integracion-contable-almacen-diseno.md).
+Agrega `con_integracion_config.activo_almacen` (boolean NOT NULL DEFAULT false): el flag por empresa que
+—junto con la fila de diario + tipo de partida en `con_integracion_asiento` (module `ALMACEN`)— habilita que
+los movimientos de almacén generen su partida por el mismo motor de integración que Ventas/Caja/Bancos
+(`sp_con_generar_comprobante_config` / `IntegracionContableConfigSql`).
+
+> **Aditivo e idempotente.** `ADD COLUMN IF NOT EXISTS`; DEFAULT `false` = comportamiento actual (el almacén
+> **NO** postea al mayor). No toca datos existentes. Rollback (`DROP COLUMN IF EXISTS`) comentado al final del
+> script. **Con binario**: el código de F0 (helper `IntegracionContableConfigSql`, entidad `con_integracion_config`
+> y la pantalla de Integración Contable) lee/escribe esta columna. **Independiente** del resto de la tanda.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-05_con_integracion_config_activo_almacen.sql
+```
+¿Ya aplicado?
+```sql
+SELECT 1 FROM information_schema.columns
+ WHERE table_schema='public' AND table_name='con_integracion_config'
+   AND column_name='activo_almacen';  -- 1 fila = aplicado
+```
+Verificación posterior:
+```sql
+SELECT column_name, data_type, column_default, is_nullable
+  FROM information_schema.columns
+ WHERE table_schema='public' AND table_name='con_integracion_config' AND column_name='activo_almacen';
+-- espera: boolean · default false · NOT NULL
+```
+
+---
+
+### Paso 31 — Integración contable de almacén: `module='ALMACEN'` en el CHECK del asiento (F0) · con binario · independiente
+F0 de [docs/plans/2026-08-05-integracion-contable-almacen-diseno.md](../docs/plans/2026-08-05-integracion-contable-almacen-diseno.md).
+Amplía `ck_con_integracion_asiento_module` para permitir `module='ALMACEN'`, de modo que cada empresa pueda
+configurar el diario + tipo de partida del módulo de almacén en `con_integracion_asiento` (lo que el motor
+`sp_con_generar_comprobante_config` exige para postear).
+
+> **Widening de un CHECK, idempotente y reversible.** El CHECK nuevo es **superconjunto** del actual (solo
+> agrega `'ALMACEN'`): ninguna fila existente lo viola, no hay `DELETE`/`TRUNCATE` ni pérdida de datos.
+> `DROP CONSTRAINT IF EXISTS` + `ADD`, seguro al re-correr. Rollback al final del script (exige que no haya
+> filas `module='ALMACEN'`). **Con binario**: `IntegracionContableModulos.Todos` y el `HasCheckConstraint` de
+> EF se amplían con `'ALMACEN'` en el mismo commit.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-05_con_integracion_asiento_module_almacen.sql
+```
+¿Ya aplicado?
+```sql
+SELECT pg_get_constraintdef(oid) LIKE '%ALMACEN%' AS aplicado
+  FROM pg_constraint WHERE conname='ck_con_integracion_asiento_module';  -- t = aplicado
+```
+Verificación posterior:
+```sql
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='ck_con_integracion_asiento_module';
+-- espera: CHECK (... 'MISCELANEOS','PROV','ALMACEN' ...)
+```
+
 ---
 
 ## 6. Después de aplicar todo
@@ -556,6 +1090,142 @@ Según notas internas al 2026-07-23 (point-in-time, **no verificado contra el SR
   binario del portal que introduce el soft-delete del maestro de artículos. No tiene
   dependencias con otros pasos de esta tanda.
 
+- **Paso 20:** creado el 2026-07-30 (rama `Cambios_almacen2.0`) y **APLICADO AL MIRROR
+  `siad_v3_restore` ese mismo día** (verificado: columna nullable creada, 9 tipos con 0 tasas
+  asignadas, FK con `confdeltype='r'`, índice parcial; el prerrequisito `cfg_impuesto_tasa`
+  existía con 4 tasas — EXENTO, EXONERADO, ISV15 15%, ISV18 18%). Tras aplicarlo, la suite de
+  Almacén pasó de 18 fallos (`42703`) a **79/79 en verde**. **Pendiente en el SRV**, donde el
+  estado de `cfg_impuesto_tasa` sigue sin constar; el script se detiene con mensaje claro si
+  falta. Va junto con el binario del portal.
+- **Paso 21 / 21b:** creados y **APLICADOS AL MIRROR `siad_v3_restore` el 2026-07-30**.
+  Verificado en el mirror antes de aplicar: 8/8 columnas de trazabilidad, las 2 claves alternas
+  por tenant, el trigger de inmutabilidad activo y el CHECK vigente con los 6 valores esperados.
+  Tras aplicar: las 2 tablas creadas, 1 fila de config sembrada (company 2, `VALOR_UNITARIO`,
+  `costo_apertura_incluye_isv=false`), `REVERSA` aceptado por el CHECK, 5/5 índices, y la suite
+  de Almacén en **79/79**. El **21b se corrió también en el mirror**: los tres pre-chequeos
+  dieron **0** y ambos CHECK quedaron `convalidated = true` — es decir, el escaneo pasa limpio
+  aquí; en el SRV hay que repetir el pre-chequeo porque su histórico puede diferir.
+  **Pendiente en el SRV.** Va con el binario que introduce el motor de posteo
+  (`InventarioPostingService`), que escribe `documento_tipo = 'REVERSA'` y por tanto **exige el
+  CHECK ampliado del paso 21**. Su prerrequisito duro son los seis scripts de kardex de julio
+  (2026-07-09, 2026-07-13 y los cuatro de 2026-07-14), que **no figuran en este runbook** y cuyo
+  estado en el SRV no consta: confirmarlo es la Fase 0(a) del diseño
+  `docs/plans/2026-07-29-carga-inicial-existencias-kardex-design.md`.
+
+- **Paso 22:** creado y **APLICADO AL MIRROR `siad_v3_restore` el 2026-07-30** (verificado:
+  tabla creada, CHECK `COSTO`/`FISCAL`, 1 fila sembrada company 2 = `COSTO`, re-aplicar es
+  idempotente sin duplicar; la suite de Almacén corre **91/91 en verde**, incluidos los 5 tests
+  de la capa 2). Tabla nueva independiente (sin FK), segunda capa de la config del ISV en compras
+  (tratamiento al costo / fiscal, una fila por empresa). **Pendiente en el SRV.** Va con el binario
+  del portal. Sin dependencias con otros pasos de esta tanda.
+
+- **Paso 23:** creado y **APLICADO AL MIRROR `siad_v3_restore` el 2026-07-30** (verificado: 3 tablas
+  creadas, columna de enlace en `alm_compra`, `CHECK (estado IN (1,2,3,4,9))`, y las **dos** FK del
+  detalle compuestas tenant-safe). Módulo nuevo de órdenes de compra: 3 tablas (`alm_orden_compra`,
+  `alm_orden_compra_detalle`, `alm_orden_compra_correlativo`) + `alm_compra.orden_compra_detalle_id`.
+  **Pendiente en el SRV.** Va con el binario del portal que introduce el módulo de O/C.
+  Dependencias: `alm_articulo` y `alm_compra` (preexistentes) **y la clave alterna
+  `(company_id, id)` de `alm_articulo`** que crea `2026-07-14_alm_fk_compuestas_tenant.sql` — el
+  script se detiene con mensaje claro si falta. Independiente de los demás pasos de esta tanda.
+  > Nota: una revisión posterior detectó que la primera versión creaba la FK al artículo **simple**
+  > en vez de compuesta (5 de las 7 FK hacia `alm_articulo` ya eran compuestas). El script se corrigió
+  > y su bloque `DO` es **reparador**: sustituye la FK simple si una corrida anterior la dejó, así que
+  > re-ejecutarlo es seguro y deja la base igual en instalaciones nuevas y ya aplicadas.
+
+- **Paso 24:** creado y **APLICADO AL MIRROR `siad_v3_restore` el 2026-07-31** (verificado: `PRIN`
+  quedó en 0 filas y `01` con 634 / 244 con existencia; cabecera cuadrada contra la suma de bodegas
+  activas; 585 de 587 artículos con el saldo del histórico igual a la existencia; exactamente una
+  bodega principal por artículo; `alm_kardex` intacto en 47,215 asientos). Mudanza del stock de la
+  bodega `PRIN` a la `01`, que es donde vive el kardex. **Pendiente en el SRV.**
+  ⚠️ **One-shot, asume `company_id = 2` y los ids `PRIN = 1` / `01 = 2`** — el `DO` block del script
+  aborta si no coinciden. **Es prerrequisito del corte de inventario**: sin él, el punto de corte no
+  empareja y el saldo del kardex duplica la existencia (verificado con un ensayo del corte en el
+  mirror el mismo día). Va **antes** del guion de
+  `docs/plans/2026-07-31-fase8-ejecucion-corte-inventario.md`.
+  > Nota: una verificación posterior detectó que la primera versión **no rehacía el rollup de
+  > cabecera**, y al eliminar la fila duplicada dejaba `alm_articulo.existencia_minima` stale (el
+  > artículo `0030` quedaba con 50 contra 30 en sus bodegas). Se agregó el paso 4 y se re-aplicó al
+  > mirror: los pasos 1–3 afectaron **0 filas** (idempotencia confirmada en vivo) y el rollup
+  > corrigió la única fila pendiente.
+
+- **Paso 25:** creado y **APLICADO AL MIRROR `siad_v3_restore` el 2026-07-31**. Cabecera de la
+  recepción de compra (`alm_compra_hdr`) + correlativo por empresa + `alm_compra.compra_hdr_id`.
+  Cierra D-3 (cabecera real en vez de agrupador plano), D-4 (contador por `company_id`, igual que la
+  O/C) y D-5 (`numero_factura_sar` de texto) del diseño
+  `docs/centura-flujos/README_compras_recepcion_proveedor.md`. **Pendiente en el SRV.**
+  Verificado en el mirror: 2 tablas creadas, 9 constraints en la cabecera, las **dos** FK compuestas
+  tenant-safe, 11 índices, `alm_compra.compra_hdr_id` nullable y las **4,484 líneas del histórico
+  SIMAFI intactas** (`con_cabecera = 0`). Guardas probadas dentro de `BEGIN … ROLLBACK` (el mirror
+  quedó sin rastro): factura duplicada por proveedor rechazada y recapturable tras anular, número
+  duplicado por empresa rechazado, estado fuera de (1,9) rechazado, `posteado=true` sin
+  `uuid`+`fecha_posteo` rechazado, moneda fuera de (HNL,USD) y `tasa_cambio<=0` rechazadas, O/C
+  inexistente rechazada, enlace de línea a cabecera inexistente rechazado, FK compuesta rechazando
+  la bodega de otra empresa, y el correlativo avanzando. **Re-ejecución confirmada idempotente**
+  (segunda corrida: todo «ya existe, omitiendo» y `COMMIT`).
+  **Depende del paso 23** y de la clave alterna de `alm_bodega`; el script aborta con mensaje claro
+  si falta alguna. Va con el binario del portal que introduce la captura de compras y el tipo
+  `COMPRA` en el motor de posteo — todavía **sin implementar** en el código.
+  > Nota para el servicio: el índice único de factura por proveedor **excluye las anuladas**, así que
+  > una factura anulada se puede recapturar; pero entonces **des-anular la original falla** con
+  > `unique_violation` (verificado). Si se implementa "reactivar", debe validarlo antes y devolver un
+  > mensaje claro en vez de un 500.
+
+- **Paso 26:** creado y **APLICADO AL MIRROR `siad_v3_restore` el 2026-08-01**. Estructura de captura
+  de requisiciones y descargos. **Pendiente en el SRV.** Verificado tras aplicar: las 4 tablas nuevas,
+  las **6 FK todas compuestas** tenant-safe, los correlativos sembrados en **17124** (empresa 2), el
+  histórico **idéntico** (42.866 requisiciones y 42.757 descargos, 100 % SIMAFI/posteado), 0 filas con
+  `cantidad_despachada > cantidad`, 0 requisiciones SIAD pendientes y el índice
+  `ix_alm_requisicion_pendiente` ausente. Backfill medido: 42.704 líneas descargadas + 162 en 0 = 42.866.
+  Ocho guardas probadas dentro de `BEGIN … ROLLBACK` (el mirror quedó sin rastro): sobre-despacho,
+  despacho negativo, requisición posteada (por CHECK y por el blindaje K0002), reserva negativa,
+  descargo directo sin motivo, aprobada sin evidencia, reabastecimiento despachado y un alta válida
+  como control positivo.
+  > **Decisión del usuario (2026-08-01): SIMAFI ya no ingresa datos** y se traerá un respaldo de esa
+  > base. Esto cierra el riesgo de colisión de numeración: el correlativo sembrado en 17124 puede
+  > continuar sin que el legacy emita números en paralelo.
+  > ⚠️ **Su arquitectura quedó supersedida** por el diseño del paso 27
+  > (`docs/plans/2026-08-01-movimientos-almacen-catalogo-diseno.md` §1): el script trae su propio
+  > bloque de rollback (líneas 440-463) y **está pendiente de decisión del usuario** si se revierte
+  > en el mirror o se deja aplicado sin uso. No aplicarlo al SRV hasta resolver eso.
+
+- **Paso 27:** creado el 2026-08-01 y **APLICADO AL MIRROR `siad_v3_restore` el 2026-08-03**, con la
+  semilla reemplazada ese mismo día por los 12 tipos reales de `INV_TIPOSTRANSACC`. Verificado tras
+  aplicar: 3 filas de la semilla vieja retiradas, 12 insertadas, 0 rastros de
+  `SOBRANTE_CONTEO`/`MERMA`/`CORRECCION_COSTO`, 4 activos (`AIE`, `AIS`, `NPG`, `APL`) y el reparto
+  de clases **7 ENTRADA / 5 SALIDA** — que es el conteo literal de `ENTRA_SALE` en el origen.
+  **Re-ejecución confirmada idempotente en vivo** (segunda corrida: `DELETE` 0 filas, `INSERT 0 0`,
+  total sigue en 12). **Pendiente en el SRV.**
+
+- **Paso 28:** creado y **APLICADO AL MIRROR `siad_v3_restore` el 2026-08-03**. Las 3 tablas del
+  documento de movimiento. Verificado tras aplicar: las 3 tablas creadas, las **4 FK todas
+  compuestas** tenant-safe, el correlativo sembrado en 0 (empresa 2), y las tres guardas probadas
+  dentro de `BEGIN … ROLLBACK` (anular sin motivo → 23514, posteado sin uuid → 23514, bodega de otra
+  empresa → 23503, alta válida como control positivo → OK). El módulo se ejercitó con las **17
+  pruebas de integración** `MovimientoAlmacenTests` + `MovimientoAlmacenAnulacionTests` en verde y la
+  suite de Almacén completa en **220/220**; el mirror quedó **sin residuos** (los tests envuelven en
+  `ROLLBACK`). **Pendiente en el SRV.** Va con el binario del portal que introduce la captura
+  (`IMovimientoAlmacenService`, controlador y —pendientes— las pantallas).
+  > **Limitación conocida arrastrada, NO bloqueante:** anular un movimiento de clase `VALOR` devuelve
+  > la existencia pero **no restituye el costo promedio anterior** (el motor no lo guarda). Es el
+  > defecto de `docs/plans/2026-08-01-costeo-articulo-diseno.md` §3, corrección 1, cuya solución es la
+  > Fase B de ese diseño. La prueba 18 fija el comportamiento actual y avisa.
+  Va junto con el binario del portal que introduce la pantalla `/almacen/tipos-movimiento`
+  (Fase 1 del catálogo: entidad, servicio, controlador, cliente HTTP, pantallas y permisos
+  `module.inventario.tipos_movimiento.*`, implementados el 2026-08-03).
+  > **Sin la tabla, la pantalla nueva falla y las pruebas `TipoMovimientoServiceTests` fallan en vez
+  > de saltarse.** Es el único acoplamiento del paso: no toca ninguna tabla existente.
+
+- **Paso 29:** creado el 2026-08-04 (Fase 5, traslado entre bodegas). **PENDIENTE en el mirror y en el
+  SRV** — aún **no aplicado** (no me conecto a la BD por iniciativa propia; lo aplicás vos, primero al
+  mirror y luego al SRV). Aditivo + *widening* de dos CHECK; 2 tablas nuevas de recepción con FK
+  compuestas tenant-safe; semilla del tipo `TRF`. Va con el binario del portal de la Fase 5:
+  **toda la Fase 5 (5.1 motor → 5.2 DDL/entidades → 5.3 `TrasladoAlmacenService` → 5.4 API/permisos →
+  5.5 UI) está en código y compila (0 errores)**. Lo único pendiente aparte de este script: **sus tests
+  de integración no se han corrido** (`InventarioPostingTrasladoTests` + `TrasladoAlmacenTests`,
+  dependen de este paso aplicado al mirror y de `SIAD_TEST_DB`) y la **prueba de humo logueada**.
+  > **Acoplamiento:** sin este script, el servicio de traslado y sus pruebas fallarían (faltarían las
+  > columnas y las tablas de recepción). No rompe nada existente: es aditivo + widening.
+
 ## 8. Nota de versionado (git)
 
 A la fecha, estos 3 scripts + este runbook están **sin commitear** (untracked) en la rama:
@@ -569,6 +1239,16 @@ A la fecha, estos 3 scripts + este runbook están **sin commitear** (untracked) 
 - `Database/2026-07-27_bitacora_config_contactos.sql`
 - `Database/2026-07-28_presupuesto_completar_ddl_valor_real.sql`
 - `Database/2026-07-29_alm_articulo_activo.sql`
+- `Database/2026-07-30_alm_tipo_articulo_impuesto_tasa.sql`
+- `Database/2026-07-30_alm_carga_inicial.sql`
+- `Database/2026-07-30_cfg_compra_isv.sql`
+- `Database/2026-07-30_alm_orden_compra.sql`
+- `Database/2026-07-31_alm_articulo_bodega_mover_a_bodega_01.sql`
+- `Database/2026-07-31_alm_compra_recepcion.sql`
+- `Database/2026-08-01_alm_requisicion_descargo.sql`
+- `Database/2026-08-01_alm_tipo_movimiento.sql`
+- `Database/2026-08-03_alm_movimiento.sql`
+- `Database/2026-08-04_alm_traslado.sql`
 - `Database/2026-07-23_runbook_despliegue_srv.md` (este archivo)
 
 Conviene versionarlos para que queden reflejados junto al resto de la tanda. **Vos

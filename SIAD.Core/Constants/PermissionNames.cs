@@ -64,6 +64,51 @@ public static class PermissionResources
         // pero con recurso propio para poder acotarla desde administración.
         public const string Saldos = "saldos";
     }
+
+    public static class Inventario
+    {
+        // Carga inicial de existencias (2026-07-30): el corte que siembra el
+        // inventario y su costo en el kardex.
+        //
+        // ⚠️ OJO con lo que un sub-recurso NO hace: ModuleAuthorize hace fallback al
+        // permiso de MÓDULO, y BuildPolicies añade BuildModulePermission a cada policy.
+        // Es decir, este recurso es un SUPERCONJUNTO de module.inventario.*, no una
+        // restricción: quien ya tenga el permiso de módulo pasa igual. Sirve para
+        // conceder permiso FINO a quien no tiene el de módulo y para que la acción
+        // aparezca en la pantalla de roles.
+        // Por eso CERRAR y REABRIR el corte NO se protegen con un recurso de inventario
+        // sino con [ModuleAuthorize(PermissionModules.Configuracion)] SIN recurso —
+        // con recurso volvería a caer en module.configuracion.create.
+        public const string CargaInicial = "carga_inicial";
+
+        // Ajustes de inventario: la vía legítima de mover stock una vez cerrada la
+        // captura manual de existencia.
+        public const string Ajustes = "ajustes";
+
+        // Catálogo de conceptos de movimiento de almacén (2026-08-01): mantenimiento del
+        // vocabulario de negocio ("Merma", "Donación"). Recurso propio porque configurar
+        // el catálogo es más sensible que capturar con él: quien registra un movimiento
+        // no tiene por qué poder inventar conceptos ni cambiarles la cuenta contable.
+        // (En el vocabulario del usuario, el campo Entrada/Salida/Valor es el "tipo"; este
+        // catálogo es el "concepto". En el código la columna sigue siendo alm_tipo_movimiento.)
+        public const string ConceptosMovimiento = "conceptos_movimiento";
+
+        // Documento de movimiento de almacén (2026-08-03): la captura de entradas y
+        // salidas manuales. Es el recurso operativo; ConceptosMovimiento es el de configuración.
+        public const string Movimientos = "movimientos";
+
+        // Traslado entre bodegas (2026-08-04, Fase 5): documento de dos bodegas con tránsito y
+        // recepción parcial. Recurso propio para poder concederlo por separado de los movimientos
+        // de entrada/salida.
+        public const string Traslados = "traslados";
+
+        // Requisición de materiales (2026-08-04, Fase 6): la solicitud (no mueve inventario).
+        // Recurso propio; la aprobación es un permiso aparte dentro de él.
+        public const string Requisiciones = "requisiciones";
+
+        // Descargo / entrega de materiales (2026-08-04, Fase 6): la salida real (sí postea).
+        public const string Descargos = "descargos";
+    }
 }
 
 public static class PermissionNames
@@ -156,6 +201,103 @@ public static class PermissionNames
         public const string Create = "module.inventario.create";
         public const string Edit = "module.inventario.edit";
         public const string Delete = "module.inventario.delete";
+
+        /// <summary>
+        /// Carga inicial de existencias. Son permisos de OPCIÓN (recurso base): cada
+        /// endpoint del catálogo genera además su permiso largo
+        /// (<c>module.inventario.carga_inicial__almacen_carga_inicial_pendientes.view</c>),
+        /// que actúa por encima de estos. Estos cortos se declaran a mano porque el
+        /// foreach del catálogo no los crea solo.
+        /// </summary>
+        public static class CargaInicial
+        {
+            public const string View = "module.inventario.carga_inicial.view";
+            public const string Create = "module.inventario.carga_inicial.create";
+            public const string Edit = "module.inventario.carga_inicial.edit";
+            public const string Delete = "module.inventario.carga_inicial.delete";
+        }
+
+        /// <summary>Ajustes de inventario (entrada / salida / valor).</summary>
+        public static class Ajustes
+        {
+            public const string View = "module.inventario.ajustes.view";
+            public const string Create = "module.inventario.ajustes.create";
+            public const string Edit = "module.inventario.ajustes.edit";
+            public const string Delete = "module.inventario.ajustes.delete";
+        }
+
+        /// <summary>
+        /// Catálogo de conceptos de movimiento de almacén: el vocabulario de negocio que el
+        /// usuario da de alta sin recompilar (equivalente de <c>INV_TIPOSTRANSACC</c> de
+        /// Centura). No hay <c>Delete</c>: un concepto no se borra, se desactiva — borrarlo
+        /// dejaría huérfano el histórico que lo referencia.
+        /// </summary>
+        public static class ConceptosMovimiento
+        {
+            public const string View = "module.inventario.conceptos_movimiento.view";
+            public const string Create = "module.inventario.conceptos_movimiento.create";
+            public const string Edit = "module.inventario.conceptos_movimiento.edit";
+        }
+
+        /// <summary>
+        /// Documento de movimiento de almacén (entradas y salidas manuales). No hay
+        /// <c>Delete</c>: un movimiento posteado no se borra, se anula con reversa — por eso
+        /// la anulación es <c>Edit</c>.
+        /// </summary>
+        public static class Movimientos
+        {
+            public const string View = "module.inventario.movimientos.view";
+            public const string Create = "module.inventario.movimientos.create";
+            public const string Edit = "module.inventario.movimientos.edit";
+
+            /// <summary>
+            /// Habilita usar tipos marcados <c>requiere_autorizacion</c> (merma grande,
+            /// donación). Es UN permiso para todos los tipos sensibles, no uno por tipo: la
+            /// matriz usuario × tipo de Centura (<c>AXL_USUARIOS_TRN</c>) NO se portó porque
+            /// la evidencia mostró que dejó de mantenerse.
+            /// <para>
+            /// Su policy NO admite fallback a <see cref="Create"/> ni al permiso de módulo: si
+            /// lo hiciera, cualquiera que pueda capturar podría usar los tipos sensibles y la
+            /// bandera no restringiría a nadie.
+            /// </para>
+            /// </summary>
+            public const string AutorizarSensibles = "module.inventario.movimientos.autorizar_sensibles";
+        }
+
+        /// <summary>
+        /// Traslado entre bodegas (Fase 5). No hay <c>Delete</c>: se anula con reversa (<c>Edit</c>).
+        /// <c>Create</c> = enviar; <c>Edit</c> = recibir (recepción parcial) y anular.
+        /// </summary>
+        public static class Traslados
+        {
+            public const string View = "module.inventario.traslados.view";
+            public const string Create = "module.inventario.traslados.create";
+            public const string Edit = "module.inventario.traslados.edit";
+        }
+
+        /// <summary>
+        /// Requisición de materiales (Fase 6). <c>Create</c> = crear/editar borrador y enviar a
+        /// revisión; <c>Edit</c> = anular; <c>Aprobar</c> = aprobar/rechazar (permiso aparte, el
+        /// control de aprobación decidido por el usuario: quien tenga el permiso, aprueba).
+        /// </summary>
+        public static class Requisiciones
+        {
+            public const string View = "module.inventario.requisiciones.view";
+            public const string Create = "module.inventario.requisiciones.create";
+            public const string Edit = "module.inventario.requisiciones.edit";
+            public const string Aprobar = "module.inventario.requisiciones.aprobar";
+        }
+
+        /// <summary>
+        /// Descargo / entrega de materiales (Fase 6). <c>Create</c> = entregar (postea la salida);
+        /// <c>Edit</c> = anular (reversa). Sin <c>Delete</c>.
+        /// </summary>
+        public static class Descargos
+        {
+            public const string View = "module.inventario.descargos.view";
+            public const string Create = "module.inventario.descargos.create";
+            public const string Edit = "module.inventario.descargos.edit";
+        }
     }
 
     public static class Contabilidad
@@ -258,7 +400,33 @@ public static class PermissionNames
             Ventas.Caja.Create,
             Ventas.Caja.Edit,
             Ventas.Caja.Delete,
-            Ventas.Caja.AbonoBanco
+            Ventas.Caja.AbonoBanco,
+
+            Inventario.CargaInicial.View,
+            Inventario.CargaInicial.Create,
+            Inventario.CargaInicial.Edit,
+            Inventario.CargaInicial.Delete,
+            Inventario.Ajustes.View,
+            Inventario.Ajustes.Create,
+            Inventario.Ajustes.Edit,
+            Inventario.Ajustes.Delete,
+            Inventario.ConceptosMovimiento.View,
+            Inventario.ConceptosMovimiento.Create,
+            Inventario.ConceptosMovimiento.Edit,
+            Inventario.Movimientos.View,
+            Inventario.Movimientos.Create,
+            Inventario.Movimientos.Edit,
+            Inventario.Movimientos.AutorizarSensibles,
+            Inventario.Traslados.View,
+            Inventario.Traslados.Create,
+            Inventario.Traslados.Edit,
+            Inventario.Requisiciones.View,
+            Inventario.Requisiciones.Create,
+            Inventario.Requisiciones.Edit,
+            Inventario.Requisiciones.Aprobar,
+            Inventario.Descargos.View,
+            Inventario.Descargos.Create,
+            Inventario.Descargos.Edit
         };
 
         list.AddRange(PermissionEndpointCatalog.All.Select(e => e.Permission));
@@ -332,7 +500,44 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Ventas.Caja.Create, [Ventas.Caja.Create, Ventas.Create]),
         new PermissionPolicyDefinition(Ventas.Caja.Edit, [Ventas.Caja.Edit, Ventas.Edit]),
         new PermissionPolicyDefinition(Ventas.Caja.Delete, [Ventas.Caja.Delete, Ventas.Delete]),
-        new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create])
+        new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create]),
+
+        // Carga inicial y ajustes de inventario. Mismo patrón que los recursos de Ventas:
+        // la policy admite el permiso fino O el de módulo, así que el recurso NO restringe
+        // a quien ya tiene module.inventario.* (ver la nota de PermissionResources.Inventario).
+        new PermissionPolicyDefinition(Inventario.CargaInicial.View, [Inventario.CargaInicial.View, Inventario.View, Legacy.Inventario]),
+        new PermissionPolicyDefinition(Inventario.CargaInicial.Create, [Inventario.CargaInicial.Create, Inventario.Create]),
+        new PermissionPolicyDefinition(Inventario.CargaInicial.Edit, [Inventario.CargaInicial.Edit, Inventario.Edit]),
+        new PermissionPolicyDefinition(Inventario.CargaInicial.Delete, [Inventario.CargaInicial.Delete, Inventario.Delete]),
+        new PermissionPolicyDefinition(Inventario.Ajustes.View, [Inventario.Ajustes.View, Inventario.View, Legacy.Inventario]),
+        new PermissionPolicyDefinition(Inventario.Ajustes.Create, [Inventario.Ajustes.Create, Inventario.Create]),
+        new PermissionPolicyDefinition(Inventario.Ajustes.Edit, [Inventario.Ajustes.Edit, Inventario.Edit]),
+        new PermissionPolicyDefinition(Inventario.Ajustes.Delete, [Inventario.Ajustes.Delete, Inventario.Delete]),
+        // Catálogo de conceptos de movimiento. Sin Delete: un concepto se desactiva, no se borra.
+        new PermissionPolicyDefinition(Inventario.ConceptosMovimiento.View, [Inventario.ConceptosMovimiento.View, Inventario.View, Legacy.Inventario]),
+        new PermissionPolicyDefinition(Inventario.ConceptosMovimiento.Create, [Inventario.ConceptosMovimiento.Create, Inventario.Create]),
+        new PermissionPolicyDefinition(Inventario.ConceptosMovimiento.Edit, [Inventario.ConceptosMovimiento.Edit, Inventario.Edit]),
+        // Documento de movimiento de almacén. Sin Delete: se anula, no se borra.
+        new PermissionPolicyDefinition(Inventario.Movimientos.View, [Inventario.Movimientos.View, Inventario.View, Legacy.Inventario]),
+        new PermissionPolicyDefinition(Inventario.Movimientos.Create, [Inventario.Movimientos.Create, Inventario.Create]),
+        new PermissionPolicyDefinition(Inventario.Movimientos.Edit, [Inventario.Movimientos.Edit, Inventario.Edit]),
+        // SIN fallback a propósito: si admitiera Movimientos.Create o Inventario.Create, quien
+        // puede capturar podría usar los tipos sensibles y la bandera no restringiría a nadie.
+        new PermissionPolicyDefinition(Inventario.Movimientos.AutorizarSensibles, [Inventario.Movimientos.AutorizarSensibles]),
+        // Traslado entre bodegas. Sin Delete: se anula, no se borra.
+        new PermissionPolicyDefinition(Inventario.Traslados.View, [Inventario.Traslados.View, Inventario.View, Legacy.Inventario]),
+        new PermissionPolicyDefinition(Inventario.Traslados.Create, [Inventario.Traslados.Create, Inventario.Create]),
+        new PermissionPolicyDefinition(Inventario.Traslados.Edit, [Inventario.Traslados.Edit, Inventario.Edit]),
+        // Requisición de materiales (Fase 6). La solicitud no mueve inventario.
+        new PermissionPolicyDefinition(Inventario.Requisiciones.View, [Inventario.Requisiciones.View, Inventario.View, Legacy.Inventario]),
+        new PermissionPolicyDefinition(Inventario.Requisiciones.Create, [Inventario.Requisiciones.Create, Inventario.Create]),
+        new PermissionPolicyDefinition(Inventario.Requisiciones.Edit, [Inventario.Requisiciones.Edit, Inventario.Edit]),
+        // Aprobar: SIN fallback a Create/Inventario.Create — quien captura no aprueba por defecto.
+        new PermissionPolicyDefinition(Inventario.Requisiciones.Aprobar, [Inventario.Requisiciones.Aprobar]),
+        // Descargo (la salida real). Sin Delete: se anula con reversa.
+        new PermissionPolicyDefinition(Inventario.Descargos.View, [Inventario.Descargos.View, Inventario.View, Legacy.Inventario]),
+        new PermissionPolicyDefinition(Inventario.Descargos.Create, [Inventario.Descargos.Create, Inventario.Create]),
+        new PermissionPolicyDefinition(Inventario.Descargos.Edit, [Inventario.Descargos.Edit, Inventario.Edit])
         };
 
         foreach (var endpoint in PermissionEndpointCatalog.All)

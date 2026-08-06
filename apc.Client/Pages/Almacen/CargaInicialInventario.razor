@@ -1,0 +1,571 @@
+@page "/almacen/carga-inicial"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject CargaInicialClient CargaClient
+@inject BodegasClient BodegasClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Carga inicial de existencias</PageTitle>
+
+<DxToastProvider Name="CargaInicialToast" MaxToastCount="4" StickToViewport="true" />
+
+@* ─────────────────────────────────────────────────────────────────────────────
+   El corte: convierte la existencia tecleada (heredada de SIMAFI) en asientos de
+   CARGA_INICIAL con su costo. Es de una sola vez por par (artículo, bodega): el
+   kardex es inmutable, así que lo que se postea mal solo se corrige revirtiendo.
+   Por eso la pantalla obliga a simular antes de ejecutar.
+   ───────────────────────────────────────────────────────────────────────────── *@
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Carga inicial de existencias</h2>
+            <p class="page-subtitle">
+                Punto cero del inventario: cada bodega con existencia recibe un asiento de kardex con su costo
+            </p>
+        </div>
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            @if (config is not null && config.AperturaCerrada)
+            {
+                <span class="badge bg-success"><i class="bi bi-lock-fill me-1"></i>Corte cerrado</span>
+            }
+            else
+            {
+                <span class="badge bg-warning text-dark"><i class="bi bi-unlock me-1"></i>Corte abierto</span>
+            }
+            @if (config?.FechaCorteApertura is not null)
+            {
+                <span class="text-muted small">Fecha de corte: <strong>@config.FechaCorteApertura.Value.ToString("dd/MM/yyyy")</strong></span>
+            }
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    @* ── Bloque 1: resumen del dry-run ────────────────────────────────────── *@
+    <div class="row g-3 mb-3">
+        <div class="col-6 col-md-2">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Pares pendientes</div>
+                <div class="summary-value">@(simulacion?.TotalPares.ToString("N0") ?? "—")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="modern-card summary-card summary-success">
+                <div class="summary-label">Posteables</div>
+                <div class="summary-value">@(simulacion?.Posteables.ToString("N0") ?? "—")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="modern-card summary-card summary-warning">
+                <div class="summary-label">Sin costo</div>
+                <div class="summary-value">@(simulacion?.SinCosto.ToString("N0") ?? "—")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="modern-card summary-card summary-danger">
+                <div class="summary-label">Negativas</div>
+                <div class="summary-value">@(simulacion?.Negativas.ToString("N0") ?? "—")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Valor a sembrar</div>
+                <div class="summary-value">@(simulacion?.ValorTotalASembrar.ToString("N2") ?? "—")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-2">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Artículos afectados</div>
+                <div class="summary-value">@(simulacion?.ArticulosAfectados.ToString("N0") ?? "—")</div>
+            </div>
+        </div>
+    </div>
+
+    @* Controles del corte. La fecha es obligatoria y se persiste: de ella depende la
+       fecha contable de TODOS los asientos del lote. *@
+    <div class="modern-card mb-3">
+        <div class="d-flex flex-wrap gap-3 align-items-end">
+            <div>
+                <label class="form-label fw-semibold mb-1">Bodega</label>
+                <DxComboBox Data="@bodegas" Value="@filtroBodegaId"
+                            ValueFieldName="@nameof(BodegaLookupDto.Id)"
+                            TextFieldName="@nameof(BodegaLookupDto.Display)"
+                            NullText="Todas las bodegas"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            ValueChanged="@((int? v) => OnBodegaChangedAsync(v))"
+                            Style="min-width: 240px;" />
+                <div class="form-text small text-muted">Cortar una bodega a la vez es lo normal en un almacén grande.</div>
+            </div>
+            <div>
+                <label class="form-label fw-semibold mb-1">Fecha de corte *</label>
+                <DxDateEdit @bind-Date="fechaCorte" Style="min-width: 180px;" />
+            </div>
+            <div>
+                <label class="form-label fw-semibold mb-1">Tamaño de lote</label>
+                <DxSpinEdit @bind-Value="tamanoLote" MinValue="1" MaxValue="5000" Style="min-width: 130px;" />
+            </div>
+
+            <DxButton Text="Simular" IconCssClass="bi bi-binoculars"
+                      RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!ocupado)" Click="CargarAsync" />
+
+            <DxButton Text="Ejecutar corte" IconCssClass="bi bi-play-fill"
+                      RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                      Enabled="@(!ocupado && PuedeEjecutar)" Click="@(() => confirmEjecutarVisible = true)" />
+
+            <DxButton Text="Cerrar apertura" IconCssClass="bi bi-lock"
+                      RenderStyle="ButtonRenderStyle.Danger" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Enabled="@(!ocupado && PuedeCerrar)" Click="@(() => confirmCerrarVisible = true)" />
+        </div>
+
+        @if (simulacion is not null && !PuedeEjecutar && simulacion.TotalPares > 0)
+        {
+            <div class="alert alert-light border small mt-3 mb-0">
+                <i class="bi bi-info-circle me-1"></i>
+                No quedan pares posteables con los filtros actuales: lo que resta necesita costo capturado a mano,
+                un ajuste que sanee la existencia negativa, o corresponde a artículos descontinuados y bodegas inactivas.
+            </div>
+        }
+    </div>
+
+    @* ── Bloque 3: captura de costo de los pares SIN_COSTO ────────────────── *@
+    @if (sinCosto.Count > 0)
+    {
+        <div class="modern-card mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2 flex-wrap gap-2">
+                <div>
+                    <h5 class="fw-bold mb-0">Pares sin costo (@sinCosto.Count.ToString("N0"))</h5>
+                    <div class="text-muted small">
+                        El artículo tiene valor unitario 0. El costo que capture entra DIRECTO al asiento: no se guarda
+                        en ninguna tabla intermedia, el asiento es el registro.
+                    </div>
+                </div>
+                <DxButton Text="@($"Postear costos capturados ({CostosCapturados})")"
+                          IconCssClass="bi bi-cash-coin" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!ocupado && CostosCapturados > 0 && fechaCorte.HasValue)"
+                          Click="PostearCostosAsync" />
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle mb-0">
+                    <thead>
+                        <tr>
+                            <th>Artículo</th>
+                            <th>Bodega</th>
+                            <th class="text-end">Existencia</th>
+                            <th style="width: 170px;">Costo de apertura</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var fila in sinCosto)
+                        {
+                            <tr>
+                                <td>
+                                    <span class="fw-semibold">@fila.Pendiente.ArticuloCodigo</span>
+                                    <div class="text-muted small">@fila.Pendiente.ArticuloDescripcion</div>
+                                </td>
+                                <td class="text-muted small">@fila.Pendiente.BodegaCodigo — @fila.Pendiente.BodegaNombre</td>
+                                <td class="text-end">@fila.Pendiente.Existencia.ToString("N2")</td>
+                                <td><DxSpinEdit @bind-Value="fila.Costo" DisplayFormat="N4" MinValue="0" CssClass="w-100" /></td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    }
+
+    @* ── Bloque 2: universo del corte ─────────────────────────────────────── *@
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@PendientesFiltrados" KeyFieldName="@nameof(CargaInicialPendienteDto.ArticuloBodegaId)"
+                    PageSize="15" PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxComboBox Data="@clases" Value="@claseSeleccionada"
+                                    ValueChanged="@((ClaseOpcion? c) => OnClaseChanged(c))"
+                                    TextFieldName="@nameof(ClaseOpcion.Etiqueta)"
+                                    NullText="Todas las clases"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 220px;" CssClass="me-1" />
+
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@PendientesFiltrados.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.Clase)" Caption="Clase" Width="180px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CargaInicialPendienteDto item)
+                            {
+                                <span class="badge @ClaseCss(item.Clase)">@ClaseEtiqueta(item.Clase)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.ArticuloCodigo)" Caption="Código" Width="130px" />
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.ArticuloDescripcion)" Caption="Artículo" MinWidth="220" />
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.BodegaCodigo)" Caption="Bodega" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.BodegaNombre)" Caption="Nombre de bodega" MinWidth="160" />
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.Existencia)" Caption="Existencia" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CargaInicialPendienteDto item)
+                            {
+                                <span class="@(item.Existencia < 0 ? "text-danger fw-bold" : "fw-semibold")">@item.Existencia.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.CostoApertura)" Caption="Costo" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CargaInicialPendienteDto item)
+                            {
+                                <span class="@(item.CostoApertura <= 0 ? "text-warning fw-bold" : "")">@item.CostoApertura.ToString("N4")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CargaInicialPendienteDto.ValorApertura)" Caption="Valor" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CargaInicialPendienteDto item)
+                            { <span>@item.ValorApertura.ToString("N2")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        No hay pares pendientes de carga inicial con los filtros actuales.
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@* Ejecutar es irreversible en la práctica: el kardex no admite UPDATE ni DELETE. *@
+<DxPopup @bind-Visible="confirmEjecutarVisible" Width="min(520px, 92vw)" HeaderText="Ejecutar el corte" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="text-center mb-3 text-primary"><i class="bi bi-journal-arrow-down" style="font-size: 2.5rem;"></i></div>
+            <p>
+                Se postearán <strong>@(simulacion?.Posteables.ToString("N0") ?? "0")</strong> asiento(s) de carga inicial
+                con fecha <strong>@(fechaCorte?.ToString("dd/MM/yyyy") ?? "—")</strong>, por un valor de
+                <strong>@(simulacion?.ValorTotalASembrar.ToString("N2") ?? "0.00")</strong>.
+            </p>
+            <div class="alert alert-warning small">
+                <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                El kardex es inmutable: un asiento mal costeado solo se corrige revirtiéndolo (permiso de Configuración).
+                Verifique que exista respaldo de la base antes de continuar.
+            </div>
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!ocupado)" Click="@(() => confirmEjecutarVisible = false)" />
+                <DxButton Text="Sí, ejecutar" RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-play-fill"
+                          Enabled="@(!ocupado)" Click="EjecutarAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmCerrarVisible" Width="min(520px, 92vw)" HeaderText="Cerrar la apertura" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="text-center mb-3 text-danger"><i class="bi bi-lock-fill" style="font-size: 2.5rem;"></i></div>
+            <p>
+                Al cerrar, ningún par <strong>preexistente</strong> podrá volver a abrirse por la vía normal: la única
+                corrección será revertir y reabrir, con permiso de Configuración. Los artículos que se den de alta
+                después siguen abriendo su existencia inicial con normalidad.
+            </p>
+            <p class="text-muted small mb-0">
+                El servidor verifica el gate: no puede quedar ningún par sin costo, negativo ni sin apertura posteada.
+            </p>
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!ocupado)" Click="@(() => confirmCerrarVisible = false)" />
+                <DxButton Text="Sí, cerrar el corte" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-lock"
+                          Enabled="@(!ocupado)" Click="CerrarAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private sealed class ClaseOpcion
+    {
+        public string Codigo { get; init; } = string.Empty;
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    /// <summary>Fila de captura: el DTO del servidor es de solo lectura (init), así que el costo tecleado vive aquí.</summary>
+    private sealed class CostoCapturaVm
+    {
+        public CargaInicialPendienteDto Pendiente { get; init; } = default!;
+        public decimal Costo { get; set; }
+    }
+
+    private const string GridLayoutStorageKey = "almacen-carga-inicial-grid-layout";
+
+    private DxGrid? grid;
+
+    private readonly List<ClaseOpcion> clases = new()
+    {
+        new ClaseOpcion { Codigo = ClaseePendienteCarga.Posteable, Etiqueta = "Posteables" },
+        new ClaseOpcion { Codigo = ClaseePendienteCarga.SinCosto, Etiqueta = "Sin costo" },
+        new ClaseOpcion { Codigo = ClaseePendienteCarga.Negativa, Etiqueta = "Existencia negativa" },
+        new ClaseOpcion { Codigo = ClaseePendienteCarga.ArticuloDescontinuado, Etiqueta = "Artículo descontinuado" },
+        new ClaseOpcion { Codigo = ClaseePendienteCarga.BodegaInactiva, Etiqueta = "Bodega inactiva" }
+    };
+
+    private List<BodegaLookupDto> bodegas = new();
+    private List<CargaInicialPendienteDto> pendientes = new();
+    private List<CostoCapturaVm> sinCosto = new();
+    private CargaInicialSimulacionDto? simulacion;
+    private CargaInicialConfigDto? config;
+
+    private int? filtroBodegaId;
+    private ClaseOpcion? claseSeleccionada;
+    private DateTime? fechaCorte = DateTime.Today;
+    private int tamanoLote = 200;
+
+    private bool isLoading;
+    private bool ocupado;
+    private string? errorMessage;
+    private bool confirmEjecutarVisible;
+    private bool confirmCerrarVisible;
+
+    private List<CargaInicialPendienteDto> PendientesFiltrados => claseSeleccionada is null
+        ? pendientes
+        : pendientes.Where(p => p.Clase == claseSeleccionada.Codigo).ToList();
+
+    private int CostosCapturados => sinCosto.Count(c => c.Costo > 0m);
+
+    private bool PuedeEjecutar => fechaCorte.HasValue
+                                  && simulacion is { Posteables: > 0 }
+                                  && config?.AperturaCerrada != true;
+
+    private bool PuedeCerrar => config?.AperturaCerrada != true && simulacion is not null;
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            bodegas = await BodegasClient.GetLookupAsync();
+        }
+        catch
+        {
+            bodegas = new List<BodegaLookupDto>();
+        }
+
+        await CargarAsync();
+    }
+
+    /// <summary>
+    /// Simular + universo en una sola pasada: el dry-run NO escribe nada, así que la
+    /// pantalla puede refrescarlo cuantas veces haga falta.
+    /// </summary>
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            config = await CargaClient.GetConfigAsync();
+            simulacion = await CargaClient.SimularAsync(filtroBodegaId);
+            pendientes = await CargaClient.GetPendientesAsync(filtroBodegaId);
+
+            // Se conservan los costos ya tecleados que sigan pendientes: recargar no debe
+            // borrar el trabajo de captura.
+            var capturados = sinCosto.ToDictionary(c => c.Pendiente.ArticuloBodegaId, c => c.Costo);
+            sinCosto = pendientes
+                .Where(p => p.Clase == ClaseePendienteCarga.SinCosto)
+                .Select(p => new CostoCapturaVm
+                {
+                    Pendiente = p,
+                    Costo = capturados.TryGetValue(p.ArticuloBodegaId, out var c) ? c : 0m
+                })
+                .ToList();
+
+            if (config.FechaCorteApertura is not null)
+            {
+                fechaCorte = config.FechaCorteApertura.Value.ToDateTime(TimeOnly.MinValue);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar el corte: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBodegaChangedAsync(int? valor)
+    {
+        filtroBodegaId = valor;
+        await CargarAsync();
+    }
+
+    private void OnClaseChanged(ClaseOpcion? valor) => claseSeleccionada = valor;
+
+    private async Task EjecutarAsync()
+    {
+        if (!fechaCorte.HasValue)
+        {
+            Toast("Validación", "Indique la fecha de corte.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        ocupado = true;
+        try
+        {
+            var r = await CargaClient.EjecutarAsync(
+                DateOnly.FromDateTime(fechaCorte.Value), tamanoLote, filtroBodegaId);
+
+            confirmEjecutarVisible = false;
+            Toast("Corte ejecutado",
+                $"{r.Posteadas:N0} apertura(s) posteada(s), {r.Omitidas:N0} omitida(s).",
+                r.Omitidas > 0 ? ToastRenderStyle.Warning : ToastRenderStyle.Success);
+
+            // Cada omisión trae su motivo: se muestran para que el operador sepa qué resolver.
+            foreach (var d in r.Detalle.Take(5))
+            {
+                Toast("Omitida", $"{d.ArticuloCodigo}: {d.Motivo}", ToastRenderStyle.Warning);
+            }
+
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private async Task PostearCostosAsync()
+    {
+        if (!fechaCorte.HasValue)
+        {
+            Toast("Validación", "Indique la fecha de corte.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        var items = sinCosto
+            .Where(c => c.Costo > 0m)
+            .Select(c => new CargaInicialCostoManualDto
+            {
+                ArticuloId = c.Pendiente.ArticuloId,
+                BodegaId = c.Pendiente.BodegaId,
+                Costo = c.Costo
+            })
+            .ToList();
+
+        if (items.Count == 0) return;
+
+        ocupado = true;
+        try
+        {
+            var r = await CargaClient.PostearCostoManualAsync(DateOnly.FromDateTime(fechaCorte.Value), items);
+            Toast("Costos posteados",
+                $"{r.Posteadas:N0} apertura(s) posteada(s), {r.Omitidas:N0} omitida(s).",
+                r.Omitidas > 0 ? ToastRenderStyle.Warning : ToastRenderStyle.Success);
+
+            foreach (var d in r.Detalle.Take(5))
+            {
+                Toast("Omitida", d.Motivo, ToastRenderStyle.Warning);
+            }
+
+            sinCosto.Clear();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private async Task CerrarAsync()
+    {
+        ocupado = true;
+        try
+        {
+            await CargaClient.CerrarAsync();
+            confirmCerrarVisible = false;
+            Toast("Corte cerrado", "La apertura quedó cerrada para los pares preexistentes.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private static string ClaseEtiqueta(string clase) => clase switch
+    {
+        ClaseePendienteCarga.Posteable => "Posteable",
+        ClaseePendienteCarga.SinCosto => "Sin costo",
+        ClaseePendienteCarga.Negativa => "Negativa",
+        ClaseePendienteCarga.ArticuloDescontinuado => "Descontinuado",
+        ClaseePendienteCarga.BodegaInactiva => "Bodega inactiva",
+        _ => clase
+    };
+
+    private static string ClaseCss(string clase) => clase switch
+    {
+        ClaseePendienteCarga.Posteable => "bg-success",
+        ClaseePendienteCarga.SinCosto => "bg-warning text-dark",
+        ClaseePendienteCarga.Negativa => "bg-danger",
+        _ => "bg-secondary"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "CargaInicialToast"
+        });
+}

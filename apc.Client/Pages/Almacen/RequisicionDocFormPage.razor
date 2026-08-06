@@ -1,0 +1,390 @@
+@page "/almacen/requisiciones/nueva"
+@page "/almacen/requisiciones/{Id:int}"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Authorization
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.Constants
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject RequisicionesDocumentoClient ReqClient
+@inject BodegasClient BodegasClient
+@inject ArticulosClient ArticulosClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - @(EsNueva ? "Nueva requisición" : "Requisición")</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="ReqFormToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">@(EsNueva ? "Nueva requisición" : $"Requisición {modelo.Numero:00000}")</h2>
+            <p class="page-subtitle">Solicitud de materiales — no mueve inventario hasta el despacho</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (!EsNueva)
+            {
+                <DxButton Text="Imprimir comprobante" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirAsync" />
+            }
+            <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => Navigation.NavigateTo("/almacen/requisiciones"))" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:120px"></div></div>
+    }
+    else
+    {
+        @if (!EsNueva)
+        {
+            <div class="alert @EstadoAlertClass mb-3" role="alert">
+                <i class="bi @EstadoIcon me-2"></i><strong>@EstadoTexto</strong>
+                @if (modelo.Estado == EstadoRequisicionHdr.Aprobada || modelo.Estado == EstadoRequisicionHdr.DespachadaParcial || modelo.Estado == EstadoRequisicionHdr.DespachadaTotal)
+                { <span> — aprobada por @modelo.AprobadoPor el @modelo.FechaAprobacion?.ToString("dd/MM/yyyy HH:mm")</span> }
+                else if (modelo.Estado == EstadoRequisicionHdr.Rechazada)
+                { <span> — por @modelo.RechazadoPor el @modelo.FechaRechazo?.ToString("dd/MM/yyyy HH:mm"). Motivo: @modelo.MotivoRechazo</span> }
+                else if (modelo.Estado == EstadoRequisicionHdr.Anulada)
+                { <span> — por @modelo.AnuladoPor el @modelo.FechaAnulacion?.ToString("dd/MM/yyyy HH:mm"). Motivo: @modelo.MotivoAnulacion</span> }
+            </div>
+        }
+
+        <div class="modern-card mb-3">
+            <div class="row g-3">
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Solicitante *</label>
+                    @if (EsEditable) { <DxTextBox @bind-Text="modelo.Solicitante" NullText="Nombre de quien solicita" MaxLength="120" CssClass="w-100" /> }
+                    else { <div class="form-control-plaintext fw-semibold">@modelo.Solicitante</div> }
+                </div>
+                <div class="col-md-4">
+                    <label class="form-label small fw-semibold">Bodega *</label>
+                    @if (EsEditable)
+                    {
+                        <DxComboBox Data="@bodegas" TData="BodegaLookupDto" TValue="int?"
+                                    Value="@(modelo.BodegaId == 0 ? (int?)null : modelo.BodegaId)"
+                                    ValueChanged="@((int? v) => modelo.BodegaId = v ?? 0)"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Seleccione..." CssClass="w-100" />
+                    }
+                    else { <div class="form-control-plaintext">@modelo.BodegaNombre</div> }
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Departamento</label>
+                    @if (EsEditable) { <DxTextBox @bind-Text="modelo.Departamento" NullText="Ej. OPE" MaxLength="3" CssClass="w-100" /> }
+                    else { <div class="form-control-plaintext">@(string.IsNullOrWhiteSpace(modelo.Departamento) ? "—" : modelo.Departamento)</div> }
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label small fw-semibold">Fecha</label>
+                    <DxDateEdit @bind-Date="fecha" Enabled="@EsEditable" CssClass="w-100" />
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Aplicación / destino</label>
+                    @if (EsEditable) { <DxTextBox @bind-Text="modelo.Aplicacion" NullText="Uso o destino" MaxLength="254" CssClass="w-100" /> }
+                    else { <div class="form-control-plaintext">@(string.IsNullOrWhiteSpace(modelo.Aplicacion) ? "—" : modelo.Aplicacion)</div> }
+                </div>
+                <div class="col-md-6">
+                    <label class="form-label small fw-semibold">Observación</label>
+                    @if (EsEditable) { <DxTextBox @bind-Text="modelo.Observacion" NullText="Opcional" MaxLength="1000" CssClass="w-100" /> }
+                    else { <div class="form-control-plaintext">@(string.IsNullOrWhiteSpace(modelo.Observacion) ? "—" : modelo.Observacion)</div> }
+                </div>
+            </div>
+        </div>
+
+        @if (EsEditable)
+        {
+            <div class="modern-card mb-3">
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div style="flex:1; min-width:240px;">
+                        <label class="form-label small fw-semibold">Agregar artículo</label>
+                        <DxComboBox Data="@articulos" @bind-Value="articuloSeleccionado" TData="ArticuloListItemDto" TValue="int?"
+                                    ValueFieldName="@nameof(ArticuloListItemDto.Id)" TextFieldName="ComboTexto"
+                                    FilteringMode="DataGridFilteringMode.Contains" NullText="Busque por código o descripción..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Enabled="@(articulos.Count > 0)" CssClass="w-100" />
+                    </div>
+                    <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="AgregarRenglon" Enabled="@(articuloSeleccionado.HasValue)" />
+                </div>
+            </div>
+        }
+
+        <div class="modern-card">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+                <span class="fw-semibold">Renglones</span>
+                <span class="text-muted small">@modelo.Detalles.Count renglón(es)</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr class="text-muted small">
+                            <th style="min-width:220px;">Artículo</th>
+                            <th class="text-end" style="width:120px;">Cantidad</th>
+                            <th class="text-end" style="width:120px;">Precio unit.</th>
+                            @if (!EsEditable)
+                            {
+                                <th class="text-end" style="width:110px;">Despachado</th>
+                                <th class="text-end" style="width:100px;">Pendiente</th>
+                            }
+                            else { <th style="width:50px;"></th> }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (modelo.Detalles.Count == 0)
+                        {
+                            <tr><td colspan="@(EsEditable ? 4 : 5)" class="text-center text-muted p-3">Sin renglones.</td></tr>
+                        }
+                        else
+                        {
+                            @foreach (var d in modelo.Detalles)
+                            {
+                                <tr>
+                                    <td><span class="fw-semibold">@(d.CodigoArticulo ?? d.ArticuloId.ToString())</span><span class="text-muted"> — @d.NombreArticulo</span></td>
+                                    <td class="text-end">
+                                        @if (EsEditable) { <DxSpinEdit @bind-Value="d.Cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" /> }
+                                        else { @d.Cantidad.ToString("N2") }
+                                    </td>
+                                    <td class="text-end">
+                                        @if (EsEditable) { <DxSpinEdit @bind-Value="d.PrecioUnitario" DisplayFormat="N2" MinValue="0" CssClass="w-100" /> }
+                                        else { @d.PrecioUnitario.ToString("N2") }
+                                    </td>
+                                    @if (!EsEditable)
+                                    {
+                                        <td class="text-end">@d.CantidadDespachada.ToString("N2")</td>
+                                        <td class="text-end fw-semibold">@((d.Cantidad - d.CantidadDespachada).ToString("N2"))</td>
+                                    }
+                                    else
+                                    {
+                                        <td class="text-center">
+                                            <button type="button" class="btn-icon btn-delete" title="Quitar" @onclick="() => modelo.Detalles.Remove(d)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
+                @if (EsEditable)
+                {
+                    <DxButton Text="Guardar borrador" IconCssClass="bi bi-save" RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="@(() => GuardarAsync(enviar: false))" Enabled="@(!procesando)" />
+                    <DxButton Text="Guardar y enviar a revisión" IconCssClass="bi bi-send" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="@(() => GuardarAsync(enviar: true))" Enabled="@(!procesando)" />
+                    @if (!EsNueva)
+                    {
+                        <DxButton Text="Anular" IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => AbrirMotivo(MotivoAccion.Anular))" Enabled="@(!procesando)" />
+                    }
+                }
+                else if (modelo.Estado == EstadoRequisicionHdr.EnRevision)
+                {
+                    <AuthorizeView Policy="@PermissionNames.Inventario.Requisiciones.Aprobar">
+                        <DxButton Text="Aprobar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Success"
+                                  Click="AprobarAsync" Enabled="@(!procesando)" />
+                        <DxButton Text="Rechazar" IconCssClass="bi bi-x-lg" RenderStyle="ButtonRenderStyle.Danger"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => AbrirMotivo(MotivoAccion.Rechazar))" Enabled="@(!procesando)" />
+                    </AuthorizeView>
+                    <DxButton Text="Anular" IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => AbrirMotivo(MotivoAccion.Anular))" Enabled="@(!procesando)" />
+                }
+                else if (modelo.Estado == EstadoRequisicionHdr.Aprobada || modelo.Estado == EstadoRequisicionHdr.DespachadaParcial)
+                {
+                    <DxButton Text="Despachar" IconCssClass="bi bi-box-arrow-up" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="@(() => Navigation.NavigateTo($"/almacen/descargos/nuevo?requisicion={modelo.Id}"))" />
+                    @if (modelo.Estado == EstadoRequisicionHdr.Aprobada)
+                    {
+                        <DxButton Text="Anular" IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => AbrirMotivo(MotivoAccion.Anular))" Enabled="@(!procesando)" />
+                    }
+                }
+            </div>
+        </div>
+    }
+</div>
+
+<DxPopup @bind-Visible="motivoVisible" Width="min(460px, 90vw)" HeaderText="@(motivoAccion == MotivoAccion.Rechazar ? "Rechazar requisición" : "Anular requisición")" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <label class="form-label small fw-semibold">Motivo *</label>
+            <DxTextBox @bind-Text="motivoTexto" NullText="Explique el motivo" MaxLength="500" CssClass="mb-3" />
+            <div class="d-flex justify-content-center gap-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => motivoVisible = false)" Enabled="@(!procesando)" />
+                <DxButton Text="Confirmar" RenderStyle="ButtonRenderStyle.Danger" Click="ConfirmarMotivoAsync" Enabled="@(!procesando)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    private RequisicionDocumentoDto modelo = new() { Estado = EstadoRequisicionHdr.Borrador };
+    private DateTime? fecha = DateTime.Today;
+    private List<BodegaLookupDto> bodegas = new();
+    private List<ArticuloListItemDto> articulos = new();
+    private int? articuloSeleccionado;
+
+    private bool cargando = true, procesando;
+
+    private enum MotivoAccion { Rechazar, Anular }
+    private bool motivoVisible;
+    private string motivoTexto = string.Empty;
+    private MotivoAccion motivoAccion;
+
+    private bool EsNueva => !Id.HasValue;
+    private bool EsEditable => EsNueva || modelo.Estado == EstadoRequisicionHdr.Borrador;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try { bodegas = await BodegasClient.GetLookupAsync(); } catch { bodegas = new(); }
+        try { articulos = await ArticulosClient.GetAsync(new ArticuloFilterDto()); } catch { articulos = new(); }
+
+        if (!EsNueva)
+        {
+            var doc = await ReqClient.GetByIdAsync(Id!.Value);
+            if (doc is null) Toast("Error", "La requisición no existe.", ToastRenderStyle.Danger);
+            else { modelo = doc; fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today; }
+        }
+        cargando = false;
+    }
+
+    private void AgregarRenglon()
+    {
+        if (!articuloSeleccionado.HasValue) return;
+        var art = articulos.FirstOrDefault(a => a.Id == articuloSeleccionado.Value);
+        if (art is null) return;
+        modelo.Detalles.Add(new RequisicionDocumentoDetalleDto
+        {
+            ArticuloId = art.Id, CodigoArticulo = art.Codigo, NombreArticulo = art.Descripcion, Cantidad = 0m, PrecioUnitario = art.ValorUnitario
+        });
+        articuloSeleccionado = null;
+    }
+
+    private async Task GuardarAsync(bool enviar)
+    {
+        if (string.IsNullOrWhiteSpace(modelo.Solicitante)) { Toast("Error", "Indique el solicitante.", ToastRenderStyle.Warning); return; }
+        if (modelo.BodegaId <= 0) { Toast("Error", "Seleccione la bodega.", ToastRenderStyle.Warning); return; }
+        if (modelo.Detalles.Count == 0) { Toast("Error", "Agregue al menos un renglón.", ToastRenderStyle.Warning); return; }
+        if (modelo.Detalles.Any(d => d.Cantidad <= 0m)) { Toast("Error", "Toda cantidad debe ser mayor que cero.", ToastRenderStyle.Warning); return; }
+
+        modelo.Fecha = DateOnly.FromDateTime(fecha ?? DateTime.Today);
+        procesando = true;
+        try
+        {
+            RequisicionDocumentoDto guardada;
+            if (EsNueva)
+            {
+                modelo.Uuid ??= Guid.NewGuid();   // idempotencia del alta
+                guardada = await ReqClient.CrearAsync(modelo);
+            }
+            else
+            {
+                guardada = await ReqClient.ActualizarAsync(modelo.Id, modelo);
+            }
+
+            if (enviar)
+            {
+                guardada = await ReqClient.EnviarAsync(guardada.Id);
+                Toast("Éxito", $"Requisición {guardada.Numero:00000} enviada a revisión.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                Toast("Éxito", $"Requisición {guardada.Numero:00000} guardada.", ToastRenderStyle.Success);
+            }
+            Navigation.NavigateTo($"/almacen/requisiciones/{guardada.Id}");
+            // Recarga el estado tras la navegación (mismo componente, distinto Id → OnParametersSet no recarga solo).
+            await RecargarAsync(guardada.Id);
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { procesando = false; }
+    }
+
+    private async Task AprobarAsync()
+    {
+        procesando = true;
+        try
+        {
+            modelo = await ReqClient.AprobarAsync(modelo.Id);
+            Toast("Éxito", "Requisición aprobada.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { procesando = false; }
+    }
+
+    private void AbrirMotivo(MotivoAccion accion) { motivoAccion = accion; motivoTexto = string.Empty; motivoVisible = true; }
+
+    private async Task ConfirmarMotivoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(motivoTexto)) { Toast("Error", "Indique el motivo.", ToastRenderStyle.Warning); return; }
+        procesando = true;
+        try
+        {
+            if (motivoAccion == MotivoAccion.Rechazar)
+            {
+                modelo = await ReqClient.RechazarAsync(modelo.Id, motivoTexto.Trim());
+                Toast("Éxito", "Requisición rechazada.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await ReqClient.AnularAsync(modelo.Id, motivoTexto.Trim());
+                Toast("Éxito", "Requisición anulada.", ToastRenderStyle.Success);
+                await RecargarAsync(modelo.Id);
+            }
+            motivoVisible = false;
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { procesando = false; }
+    }
+
+    private async Task RecargarAsync(int id)
+    {
+        var doc = await ReqClient.GetByIdAsync(id);
+        if (doc is not null) { modelo = doc; fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today; }
+    }
+
+    private async Task ImprimirAsync()
+        => await JS.InvokeVoidAsync("open", RequisicionesDocumentoClient.GetComprobantePdfUrl(modelo.Id), "_blank");
+
+    private string EstadoTexto => modelo.Estado switch
+    {
+        EstadoRequisicionHdr.Borrador => "Borrador",
+        EstadoRequisicionHdr.EnRevision => "En revisión",
+        EstadoRequisicionHdr.Aprobada => "Aprobada",
+        EstadoRequisicionHdr.DespachadaParcial => "Despachada parcial",
+        EstadoRequisicionHdr.DespachadaTotal => "Despachada total",
+        EstadoRequisicionHdr.Rechazada => "Rechazada",
+        EstadoRequisicionHdr.Anulada => "Anulada",
+        _ => "—"
+    };
+    private string EstadoAlertClass => modelo.Estado switch
+    {
+        EstadoRequisicionHdr.EnRevision => "alert-warning",
+        EstadoRequisicionHdr.Aprobada or EstadoRequisicionHdr.DespachadaParcial => "alert-primary",
+        EstadoRequisicionHdr.DespachadaTotal => "alert-success",
+        EstadoRequisicionHdr.Rechazada or EstadoRequisicionHdr.Anulada => "alert-danger",
+        _ => "alert-secondary"
+    };
+    private string EstadoIcon => modelo.Estado switch
+    {
+        EstadoRequisicionHdr.EnRevision => "bi-hourglass-split",
+        EstadoRequisicionHdr.Aprobada or EstadoRequisicionHdr.DespachadaParcial => "bi-check-circle",
+        EstadoRequisicionHdr.DespachadaTotal => "bi-check-all",
+        EstadoRequisicionHdr.Rechazada or EstadoRequisicionHdr.Anulada => "bi-x-circle",
+        _ => "bi-pencil"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "ReqFormToast" });
+}

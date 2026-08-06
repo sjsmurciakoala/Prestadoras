@@ -1,0 +1,858 @@
+@page "/almacen/compras/recepciones/nueva"
+@page "/almacen/compras/recepciones/{Id:int}"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject RecepcionesCompraClient RecepcionesClient
+@inject OrdenesCompraClient OrdenesClient
+@inject BodegasClient BodegasClient
+@inject ProveedoresClient ProveedoresClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - @(EsConsulta ? "Factura de compra" : "Nueva factura de compra")</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="RecepcionCompraFormToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="@IconWrapperClass form-icon">
+                <i class="bi bi-box-arrow-in-down"></i>
+            </div>
+            <div>
+                <h2 class="page-title">
+                    @(EsConsulta ? $"Factura de compra {modelo.Numero:00000}" : "Nueva factura de compra")
+                    @if (EsConsulta)
+                    {
+                        <span class="badge-estado-rec @ClaseEstado(modelo.Estado) ms-2">@modelo.EstadoDescripcion</span>
+                    }
+                </h2>
+                <p class="page-subtitle">
+                    @(EsConsulta
+                        ? "Documento registrado: sus renglones ya entraron al inventario"
+                        : "Recepción de mercadería contra orden de compra o compra directa")
+                </p>
+            </div>
+        </div>
+        <div class="header-actions d-flex gap-2 flex-wrap">
+            @if (EsConsulta)
+            {
+                <span class="text-muted small align-self-center me-2">
+                    <i class="bi bi-lock me-1"></i>Sólo lectura: una factura registrada ya movió el kardex
+                </span>
+            }
+            <DxButton Text="Volver" Click="Volver"
+                      IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary"
+                      RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card d-flex justify-content-center py-5">
+            <DxLoadingPanel Visible="true" Text="Cargando..." />
+        </div>
+    }
+    else if (!string.IsNullOrWhiteSpace(errorCarga))
+    {
+        <div class="alert alert-danger" role="alert">@errorCarga</div>
+    }
+    else
+    {
+        <!-- ── Modo de captura ───────────────────────────────────────────────── -->
+        @if (!EsConsulta)
+        {
+            <div class="modern-card mb-3">
+                <h6 class="seccion-titulo"><i class="bi bi-signpost-split me-2"></i>Modo de captura</h6>
+                <div role="radiogroup" class="d-flex gap-4 flex-wrap">
+                    <DxRadio TValue="bool" GroupName="modo-captura-compra" Value="@(false)"
+                             GroupValue="@compraDirecta"
+                             GroupValueExpression="@(() => compraDirecta)"
+                             GroupValueChanged="@((bool v) => CambiarModo(v))">
+                        Con orden de compra
+                    </DxRadio>
+                    <DxRadio TValue="bool" GroupName="modo-captura-compra" Value="@(true)"
+                             GroupValue="@compraDirecta"
+                             GroupValueExpression="@(() => compraDirecta)"
+                             GroupValueChanged="@((bool v) => CambiarModo(v))">
+                        Compra directa (sin O/C)
+                    </DxRadio>
+                </div>
+                <div class="form-text mt-2">
+                    Una orden de compra admite varias facturas: cada recepción descarga lo recibido y la orden
+                    se cierra cuando ya no queda nada pendiente.
+                </div>
+            </div>
+        }
+
+        <!-- ── Datos de la factura ───────────────────────────────────────────── -->
+        <div class="modern-card mb-3">
+            <h6 class="seccion-titulo"><i class="bi bi-file-earmark-text me-2"></i>Datos de la factura</h6>
+
+            <div class="row g-3">
+                <div class="col-12 col-md-2">
+                    <label class="form-label fw-semibold">No. recepción</label>
+                    <div class="valor-solo-lectura">
+                        @(modelo.Numero > 0 ? modelo.Numero.ToString("00000") : "Se asigna al guardar")
+                    </div>
+                </div>
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">
+                        Proveedor
+                        @if (!EsConsulta)
+                        {
+                            <span class="text-danger">*</span>
+                        }
+                    </label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@ProveedorTexto</div>
+                    }
+                    else
+                    {
+                        <DxComboBox Data="@proveedores" Value="@modelo.CodProveedor"
+                                    ValueChanged="@((string? v) => OnProveedorChangedAsync(v))"
+                                    ValueExpression="@(() => modelo.CodProveedor)"
+                                    ValueFieldName="@nameof(ProveedorComboItem.Codigo)"
+                                    TextFieldName="@nameof(ProveedorComboItem.Display)"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    NullText="Seleccione o busque un proveedor..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="w-100" />
+                        <div class="form-text">Define qué artículos se pueden recibir: sólo los que tienen su código.</div>
+                    }
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">No. factura (SAR)</label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@(string.IsNullOrWhiteSpace(modelo.NumeroFacturaSar) ? "—" : modelo.NumeroFacturaSar)</div>
+                    }
+                    else
+                    {
+                        <DxTextBox @bind-Text="modelo.NumeroFacturaSar" MaxLength="30"
+                                   NullText="000-001-01-00000001" CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">CAI</label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@(string.IsNullOrWhiteSpace(modelo.Cai) ? "—" : modelo.Cai)</div>
+                    }
+                    else
+                    {
+                        <DxTextBox @bind-Text="modelo.Cai" MaxLength="50" NullText="Opcional" CssClass="w-100" />
+                    }
+                </div>
+
+                <div class="col-12 col-md-2">
+                    <label class="form-label fw-semibold">Fecha</label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@(modelo.Fecha?.ToString("dd/MM/yyyy") ?? "—")</div>
+                    }
+                    else
+                    {
+                        <DxDateEdit Date="@fecha" DateChanged="@((DateTime? d) => fecha = d)" CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label fw-semibold">Fecha factura</label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@(modelo.FechaFactura?.ToString("dd/MM/yyyy") ?? "—")</div>
+                    }
+                    else
+                    {
+                        <DxDateEdit Date="@fechaFactura" DateChanged="@((DateTime? d) => fechaFactura = d)"
+                                    NullText="Opcional" CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-12 col-md-2">
+                    <label class="form-label fw-semibold">Vence</label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@(modelo.FechaVencimiento?.ToString("dd/MM/yyyy") ?? "—")</div>
+                    }
+                    else
+                    {
+                        <DxDateEdit Date="@fechaVencimiento" DateChanged="@((DateTime? d) => fechaVencimiento = d)"
+                                    NullText="Opcional" CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">
+                        Bodega que recibe
+                        @if (!EsConsulta)
+                        {
+                            <span class="text-danger">*</span>
+                        }
+                    </label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@(string.IsNullOrWhiteSpace(modelo.BodegaNombre) ? "—" : modelo.BodegaNombre)</div>
+                    }
+                    else
+                    {
+                        <DxComboBox Data="@bodegas" @bind-Value="bodegaSeleccionada"
+                                    TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    NullText="Seleccione la bodega..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Términos de pago</label>
+                    @if (EsConsulta)
+                    {
+                        <div class="valor-solo-lectura">@(string.IsNullOrWhiteSpace(modelo.TerminosPago) ? "—" : modelo.TerminosPago)</div>
+                    }
+                    else
+                    {
+                        <DxTextBox @bind-Text="modelo.TerminosPago" MaxLength="100"
+                                   NullText="Ej. Crédito 30 días" CssClass="w-100" />
+                    }
+                </div>
+
+                @if (!EsConsulta)
+                {
+                    <div class="col-12 col-md-3 d-flex align-items-end gap-3">
+                        <DxCheckBox Checked="detallarIsv"
+                                    CheckedExpression="@(() => detallarIsv)"
+                                    CheckedChanged="@((bool v) => detallarIsv = v)">
+                            Detallar ISV
+                        </DxCheckBox>
+                        <DxCheckBox Checked="modelo.ConsumoInterno"
+                                    CheckedExpression="@(() => modelo.ConsumoInterno)"
+                                    CheckedChanged="@((bool v) => modelo.ConsumoInterno = v)">
+                            Consumo interno
+                        </DxCheckBox>
+                    </div>
+                }
+                else
+                {
+                    <div class="col-12 col-md-3">
+                        <label class="form-label fw-semibold">ISV</label>
+                        <div class="valor-solo-lectura">
+                            @(modelo.DetallarIsv == true ? "Detallado (no capitaliza)" : "Al costo")
+                        </div>
+                    </div>
+                }
+            </div>
+
+            @if (!EsConsulta && !compraDirecta)
+            {
+                <div class="row g-3 mt-1">
+                    <div class="col-12 col-md-5">
+                        <label class="form-label fw-semibold">Orden de compra <span class="text-danger">*</span></label>
+                        <DxComboBox Data="@ordenesRecibibles" Value="@ordenSeleccionada"
+                                    ValueChanged="@((OrdenCompraListItemDto? o) => OnOrdenChangedAsync(o))"
+                                    ValueExpression="@(() => ordenSeleccionada)"
+                                    TextFieldName="@nameof(OrdenCompraListItemDto.Display)"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    NullText="Seleccione la orden a recibir..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Enabled="@(!string.IsNullOrWhiteSpace(modelo.CodProveedor))"
+                                    CssClass="w-100" />
+                        <div class="form-text">Sólo aparecen las aprobadas o recibidas parcialmente.</div>
+                    </div>
+                    <div class="col-12 col-md-7 d-flex align-items-center">
+                        @if (ordenSeleccionada is not null && modelo.Detalles.Count == 0 && pendientes.Count == 0)
+                        {
+                            <div class="alert alert-warning py-2 mb-0 w-100" role="alert">
+                                <i class="bi bi-exclamation-triangle me-1"></i>
+                                Esta orden ya no tiene renglones pendientes de recibir.
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- ── Renglones ─────────────────────────────────────────────────────── -->
+        <div class="modern-card mb-3">
+            <div class="d-flex justify-content-between align-items-center flex-wrap gap-2 mb-3">
+                <h6 class="seccion-titulo mb-0"><i class="bi bi-list-ul me-2"></i>Renglones recibidos</h6>
+                <div class="text-muted small">
+                    Renglones: <span class="fw-bold">@modelo.Detalles.Count</span> ·
+                    Cantidad: <span class="fw-bold">@modelo.Detalles.Sum(d => d.Cantidad).ToString("N2")</span>
+                </div>
+            </div>
+
+            @if (!EsConsulta)
+            {
+                @if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
+                {
+                    <div class="alert alert-info py-2 mb-3" role="alert">
+                        <i class="bi bi-info-circle me-1"></i>Elija primero el proveedor.
+                    </div>
+                }
+                else if (compraDirecta)
+                {
+                    <div class="buscador-articulo mb-3">
+                        <DxComboBox Data="@articulosProveedor" @bind-Value="articuloSeleccionado"
+                                    TextFieldName="@nameof(OrdenCompraArticuloLookupDto.Display)"
+                                    FilteringMode="DataGridFilteringMode.Contains"
+                                    NullText="Buscar artículo por código o descripción..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="flex-grow-1" />
+                        <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg"
+                                  RenderStyle="ButtonRenderStyle.Primary"
+                                  Enabled="@(articuloSeleccionado is not null)"
+                                  Click="AgregarRenglonDirecto" />
+                    </div>
+
+                    @if (articulosProveedor.Count == 0)
+                    {
+                        <div class="alert alert-warning py-2 mb-3" role="alert">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Este proveedor no tiene artículos con código registrado. Regístrelo en el artículo
+                            (pestaña <strong>Proveedores</strong>, campo <strong>Código UPC</strong>) antes de recibirle mercadería.
+                        </div>
+                    }
+                }
+            }
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle tabla-renglones">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Cód. proveedor</th>
+                            <th>Descripción</th>
+                            @if (!compraDirecta)
+                            {
+                                <th class="text-end">Pendiente O/C</th>
+                            }
+                            <th class="text-end">Cant. recibida</th>
+                            <th class="text-end">Costo unitario</th>
+                            <th class="text-end">ISV</th>
+                            <th class="text-end">Total</th>
+                            @if (!EsConsulta && compraDirecta)
+                            {
+                                <th></th>
+                            }
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @if (modelo.Detalles.Count == 0)
+                        {
+                            <tr>
+                                <td colspan="9" class="text-center text-muted py-4">
+                                    @(compraDirecta
+                                        ? "Agregue los artículos que está recibiendo."
+                                        : "Elija una orden de compra para traer sus renglones pendientes.")
+                                </td>
+                            </tr>
+                        }
+                        else
+                        {
+                            @foreach (var d in modelo.Detalles)
+                            {
+                                <tr @key="d">
+                                    <td class="font-monospace small text-muted">@(string.IsNullOrWhiteSpace(d.CodigoArticulo) ? "—" : d.CodigoArticulo)</td>
+                                    <td><span class="cod-proveedor">@(string.IsNullOrWhiteSpace(d.CodigoUpc) ? "—" : d.CodigoUpc)</span></td>
+                                    <td>@d.Descripcion</td>
+                                    @if (!compraDirecta)
+                                    {
+                                        <td class="text-end text-muted">@PendienteDe(d).ToString("N2")</td>
+                                    }
+                                    <td class="text-end" style="min-width:120px">
+                                        @if (EsConsulta)
+                                        {
+                                            <span>@d.Cantidad.ToString("N2")</span>
+                                        }
+                                        else
+                                        {
+                                            <DxSpinEdit Value="@d.Cantidad"
+                                                        ValueChanged="@((decimal v) => CambiarCantidad(d, v))"
+                                                        ValueExpression="@(() => d.Cantidad)"
+                                                        DisplayFormat="N2" MinValue="0"
+                                                        MaxValue="@(compraDirecta ? decimal.MaxValue : PendienteDe(d))"
+                                                        CssClass="w-100" />
+                                        }
+                                    </td>
+                                    <td class="text-end" style="min-width:130px">
+                                        @if (EsConsulta)
+                                        {
+                                            <span>@d.CostoUnitario.ToString("N4")</span>
+                                        }
+                                        else
+                                        {
+                                            <DxSpinEdit @bind-Value="d.CostoUnitario" DisplayFormat="N4" MinValue="0" CssClass="w-100" />
+                                        }
+                                    </td>
+                                    <td class="text-end text-muted">
+                                        @(EsConsulta ? d.Impuesto.ToString("N2") : "Lo calcula el sistema")
+                                    </td>
+                                    <td class="text-end fw-semibold">@TotalRenglon(d).ToString("N2")</td>
+                                    @if (!EsConsulta && compraDirecta)
+                                    {
+                                        <td class="text-center">
+                                            <button type="button" class="btn-icon btn-delete" title="Quitar renglón"
+                                                    @onclick="() => QuitarRenglon(d)">
+                                                <i class="bi bi-trash"></i>
+                                            </button>
+                                        </td>
+                                    }
+                                </tr>
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            @if (EsConsulta && modelo.Detalles.Count > 0)
+            {
+                <div class="form-text mt-2">
+                    <i class="bi bi-info-circle me-1"></i>
+                    El costo con que cada renglón entró al kardex fue
+                    @string.Join(" · ", modelo.Detalles.Select(d => $"{d.CodigoArticulo}: {d.CostoPosteado:N4}")).
+                </div>
+            }
+        </div>
+
+        <!-- ── Observaciones + totales ───────────────────────────────────────── -->
+        <div class="row g-3">
+            <div class="col-12 col-lg-7">
+                <div class="modern-card h-100">
+                    <h6 class="seccion-titulo"><i class="bi bi-chat-left-text me-2"></i>Observaciones</h6>
+                    @if (EsConsulta)
+                    {
+                        <p class="text-muted mb-0">@(string.IsNullOrWhiteSpace(modelo.Observaciones) ? "Sin observaciones." : modelo.Observaciones)</p>
+                    }
+                    else
+                    {
+                        <DxMemo @bind-Text="modelo.Observaciones" Rows="4" MaxLength="1000"
+                                NullText="Notas de la recepción, faltantes, estado de la mercadería..."
+                                CssClass="w-100" />
+                    }
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-5">
+                <div class="modern-card h-100">
+                    <h6 class="seccion-titulo"><i class="bi bi-receipt me-2"></i>Totales</h6>
+
+                    <div class="totales-fila">
+                        <span>Sub-total</span>
+                        <span class="valor">@SubTotal.ToString("N2")</span>
+                    </div>
+                    <div class="totales-fila">
+                        <span>Descuento (%)</span>
+                        <span style="width:120px">
+                            @if (EsConsulta)
+                            {
+                                <span class="valor d-block text-end">@modelo.Descuento.ToString("N2")</span>
+                            }
+                            else
+                            {
+                                <DxSpinEdit @bind-Value="modelo.Descuento" DisplayFormat="N2"
+                                            MinValue="0" MaxValue="100" CssClass="w-100" />
+                            }
+                        </span>
+                    </div>
+                    <div class="totales-fila">
+                        <span class="text-muted">Monto del descuento</span>
+                        <span class="valor text-danger">-@MontoDescuento.ToString("N2")</span>
+                    </div>
+                    <div class="totales-fila">
+                        <span>ISV</span>
+                        <span class="valor">@(EsConsulta ? modelo.Impuesto.ToString("N2") : "Se calcula al guardar")</span>
+                    </div>
+                    <div class="totales-fila">
+                        <span>Otros gastos</span>
+                        <span style="width:120px">
+                            @if (EsConsulta)
+                            {
+                                <span class="valor d-block text-end">@modelo.OtrosGastos.ToString("N2")</span>
+                            }
+                            else
+                            {
+                                <DxSpinEdit @bind-Value="modelo.OtrosGastos" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                            }
+                        </span>
+                    </div>
+                    <div class="totales-fila">
+                        <span>Flete y seguro</span>
+                        <span style="width:120px">
+                            @if (EsConsulta)
+                            {
+                                <span class="valor d-block text-end">@modelo.FleteSeguro.ToString("N2")</span>
+                            }
+                            else
+                            {
+                                <DxSpinEdit @bind-Value="modelo.FleteSeguro" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                            }
+                        </span>
+                    </div>
+
+                    <div class="totales-total">
+                        <span>Total de la factura</span>
+                        <span>@(EsConsulta ? modelo.Total.ToString("N2") : TotalEstimado.ToString("N2")) <small class="text-muted">HNL</small></span>
+                    </div>
+
+                    @if (!EsConsulta)
+                    {
+                        <div class="alert alert-info py-2 mt-3 mb-0 small" role="alert">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Al registrar, cada renglón entra al inventario con su asiento en el kardex.
+                            No hay edición posterior: para corregir habrá que anular.
+                        </div>
+
+                        <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
+                            <DxButton Text="Registrar factura" IconCssClass="bi bi-check-lg"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Enabled="@(!guardando && modelo.Detalles.Count > 0)"
+                                      Click="GuardarAsync" />
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int? Id { get; set; }
+
+    /// <summary>Item del combo de proveedores: código + "código — nombre".</summary>
+    private sealed class ProveedorComboItem
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Display => $"{Codigo} — {Nombre}";
+    }
+
+    private RecepcionCompraDto modelo = new();
+    private List<ProveedorComboItem> proveedores = new();
+    private List<BodegaLookupDto> bodegas = new();
+    private List<OrdenCompraArticuloLookupDto> articulosProveedor = new();
+    private List<OrdenCompraListItemDto> ordenesRecibibles = new();
+    private List<OrdenCompraPendienteDto> pendientes = new();
+
+    private OrdenCompraArticuloLookupDto? articuloSeleccionado;
+    private OrdenCompraListItemDto? ordenSeleccionada;
+    private BodegaLookupDto? bodegaSeleccionada;
+
+    private DateTime? fecha = DateTime.Today;
+    private DateTime? fechaFactura = DateTime.Today;
+    private DateTime? fechaVencimiento;
+
+    /// <summary>Casilla "Detallar ISV": marcada = el ISV va aparte y NO se capitaliza al costo.</summary>
+    private bool detallarIsv;
+
+    private bool compraDirecta;
+    private bool cargando = true;
+    private bool guardando;
+    private string? errorCarga;
+
+    private bool EsConsulta => Id.HasValue;
+
+    private string IconWrapperClass => EsConsulta
+        ? "bg-secondary bg-opacity-10 text-secondary rounded-circle d-flex align-items-center justify-content-center"
+        : "bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center";
+
+    private string ProveedorTexto => string.IsNullOrWhiteSpace(modelo.ProveedorNombre)
+        ? modelo.CodProveedor
+        : $"{modelo.CodProveedor} — {modelo.ProveedorNombre}";
+
+    private decimal SubTotal => modelo.Detalles.Sum(TotalRenglon);
+    private decimal MontoDescuento => Math.Round(SubTotal * modelo.Descuento / 100m, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// Total sin ISV: el impuesto lo resuelve el servidor por el tipo de artículo, así que
+    /// aquí sólo se anticipa lo que la pantalla sí conoce.
+    /// </summary>
+    private decimal TotalEstimado => SubTotal - MontoDescuento + modelo.OtrosGastos + modelo.FleteSeguro;
+
+    private static decimal TotalRenglon(RecepcionCompraDetalleDto d)
+        => Math.Round(d.Cantidad * d.CostoUnitario, 2, MidpointRounding.AwayFromZero);
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            if (EsConsulta)
+            {
+                var cargada = await RecepcionesClient.GetByIdAsync(Id!.Value);
+                if (cargada is null)
+                {
+                    errorCarga = "La factura no existe o no pertenece a esta empresa.";
+                    return;
+                }
+                modelo = cargada;
+                compraDirecta = !modelo.OrdenCompraId.HasValue;
+                return;
+            }
+
+            await CargarCatalogosAsync();
+        }
+        catch (Exception ex)
+        {
+            errorCarga = $"No se pudo cargar la pantalla: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task CargarCatalogosAsync()
+    {
+        try
+        {
+            var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+            proveedores = lista
+                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+                .OrderBy(p => p.Codigo)
+                .ToList();
+        }
+        catch
+        {
+            proveedores = new List<ProveedorComboItem>();
+        }
+
+        try
+        {
+            bodegas = await BodegasClient.GetLookupAsync();
+            // Con una sola bodega no tiene sentido obligar a elegirla.
+            if (bodegas.Count == 1)
+            {
+                bodegaSeleccionada = bodegas[0];
+            }
+        }
+        catch
+        {
+            bodegas = new List<BodegaLookupDto>();
+        }
+    }
+
+    private void CambiarModo(bool directa)
+    {
+        if (compraDirecta == directa) return;
+
+        compraDirecta = directa;
+        ordenSeleccionada = null;
+        pendientes.Clear();
+        modelo.Detalles.Clear();
+        modelo.OrdenCompraId = null;
+    }
+
+    private async Task OnProveedorChangedAsync(string? codigo)
+    {
+        modelo.CodProveedor = codigo ?? string.Empty;
+
+        // Cambiar de proveedor invalida todo lo elegido: artículos, orden y renglones.
+        modelo.Detalles.Clear();
+        articuloSeleccionado = null;
+        ordenSeleccionada = null;
+        modelo.OrdenCompraId = null;
+        pendientes.Clear();
+        articulosProveedor.Clear();
+        ordenesRecibibles.Clear();
+
+        if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
+        {
+            return;
+        }
+
+        try
+        {
+            articulosProveedor = await OrdenesClient.BuscarArticulosProveedorAsync(modelo.CodProveedor);
+        }
+        catch
+        {
+            articulosProveedor = new List<OrdenCompraArticuloLookupDto>();
+        }
+
+        try
+        {
+            ordenesRecibibles = await RecepcionesClient.ObtenerOrdenesRecibiblesAsync(modelo.CodProveedor);
+        }
+        catch
+        {
+            ordenesRecibibles = new List<OrdenCompraListItemDto>();
+        }
+    }
+
+    private async Task OnOrdenChangedAsync(OrdenCompraListItemDto? orden)
+    {
+        ordenSeleccionada = orden;
+        modelo.Detalles.Clear();
+        pendientes.Clear();
+        modelo.OrdenCompraId = orden?.Id;
+
+        if (orden is null) return;
+
+        try
+        {
+            pendientes = await RecepcionesClient.ObtenerPendientesAsync(orden.Id);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+            return;
+        }
+
+        // Se propone recibir todo lo pendiente; el usuario ajusta lo que llegó de menos.
+        foreach (var p in pendientes)
+        {
+            modelo.Detalles.Add(new RecepcionCompraDetalleDto
+            {
+                ArticuloId = p.ArticuloId,
+                CodigoArticulo = p.CodigoArticulo,
+                Descripcion = p.Descripcion,
+                CodigoUpc = p.CodigoUpc,
+                OrdenDetalleId = p.OrdenDetalleId,
+                Cantidad = p.CantidadPendiente,
+                CostoUnitario = p.CostoUnitario
+            });
+        }
+    }
+
+    private decimal PendienteDe(RecepcionCompraDetalleDto d)
+        => pendientes.FirstOrDefault(p => p.OrdenDetalleId == d.OrdenDetalleId)?.CantidadPendiente ?? 0m;
+
+    /// <summary>
+    /// En modo Con O/C la cantidad no puede pasar del pendiente. El servidor lo valida igual
+    /// (y bloquea la orden para que dos recepciones no se pisen), pero avisar aquí evita que
+    /// el usuario descubra el tope recién al guardar.
+    /// </summary>
+    private void CambiarCantidad(RecepcionCompraDetalleDto d, decimal valor)
+    {
+        if (!compraDirecta)
+        {
+            var tope = PendienteDe(d);
+            if (valor > tope)
+            {
+                valor = tope;
+                Toast("Aviso", $"La orden sólo tiene {tope:N2} pendientes de ese artículo.", ToastRenderStyle.Warning);
+            }
+        }
+        d.Cantidad = valor < 0m ? 0m : valor;
+    }
+
+    private void AgregarRenglonDirecto()
+    {
+        if (articuloSeleccionado is null) return;
+
+        if (modelo.Detalles.Any(d => d.ArticuloId == articuloSeleccionado.ArticuloId))
+        {
+            Toast("Aviso", "Ese artículo ya está en la factura.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        modelo.Detalles.Add(new RecepcionCompraDetalleDto
+        {
+            ArticuloId = articuloSeleccionado.ArticuloId,
+            CodigoArticulo = articuloSeleccionado.CodigoArticulo,
+            Descripcion = articuloSeleccionado.Descripcion,
+            CodigoUpc = articuloSeleccionado.CodigoUpc,
+            Cantidad = 1m,
+            CostoUnitario = articuloSeleccionado.Costo
+        });
+
+        articuloSeleccionado = null;
+    }
+
+    private void QuitarRenglon(RecepcionCompraDetalleDto d) => modelo.Detalles.Remove(d);
+
+    private async Task GuardarAsync()
+    {
+        if (guardando) return;
+
+        if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
+        {
+            Toast("Faltan datos", "Seleccione el proveedor.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (bodegaSeleccionada is null)
+        {
+            Toast("Faltan datos", "Seleccione la bodega que recibe.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (!compraDirecta && modelo.OrdenCompraId is null)
+        {
+            Toast("Faltan datos", "Seleccione la orden de compra que está recibiendo.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (modelo.Detalles.Count == 0)
+        {
+            Toast("Faltan datos", "Agregue al menos un renglón.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (modelo.Detalles.Any(d => d.Cantidad <= 0m))
+        {
+            Toast("Faltan datos", "Hay renglones con cantidad en cero: quítelos o corrija la cantidad.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (modelo.Detalles.Any(d => d.CostoUnitario <= 0m))
+        {
+            Toast("Faltan datos", "El costo unitario debe ser mayor que cero en todos los renglones.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        guardando = true;
+        try
+        {
+            modelo.Fecha = fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : DateOnly.FromDateTime(DateTime.Today);
+            modelo.FechaFactura = fechaFactura.HasValue ? DateOnly.FromDateTime(fechaFactura.Value) : null;
+            modelo.FechaVencimiento = fechaVencimiento.HasValue ? DateOnly.FromDateTime(fechaVencimiento.Value) : null;
+            modelo.BodegaId = bodegaSeleccionada.Id;
+            modelo.DetallarIsv = detallarIsv ? true : null;   // null = la política de la empresa decide
+            modelo.Moneda = MonedaCompra.Lempira;
+            modelo.TasaCambio = 1m;
+
+            // Identidad del documento: si el POST se reintenta (doble clic, red), el servidor
+            // devuelve la factura ya registrada en vez de duplicar la existencia.
+            modelo.Uuid ??= Guid.NewGuid();
+
+            var registrada = await RecepcionesClient.CrearAsync(modelo);
+
+            Toast("Éxito", $"Factura {registrada.Numero:00000} registrada: el inventario ya está actualizado.", ToastRenderStyle.Success);
+            Navigation.NavigateTo($"/almacen/compras/recepciones/{registrada.Id}");
+        }
+        catch (Exception ex)
+        {
+            // El uuid se descarta: un reintento tras un error de validación es un documento
+            // nuevo, no el mismo que ya entró.
+            modelo.Uuid = null;
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void Volver() => Navigation.NavigateTo("/almacen/compras/recepciones");
+
+    private static string ClaseEstado(short estado) => estado switch
+    {
+        EstadoRecepcionCompra.Registrada => "estado-registrada",
+        EstadoRecepcionCompra.Anulada    => "estado-anulada",
+        _ => "estado-registrada"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "RecepcionCompraFormToast"
+        });
+}

@@ -82,6 +82,17 @@
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(TipoArticuloListItemDto.IsvDisplay)" Caption="ISV compras" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is TipoArticuloListItemDto item)
+                            {
+                                @if (item.IsvDisplay == "—")
+                                { <span class="text-muted" title="No registra ISV en compras">—</span> }
+                                else
+                                { <span class="badge bg-light text-dark border" title="Tratamiento del ISV en las compras de este tipo">@item.IsvDisplay</span> }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
                     <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is TipoArticuloListItemDto item)
@@ -135,7 +146,7 @@
         }
         else
         {
-            <TipoArticuloForm Model="formModel" CuentasContables="cuentasContables" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+            <TipoArticuloForm Model="formModel" CuentasContables="cuentasContables" TasasIsv="tasasIsv" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
         }
     </BodyContentTemplate>
 </DxPopup>
@@ -161,6 +172,7 @@
     private DxGrid? grid;
     private List<TipoArticuloListItemDto> tipos = new();
     private List<CuentaContableLookupDto> cuentasContables = new();
+    private List<TasaIsvOpcionDto> tasasIsv = new();
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
@@ -191,6 +203,7 @@
     protected override async Task OnInitializedAsync()
     {
         await CargarCuentasAsync();
+        await CargarTasasIsvAsync();
         await CargarAsync();
     }
 
@@ -198,6 +211,12 @@
     {
         try { cuentasContables = await TiposClient.GetCuentasContablesAsync(); }
         catch { cuentasContables = new(); }
+    }
+
+    private async Task CargarTasasIsvAsync()
+    {
+        try { tasasIsv = await TiposClient.GetTasasIsvAsync(); }
+        catch { tasasIsv = new(); }
     }
 
     private ClasificacionFilterDto BuildFilter() => new()

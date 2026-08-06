@@ -116,10 +116,35 @@ public static class ServiceRegistration
         services.AddScoped<IUnidadesMedidaService, UnidadesMedidaService>();
         services.AddScoped<ICategoriaUnidadService, CategoriaUnidadService>();
         services.AddScoped<ITipoArticuloService, TipoArticuloService>();
+        services.AddScoped<IIsvCompraConfigService, IsvCompraConfigService>();
         services.AddScoped<IBodegaService, BodegaService>();
         services.AddScoped<IArticuloUbicacionService, ArticuloUbicacionService>();
         services.AddScoped<IArticuloProveedorService, ArticuloProveedorService>();
+        services.AddScoped<IOrdenCompraService, OrdenCompraService>();
+        services.AddScoped<IRecepcionCompraService, RecepcionCompraService>();
         services.AddScoped<IGrupoService, GrupoService>();
+        // Reporte de existencias por bodega (valorado) — alimenta pantalla y PDF.
+        services.AddScoped<IExistenciasBodegaService, ExistenciasBodegaService>();
+        // Valuación de inventario a una fecha (reconstruye el saldo desde el kardex) — pantalla y PDF.
+        services.AddScoped<IValuacionInventarioService, ValuacionInventarioService>();
+
+        // Motor de movimientos (Fase 1): rollup compartido de cabecera + posteo al kardex.
+        services.AddScoped<IArticuloRollupService, ArticuloRollupService>();
+        services.AddScoped<IInventarioPostingService, InventarioPostingService>();
+
+        // Carga inicial de existencias y ajustes (Fase 4).
+        services.AddScoped<ICargaInicialInventarioService, CargaInicialInventarioService>();
+        services.AddScoped<IAjusteInventarioService, AjusteInventarioService>();
+
+        // Catálogo de tipos de movimiento (movimientos de almacén, Fase 1).
+        services.AddScoped<ITipoMovimientoService, TipoMovimientoService>();
+        services.AddScoped<IMovimientoAlmacenService, MovimientoAlmacenService>();
+        // Traslado entre bodegas (Fase 5).
+        services.AddScoped<ITrasladoAlmacenService, TrasladoAlmacenService>();
+        // Requisición → descargo (Fase 6). El documento de requisición (solicitud, no postea).
+        services.AddScoped<IRequisicionDocumentoService, RequisicionDocumentoService>();
+        // El descargo (la entrega real, sí postea).
+        services.AddScoped<IDescargoDocumentoService, DescargoDocumentoService>();
 
         // ciclos
         services.AddScoped<ICiclosService, CiclosService>();

@@ -10,5 +10,11 @@ public sealed class TipoArticuloListItemDto
     /// <summary>false = los artículos de este tipo no llevan existencias ni kardex (ej. Servicios).</summary>
     public bool ManejaInventario { get; init; } = true;
 
+    /// <summary>
+    /// Tratamiento del ISV en compras de este tipo, listo para mostrar: "ISV 15%", "Exento",
+    /// o "—" si no tiene tasa asignada (no registra ISV).
+    /// </summary>
+    public string IsvDisplay { get; init; } = "—";
+
     public bool Activo { get; init; }
 }

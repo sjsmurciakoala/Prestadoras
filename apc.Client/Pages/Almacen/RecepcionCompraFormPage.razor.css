@@ -1,0 +1,103 @@
+/* Sólo lo propio de esta pantalla. El look base (page-container, modern-card, btn-icon…)
+   se hereda de apc/wwwroot/css/siad-grid.css — no se duplica aquí. */
+
+.seccion-titulo {
+    font-weight: 600;
+    color: #344767;
+    margin-bottom: 1rem;
+}
+
+.valor-solo-lectura {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    color: #344767;
+}
+
+/* Círculo con icono junto al título */
+.form-icon {
+    width: 44px;
+    height: 44px;
+    font-size: 1.25rem;
+    flex-shrink: 0;
+}
+
+.badge-estado-rec {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 600;
+    vertical-align: middle;
+    white-space: nowrap;
+}
+
+.badge-estado-rec.estado-registrada { background-color: rgba(25, 135, 84, 0.15); color: #146c43; }
+.badge-estado-rec.estado-anulada    { background-color: rgba(220, 53, 69, 0.15); color: #b02a37; }
+
+/* Buscador de artículo del proveedor (modo compra directa) */
+.buscador-articulo {
+    display: flex;
+    gap: 0.5rem;
+    align-items: center;
+    flex-wrap: wrap;
+    background-color: #f8f9fa;
+    border: 1px dashed #ced4da;
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+}
+
+/* Tabla de renglones */
+.tabla-renglones thead th {
+    font-size: 0.72rem;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: #67748e;
+    background-color: #f8f9fa;
+    white-space: nowrap;
+}
+
+.tabla-renglones td {
+    vertical-align: middle;
+}
+
+.cod-proveedor {
+    font-family: ui-monospace, "Cascadia Mono", Consolas, monospace;
+    font-size: 0.78rem;
+    color: #0a58ca;
+    background-color: rgba(13, 110, 253, 0.08);
+    border-radius: 0.3rem;
+    padding: 0.15rem 0.4rem;
+    white-space: nowrap;
+}
+
+/* Panel de totales */
+.totales-fila {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.4rem 0;
+    font-size: 0.9rem;
+    color: #67748e;
+}
+
+.totales-fila .valor {
+    font-weight: 600;
+    color: #344767;
+    font-variant-numeric: tabular-nums;
+}
+
+.totales-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    border-top: 1px solid #e9ecef;
+    margin-top: 0.5rem;
+    padding-top: 0.75rem;
+    font-weight: 700;
+    font-size: 1.15rem;
+    color: #344767;
+    font-variant-numeric: tabular-nums;
+}

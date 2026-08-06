@@ -25,6 +25,41 @@ public sealed class KardexMovimientoDto
     /// <summary>Fecha y hora de registro del movimiento (hora local, alm_kardex.fechacreacion).</summary>
     public DateTime? FechaCreacion { get; init; }
 
-    /// <summary>Saldo corrido (Σ ingresos − Σ salidas hasta este movimiento).</summary>
-    public decimal Saldo { get; set; }
+    /// <summary>
+    /// Saldo corrido (Σ ingresos − Σ salidas) desde el asiento de CARGA INICIAL del par.
+    /// <para>
+    /// Es <c>null</c> en los movimientos PRE-CORTE (ver <see cref="EsPreCorte"/>): antes de
+    /// la apertura no hay un saldo con significado, porque el histórico migrado de SIMAFI
+    /// no arranca de un punto cero conocido. La UI muestra "—".
+    /// </para>
+    /// </summary>
+    public decimal? Saldo { get; set; }
+
+    // ── Trazabilidad del libro nuevo (motor de posteo) ───────────────────────
+
+    /// <summary>
+    /// Qué documento originó el asiento (<c>TipoDocumentoInventario</c>). NULL = histórico
+    /// SIMAFI, no posteado por el motor. Es lo que distingue una carga inicial de una
+    /// entrada cualquiera: sin esto ambas se rotulan "Entrada" y son indistinguibles.
+    /// </summary>
+    public string? DocumentoTipo { get; init; }
+
+    /// <summary>Id del documento origen dentro de la tabla que corresponda a <see cref="DocumentoTipo"/>.</summary>
+    public int? DocumentoId { get; init; }
+
+    /// <summary>Existencia del par DESPUÉS de este asiento (snapshot que escribe el motor).</summary>
+    public decimal? ExistenciaResultante { get; init; }
+
+    /// <summary>Costo promedio del par DESPUÉS de este asiento.</summary>
+    public decimal? CostoPromedioResultante { get; init; }
+
+    /// <summary>
+    /// true si el movimiento es ANTERIOR al asiento de carga inicial de su par: histórico
+    /// informativo, fuera del saldo. Lo calcula <c>KardexService</c> al aplicar el punto
+    /// de corte; no viene de la base.
+    /// </summary>
+    public bool EsPreCorte { get; set; }
+
+    /// <summary>true si este asiento ES la línea de corte (la carga inicial vigente del par).</summary>
+    public bool EsLineaDeCorte { get; set; }
 }

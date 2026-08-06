@@ -1,0 +1,24 @@
+/* Sólo lo propio de esta pantalla: los colores de la insignia de estado de la recepción.
+   El resto del look (page-container, modern-card, grid-solicitudes, btn-icon…) lo hereda
+   de apc/wwwroot/css/siad-grid.css — no se duplica aquí. */
+
+.badge-estado-rec {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.badge-estado-rec.estado-registrada {
+    background-color: rgba(25, 135, 84, 0.15);
+    color: #146c43;
+}
+
+.badge-estado-rec.estado-anulada {
+    background-color: rgba(220, 53, 69, 0.15);
+    color: #b02a37;
+    text-decoration: line-through;
+}

@@ -51,9 +51,6 @@ public sealed class ArticuloEditDto
     [StringLength(80, ErrorMessage = "El diámetro no puede superar los 80 caracteres.")]
     public string? Diametro { get; set; }
 
-    [StringLength(20, ErrorMessage = "La cuenta contable no puede superar los 20 caracteres.")]
-    public string? CuentaContable { get; set; }
-
     [Range(0, 9_999_999_999_999d, ErrorMessage = "La existencia mínima no puede ser negativa.")]
     public decimal ExistenciaMinima { get; set; }
 

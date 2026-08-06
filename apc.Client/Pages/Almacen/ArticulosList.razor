@@ -51,14 +51,17 @@
                 <div class="summary-value">@resumen.BajoMinimo.ToString("N0")</div>
             </div>
         </div>
-        <div class="col-6 col-md">
-            <div class="modern-card summary-card summary-warning summary-clickable"
-                 title="Artículos cuya existencia de cabecera no cuadra con la suma de sus bodegas activas. Clic para filtrarlos."
-                 @onclick="ToggleDescuadreDesdeTarjeta">
-                <div class="summary-label">Descuadres</div>
-                <div class="summary-value">@resumen.ConDescuadre.ToString("N0")</div>
+        @if (!EnVistaBodega)
+        {
+            <div class="col-6 col-md">
+                <div class="modern-card summary-card summary-warning summary-clickable"
+                     title="Artículos cuya existencia de cabecera no cuadra con la suma de sus bodegas activas. Clic para filtrarlos."
+                     @onclick="ToggleDescuadreDesdeTarjeta">
+                    <div class="summary-label">Descuadres</div>
+                    <div class="summary-value">@resumen.ConDescuadre.ToString("N0")</div>
+                </div>
             </div>
-        </div>
+        }
         <div class="col-6 col-md">
             <div class="modern-card summary-card">
                 <div class="summary-label">Valor inventario</div>
@@ -189,11 +192,14 @@
                                         CheckType="CheckType.Switch">Ver descontinuados</DxCheckBox>
                         </div>
 
-                        <div class="d-flex align-items-center me-2">
-                            <DxCheckBox Checked="@filtroConDescuadre"
-                                        CheckedChanged="@((bool v) => OnConDescuadreChanged(v))"
-                                        CheckType="CheckType.Switch">Con descuadre</DxCheckBox>
-                        </div>
+                        @if (!EnVistaBodega)
+                        {
+                            <div class="d-flex align-items-center me-2">
+                                <DxCheckBox Checked="@filtroConDescuadre"
+                                            CheckedChanged="@((bool v) => OnConDescuadreChanged(v))"
+                                            CheckType="CheckType.Switch">Con descuadre</DxCheckBox>
+                            </div>
+                        }
 
                         <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
                                   RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
@@ -244,20 +250,28 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.TipoArticuloDisplay)" Caption="Tipo" MinWidth="150">
+                    @* DxGrid usa layout de tabla fijo: la columna no se ajusta sola al contenido.
+                       Los nombres de tipo son largos ("INVENTARIO DE MATERIALES Y ACCESORIOS
+                       ALCANTARILLADO SANITARIO"), así que se topa en 2 renglones con elipsis en
+                       vez de 1: a una sola línea dos tipos distintos se veían idénticos. *@
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.TipoArticuloDisplay)" Caption="Tipo" MinWidth="230">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
-                                <span class="text-muted" title="@item.TipoArticuloDisplay">@item.TipoArticuloDisplay</span>
+                                <span class="text-muted celda-dos-lineas" title="@item.TipoArticuloDisplay">@item.TipoArticuloDisplay</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UnidadMedidaDisplay)" Caption="Unidad" Width="100px" TextAlignment="GridTextAlignment.Center">
+                    @* Descripción de la unidad (alm_unidad_medida.nombre), no el código.
+                       El ancho sube de 100px porque "Kilogramo" o "Metro cúbico" no caben.
+                       Sin unidad de catálogo la celda queda vacía (no "—"): así se distingue
+                       de un vistazo qué artículos falta sanear. *@
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UnidadMedidaDisplay)" Caption="Unidad" Width="150px" TextAlignment="GridTextAlignment.Center">
                         <CellDisplayTemplate Context="cell">
-                            @if (cell.DataItem is ArticuloListItemDto item)
+                            @if (cell.DataItem is ArticuloListItemDto item && !string.IsNullOrEmpty(item.UnidadMedidaDisplay))
                             {
-                                <span class="text-muted">@item.UnidadMedidaDisplay</span>
+                                <span class="text-muted celda-una-linea" title="@item.UnidadMedidaDisplay">@item.UnidadMedidaDisplay</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -271,11 +285,18 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Existencia)" Caption="Existencia" Width="130px" TextAlignment="GridTextAlignment.Right">
+                    @* La cantidad va acompañada de la unidad en forma corta (abreviatura del
+                       catálogo). El Excel sigue exportando el número puro: el sufijo es del
+                       template y la exportación toma el valor del campo. *@
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.Existencia)" Caption="@CaptionExistencia" Width="165px" TextAlignment="GridTextAlignment.Right">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
                                 <span class="@(item.BajoMinimo ? "text-danger fw-bold" : "text-dark")">@item.Existencia.ToString("N2")</span>
+                                @if (!string.IsNullOrEmpty(item.UnidadMedidaCorta))
+                                {
+                                    <span class="unidad-sufijo" title="@item.UnidadMedidaDisplay">@item.UnidadMedidaCorta</span>
+                                }
                                 @if (item.Descuadrado)
                                 {
                                     <i class="bi bi-exclamation-triangle-fill text-warning ms-1"
@@ -287,7 +308,7 @@
 
                     @* DINERO (existencia × valor unitario): la suma de esta columna cuadra con la
                        tarjeta "Valor inventario". El FieldName no cambia (sort remoto y layouts guardados). *@
-                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorTotal)" Caption="Valor inventario" Width="140px" TextAlignment="GridTextAlignment.Right">
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorTotal)" Caption="@CaptionValor" Width="140px" TextAlignment="GridTextAlignment.Right">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
@@ -551,6 +572,9 @@
     private async Task OnBodegaChanged(int? valor)
     {
         filtroBodegaId = valor;
+        // El descuadre (cabecera vs Σ bodegas) no aplica a una sola bodega: se apaga al entrar
+        // en la vista por bodega para no dejar activo un filtro cuyo control ya no se muestra.
+        if (valor.HasValue) filtroConDescuadre = false;
         await CargarAsync();
     }
 
@@ -586,6 +610,13 @@
     private string NombreGrupo(int? id) => grupos.FirstOrDefault(g => g.Id == id)?.Nombre ?? "—";
     private string NombreBodega(int? id) => bodegas.FirstOrDefault(b => b.Id == id)?.Nombre ?? "—";
     private static string NombreEstado(string? v) => EstadosStock.FirstOrDefault(e => e.Valor == v)?.Texto ?? "—";
+
+    // ── Vista por bodega ─────────────────────────────────────────────────────
+    // Con una bodega elegida, la lista muestra las cifras de ESA bodega (existencia, valor,
+    // estado y KPIs). Los encabezados lo dejan explícito y el descuadre (global) se oculta.
+    private bool EnVistaBodega => filtroBodegaId.HasValue;
+    private string CaptionExistencia => EnVistaBodega ? $"Existencia en {NombreBodega(filtroBodegaId)}" : "Existencia";
+    private string CaptionValor => EnVistaBodega ? $"Valor en {NombreBodega(filtroBodegaId)}" : "Valor inventario";
 
     private Task QuitarBusqueda() { filtroBusqueda = string.Empty; return CargarAsync(); }
     private Task QuitarTipo() { filtroTipoArticuloId = null; filtroGrupoId = null; return CargarAsync(); }

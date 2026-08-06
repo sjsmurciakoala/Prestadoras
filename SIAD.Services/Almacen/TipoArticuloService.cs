@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Data;
@@ -9,6 +10,9 @@ namespace SIAD.Services.Almacen;
 public sealed class TipoArticuloService : ITipoArticuloService
 {
     private readonly SiadDbContext _context;
+
+    /// <summary>Código del impuesto (cfg_impuesto) cuyas tasas se ofrecen para el ISV en compras.</summary>
+    private const string CodigoIsv = "ISV";
 
     public TipoArticuloService(SiadDbContext context)
     {
@@ -34,18 +38,33 @@ public sealed class TipoArticuloService : ITipoArticuloService
                 : query.Where(t => t.codigo.ToLower().Contains(term.ToLower()) || t.nombre.ToLower().Contains(term.ToLower()));
         }
 
-        return await query
+        // La tasa (tipo/porcentaje) se trae cruda y el display se arma en memoria: interpolar
+        // con formato no lo traduce EF a SQL.
+        var rows = await query
             .OrderBy(t => t.codigo)
-            .Select(t => new TipoArticuloListItemDto
+            .Select(t => new
             {
-                Id = t.id,
-                Codigo = t.codigo,
-                Nombre = t.nombre,
-                Descripcion = t.descripcion,
-                ManejaInventario = t.maneja_inventario,
-                Activo = t.activo
+                t.id,
+                t.codigo,
+                t.nombre,
+                t.descripcion,
+                t.maneja_inventario,
+                t.activo,
+                TasaTipo = t.impuesto_tasa != null ? t.impuesto_tasa.tipo : null,
+                TasaPorc = t.impuesto_tasa != null ? (decimal?)t.impuesto_tasa.porcentaje : null
             })
             .ToListAsync(ct);
+
+        return rows.Select(r => new TipoArticuloListItemDto
+        {
+            Id = r.id,
+            Codigo = r.codigo,
+            Nombre = r.nombre,
+            Descripcion = r.descripcion,
+            ManejaInventario = r.maneja_inventario,
+            IsvDisplay = IsvDisplay(r.TasaTipo, r.TasaPorc),
+            Activo = r.activo
+        }).ToList();
     }
 
     public async Task<TipoArticuloEditDto?> GetByIdAsync(int id, CancellationToken ct = default)
@@ -65,6 +84,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
                 CuentaAjustes = t.cuenta_ajustes,
                 CuentaDevoluciones = t.cuenta_devoluciones,
                 ManejaInventario = t.maneja_inventario,
+                ImpuestoTasaId = t.impuesto_tasa_id,
                 Activo = t.activo
             })
             .FirstOrDefaultAsync(ct);
@@ -72,18 +92,42 @@ public sealed class TipoArticuloService : ITipoArticuloService
 
     public async Task<IReadOnlyList<TipoArticuloLookupDto>> GetLookupAsync(CancellationToken ct = default)
     {
-        return await _context.alm_tipo_articulos.AsNoTracking()
+        var rows = await _context.alm_tipo_articulos.AsNoTracking()
             .Where(t => t.activo)
             .OrderBy(t => t.codigo)
-            .Select(t => new TipoArticuloLookupDto
+            .Select(t => new
             {
-                Id = t.id,
-                Codigo = t.codigo,
-                Nombre = t.nombre,
-                // El formulario del artículo lo usa para bloquear la pestaña Existencias.
-                ManejaInventario = t.maneja_inventario
+                t.id,
+                t.codigo,
+                t.nombre,
+                t.maneja_inventario,
+                t.cuenta_inventario,
+                t.cuenta_costo_ventas,
+                t.cuenta_ventas,
+                t.cuenta_ajustes,
+                t.cuenta_devoluciones,
+                t.impuesto_tasa_id,
+                TasaTipo = t.impuesto_tasa != null ? t.impuesto_tasa.tipo : null,
+                TasaPorc = t.impuesto_tasa != null ? (decimal?)t.impuesto_tasa.porcentaje : null
             })
             .ToListAsync(ct);
+
+        return rows.Select(r => new TipoArticuloLookupDto
+        {
+            Id = r.id,
+            Codigo = r.codigo,
+            Nombre = r.nombre,
+            // El formulario del artículo lo usa para bloquear la pestaña Existencias.
+            ManejaInventario = r.maneja_inventario,
+            // Cuentas del tipo: el form del artículo las muestra en solo lectura (herencia).
+            CuentaInventario = r.cuenta_inventario,
+            CuentaCostoVentas = r.cuenta_costo_ventas,
+            CuentaVentas = r.cuenta_ventas,
+            CuentaAjustes = r.cuenta_ajustes,
+            CuentaDevoluciones = r.cuenta_devoluciones,
+            ImpuestoTasaId = r.impuesto_tasa_id,
+            ImpuestoTasaDisplay = r.impuesto_tasa_id == null ? null : IsvDisplay(r.TasaTipo, r.TasaPorc)
+        }).ToList();
     }
 
     public async Task<TipoArticuloEditDto> CreateAsync(TipoArticuloEditDto dto, string user, CancellationToken ct = default)
@@ -97,6 +141,8 @@ public sealed class TipoArticuloService : ITipoArticuloService
             throw new InvalidOperationException($"Ya existe un tipo de artículo con el código {codigo}.");
         }
 
+        var impuestoTasaId = await ValidarTasaIsvAsync(dto.ImpuestoTasaId, ct);
+
         var entity = new alm_tipo_articulo
         {
             codigo = codigo,
@@ -108,6 +154,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
             cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 25),
             cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 25),
             maneja_inventario = dto.ManejaInventario,
+            impuesto_tasa_id = impuestoTasaId,
             activo = dto.Activo,
             usuariocreacion = ClasificacionNormalizer.Usuario(user),
             fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
@@ -134,6 +181,8 @@ public sealed class TipoArticuloService : ITipoArticuloService
             throw new InvalidOperationException($"Ya existe un tipo de artículo con el código {codigo}.");
         }
 
+        var impuestoTasaId = await ValidarTasaIsvAsync(dto.ImpuestoTasaId, ct);
+
         entity.codigo = codigo;
         entity.nombre = nombre;
         entity.descripcion = ClasificacionNormalizer.Opcional(dto.Descripcion, 200);
@@ -143,6 +192,7 @@ public sealed class TipoArticuloService : ITipoArticuloService
         entity.cuenta_ajustes = ClasificacionNormalizer.Opcional(dto.CuentaAjustes, 25);
         entity.cuenta_devoluciones = ClasificacionNormalizer.Opcional(dto.CuentaDevoluciones, 25);
         entity.maneja_inventario = dto.ManejaInventario;
+        entity.impuesto_tasa_id = impuestoTasaId;
         entity.activo = dto.Activo;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
@@ -163,5 +213,68 @@ public sealed class TipoArticuloService : ITipoArticuloService
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<IReadOnlyList<TasaIsvOpcionDto>> GetTasasIsvAsync(CancellationToken ct = default)
+    {
+        var hoy = DateOnly.FromDateTime(DateTime.Today);
+
+        var rows = await _context.cfg_impuesto_tasas.AsNoTracking()
+            .Where(t => t.impuesto!.codigo == CodigoIsv
+                     && t.activo
+                     && t.vigencia_desde <= hoy
+                     && (t.vigencia_hasta == null || t.vigencia_hasta >= hoy))
+            .OrderBy(t => t.tipo)
+            .ThenBy(t => t.porcentaje)
+            .Select(t => new { t.id, t.codigo, t.nombre, t.tipo, t.porcentaje })
+            .ToListAsync(ct);
+
+        return rows.Select(r => new TasaIsvOpcionDto
+        {
+            Id = r.id,
+            Codigo = r.codigo,
+            Nombre = r.nombre,
+            Tipo = r.tipo,
+            Porcentaje = r.porcentaje,
+            EsGravada = TipoImpuestoTasa.ExigePorcentaje(r.tipo) && r.porcentaje > 0m,
+            Display = SelectorDisplay(r.tipo, r.porcentaje, r.nombre)
+        }).ToList();
+    }
+
+    /// <summary>
+    /// Valida que la tasa (si se indicó) exista y pertenezca al ISV. Devuelve el id a guardar
+    /// (o null si el tipo no aplica ISV). Es defensa de servidor: el selector ya restringe a
+    /// tasas del ISV, pero un cliente podría mandar otro id.
+    /// </summary>
+    private async Task<int?> ValidarTasaIsvAsync(int? tasaId, CancellationToken ct)
+    {
+        if (tasaId is not int id) return null;
+
+        var esIsv = await _context.cfg_impuesto_tasas.AsNoTracking()
+            .AnyAsync(t => t.id == id && t.impuesto!.codigo == CodigoIsv, ct);
+        if (!esIsv)
+        {
+            throw new InvalidOperationException("La tasa de ISV seleccionada no existe o no pertenece al ISV.");
+        }
+        return id;
+    }
+
+    /// <summary>Etiqueta corta para la lista/herencia: "ISV 15%", "Exento", "Exonerado" o "—".</summary>
+    private static string IsvDisplay(string? tipo, decimal? porcentaje)
+    {
+        if (tipo is null) return "—";
+        if (TipoImpuestoTasa.ExigePorcentaje(tipo)) return $"ISV {(porcentaje ?? 0m):0.##}%";
+        if (string.Equals(tipo, TipoImpuestoTasa.Exento, StringComparison.OrdinalIgnoreCase)) return "Exento";
+        if (string.Equals(tipo, TipoImpuestoTasa.Exonerado, StringComparison.OrdinalIgnoreCase)) return "Exonerado";
+        return "—";
+    }
+
+    /// <summary>Etiqueta descriptiva para el combo del formulario.</summary>
+    private static string SelectorDisplay(string? tipo, decimal porcentaje, string nombre)
+    {
+        if (TipoImpuestoTasa.ExigePorcentaje(tipo)) return $"ISV {porcentaje:0.##}% (gravado)";
+        if (string.Equals(tipo, TipoImpuestoTasa.Exento, StringComparison.OrdinalIgnoreCase)) return "Exento (no registra ISV)";
+        if (string.Equals(tipo, TipoImpuestoTasa.Exonerado, StringComparison.OrdinalIgnoreCase)) return "Exonerado";
+        return string.IsNullOrWhiteSpace(nombre) ? "—" : nombre;
     }
 }

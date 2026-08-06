@@ -1,4 +1,5 @@
 @using DevExpress.Blazor
+@using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Almacen
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
@@ -6,6 +7,7 @@
 @inject ArticulosClient ArticulosClient
 @inject BodegasClient BodegasClient
 @inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
 @inject IJSRuntime JS
 
 <DxToastProvider Name="UbicacionesToast" MaxToastCount="4" />
@@ -18,11 +20,11 @@
             <i class="bi bi-geo-alt me-1"></i>
             @if (EnMemoria)
             {
-                <text>Asigne las bodegas donde se almacenará el artículo. La primera es la principal. La ubicación física (5 campos) es manual y opcional.</text>
+                <text>Asigne las bodegas donde se almacenará el artículo. La primera es la principal. La existencia inicial que capture se registra como <strong>carga inicial</strong> en el kardex, así que exige su costo de apertura.</text>
             }
             else
             {
-                <text>Bodegas donde se almacena este artículo. Las ubicaciones no se eliminan: se deshabilitan y quedan en el histórico.</text>
+                <text>Bodegas donde se almacena este artículo. La existencia se mueve con <strong>documentos de inventario</strong> (ajuste, compra o traslado): no se teclea. Las ubicaciones no se eliminan: se deshabilitan y quedan en el histórico.</text>
             }
         </div>
         <div class="d-flex align-items-center gap-3 flex-wrap">
@@ -161,6 +163,16 @@
                                             @onclick="() => AbrirEditar(item)" @onclick:stopPropagation="true">
                                         <i class="bi bi-pencil-square"></i>
                                     </button>
+                                    @if (!EnMemoria)
+                                    {
+                                        @* La existencia se mueve con el documento de movimiento de almacén:
+                                           este atajo abre el formulario nuevo con la bodega y el artículo
+                                           precargados (el ajuste de una línea quedó deprecado, Fase 4). *@
+                                        <button type="button" class="btn-icon btn-edit" title="Registrar movimiento de inventario"
+                                                @onclick="() => IrAAjustar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-sliders"></i>
+                                        </button>
+                                    }
                                     @if (EnMemoria)
                                     {
                                         <button type="button" class="btn-icon btn-delete" title="Quitar"
@@ -246,12 +258,29 @@
             </div>
 
             @* Comprometida y tránsito NO van en el modal: no hay nada que teclear; las
-               mantiene el motor de movimientos y sólo se ven en la grilla. *@
+               mantiene el motor de movimientos y sólo se ven en la grilla.
+               La EXISTENCIA solo se teclea al dar de alta el par (artículo, bodega): esa
+               cantidad se postea como CARGA_INICIAL en el kardex junto con su costo de
+               apertura. Después la mueven documentos de inventario, no este formulario. *@
             <div class="row g-3 mb-3 mt-1">
                 <div class="col-12 col-md-3">
-                    <label class="form-label fw-semibold">Existencia</label>
-                    <DxSpinEdit @bind-Value="form.Existencia" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                    <label class="form-label fw-semibold">
+                        @(EsAperturaEditable ? "Existencia inicial" : "Existencia")
+                    </label>
+                    <DxSpinEdit @bind-Value="form.Existencia" DisplayFormat="N2" MinValue="0"
+                                ReadOnly="@(!EsAperturaEditable)" ShowSpinButtons="@EsAperturaEditable"
+                                CssClass="w-100" />
                 </div>
+                @if (EsAperturaEditable)
+                {
+                    <div class="col-12 col-md-3">
+                        <label class="form-label fw-semibold">
+                            Costo de apertura @if (form.Existencia > 0) { <span class="text-danger">*</span> }
+                        </label>
+                        <DxSpinEdit @bind-Value="form.CostoApertura" DisplayFormat="N4" MinValue="0" CssClass="w-100" />
+                        <div class="form-text small text-muted">Obligatorio si captura existencia.</div>
+                    </div>
+                }
                 <div class="col-12 col-md-3">
                     <label class="form-label fw-semibold">Existencia mínima</label>
                     <DxSpinEdit @bind-Value="form.ExistenciaMinima" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
@@ -266,6 +295,22 @@
                     <div class="form-text small text-muted">Existencia a la que conviene reponer.</div>
                 </div>
             </div>
+
+            @if (!EsAperturaEditable)
+            {
+                <div class="alert alert-light border small d-flex align-items-center justify-content-between gap-2 mb-3">
+                    <span>
+                        <i class="bi bi-lock me-1"></i>
+                        La existencia se mueve con documentos de inventario (ajuste, compra o traslado), no desde este formulario.
+                    </span>
+                    @if (!EnMemoria)
+                    {
+                        <DxButton Text="Registrar movimiento" IconCssClass="bi bi-sliders"
+                                  RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                  Click="@(() => IrAAjustar(form))" />
+                    }
+                </div>
+            }
 
             @* Costo promedio y último costo son SOLO LECTURA: los recalcula el motor de
                movimientos (kardex) en cada ingreso. Se muestran para consulta —el servicio
@@ -380,6 +425,13 @@
     private bool confirmVisible;
     private ArticuloUbicacionDto? paraDeshabilitar;
 
+    /// <summary>
+    /// La existencia solo se teclea al ALTA del par (artículo, bodega): esa cantidad se
+    /// postea como carga inicial. En el alta del artículo (modo en memoria) todavía no hay
+    /// nada posteado, así que sigue siendo editable hasta guardar.
+    /// </summary>
+    private bool EsAperturaEditable => EnMemoria || !form.Id.HasValue;
+
     private string PopupTitle => form.Id.HasValue ? "Editar existencias y ubicación" : "Agregar existencias y ubicación";
     private string PopupIcon => form.Id.HasValue ? "bi bi-pencil-square" : "bi bi-geo-alt";
     private string PopupIconWrapperClass => form.Id.HasValue
@@ -461,6 +513,7 @@
             Ubicacion4 = row.Ubicacion4,
             Ubicacion5 = row.Ubicacion5,
             Existencia = row.Existencia,
+            CostoApertura = row.CostoApertura,
             ExistenciaMinima = row.ExistenciaMinima,
             ExistenciaMaxima = row.ExistenciaMaxima,
             PuntoReorden = row.PuntoReorden,
@@ -489,6 +542,16 @@
         if (form.BodegaId <= 0)
         {
             Toast("Validación", "Seleccione una bodega.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        // Espejo de la regla del servidor: la existencia inicial se postea como carga
+        // inicial y una apertura a costo 0 corrompería el promedio ponderado.
+        if (EsAperturaEditable && form.Existencia > 0m && form.CostoApertura <= 0m)
+        {
+            Toast("Validación",
+                "Indique el costo de apertura de la existencia inicial. Si no lo conoce, deje la existencia en 0 y registre el ingreso con un ajuste.",
+                ToastRenderStyle.Warning);
             return;
         }
 
@@ -630,6 +693,16 @@
             confirmVisible = false;
             paraDeshabilitar = null;
         }
+    }
+
+    // ── Movimiento de inventario (Fase 4: el ajuste de una línea quedó deprecado) ─────
+    // El atajo re-apunta al documento de movimiento de almacén, con la bodega y el artículo
+    // precargados. La captura de existencia pasa por IMovimientoAlmacenService; el ajuste de
+    // una línea (alm_ajuste_inventario) ya no se captura desde aquí.
+    private void IrAAjustar(ArticuloUbicacionDto row)
+    {
+        if (EnMemoria || row.BodegaId <= 0 || !ArticuloId.HasValue) return;
+        Navigation.NavigateTo($"/almacen/movimientos/nuevo?bodega={row.BodegaId}&articulo={ArticuloId.Value}");
     }
 
     private async Task ReactivarAsync(ArticuloUbicacionDto row)

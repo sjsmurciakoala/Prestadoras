@@ -157,8 +157,10 @@
                     <ToolbarTemplate>
                         <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                             <span class="fw-bold">@kardex.Codigo — @kardex.Descripcion</span>
+                            <DxButton Text="Imprimir PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="ImprimirPdfAsync" CssClass="ms-auto me-1" />
                             <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
-                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="ms-auto me-1" />
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
                             <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
                                       RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-3" />
 
@@ -241,11 +243,42 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
+                        @* Documento origen: sin esta columna, una carga inicial y una entrada
+                           cualquiera se rotulan igual ("Entrada") y son indistinguibles. *@
+                        <DxGridDataColumn Caption="Documento" Width="130px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    @if (m.EsLineaDeCorte)
+                                    {
+                                        <span class="badge-mov mov-corte" title="Saldo inicial: desde aquí corre el saldo">CARGA INICIAL</span>
+                                    }
+                                    else if (!string.IsNullOrWhiteSpace(m.DocumentoTipo))
+                                    {
+                                        <span class="text-muted small">@m.DocumentoTipo</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="Histórico migrado de SIMAFI, no posteado por el motor">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
                         <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Saldo)" Caption="Saldo" Width="120px" TextAlignment="GridTextAlignment.Right">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
-                                    <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
+                                    @if (m.Saldo.HasValue)
+                                    {
+                                        <span class="text-dark fw-bold">@m.Saldo.Value.ToString("N2")</span>
+                                    }
+                                    else
+                                    {
+                                        @* Pre-corte: antes de la apertura no hay un saldo con
+                                           significado (el histórico SIMAFI no arranca de cero). *@
+                                        <span class="text-muted" title="Anterior a la carga inicial: histórico informativo">—</span>
+                                    }
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
@@ -472,6 +505,25 @@
         "202" => "mov-salida",
         _ => "mov-otro"
     };
+
+    private async Task ImprimirPdfAsync()
+    {
+        if (articuloSeleccionado is null)
+        {
+            return;
+        }
+
+        var filtro = new KardexFilterDto
+        {
+            ArticuloId = articuloSeleccionado.Id,
+            FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+            FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null,
+            TipoTransaccion = tipoSeleccionado?.Codigo,
+            BodegaId = bodegaSeleccionada?.Id
+        };
+
+        await JS.InvokeVoidAsync("open", KardexClient.GetPdfArticuloUrl(filtro), "_blank");
+    }
 
     private async Task ExportExcelAsync()
     {

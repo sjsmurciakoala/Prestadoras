@@ -1,0 +1,39 @@
+/* Sólo lo propio de esta pantalla: los colores de la insignia de estado de la O/C.
+   El resto del look (page-container, modern-card, grid-solicitudes, btn-icon…) lo hereda
+   de apc/wwwroot/css/siad-grid.css — no se duplica aquí. */
+
+.badge-estado-oc {
+    display: inline-block;
+    padding: 0.25rem 0.6rem;
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    line-height: 1.4;
+    white-space: nowrap;
+}
+
+.badge-estado-oc.estado-borrador {
+    background-color: rgba(255, 193, 7, 0.15);
+    color: #997404;
+}
+
+.badge-estado-oc.estado-aprobada {
+    background-color: rgba(25, 135, 84, 0.15);
+    color: #146c43;
+}
+
+.badge-estado-oc.estado-parcial {
+    background-color: rgba(13, 110, 253, 0.15);
+    color: #0a58ca;
+}
+
+.badge-estado-oc.estado-cerrada {
+    background-color: rgba(108, 117, 125, 0.18);
+    color: #495057;
+}
+
+.badge-estado-oc.estado-anulada {
+    background-color: rgba(220, 53, 69, 0.15);
+    color: #b02a37;
+    text-decoration: line-through;
+}

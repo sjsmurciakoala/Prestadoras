@@ -44,7 +44,11 @@ public class ArticuloDeleteGuardTests : IntegrationTestBase, IAsyncLifetime
             var company = new TestCurrentCompanyService(CompanyId);
             _context = new SiadDbContext(options, company);
             _context.Database.UseTransaction(Transaction);
-            _service = new ArticulosService(_context, company);
+
+            var rollup = new ArticuloRollupService(_context);
+            var motor = new InventarioPostingService(_context, company, rollup);
+            var carga = new CargaInicialInventarioService(_context, company, motor);
+            _service = new ArticulosService(_context, company, rollup, carga);
         }
     }
 
