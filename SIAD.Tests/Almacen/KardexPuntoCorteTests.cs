@@ -50,7 +50,7 @@ public class KardexPuntoCorteTests : IntegrationTestBase, IAsyncLifetime
 
             var rollup = new ArticuloRollupService(_context);
             var motor = new InventarioPostingService(_context, company, rollup);
-            _kardex = new KardexService(_context);
+            _kardex = new KardexService(_context, company);
             _carga = new CargaInicialInventarioService(_context, company, motor);
             _ajustes = new AjusteInventarioService(_context, company, motor);
         }

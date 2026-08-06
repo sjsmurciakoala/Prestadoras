@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Reports;
 using SIAD.Services.Almacen;
 using apc.Security;
 
@@ -29,6 +30,38 @@ public sealed class TrasladosController : ControllerBase
     {
         var doc = await _service.GetByIdAsync(id, ct);
         return doc is null ? NotFound() : Ok(doc);
+    }
+
+    /// <summary>Comprobante (vale) del traslado —el envío— en PDF, para imprimir/firmar.</summary>
+    [HttpGet("{id:int}/comprobante/pdf")]
+    public async Task<IActionResult> GetComprobantePdf(int id, CancellationToken ct)
+    {
+        var datos = await _service.GetDatosImpresionAsync(id, UsuarioActual, ct);
+        if (datos is null)
+            return NotFound(new { message = $"No se encontró el traslado {id}." });
+
+        using var report = new Rpt_Dev_Comprobante_Traslado(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=Traslado-{datos.Documento.Numero:00000}.pdf";
+        return File(stream.ToArray(), "application/pdf");
+    }
+
+    /// <summary>Comprobante de una recepción (tanda) del traslado en PDF —la contraparte que recibe destino—.</summary>
+    [HttpGet("{id:int}/recepciones/{recepcionId:int}/comprobante/pdf")]
+    public async Task<IActionResult> GetRecepcionComprobantePdf(int id, int recepcionId, CancellationToken ct)
+    {
+        var datos = await _service.GetDatosImpresionRecepcionAsync(id, recepcionId, UsuarioActual, ct);
+        if (datos is null)
+            return NotFound(new { message = $"No se encontró la recepción {recepcionId} del traslado {id}." });
+
+        using var report = new Rpt_Dev_Comprobante_Traslado_Recepcion(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=Traslado-{datos.Traslado.Numero:00000}-Recepcion-{recepcionId}.pdf";
+        return File(stream.ToArray(), "application/pdf");
     }
 
     /// <summary>Enviar (crear) el traslado. Con recepción o directo según <c>RequiereRecepcion</c>.</summary>

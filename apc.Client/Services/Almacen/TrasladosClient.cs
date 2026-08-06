@@ -14,6 +14,13 @@ public sealed class TrasladosClient
 
     public TrasladosClient(HttpClient http) => _http = http;
 
+    /// <summary>URL del comprobante (vale) del traslado —el envío— en PDF, para abrirlo en una pestaña nueva.</summary>
+    public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
+
+    /// <summary>URL del comprobante de una recepción del traslado en PDF.</summary>
+    public static string GetRecepcionComprobantePdfUrl(int id, int recepcionId)
+        => $"/{BaseUrl}/{id}/recepciones/{recepcionId}/comprobante/pdf";
+
     public async Task<List<TrasladoListItemDto>> GetAsync(TrasladoFilterDto? filtro = null, CancellationToken ct = default)
     {
         var f = filtro ?? new TrasladoFilterDto();

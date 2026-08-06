@@ -204,6 +204,60 @@ public sealed class TrasladoAlmacenService : ITrasladoAlmacenService
         };
     }
 
+    public async Task<TrasladoImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default)
+    {
+        var doc = await GetByIdAsync(id, ct);
+        if (doc is null) return null;
+
+        var empresa = await CargarEmpresaAsync(ct);
+        return new TrasladoImpresionDto
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = ClasificacionNormalizer.Usuario(impresoPor),
+            Documento = doc,
+            MontoEnLetras = doc.Total > 0m ? NumerosALetras.Convertir(doc.Total) : string.Empty
+        };
+    }
+
+    public async Task<TrasladoRecepcionImpresionDto?> GetDatosImpresionRecepcionAsync(
+        int id, int recepcionId, string impresoPor, CancellationToken ct = default)
+    {
+        var doc = await GetByIdAsync(id, ct);
+        if (doc is null) return null;
+        var rec = doc.Recepciones.FirstOrDefault(r => r.Id == recepcionId);
+        if (rec is null) return null;
+
+        var empresa = await CargarEmpresaAsync(ct);
+        var totalActo = rec.Lineas.Sum(l => l.Total);
+        return new TrasladoRecepcionImpresionDto
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = ClasificacionNormalizer.Usuario(impresoPor),
+            Traslado = doc,
+            Recepcion = rec,
+            MontoEnLetras = totalActo > 0m ? NumerosALetras.Convertir(totalActo) : string.Empty
+        };
+    }
+
+    private async Task<cfg_company?> CargarEmpresaAsync(CancellationToken ct)
+    {
+        var companyId = _company.GetCompanyId();
+        return await _context.cfg_companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // Envío (con recepción o directo)
     // ─────────────────────────────────────────────────────────────────────────

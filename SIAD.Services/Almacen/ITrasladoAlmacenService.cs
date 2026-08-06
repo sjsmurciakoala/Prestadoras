@@ -14,6 +14,12 @@ public interface ITrasladoAlmacenService
     Task<IReadOnlyList<TrasladoListItemDto>> GetAsync(TrasladoFilterDto? filtro, CancellationToken ct = default);
     Task<TrasladoDto?> GetByIdAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Datos para imprimir el comprobante (vale) del traslado —el envío—. Null si no existe.</summary>
+    Task<TrasladoImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default);
+
+    /// <summary>Datos para imprimir el comprobante de una recepción del traslado. Null si no existe el traslado o la recepción.</summary>
+    Task<TrasladoRecepcionImpresionDto?> GetDatosImpresionRecepcionAsync(int id, int recepcionId, string impresoPor, CancellationToken ct = default);
+
     /// <summary>
     /// Crea el traslado y postea la salida de origen de cada renglón, cargando el tránsito de
     /// destino. Si <see cref="TrasladoDto.RequiereRecepcion"/> es <c>false</c> (directo), encadena

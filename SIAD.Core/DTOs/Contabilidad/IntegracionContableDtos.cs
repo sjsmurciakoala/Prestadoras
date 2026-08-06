@@ -68,8 +68,9 @@ public static class IntegracionContableModulos
     public const string Notas = "NOTAS";
     public const string Miscelaneos = "MISCELANEOS";
     public const string Proveedores = "PROV";
+    public const string Almacen = "ALMACEN";
 
-    public static readonly string[] Todos = [Ventas, Caja, Bancos, Notas, Miscelaneos, Proveedores];
+    public static readonly string[] Todos = [Ventas, Caja, Bancos, Notas, Miscelaneos, Proveedores, Almacen];
 }
 
 /// <summary>Cabecera de configuración (con_integracion_config).</summary>

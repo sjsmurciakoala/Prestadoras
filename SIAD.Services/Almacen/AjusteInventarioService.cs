@@ -58,7 +58,7 @@ public sealed class AjusteInventarioService : IAjusteInventarioService
         // bloquearla con FOR UPDATE; esto es solo para fallar temprano con buen mensaje.
         var fila = await _context.alm_articulo_bodegas.AsNoTracking()
             .Where(u => u.articulo_id == dto.ArticuloId && u.bodega_id == dto.BodegaId)
-            .Select(u => new { u.id, u.activo })
+            .Select(u => new { u.id, u.activo, u.costo_promedio })
             .FirstOrDefaultAsync(ct)
             ?? throw new InvalidOperationException("El artículo no tiene ubicación en esa bodega.");
 
@@ -102,6 +102,31 @@ public sealed class AjusteInventarioService : IAjusteInventarioService
             DocumentoId = documento.id,
             Observacion = motivo
         }, user, ct);
+
+        // F1 — Integración contable: con el módulo ALMACEN activo, el ajuste de existencia
+        // (ENTRADA/SALIDA) genera su partida de doble entrada en ESTA misma transacción del
+        // kardex. La ENTRADA se asienta al costo de entrada; la SALIDA, al promedio vigente
+        // (que no cambia). El ajuste de VALOR se contabiliza aparte (necesita el costo anterior).
+        var fechaAsiento = dto.Fecha ?? DateOnly.FromDateTime(DateTime.Today);
+        if (clase is ClaseAjusteInventario.Entrada or ClaseAjusteInventario.Salida)
+        {
+            var costoAsiento = clase == ClaseAjusteInventario.Entrada
+                ? dto.CostoUnitario
+                : resultado.CostoPromedioResultante;
+            await AlmacenContabilidad.ContabilizarAjusteAsync(
+                _context, _company.GetCompanyId(), dto.ArticuloId, clase,
+                dto.Cantidad * costoAsiento, documento.id, $"AJ-{documento.id}",
+                fechaAsiento, motivo, usuario, ct);
+        }
+        else if (clase == ClaseAjusteInventario.Valor)
+        {
+            // El valor del inventario cambia en existencia × (costo_nuevo − costo_anterior).
+            // fila.costo_promedio es el costo ANTES del ajuste; en VALOR la existencia no cambia.
+            var delta = resultado.ExistenciaResultante * (dto.CostoUnitario - fila.costo_promedio);
+            await AlmacenContabilidad.ContabilizarAjusteValorAsync(
+                _context, _company.GetCompanyId(), dto.ArticuloId, delta, documento.id,
+                $"AJ-{documento.id}", fechaAsiento, motivo, usuario, ct);
+        }
 
         documento.posteado = true;
         await _context.SaveChangesAsync(ct);

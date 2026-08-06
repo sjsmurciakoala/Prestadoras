@@ -36,9 +36,10 @@ public class KardexBodegaTests : IntegrationTestBase, IAsyncLifetime
                 .UseNpgsql(Connection)
                 .Options;
 
-            _context = new SiadDbContext(options, new TestCurrentCompanyService(CompanyId));
+            var company = new TestCurrentCompanyService(CompanyId);
+            _context = new SiadDbContext(options, company);
             _context.Database.UseTransaction(Transaction);
-            _service = new KardexService(_context);
+            _service = new KardexService(_context, company);
         }
     }
 

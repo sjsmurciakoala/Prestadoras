@@ -55,3 +55,29 @@ public sealed class MovimientoImpresionDto : ComprobanteAlmacenImpresionBase
     /// <summary>Total del movimiento en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
     public string MontoEnLetras { get; set; } = string.Empty;
 }
+
+/// <summary>
+/// Datos de impresión del comprobante de ENVÍO de un traslado entre bodegas (directo o en tránsito):
+/// la mercadería que sale de la bodega origen hacia la destino. En el traslado con recepción este vale
+/// acompaña la salida; cada recepción en destino se respalda con <see cref="TrasladoRecepcionImpresionDto"/>.
+/// </summary>
+public sealed class TrasladoImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public TrasladoDto Documento { get; set; } = new();
+
+    /// <summary>Total del traslado en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Datos de impresión del comprobante de una RECEPCIÓN de traslado (la tanda que recibe la bodega
+/// destino, posiblemente parcial). Lleva el traslado como contexto y el acto de recepción concreto.
+/// </summary>
+public sealed class TrasladoRecepcionImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public TrasladoDto Traslado { get; set; } = new();
+    public TrasladoRecepcionDto Recepcion { get; set; } = new();
+
+    /// <summary>Total recibido en esta tanda, en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}

@@ -108,6 +108,8 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/<script>.sql
 | 27 | `2026-08-01_alm_tipo_movimiento.sql` | `alm_tipo_movimiento`: catálogo de tipos de movimiento de almacén + semilla de **los 12 tipos reales importados de `INV_TIPOSTRANSACC` de MERENDON** (2026-08-03) | Aditivo (1 tabla + índice) + ⚠️ **DELETE acotado** de la semilla genérica anterior + semilla idempotente · **con binario** · **independiente** | Sí |
 | 28 | `2026-08-03_alm_movimiento.sql` | Documento de movimiento de almacén: `alm_movimiento_hdr` + `alm_movimiento_dtl` + `alm_movimiento_correlativo` (entradas y salidas manuales, equivalente de `dlgTransaccionesGenericasINV`) | Aditivo (3 tablas + índices) + siembra del correlativo · **con binario** · **depende del paso 27** | Sí |
 | 29 | `2026-08-04_alm_traslado.sql` | Traslado entre bodegas (Fase 5): columnas de traslado en `alm_movimiento_hdr`/`_dtl`, 2 tablas nuevas `alm_traslado_recepcion`/`_dtl`, widening de 2 CHECK (estado→1/2/3/9; clase→+TRASLADO), CHECK `existencia_transito>=0` y semilla del tipo `TRF` | Aditivo (2 tablas + 6 columnas + 4 FK) + **widening de 2 CHECK** + semilla idempotente · **con binario** · **depende de los pasos 27 y 28** | Sí |
+| 30 | `2026-08-05_con_integracion_config_activo_almacen.sql` | Integración contable de almacén (F0): `con_integracion_config.activo_almacen` (bandera de activación por empresa; DEFAULT false = no postea) | Aditivo (columna) · **con binario** · **independiente** | Sí |
+| 31 | `2026-08-05_con_integracion_asiento_module_almacen.sql` | Integración contable de almacén (F0): amplía `ck_con_integracion_asiento_module` con `'ALMACEN'` (permite configurar el asiento del módulo por empresa) | Widening de CHECK · **con binario** · **independiente** | Sí |
 | — | `2026-07-16_backup_sp_obtener_cliente_saldo.sql` | **NO aplicar** — rollback del paso 6 | Respaldo | — |
 
 > **Casi sin dependencias cruzadas duras entre bloques:** salvo el paso 20, todas las FK
@@ -974,6 +976,65 @@ SELECT to_regclass('public.alm_traslado_recepcion')     AS rec,
 ```
 Verificación posterior: V1–V8 del propio script (incluye dos pruebas negativas — destino = origen y
 tránsito negativo — que deben fallar dentro de `ROLLBACK`).
+
+---
+
+### Paso 30 — Integración contable de almacén: bandera `activo_almacen` (F0) · con binario · independiente
+F0 de [docs/plans/2026-08-05-integracion-contable-almacen-diseno.md](../docs/plans/2026-08-05-integracion-contable-almacen-diseno.md).
+Agrega `con_integracion_config.activo_almacen` (boolean NOT NULL DEFAULT false): el flag por empresa que
+—junto con la fila de diario + tipo de partida en `con_integracion_asiento` (module `ALMACEN`)— habilita que
+los movimientos de almacén generen su partida por el mismo motor de integración que Ventas/Caja/Bancos
+(`sp_con_generar_comprobante_config` / `IntegracionContableConfigSql`).
+
+> **Aditivo e idempotente.** `ADD COLUMN IF NOT EXISTS`; DEFAULT `false` = comportamiento actual (el almacén
+> **NO** postea al mayor). No toca datos existentes. Rollback (`DROP COLUMN IF EXISTS`) comentado al final del
+> script. **Con binario**: el código de F0 (helper `IntegracionContableConfigSql`, entidad `con_integracion_config`
+> y la pantalla de Integración Contable) lee/escribe esta columna. **Independiente** del resto de la tanda.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-05_con_integracion_config_activo_almacen.sql
+```
+¿Ya aplicado?
+```sql
+SELECT 1 FROM information_schema.columns
+ WHERE table_schema='public' AND table_name='con_integracion_config'
+   AND column_name='activo_almacen';  -- 1 fila = aplicado
+```
+Verificación posterior:
+```sql
+SELECT column_name, data_type, column_default, is_nullable
+  FROM information_schema.columns
+ WHERE table_schema='public' AND table_name='con_integracion_config' AND column_name='activo_almacen';
+-- espera: boolean · default false · NOT NULL
+```
+
+---
+
+### Paso 31 — Integración contable de almacén: `module='ALMACEN'` en el CHECK del asiento (F0) · con binario · independiente
+F0 de [docs/plans/2026-08-05-integracion-contable-almacen-diseno.md](../docs/plans/2026-08-05-integracion-contable-almacen-diseno.md).
+Amplía `ck_con_integracion_asiento_module` para permitir `module='ALMACEN'`, de modo que cada empresa pueda
+configurar el diario + tipo de partida del módulo de almacén en `con_integracion_asiento` (lo que el motor
+`sp_con_generar_comprobante_config` exige para postear).
+
+> **Widening de un CHECK, idempotente y reversible.** El CHECK nuevo es **superconjunto** del actual (solo
+> agrega `'ALMACEN'`): ninguna fila existente lo viola, no hay `DELETE`/`TRUNCATE` ni pérdida de datos.
+> `DROP CONSTRAINT IF EXISTS` + `ADD`, seguro al re-correr. Rollback al final del script (exige que no haya
+> filas `module='ALMACEN'`). **Con binario**: `IntegracionContableModulos.Todos` y el `HasCheckConstraint` de
+> EF se amplían con `'ALMACEN'` en el mismo commit.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-05_con_integracion_asiento_module_almacen.sql
+```
+¿Ya aplicado?
+```sql
+SELECT pg_get_constraintdef(oid) LIKE '%ALMACEN%' AS aplicado
+  FROM pg_constraint WHERE conname='ck_con_integracion_asiento_module';  -- t = aplicado
+```
+Verificación posterior:
+```sql
+SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname='ck_con_integracion_asiento_module';
+-- espera: CHECK (... 'MISCELANEOS','PROV','ALMACEN' ...)
+```
 
 ---
 
