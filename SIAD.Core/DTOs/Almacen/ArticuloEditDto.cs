@@ -57,6 +57,15 @@ public sealed class ArticuloEditDto
     [Range(0, 99_999_999d, ErrorMessage = "El valor unitario no puede ser negativo.")]
     public decimal ValorUnitario { get; set; }
 
+    /// <summary>Costo promedio unitario del artículo (valor unitario).</summary>
+    public decimal CostoPromedio { get; set; }
+
+    /// <summary>Último costo de compra / entrada registrado en sus ubicaciones activas.</summary>
+    public decimal UltimoCosto { get; set; }
+
+    /// <summary>Valor total de inventario (existencia física × costo promedio).</summary>
+    public decimal ValorTotal { get; set; }
+
     /// <summary>
     /// Existencia física. En edición es el rollup (suma de bodegas) y se conserva.
     /// Al crear ya no se captura aquí: la existencia entra por bodega en <see cref="Ubicaciones"/>.

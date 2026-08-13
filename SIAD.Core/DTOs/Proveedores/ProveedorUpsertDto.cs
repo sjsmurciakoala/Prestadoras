@@ -32,5 +32,8 @@ public class ProveedorUpsertDto
 
     public List<ProveedorContactoDto> Contactos { get; set; } = new();
 
+    /// <summary>Término de pago habitual del proveedor (alm_termino_pago). NULL = usar el predeterminado global.</summary>
+    public int? TerminoPagoId { get; set; }
+
     public bool Activo { get; set; } = true;
 }

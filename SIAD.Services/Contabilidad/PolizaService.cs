@@ -150,16 +150,49 @@ public sealed class PolizaService : IPolizaService
 
     public async Task<PolizaConLineasDto> ObtenerAsync(long companyId, long polizaId, CancellationToken ct = default)
     {
-        var poliza = await _context.con_partida_hdrs
+        var poliza = await ConsultaConLineas(companyId)
+            .Where(x => x.poliza_id == polizaId)
+            .FirstOrDefaultAsync(ct)
+            ?? throw new InvalidOperationException($"Poliza {polizaId} no encontrada");
+
+        return Mapear(poliza);
+    }
+
+    public async Task<PolizaConLineasDto?> ObtenerPorDocumentoAsync(
+        long companyId, string module, string documentType, long documentId, CancellationToken ct = default)
+    {
+        var mod = (module ?? string.Empty).Trim().ToUpperInvariant();
+        var doc = (documentType ?? string.Empty).Trim().ToUpperInvariant();
+
+        var candidatas = await ConsultaConLineas(companyId)
+            .Where(x => x.module == mod && x.document_type == doc && x.document_id == documentId)
+            .ToListAsync(ct);
+
+        if (candidatas.Count == 0)
+        {
+            return null;
+        }
+
+        // Prefiere la partida POSTEADA (status=1); si el documento fue anulado y solo queda la
+        // revertida, imprime esa (el reporte la marca ANULADA). A igualdad, la más reciente.
+        var poliza = candidatas.FirstOrDefault(x => x.status == 1)
+            ?? candidatas.OrderByDescending(x => x.poliza_id).First();
+
+        return Mapear(poliza);
+    }
+
+    /// <summary>Consulta base de partidas del tenant con sus líneas (cuenta + centro de costo).</summary>
+    private IQueryable<con_partida_hdr> ConsultaConLineas(long companyId)
+        => _context.con_partida_hdrs
             .AsNoTracking()
             .Include(p => p.lineas)
             .ThenInclude(l => l.account)
             .Include(p => p.lineas)
             .ThenInclude(l => l.cost_center)
-            .Where(x => x.poliza_id == polizaId && x.company_id == companyId)
-            .FirstOrDefaultAsync(ct)
-            ?? throw new InvalidOperationException($"Poliza {polizaId} no encontrada");
+            .Where(x => x.company_id == companyId);
 
+    private static PolizaConLineasDto Mapear(con_partida_hdr poliza)
+    {
         var totalDebit = poliza.lineas?.Sum(x => x.debit_amount) ?? 0;
         var totalCredit = poliza.lineas?.Sum(x => x.credit_amount) ?? 0;
         var isBalanced = Math.Abs(totalDebit - totalCredit) < 0.01m;

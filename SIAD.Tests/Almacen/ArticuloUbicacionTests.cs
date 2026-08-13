@@ -42,6 +42,10 @@ public class ArticuloUbicacionTests : IntegrationTestBase, IAsyncLifetime
             var motor = new InventarioPostingService(_context, company, rollup);
             var carga = new CargaInicialInventarioService(_context, company, motor);
             _service = new ArticuloUbicacionService(_context, rollup, carga, motor);
+
+            // Prueba la MECÁNICA (rollup/ubicaciones/vaciado por ajuste), no la contabilidad: se apaga
+            // la integración para aislar el test del estado de los flags en la base de prueba.
+            await DesactivarIntegracionContableAsync();
         }
     }
 

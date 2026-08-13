@@ -247,6 +247,7 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "alm-traslados", Text = "Traslados entre bodegas", NavigateUrl = "/almacen/traslados", MatchPrefixes = ["/almacen/traslados"], IconCssClass = "bi bi-box-arrow-in-right" },
                         new SidebarNavItem { Id = "alm-ordenes-compra", Text = "Órdenes de compra", NavigateUrl = "/almacen/ordenes-compra", MatchPrefixes = ["/almacen/ordenes-compra"], IconCssClass = "bi bi-file-earmark-text" },
                         new SidebarNavItem { Id = "alm-recepciones", Text = "Recepción de compras", NavigateUrl = "/almacen/compras/recepciones", MatchPrefixes = ["/almacen/compras/recepciones"], IconCssClass = "bi bi-box-arrow-in-down" },
+                        new SidebarNavItem { Id = "alm-pagos-compra", Text = "Pagos a proveedores", NavigateUrl = "/almacen/compras/pagos", MatchPrefixes = ["/almacen/compras/pagos"], IconCssClass = "bi bi-cash-stack" },
                         new SidebarNavItem { Id = "alm-compras", Text = "Consulta de compras", NavigateUrl = "/almacen/compras", MatchPrefixes = ["/almacen/compras"], MatchExact = true, IconCssClass = "bi bi-cart-plus" },
                         new SidebarNavItem { Id = "alm-carga-inicial", Text = "Carga inicial", NavigateUrl = "/almacen/carga-inicial", MatchPrefixes = ["/almacen/carga-inicial"], IconCssClass = "bi bi-flag" },
                         new SidebarNavItem { Id = "alm-requisiciones", Text = "Requisiciones", NavigateUrl = "/almacen/requisiciones", MatchPrefixes = ["/almacen/requisiciones"], IconCssClass = "bi bi-clipboard-check" },
@@ -258,21 +259,27 @@ public static class SidebarNavigationDefinition
                     Id = "proveedores",
                     Text = "Proveedores",
                     IconCssClass = "bi bi-truck",
-                    NavigateUrl = "/proveedores",
-                    MatchPrefixes = ["/proveedores"]
+                    MatchPrefixes = ["/proveedores"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "prov-lista", Text = "Proveedores", NavigateUrl = "/proveedores", MatchPrefixes = ["/proveedores"], MatchExact = true, IconCssClass = "bi bi-truck" },
+                        new SidebarNavItem { Id = "prov-retenciones", Text = "Retenciones", NavigateUrl = "/proveedores/retenciones", MatchPrefixes = ["/proveedores/retenciones"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
+                        new SidebarNavItem { Id = "prov-retenciones-declaracion", Text = "Declaración de retenciones", NavigateUrl = "/proveedores/retenciones/declaracion", MatchPrefixes = ["/proveedores/retenciones/declaracion"], IconCssClass = "bi bi-file-earmark-spreadsheet" }
+                    ]
                 },
                 new SidebarNavItem
                 {
                     Id = "inv-catalogos",
                     Text = "Catálogos de almacén",
                     IconCssClass = "bi bi-tags",
-                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida", "/almacen/conceptos-movimiento", "/almacen/isv-compras"],
+                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida", "/almacen/conceptos-movimiento", "/almacen/isv-compras", "/almacen/terminos-pago"],
                     Children =
                     [
                         new SidebarNavItem { Id = "alm-tipos-articulo", Text = "Tipos de artículos", NavigateUrl = "/almacen/tipos-articulo", MatchPrefixes = ["/almacen/tipos-articulo"], IconCssClass = "bi bi-tags" },
                         new SidebarNavItem { Id = "alm-categorias-unidad", Text = "Categorías por unidad", NavigateUrl = "/almacen/categorias-unidad", MatchPrefixes = ["/almacen/categorias-unidad"], IconCssClass = "bi bi-diagram-2" },
                         new SidebarNavItem { Id = "alm-unidades", Text = "Unidades de medida", NavigateUrl = "/almacen/unidades-medida", MatchPrefixes = ["/almacen/unidades-medida"], IconCssClass = "bi bi-rulers" },
                         new SidebarNavItem { Id = "alm-conceptos-movimiento", Text = "Conceptos de movimiento", NavigateUrl = "/almacen/conceptos-movimiento", MatchPrefixes = ["/almacen/conceptos-movimiento"], IconCssClass = "bi bi-arrow-left-right" },
+                        new SidebarNavItem { Id = "alm-terminos-pago", Text = "Términos de pago", NavigateUrl = "/almacen/terminos-pago", MatchPrefixes = ["/almacen/terminos-pago"], IconCssClass = "bi bi-calendar-check" },
                         new SidebarNavItem { Id = "alm-isv-compras", Text = "ISV en compras", NavigateUrl = "/almacen/isv-compras", MatchPrefixes = ["/almacen/isv-compras"], IconCssClass = "bi bi-percent" }
                     ]
                 }
@@ -324,14 +331,15 @@ public static class SidebarNavigationDefinition
                     Id = "cfg-tarifario",
                     Text = "Tarifario",
                     IconCssClass = "bi bi-calculator",
-                    MatchPrefixes = ["/tarifario/cuadros", "/tarifario/maestro-servicios-v3", "/tarifario/desglose-abonos", "/mantenimientos/ajustes-tarifarios", "/mantenimientos/impuestos"],
+                    MatchPrefixes = ["/tarifario/cuadros", "/tarifario/maestro-servicios-v3", "/tarifario/desglose-abonos", "/mantenimientos/ajustes-tarifarios", "/mantenimientos/impuestos", "/mantenimientos/retenciones"],
                     Children =
                     [
                         new SidebarNavItem { Id = "tarv3-cuadros", Text = "Cuadros tarifarios", NavigateUrl = "/tarifario/cuadros", MatchPrefixes = ["/tarifario/cuadros"], IconCssClass = "bi bi-table" },
                         new SidebarNavItem { Id = "tarv3-maestro-servicios", Text = "Maestro servicios", NavigateUrl = "/tarifario/maestro-servicios-v3", MatchPrefixes = ["/tarifario/maestro-servicios-v3"], IconCssClass = "bi bi-list-ul" },
                         new SidebarNavItem { Id = "tarv3-desglose-abonos", Text = "Distribución de abonos", NavigateUrl = "/tarifario/desglose-abonos", MatchPrefixes = ["/tarifario/desglose-abonos"], IconCssClass = "bi bi-percent" },
                         new SidebarNavItem { Id = "mant-ajustes-tarifarios", Text = "Ajustes tarifarios", NavigateUrl = "/mantenimientos/ajustes-tarifarios", MatchPrefixes = ["/mantenimientos/ajustes-tarifarios"], IconCssClass = "bi bi-percent" },
-                        new SidebarNavItem { Id = "mant-impuestos", Text = "Impuestos", NavigateUrl = "/mantenimientos/impuestos", MatchPrefixes = ["/mantenimientos/impuestos"], IconCssClass = "bi bi-receipt" }
+                        new SidebarNavItem { Id = "mant-impuestos", Text = "Impuestos", NavigateUrl = "/mantenimientos/impuestos", MatchPrefixes = ["/mantenimientos/impuestos"], IconCssClass = "bi bi-receipt" },
+                        new SidebarNavItem { Id = "mant-retenciones", Text = "Retenciones", NavigateUrl = "/mantenimientos/retenciones", MatchPrefixes = ["/mantenimientos/retenciones"], IconCssClass = "bi bi-cash-coin" }
                     ]
                 },
                 new SidebarNavItem

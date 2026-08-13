@@ -55,11 +55,18 @@ public partial class alm_compra_hdr : ICompanyScopedEntity
     /// <summary>Bodega que RECIBE la mercadería. Obligatoria: toda cabecera es un documento nuevo.</summary>
     public int bodega_id { get; set; }
 
+    /// <summary>Snapshot del NOMBRE del término de pago (o texto libre del histórico). Ver <see cref="termino_pago_id"/>.</summary>
     public string? terminos_pago { get; set; }
+
+    /// <summary>Término de pago elegido del catálogo (alm_termino_pago). NULL = sin término / histórico.</summary>
+    public int? termino_pago_id { get; set; }
 
     /// <summary>Espejo de <c>alm_compra.tipo_compra</c> (contado / crédito).</summary>
     public short tipo_compra { get; set; }
     public int? plazo_dias { get; set; }
+
+    /// <summary>Condición de pago explícita: ver <see cref="SIAD.Core.Constants.CondicionPagoCompra"/> (1 Contado · 2 Crédito · 3 Prepagado).</summary>
+    public short condicion_pago { get; set; } = CondicionPagoCompra.Contado;
 
     /// <summary>HNL o USD. La 1ª entrega opera sólo en HNL.</summary>
     public string moneda { get; set; } = MonedaCompra.Lempira;
@@ -114,6 +121,9 @@ public partial class alm_compra_hdr : ICompanyScopedEntity
 
     /// <summary>Orden de compra recibida, si la recepción se hizo contra una O/C.</summary>
     public virtual alm_orden_compra? orden { get; set; }
+
+    /// <summary>Término de pago del catálogo, si se eligió uno.</summary>
+    public virtual alm_termino_pago? termino_pago_ref { get; set; }
 
     /// <summary>Renglones de la factura (líneas de alm_compra).</summary>
     public virtual ICollection<alm_compra> lineas { get; set; } = new List<alm_compra>();

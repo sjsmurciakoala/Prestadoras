@@ -13,6 +13,7 @@
 @inject RecepcionesCompraClient RecepcionesClient
 @inject OrdenesCompraClient OrdenesClient
 @inject BodegasClient BodegasClient
+@inject TerminosPagoClient TerminosClient
 @inject ProveedoresClient ProveedoresClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
@@ -92,6 +93,36 @@
                     Una orden de compra admite varias facturas: cada recepción descarga lo recibido y la orden
                     se cierra cuando ya no queda nada pendiente.
                 </div>
+
+                @if (!compraDirecta)
+                {
+                    <div class="row g-3 mt-1">
+                        <div class="col-12 col-md-6">
+                            <label class="form-label fw-semibold">Orden de compra <span class="text-danger">*</span></label>
+                            <DxComboBox Data="@ordenesRecibibles" Value="@ordenSeleccionada"
+                                        ValueChanged="@((OrdenCompraListItemDto? o) => OnOrdenChangedAsync(o))"
+                                        ValueExpression="@(() => ordenSeleccionada)"
+                                        TextFieldName="@nameof(OrdenCompraListItemDto.Display)"
+                                        FilteringMode="DataGridFilteringMode.Contains"
+                                        NullText="Seleccione la orden a recibir..."
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        CssClass="w-100" />
+                            <div class="form-text">
+                                Están todas las órdenes por recibir (aprobadas o parciales); si elige un proveedor,
+                                se acotan a las suyas.
+                            </div>
+                        </div>
+                        <div class="col-12 col-md-6 d-flex align-items-center">
+                            @if (ordenSeleccionada is not null && modelo.Detalles.Count == 0 && pendientes.Count == 0)
+                            {
+                                <div class="alert alert-warning py-2 mb-0 w-100" role="alert">
+                                    <i class="bi bi-exclamation-triangle me-1"></i>
+                                    Esta orden ya no tiene renglones pendientes de recibir.
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
             </div>
         }
 
@@ -175,7 +206,7 @@
                     }
                     else
                     {
-                        <DxDateEdit Date="@fechaFactura" DateChanged="@((DateTime? d) => fechaFactura = d)"
+                        <DxDateEdit Date="@fechaFactura" DateChanged="@((DateTime? d) => OnFechaFacturaChanged(d))"
                                     NullText="Opcional" CssClass="w-100" />
                     }
                 </div>
@@ -217,12 +248,32 @@
                     <label class="form-label fw-semibold">Términos de pago</label>
                     @if (EsConsulta)
                     {
-                        <div class="valor-solo-lectura">@(string.IsNullOrWhiteSpace(modelo.TerminosPago) ? "—" : modelo.TerminosPago)</div>
+                        <div class="valor-solo-lectura">
+                            @(string.IsNullOrWhiteSpace(modelo.TerminosPago) ? "—" : modelo.TerminosPago)
+                            <span class="ms-2 fw-semibold @CondicionColorClass">· @modelo.CondicionPagoDescripcion</span>
+                        </div>
                     }
                     else
                     {
-                        <DxTextBox @bind-Text="modelo.TerminosPago" MaxLength="100"
-                                   NullText="Ej. Crédito 30 días" CssClass="w-100" />
+                        <DxComboBox Data="@terminosPago" Value="@modelo.TerminoPagoId"
+                                    ValueChanged="@((int? v) => OnTerminoPagoChanged(v))"
+                                    ValueExpression="@(() => modelo.TerminoPagoId)"
+                                    ValueFieldName="@nameof(TerminoPagoLookupDto.Id)"
+                                    TextFieldName="@nameof(TerminoPagoLookupDto.Display)"
+                                    NullText="Contado / sin término..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="w-100" />
+                        <div class="form-text">
+                            Condición: <span class="fw-semibold @CondicionColorClass">@CondicionActualDesc</span>
+                            @if (terminosPago.Count == 0)
+                            {
+                                <text> · sin catálogo (configúrelo en Catálogos de almacén).</text>
+                            }
+                            else
+                            {
+                                <text> · sus días fijan el vencimiento.</text>
+                            }
+                        </div>
                     }
                 </div>
 
@@ -252,33 +303,21 @@
                 }
             </div>
 
-            @if (!EsConsulta && !compraDirecta)
-            {
-                <div class="row g-3 mt-1">
-                    <div class="col-12 col-md-5">
-                        <label class="form-label fw-semibold">Orden de compra <span class="text-danger">*</span></label>
-                        <DxComboBox Data="@ordenesRecibibles" Value="@ordenSeleccionada"
-                                    ValueChanged="@((OrdenCompraListItemDto? o) => OnOrdenChangedAsync(o))"
-                                    ValueExpression="@(() => ordenSeleccionada)"
-                                    TextFieldName="@nameof(OrdenCompraListItemDto.Display)"
-                                    FilteringMode="DataGridFilteringMode.Contains"
-                                    NullText="Seleccione la orden a recibir..."
-                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                    Enabled="@(!string.IsNullOrWhiteSpace(modelo.CodProveedor))"
-                                    CssClass="w-100" />
-                        <div class="form-text">Sólo aparecen las aprobadas o recibidas parcialmente.</div>
-                    </div>
-                    <div class="col-12 col-md-7 d-flex align-items-center">
-                        @if (ordenSeleccionada is not null && modelo.Detalles.Count == 0 && pendientes.Count == 0)
-                        {
-                            <div class="alert alert-warning py-2 mb-0 w-100" role="alert">
-                                <i class="bi bi-exclamation-triangle me-1"></i>
-                                Esta orden ya no tiene renglones pendientes de recibir.
-                            </div>
-                        }
-                    </div>
+            <div class="row g-3 mt-1">
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Observaciones</label>
+                    @if (EsConsulta)
+                    {
+                        <p class="text-muted mb-0">@(string.IsNullOrWhiteSpace(modelo.Observaciones) ? "Sin observaciones." : modelo.Observaciones)</p>
+                    }
+                    else
+                    {
+                        <DxMemo @bind-Text="modelo.Observaciones" Rows="3" MaxLength="1000"
+                                NullText="Notas de la recepción, faltantes, estado de la mercadería..."
+                                CssClass="w-100" />
+                    }
                 </div>
-            }
+            </div>
         </div>
 
         <!-- ── Renglones ─────────────────────────────────────────────────────── -->
@@ -291,7 +330,7 @@
                 </div>
             </div>
 
-            @if (!EsConsulta)
+            @if (!EsConsulta && compraDirecta)
             {
                 @if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
                 {
@@ -299,7 +338,7 @@
                         <i class="bi bi-info-circle me-1"></i>Elija primero el proveedor.
                     </div>
                 }
-                else if (compraDirecta)
+                else
                 {
                     <div class="buscador-articulo mb-3">
                         <DxComboBox Data="@articulosProveedor" @bind-Value="articuloSeleccionado"
@@ -424,26 +463,10 @@
             }
         </div>
 
-        <!-- ── Observaciones + totales ───────────────────────────────────────── -->
+        <!-- ── Totales ───────────────────────────────────────────────────────── -->
         <div class="row g-3">
-            <div class="col-12 col-lg-7">
-                <div class="modern-card h-100">
-                    <h6 class="seccion-titulo"><i class="bi bi-chat-left-text me-2"></i>Observaciones</h6>
-                    @if (EsConsulta)
-                    {
-                        <p class="text-muted mb-0">@(string.IsNullOrWhiteSpace(modelo.Observaciones) ? "Sin observaciones." : modelo.Observaciones)</p>
-                    }
-                    else
-                    {
-                        <DxMemo @bind-Text="modelo.Observaciones" Rows="4" MaxLength="1000"
-                                NullText="Notas de la recepción, faltantes, estado de la mercadería..."
-                                CssClass="w-100" />
-                    }
-                </div>
-            </div>
-
-            <div class="col-12 col-lg-5">
-                <div class="modern-card h-100">
+            <div class="col-12 col-lg-5 ms-lg-auto">
+                <div class="modern-card">
                     <h6 class="seccion-titulo"><i class="bi bi-receipt me-2"></i>Totales</h6>
 
                     <div class="totales-fila">
@@ -533,6 +556,8 @@
     {
         public string Codigo { get; set; } = string.Empty;
         public string Nombre { get; set; } = string.Empty;
+        /// <summary>Término de pago habitual del proveedor; se propone al elegirlo.</summary>
+        public int? TerminoPagoId { get; set; }
         public string Display => $"{Codigo} — {Nombre}";
     }
 
@@ -542,6 +567,7 @@
     private List<OrdenCompraArticuloLookupDto> articulosProveedor = new();
     private List<OrdenCompraListItemDto> ordenesRecibibles = new();
     private List<OrdenCompraPendienteDto> pendientes = new();
+    private List<TerminoPagoLookupDto> terminosPago = new();
 
     private OrdenCompraArticuloLookupDto? articuloSeleccionado;
     private OrdenCompraListItemDto? ordenSeleccionada;
@@ -616,7 +642,7 @@
         {
             var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
             proveedores = lista
-                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre, TerminoPagoId = p.TerminoPagoId })
                 .OrderBy(p => p.Codigo)
                 .ToList();
         }
@@ -638,9 +664,113 @@
         {
             bodegas = new List<BodegaLookupDto>();
         }
+
+        try
+        {
+            terminosPago = await TerminosClient.GetLookupAsync();
+            // Preseleccionar el término predeterminado (si hay) y proponer su vencimiento.
+            var def = terminosPago.FirstOrDefault(t => t.EsDefault);
+            if (def is not null)
+            {
+                modelo.TerminoPagoId = def.Id;
+                modelo.TerminosPago = def.Nombre;
+                fechaVencimiento = CalcularVencimiento(def);
+            }
+        }
+        catch
+        {
+            terminosPago = new List<TerminoPagoLookupDto>();
+        }
+
+        // Modo por defecto = con orden de compra: se ofrecen todas las órdenes por recibir,
+        // sin obligar a elegir el proveedor primero.
+        if (!compraDirecta)
+        {
+            await CargarOrdenesRecibiblesAsync();
+        }
     }
 
-    private void CambiarModo(bool directa)
+    /// <summary>
+    /// Carga el combo de órdenes recibibles: todas las que aún admiten recepción, o sólo las
+    /// del proveedor elegido si ya hay uno.
+    /// </summary>
+    private async Task CargarOrdenesRecibiblesAsync()
+    {
+        try
+        {
+            var codProveedor = string.IsNullOrWhiteSpace(modelo.CodProveedor) ? null : modelo.CodProveedor;
+            ordenesRecibibles = await RecepcionesClient.ObtenerOrdenesRecibiblesAsync(codProveedor);
+        }
+        catch
+        {
+            ordenesRecibibles = new List<OrdenCompraListItemDto>();
+        }
+    }
+
+    /// <summary>Trae los artículos que se le pueden comprar al proveedor (buscador de compra directa).</summary>
+    private async Task CargarArticulosProveedorAsync()
+    {
+        if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
+        {
+            articulosProveedor.Clear();
+            return;
+        }
+
+        try
+        {
+            articulosProveedor = await OrdenesClient.BuscarArticulosProveedorAsync(modelo.CodProveedor);
+        }
+        catch
+        {
+            articulosProveedor = new List<OrdenCompraArticuloLookupDto>();
+        }
+    }
+
+    private void OnTerminoPagoChanged(int? id)
+    {
+        modelo.TerminoPagoId = id;
+        var t = terminosPago.FirstOrDefault(x => x.Id == id);
+        modelo.TerminosPago = t?.Nombre;
+        if (t is not null)
+        {
+            fechaVencimiento = CalcularVencimiento(t);
+        }
+    }
+
+    private void OnFechaFacturaChanged(DateTime? valor)
+    {
+        fechaFactura = valor;
+        // Si ya hay término elegido, el vencimiento sigue a la fecha de la factura.
+        var t = terminosPago.FirstOrDefault(x => x.Id == modelo.TerminoPagoId);
+        if (t is not null)
+        {
+            fechaVencimiento = CalcularVencimiento(t);
+        }
+    }
+
+    /// <summary>Vencimiento propuesto: fecha de la factura (o de la transacción) + días del término.</summary>
+    private DateTime? CalcularVencimiento(TerminoPagoLookupDto termino)
+    {
+        var baseDate = fechaFactura ?? fecha ?? DateTime.Today;
+        return termino.Dias > 0 ? baseDate.AddDays(termino.Dias) : baseDate;
+    }
+
+    /// <summary>Condición de pago vigente: en consulta la de la factura; en captura, derivada del término.</summary>
+    private short CondicionActual
+    {
+        get
+        {
+            if (EsConsulta) return modelo.CondicionPago;
+            var t = terminosPago.FirstOrDefault(x => x.Id == modelo.TerminoPagoId);
+            return (t?.Dias ?? 0) > 0 ? CondicionPagoCompra.Credito : CondicionPagoCompra.Contado;
+        }
+    }
+
+    private string CondicionActualDesc => CondicionPagoCompra.Describir(CondicionActual);
+
+    private string CondicionColorClass => CondicionActual == CondicionPagoCompra.Credito ? "text-primary" : "text-success";
+
+    private async Task CambiarModo(bool directa)
     {
         if (compraDirecta == directa) return;
 
@@ -649,6 +779,13 @@
         pendientes.Clear();
         modelo.Detalles.Clear();
         modelo.OrdenCompraId = null;
+
+        // Al volver a "con orden de compra" se refresca el combo: todas las órdenes, o las del
+        // proveedor si ya hay uno elegido.
+        if (!directa)
+        {
+            await CargarOrdenesRecibiblesAsync();
+        }
     }
 
     private async Task OnProveedorChangedAsync(string? codigo)
@@ -661,31 +798,39 @@
         ordenSeleccionada = null;
         modelo.OrdenCompraId = null;
         pendientes.Clear();
-        articulosProveedor.Clear();
-        ordenesRecibibles.Clear();
 
-        if (string.IsNullOrWhiteSpace(modelo.CodProveedor))
-        {
-            return;
-        }
+        await CargarArticulosProveedorAsync();
 
-        try
-        {
-            articulosProveedor = await OrdenesClient.BuscarArticulosProveedorAsync(modelo.CodProveedor);
-        }
-        catch
-        {
-            articulosProveedor = new List<OrdenCompraArticuloLookupDto>();
-        }
+        // Si el proveedor tiene término de pago habitual, se propone (y recalcula el vencimiento).
+        AplicarTerminoDelProveedor();
 
-        try
+        // El combo de órdenes se acota al proveedor; si se quitó el proveedor, vuelve a listarlas
+        // todas. En compra directa el combo no interviene.
+        if (!compraDirecta)
         {
-            ordenesRecibibles = await RecepcionesClient.ObtenerOrdenesRecibiblesAsync(modelo.CodProveedor);
+            await CargarOrdenesRecibiblesAsync();
         }
-        catch
+        else
         {
-            ordenesRecibibles = new List<OrdenCompraListItemDto>();
+            ordenesRecibibles.Clear();
         }
+    }
+
+    /// <summary>
+    /// Propone el término de pago habitual del proveedor elegido (si lo tiene y sigue activo),
+    /// sobrescribiendo el predeterminado global y recalculando el vencimiento.
+    /// </summary>
+    private void AplicarTerminoDelProveedor()
+    {
+        var prov = proveedores.FirstOrDefault(p => p.Codigo == modelo.CodProveedor);
+        if (prov?.TerminoPagoId is not int terminoId) return;
+
+        var termino = terminosPago.FirstOrDefault(t => t.Id == terminoId);
+        if (termino is null) return;   // el término del proveedor está inactivo o fuera del catálogo
+
+        modelo.TerminoPagoId = termino.Id;
+        modelo.TerminosPago = termino.Nombre;
+        fechaVencimiento = CalcularVencimiento(termino);
     }
 
     private async Task OnOrdenChangedAsync(OrdenCompraListItemDto? orden)
@@ -696,6 +841,14 @@
         modelo.OrdenCompraId = orden?.Id;
 
         if (orden is null) return;
+
+        // La orden define el proveedor de la factura: si se eligió la orden sin haber fijado
+        // proveedor (o de otro distinto), la factura queda a nombre del proveedor de la orden.
+        if (!string.Equals(modelo.CodProveedor, orden.CodProveedor, StringComparison.Ordinal))
+        {
+            modelo.CodProveedor = orden.CodProveedor;
+            await CargarArticulosProveedorAsync();
+        }
 
         try
         {

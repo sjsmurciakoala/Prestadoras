@@ -17,6 +17,9 @@ public sealed class MovimientosAlmacenClient
     /// <summary>URL del comprobante del movimiento en PDF, para abrirlo en una pestaña nueva.</summary>
     public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
 
+    /// <summary>URL de la partida contable del movimiento en PDF (existe solo si el movimiento generó asiento).</summary>
+    public static string GetPartidaPdfUrl(int id) => $"/{BaseUrl}/{id}/partida/pdf";
+
     public async Task<List<MovimientoAlmacenListItemDto>> GetAsync(
         MovimientoAlmacenFilterDto? filtro = null, CancellationToken ct = default)
     {

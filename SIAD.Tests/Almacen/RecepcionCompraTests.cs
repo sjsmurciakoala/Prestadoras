@@ -64,8 +64,8 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
         _context.Database.UseTransaction(Transaction);
 
         _motor = new InventarioPostingService(_context, company, new ArticuloRollupService(_context));
-        _service = new RecepcionCompraService(_context, company, _motor);
-        _ordenes = new OrdenCompraService(_context, company);
+        _service = new RecepcionCompraService(_context, company, _motor, new TasaIsvArticuloResolver(_context));
+        _ordenes = new OrdenCompraService(_context, company, new TasaIsvArticuloResolver(_context));
 
         _codProveedor = await _context.prv_proveedores.AsNoTracking()
             .Where(p => p.company_id == CompanyId && (p.status == null || p.status == true))
@@ -90,6 +90,21 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
 
         await SembrarRelacionAsync(_articuloA, UpcA);
         await SembrarRelacionAsync(_articuloB, UpcB);
+
+        // Estos tests vigilan la MECÁNICA de la recepción (kardex, O/C, ISV), no la contabilidad.
+        // El asiento de la compra es del módulo COMPRAS (gated activo_compras); se apaga aquí, dentro
+        // de la transacción del test, para aislarlos. La contabilidad tiene sus propios tests en
+        // CompraCxpTests.
+        await ApagarIntegracionContableAsync();
+    }
+
+    private async Task ApagarIntegracionContableAsync()
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = "UPDATE public.con_integracion_config SET activo_compras = false WHERE company_id = @c;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        await cmd.ExecuteNonQueryAsync();
     }
 
     public new Task DisposeAsync()
@@ -652,6 +667,83 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
     }
 
     // ── Apoyo ────────────────────────────────────────────────────────────────
+
+    // ── Cuenta por pagar (Fase 1) ─────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task Crear_GeneraLaCuentaPorPagar_Contado()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var r = await _service!.CrearAsync(NuevaFactura(cantidad: 10m, costo: 25m), "tester");
+
+        var cxp = await _context!.alm_compra_cxps.AsNoTracking().FirstAsync(c => c.compra_hdr_id == r.Id);
+        Assert.Equal(r.Total, cxp.monto);
+        Assert.Equal(r.Total, cxp.saldo);
+        Assert.Equal(EstadoCompraCxp.Pendiente, cxp.estado_id);
+        Assert.Equal(CondicionPagoCompra.Contado, cxp.condicion_pago);
+        Assert.Equal(_codProveedor, cxp.cod_proveedor);
+        // Contado sin término: vence en la fecha de la factura.
+        Assert.Equal(cxp.fecha, cxp.fecha_vencimiento);
+    }
+
+    [SkippableFact]
+    public async Task Crear_ConTerminoCredito_LaCxpEsCreditoYVenceSegunLosDias()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var termino = new alm_termino_pago { nombre = "TEST-CREDITO-30", dias = 30, activo = true };
+        _context!.alm_termino_pagos.Add(termino);
+        await _context.SaveChangesAsync();
+
+        var dto = NuevaFactura(cantidad: 4m, costo: 50m);
+        dto.TerminoPagoId = termino.id;
+
+        var r = await _service!.CrearAsync(dto, "tester");
+
+        var cxp = await _context.alm_compra_cxps.AsNoTracking().FirstAsync(c => c.compra_hdr_id == r.Id);
+        Assert.Equal(CondicionPagoCompra.Credito, cxp.condicion_pago);
+        Assert.Equal(cxp.fecha.AddDays(30), cxp.fecha_vencimiento);
+    }
+
+    [SkippableFact]
+    public async Task Anular_SinPagos_AnulaLaCuentaPorPagar()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var r = await _service!.CrearAsync(NuevaFactura(cantidad: 10m, costo: 25m), "tester");
+        Assert.True(await _service.AnularAsync(r.Id, "prueba", "tester"));
+
+        var cxp = await _context!.alm_compra_cxps.AsNoTracking().FirstAsync(c => c.compra_hdr_id == r.Id);
+        Assert.Equal(EstadoCompraCxp.Anulada, cxp.estado_id);
+        Assert.Equal(0m, cxp.saldo);
+    }
+
+    [SkippableFact]
+    public async Task Anular_ConPagoAplicado_Rechaza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var r = await _service!.CrearAsync(NuevaFactura(cantidad: 10m, costo: 25m), "tester");
+        var cxp = await _context!.alm_compra_cxps.FirstAsync(c => c.compra_hdr_id == r.Id);
+
+        // Un abono vigente sobre la CxP: anular la factura debe frenarse.
+        _context.alm_compra_cxp_abonos.Add(new alm_compra_cxp_abono
+        {
+            cxp_id = cxp.id,
+            numero_abono = 1,
+            fecha = DateOnly.FromDateTime(DateTime.Today),
+            monto = 50m,
+            estado = "V"
+        });
+        cxp.saldo = cxp.monto - 50m;
+        cxp.estado_id = EstadoCompraCxp.Parcial;
+        await _context.SaveChangesAsync();
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.AnularAsync(r.Id, null, "tester"));
+        Assert.Contains("pagos aplicados", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
 
     private RecepcionCompraDto NuevaFactura(
         decimal cantidad = 10m, decimal costo = 25m, string? sar = null) => new()

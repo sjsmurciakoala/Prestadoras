@@ -26,6 +26,7 @@ public partial class SiadDbContext
     public virtual DbSet<af_activo_fijo_depreciacion> af_activo_fijo_depreciacions { get; set; } = null!;
     public virtual DbSet<alm_unidad_medida> alm_unidad_medidas { get; set; } = null!;
     public virtual DbSet<alm_categoria_unidad> alm_categoria_unidads { get; set; } = null!;
+    public virtual DbSet<alm_termino_pago> alm_termino_pagos { get; set; } = null!;
     public virtual DbSet<alm_tipo_articulo> alm_tipo_articulos { get; set; } = null!;
     public virtual DbSet<alm_grupo> alm_grupos { get; set; } = null!;
     public virtual DbSet<alm_bodega> alm_bodegas { get; set; } = null!;
@@ -36,6 +37,8 @@ public partial class SiadDbContext
     public virtual DbSet<alm_orden_compra_correlativo> alm_orden_compra_correlativos { get; set; } = null!;
     public virtual DbSet<alm_compra_hdr> alm_compra_hdrs { get; set; } = null!;
     public virtual DbSet<alm_compra_correlativo> alm_compra_correlativos { get; set; } = null!;
+    public virtual DbSet<alm_compra_cxp> alm_compra_cxps { get; set; } = null!;
+    public virtual DbSet<alm_compra_cxp_abono> alm_compra_cxp_abonos { get; set; } = null!;
     public virtual DbSet<alm_config_inventario> alm_config_inventarios { get; set; } = null!;
     public virtual DbSet<alm_ajuste_inventario> alm_ajuste_inventarios { get; set; } = null!;
     public virtual DbSet<alm_tipo_movimiento> alm_tipo_movimientos { get; set; } = null!;
@@ -780,6 +783,24 @@ public partial class SiadDbContext
             entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
         });
 
+        modelBuilder.Entity<alm_termino_pago>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_termino_pago_pkey");
+            entity.ToTable("alm_termino_pago", "public");
+            entity.HasIndex(e => new { e.company_id, e.nombre }, "uq_alm_termino_pago_company_nombre").IsUnique();
+            entity.HasIndex(e => e.company_id, "ix_alm_termino_pago_company");
+            // A lo sumo un término predeterminado por empresa.
+            entity.HasIndex(e => e.company_id, "uq_alm_termino_pago_default").IsUnique().HasFilter("es_default");
+            entity.Property(e => e.nombre).HasMaxLength(60);
+            entity.Property(e => e.dias).HasDefaultValue(0);
+            entity.Property(e => e.es_default).HasDefaultValue(false);
+            entity.Property(e => e.activo).HasDefaultValue(true);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+        });
+
         modelBuilder.Entity<alm_tipo_articulo>(entity =>
         {
             entity.HasKey(e => e.id).HasName("alm_tipo_articulo_pkey");
@@ -995,6 +1016,7 @@ public partial class SiadDbContext
             entity.HasIndex(e => new { e.company_id, e.fecha }, "ix_alm_compra_hdr_fecha");
             entity.HasIndex(e => new { e.company_id, e.orden_compra_id }, "ix_alm_compra_hdr_oc");
             entity.HasIndex(e => e.bodega_id, "ix_alm_compra_hdr_bodega");
+            entity.HasIndex(e => e.termino_pago_id, "ix_alm_compra_hdr_termino_pago");
             entity.HasIndex(e => new { e.company_id, e.numero }, "uq_alm_compra_hdr_numero").IsUnique();
             // Clave alterna por tenant: respaldo de la FK compuesta desde alm_compra (las líneas).
             entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_compra_hdr_tenant").IsUnique();
@@ -1017,6 +1039,7 @@ public partial class SiadDbContext
             entity.Property(e => e.cai).HasMaxLength(50);
             entity.Property(e => e.terminos_pago).HasMaxLength(100);
             entity.Property(e => e.tipo_compra).HasDefaultValue((short)0);
+            entity.Property(e => e.condicion_pago).HasDefaultValue(CondicionPagoCompra.Contado);
             entity.Property(e => e.moneda).HasMaxLength(3).HasDefaultValue(MonedaCompra.Lempira);
             entity.Property(e => e.tasa_cambio).HasPrecision(14, 6).HasDefaultValue(1m);
             entity.Property(e => e.consumo_interno).HasDefaultValue(false);
@@ -1041,8 +1064,66 @@ public partial class SiadDbContext
             entity.HasOne(e => e.orden).WithMany()
                 .HasForeignKey(e => e.orden_compra_id)
                 .OnDelete(DeleteBehavior.Restrict);
+            entity.HasOne(e => e.termino_pago_ref).WithMany()
+                .HasForeignKey(e => e.termino_pago_id)
+                .OnDelete(DeleteBehavior.SetNull);
             entity.HasMany(e => e.lineas).WithOne(l => l.cabecera)
                 .HasForeignKey(l => l.compra_hdr_id)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<alm_compra_cxp>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_compra_cxp_pkey");
+            entity.ToTable("alm_compra_cxp", "public");
+            entity.HasIndex(e => new { e.company_id, e.compra_hdr_id }, "uq_alm_compra_cxp_factura").IsUnique();
+            entity.HasIndex(e => new { e.company_id, e.id }, "uq_alm_compra_cxp_tenant").IsUnique();
+            entity.HasIndex(e => e.company_id, "ix_alm_compra_cxp_company");
+            entity.HasIndex(e => new { e.company_id, e.cod_proveedor }, "ix_alm_compra_cxp_proveedor");
+            entity.HasIndex(e => new { e.company_id, e.fecha_vencimiento }, "ix_alm_compra_cxp_vencimiento");
+            entity.HasIndex(e => new { e.company_id, e.estado_id }, "ix_alm_compra_cxp_estado");
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.fecha_vencimiento).HasColumnType("date");
+            entity.Property(e => e.cod_proveedor).HasMaxLength(20);
+            entity.Property(e => e.proveedor).HasMaxLength(100);
+            entity.Property(e => e.numero_factura_sar).HasMaxLength(30);
+            entity.Property(e => e.condicion_pago).HasDefaultValue(CondicionPagoCompra.Contado);
+            entity.Property(e => e.monto).HasPrecision(14, 2);
+            entity.Property(e => e.saldo).HasPrecision(14, 2);
+            entity.Property(e => e.estado_id).HasDefaultValue(EstadoCompraCxp.Pendiente);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
+
+            entity.HasOne(e => e.compra).WithMany()
+                .HasForeignKey(e => e.compra_hdr_id)
+                .OnDelete(DeleteBehavior.Restrict);
+        });
+
+        modelBuilder.Entity<alm_compra_cxp_abono>(entity =>
+        {
+            entity.HasKey(e => e.id).HasName("alm_compra_cxp_abono_pkey");
+            entity.ToTable("alm_compra_cxp_abono", "public");
+            entity.HasIndex(e => new { e.company_id, e.cxp_id, e.numero_abono }, "uq_alm_compra_cxp_abono_num").IsUnique();
+            entity.HasIndex(e => e.company_id, "ix_alm_compra_cxp_abono_company");
+            entity.HasIndex(e => new { e.company_id, e.cxp_id }, "ix_alm_compra_cxp_abono_cxp");
+
+            entity.Property(e => e.fecha).HasColumnType("date");
+            entity.Property(e => e.monto).HasPrecision(14, 2);
+            entity.Property(e => e.metodo_pago).HasMaxLength(20);
+            entity.Property(e => e.num_cheque).HasMaxLength(20);
+            entity.Property(e => e.estado).HasMaxLength(1).HasDefaultValue("V");
+            entity.Property(e => e.motivo_anulacion).HasMaxLength(300);
+            entity.Property(e => e.observaciones).HasMaxLength(300);
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuarioanulacion).HasMaxLength(100);
+            entity.Property(e => e.fechaanulacion).HasColumnType("timestamp without time zone");
+
+            entity.HasOne(e => e.cxp).WithMany(c => c.abonos)
+                .HasForeignKey(e => e.cxp_id)
                 .OnDelete(DeleteBehavior.Restrict);
         });
 

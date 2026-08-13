@@ -29,6 +29,9 @@ namespace SIAD.Services.Almacen;
 /// </summary>
 internal static class AlmacenContabilidad
 {
+    /// <summary>Tipo de documento del asiento de un movimiento de almacén (idempotencia por documento).</summary>
+    internal const string DocTypeMovimiento = "MOVIMIENTO";
+
     /// <summary>
     /// Contabiliza un ajuste de EXISTENCIA (ENTRADA / SALIDA) si el módulo ALMACEN está activo.
     /// ENTRADA sube el inventario (Debe inventario / Haber ajustes); SALIDA lo baja (al revés).
@@ -142,5 +145,116 @@ internal static class AlmacenContabilidad
 
         return accountId ?? throw new InvalidOperationException(
             $"La cuenta de {rol} '{codigo}' no existe en el plan de cuentas o no permite movimiento.");
+    }
+
+    /// <summary>
+    /// Contabiliza un DOCUMENTO de movimiento de almacén completo como UNA sola partida (a
+    /// diferencia del ajuste, que es de un artículo): agrupa las líneas Debe/Haber por cuenta,
+    /// de modo que un movimiento con varios renglones deja un único asiento —imprimible como
+    /// "la partida del movimiento"—. Solo postea si el módulo ALMACEN está activo. Devuelve el
+    /// <c>poliza_id</c>, o <c>null</c> si el módulo está inactivo, la partida quedó encolada
+    /// (sin período) o ningún renglón tenía valor contable.
+    /// <para>
+    /// <paramref name="clase"/> fija la dirección: ENTRADA sube el inventario (Debe inventario /
+    /// Haber ajustes), SALIDA lo baja (al revés) y VALOR la decide el signo de cada
+    /// <c>Valor</c> (delta): positivo sube, negativo baja. En ENTRADA/SALIDA <c>Valor</c> es el
+    /// monto (positivo) del renglón; el llamador lo pasa ya redondeado a 2 decimales, así que
+    /// agrupar y netear por cuenta no desbalancea la partida frente al control del SP.
+    /// </para>
+    /// </summary>
+    internal static async Task<long?> ContabilizarMovimientoAsync(
+        SiadDbContext context, long companyId, string clase,
+        IReadOnlyList<(int ArticuloId, decimal Valor)> renglones,
+        long documentoId, string documentoNumero, DateOnly fecha,
+        string descripcion, string usuario, CancellationToken ct)
+    {
+        var conn = context.Database.GetDbConnection();
+        var tx = context.Database.CurrentTransaction?.GetDbTransaction();
+
+        var config = await IntegracionContableConfigSql.ObtenerConfigAsync(conn, companyId, tx, ct);
+        if (config is null || !config.ActivoAlmacen)
+        {
+            return null;
+        }
+
+        // Debe/Haber acumulado por cuenta (una cuenta que aparezca en varios renglones se suma).
+        var porCuenta = new Dictionary<long, (decimal Debe, decimal Haber)>();
+
+        foreach (var (articuloId, valor) in renglones)
+        {
+            if (valor == 0m)
+            {
+                continue;
+            }
+
+            var cuentas = await (
+                from a in context.alm_articulos.AsNoTracking()
+                join t in context.alm_tipo_articulos.AsNoTracking() on a.tipo_articulo_id equals t.id
+                where a.id == articuloId
+                select new { t.cuenta_inventario, t.cuenta_ajustes }).FirstOrDefaultAsync(ct)
+                ?? throw new InvalidOperationException(
+                    "El artículo no tiene un tipo con cuentas contables: configure el tipo antes de contabilizar el movimiento.");
+
+            var ctaInventario = await ResolverCuentaAsync(context, companyId, cuentas.cuenta_inventario, "inventario", ct);
+            var ctaAjustes = await ResolverCuentaAsync(context, companyId, cuentas.cuenta_ajustes, "ajustes de inventario", ct);
+
+            var inventarioSube = clase switch
+            {
+                ClaseMovimientoInventario.Entrada => true,
+                ClaseMovimientoInventario.Salida => false,
+                ClaseMovimientoInventario.Valor => valor > 0m,
+                _ => throw new InvalidOperationException(
+                    $"La clase '{clase}' no se puede contabilizar. Válidas: ENTRADA, SALIDA, VALOR.")
+            };
+
+            var monto = Math.Abs(valor);
+            var (ctaDebe, ctaHaber) = inventarioSube ? (ctaInventario, ctaAjustes) : (ctaAjustes, ctaInventario);
+
+            Acumular(porCuenta, ctaDebe, monto, 0m);
+            Acumular(porCuenta, ctaHaber, 0m, monto);
+        }
+
+        // Netea por cuenta (una cuenta que quede con Debe y Haber colapsa a su diferencia) y arma
+        // las líneas ordenadas por cuenta. Si todo se anula entre sí (p. ej. inventario y ajustes
+        // resuelven a la misma cuenta) quedan menos de 2 líneas: no hay asiento que valga, se omite.
+        var lineas = new List<IntegracionContableConfigSql.ComprobanteLinea>();
+        foreach (var kv in porCuenta.OrderBy(k => k.Key))
+        {
+            var debe = Math.Round(kv.Value.Debe, 2, MidpointRounding.AwayFromZero);
+            var haber = Math.Round(kv.Value.Haber, 2, MidpointRounding.AwayFromZero);
+            var debeNeto = debe > haber ? debe - haber : 0m;
+            var haberNeto = haber > debe ? haber - debe : 0m;
+            if (debeNeto == 0m && haberNeto == 0m)
+            {
+                continue;
+            }
+
+            lineas.Add(new IntegracionContableConfigSql.ComprobanteLinea(kv.Key, debeNeto, haberNeto, descripcion));
+        }
+
+        if (lineas.Count < 2)
+        {
+            return null;
+        }
+
+        return await IntegracionContableConfigSql.GenerarComprobanteAsync(
+            conn, companyId, IntegracionContableModulos.Almacen, DocTypeMovimiento, documentoId,
+            documentoNumero, fecha, descripcion, usuario, lineas, tx, ct);
+    }
+
+    /// <summary>
+    /// Revierte la partida del documento de movimiento (docType <c>MOVIMIENTO</c>) y descarta su
+    /// pendiente viva si estaba encolada. No-op (devuelve null) si el módulo estaba inactivo al
+    /// crearlo y por tanto no hay partida que revertir.
+    /// </summary>
+    internal static Task<long?> RevertirMovimientoAsync(
+        SiadDbContext context, long companyId, long documentoId, string usuario, CancellationToken ct)
+        => RevertirAsync(context, companyId, DocTypeMovimiento, documentoId, usuario, ct);
+
+    private static void Acumular(
+        Dictionary<long, (decimal Debe, decimal Haber)> porCuenta, long cuenta, decimal debe, decimal haber)
+    {
+        var actual = porCuenta.GetValueOrDefault(cuenta);
+        porCuenta[cuenta] = (actual.Debe + debe, actual.Haber + haber);
     }
 }

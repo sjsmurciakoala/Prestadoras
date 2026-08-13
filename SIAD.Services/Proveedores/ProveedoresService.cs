@@ -165,7 +165,8 @@ public class ProveedoresService : IProveedoresService
                     .Where(t => t.cod_tipoproveedor == p.cod_tipoproveedor)
                     .Select(t => t.nombre)
                     .FirstOrDefault(),
-                p.cod_tipoproveedor))
+                p.cod_tipoproveedor,
+                p.termino_pago_id))
             .ToListAsync(cancellationToken);
     }
 
@@ -210,7 +211,8 @@ public class ProveedoresService : IProveedoresService
                 p.saldo_act_dolares,
                 p.fecha_creacion,
                 p.fecha_modificacion,
-                p.status
+                p.status,
+                p.termino_pago_id
             })
             .FirstOrDefaultAsync(cancellationToken);
 
@@ -224,6 +226,16 @@ public class ProveedoresService : IProveedoresService
             .Where(t => t.cod_tipoproveedor == proveedor.cod_tipoproveedor)
             .Select(t => t.nombre)
             .FirstOrDefaultAsync(cancellationToken);
+
+        string? terminoPagoNombre = null;
+        if (proveedor.termino_pago_id.HasValue)
+        {
+            terminoPagoNombre = await _context.alm_termino_pagos
+                .AsNoTracking()
+                .Where(t => t.id == proveedor.termino_pago_id.Value)
+                .Select(t => t.nombre)
+                .FirstOrDefaultAsync(cancellationToken);
+        }
 
         var cuentasBancarias = await LoadCuentasBancariasAsync(codigoNormalizado, cancellationToken);
         var contactos = await LoadContactosAsync(codigoNormalizado, cancellationToken);
@@ -252,7 +264,9 @@ public class ProveedoresService : IProveedoresService
             proveedor.saldo_act_dolares,
             proveedor.fecha_creacion,
             proveedor.fecha_modificacion,
-            proveedor.status == true);
+            proveedor.status == true,
+            proveedor.termino_pago_id,
+            terminoPagoNombre);
     }
 
     public async Task<IReadOnlyList<ProveedorTipoLookupDto>> GetTiposAsync(CancellationToken cancellationToken = default)
@@ -576,6 +590,15 @@ public class ProveedoresService : IProveedoresService
         await SyncBancosCatalogoAsync(cuentasBancarias, user, cancellationToken);
         await SyncCuentasBancariasAsync(codigo, cuentasBancarias, user, cancellationToken);
         await SyncContactosAsync(codigo, contactos, user, cancellationToken);
+
+        // Término de pago del proveedor (columna nueva; se fija aparte del INSERT legacy posicional).
+        if (dto.TerminoPagoId.HasValue)
+        {
+            await _context.Database.ExecuteSqlRawAsync(
+                "UPDATE public.prv_proveedores SET termino_pago_id = {1} WHERE cod_proveedor = {0} AND company_id = {2}",
+                new object[] { codigo, dto.TerminoPagoId.Value, companyId });
+        }
+
         await tx.CommitAsync(cancellationToken);
 
         return codigo;
@@ -718,6 +741,12 @@ public class ProveedoresService : IProveedoresService
         await SyncBancosCatalogoAsync(cuentasBancarias, user, cancellationToken);
         await SyncCuentasBancariasAsync(codigoNormalizado, cuentasBancarias, user, cancellationToken);
         await SyncContactosAsync(codigoNormalizado, contactos, user, cancellationToken);
+
+        // Término de pago del proveedor (columna nueva; se fija o se limpia según lo enviado).
+        await _context.Database.ExecuteSqlRawAsync(
+            "UPDATE public.prv_proveedores SET termino_pago_id = {1} WHERE cod_proveedor = {0}",
+            new object[] { codigoNormalizado, dto.TerminoPagoId.HasValue ? (object)dto.TerminoPagoId.Value : DBNull.Value });
+
         await tx.CommitAsync(cancellationToken);
     }
 

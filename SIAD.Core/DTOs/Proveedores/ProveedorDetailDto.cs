@@ -27,4 +27,6 @@ public record ProveedorDetailDto(
     double? SaldoActualDolares,
     DateTime FechaCreacion,
     DateTime? FechaModificacion,
-    bool Activo);
+    bool Activo,
+    int? TerminoPagoId = null,
+    string? TerminoPago = null);

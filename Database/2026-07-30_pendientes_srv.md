@@ -155,6 +155,457 @@ SELECT to_regclass('public.cfg_impuesto_tasa') AS existe;   -- NULL = falta
 > Las cifras de `libretas_globales` son las **del mirror**. En el SRV pueden diferir:
 > **medilas antes de aplicar** con las consultas de conteo del propio script.
 
+### 3.4 Retenciones a proveedores — Fase F1 (iniciativa nueva, 2026-08-06)
+
+Primer script de la iniciativa de retenciones a proveedores (rama
+`feat/almacen-integracion-contable`). **Aditivo idempotente, bajo riesgo:** crea tres tablas
+nuevas y **no toca ninguna existente** (sin `DROP`/`ALTER`/`TRUNCATE`).
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-06_cfg_retenciones.sql` | `cfg_retencion` + `cfg_retencion_tasa` (catálogo GLOBAL, con vigencia y EXCLUDE gist) + `prv_retencion_cuenta` (cuenta del pasivo por empresa) + semilla (ISR 12.5% y 1% con tasa; ISV retenido **solo concepto, sin tasa** — pendiente D2, confirmar % con SAR) | Aditivo idempotente (`CREATE … IF NOT EXISTS`, `INSERT … ON CONFLICT` / `WHERE NOT EXISTS`) — **re-ejecutable** | **sí (2026-08-06)** | **pendiente** |
+
+- **Dependencias:** solo tablas base ya en producción — `cfg_company(company_id)` y
+  `con_plan_cuentas(account_id)` — más la extensión `btree_gist` (ya presente por `cfg_impuestos`).
+  **No** depende de la tanda de almacén ni asume ningún `company_id` (la tabla tenant no se siembra).
+- **Con binario:** la pantalla `/mantenimientos/retenciones` y su API (`api/retenciones`) leen estas
+  tablas; aplicar el SQL en la misma ventana que el despliegue del portal de la iniciativa.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-06_cfg_retenciones.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT to_regclass('public.cfg_retencion')        AS concepto,       -- NULL = falta
+       to_regclass('public.cfg_retencion_tasa')   AS tasa,
+       to_regclass('public.prv_retencion_cuenta') AS cuenta_empresa;
+```
+
+Verificación (ISV-RET debe salir SIN tasa):
+
+```sql
+SELECT r.codigo, r.base_calculo, r.tipo_impuesto, t.porcentaje, t.vigencia_desde
+FROM cfg_retencion r LEFT JOIN cfg_retencion_tasa t ON t.retencion_id = r.id
+ORDER BY r.codigo;   -- ISR-PROV 1.00 | ISR-SERV 12.50 | ISV-RET (sin tasa)
+```
+
+### 3.5 Retenciones a proveedores — Fase F0 (posteo al mayor, 2026-08-07)
+
+Segundo script de la iniciativa de retenciones (rama `feat/almacen-integracion-contable`).
+**Aditivo idempotente, sin DDL ni borrado:** solo datos de configuración contable; **no toca**
+ninguna tabla existente con `ALTER`/`DROP`/`TRUNCATE`.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-07_con_integracion_prov_activar.sql` | Para `company_id=2`: fila `con_integracion_asiento` module='PROV' (journal_id/type_id resueltos por el mismo fallback de OPD; en el mirror = 1/1) + `con_integracion_config.activo_proveedores=TRUE` | Datos idempotente (`INSERT … WHERE NOT EXISTS`, `UPDATE` idempotente) — **re-ejecutable**; aborta con `RAISE` si falta la config o no hay diario/tipo activo | **sí (2026-08-07)** | **pendiente** |
+
+- **Dependencias:** la empresa debe tener fila en `con_integracion_config` (ya existe; la usan
+  Ventas/Caja/Bancos) y ≥1 diario y ≥1 tipo de partida activos (ya existen). `'PROV'` ya está en el
+  CHECK de `con_integracion_asiento` y `activo_proveedores` ya existe (fase2 de integración contable)
+  → **no** requiere script de estructura.
+- **Asume `company_id = 2`** (única con `con_integracion_config` en el mirror). Confirmar el tenant
+  real antes de aplicar en SRV.
+- **⚠️ Con binario y cambio de flujo de dinero:** enciende que el asiento de PAGO de compromisos
+  (proveedor DEBE / retención HABER / banco HABER) se postee **POSTED al mayor** por el motor
+  `sp_con_generar_comprobante_config`, en vez de quedar en borrador. El binario de F0
+  (`OrdenesPagoDirectoService` + `PrvContabilidad`) lo lee al procesar/abonar/anular. **Aplicar en la
+  misma ventana que el despliegue del portal.** Las 23 partidas PROV históricas en borrador se dejan
+  como histórico (F0 aplica solo a nuevas).
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-07_con_integracion_prov_activar.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT c.activo_proveedores, a.journal_id, a.type_id
+  FROM con_integracion_config c
+  LEFT JOIN con_integracion_asiento a ON a.company_id = c.company_id AND a.module = 'PROV'
+ WHERE c.company_id = 2;   -- Esperado: activo_proveedores = t | journal_id y type_id NO nulos
+```
+
+### 3.6 Retenciones a proveedores — Fase F4 (registro fiscal hdr/dtl, 2026-08-07)
+
+Tercer script de la iniciativa de retenciones (rama `feat/almacen-integracion-contable`).
+**Aditivo idempotente, bajo riesgo:** crea tres tablas nuevas y **no toca ninguna existente**
+(sin `DROP`/`ALTER`/`TRUNCATE`).
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-07_prv_retencion_hdr_dtl.sql` | `prv_retencion_hdr` (libro fiscal: una cabecera por pago, `estado_id` 1/9, folio por empresa, ligada a `partida_id` + `numero_abono`) + `prv_retencion_dtl` (una fila por retención, snapshot código/nombre/%/base) + `prv_retencion_correlativo` (contador de folio por empresa) | Aditivo idempotente (`CREATE … IF NOT EXISTS`) — **re-ejecutable** | **sí (2026-08-07)** | **pendiente** |
+
+- **Dependencias:** `prv_compromiso_hdr(company_id, numero_orden)` (FK compuesta), `cfg_retencion(id)`
+  (F1 §3.4 — aplicar antes) y `con_plan_cuentas(account_id)`. El script aborta con `RAISE` si falta
+  alguna. **No** asume ningún `company_id` (las tablas no se siembran).
+- **⚠️ Con binario:** el registro hdr/dtl lo escribe el binario de F4 (`OrdenesPagoDirectoService`
+  + `RetencionRegistroService`) al procesar/abonar/anular, y la pantalla `/proveedores/retenciones`
+  lo consulta. **Aplicar en la misma ventana que el despliegue del portal.**
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-07_prv_retencion_hdr_dtl.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT to_regclass('public.prv_retencion_hdr')         AS hdr,   -- NULL = falta
+       to_regclass('public.prv_retencion_dtl')         AS dtl,
+       to_regclass('public.prv_retencion_correlativo') AS folio;
+```
+
+### 3.7 Términos de pago del proveedor — catálogo (2026-08-11)
+
+Script de la iniciativa (rama `feat/almacen-integracion-contable`). **Aditivo idempotente, bajo
+riesgo:** crea una tabla nueva y agrega una columna nullable con FK; **no borra ni reescribe datos**
+(sin `DROP`/`TRUNCATE`; el `ALTER` solo agrega la columna).
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-11_alm_termino_pago.sql` | `alm_termino_pago` (catálogo por empresa: `nombre` + `dias` de crédito + `es_default` + `activo`; UNIQUE(company_id, nombre), índice único parcial de `es_default`, CHECK `dias >= 0`) + `alm_compra_hdr.termino_pago_id` (FK NULL `ON DELETE SET NULL`) + índice | Aditivo idempotente (`CREATE/ADD … IF [NOT] EXISTS`) — **re-ejecutable** | **sí (2026-08-11)** | **pendiente** |
+
+- **Dependencias:** `alm_compra_hdr` (paso 25, `2026-07-31_alm_compra_recepcion.sql`) debe existir para
+  el `ADD COLUMN`. **No** asume ningún `company_id` (el catálogo arranca **vacío**, sin seed: lo llena
+  el usuario en la nueva pantalla).
+- **⚠️ Con binario:** el catálogo (pantalla `/almacen/terminos-pago` + API `api/almacen/terminos-pago`)
+  y el cableo en la factura de recepción (combo del término + autocálculo del vencimiento) leen estas
+  tablas. **Aplicar en la misma ventana que el despliegue del portal.** El SQL sin el binario es inocuo.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-11_alm_termino_pago.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT to_regclass('public.alm_termino_pago') AS catalogo,   -- NULL = falta
+       (SELECT count(*) FROM information_schema.columns
+         WHERE table_name = 'alm_compra_hdr' AND column_name = 'termino_pago_id') AS fk_en_hdr;  -- esperado: 1
+```
+
+**Semilla (OPCIONAL):** `2026-08-11_alm_termino_pago_seed.sql` inserta 5 términos base para
+`company_id = 2` (Contado 0 d **predeterminado**, Crédito 15/30/45/60 d). Idempotente
+(`ON CONFLICT (company_id, nombre) DO NOTHING`). **⚠️ Asume `company_id = 2`**; en el SRV la empresa
+puede preferir definir los suyos desde la pantalla — el seed es opcional. Va **después** del script de
+estructura. Aplicado al mirror el 2026-08-11.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-11_alm_termino_pago_seed.sql
+```
+
+### 3.8 Término de pago por proveedor (2026-08-11)
+
+Continuación de §3.7 (rama `feat/almacen-integracion-contable`). **Aditivo idempotente, bajo riesgo:**
+agrega una columna nullable con FK; **no borra ni reescribe datos**.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-11_prv_proveedor_termino_pago.sql` | `prv_proveedores.termino_pago_id` (FK NULL → `alm_termino_pago` `ON DELETE SET NULL`) + índice | Aditivo idempotente (`ADD/CREATE … IF [NOT] EXISTS`) — **re-ejecutable** | **sí (2026-08-11)** | **pendiente** |
+
+- **Dependencias:** `alm_termino_pago` (§3.7 — aplicar **antes**). No asume ningún `company_id`.
+- **⚠️ Con binario:** el combo "Término de pago" en el maestro de proveedores (`ProveedoresService` /
+  `ProveedorForm`) y la precarga al elegir el proveedor en la factura de recepción leen esta columna.
+  **Aplicar en la misma ventana que el despliegue del portal.** El SQL sin el binario es inocuo.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-11_prv_proveedor_termino_pago.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT count(*) AS fk_en_proveedor FROM information_schema.columns
+ WHERE table_name = 'prv_proveedores' AND column_name = 'termino_pago_id';   -- esperado: 1
+```
+
+### 3.9 Condición de pago de la factura — Fase 0 (2026-08-12)
+
+Primer paso de la iniciativa "facturas al crédito → CxP" (rama `feat/almacen-integracion-contable`).
+**Aditivo, bajo riesgo:** agrega una columna con default + CHECK; no borra ni reescribe otros datos.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-12_alm_compra_condicion_pago.sql` | `alm_compra_hdr.condicion_pago` SMALLINT NOT NULL DEFAULT 1 (1=Contado/2=Crédito/3=Prepagado) + CHECK `ck_alm_compra_hdr_condicion_pago` | Aditivo idempotente (`ADD COLUMN IF NOT EXISTS` + guard del CHECK) — **re-ejecutable** | **sí (2026-08-12)** | **pendiente** |
+
+- **Dependencias:** `alm_compra_hdr` (paso 25). No asume ningún `company_id`. Las facturas existentes quedan en 1 (Contado) por el default.
+- **⚠️ Con binario:** el servidor deriva `condicion_pago` del término (0 días=Contado, >0=Crédito) al registrar la factura, y la pantalla muestra la condición. **Aplicar en la misma ventana que el despliegue del portal.**
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-12_alm_compra_condicion_pago.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT count(*) AS col FROM information_schema.columns
+ WHERE table_name = 'alm_compra_hdr' AND column_name = 'condicion_pago';   -- esperado: 1
+```
+
+### 3.10 Cuenta por pagar de compra + abonos — Fase 1 (2026-08-12)
+
+Fase 1 de "facturas al crédito → CxP" (rama `feat/almacen-integracion-contable`). **Aditivo:** dos
+tablas nuevas; **no toca ninguna existente**. La CxP se genera **hacia adelante** (al registrar cada
+factura); el histórico no se backfillea.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-12_alm_compra_cxp.sql` | `alm_compra_cxp` (cuenta por pagar 1:1 con la factura: proveedor, vencimiento, condición, monto, **saldo materializado**, `estado_id` 1/2/3/9; UNIQUE por factura + clave alterna tenant; FK compuesta → `alm_compra_hdr`) + `alm_compra_cxp_abono` (pagos: método, banco, cheque, `partida_id`, estado 'V'/'A'; UNIQUE por numero_abono; FK → `alm_compra_cxp`) | Aditivo idempotente (`CREATE … IF NOT EXISTS`) — **re-ejecutable** | **sí (2026-08-12)** | **pendiente** |
+
+- **Dependencias:** `alm_compra_hdr` (paso 25) con su clave alterna `uq_alm_compra_hdr_tenant` (para la FK compuesta) y `condicion_pago` (§3.9). No asume ningún `company_id`.
+- **⚠️ Con binario:** el servicio genera la CxP al registrar la factura y la anula al anular; el servicio/pantalla de pagos (F1b/F1c) leen estas tablas. **Aplicar en la misma ventana que el despliegue del portal.**
+- **Contabilidad:** el asiento de nacimiento (proveedor al HABER) **NO** entra aquí — es Fase 2, D-1 del contador.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-12_alm_compra_cxp.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT to_regclass('public.alm_compra_cxp') AS cxp, to_regclass('public.alm_compra_cxp_abono') AS abono;
+```
+
+**Backfill (datos, opcional pero recomendado):** `2026-08-12_alm_compra_cxp_backfill.sql` genera la CxP
+de las facturas **ya registradas** (vigentes y no prepagadas) con estado Pendiente y saldo = total; las
+**anuladas no llevan CxP** y las prepagadas tampoco. Idempotente (`INSERT … WHERE NOT EXISTS`). Va
+**después** de la estructura (§3.10) y del binario. Aplicado al mirror el 2026-08-12 (**9 CxP, L 107,257.25**).
+El histórico SIMAFI (`alm_compra` sin cabecera) no aplica.
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-12_alm_compra_cxp_backfill.sql
+```
+
+### 3.11 Integración contable de compras — módulo propio COMPRAS, Fase 2 (2026-08-12)
+
+Fase 2 de compras a proveedor: Compras/CxP se vuelve un **módulo contable independiente**, como
+VENTAS, CAJA, BANCOS, PROV, ALMACEN. Un solo flag `activo_compras` gatea los **dos** asientos del
+ciclo, ambos con `module='COMPRAS'`:
+
+- **factura** de compra → DEBE inventario / HABER proveedor
+- **pago** de la CxP (bancario) → DEBE proveedor / HABER banco
+
+Separado de inventario (ALMACEN) **y** de los pagos OPD (PROV): toda la contabilidad de compras en
+un diario/módulo propio.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-12_con_integracion_compras_modulo.sql` | (0) amplía el CHECK `ck_con_integracion_asiento_module` para admitir `'COMPRAS'` (7→8 módulos, no quita ninguno); (1) `con_integracion_config.activo_compras` BOOLEAN NOT NULL DEFAULT false; (2) siembra la fila `con_integracion_asiento (module='COMPRAS')` copiando diario/tipo de `ALMACEN` | Aditivo + ampliación de CHECK · idempotente (`ADD COLUMN IF NOT EXISTS`, `INSERT … WHERE NOT EXISTS`, re-CREATE del CHECK) — **re-ejecutable** | **sí (2026-08-12)** | **pendiente** |
+
+- **Dependencias:** `con_integracion_config`, `con_integracion_asiento` (con la fila `ALMACEN` de la empresa, para copiar el default). No asume un `company_id` fijo (multiempresa).
+- **⚠️ Con binario:** la recepción postea la factura y `CompraCxpService` postea el pago, ambos **gated** por `activo_compras`; el reverso (anular factura / anular abono) revierte el asiento. **Aplicar en la misma ventana que el despliegue del portal.** Con el flag **apagado** (default) el binario no genera ninguna póliza (verificado por test) → despliegue seguro: NO se auto-activa.
+- **Para encenderlo** (decisión del contador): `UPDATE con_integracion_config SET activo_compras = TRUE WHERE company_id = <id>;` + que las cuentas resuelvan: la fila `con_integracion_asiento` de `COMPRAS` (la siembra este script; el contador ajusta el diario/tipo), `prv_proveedores.cuenta_contable` posteable (los 237 vacíos, ver §3.12) y `cuenta_inventario` posteable en cada `alm_tipo_articulo` (§3.12).
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-12_con_integracion_compras_modulo.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT (SELECT count(*) FROM information_schema.columns
+         WHERE table_name='con_integracion_config' AND column_name='activo_compras') AS flag,        -- esperado 1
+       (SELECT count(*) FROM con_integracion_asiento WHERE module='COMPRAS') AS asientos_compras;    -- >= 1 (por empresa con ALMACEN)
+```
+
+> **Historia:** un primer intento (2026-08-12) usó el flag propio `activo_compras` reusando el módulo
+> ALMACEN; se cambió a gatear por `activo_almacen`/`activo_proveedores` (unificado); y finalmente, por
+> decisión del usuario, se hizo el **módulo COMPRAS propio** (esta versión). El script del primer
+> intento (`2026-08-12_con_integracion_config_activo_compras.sql`) se eliminó; en SRV nunca se aplicó.
+
+### 3.12 Saneo — formato de la cuenta de inventario del tipo (2026-08-12)
+
+Prerrequisito de datos para **encender** la contabilidad de compras (§3.11) — es decir, con
+`activo_compras` = TRUE. El asiento de la factura resuelve la cuenta de inventario con igualdad
+**exacta** contra `con_plan_cuentas.code`. Los
+tipos migrados guardan el código **con guiones** (`114-01-01-02-01`) y el plan lo tiene **sin
+guiones** (`11401010201`): mismo código, distinto formato, y por eso el binario no lo resuelve. Este
+script quita los guiones **sólo** cuando el código normalizado ya existe y es posteable en el plan de
+la misma empresa.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-12_alm_tipo_articulo_normalizar_cuenta_inventario.sql` | `UPDATE` correctivo de `alm_tipo_articulo.cuenta_inventario` (quita guiones) con guardia `EXISTS` (sólo si el código normalizado existe y `allows_posting`). Sin `company_id` fijo → multiempresa | **Correctivo de datos, no destructivo, reversible, idempotente** (`WHERE cuenta_inventario ~ '\D'`) — **re-ejecutable** | **sí (2026-08-12)** | **pendiente** |
+
+- **Dependencias:** `alm_tipo_articulo` y `con_plan_cuentas`. No toca estructura. Sólo relevante si se va a encender la contabilidad de compras (`activo_compras`, §3.11).
+- **⚠️ Datos:** modifica filas existentes. Reversible: el script trae el mapeo y el `ROLLBACK` manual comentado. Aplicado al **mirror** el 2026-08-12 (**8 filas, empresa 2, tipos 02–09**; verificado: 0 tipos sin cuenta posteable). SRV pendiente. Respaldo del estado previo en `scratchpad/respaldo_cuenta_inventario_antes.csv`.
+- Sólo cubre `cuenta_inventario` — es la única con el desajuste de guiones. **Verificado (2026-08-12):** las otras 4 cuentas del tipo (`cuenta_costo_ventas`, `cuenta_ventas`, `cuenta_ajustes`, `cuenta_devoluciones`) **no** tienen problema de formato, están **vacías**; sólo habrá que asignarlas si esos flujos (ventas/ajustes/devoluciones) se integran al mayor, lo cual no afecta al flag de compras.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-12_alm_tipo_articulo_normalizar_cuenta_inventario.sql
+```
+
+¿Ya aplicado? (debe devolver 0)
+
+```sql
+SELECT count(*) AS tipos_sin_cuenta_posteable
+  FROM alm_tipo_articulo t
+ WHERE t.cuenta_inventario IS NOT NULL AND btrim(t.cuenta_inventario) <> ''
+   AND NOT EXISTS (SELECT 1 FROM con_plan_cuentas c
+                     WHERE c.company_id = t.company_id AND btrim(c.code) = btrim(t.cuenta_inventario) AND c.allows_posting);
+```
+
+> Los **proveedores** sin cuenta (237 en el mirror, empresa 2) **no** son de formato: están vacíos y
+> requieren que el contador asigne la cuenta por pagar. No hay script — es carga de datos en el maestro.
+
+### 3.13 Correo y notificaciones por empresa — mantenimiento SendGrid, F1 (2026-08-13)
+
+Primer script de la iniciativa de correo/notificaciones (rama `feat/almacen-integracion-contable`).
+**Aditivo idempotente, bajo riesgo:** crea tres tablas nuevas y **no toca ninguna existente** (sin
+`DROP`/`ALTER`/`TRUNCATE`).
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-13_cfg_correo_notificaciones.sql` | `cfg_correo` (la **conexión**, 1 por empresa: proveedor + **API key cifrada** con DataProtection + remitente por defecto + activo global; UNIQUE(company_id, proveedor), CHECK proveedor ∈ SENDGRID/SMTP) + `cfg_notificacion` (**área/tipo**, N por empresa: remitente propio opcional; UNIQUE(company_id, tipo), CHECK tipo ∈ ADMINISTRACION/ALMACEN/COBRANZA/SISTEMA) + `cfg_notificacion_destinatario` (**destinatarios** TO/CC, N por área; FK → `cfg_notificacion` ON DELETE CASCADE, UNIQUE(notificacion_id, lower(correo), clase)) | Aditivo idempotente (`CREATE … IF NOT EXISTS`) — **re-ejecutable** | **pendiente** | **pendiente** |
+
+- **Dependencias:** ninguna externa. La única FK es interna (destinatario → notificación, ambas en
+  este script). Tenant-scoped por `company_id` (sin FK a `cfg_company`, igual que el resto). **No**
+  asume ningún `company_id`: las tablas arrancan **vacías** (sin seed) — las filas las crea la
+  pantalla y el catálogo de tipos lo define el código.
+- **⚠️ Con binario (pendiente):** el mantenimiento `/configuracion/correo` + su API y el servicio
+  `ICorreoConfigService` (Fases F2/F3, **aún sin implementar**) leen/escriben estas tablas. El SQL
+  **sin** el binario es inocuo. Aparte, la Fase **F0** ya cableó el key-ring de DataProtection en
+  producción (`Program.cs`), prerrequisito para que el binario pueda **descifrar** la API key que se
+  guarde aquí; el SQL no depende de F0.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-13_cfg_correo_notificaciones.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT to_regclass('public.cfg_correo')                    AS conexion,   -- NULL = falta
+       to_regclass('public.cfg_notificacion')              AS area,
+       to_regclass('public.cfg_notificacion_destinatario') AS destinatario;
+```
+
+### 3.14 Saneo — numero_cuenta de las cuentas de banco (2026-08-13)
+
+El combo "Cuenta del banco" del pago a proveedores (`/almacen/compras/pagos`) muestra ahora **sólo**
+`ban_cuenta.numero_cuenta`. Algunos valores migrados traen ruido en el propio dato: sufijo
+desambiguador `"… (SIMS06)"` o prefijo `"Cta. "` / `"Cta. No."`. Este script deja el número limpio.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-13_ban_cuenta_sanear_numero_cuenta.sql` | `UPDATE` correctivo de `ban_cuenta.numero_cuenta`: quita el sufijo `"(…)"` y el prefijo `"Cta."/"Cta. No."`. **Sólo cuentas `activo = true`** (las que aparecen en el combo) + **guardia anti-colisión** `NOT EXISTS` contra el `UNIQUE (company_id, numero_cuenta)`. Sin `company_id` fijo → multiempresa | **Correctivo de datos, no destructivo, reversible, idempotente** — **re-ejecutable** | **pendiente** | **pendiente** |
+
+- **Dependencias:** ninguna (sólo `ban_cuenta`). No toca estructura, no lleva binario. Independiente del resto de la tanda.
+- **⚠️ Datos + UNIQUE:** el sufijo `"(SIMSxx)/(SIMCxxxx)"` **desambigua** cuentas que comparten el número base (p.ej. SIMS01/SIMS06 = `11-701-000572-3`). Por eso el saneo toca **sólo las activas** y lleva guardia `NOT EXISTS`; las inactivas con el mismo número base conservan su sufijo (histórico invisible en el combo). En el mirror (empresa 2) afecta **5 filas activas** (SIMS06, SIMS10, SIMS11, SIMS12, SIMS13); las inactivas con ruido (SIMS01, SIMC1140, SIMC2586, SIMC7535, SIMC7753) **no** se tocan. Reversible: el script trae el `ROLLBACK` manual comentado con los valores originales.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-13_ban_cuenta_sanear_numero_cuenta.sql
+```
+
+¿Ya aplicado? (debe devolver 0)
+
+```sql
+SELECT count(*) AS cuentas_activas_con_ruido
+  FROM public.ban_cuenta
+ WHERE activo = true
+   AND (numero_cuenta ~ '\([^)]*\)\s*$' OR numero_cuenta ~* '^\s*Cta\.');
+```
+
+### 3.15 Bancos — 'COMPRA_CXP' en el CHECK ck_ban_cheque_origen (2026-08-13)
+
+**Bug de despliegue** hallado probando el pago con **cheque** desde compras: el cheque se emite con
+origen `ChequeOrigen.CompraCxp = 'COMPRA_CXP'` (`SIAD.Core/DTOs/Bancos/ChequesDtos.cs`), pero el CHECK
+`ck_ban_cheque_origen` sólo permitía PROCESAR/ABONO/TRANSACCION/MANUAL → el INSERT en `ban_cheque`
+fallaba y el pago con cheque se revertía entero. Efectivo/transferencia no tocan `ban_cheque`, por eso
+no se veía; los tests de CompraCxp usan transferencia. **Prerrequisito para pagar compras con cheque.**
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-13_ban_cheque_origen_compra_cxp.sql` | `ALTER` del CHECK `ck_ban_cheque_origen` para incluir `'COMPRA_CXP'` (DROP IF EXISTS + ADD con la lista completa). No asume `company_id` | **Aditivo** (sólo agrega un valor permitido), no destructivo, **idempotente / re-ejecutable** | **sí (2026-08-13)** | **pendiente** |
+
+- **Dependencias:** `ban_cheque` (estructura antigua, ya en SRV). No lleva binario nuevo (el código que usa 'COMPRA_CXP' ya está en la rama de compras). Independiente del resto de la tanda.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-13_ban_cheque_origen_compra_cxp.sql
+```
+
+¿Ya aplicado? (debe listar 'COMPRA_CXP' en la definición)
+
+```sql
+SELECT pg_get_constraintdef(oid) AS def FROM pg_constraint WHERE conname = 'ck_ban_cheque_origen';
+```
+
+---
+
+### 3.16 Proveedores — estado de cuenta: 3 funciones de lectura (2026-08-13)
+
+**F0** de la iniciativa "estado de cuenta del proveedor"
+([docs/plans/2026-08-13-proveedor-estado-cuenta-plan.md](../docs/plans/2026-08-13-proveedor-estado-cuenta-plan.md)).
+No existía nada equivalente para proveedores: todo lo de saldo/antigüedad en esta base es de
+clientes. Las funciones unifican las **dos** ramas donde vive la deuda —`alm_compra_cxp`(+abono)
+y `prv_compromiso_hdr`(+`prv_compromiso_abono`)— y concentran ahí las reglas de vigencia, incluida
+la **compat legacy** del compromiso procesado sin abonos (si no se respeta, el estado de cuenta
+inventa los ~L 6.8M de las 228 órdenes migradas de SIMAFI).
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-13_prv_estado_cuenta.sql` | `CREATE OR REPLACE FUNCTION` × 3: `fn_prv_estado_cuenta_documentos` (base, dueña de las reglas de vigencia), `fn_prv_estado_cuenta_resumen` (saldo, vencido, antigüedad, último pago) y `fn_prv_estado_cuenta_movimientos` (libro con saldo corrido). Solo lectura. No asume `company_id` | **Objetos** — aditivo, no destructivo, **idempotente / re-ejecutable**. No crea ni altera tablas, columnas, índices ni datos | **sí (2026-08-13)** | **pendiente** |
+
+- **Dependencias:** `alm_compra_cxp` + `alm_compra_cxp_abono` (§3.10), `prv_compromiso_abono`
+  (2026-07-17) y `prv_compromiso_hdr` con `company_id` (paso 10 / 2026-07-10). Va **después** de
+  §3.10; es independiente del resto de la tanda de compras.
+- **Lleva binario:** sí. El backend (`ProveedorEstadoCuentaService` + `api/proveedores/{codigo}/estado-cuenta`)
+  llama a estas funciones; sin el script, el endpoint responde error `42883` (función inexistente).
+  El script sin el binario es inocuo.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-13_prv_estado_cuenta.sql
+```
+
+¿Ya aplicado? (deben aparecer las 3 funciones)
+
+```sql
+SELECT proname, pg_get_function_identity_arguments(oid) AS args
+  FROM pg_proc WHERE proname LIKE 'fn_prv_estado_cuenta%' ORDER BY proname;
+```
+
+Verificación posterior (sustituir el código de proveedor; el cuadre debe dar `true`):
+
+```sql
+SELECT (SELECT SUM(cargo) - SUM(abono) FROM fn_prv_estado_cuenta_movimientos(2, '0088', NULL, NULL))
+     = (SELECT saldo_total FROM fn_prv_estado_cuenta_resumen(2, '0088', NULL)) AS cuadra;
+```
+
+> No comparar contra «la última fila» del libro con un `ORDER BY fecha DESC, tipo DESC`: el saldo
+> corrido se ordena por `(fecha, tipo, origen, documento_id, desempate)`, así que con empates de
+> fecha ese `LIMIT 1` cae en una fila intermedia y el cuadre da `false` sin que nada esté mal.
+
+**Verificado en el mirror el 2026-08-13** (proveedor 0088, empresa 2): saldo total **L 73,327.50**
+en 7 documentos, vencido L 69,586.00, último pago L 150.00 del 2026-08-13; los tres netos
+(movimientos, documentos-todos, documentos-pendientes) coinciden exactamente.
+
 ---
 
 ## 4. Orden de aplicación recomendado
@@ -207,3 +658,54 @@ correspondiente.
 Los scripts de esta sesión (`2026-07-29_alm_articulo_activo.sql`, los cuatro de `2026-07-30`,
 `2026-07-30_saneo_libretas_fantasma.sql`, este registro y el runbook) están **sin commitear**.
 Conviene versionarlos antes de llevarlos al servidor. **Vos decidís cuándo.**
+
+**Iniciativa de retenciones (2026-08-06):** `2026-08-06_cfg_retenciones.sql` (§3.4) también está
+**sin commitear**. Versionarlo junto con el binario de la pantalla `/mantenimientos/retenciones`.
+
+**Iniciativa de retenciones — F0 (2026-08-07):** `2026-08-07_con_integracion_prov_activar.sql` (§3.5)
+está **sin commitear**. Versionarlo junto con el binario de F0 (`OrdenesPagoDirectoService` +
+`PrvContabilidad`) — el SQL sin el binario no hace daño, pero el binario sin el SQL no postea al mayor
+(el motor exige la fila `con_integracion_asiento` PROV + `activo_proveedores=TRUE`).
+
+**Iniciativa de retenciones — F4 (2026-08-07):** `2026-08-07_prv_retencion_hdr_dtl.sql` (§3.6) está
+**sin commitear**. Versionarlo junto con el binario de F4 (`OrdenesPagoDirectoService` +
+`RetencionRegistroService` + la pantalla `/proveedores/retenciones`). El SQL sin el binario es inocuo;
+el binario sin el SQL rompe el registro de la retención (INSERT a tablas inexistentes).
+
+**Términos de pago del proveedor (2026-08-11):** `2026-08-11_alm_termino_pago.sql` (§3.7),
+`2026-08-11_alm_termino_pago_seed.sql` (semilla opcional, §3.7) y
+`2026-08-11_prv_proveedor_termino_pago.sql` (§3.8) están **sin commitear**. Versionarlos junto con el
+binario del catálogo (`/almacen/terminos-pago`), el cableo en la factura de recepción y el campo
+"Término de pago" en el maestro de proveedores. El SQL sin el binario es inocuo; el binario sin el SQL
+rompe la pantalla del catálogo, el combo en la factura y el alta/edición de proveedores (leen columnas
+inexistentes). Orden: estructura del catálogo → (semilla) → columna en proveedores.
+
+**Facturas al crédito → CxP (2026-08-12):** `2026-08-12_alm_compra_condicion_pago.sql` (§3.9),
+`2026-08-12_alm_compra_cxp.sql` (§3.10), `2026-08-12_alm_compra_cxp_backfill.sql` (backfill, §3.10) y
+`2026-08-12_con_integracion_compras_modulo.sql` (módulo COMPRAS, §3.11) están **sin commitear**.
+Versionarlos junto con el binario de la CxP de compra (`RecepcionCompraService` genera/anula la CxP,
+`CompraCxpService` + la pantalla `/almacen/compras/pagos`) y de la integración contable Fase 2
+(`CompraContabilidad` + los enganches gated por `activo_compras`, module `COMPRAS`). Orden: condición
+de pago → CxP → (backfill) → módulo COMPRAS. El módulo es inocuo apagado; los otros sin el binario son
+inocuos, el binario sin ellos rompe el registro de la factura y la pantalla de pagos.
+
+**Saneo cuenta de inventario del tipo (2026-08-12):** `2026-08-12_alm_tipo_articulo_normalizar_cuenta_inventario.sql`
+(§3.12) está **sin commitear**. Es sólo datos (no lleva binario), aplicado al **mirror** el 2026-08-12,
+**SRV pendiente**; es prerrequisito para *encender* la contabilidad de compras (`activo_almacen`, §3.11),
+no para desplegar el binario.
+
+**Correo y notificaciones — F1 (2026-08-13):** `2026-08-13_cfg_correo_notificaciones.sql` (§3.13) está
+**sin commitear** y **sin aplicar** (ni mirror ni SRV — no me conecté a ninguna base; lo aplicás vos).
+Versionarlo junto con el binario del mantenimiento `/configuracion/correo` (Fases F2/F3, pendientes) y
+con el cambio de F0 en `Program.cs` (key-ring de DataProtection estable en producción). El SQL sin el
+binario es inocuo.
+
+**Saneo numero_cuenta de bancos (2026-08-13):** `2026-08-13_ban_cuenta_sanear_numero_cuenta.sql`
+(§3.14) está **sin commitear** y **sin aplicar** (ni mirror ni SRV). Es sólo datos, no lleva binario:
+el cambio de UI (el combo de "Cuenta del banco" muestra sólo `numero_cuenta`) ya funciona sin él; esto
+es la limpieza cosmética del dato. Independiente del resto de la tanda; aplicable en cualquier momento.
+
+**Fix cheque de compras (2026-08-13):** `2026-08-13_ban_cheque_origen_compra_cxp.sql` (§3.15) está
+**sin commitear**; **aplicado al mirror** el 2026-08-13, **SRV pendiente**. Es prerrequisito para
+pagar compras con **cheque** (sin él, el pago con cheque revienta el INSERT en `ban_cheque`). Aditivo
+al CHECK, no lleva binario nuevo (el código que usa 'COMPRA_CXP' ya está en la rama de compras).

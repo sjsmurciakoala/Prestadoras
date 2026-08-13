@@ -55,7 +55,8 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
 
         _context = new SiadDbContext(options, new TestCurrentCompanyService(CompanyId));
         _context.Database.UseTransaction(Transaction);
-        _service = new OrdenCompraService(_context, new TestCurrentCompanyService(CompanyId));
+        _service = new OrdenCompraService(
+            _context, new TestCurrentCompanyService(CompanyId), new TasaIsvArticuloResolver(_context));
 
         // Proveedor activo cualquiera de la empresa de pruebas.
         _codProveedor = await _context.prv_proveedores.AsNoTracking()
@@ -93,15 +94,21 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
-        var creada = await _service!.CrearAsync(NuevaOrden(descuento: 10m, impuesto: 38.25m), "tester");
+        // El ISV se autocalcula desde la tasa del tipo: 15% sobre el total del renglón.
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var creada = await _service!.CrearAsync(NuevaOrden(descuento: 10m), "tester");
 
         Assert.True(creada.Numero > 0);
         Assert.Equal(EstadoOrdenCompra.Borrador, creada.Estado);
         Assert.Single(creada.Detalles);
 
-        // 10 × 25.50 = 255.00 · descuento 10% = 25.50 · ISV 38.25
+        // 10 × 25.50 = 255.00 · descuento 10% = 25.50 · ISV 15% = 38.25
         Assert.Equal(255.00m, creada.SubTotal);
         Assert.Equal(38.25m, creada.Impuesto);
+        Assert.Equal(38.25m, creada.Detalles.Single().Impuesto);
+        Assert.Equal(15m, creada.Detalles.Single().TasaIsv);
+        Assert.True(creada.Detalles.Single().IsvConfigurado);
         Assert.Equal(267.75m, creada.Total);   // 255 − 25.50 + 38.25
     }
 
@@ -117,11 +124,14 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task Crear_SinCalculaIsv_IgnoraElImpuestoDelRenglon()
+    public async Task Crear_SinCalculaIsv_NoRegistraIsvAunConTasa()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
-        var dto = NuevaOrden(impuesto: 99m);
+        // Aunque el tipo tenga tasa, con CalculaIsv=false el ISV queda en 0.
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var dto = NuevaOrden();
         dto.CalculaIsv = false;
 
         var creada = await _service!.CrearAsync(dto, "tester");
@@ -129,6 +139,42 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(0m, creada.Impuesto);
         Assert.Equal(0m, creada.Detalles.Single().Impuesto);
         Assert.Equal(255.00m, creada.Total);
+    }
+
+    [SkippableFact]
+    public async Task Crear_TipoSinTasa_NoRegistraIsvYRenglonNoConfigurado()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // El tipo del artículo sin tasa asignada: el renglón va sin ISV y marcado "no configurado".
+        await QuitarIsvDelArticuloAsync(_articuloA);
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.Equal(0m, creada.Impuesto);
+        Assert.Equal(0m, creada.Detalles.Single().Impuesto);
+        Assert.False(creada.Detalles.Single().IsvConfigurado);
+        Assert.Equal(255.00m, creada.Total);
+    }
+
+    [SkippableFact]
+    public async Task BuscarArticulosProveedor_TraeTasaYFlagIsv()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var conTasa = await _service!.BuscarArticulosProveedorAsync(_codProveedor, null);
+        var itemA = Assert.Single(conTasa, x => x.ArticuloId == _articuloA);
+        Assert.True(itemA.TieneIsvConfigurado);
+        Assert.Equal(15m, itemA.TasaIsv);
+
+        // Sin tasa: aparece igual (tiene código), pero marcado como no configurado y tasa 0.
+        await QuitarIsvDelArticuloAsync(_articuloA);
+        var sinTasa = await _service.BuscarArticulosProveedorAsync(_codProveedor, null);
+        var itemSin = Assert.Single(sinTasa, x => x.ArticuloId == _articuloA);
+        Assert.False(itemSin.TieneIsvConfigurado);
+        Assert.Equal(0m, itemSin.TasaIsv);
     }
 
     // ── Regla dura del código de proveedor ───────────────────────────────────
@@ -377,8 +423,12 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
 
     // ── Apoyo ────────────────────────────────────────────────────────────────
 
-    /// <summary>Orden mínima válida: un renglón de 10 × 25.50 sobre el artículo A.</summary>
-    private OrdenCompraDto NuevaOrden(decimal descuento = 0m, decimal impuesto = 0m) => new()
+    /// <summary>
+    /// Orden mínima válida: un renglón de 10 × 25.50 sobre el artículo A. El ISV NO se pasa a
+    /// mano: lo calcula el servicio desde la tasa del tipo del artículo (ver los helpers de
+    /// sembrado). Sin tasa sembrada, el renglón va sin ISV.
+    /// </summary>
+    private OrdenCompraDto NuevaOrden(decimal descuento = 0m) => new()
     {
         CodProveedor = _codProveedor,
         Fecha = DateOnly.FromDateTime(DateTime.Today),
@@ -393,11 +443,54 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
                 ArticuloId = _articuloA,
                 CantidadPedida = 10m,
                 CostoUnitario = 25.50m,
-                Impuesto = impuesto,
                 Descripcion = "Renglón de prueba"
             }
         }
     };
+
+    /// <summary>
+    /// Asigna al tipo del artículo una tasa de ISV vigente del <paramref name="porcentaje"/>%
+    /// (misma mecánica que la recepción). Si el artículo no tiene tipo, crea uno de prueba.
+    /// </summary>
+    private async Task SembrarIsvDelArticuloAsync(int articuloId, decimal porcentaje)
+    {
+        var hoy = DateOnly.FromDateTime(DateTime.Today);
+        var tasaId = await _context!.cfg_impuesto_tasas.AsNoTracking()
+            .Where(t => t.porcentaje == porcentaje
+                     && t.vigencia_desde <= hoy
+                     && (t.vigencia_hasta == null || t.vigencia_hasta >= hoy))
+            .Select(t => (int?)t.id)
+            .FirstOrDefaultAsync();
+
+        Skip.If(tasaId is null, $"El catálogo cfg_impuesto_tasa no tiene una tasa vigente del {porcentaje}%");
+
+        var articulo = await _context.alm_articulos.FirstAsync(a => a.id == articuloId);
+        var tipo = articulo.tipo_articulo_id is null
+            ? null
+            : await _context.alm_tipo_articulos.FirstOrDefaultAsync(t => t.id == articulo.tipo_articulo_id);
+
+        if (tipo is null)
+        {
+            tipo = new alm_tipo_articulo { codigo = "ZOC", descripcion = "Tipo de prueba", activo = true };
+            _context.alm_tipo_articulos.Add(tipo);
+            await _context.SaveChangesAsync();
+            articulo.tipo_articulo_id = tipo.id;
+        }
+
+        tipo.impuesto_tasa_id = tasaId;
+        await _context.SaveChangesAsync();
+    }
+
+    /// <summary>Deja al tipo del artículo sin tasa de ISV (para probar el caso "no configurado").</summary>
+    private async Task QuitarIsvDelArticuloAsync(int articuloId)
+    {
+        var articulo = await _context!.alm_articulos.AsNoTracking().FirstAsync(a => a.id == articuloId);
+        if (articulo.tipo_articulo_id is null) return;
+
+        var tipo = await _context.alm_tipo_articulos.FirstAsync(t => t.id == articulo.tipo_articulo_id);
+        tipo.impuesto_tasa_id = null;
+        await _context.SaveChangesAsync();
+    }
 
     private async Task SembrarRelacionAsync(int articuloId, string? codigoUpc, bool activo = true)
     {

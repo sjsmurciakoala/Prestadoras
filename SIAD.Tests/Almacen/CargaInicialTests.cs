@@ -48,6 +48,10 @@ public class CargaInicialTests : IntegrationTestBase, IAsyncLifetime
             _motor = new InventarioPostingService(_context, company, rollup);
             _carga = new CargaInicialInventarioService(_context, company, _motor);
             _ajustes = new AjusteInventarioService(_context, company, _motor);
+
+            // Prueba la MECÁNICA (apertura/ajustes/kardex), no la contabilidad: se apaga la
+            // integración para aislar el test del estado de los flags en la base de prueba.
+            await DesactivarIntegracionContableAsync();
         }
     }
 

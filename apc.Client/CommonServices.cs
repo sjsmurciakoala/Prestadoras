@@ -80,6 +80,7 @@ namespace apc.Client
             // Clientes HTTP para módulo de Clientes
             services.AddScoped<ClientesClient>();
             services.AddScoped<ProveedoresClient>();
+            services.AddScoped<ProveedorEstadoCuentaClient>();
             services.AddScoped<SolicitudesClient>();
             services.AddScoped<MedidoresClient>();
             services.AddScoped<CatalogosClient>();
@@ -93,6 +94,8 @@ namespace apc.Client
             services.AddScoped<DescargosClient>();
             services.AddScoped<UnidadesMedidaClient>();
             services.AddScoped<CategoriasUnidadClient>();
+            services.AddScoped<TerminosPagoClient>();
+            services.AddScoped<PagosCompraClient>();
             services.AddScoped<TiposArticuloClient>();
             services.AddScoped<TiposMovimientoClient>();
             services.AddScoped<MovimientosAlmacenClient>();
@@ -130,6 +133,15 @@ namespace apc.Client
 
             // impuestos y tasas con vigencia (catalogo global SAR; ISV Honduras)
             services.AddScoped<ImpuestosClient>();
+
+            // retenciones a proveedores: catalogo (concepto + tasas) + cuenta del pasivo por empresa (F1)
+            services.AddScoped<apc.Client.Services.Retenciones.RetencionesClient>();
+
+            // retenciones a proveedores: consulta del registro fiscal hdr/dtl (F4)
+            services.AddScoped<apc.Client.Services.Retenciones.RetencionRegistroClient>();
+
+            // correo y notificaciones por empresa: conexion (SendGrid) + areas de notificacion (F2)
+            services.AddScoped<apc.Client.Services.Configuracion.CorreoConfigClient>();
 
             services.AddScoped<ITenantProvider, TenantProvider>();
             services.AddScoped<TenantState>();

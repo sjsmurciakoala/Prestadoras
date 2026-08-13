@@ -41,7 +41,12 @@ public class MovimientoAlmacenAnulacionTests : IntegrationTestBase, IAsyncLifeti
 
             var rollup = new ArticuloRollupService(_context);
             var motor = new InventarioPostingService(_context, company, rollup);
-            _service = new MovimientoAlmacenService(_context, company, motor);
+            var poliza = new SIAD.Services.Contabilidad.PolizaService(_context, company);
+            _service = new MovimientoAlmacenService(_context, company, motor, poliza);
+
+            // Prueba la MECÁNICA de la anulación (revierte el kardex/estado), no el asiento contable:
+            // se apaga la integración para aislar el test del estado de los flags en la base de prueba.
+            await DesactivarIntegracionContableAsync();
         }
     }
 

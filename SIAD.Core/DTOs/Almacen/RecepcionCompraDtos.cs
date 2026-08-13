@@ -48,9 +48,19 @@ public sealed class RecepcionCompraDto
 
     public string? BodegaNombre { get; set; }
 
+    /// <summary>Término de pago elegido del catálogo (alm_termino_pago). NULL = sin término.</summary>
+    public int? TerminoPagoId { get; set; }
+
+    /// <summary>Snapshot del nombre del término. Lo resuelve el servidor desde el catálogo.</summary>
     public string? TerminosPago { get; set; }
     public short TipoCompra { get; set; }
     public int? PlazoDias { get; set; }
+
+    /// <summary>Condición de pago (1 Contado · 2 Crédito · 3 Prepagado). La deriva el servidor del término.</summary>
+    public short CondicionPago { get; set; } = CondicionPagoCompra.Contado;
+
+    /// <summary>Descripción legible de la condición de pago (sólo lectura).</summary>
+    public string CondicionPagoDescripcion => CondicionPagoCompra.Describir(CondicionPago);
 
     public string Moneda { get; set; } = MonedaCompra.Lempira;
     public decimal TasaCambio { get; set; } = 1m;

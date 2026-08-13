@@ -78,6 +78,38 @@
             }
         </DxFormLayoutGroup>
 
+        @if (Model.Id.HasValue)
+        {
+            <DxFormLayoutGroup Caption="Costos y valuación" ColSpanXs="12">
+                <DxFormLayoutItem Caption="Costo promedio" ColSpanMd="4">
+                    <Template>
+                        <div class="pt-2"><span class="fw-semibold text-dark fs-6">@Model.CostoPromedio.ToString("N4")</span></div>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Último costo" ColSpanMd="4">
+                    <Template>
+                        <div class="pt-2"><span class="fw-semibold text-dark fs-6">@Model.UltimoCosto.ToString("N4")</span></div>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Valor total inventario" ColSpanMd="4">
+                    <Template>
+                        <div class="pt-2"><span class="fw-bold text-primary fs-6">@Model.ValorTotal.ToString("N2")</span></div>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="form-hint text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Valores calculados automáticamente por las compras y movimientos de inventario (solo lectura).
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+        }
+
         <DxFormLayoutGroup Caption="Clasificación" ColSpanXs="12">
             <DxFormLayoutItem Caption="Tipo de artículo *" ColSpanMd="6">
                 <DxComboBox Data="@Tipos" Value="Model.TipoArticuloId"

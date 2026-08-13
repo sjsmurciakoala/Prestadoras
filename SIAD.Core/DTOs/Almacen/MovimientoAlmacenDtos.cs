@@ -99,6 +99,13 @@ public sealed class MovimientoAlmacenDto
     public short Estado { get; init; }
     public bool Posteado { get; init; }
 
+    /// <summary>
+    /// Solo lectura: el movimiento tiene partida contable registrada (module ALMACEN / docType
+    /// MOVIMIENTO). La pantalla muestra "Imprimir partida contable" solo cuando es <c>true</c>.
+    /// Es <c>false</c> si el módulo estaba inactivo al postear o la partida quedó encolada.
+    /// </summary>
+    public bool TienePartidaContable { get; init; }
+
     public string? AnuladoPor { get; init; }
     public DateTime? FechaAnulacion { get; init; }
     public string? MotivoAnulacion { get; init; }

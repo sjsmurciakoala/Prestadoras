@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using apc.Client.Services;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.DTOs.Presupuesto;
+using SIAD.Core.DTOs.Retenciones;
 
 namespace apc.Client.Services.Presupuesto;
 
@@ -54,6 +55,23 @@ public sealed class OrdenesPagoDirectoClient
         var response = await _http.GetAsync(url, ct);
         return await response.ReadFromJsonAsyncWithAuthCheck<List<OrdenPagoDirectoListItemDto>>(ct)
             ?? new List<OrdenPagoDirectoListItemDto>();
+    }
+
+    /// <summary>
+    /// Retenciones aplicables a la fecha del compromiso (para el autocálculo de F2): % vigente (o null =
+    /// sin tasa), cuenta del pasivo por empresa, y la tasa ISV general vigente. Sin fecha usa hoy.
+    /// </summary>
+    public async Task<RetencionesAplicablesDto> GetRetencionesAplicablesAsync(
+        DateOnly? fecha = null,
+        CancellationToken ct = default)
+    {
+        var url = fecha.HasValue
+            ? $"api/presupuesto/ordenes-pago-directo/retenciones-aplicables?fecha={fecha.Value:yyyy-MM-dd}"
+            : "api/presupuesto/ordenes-pago-directo/retenciones-aplicables";
+
+        var response = await _http.GetAsync(url, ct);
+        return await response.ReadFromJsonAsyncWithAuthCheck<RetencionesAplicablesDto>(ct)
+            ?? new RetencionesAplicablesDto();
     }
 
     public async Task<OrdenPagoDirectoDetalleDto?> GetByNumeroOrdenAsync(

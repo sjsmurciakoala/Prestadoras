@@ -29,11 +29,28 @@ public sealed class OrdenCompraDetalleDto
     [Range(0, 9_999_999_999d, ErrorMessage = "El costo unitario está fuera de rango.")]
     public decimal CostoUnitario { get; set; }
 
+    /// <summary>
+    /// ISV del renglón. Es de SALIDA: lo calcula el servidor a partir de la tasa del tipo de
+    /// artículo (<see cref="TasaIsv"/>) × total del renglón. Lo que mande el cliente aquí se
+    /// ignora (el ISV no se teclea a mano).
+    /// </summary>
     [Range(0, 999_999_999_999d, ErrorMessage = "El impuesto está fuera de rango.")]
     public decimal Impuesto { get; set; }
 
     public decimal Total { get; set; }
     public decimal CantidadAplicada { get; set; }
+
+    /// <summary>Porcentaje de ISV que aplica a este artículo (capa 1), vigente a la fecha de la orden.</summary>
+    public decimal TasaIsv { get; set; }
+
+    /// <summary>
+    /// El tipo del artículo tiene una tasa de ISV asignada (aunque sea exenta). Si es
+    /// <c>false</c>, el renglón va sin ISV porque NO está configurado: la pantalla lo señala.
+    /// </summary>
+    public bool IsvConfigurado { get; set; } = true;
+
+    /// <summary>Nombre del tipo del artículo (para el aviso de "sin ISV configurado"). Null si no tiene tipo.</summary>
+    public string? TipoArticuloNombre { get; set; }
 }
 
 /// <summary>Orden de compra completa (cabecera + renglones): crear, editar y ver el detalle.</summary>
@@ -83,11 +100,21 @@ public sealed class OrdenCompraListItemDto
     public string EstadoDescripcion => OrdenCompraEstados.Describir(Estado);
     public int Renglones { get; set; }
 
-    /// <summary>Texto para combos: "O/C 00012 — 15/07/2026 — 4,500.00".</summary>
-    public string Display =>
-        $"O/C {Numero:00000}" +
-        (Fecha.HasValue ? $" — {Fecha.Value:dd/MM/yyyy}" : string.Empty) +
-        $" — {Total:N2}";
+    /// <summary>
+    /// Texto para combos: "O/C 00012 — 15/07/2026 — Ferretería El Clavo — 4,500.00".
+    /// Incluye el proveedor para distinguir órdenes cuando el combo lista las de todos.
+    /// </summary>
+    public string Display
+    {
+        get
+        {
+            var proveedor = string.IsNullOrWhiteSpace(ProveedorNombre) ? CodProveedor : ProveedorNombre;
+            return $"O/C {Numero:00000}"
+                + (Fecha.HasValue ? $" — {Fecha.Value:dd/MM/yyyy}" : string.Empty)
+                + (string.IsNullOrWhiteSpace(proveedor) ? string.Empty : $" — {proveedor}")
+                + $" — {Total:N2}";
+        }
+    }
 }
 
 /// <summary>
@@ -104,6 +131,18 @@ public sealed class OrdenCompraArticuloLookupDto
     /// <summary>Último costo pactado con ese proveedor; se propone como costo unitario.</summary>
     public decimal Costo { get; set; }
     public string? UnidadMedida { get; set; }
+
+    /// <summary>Porcentaje de ISV del artículo (capa 1, vigente hoy). 0 si no aplica o no está configurado.</summary>
+    public decimal TasaIsv { get; set; }
+
+    /// <summary>
+    /// El tipo del artículo tiene una tasa de ISV asignada (aunque sea exenta). Si es
+    /// <c>false</c>, al agregarlo la pantalla avisa que irá sin ISV por falta de configuración.
+    /// </summary>
+    public bool TieneIsvConfigurado { get; set; }
+
+    /// <summary>Nombre del tipo del artículo (para el aviso). Null si el artículo no tiene tipo.</summary>
+    public string? TipoArticuloNombre { get; set; }
 
     /// <summary>"CÓDIGO — Descripción" para el combo.</summary>
     public string Display => string.IsNullOrWhiteSpace(CodigoArticulo)

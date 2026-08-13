@@ -1,0 +1,277 @@
+@page "/proveedores/retenciones"
+@attribute [Authorize]
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Retenciones
+@using apc.Client.Services
+@using apc.Client.Services.Retenciones
+@inject RetencionRegistroClient RegistroClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>Retenciones aplicadas</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Retenciones aplicadas</h2>
+            <p class="page-subtitle">Registro fiscal de retenciones por pago a proveedores (libro por proveedor).</p>
+        </div>
+    </div>
+
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@dataSource"
+                    KeyFieldName="@nameof(RetencionRegistroListItemDto.RetencionHdrId)"
+                    PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    SelectionMode="GridSelectionMode.Single"
+                    SelectedDataItem="@cabeceraSeleccionada"
+                    SelectedDataItemChanged="@((object item) => OnSeleccionAsync(item as RetencionRegistroListItemDto))"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                               TextExpression="@(() => filtroBusqueda)"
+                               Placeholder="Buscar proveedor, RTN o póliza…" InputDelay="600"
+                               ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                               CssClass="me-1" Style="min-width: 260px;" />
+                    <DxDateEdit @bind-Date="filtroDesde" NullText="Desde" DisplayFormat="dd/MM/yyyy"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                CssClass="me-1" Style="min-width: 140px;" />
+                    <DxDateEdit @bind-Date="filtroHasta" NullText="Hasta" DisplayFormat="dd/MM/yyyy"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                CssClass="me-1" Style="min-width: 140px;" />
+                    <DxComboBox Data="@estadoOpciones" @bind-Value="filtroEstado"
+                                TextFieldName="@nameof(OpcionEstado.Etiqueta)"
+                                ValueFieldName="@nameof(OpcionEstado.Valor)"
+                                NullText="Todos los estados"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                CssClass="me-1" Style="min-width: 160px;" />
+                    <DxButton Text="Aplicar" IconCssClass="bi bi-funnel" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="AplicarFiltros" CssClass="me-1" />
+                    <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="RecargarGrid" CssClass="me-1" />
+                    <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" />
+                    <div class="ms-auto text-muted small align-self-center">
+                        Total: <span class="fw-bold">@total.ToString("N0")</span>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="Folio" Caption="Folio" Width="90px" />
+                    <DxGridDataColumn FieldName="FechaEmision" Caption="Fecha" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
+                            <span>@r.FechaEmision.ToString("dd/MM/yyyy")</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="CodProveedor" Caption="Proveedor" Width="200px">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
+                            <div class="d-flex flex-column">
+                                <span class="fw-semibold">@r.CodProveedor</span>
+                                @if (!string.IsNullOrWhiteSpace(r.RtnProveedor))
+                                {
+                                    <span class="text-muted small">RTN @r.RtnProveedor</span>
+                                }
+                            </div>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="NumeroOrden" Caption="Orden / Abono" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
+                            <span>@r.NumeroOrden <span class="text-muted">/ @r.NumeroAbono</span></span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="BaseTotal" Caption="Base" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
+                            <span>@r.BaseTotal.ToString("N2")</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="TotalRetenido" Caption="Retenido" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
+                            <span class="fw-semibold">@r.TotalRetenido.ToString("N2")</span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="PolizaNumber" Caption="Póliza" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
+                            @if (!string.IsNullOrWhiteSpace(r.PolizaNumber))
+                            {
+                                <span>@r.PolizaNumber</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted small">sin póliza</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="EstadoId" Caption="Estado" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
+                            <span class="badge-status @(r.EstadoId == EstadoRetencion.Anulada ? "inactive" : "active")">
+                                @r.EstadoDescripcion
+                            </span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay retenciones para el filtro seleccionado.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+
+    @if (cabeceraSeleccionada is not null)
+    {
+        <div class="modern-card mt-3">
+            <div class="detalle-header">
+                <div>
+                    <span class="fw-semibold">Detalle — folio @cabeceraSeleccionada.Folio</span>
+                    <span class="text-muted small ms-2">
+                        @cabeceraSeleccionada.CodProveedor · orden @cabeceraSeleccionada.NumeroOrden / abono @cabeceraSeleccionada.NumeroAbono
+                    </span>
+                </div>
+                <div class="d-flex align-items-center gap-2">
+                    <DxButton Text="Imprimir constancia" IconCssClass="bi bi-file-earmark-pdf"
+                              RenderStyle="ButtonRenderStyle.Secondary" Click="ImprimirConstancia" />
+                    <span class="badge-status @(cabeceraSeleccionada.EstadoId == EstadoRetencion.Anulada ? "inactive" : "active")">
+                        @cabeceraSeleccionada.EstadoDescripcion
+                    </span>
+                </div>
+            </div>
+            @if (!string.IsNullOrWhiteSpace(cabeceraSeleccionada.MotivoAnulacion))
+            {
+                <div class="text-danger small mb-2">Motivo de anulación: @cabeceraSeleccionada.MotivoAnulacion</div>
+            }
+            <div class="grid-wrapper">
+                <DxGrid Data="@lineasSeleccionadas" KeyFieldName="@nameof(RetencionRegistroLineaDto.RetencionDtlId)"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                    <Columns>
+                        <DxGridDataColumn FieldName="Codigo" Caption="Código" Width="120px" />
+                        <DxGridDataColumn FieldName="Nombre" Caption="Retención" />
+                        <DxGridDataColumn FieldName="Porcentaje" Caption="%" Width="90px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var l = (RetencionRegistroLineaDto)cell.DataItem; }
+                                <span>@l.Porcentaje.ToString("N2")</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="BaseLinea" Caption="Base" Width="140px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var l = (RetencionRegistroLineaDto)cell.DataItem; }
+                                <span>@l.BaseLinea.ToString("N2")</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="MontoRetenido" Caption="Retenido" Width="140px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @{ var l = (RetencionRegistroLineaDto)cell.DataItem; }
+                                <span class="fw-semibold">@l.MontoRetenido.ToString("N2")</span>
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="p-3 text-center text-muted">Sin líneas de detalle.</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        </div>
+    }
+</div>
+
+<DxToastProvider Name="RetencionesConsultaToast" MaxToastCount="3" StickToViewport="true" />
+
+@code {
+    private DxGrid? grid;
+    private RetencionesConsultaGridDataSource dataSource = default!;
+
+    private string filtroBusqueda = string.Empty;
+    private DateTime? filtroDesde;
+    private DateTime? filtroHasta;
+    private short? filtroEstado;
+    private int total;
+
+    private RetencionRegistroListItemDto? cabeceraSeleccionada;
+    private IReadOnlyList<RetencionRegistroLineaDto> lineasSeleccionadas = Array.Empty<RetencionRegistroLineaDto>();
+
+    private const string GridLayoutStorageKey = "retenciones-consulta-grid-layout";
+
+    private readonly List<OpcionEstado> estadoOpciones =
+    [
+        new OpcionEstado(EstadoRetencion.Vigente, "Vigente"),
+        new OpcionEstado(EstadoRetencion.Anulada, "Anulada")
+    ];
+
+    protected override void OnInitialized()
+    {
+        dataSource = new RetencionesConsultaGridDataSource(RegistroClient, t =>
+        {
+            total = t;
+            InvokeAsync(StateHasChanged);
+        });
+    }
+
+    private void AplicarFiltros()
+    {
+        dataSource.Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda.Trim();
+        dataSource.Desde = filtroDesde.HasValue ? DateOnly.FromDateTime(filtroDesde.Value) : null;
+        dataSource.Hasta = filtroHasta.HasValue ? DateOnly.FromDateTime(filtroHasta.Value) : null;
+        dataSource.EstadoId = filtroEstado;
+        cabeceraSeleccionada = null;
+        lineasSeleccionadas = Array.Empty<RetencionRegistroLineaDto>();
+        grid?.Reload();
+    }
+
+    private void OnBusquedaChanged(string value)
+    {
+        filtroBusqueda = value;
+        AplicarFiltros();
+    }
+
+    private void RecargarGrid() => grid?.Reload();
+
+    private async Task OnSeleccionAsync(RetencionRegistroListItemDto? item)
+    {
+        cabeceraSeleccionada = item;
+        lineasSeleccionadas = Array.Empty<RetencionRegistroLineaDto>();
+        if (item is null) return;
+
+        try
+        {
+            var detalle = await RegistroClient.GetDetalleAsync(item.RetencionHdrId);
+            if (detalle is not null)
+            {
+                cabeceraSeleccionada = detalle.Cabecera;
+                lineasSeleccionadas = detalle.Lineas;
+            }
+        }
+        catch (Exception ex)
+        {
+            ToastService.ShowToast(new ToastOptions
+            {
+                ProviderName = "RetencionesConsultaToast",
+                RenderStyle = ToastRenderStyle.Danger,
+                Title = "No se pudo cargar el detalle",
+                Text = ex.Message
+            });
+        }
+    }
+
+    private async Task ImprimirConstancia()
+    {
+        if (cabeceraSeleccionada is null) return;
+        await JS.InvokeVoidAsync("open", RegistroClient.GetConstanciaPdfUrl(cabeceraSeleccionada.RetencionHdrId), "_blank");
+    }
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e) => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e) => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private sealed record OpcionEstado(short Valor, string Etiqueta);
+}

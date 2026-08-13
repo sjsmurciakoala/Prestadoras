@@ -51,6 +51,25 @@ public sealed class MovimientosAlmacenController : ControllerBase
         return File(stream.ToArray(), "application/pdf");
     }
 
+    /// <summary>
+    /// Partida contable generada por el movimiento, en PDF. 404 si el movimiento no tiene asiento
+    /// (módulo de almacén no integrado a contabilidad, sin período abierto, o movimiento inexistente).
+    /// </summary>
+    [HttpGet("{id:int}/partida/pdf")]
+    public async Task<IActionResult> GetPartidaContablePdf(int id, CancellationToken ct)
+    {
+        var datos = await _service.GetDatosImpresionPartidaAsync(id, UsuarioActual, ct);
+        if (datos is null)
+            return NotFound(new { message = $"El movimiento {id} no tiene partida contable (módulo inactivo, sin período abierto o inexistente)." });
+
+        using var report = new Rpt_Dev_Partida_Contable(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=Partida-Movimiento-{id:00000}.pdf";
+        return File(stream.ToArray(), "application/pdf");
+    }
+
     [HttpPost]
     public async Task<IActionResult> Crear([FromBody] MovimientoAlmacenDto dto, CancellationToken ct)
     {

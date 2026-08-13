@@ -1,0 +1,724 @@
+@page "/almacen/compras/pagos"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject PagosCompraClient PagosClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Pagos a proveedores</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="PagosCompraToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center form-icon">
+                <i class="bi bi-cash-stack"></i>
+            </div>
+            <div>
+                <h2 class="page-title">Pagos a proveedores</h2>
+                <p class="page-subtitle">Cuentas por pagar de compras — contado y crédito en una sola vista</p>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="row g-3 mb-1">
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Saldo por pagar</div>
+                <div class="kpi-value">@TotalSaldo.ToString("N2")</div>
+                <div class="kpi-sub">@cxps.Count factura(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label"><span class="dot bad"></span>Vencido</div>
+                <div class="kpi-value text-danger">@TotalVencido.ToString("N2")</div>
+                <div class="kpi-sub">@ContarVencidas factura(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label"><span class="dot warn"></span>Vence esta semana</div>
+                <div class="kpi-value text-warning">@TotalPorVencer.ToString("N2")</div>
+                <div class="kpi-sub">≤ 7 días</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">En pantalla</div>
+                <div class="kpi-value">@cxps.Count.ToString("N0")</div>
+                <div class="kpi-sub">documentos</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@cxps" KeyFieldName="@nameof(CompraCxpListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true" PageSizeSelectorItems="new int[] { 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar proveedor o No. factura..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <DxComboBox Data="@estadosFiltro" Value="@estadoId"
+                                    ValueChanged="@((short? v) => OnEstadoChanged(v))"
+                                    ValueExpression="@(() => estadoId)"
+                                    ValueFieldName="@nameof(EstadoFiltroItem.Id)" TextFieldName="@nameof(EstadoFiltroItem.Nombre)"
+                                    NullText="Todos los estados" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 170px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloVencidas" CheckedChanged="@((bool v) => OnSoloVencidasChanged(v))"
+                                        CheckType="CheckType.Switch">Solo vencidas</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Saldo total: <span class="fw-bold">@TotalSaldo.ToString("N2")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.Proveedor)" Caption="Proveedor" MinWidth="180">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@(string.IsNullOrWhiteSpace(item.Proveedor) ? item.CodProveedor : item.Proveedor)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.NumeroFacturaSar)" Caption="No. factura" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item)
+                            { <span class="font-monospace small text-muted">@(string.IsNullOrWhiteSpace(item.NumeroFacturaSar) ? item.Numero.ToString("00000") : item.NumeroFacturaSar)</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.FechaVencimiento)" Caption="Vence" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span>@item.FechaVencimiento.ToString("dd/MM/yyyy")</span>
+                                    <span class="small @VencClase(item)">@VencTexto(item)</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Condición" Width="120px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item)
+                            { <span class="badge-status @(item.CondicionPago == CondicionPagoCompra.Credito ? "active" : "inactive")">@item.CondicionPagoDescripcion</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.Monto)" Caption="Total" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item) { <span class="money">@item.Monto.ToString("N2")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.Abonado)" Caption="Abonado" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item) { <span class="money text-muted">@item.Abonado.ToString("N2")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.Saldo)" Caption="Saldo" Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item) { <span class="money fw-bold">@item.Saldo.ToString("N2")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item)
+                            { <span class="badge-status @EstadoClase(item.EstadoId)">@item.EstadoDescripcion</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CompraCxpListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center align-items-center gap-2">
+                                    <DxButton Text="Pagar" IconCssClass="bi bi-cash" RenderStyle="ButtonRenderStyle.Primary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Contained"
+                                              Enabled="@(item.Saldo > 0)" Click="@(() => AbrirPago(item))" CssClass="btn-sm" />
+                                    <button type="button" class="btn-icon" title="Ver pagos"
+                                            @onclick="() => AbrirAbonosAsync(item)">
+                                        <i class="bi bi-clock-history"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">No hay cuentas por pagar para mostrar.</div></EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="pagoVisible" Width="min(480px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center" style="width:38px;height:38px;">
+                <i class="bi bi-cash-coin"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Registrar pago</div>
+                <div class="small text-muted" style="font-weight:normal;">@(seleccionada?.Proveedor ?? seleccionada?.CodProveedor)</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (seleccionada is not null)
+        {
+            <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 mb-3">
+                <span class="text-muted small">Saldo pendiente</span>
+                <span class="fw-bold fs-5">@seleccionada.Saldo.ToString("N2")</span>
+            </div>
+
+            <div class="row g-3">
+                <div class="col-6">
+                    <label class="form-label fw-semibold">Monto a pagar</label>
+                    <DxSpinEdit @bind-Value="pago.Monto" DisplayFormat="N2" MinValue="0" MaxValue="@seleccionada.Saldo" CssClass="w-100" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label fw-semibold">Fecha</label>
+                    <DxDateEdit Date="@fechaPago" DateChanged="@((DateTime? d) => fechaPago = d)" CssClass="w-100" />
+                </div>
+                <div class="col-6">
+                    <label class="form-label fw-semibold">Método</label>
+                    <DxComboBox Data="@metodos" Value="@pago.MetodoPago"
+                                ValueChanged="@((string v) => OnMetodoChanged(v))"
+                                ValueExpression="@(() => pago.MetodoPago)" CssClass="w-100" />
+                </div>
+                @if (EsBancario)
+                {
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Banco <span class="text-danger">*</span></label>
+                        <DxComboBox Data="@bancosDisponibles" Value="@bancoSeleccionadoId"
+                                    ValueChanged="@((long? v) => OnBancoChanged(v))"
+                                    ValueExpression="@(() => bancoSeleccionadoId)"
+                                    ValueFieldName="@nameof(BancoItem.BancoId)" TextFieldName="@nameof(BancoItem.Nombre)"
+                                    NullText="Seleccione el banco..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Cuenta del banco <span class="text-danger">*</span></label>
+                        <DxComboBox Data="@CuentasDelBanco" Value="@pago.BancoCuentaId"
+                                    ValueChanged="@((long? v) => pago.BancoCuentaId = v)"
+                                    ValueExpression="@(() => pago.BancoCuentaId)"
+                                    ValueFieldName="@nameof(CuentaBancariaLookupDto.BancoCuentaId)"
+                                    TextFieldName="@nameof(CuentaBancariaLookupDto.NumeroCuenta)"
+                                    NullText="@(bancoSeleccionadoId is > 0 ? "Seleccione la cuenta..." : "Elija primero el banco")"
+                                    Enabled="@(bancoSeleccionadoId is > 0)"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                    </div>
+                }
+                else
+                {
+                    <div class="col-6">
+                        <label class="form-label fw-semibold">Cuenta contable @if (contabilidadActiva) { <span class="text-danger">*</span> }</label>
+                        <DxComboBox Data="@cuentasContables" Value="@pago.CuentaContableId"
+                                    ValueChanged="@((long? v) => pago.CuentaContableId = v)"
+                                    ValueExpression="@(() => pago.CuentaContableId)"
+                                    ValueFieldName="@nameof(CompraCuentaContableLookupDto.AccountId)"
+                                    TextFieldName="@nameof(CompraCuentaContableLookupDto.Display)"
+                                    NullText="Caja / efectivo..." FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                        <div class="form-text">Contrapartida del pago: la caja de donde sale el efectivo.</div>
+                    </div>
+                }
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Observaciones</label>
+                    <DxTextBox @bind-Text="pago.Observaciones" MaxLength="300" NullText="Opcional" CssClass="w-100" />
+                </div>
+            </div>
+
+            <div class="alert @(contabilidadActiva ? "alert-success" : "alert-info") py-2 mt-3 mb-0 small">
+                <i class="bi bi-info-circle me-1"></i>
+                @if (contabilidadActiva)
+                {
+                    <text>Se generará la partida contable del pago: <b>DEBE</b> la cuenta del proveedor / <b>HABER</b> @(EsBancario ? "la cuenta contable del banco" : "la cuenta contable seleccionada").</text>
+                }
+                else if (EsBancario)
+                {
+                    <text>El pago mueve el saldo de la cuenta bancaria. El asiento contable se generará cuando se active la integración contable de compras.</text>
+                }
+                else
+                {
+                    <text>El pago registra el abono en efectivo. El asiento contable se generará cuando se active la integración contable de compras.</text>
+                }
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!guardando)" Click="CerrarPago" />
+                <DxButton Text="Registrar pago" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!guardando && pago.Monto > 0)" Click="GuardarPagoAsync" />
+            </div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="abonosVisible" Width="min(620px, 96vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="true">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-secondary bg-opacity-10 text-secondary p-2 rounded-circle d-flex justify-content-center align-items-center" style="width:38px;height:38px;">
+                <i class="bi bi-clock-history"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Pagos de la factura</div>
+                <div class="small text-muted" style="font-weight:normal;">
+                    @(cxpAbonos?.Proveedor ?? cxpAbonos?.CodProveedor) · @(string.IsNullOrWhiteSpace(cxpAbonos?.NumeroFacturaSar) ? cxpAbonos?.Numero.ToString("00000") : cxpAbonos?.NumeroFacturaSar)
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (cxpAbonos is not null)
+        {
+            <div class="alert alert-light border d-flex justify-content-between align-items-center py-2 mb-3">
+                <span class="text-muted small">Saldo pendiente</span>
+                <span class="fw-bold">@cxpAbonos.Saldo.ToString("N2") <small class="text-muted">de @cxpAbonos.Monto.ToString("N2")</small></span>
+            </div>
+        }
+
+        @if (abonosLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:60px"></div></div>
+        }
+        else if (abonos.Count == 0)
+        {
+            <div class="p-3 text-center text-muted">Esta factura aún no tiene pagos registrados.</div>
+        }
+        else
+        {
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>No.</th><th>Fecha</th><th class="text-end">Monto</th><th>Método</th>
+                            <th>Cheque</th><th class="text-center">Estado</th><th></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var a in abonos)
+                        {
+                            <tr @key="a.NumeroAbono" class="@(a.Estado == "A" ? "text-muted" : "")">
+                                <td>@a.NumeroAbono</td>
+                                <td>@a.Fecha.ToString("dd/MM/yyyy")</td>
+                                <td class="text-end money">@a.Monto.ToString("N2")</td>
+                                <td class="small">@a.MetodoPago</td>
+                                <td class="small">@(string.IsNullOrWhiteSpace(a.NumCheque) ? "—" : a.NumCheque)</td>
+                                <td class="text-center">
+                                    <span class="badge-status @(a.Estado == "A" ? "inactive" : "active")">@a.EstadoDescripcion</span>
+                                </td>
+                                <td class="text-center">
+                                    <div class="d-inline-flex gap-1">
+                                        <button type="button" class="btn-icon" title="Imprimir comprobante de pago"
+                                                @onclick="() => ImprimirComprobantePagoAsync(a.NumeroAbono)">
+                                            <i class="bi bi-printer"></i>
+                                        </button>
+                                        @if (a.PartidaId is > 0)
+                                        {
+                                            <button type="button" class="btn-icon" title="Ver partida contable"
+                                                    @onclick="() => VerPartidaAsync(a.NumeroAbono)">
+                                                <i class="bi bi-journal-text"></i>
+                                            </button>
+                                            <button type="button" class="btn-icon" title="Imprimir partida contable"
+                                                    @onclick="() => ImprimirPartidaPagoAsync(a.NumeroAbono)">
+                                                <i class="bi bi-file-earmark-pdf"></i>
+                                            </button>
+                                        }
+                                        @if (a.Estado == "V" && a.NumeroAbono == UltimoVigente)
+                                        {
+                                            <button type="button" class="btn-icon btn-delete" title="Anular pago"
+                                                    @onclick="() => PedirAnular(a.NumeroAbono)">
+                                                <i class="bi bi-x-circle"></i>
+                                            </button>
+                                        }
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="form-text mt-1">Sólo se puede anular el último pago vigente (los pagos se deshacen en orden inverso).</div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmAnularVisible" Width="min(440px, 92vw)" HeaderText="Anular pago" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="text-center mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size:2.5rem;"></i></div>
+            <h5 class="fw-bold text-center">¿Anular el pago No. @abonoAAnular?</h5>
+            <p class="text-muted text-center small">Se reversa el movimiento bancario y el saldo de la factura vuelve a subir.</p>
+            <label class="form-label fw-semibold">Motivo <span class="text-danger">*</span></label>
+            <DxTextBox @bind-Text="motivoAnulacion" MaxLength="300" NullText="Motivo de la anulación..." CssClass="w-100" />
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!anulando)" Click="@(() => confirmAnularVisible = false)" />
+                <DxButton Text="Sí, anular" IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
+                          Enabled="@(!anulando)" Click="AnularConfirmadoAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="partidaVisible" Width="min(600px, 96vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="true">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-info bg-opacity-10 text-info p-2 rounded-circle d-flex justify-content-center align-items-center" style="width:38px;height:38px;">
+                <i class="bi bi-journal-text"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Partida contable del pago</div>
+                <div class="small text-muted" style="font-weight:normal;">
+                    @if (partida is not null) { @($"Partida {partida.PolizaNumero} · {partida.Fecha:dd/MM/yyyy}") }
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (partidaLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:60px"></div></div>
+        }
+        else if (partida is null)
+        {
+            <div class="p-3 text-center text-muted">Este pago no generó partida contable (la contabilidad de compras estaba desactivada cuando se registró).</div>
+        }
+        else
+        {
+            @if (!string.IsNullOrWhiteSpace(partida.Descripcion))
+            {
+                <div class="text-muted small mb-2">@partida.Descripcion</div>
+            }
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Cuenta</th><th>Descripción</th>
+                            <th class="text-end">Debe</th><th class="text-end">Haber</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var l in partida.Lineas)
+                        {
+                            <tr>
+                                <td class="font-monospace small">@l.Cuenta</td>
+                                <td class="small">@l.Nombre</td>
+                                <td class="text-end money">@(l.Debe != 0 ? l.Debe.ToString("N2") : "—")</td>
+                                <td class="text-end money">@(l.Haber != 0 ? l.Haber.ToString("N2") : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot>
+                        <tr class="fw-bold border-top">
+                            <td colspan="2" class="text-end">Totales</td>
+                            <td class="text-end money">@partida.TotalDebe.ToString("N2")</td>
+                            <td class="text-end money">@partida.TotalHaber.ToString("N2")</td>
+                        </tr>
+                    </tfoot>
+                </table>
+            </div>
+        }
+        <div class="d-flex justify-content-end mt-2">
+            <DxButton Text="Cerrar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      Click="@(() => partidaVisible = false)" />
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<CompraCxpListItemDto> cxps = new();
+    private List<CuentaBancariaLookupDto> cuentas = new();
+    private List<BancoItem> bancosDisponibles = new();
+    private List<CompraCuentaContableLookupDto> cuentasContables = new();
+    private bool contabilidadActiva;
+    private long? bancoSeleccionadoId;
+
+    private string filtroBusqueda = string.Empty;
+    private short? estadoId;
+    private bool soloVencidas;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool pagoVisible, guardando;
+    private CompraCxpListItemDto? seleccionada;
+    private CompraCxpAbonoUpsertDto pago = new();
+    private DateTime? fechaPago = DateTime.Today;
+
+    private bool abonosVisible, abonosLoading;
+    private CompraCxpListItemDto? cxpAbonos;
+    private List<CompraCxpAbonoListItemDto> abonos = new();
+
+    private bool confirmAnularVisible, anulando;
+    private int abonoAAnular;
+    private string motivoAnulacion = string.Empty;
+
+    private bool partidaVisible, partidaLoading;
+    private CompraCxpPartidaDto? partida;
+
+    private int UltimoVigente => abonos.Where(a => a.Estado == "V").Select(a => a.NumeroAbono).DefaultIfEmpty(0).Max();
+
+    private static readonly string[] metodos = { MetodoPagoCompra.Efectivo, MetodoPagoCompra.Cheque, MetodoPagoCompra.Transferencia };
+
+    private sealed record BancoItem(long BancoId, string Nombre);
+
+    /// <summary>Cuentas del banco actualmente elegido (cascada del combo Banco → Cuenta).</summary>
+    private List<CuentaBancariaLookupDto> CuentasDelBanco =>
+        cuentas.Where(c => (c.BancoId ?? 0) == (bancoSeleccionadoId ?? -1)).ToList();
+
+    private sealed class EstadoFiltroItem { public short Id { get; set; } public string Nombre { get; set; } = string.Empty; }
+    private static readonly EstadoFiltroItem[] estadosFiltro =
+    {
+        new() { Id = EstadoCompraCxp.Pendiente, Nombre = "Pendiente" },
+        new() { Id = EstadoCompraCxp.Parcial, Nombre = "Parcial" },
+        new() { Id = EstadoCompraCxp.Pagada, Nombre = "Pagada" }
+    };
+
+    private const string GridLayoutStorageKey = "almacen-pagos-compra-grid-layout";
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e) => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e) => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private bool EsBancario => MetodoPagoCompra.EsBancario(pago.MetodoPago);
+
+    private void OnMetodoChanged(string metodo)
+    {
+        pago.MetodoPago = string.IsNullOrWhiteSpace(metodo) ? MetodoPagoCompra.Efectivo : metodo;
+        if (EsBancario)
+        {
+            pago.CuentaContableId = null;
+        }
+        else
+        {
+            pago.BancoCuentaId = null;
+            bancoSeleccionadoId = null;
+        }
+    }
+
+    private void OnBancoChanged(long? bancoId)
+    {
+        bancoSeleccionadoId = bancoId;
+        pago.BancoCuentaId = null;   // al cambiar de banco se vuelve a elegir la cuenta
+    }
+
+    private decimal TotalSaldo => cxps.Sum(x => x.Saldo);
+    private decimal TotalVencido => cxps.Where(EsVencida).Sum(x => x.Saldo);
+    private decimal TotalPorVencer => cxps.Where(x => !EsVencida(x) && DiasParaVencer(x) <= 7).Sum(x => x.Saldo);
+    private int ContarVencidas => cxps.Count(EsVencida);
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarAsync();
+        try
+        {
+            cuentas = await PagosClient.ListarCuentasBancariasAsync();
+            bancosDisponibles = cuentas
+                .GroupBy(c => c.BancoId ?? 0)
+                .Select(g => new BancoItem(g.Key, g.First().Banco ?? "Sin banco"))
+                .OrderBy(b => b.Nombre)
+                .ToList();
+        }
+        catch { cuentas = new(); bancosDisponibles = new(); }
+
+        try { cuentasContables = await PagosClient.ListarCuentasContablesAsync(); } catch { cuentasContables = new(); }
+        try { contabilidadActiva = await PagosClient.ObtenerContabilidadActivaAsync(); } catch { contabilidadActiva = false; }
+    }
+
+    private CompraCxpFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        EstadoId = estadoId,
+        SoloVencidas = soloVencidas
+    };
+
+    private async Task CargarAsync()
+    {
+        try { isLoading = true; errorMessage = null; cxps = await PagosClient.ListarAsync(BuildFilter()); }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar las cuentas por pagar: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnEstadoChanged(short? v) { estadoId = v; await CargarAsync(); }
+    private async Task OnSoloVencidasChanged(bool v) { soloVencidas = v; await CargarAsync(); }
+
+    private void AbrirPago(CompraCxpListItemDto item)
+    {
+        seleccionada = item;
+        pago = new CompraCxpAbonoUpsertDto { Monto = item.Saldo, MetodoPago = MetodoPagoCompra.Efectivo };
+        bancoSeleccionadoId = null;
+        fechaPago = DateTime.Today;
+        pagoVisible = true;
+    }
+
+    private void CerrarPago() { if (guardando) return; pagoVisible = false; seleccionada = null; }
+
+    private async Task GuardarPagoAsync()
+    {
+        if (seleccionada is null) return;
+        if (EsBancario)
+        {
+            if (bancoSeleccionadoId is not > 0)
+            {
+                Toast("Faltan datos", "Seleccione el banco de origen del pago.", ToastRenderStyle.Warning);
+                return;
+            }
+            if (pago.BancoCuentaId is not > 0)
+            {
+                Toast("Faltan datos", "Seleccione la cuenta del banco de origen.", ToastRenderStyle.Warning);
+                return;
+            }
+        }
+        else if (contabilidadActiva && pago.CuentaContableId is not > 0)
+        {
+            Toast("Faltan datos", "Seleccione la cuenta contable de contrapartida del pago en efectivo.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        guardando = true;
+        try
+        {
+            pago.Fecha = fechaPago.HasValue ? DateOnly.FromDateTime(fechaPago.Value) : DateOnly.FromDateTime(DateTime.Today);
+            var cxpId = seleccionada.Id;
+            var r = await PagosClient.RegistrarAbonoAsync(cxpId, pago);
+
+            var msg = r.NumeroCheque.HasValue
+                ? $"Pago registrado. Cheque No. {r.NumeroCheque:0}. Saldo: {r.Saldo:N2}."
+                : $"Pago registrado. Saldo: {r.Saldo:N2} ({r.EstadoDescripcion}).";
+            Toast("Éxito", msg, ToastRenderStyle.Success);
+
+            pagoVisible = false;
+            seleccionada = null;
+            await CargarAsync();
+
+            // Comprobante del pago recién registrado (se abre en pestaña nueva).
+            await JS.InvokeVoidAsync("open", PagosCompraClient.GetComprobantePagoPdfUrl(cxpId, r.NumeroAbono), "_blank");
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { guardando = false; }
+    }
+
+    // ── Ver / anular pagos ────────────────────────────────────────────────────
+
+    private async Task AbrirAbonosAsync(CompraCxpListItemDto item)
+    {
+        cxpAbonos = item;
+        abonos = new();
+        abonosVisible = true;
+        abonosLoading = true;
+        try { abonos = await PagosClient.ListarAbonosAsync(item.Id); }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { abonosLoading = false; }
+    }
+
+    private void PedirAnular(int numeroAbono)
+    {
+        abonoAAnular = numeroAbono;
+        motivoAnulacion = string.Empty;
+        confirmAnularVisible = true;
+    }
+
+    private async Task AnularConfirmadoAsync()
+    {
+        if (cxpAbonos is null) return;
+        if (string.IsNullOrWhiteSpace(motivoAnulacion))
+        {
+            Toast("Faltan datos", "Indique el motivo de la anulación.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        anulando = true;
+        try
+        {
+            await PagosClient.AnularAbonoAsync(cxpAbonos.Id, abonoAAnular, motivoAnulacion);
+            Toast("Éxito", $"Pago No. {abonoAAnular} anulado; el saldo volvió a subir.", ToastRenderStyle.Success);
+            confirmAnularVisible = false;
+
+            // El saldo cambió: se recargan el historial y la lista principal.
+            abonos = await PagosClient.ListarAbonosAsync(cxpAbonos.Id);
+            await CargarAsync();
+            cxpAbonos = cxps.FirstOrDefault(x => x.Id == cxpAbonos.Id) ?? cxpAbonos;
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { anulando = false; }
+    }
+
+    private async Task VerPartidaAsync(int numeroAbono)
+    {
+        if (cxpAbonos is null) return;
+        partida = null;
+        partidaVisible = true;
+        partidaLoading = true;
+        try { partida = await PagosClient.ObtenerPartidaAbonoAsync(cxpAbonos.Id, numeroAbono); }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { partidaLoading = false; }
+    }
+
+    // ── Comprobantes PDF (se abren en pestaña nueva, como los demás comprobantes) ──
+
+    private async Task ImprimirComprobantePagoAsync(int numeroAbono)
+    {
+        if (cxpAbonos is null) return;
+        await JS.InvokeVoidAsync("open", PagosCompraClient.GetComprobantePagoPdfUrl(cxpAbonos.Id, numeroAbono), "_blank");
+    }
+
+    private async Task ImprimirPartidaPagoAsync(int numeroAbono)
+    {
+        if (cxpAbonos is null) return;
+        await JS.InvokeVoidAsync("open", PagosCompraClient.GetPartidaPagoPdfUrl(cxpAbonos.Id, numeroAbono), "_blank");
+    }
+
+    // ── Semáforo de vencimiento ──────────────────────────────────────────────
+    private static int DiasParaVencer(CompraCxpListItemDto item)
+        => item.FechaVencimiento.DayNumber - DateOnly.FromDateTime(DateTime.Today).DayNumber;
+
+    private static bool EsVencida(CompraCxpListItemDto item)
+        => DiasParaVencer(item) < 0 && item.EstadoId != EstadoCompraCxp.Pagada;
+
+    private static string VencTexto(CompraCxpListItemDto item)
+    {
+        if (item.EstadoId == EstadoCompraCxp.Pagada) return "pagada";
+        var d = DiasParaVencer(item);
+        return d < 0 ? $"vencida {-d} d" : d == 0 ? "vence hoy" : $"en {d} d";
+    }
+
+    private static string VencClase(CompraCxpListItemDto item)
+    {
+        if (item.EstadoId == EstadoCompraCxp.Pagada) return "text-muted";
+        var d = DiasParaVencer(item);
+        return d < 0 ? "text-danger fw-semibold" : d <= 7 ? "text-warning" : "text-success";
+    }
+
+    private static string EstadoClase(short estado) => estado switch
+    {
+        EstadoCompraCxp.Pagada => "active",
+        EstadoCompraCxp.Parcial => "pendiente",
+        EstadoCompraCxp.Anulada => "inactive",
+        _ => "inactive"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "PagosCompraToast" });
+}

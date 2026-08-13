@@ -53,6 +53,10 @@ public class KardexPuntoCorteTests : IntegrationTestBase, IAsyncLifetime
             _kardex = new KardexService(_context, company);
             _carga = new CargaInicialInventarioService(_context, company, motor);
             _ajustes = new AjusteInventarioService(_context, company, motor);
+
+            // Prueba la MECÁNICA (kardex/punto de corte/saldos), no la contabilidad: se apaga la
+            // integración para aislar el test del estado de los flags en la base de prueba.
+            await DesactivarIntegracionContableAsync();
         }
     }
 

@@ -246,6 +246,20 @@ public sealed class ArticulosService : IArticulosService
                     : query.OrderBy(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodEx).Sum(u => u.existencia)))
                 : (sortDesc
                     ? query.OrderByDescending(a => a.existencia) : query.OrderBy(a => a.existencia)),
+            nameof(ArticuloListItemDto.ValorUnitario) => bodegaId is int bodUnit
+                ? (sortDesc
+                    ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodUnit).Max(u => (decimal?)u.costo_promedio))
+                    : query.OrderBy(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodUnit).Max(u => (decimal?)u.costo_promedio)))
+                : (sortDesc
+                    ? query.OrderByDescending(a => a.valor_unitario)
+                    : query.OrderBy(a => a.valor_unitario)),
+            nameof(ArticuloListItemDto.UltimoCosto) => bodegaId is int bodUlt
+                ? (sortDesc
+                    ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodUlt).Max(u => (decimal?)u.ultimo_costo))
+                    : query.OrderBy(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodUlt).Max(u => (decimal?)u.ultimo_costo)))
+                : (sortDesc
+                    ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo).Max(u => (decimal?)u.ultimo_costo))
+                    : query.OrderBy(a => a.ubicaciones.Where(u => u.activo).Max(u => (decimal?)u.ultimo_costo))),
             nameof(ArticuloListItemDto.ValorTotal) => bodegaId is int bodVal
                 ? (sortDesc
                     ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodVal).Sum(u => u.existencia * u.costo_promedio))
@@ -291,7 +305,12 @@ public sealed class ArticulosService : IArticulosService
         ExistenciaMinima = bodegaComoAlcance && bodegaId != null
             ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia_minima)
             : a.existencia_minima,
-        ValorUnitario = a.valor_unitario,
+        ValorUnitario = bodegaComoAlcance && bodegaId != null
+            ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Max(u => (decimal?)u.costo_promedio) ?? 0m
+            : a.valor_unitario,
+        UltimoCosto = bodegaComoAlcance && bodegaId != null
+            ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Max(u => (decimal?)u.ultimo_costo) ?? 0m
+            : a.ubicaciones.Where(u => u.activo).Max(u => (decimal?)u.ultimo_costo) ?? a.valor_unitario,
         // DINERO. Vista global: existencia × valor unitario (la suma cuadra con el KPI
         // ValorInventario). Vista por bodega: existencia de la bodega × su costo promedio
         // ponderado (la valuación real de lo que hay físicamente en esa bodega).
@@ -566,32 +585,56 @@ public sealed class ArticulosService : IArticulosService
             return null;
         }
 
-        return await _context.alm_articulos
+        var articulo = await _context.alm_articulos
             .AsNoTracking()
             .Where(a => a.id == id)
-            .Select(a => new ArticuloEditDto
+            .Select(a => new
             {
-                Id = a.id,
-                Codigo = a.codigo_articulo,
-                Descripcion = a.descripcion,
-                UnidadMedidaId = a.unidad_medida_id,
-                UnidadAlmacenajeId = a.unidad_almacenaje_id,
-                UnidadSalidaId = a.unidad_salida_id,
-                TipoArticuloId = a.tipo_articulo_id,
-                GrupoId = a.grupo_id,
-                Diametro = a.diametro,
-                ExistenciaMinima = a.existencia_minima,
-                ValorUnitario = a.valor_unitario,
-                Activo = a.activo,
-                // xmin es la propiedad sombra del token de concurrencia (UseXminAsConcurrencyToken).
-                // Viaja al cliente para que el PUT pueda detectar que otro usuario guardó primero.
+                a.id,
+                a.codigo_articulo,
+                a.descripcion,
+                a.unidad_medida_id,
+                a.unidad_almacenaje_id,
+                a.unidad_salida_id,
+                a.tipo_articulo_id,
+                a.grupo_id,
+                a.diametro,
+                a.existencia_minima,
+                a.valor_unitario,
+                a.activo,
                 RowVersion = EF.Property<uint>(a, "xmin"),
-                // La existencia mostrada es el total real: la suma de las ubicaciones ACTIVAS
-                // (mismo contrato que el rollup de cabecera; antes sumaba también las
-                // deshabilitadas y el form contradecía al maestro).
-                Existencia = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia)
+                Existencia = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia),
+                UltimoCosto = a.ubicaciones.Where(u => u.activo).Max(u => (decimal?)u.ultimo_costo)
             })
             .FirstOrDefaultAsync(ct);
+
+        if (articulo is null)
+        {
+            return null;
+        }
+
+        var ultimoCosto = articulo.UltimoCosto ?? articulo.valor_unitario;
+
+        return new ArticuloEditDto
+        {
+            Id = articulo.id,
+            Codigo = articulo.codigo_articulo,
+            Descripcion = articulo.descripcion,
+            UnidadMedidaId = articulo.unidad_medida_id,
+            UnidadAlmacenajeId = articulo.unidad_almacenaje_id,
+            UnidadSalidaId = articulo.unidad_salida_id,
+            TipoArticuloId = articulo.tipo_articulo_id,
+            GrupoId = articulo.grupo_id,
+            Diametro = articulo.diametro,
+            ExistenciaMinima = articulo.existencia_minima,
+            ValorUnitario = articulo.valor_unitario,
+            CostoPromedio = articulo.valor_unitario,
+            UltimoCosto = ultimoCosto,
+            ValorTotal = articulo.Existencia * articulo.valor_unitario,
+            Activo = articulo.activo,
+            RowVersion = articulo.RowVersion,
+            Existencia = articulo.Existencia
+        };
     }
 
     public async Task<ArticuloEditDto> CreateAsync(ArticuloEditDto dto, string user, CancellationToken ct = default)

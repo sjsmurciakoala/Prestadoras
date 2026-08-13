@@ -73,7 +73,14 @@ public sealed class ArticuloListItemDto
     public decimal? CostoPromedioEnBodega { get; init; }
 
     public decimal ExistenciaMinima { get; init; }
+
+    /// <summary>Costo promedio unitario del artículo (en vista global: valor_unitario de cabecera; en vista bodega: costo_promedio de esa bodega).</summary>
+    public decimal CostoPromedio => ValorUnitario;
+
     public decimal ValorUnitario { get; init; }
+
+    /// <summary>Último costo de compra/entrada registrado en las ubicaciones/bodega.</summary>
+    public decimal UltimoCosto { get; init; }
 
     /// <summary>
     /// Valor de inventario en DINERO: existencia (rollup de cabecera) × valor unitario.

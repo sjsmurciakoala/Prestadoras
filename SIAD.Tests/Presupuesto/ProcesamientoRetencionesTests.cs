@@ -214,14 +214,18 @@ SELECT COALESCE(status_transacc, FALSE) FROM public.prv_compromiso_hdr
         return (bool)(await cmd.ExecuteScalarAsync())!;
     }
 
-    /// <summary>Ultimo poliza_id registrado para el compromiso (la partida PRC, la mas reciente).</summary>
+    /// <summary>
+    /// Ultimo poliza_id de la partida de PAGO del compromiso (la mas reciente). Desde F0 el asiento de
+    /// pago lo postea el motor con document_type='OPD-ABO{numeroAbono}' (POSTED); la GEN de creacion
+    /// sigue con document_type='OPD' (borrador) y se excluye con el LIKE.
+    /// </summary>
     private async Task<long?> LeerUltimoPolizaIdAsync(int numeroOrden)
     {
         await using var cmd = Connection.CreateCommand();
         cmd.Transaction = Transaction;
         cmd.CommandText = @"
 SELECT poliza_id FROM public.con_partida_hdr
- WHERE company_id = @c AND ""module"" = 'PROV' AND document_type = 'OPD'
+ WHERE company_id = @c AND ""module"" = 'PROV' AND document_type LIKE 'OPD-ABO%'
    AND btrim(coalesce(document_number,'')) = btrim(@doc)
  ORDER BY poliza_id DESC LIMIT 1;";
         cmd.Parameters.AddWithValue("c", CompanyId);

@@ -218,3 +218,19 @@ public static class EstadoDescargoHdr
     public const short Registrado = 1;
     public const short Anulado    = 9;
 }
+
+// Retención fiscal (prv_retencion_hdr.estado_id). CHECK en BD: estado_id IN (1,9).
+// La retención nace Vigente; se corrige por anulación del pago (estado_id=9 + motivo), nunca por
+// DELETE. El reverso de la partida lo hace el motor (F0); F4 solo marca el hdr.
+public static class EstadoRetencion
+{
+    public const short Vigente = 1;
+    public const short Anulada = 9;
+
+    /// <summary>Descripción para el usuario final. Único punto de traducción en C#.</summary>
+    public static string Descripcion(short? id) => id switch
+    {
+        Anulada => "ANULADA",
+        _       => "VIGENTE"
+    };
+}

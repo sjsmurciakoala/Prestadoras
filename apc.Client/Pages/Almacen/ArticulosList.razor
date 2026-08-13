@@ -17,7 +17,7 @@
 <PageTitle>SIAD - Artículos de almacén</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="ArticulosToast" MaxToastCount="4" />
+    <DxToastProvider Name="ArticulosToast" MaxToastCount="4" StickToViewport="true" />
 
     <div class="header-section">
         <div>
@@ -302,6 +302,24 @@
                                     <i class="bi bi-exclamation-triangle-fill text-warning ms-1"
                                        title="@($"Descuadre: cabecera {item.Existencia:N2} ≠ suma de bodegas activas {item.ExistenciaBodegas:N2}")"></i>
                                 }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorUnitario)" Caption="@CaptionCostoPromedio" Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted" title="Costo promedio ponderado">@item.ValorUnitario.ToString("N4")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.UltimoCosto)" Caption="@CaptionUltimoCosto" Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ArticuloListItemDto item)
+                            {
+                                <span class="text-muted" title="Último costo de compra / entrada">@item.UltimoCosto.ToString("N4")</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -616,6 +634,8 @@
     // estado y KPIs). Los encabezados lo dejan explícito y el descuadre (global) se oculta.
     private bool EnVistaBodega => filtroBodegaId.HasValue;
     private string CaptionExistencia => EnVistaBodega ? $"Existencia en {NombreBodega(filtroBodegaId)}" : "Existencia";
+    private string CaptionCostoPromedio => EnVistaBodega ? $"Costo prom. en {NombreBodega(filtroBodegaId)}" : "Costo prom.";
+    private string CaptionUltimoCosto => EnVistaBodega ? $"Último costo en {NombreBodega(filtroBodegaId)}" : "Último costo";
     private string CaptionValor => EnVistaBodega ? $"Valor en {NombreBodega(filtroBodegaId)}" : "Valor inventario";
 
     private Task QuitarBusqueda() { filtroBusqueda = string.Empty; return CargarAsync(); }

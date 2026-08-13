@@ -31,6 +31,11 @@
             {
                 <DxButton Text="Imprimir comprobante" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
                           RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirAsync" />
+                @if (modelo.TienePartidaContable)
+                {
+                    <DxButton Text="Imprimir partida contable" IconCssClass="bi bi-journal-text" RenderStyle="ButtonRenderStyle.Secondary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirPartidaAsync" />
+                }
             }
             <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
                       Click="@(() => Navigation.NavigateTo("/almacen/movimientos"))" />
@@ -392,6 +397,10 @@
     private async Task ImprimirAsync()
         // El botón solo aparece en modo lectura (Id de ruta presente); se usa ese Id, con respaldo en el modelo.
         => await JS.InvokeVoidAsync("open", MovimientosAlmacenClient.GetComprobantePdfUrl(Id ?? modelo.Id ?? 0), "_blank");
+
+    private async Task ImprimirPartidaAsync()
+        // Solo visible cuando el movimiento tiene partida contable (TienePartidaContable).
+        => await JS.InvokeVoidAsync("open", MovimientosAlmacenClient.GetPartidaPdfUrl(Id ?? modelo.Id ?? 0), "_blank");
 
     private void Toast(string title, string text, ToastRenderStyle style)
         => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "MovFormToast" });

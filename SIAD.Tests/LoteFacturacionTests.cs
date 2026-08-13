@@ -141,10 +141,12 @@ public sealed class LoteFacturacionTests : IntegrationTestBase
 
         var anulada = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
             UPDATE public.factura SET estado = 'N', estado_id = 3
-            WHERE id = (SELECT id FROM public.factura
-                        WHERE company_id = @CompanyId AND tipofacturacion = 'S' AND tipofactura = 'F'
-                          AND COALESCE(estado_id, 1) <> 3
-                        ORDER BY id LIMIT 1)
+            WHERE id = (SELECT f.id FROM public.factura f
+                        WHERE f.company_id = @CompanyId AND f.tipofacturacion = 'S' AND f.tipofactura = 'F'
+                          AND COALESCE(f.estado_id, 1) <> 3
+                          AND NOT EXISTS (SELECT 1 FROM public.con_partida_factura pf
+                                          WHERE pf.company_id = @CompanyId AND pf.factura_id = f.id)
+                        ORDER BY f.id LIMIT 1)
             RETURNING id",
             new { CompanyId }, Transaction));
 
@@ -165,10 +167,12 @@ public sealed class LoteFacturacionTests : IntegrationTestBase
         // Mover una factura a una fecha sin período contable.
         var facturaId = await Connection.ExecuteScalarAsync<int>(new CommandDefinition(@"
             UPDATE public.factura SET fechaemision = DATE '2031-01-15'
-            WHERE id = (SELECT id FROM public.factura
-                        WHERE company_id = @CompanyId AND tipofacturacion = 'S' AND tipofactura = 'F'
-                          AND COALESCE(estado_id, 1) <> 3
-                        ORDER BY id LIMIT 1)
+            WHERE id = (SELECT f.id FROM public.factura f
+                        WHERE f.company_id = @CompanyId AND f.tipofacturacion = 'S' AND f.tipofactura = 'F'
+                          AND COALESCE(f.estado_id, 1) <> 3
+                          AND NOT EXISTS (SELECT 1 FROM public.con_partida_factura pf
+                                          WHERE pf.company_id = @CompanyId AND pf.factura_id = f.id)
+                        ORDER BY f.id LIMIT 1)
             RETURNING id",
             new { CompanyId }, Transaction));
 
@@ -213,10 +217,12 @@ public sealed class LoteFacturacionTests : IntegrationTestBase
 
         await Connection.ExecuteAsync(new CommandDefinition(@"
             UPDATE public.factura SET fechaemision = DATE '2031-02-10'
-            WHERE id = (SELECT id FROM public.factura
-                        WHERE company_id = @CompanyId AND tipofacturacion = 'S' AND tipofactura = 'F'
-                          AND COALESCE(estado_id, 1) <> 3
-                        ORDER BY id LIMIT 1)",
+            WHERE id = (SELECT f.id FROM public.factura f
+                        WHERE f.company_id = @CompanyId AND f.tipofacturacion = 'S' AND f.tipofactura = 'F'
+                          AND COALESCE(f.estado_id, 1) <> 3
+                          AND NOT EXISTS (SELECT 1 FROM public.con_partida_factura pf
+                                          WHERE pf.company_id = @CompanyId AND pf.factura_id = f.id)
+                        ORDER BY f.id LIMIT 1)",
             new { CompanyId }, Transaction));
 
         var ex = await Assert.ThrowsAsync<PostgresException>(() =>

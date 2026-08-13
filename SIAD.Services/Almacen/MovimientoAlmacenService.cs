@@ -1,10 +1,12 @@
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Contabilidad;
 
 namespace SIAD.Services.Almacen;
 
@@ -22,13 +24,16 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _company;
     private readonly IInventarioPostingService _posting;
+    private readonly IPolizaService _poliza;
 
     public MovimientoAlmacenService(
-        SiadDbContext context, ICurrentCompanyService company, IInventarioPostingService posting)
+        SiadDbContext context, ICurrentCompanyService company, IInventarioPostingService posting,
+        IPolizaService poliza)
     {
         _context = context;
         _company = company;
         _posting = posting;
+        _poliza = poliza;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -116,6 +121,15 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
                                   ExistenciaActual = u == null ? null : u.existencia
                               }).ToListAsync(ct);
 
+        // ¿El movimiento dejó partida contable? (module ALMACEN / docType MOVIMIENTO / id). Gobierna
+        // el botón "Imprimir partida contable"; es false si el módulo estaba inactivo o quedó encolada.
+        var companyId = _company.GetCompanyId();
+        var tienePartida = await _context.con_partida_hdrs.AsNoTracking()
+            .AnyAsync(p => p.company_id == companyId
+                        && p.module == IntegracionContableModulos.Almacen
+                        && p.document_type == AlmacenContabilidad.DocTypeMovimiento
+                        && p.document_id == id, ct);
+
         return new MovimientoAlmacenDto
         {
             Id = fila.h.id,
@@ -133,6 +147,7 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
             Total = fila.h.total,
             Estado = fila.h.estado,
             Posteado = fila.h.posteado,
+            TienePartidaContable = tienePartida,
             AnuladoPor = fila.h.anulado_por,
             FechaAnulacion = fila.h.fecha_anulacion,
             MotivoAnulacion = fila.h.motivo_anulacion,
@@ -166,6 +181,63 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
             ImpresoPor = ClasificacionNormalizer.Usuario(impresoPor),
             Documento = doc,
             MontoEnLetras = doc.Total > 0m ? NumerosALetras.Convertir(doc.Total) : string.Empty
+        };
+    }
+
+    /// <summary>
+    /// Arma los datos de impresión de la PARTIDA CONTABLE del movimiento (empresa + asiento +
+    /// total en letras). Devuelve <c>null</c> si el movimiento no existe o no generó partida
+    /// (módulo inactivo o partida encolada sin período).
+    /// </summary>
+    public async Task<PartidaContableImpresionDto?> GetDatosImpresionPartidaAsync(
+        int id, string impresoPor, CancellationToken ct = default)
+    {
+        var mov = await GetByIdAsync(id, ct);
+        if (mov is null)
+        {
+            return null;
+        }
+
+        var companyId = _company.GetCompanyId();
+        var partida = await _poliza.ObtenerPorDocumentoAsync(
+            companyId, IntegracionContableModulos.Almacen, AlmacenContabilidad.DocTypeMovimiento, id, ct);
+        if (partida is null)
+        {
+            return null;
+        }
+
+        var empresa = await CargarEmpresaAsync(ct);
+        var totalDebe = partida.Lineas.Sum(l => l.DebitAmount);
+        var totalHaber = partida.Lineas.Sum(l => l.CreditAmount);
+        var anulada = partida.Status == 2;
+
+        return new PartidaContableImpresionDto
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = ClasificacionNormalizer.Usuario(impresoPor),
+            Numero = partida.PolizaNumber,
+            Fecha = partida.PolizaDate,
+            Descripcion = partida.Description,
+            DocumentoReferencia = $"Movimiento No. {mov.Numero:00000}",
+            Anulada = anulada,
+            EstadoTexto = anulada ? "ANULADA" : "REGISTRADA",
+            TotalDebe = totalDebe,
+            TotalHaber = totalHaber,
+            Lineas = partida.Lineas.Select(l => new PartidaContableLineaImpresionDto
+            {
+                CuentaCodigo = l.AccountCode,
+                CuentaNombre = l.AccountName,
+                Debe = l.DebitAmount,
+                Haber = l.CreditAmount,
+                Descripcion = l.Description
+            }).ToList(),
+            TotalEnLetras = totalDebe > 0m ? NumerosALetras.Convertir(totalDebe) : string.Empty
         };
     }
 
@@ -293,6 +365,20 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
         // Los renglones necesitan su id — ES el documento_id del asiento.
         await _context.SaveChangesAsync(ct);
 
+        // Para el asiento de una corrección de VALOR hace falta el costo promedio ANTERIOR de
+        // cada par (el delta contable es existencia × (costo_nuevo − costo_anterior)); se toma
+        // ANTES de postear, porque el kardex lo reemplaza. En ENTRADA/SALIDA no se usa.
+        var articuloIds = lineas.Select(l => l.articulo_id).ToList();
+        var costoPrevioPorPar = tipo.clase == ClaseMovimientoInventario.Valor
+            ? await _context.alm_articulo_bodegas.AsNoTracking()
+                .Where(u => u.bodega_id == dto.BodegaId && articuloIds.Contains(u.articulo_id))
+                .ToDictionaryAsync(u => u.articulo_id, u => u.costo_promedio, ct)
+            : new Dictionary<int, decimal>();
+
+        // Renglones que alimentan la partida contable (uno por línea con valor). En ENTRADA/SALIDA
+        // el valor es el total del renglón (positivo); en VALOR es el delta con signo.
+        var renglonesContables = new List<(int ArticuloId, decimal Valor)>();
+
         decimal total = 0m;
 
         foreach (var linea in lineas)
@@ -318,11 +404,28 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
             linea.total = Math.Round(linea.cantidad * (linea.costo_real ?? 0m), 2, MidpointRounding.AwayFromZero);
             linea.posteado = true;
             total += linea.total;
+
+            var valorContable = tipo.clase switch
+            {
+                ClaseMovimientoInventario.Entrada or ClaseMovimientoInventario.Salida => linea.total,
+                ClaseMovimientoInventario.Valor => Math.Round(
+                    resultado.ExistenciaResultante * (linea.costo_unitario - costoPrevioPorPar.GetValueOrDefault(linea.articulo_id)),
+                    2, MidpointRounding.AwayFromZero),
+                _ => 0m
+            };
+            renglonesContables.Add((linea.articulo_id, valorContable));
         }
 
         cabecera.total = Math.Round(total, 2, MidpointRounding.AwayFromZero);
         cabecera.posteado = true;
         cabecera.fecha_posteo = ahora;
+
+        // Integración contable: con el módulo ALMACEN activo, el documento deja UNA partida de
+        // doble entrada en ESTA misma transacción del kardex (se confirma o revierte con él). Con
+        // el módulo inactivo no hace nada y el movimiento queda sin asiento.
+        await AlmacenContabilidad.ContabilizarMovimientoAsync(
+            _context, companyId, tipo.clase, renglonesContables,
+            cabecera.id, $"MOV-{numero:00000}", fecha, $"{tipo.codigo} · {motivo}", usuario, ct);
 
         await _context.SaveChangesAsync(ct);
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
@@ -409,6 +512,10 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
                 Observacion = $"Anulación del movimiento {cabecera.numero:00000}"
             }, user, ct);
         }
+
+        // Reverso contable: descarta la partida del movimiento (docType MOVIMIENTO), o su pendiente
+        // viva si estaba encolada. No-op si el módulo estaba inactivo al crearlo (no hay asiento).
+        await AlmacenContabilidad.RevertirMovimientoAsync(_context, companyId, cabecera.id, usuario, ct);
 
         cabecera.estado = EstadoMovimientoAlmacen.Anulado;
         cabecera.anulado_por = usuario;

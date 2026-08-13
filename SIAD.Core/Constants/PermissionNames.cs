@@ -109,6 +109,34 @@ public static class PermissionResources
         // Descargo / entrega de materiales (2026-08-04, Fase 6): la salida real (sí postea).
         public const string Descargos = "descargos";
     }
+
+    public static class Configuracion
+    {
+        // Catálogo de retenciones a proveedores (2026-08-06, F1): mantenimiento del vocabulario
+        // fiscal (concepto + tasas con vigencia) y de la cuenta del pasivo por empresa. Recurso
+        // propio para poder concederlo aparte de otras opciones de configuración. Como en
+        // Inventario, la policy admite el permiso fino O el de módulo: no restringe a quien ya
+        // tiene module.configuracion.*, pero permite concederlo a quien no lo tiene y hace que la
+        // opción aparezca en la pantalla de roles.
+        public const string Retenciones = "retenciones";
+
+        // Configuración de correo y notificaciones (2026-08-13): conexión SendGrid (API key cifrada)
+        // + áreas de notificación (remitente y destinatarios por área). Recurso propio para poder
+        // restringir el manejo del secreto aparte del resto de configuración.
+        public const string Correo = "correo";
+    }
+
+    public static class Proveedores
+    {
+        // Registro fiscal de retenciones aplicadas (2026-08-07, F4): consulta del libro hdr/dtl.
+        // Recurso propio para concederlo aparte del permiso de módulo (aparece en la pantalla de roles).
+        public const string Retenciones = "retenciones";
+
+        // Estado de cuenta del proveedor (2026-08-13): saldo, documentos por pagar y movimientos.
+        // Recurso propio porque expone la deuda consolidada del proveedor (compras + compromisos),
+        // que no todo usuario del maestro tiene por qué ver.
+        public const string EstadoCuenta = "estado_cuenta";
+    }
 }
 
 public static class PermissionNames
@@ -193,6 +221,24 @@ public static class PermissionNames
         public const string Create = "module.proveedores.create";
         public const string Edit = "module.proveedores.edit";
         public const string Delete = "module.proveedores.delete";
+
+        /// <summary>
+        /// Consulta del registro fiscal de retenciones aplicadas (F4). Solo <c>View</c>: es una
+        /// consulta; el registro lo escribe el flujo de pago (procesar/abonar), no esta pantalla.
+        /// </summary>
+        public static class Retenciones
+        {
+            public const string View = "module.proveedores.retenciones.view";
+        }
+
+        /// <summary>
+        /// Estado de cuenta del proveedor. Solo <c>View</c>: es una consulta que unifica lo que
+        /// ya registran Compras y Compromisos; esta pantalla no crea ni modifica documentos.
+        /// </summary>
+        public static class EstadoCuenta
+        {
+            public const string View = "module.proveedores.estado_cuenta.view";
+        }
     }
 
     public static class Inventario
@@ -322,6 +368,28 @@ public static class PermissionNames
         public const string Create = "module.configuracion.create";
         public const string Edit = "module.configuracion.edit";
         public const string Delete = "module.configuracion.delete";
+
+        /// <summary>
+        /// Catálogo de retenciones a proveedores (concepto + tasas con vigencia + cuenta del pasivo
+        /// por empresa). Sin <c>Delete</c>: una retención no se borra, se desactiva — borrarla
+        /// dejaría huérfano lo que la referencie.
+        /// </summary>
+        public static class Retenciones
+        {
+            public const string View = "module.configuracion.retenciones.view";
+            public const string Create = "module.configuracion.retenciones.create";
+            public const string Edit = "module.configuracion.retenciones.edit";
+        }
+
+        /// <summary>
+        /// Mantenimiento de correo y notificaciones (2026-08-13). Sin <c>Create</c>/<c>Delete</c>:
+        /// es un upsert de configuración (la conexión y cada área se crean o actualizan con Edit).
+        /// </summary>
+        public static class Correo
+        {
+            public const string View = "module.configuracion.correo.view";
+            public const string Edit = "module.configuracion.correo.edit";
+        }
     }
 
     public static class Legacy
@@ -426,7 +494,18 @@ public static class PermissionNames
             Inventario.Requisiciones.Aprobar,
             Inventario.Descargos.View,
             Inventario.Descargos.Create,
-            Inventario.Descargos.Edit
+            Inventario.Descargos.Edit,
+
+            Configuracion.Retenciones.View,
+            Configuracion.Retenciones.Create,
+            Configuracion.Retenciones.Edit,
+
+            Configuracion.Correo.View,
+            Configuracion.Correo.Edit,
+
+            Proveedores.Retenciones.View,
+
+            Proveedores.EstadoCuenta.View
         };
 
         list.AddRange(PermissionEndpointCatalog.All.Select(e => e.Permission));
@@ -537,7 +616,27 @@ public static class PermissionNames
         // Descargo (la salida real). Sin Delete: se anula con reversa.
         new PermissionPolicyDefinition(Inventario.Descargos.View, [Inventario.Descargos.View, Inventario.View, Legacy.Inventario]),
         new PermissionPolicyDefinition(Inventario.Descargos.Create, [Inventario.Descargos.Create, Inventario.Create]),
-        new PermissionPolicyDefinition(Inventario.Descargos.Edit, [Inventario.Descargos.Edit, Inventario.Edit])
+        new PermissionPolicyDefinition(Inventario.Descargos.Edit, [Inventario.Descargos.Edit, Inventario.Edit]),
+
+        // Catálogo de retenciones a proveedores (configuracion). Mismo patrón que Inventario: la
+        // policy admite el permiso fino O el de módulo, así que el recurso NO restringe a quien ya
+        // tiene module.configuracion.* — permite concederlo aparte y aparece en la pantalla de roles.
+        new PermissionPolicyDefinition(Configuracion.Retenciones.View, [Configuracion.Retenciones.View, Configuracion.View, Legacy.Configuracion]),
+        new PermissionPolicyDefinition(Configuracion.Retenciones.Create, [Configuracion.Retenciones.Create, Configuracion.Create]),
+        new PermissionPolicyDefinition(Configuracion.Retenciones.Edit, [Configuracion.Retenciones.Edit, Configuracion.Edit]),
+
+        // Mantenimiento de correo y notificaciones (2026-08-13). Mismo patrón: el permiso fino O el
+        // de módulo bastan, así que no restringe a quien ya tiene module.configuracion.*.
+        new PermissionPolicyDefinition(Configuracion.Correo.View, [Configuracion.Correo.View, Configuracion.View, Legacy.Configuracion]),
+        new PermissionPolicyDefinition(Configuracion.Correo.Edit, [Configuracion.Correo.Edit, Configuracion.Edit]),
+
+        // Registro fiscal de retenciones aplicadas (F4): consulta bajo el módulo Proveedores. El
+        // permiso fino O el de módulo bastan (no restringe a quien ya tiene module.proveedores.*).
+        new PermissionPolicyDefinition(Proveedores.Retenciones.View, [Proveedores.Retenciones.View, Proveedores.View, Legacy.Proveedores]),
+
+        // Estado de cuenta del proveedor (2026-08-13). Mismo patrón: el permiso fino O el de
+        // módulo bastan, así que no restringe a quien ya tiene module.proveedores.*.
+        new PermissionPolicyDefinition(Proveedores.EstadoCuenta.View, [Proveedores.EstadoCuenta.View, Proveedores.View, Legacy.Proveedores])
         };
 
         foreach (var endpoint in PermissionEndpointCatalog.All)

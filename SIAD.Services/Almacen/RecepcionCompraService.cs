@@ -20,13 +20,16 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _company;
     private readonly IInventarioPostingService _motor;
+    private readonly ITasaIsvArticuloResolver _tasas;
 
     public RecepcionCompraService(
-        SiadDbContext context, ICurrentCompanyService company, IInventarioPostingService motor)
+        SiadDbContext context, ICurrentCompanyService company, IInventarioPostingService motor,
+        ITasaIsvArticuloResolver tasas)
     {
         _context = context;
         _company = company;
         _motor = motor;
+        _tasas = tasas;
     }
 
     // ── Consultas ────────────────────────────────────────────────────────────
@@ -196,7 +199,7 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
             query = query.Where(o => o.cod_proveedor == cod);
         }
 
-        return await query
+        var filas = await query
             .OrderByDescending(o => o.numero)
             .Select(o => new OrdenCompraListItemDto
             {
@@ -210,6 +213,13 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
             })
             .Take(200)
             .ToListAsync(ct);
+
+        // El nombre del proveedor hace legible el combo cuando se listan las órdenes de todos
+        // los proveedores (sin uno ya elegido), no sólo las de uno.
+        await ResolverProveedoresAsync(filas.Select(f => f.CodProveedor),
+            (cod, nombre) => { foreach (var f in filas.Where(x => x.CodProveedor == cod)) f.ProveedorNombre = nombre; }, ct);
+
+        return filas;
     }
 
     // ── Alta ─────────────────────────────────────────────────────────────────
@@ -246,7 +256,7 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
 
         // Política del ISV: capa 1 (tasa por tipo de artículo) y capa 2 (qué hace la empresa
         // con ese ISV), más el override de la factura.
-        var tasas = await ResolverTasasIsvAsync(dto.Detalles.Select(d => d.ArticuloId).Distinct().ToList(), fecha, ct);
+        var tasas = await _tasas.ResolverAsync(dto.Detalles.Select(d => d.ArticuloId).ToList(), fecha, ct);
 
         // El código del artículo se toma del CATÁLOGO, no del DTO: es un snapshot y el
         // cliente puede no mandarlo (o mandar cualquier cosa). Mismo criterio que el
@@ -295,6 +305,10 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
             fechacreacion = ahora
         };
 
+        // Término de pago del catálogo: si se eligió uno, manda sobre el texto libre y define
+        // el vencimiento por sus días.
+        await AplicarTerminoPagoAsync(cabecera, dto, fecha, ct);
+
         var lineas = ArmarLineasYTotales(cabecera, dto, upcs, codigos, tasas, capitalizaIsv);
 
         _context.alm_compra_hdrs.Add(cabecera);
@@ -335,10 +349,49 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         cabecera.posteado = true;
         cabecera.fecha_posteo = ahora;
 
+        // Toda factura genera su cuenta por pagar (contado o crédito); todas se pagan desde la
+        // vista unificada.
+        GenerarCxp(cabecera);
+
+        // Fase 2: asiento contable de la compra (DEBE inventario / HABER proveedor), módulo COMPRAS,
+        // gated por activo_compras (Compras es su propio módulo contable). No-op si el módulo COMPRAS
+        // está inactivo (el comportamiento de hoy).
+        await CompraContabilidad.ContabilizarFacturaAsync(
+            _context, companyId, cod, cabecera.total,
+            lineas.Select(l => (l.Linea.articulo_id!.Value, l.CostoPosteo * l.Linea.cantidad)).ToList(),
+            cabecera.id, cabecera.numero.ToString("00000"), fecha,
+            $"Compra {cabecera.numero:00000} · proveedor {cod}", usuario, ct);
+
         await _context.SaveChangesAsync(ct);
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
 
         return (await GetByIdAsync(cabecera.id, ct))!;
+    }
+
+    /// <summary>
+    /// Crea la cuenta por pagar de la factura: saldo = total, estado Pendiente, vencimiento del
+    /// término (o la fecha de la factura si no hay). El índice único (company_id, compra_hdr_id)
+    /// garantiza una sola CxP por factura. Prepagado no genera CxP (ya está pagada).
+    /// </summary>
+    private void GenerarCxp(alm_compra_hdr cabecera)
+    {
+        if (cabecera.condicion_pago == CondicionPagoCompra.Prepagado) return;
+
+        _context.alm_compra_cxps.Add(new alm_compra_cxp
+        {
+            compra_hdr_id = cabecera.id,
+            cod_proveedor = cabecera.cod_proveedor,
+            proveedor = cabecera.proveedor,
+            numero_factura_sar = cabecera.numero_factura_sar,
+            fecha = cabecera.fecha,
+            fecha_vencimiento = cabecera.fecha_vencimiento ?? cabecera.fecha,
+            condicion_pago = cabecera.condicion_pago,
+            monto = cabecera.total,
+            saldo = cabecera.total,
+            estado_id = EstadoCompraCxp.Pendiente,
+            usuariocreacion = cabecera.usuariocreacion,
+            fechacreacion = cabecera.fechacreacion
+        });
     }
 
     // ── Anulación ────────────────────────────────────────────────────────────
@@ -416,6 +469,12 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
             }, user, ct);
         }
 
+        // Anula la cuenta por pagar de la factura (rechaza si ya tiene pagos aplicados).
+        await AnularCxpDeFacturaAsync(cabecera, usuario, ahora, ct);
+
+        // Fase 2: revierte el asiento contable de la compra (no-op si el flag estaba apagado al crearla).
+        await CompraContabilidad.RevertirFacturaAsync(_context, companyId, cabecera.id, usuario, ct);
+
         cabecera.estado = EstadoRecepcionCompra.Anulada;
         cabecera.observaciones = AnexarMotivo(cabecera.observaciones, motivo, usuario);
         cabecera.usuariomodificacion = usuario;
@@ -424,6 +483,29 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         await _context.SaveChangesAsync(ct);
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
         return true;
+    }
+
+    /// <summary>
+    /// Anula la cuenta por pagar generada por la factura. Si tiene abonos vigentes, rechaza: los
+    /// pagos deben anularse antes (no se deshace una factura ya pagada por esta vía).
+    /// </summary>
+    private async Task AnularCxpDeFacturaAsync(alm_compra_hdr cabecera, string usuario, DateTime ahora, CancellationToken ct)
+    {
+        var cxp = await _context.alm_compra_cxps.FirstOrDefaultAsync(c => c.compra_hdr_id == cabecera.id, ct);
+        if (cxp is null || cxp.estado_id == EstadoCompraCxp.Anulada) return;
+
+        var tienePagos = await _context.alm_compra_cxp_abonos
+            .AnyAsync(a => a.cxp_id == cxp.id && a.estado == "V", ct);
+        if (tienePagos)
+        {
+            throw new InvalidOperationException(
+                "No se puede anular la factura: su cuenta por pagar tiene pagos aplicados. Anule primero los pagos.");
+        }
+
+        cxp.estado_id = EstadoCompraCxp.Anulada;
+        cxp.saldo = 0m;
+        cxp.usuariomodificacion = usuario;
+        cxp.fechamodificacion = ahora;
     }
 
     /// <summary>
@@ -613,7 +695,7 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         RecepcionCompraDto dto,
         IReadOnlyDictionary<int, string> upcs,
         IReadOnlyDictionary<int, string?> codigos,
-        IReadOnlyDictionary<int, decimal> tasas,
+        IReadOnlyDictionary<int, TasaIsvArticulo> tasas,
         bool capitalizaIsv)
     {
         var resultado = new List<(alm_compra, decimal)>();
@@ -622,7 +704,7 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         foreach (var d in dto.Detalles)
         {
             var totalRenglon = Redondear2(d.Cantidad * d.CostoUnitario);
-            var porcentaje = tasas.TryGetValue(d.ArticuloId, out var p) ? p : 0m;
+            var porcentaje = tasas.TryGetValue(d.ArticuloId, out var t) ? t.Porcentaje : 0m;
             var isvRenglon = Redondear2(totalRenglon * porcentaje / 100m);
 
             ExigirMonto(totalRenglon, "El total de un renglón");
@@ -692,44 +774,6 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         ExigirMonto(cabecera.total, "El total de la factura");
 
         return resultado;
-    }
-
-    /// <summary>
-    /// Porcentaje de ISV por artículo: capa 1 de la política
-    /// (<c>alm_tipo_articulo.impuesto_tasa_id</c> → tasa vigente a la fecha del documento).
-    /// Un artículo sin tipo, o con tipo sin tasa, no lleva ISV.
-    /// </summary>
-    private async Task<IReadOnlyDictionary<int, decimal>> ResolverTasasIsvAsync(
-        List<int> articuloIds, DateOnly fecha, CancellationToken ct)
-    {
-        if (articuloIds.Count == 0) return new Dictionary<int, decimal>();
-
-        var pares = await (
-            from a in _context.alm_articulos.AsNoTracking()
-            join t in _context.alm_tipo_articulos.AsNoTracking() on a.tipo_articulo_id equals t.id
-            where articuloIds.Contains(a.id) && t.impuesto_tasa_id != null
-            select new { a.id, TasaId = t.impuesto_tasa_id!.Value })
-            .ToListAsync(ct);
-
-        if (pares.Count == 0) return new Dictionary<int, decimal>();
-
-        var tasaIds = pares.Select(p => p.TasaId).Distinct().ToList();
-
-        // Vigencia: la tasa que regía a la FECHA del documento, no la de hoy. Reimprimir o
-        // recalcular una factura vieja debe dar el impuesto de su época.
-        var tasas = await _context.cfg_impuesto_tasas.AsNoTracking()
-            .Where(t => tasaIds.Contains(t.id)
-                     && t.vigencia_desde <= fecha
-                     && (t.vigencia_hasta == null || t.vigencia_hasta >= fecha))
-            .Select(t => new { t.id, t.porcentaje })
-            .ToListAsync(ct);
-
-        var porTasa = tasas.ToDictionary(t => t.id, t => t.porcentaje);
-
-        return pares
-            .Where(p => porTasa.ContainsKey(p.TasaId))
-            .GroupBy(p => p.id)
-            .ToDictionary(g => g.Key, g => porTasa[g.First().TasaId]);
     }
 
     /// <summary>
@@ -826,8 +870,10 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         OrdenCompraNumero = h.orden?.numero,
         BodegaId = h.bodega_id,
         BodegaNombre = h.bodega_ref?.nombre,
+        TerminoPagoId = h.termino_pago_id,
         TerminosPago = h.terminos_pago,
         TipoCompra = h.tipo_compra,
+        CondicionPago = h.condicion_pago,
         PlazoDias = h.plazo_dias,
         Moneda = h.moneda,
         TasaCambio = h.tasa_cambio,
@@ -864,6 +910,54 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
             .Where(p => p.company_id == companyId && p.cod_proveedor == cod)
             .Select(p => p.nombre)
             .FirstOrDefaultAsync(ct);
+
+    /// <summary>
+    /// Aplica el término de pago del catálogo a la cabecera: valida que exista y esté activo,
+    /// snapshotea su nombre y días, deriva contado/crédito y calcula el vencimiento (fecha de la
+    /// factura + días) cuando el usuario no lo fijó a mano. Sin término elegido no toca nada.
+    /// </summary>
+    private async Task AplicarTerminoPagoAsync(
+        alm_compra_hdr cabecera, RecepcionCompraDto dto, DateOnly fecha, CancellationToken ct)
+    {
+        if (!dto.TerminoPagoId.HasValue) return;
+
+        // El filtro por empresa lo aplica el contexto: un término de otra empresa no aparece.
+        var termino = await _context.alm_termino_pagos.AsNoTracking()
+            .FirstOrDefaultAsync(t => t.id == dto.TerminoPagoId.Value, ct)
+            ?? throw new InvalidOperationException("El término de pago seleccionado no existe.");
+        if (!termino.activo)
+        {
+            throw new InvalidOperationException("El término de pago seleccionado está inactivo.");
+        }
+
+        cabecera.termino_pago_id = termino.id;
+        cabecera.terminos_pago = termino.nombre;   // el snapshot del catálogo manda sobre el texto libre
+        cabecera.plazo_dias = termino.dias;
+        cabecera.tipo_compra = termino.dias > 0 ? (short)1 : TipoCompra.Contado;
+        cabecera.condicion_pago = termino.dias > 0 ? CondicionPagoCompra.Credito : CondicionPagoCompra.Contado;
+
+        // El vencimiento lo define el término; si el usuario lo ajustó a mano, se respeta.
+        cabecera.fecha_vencimiento ??= (dto.FechaFactura ?? fecha).AddDays(termino.dias);
+    }
+
+    /// <summary>Resuelve en un solo viaje el nombre de varios proveedores por su código.</summary>
+    private async Task ResolverProveedoresAsync(
+        IEnumerable<string> codigos, Action<string, string?> asignar, CancellationToken ct)
+    {
+        var codes = codigos.Where(c => !string.IsNullOrWhiteSpace(c)).Distinct().ToList();
+        if (codes.Count == 0) return;
+
+        var companyId = _company.GetCompanyId();
+        var nombres = await _context.prv_proveedores.AsNoTracking()
+            .Where(p => p.company_id == companyId && codes.Contains(p.cod_proveedor))
+            .Select(p => new { p.cod_proveedor, p.nombre })
+            .ToListAsync(ct);
+
+        foreach (var n in nombres.GroupBy(x => x.cod_proveedor))
+        {
+            asignar(n.Key, n.First().nombre);
+        }
+    }
 
     private async Task ValidarProveedorAsync(string cod, long companyId, CancellationToken ct)
     {

@@ -18,7 +18,7 @@
 <PageTitle>SIAD - @(EsEdicion ? "Editar" : "Nuevo") artículo</PageTitle>
 
 <div class="page-container">
-    <DxToastProvider Name="ArticuloFormToast" MaxToastCount="4" />
+    <DxToastProvider Name="ArticuloFormToast" MaxToastCount="4" StickToViewport="true" />
 
     <div class="header-section">
         <div class="d-flex align-items-center gap-3">
@@ -110,18 +110,29 @@
 
     protected override async Task OnInitializedAsync()
     {
-        await CargarLookupsAsync();
-
-        if (EsEdicion)
+        cargando = true;
+        errorCarga = null;
+        try
         {
-            await CargarArticuloAsync(Id!.Value);
-        }
-        else
-        {
-            modelo = new ArticuloEditDto();
-        }
+            await CargarLookupsAsync();
 
-        cargando = false;
+            if (EsEdicion)
+            {
+                await CargarArticuloAsync(Id!.Value);
+            }
+            else
+            {
+                modelo = new ArticuloEditDto();
+            }
+        }
+        catch (Exception ex)
+        {
+            errorCarga = $"Error al inicializar la pantalla: {ex.Message}";
+        }
+        finally
+        {
+            cargando = false;
+        }
     }
 
     private async Task CargarLookupsAsync()

@@ -21,6 +21,12 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- DataProtection: para instanciar CorreoConfigService en los tests con un
+         EphemeralDataProtectionProvider (llaves en memoria, round-trip de cifrado). -->
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+  </ItemGroup>
+
+  <ItemGroup>
     <ProjectReference Include="..\SIAD.Core\SIAD.Core.csproj" />
     <ProjectReference Include="..\SIAD.Data\SIAD.Data.csproj" />
     <ProjectReference Include="..\SIAD.Services\SIAD.Services.csproj" />

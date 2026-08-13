@@ -164,6 +164,18 @@
                 }
             }
 
+            @{
+                var renglonesSinIsv = modelo.Detalles.Count(x => !x.IsvConfigurado);
+            }
+            @if (modelo.CalculaIsv && renglonesSinIsv > 0)
+            {
+                <div class="alert alert-warning py-2 mb-3" role="alert">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    <strong>@renglonesSinIsv</strong> renglón(es) van <strong>sin ISV</strong>: su tipo de artículo no tiene tasa configurada.
+                    Asígnala en <strong>Mantenimientos → Tipos de artículo</strong> (campo «ISV en compras») y el ISV se calculará solo.
+                </div>
+            }
+
             <div class="table-responsive">
                 <table class="table table-sm align-middle tabla-renglones">
                     <thead>
@@ -230,13 +242,22 @@
                                         }
                                     </td>
                                     <td class="text-end" style="min-width:120px">
-                                        @if (SoloLectura || !modelo.CalculaIsv)
+                                        @if (!modelo.CalculaIsv)
                                         {
-                                            <span class="text-muted">@(modelo.CalculaIsv ? d.Impuesto.ToString("N2") : "—")</span>
+                                            <span class="text-muted">—</span>
                                         }
                                         else
                                         {
-                                            <DxSpinEdit @bind-Value="d.Impuesto" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                                            <span class="fw-semibold">@IsvRenglon(d).ToString("N2")</span>
+                                            @if (!d.IsvConfigurado)
+                                            {
+                                                <i class="bi bi-exclamation-triangle-fill text-warning ms-1"
+                                                   title="@AvisoSinIsv(d.Descripcion, d.TipoArticuloNombre)"></i>
+                                            }
+                                            else if (d.TasaIsv > 0)
+                                            {
+                                                <span class="text-muted small ms-1">@d.TasaIsv.ToString("0.##")%</span>
+                                            }
                                         }
                                     </td>
                                     <td class="text-end fw-semibold">@TotalRenglon(d).ToString("N2")</td>
@@ -378,13 +399,32 @@
     // ── Totales (espejo del cálculo del servidor, que es el autoritativo) ────
     private decimal SubTotal => modelo.Detalles.Sum(TotalRenglon);
     private decimal MontoDescuento => Math.Round(SubTotal * modelo.Descuento / 100m, 2, MidpointRounding.AwayFromZero);
-    private decimal Isv => modelo.CalculaIsv
-        ? Math.Round(modelo.Detalles.Sum(d => d.Impuesto), 2, MidpointRounding.AwayFromZero)
-        : 0m;
+    private decimal Isv => Math.Round(modelo.Detalles.Sum(IsvRenglon), 2, MidpointRounding.AwayFromZero);
     private decimal Total => SubTotal - MontoDescuento + Isv + modelo.OtrosGastos;
 
     private static decimal TotalRenglon(OrdenCompraDetalleDto d)
         => Math.Round(d.CantidadPedida * d.CostoUnitario, 2, MidpointRounding.AwayFromZero);
+
+    /// <summary>
+    /// ISV del renglón. Editando se calcula desde la tasa del tipo (el servidor hace lo mismo y
+    /// es el autoritativo); en solo lectura se respeta el ISV que quedó guardado.
+    /// </summary>
+    private decimal IsvRenglon(OrdenCompraDetalleDto d)
+    {
+        if (!modelo.CalculaIsv) return 0m;
+        return SoloLectura
+            ? d.Impuesto
+            : Math.Round(TotalRenglon(d) * d.TasaIsv / 100m, 2, MidpointRounding.AwayFromZero);
+    }
+
+    /// <summary>Texto del aviso "sin ISV configurado", para el toast al agregar y el tooltip del renglón.</summary>
+    private static string AvisoSinIsv(string? descripcion, string? tipoNombre)
+    {
+        var art = string.IsNullOrWhiteSpace(descripcion) ? "El artículo" : $"«{descripcion}»";
+        return string.IsNullOrWhiteSpace(tipoNombre)
+            ? $"{art} no tiene tipo asignado, así que irá SIN ISV. Asígnale un tipo con tasa en Mantenimientos → Tipos de artículo."
+            : $"El tipo «{tipoNombre}» no tiene ISV configurado, así que {art} irá SIN ISV. Configúralo en Mantenimientos → Tipos de artículo (campo «ISV en compras»).";
+    }
 
     protected override async Task OnInitializedAsync()
     {
@@ -496,8 +536,20 @@
             CodigoUpc = articuloSeleccionado.CodigoUpc,
             Descripcion = articuloSeleccionado.Descripcion,
             CantidadPedida = 1m,
-            CostoUnitario = articuloSeleccionado.Costo
+            CostoUnitario = articuloSeleccionado.Costo,
+            TasaIsv = articuloSeleccionado.TasaIsv,
+            IsvConfigurado = articuloSeleccionado.TieneIsvConfigurado,
+            TipoArticuloNombre = articuloSeleccionado.TipoArticuloNombre
         });
+
+        // Aviso inmediato: si el tipo del artículo no tiene ISV configurado, el renglón irá sin
+        // impuesto — y no es un olvido de captura, porque el ISV ya no se teclea a mano.
+        if (modelo.CalculaIsv && !articuloSeleccionado.TieneIsvConfigurado)
+        {
+            Toast("ISV no configurado",
+                AvisoSinIsv(articuloSeleccionado.Descripcion, articuloSeleccionado.TipoArticuloNombre),
+                ToastRenderStyle.Warning);
+        }
 
         articuloSeleccionado = null;
     }

@@ -23,6 +23,12 @@ public interface IMovimientoAlmacenService
     Task<MovimientoImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default);
 
     /// <summary>
+    /// Datos de impresión de la partida contable del movimiento (empresa + asiento + total en
+    /// letras), o <c>null</c> si el movimiento no generó partida (módulo inactivo o encolada).
+    /// </summary>
+    Task<PartidaContableImpresionDto?> GetDatosImpresionPartidaAsync(int id, string impresoPor, CancellationToken ct = default);
+
+    /// <summary>
     /// Crea el documento Y postea todos sus renglones en la MISMA transacción: o se registran
     /// todos los asientos o no se registra ninguno. Un documento sin asiento sería un papel
     /// sin efecto (mismo criterio que <see cref="IAjusteInventarioService"/>).

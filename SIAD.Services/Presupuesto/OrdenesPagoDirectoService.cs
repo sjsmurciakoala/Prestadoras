@@ -9,6 +9,7 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Contabilidad;
 using SIAD.Core.DTOs.Presupuesto;
+using SIAD.Core.DTOs.Retenciones;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
 using SIAD.Data;
@@ -684,10 +685,14 @@ ORDER BY a.numero_abono;";
 
         ArgumentNullException.ThrowIfNull(dto);
 
+        // F4: la retencion aplicada viaja en dto.Retenciones (paralela a Lineas). Validar que cuadre
+        // con la partida ANTES de tocar nada, para no desincronizar el registro fiscal del asiento.
+        ValidateRetencionesConsistencia(dto.Retenciones, dto.Lineas);
+
         var orden = await _context.prv_compromiso_hdrs
             .AsNoTracking()
             .Where(x => x.numero_orden == numeroOrden)
-            .Select(x => new { x.numero_orden, x.fecha, x.concepto, x.monto, x.cod_proveedor, x.nombre_proveedor, x.status_transacc, x.anulado })
+            .Select(x => new { x.numero_orden, x.fecha, x.concepto, x.monto, x.cod_proveedor, x.rtn, x.nombre_proveedor, x.status_transacc, x.anulado })
             .FirstOrDefaultAsync(ct);
 
         if (orden is null)
@@ -835,6 +840,10 @@ ORDER BY a.numero_abono;";
                 };
             }
 
+            // Numero del abono que representa el PAGO del procesar (la fila 'V' por el saldo que se inserta
+            // abajo). Es tambien la llave del asiento de pago en el motor (docType OPD-ABO{numeroAbono}).
+            var numeroAbonoPago = estadoSaldo.SiguienteNumeroAbono;
+
             // La partida GEN pudo generarla un abono concurrente: revalidar bajo el lock.
             if (faltaPartidaCreacion)
             {
@@ -855,11 +864,16 @@ ORDER BY a.numero_abono;";
                     ct);
             }
 
-            var partidaId = await RegisterPartidaContableAsync(
+            // Asiento de PAGO por el motor config-driven (POSTED, idempotente, con reverso), en lugar del
+            // camino viejo sp_registrar_partida_contable (borrador). El pago del procesar ES el abono final
+            // (numeroAbonoPago); llave (module=PROV, docType=OPD-ABO{numeroAbono}, documentId=numeroOrden).
+            // Devuelve null si el motor encola por falta de periodo abierto (el procesar no rompe).
+            var partidaId = await PostearPagoMotorAsync(
                 connection,
                 dbTransaction,
-                BuildDocumentNumber(numeroOrden),
-                BuildPartidaNumber(numeroOrden, "PRC"),
+                companyId,
+                numeroOrden,
+                numeroAbonoPago,
                 fechaOrden,
                 descripcion,
                 usuarioProceso,
@@ -868,12 +882,9 @@ ORDER BY a.numero_abono;";
 
             if (OrdenPagoDirectoMetodoPago.EsBancario(metodoPago))
             {
-                if (!partidaId.HasValue || partidaId.Value <= 0)
-                {
-                    throw new InvalidOperationException(
-                        "No se pudo resolver la partida contable del procesamiento para vincular la transaccion bancaria.");
-                }
-
+                // partidaId puede ser null si el motor encolo la partida (sin periodo abierto): el
+                // movimiento bancario se registra igual (el dinero salio) y el vinculo con la poliza
+                // queda diferido. Un fallo real del motor lanza excepcion, no devuelve null.
                 kardexIds = usaModeloGeneral
                     ? await RegisterLinkedBankMovementsGeneralAsync(
                         connection,
@@ -883,7 +894,7 @@ ORDER BY a.numero_abono;";
                         descripcion,
                         usuarioProceso,
                         metodoPago,
-                        partidaId.Value,
+                        partidaId,
                         lineasBancoGeneral,
                         ChequeOrigen.Procesar,
                         orden.nombre_proveedor,
@@ -897,7 +908,7 @@ ORDER BY a.numero_abono;";
                         descripcion,
                         usuarioProceso,
                         metodoPago,
-                        partidaId.Value,
+                        partidaId,
                         lineasContraNormalizadas,
                         ChequeOrigen.Procesar,
                         orden.nombre_proveedor,
@@ -922,9 +933,16 @@ ORDER BY a.numero_abono;";
             }
 
             await InsertAbonoRowAsync(
-                connection, dbTransaction, companyId, numeroOrden, estadoSaldo.SiguienteNumeroAbono,
+                connection, dbTransaction, companyId, numeroOrden, numeroAbonoPago,
                 orden.fecha.Date, estadoSaldo.SaldoActual, metodoPago, cuentaContraAbonoId,
                 bancoCuentaAbonoId, banKardexAbonoId, partidaId, usuarioProceso, ct);
+
+            // F4: registro fiscal de la(s) retencion(es) aplicada(s), ligado a la partida POSTED
+            // (partidaId) y al numero_abono. No-op si el pago no trae retenciones.
+            await PersistRetencionesAplicadasAsync(
+                connection, dbTransaction, companyId, numeroOrden, numeroAbonoPago,
+                DateOnly.FromDateTime(fechaOrden), orden.cod_proveedor, orden.rtn, saldoPendiente,
+                partidaId, dto.Retenciones, usuarioProceso, ct);
 
             await UpdateCompromisoStatusTransaccAsync(
                 connection,
@@ -977,11 +995,14 @@ ORDER BY a.numero_abono;";
 
         ArgumentNullException.ThrowIfNull(dto);
 
+        // F4: validar que las retenciones aplicadas cuadren con la partida antes de registrar el abono.
+        ValidateRetencionesConsistencia(dto.Retenciones, dto.Lineas);
+
         // Pre-lectura (fuera de transaccion) para rechazos tempranos y datos del compromiso.
         var orden = await _context.prv_compromiso_hdrs
             .AsNoTracking()
             .Where(x => x.numero_orden == numeroOrden)
-            .Select(x => new { x.numero_orden, x.fecha, x.concepto, x.monto, x.cod_proveedor, x.nombre_proveedor, x.status_transacc, x.anulado })
+            .Select(x => new { x.numero_orden, x.fecha, x.concepto, x.monto, x.cod_proveedor, x.rtn, x.nombre_proveedor, x.status_transacc, x.anulado })
             .FirstOrDefaultAsync(ct);
 
         if (orden is null)
@@ -998,39 +1019,75 @@ ORDER BY a.numero_abono;";
         var descripcionBase = $"Abono - {(orden.concepto?.Trim() ?? $"Orden pago directo {numeroOrden}")}";
         if (descripcionBase.Length > 200) descripcionBase = descripcionBase[..200];
 
-        // Contracuentas del abono (por el MONTO DEL ABONO). Preparacion read-only, fuera de la transaccion.
-        IReadOnlyList<PartidaLineaOrdenPagoDto> lineasContraDto;
-        if (dto.Lineas is { Count: > 0 })
+        // Preparacion read-only de la partida del abono (fuera de la transaccion). El "bruto" del abono
+        // es dto.Monto (lo que reduce el SALDO del compromiso); el proveedor va al DEBE por ese bruto.
+        //
+        // Bifurcacion GENERAL vs CONTRA, igual que MarkAsProcessedAsync (el PROCESAR):
+        //  - CON retenciones/deducciones el abono trae Lineas con al menos una linea al HABER
+        //    (Credito > 0): la de retencion. Se usa el modelo GENERAL, donde cada linea del DTO trae su
+        //    Debito/Credito REAL y la de origen (banco) va al HABER por el NETO (= bruto - retenciones).
+        //  - SIN retenciones se mantiene el camino contra-magnitud de siempre (toda la magnitud viaja en
+        //    Debito y se asienta al HABER en BuildProviderProcessingPartidaLineasAsync). NO se relaja
+        //    NormalizeContraProcessingLinesAsync: sigue rechazando lineas de contracuenta con Credito != 0.
+        //
+        // SUPUESTO del discriminador (fijarlo aqui): el modelo GENERAL se activa por la presencia de una
+        // linea al HABER, y el envio con retenciones SIEMPRE incluye la linea de origen con Credito = neto
+        // > 0. Si a futuro se cambia el payload del abono (p. ej. mandar el origen al Debito), revisar esta
+        // condicion para no desviar el ruteo GENERAL/CONTRA sin querer.
+        var lineasDtoAbono = dto.Lineas ?? new List<PartidaLineaOrdenPagoDto>();
+        var usaModeloGeneral = lineasDtoAbono.Any(x => x.Credito > 0m);
+
+        List<PartidaLineaOrden> lineasPartida;
+        long? cuentaContraId;
+        IReadOnlyList<NormalizedContraProcessingLine> lineasContra = Array.Empty<NormalizedContraProcessingLine>();
+        List<PartidaLineaOrdenPagoDto> lineasBancoGeneral = new();
+
+        if (usaModeloGeneral)
         {
-            lineasContraDto = dto.Lineas;
-        }
-        else if (dto.CuentaContraId is > 0)
-        {
-            // BancoCuentaId desambigua cuando varias cuentas bancarias comparten la misma cuenta
-            // contable; si va null, NormalizeContraProcessingLinesAsync toma la primera del banco.
-            lineasContraDto = new List<PartidaLineaOrdenPagoDto>
-            {
-                new()
-                {
-                    CuentaId = dto.CuentaContraId.Value,
-                    BancoCuentaId = dto.BancoCuentaId,
-                    Descripcion = descripcionBase,
-                    Debito = dto.Monto,
-                    Credito = 0m
-                }
-            };
+            // Modelo GENERAL (retenciones): proveedor al DEBE por el bruto (= dto.Monto), retenciones al
+            // HABER, banco/origen al HABER por el neto. Valida XOR por linea, cuadre y neto > 0 (bancario).
+            var partidaGeneral = await BuildGeneralProcessingPartidaLineasAsync(
+                orden.cod_proveedor, lineasDtoAbono, dto.Monto, descripcionBase, metodoPago, ct);
+            lineasPartida = partidaGeneral.Lineas;
+            lineasBancoGeneral = partidaGeneral.LineasBanco;
+            cuentaContraId = lineasBancoGeneral.Select(x => (long?)x.CuentaId).FirstOrDefault();
         }
         else
         {
-            throw new ArgumentException(
-                "Debe seleccionar al menos una cuenta contra (origen) para registrar el abono.", nameof(dto));
-        }
+            // Contracuentas del abono (por el MONTO DEL ABONO).
+            IReadOnlyList<PartidaLineaOrdenPagoDto> lineasContraDto;
+            if (dto.Lineas is { Count: > 0 })
+            {
+                lineasContraDto = dto.Lineas;
+            }
+            else if (dto.CuentaContraId is > 0)
+            {
+                // BancoCuentaId desambigua cuando varias cuentas bancarias comparten la misma cuenta
+                // contable; si va null, NormalizeContraProcessingLinesAsync toma la primera del banco.
+                lineasContraDto = new List<PartidaLineaOrdenPagoDto>
+                {
+                    new()
+                    {
+                        CuentaId = dto.CuentaContraId.Value,
+                        BancoCuentaId = dto.BancoCuentaId,
+                        Descripcion = descripcionBase,
+                        Debito = dto.Monto,
+                        Credito = 0m
+                    }
+                };
+            }
+            else
+            {
+                throw new ArgumentException(
+                    "Debe seleccionar al menos una cuenta contra (origen) para registrar el abono.", nameof(dto));
+            }
 
-        // Normaliza contra el monto del ABONO (resuelve BancoCuentaId de cada contracuenta).
-        var lineasContra = await NormalizeContraProcessingLinesAsync(lineasContraDto, dto.Monto, descripcionBase, ct);
-        var lineasPartida = await BuildProviderProcessingPartidaLineasAsync(
-            orden.cod_proveedor, lineasContra, dto.Monto, descripcionBase, ct);
-        var cuentaContraId = lineasContra.Select(x => (long?)x.AccountId).FirstOrDefault();
+            // Normaliza contra el monto del ABONO (resuelve BancoCuentaId de cada contracuenta).
+            lineasContra = await NormalizeContraProcessingLinesAsync(lineasContraDto, dto.Monto, descripcionBase, ct);
+            lineasPartida = await BuildProviderProcessingPartidaLineasAsync(
+                orden.cod_proveedor, lineasContra, dto.Monto, descripcionBase, ct);
+            cuentaContraId = lineasContra.Select(x => (long?)x.AccountId).FirstOrDefault();
+        }
 
         var faltaPartidaCreacion = !await HasPartidaContableRegistradaAsync(numeroOrden, ct);
         List<PartidaLineaOrden>? lineasCreacion = null;
@@ -1108,29 +1165,46 @@ ORDER BY a.numero_abono;";
                     usuario, lineasCreacion, ct);
             }
 
-            // (d) Partida contable del abono.
-            partidaId = await RegisterPartidaContableAsync(
-                connection, tx, BuildDocumentNumber(numeroOrden), partidaNumber,
+            // (d) Asiento de PAGO del abono por el motor config-driven (POSTED, idempotente, con reverso),
+            // en lugar del camino viejo sp_registrar_partida_contable (borrador). Llave
+            // (module=PROV, docType=OPD-ABO{numeroAbono}, documentId=numeroOrden). null si el motor encola
+            // por falta de periodo abierto (el abono se registra igual, partida_id null, sin romper).
+            partidaId = await PostearPagoMotorAsync(
+                connection, tx, companyId, numeroOrden, numeroAbono,
                 fechaAbono, descripcionAbono, usuario, lineasPartida, ct);
 
-            // (e) Si el metodo es bancario, transaccion bancaria vinculada.
+            // (e) Si el metodo es bancario, transaccion bancaria vinculada. Con retencion (modelo general)
+            // el movimiento va por el NETO (lineasBancoGeneral trae Credito = neto); sin retencion, por el
+            // camino contra de siempre. Misma ramificacion que MarkAsProcessedAsync.
             if (OrdenPagoDirectoMetodoPago.EsBancario(metodoPago))
             {
-                if (!partidaId.HasValue || partidaId.Value <= 0)
-                    throw new InvalidOperationException("No se pudo resolver la partida contable del abono para vincular la transaccion bancaria.");
-
-                var kardexIds = await RegisterLinkedBankTransactionsAsync(
-                    connection, tx, numeroOrden, fechaAbono, descripcionAbono, usuario, metodoPago, partidaId.Value, lineasContra,
-                    ChequeOrigen.Abono, orden.nombre_proveedor, chequesEmitidos, ct);
+                // partidaId null = el motor encolo la partida (sin periodo abierto): el movimiento
+                // bancario se registra igual y el vinculo con la poliza queda diferido.
+                var kardexIds = usaModeloGeneral
+                    ? await RegisterLinkedBankMovementsGeneralAsync(
+                        connection, tx, numeroOrden, fechaAbono, descripcionAbono, usuario, metodoPago, partidaId, lineasBancoGeneral,
+                        ChequeOrigen.Abono, orden.nombre_proveedor, chequesEmitidos, ct)
+                    : await RegisterLinkedBankTransactionsAsync(
+                        connection, tx, numeroOrden, fechaAbono, descripcionAbono, usuario, metodoPago, partidaId, lineasContra,
+                        ChequeOrigen.Abono, orden.nombre_proveedor, chequesEmitidos, ct);
 
                 banKardexId = kardexIds.Count > 0 ? kardexIds[0] : null;
-                bancoCuentaId = lineasContra.Where(x => x.BancoCuentaId is > 0).Select(x => x.BancoCuentaId).FirstOrDefault();
+                bancoCuentaId = usaModeloGeneral
+                    ? lineasBancoGeneral.Where(x => x.BancoCuentaId is > 0).Select(x => x.BancoCuentaId).FirstOrDefault()
+                    : lineasContra.Where(x => x.BancoCuentaId is > 0).Select(x => x.BancoCuentaId).FirstOrDefault();
             }
 
             // (f) Persistir la fila del abono (estado 'V').
             await InsertAbonoRowAsync(
                 connection, tx, companyId, numeroOrden, numeroAbono, fechaAbono, dto.Monto, metodoPago,
                 cuentaContraId, bancoCuentaId, banKardexId, partidaId, usuario, ct);
+
+            // (f.2) F4: registro fiscal de la(s) retencion(es) aplicada(s), ligado a la partida POSTED
+            // (partidaId) y al numero_abono. No-op si el abono no trae retenciones.
+            await PersistRetencionesAplicadasAsync(
+                connection, tx, companyId, numeroOrden, numeroAbono,
+                DateOnly.FromDateTime(fechaAbono), orden.cod_proveedor, orden.rtn, dto.Monto,
+                partidaId, dto.Retenciones, usuario, ct);
 
             // (g) Si el abono liquida el saldo, marcar el compromiso como pagado.
             var saldoTrasAbono = estado.SaldoActual - dto.Monto;
@@ -1293,6 +1367,178 @@ VALUES
         command.Parameters.AddWithValue("usuario_creo", NpgsqlDbType.Varchar, usuario);
 
         await command.ExecuteNonQueryAsync(ct);
+    }
+
+    // ── F4: registro fiscal estructurado de retenciones (prv_retencion_hdr/dtl) ──────────────────
+
+    /// <summary>
+    /// Valida que las retenciones aplicadas (F4) cuadren con la partida antes de persistir: cada
+    /// CuentaId debe aparecer como credito en Lineas y Σ Monto == Σ credito de esas cuentas (±0.01);
+    /// sanidad por linea |Monto - round(Base*%/100,2)| ≤ 0.02. Lanza ArgumentException (→ 400) si no
+    /// cuadra, para no desincronizar el registro fiscal del asiento. No-op sin retenciones.
+    /// </summary>
+    private static void ValidateRetencionesConsistencia(
+        IReadOnlyList<RetencionAplicadaDto> retenciones, IReadOnlyList<PartidaLineaOrdenPagoDto> lineas)
+    {
+        if (retenciones is null || retenciones.Count == 0)
+            return;
+
+        foreach (var r in retenciones)
+        {
+            if (r.CuentaId <= 0)
+                throw new ArgumentException("Una retencion no tiene cuenta contable.", nameof(retenciones));
+            if (r.Monto <= 0m)
+                throw new ArgumentException("Una retencion tiene monto no positivo.", nameof(retenciones));
+
+            var esperado = Math.Round(r.Base * r.Porcentaje / 100m, 2, MidpointRounding.AwayFromZero);
+            if (Math.Abs(r.Monto - esperado) > 0.02m)
+                throw new ArgumentException(
+                    $"El monto de la retencion ({r.Monto:N2}) no coincide con base x % ({esperado:N2}).",
+                    nameof(retenciones));
+        }
+
+        var retAccts = retenciones.Select(r => r.CuentaId).ToHashSet();
+        var sumRet = retenciones.Sum(r => r.Monto);
+        var sumLin = (lineas ?? new List<PartidaLineaOrdenPagoDto>())
+            .Where(l => retAccts.Contains(l.CuentaId))
+            .Sum(l => l.Credito);
+        if (Math.Abs(sumRet - sumLin) > 0.01m)
+            throw new ArgumentException(
+                "Las retenciones no cuadran con la partida (Σ retenido ≠ Σ credito de sus cuentas de retencion).",
+                nameof(retenciones));
+    }
+
+    /// <summary>
+    /// Escribe el registro fiscal de retenciones (F4): un prv_retencion_hdr (estado Vigente) + N
+    /// prv_retencion_dtl, en la MISMA transaccion del pago, ligado a la partida POSTED (partidaId, puede
+    /// ser null si el motor encolo) y al numero_abono. Reserva el folio por empresa (upsert atomico) y
+    /// snapshotea codigo/nombre desde cfg_retencion. No-op si no hay retenciones.
+    /// </summary>
+    private static async Task PersistRetencionesAplicadasAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, long companyId,
+        int numeroOrden, int numeroAbono, DateOnly fechaEmision, string? codProveedor, string? rtnProveedor,
+        decimal baseTotal, long? partidaId, IReadOnlyList<RetencionAplicadaDto> retenciones, string usuario,
+        CancellationToken ct)
+    {
+        if (retenciones is null || retenciones.Count == 0)
+            return;
+
+        var folio = await ReserveFolioRetencionAsync(connection, transaction, companyId, ct);
+        var polizaNumber = await LoadPolizaNumberAsync(connection, transaction, companyId, partidaId, ct);
+        var totalRetenido = retenciones.Sum(r => r.Monto);
+
+        long retencionHdrId;
+        await using (var cmd = connection.CreateCommand())
+        {
+            cmd.Transaction = transaction;
+            cmd.CommandType = CommandType.Text;
+            cmd.CommandText = @"
+INSERT INTO public.prv_retencion_hdr
+    (company_id, numero_orden, numero_abono, folio, fecha_emision, cod_proveedor, rtn_proveedor,
+     base_total, total_retenido, partida_id, poliza_number, estado_id, usuario_creo)
+VALUES
+    (@company_id, @numero_orden, @numero_abono, @folio, @fecha_emision, @cod_proveedor, @rtn_proveedor,
+     @base_total, @total_retenido, @partida_id, @poliza_number, @estado_id, @usuario_creo)
+RETURNING retencion_hdr_id;";
+            cmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+            cmd.Parameters.AddWithValue("numero_orden", NpgsqlDbType.Integer, numeroOrden);
+            cmd.Parameters.AddWithValue("numero_abono", NpgsqlDbType.Integer, numeroAbono);
+            cmd.Parameters.AddWithValue("folio", NpgsqlDbType.Integer, folio);
+            cmd.Parameters.AddWithValue("fecha_emision", NpgsqlDbType.Date, fechaEmision);
+            cmd.Parameters.Add(new NpgsqlParameter("cod_proveedor", NpgsqlDbType.Varchar) { Value = (object?)codProveedor ?? DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter("rtn_proveedor", NpgsqlDbType.Varchar) { Value = (object?)rtnProveedor ?? DBNull.Value });
+            cmd.Parameters.AddWithValue("base_total", NpgsqlDbType.Numeric, baseTotal);
+            cmd.Parameters.AddWithValue("total_retenido", NpgsqlDbType.Numeric, totalRetenido);
+            cmd.Parameters.Add(new NpgsqlParameter("partida_id", NpgsqlDbType.Bigint) { Value = partidaId.HasValue ? partidaId.Value : (object)DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter("poliza_number", NpgsqlDbType.Varchar) { Value = (object?)polizaNumber ?? DBNull.Value });
+            cmd.Parameters.AddWithValue("estado_id", NpgsqlDbType.Smallint, EstadoRetencion.Vigente);
+            cmd.Parameters.AddWithValue("usuario_creo", NpgsqlDbType.Varchar, usuario);
+
+            var scalar = await cmd.ExecuteScalarAsync(ct);
+            retencionHdrId = Convert.ToInt64(scalar);
+        }
+
+        // Snapshot autoritativo de codigo/nombre desde el catalogo global (el % y la base son del DTO,
+        // que ya paso la validacion de consistencia contra la partida).
+        var ids = retenciones.Select(r => r.RetencionId).Distinct().ToArray();
+        var snapshot = await LoadRetencionSnapshotAsync(connection, transaction, ids, ct);
+
+        foreach (var r in retenciones)
+        {
+            snapshot.TryGetValue(r.RetencionId, out var info);
+            await using var cmd = connection.CreateCommand();
+            cmd.Transaction = transaction;
+            cmd.CommandType = CommandType.Text;
+            cmd.CommandText = @"
+INSERT INTO public.prv_retencion_dtl
+    (company_id, retencion_hdr_id, retencion_id, codigo, nombre, porcentaje, base_linea, monto_retenido, account_id)
+VALUES
+    (@company_id, @retencion_hdr_id, @retencion_id, @codigo, @nombre, @porcentaje, @base_linea, @monto_retenido, @account_id);";
+            cmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+            cmd.Parameters.AddWithValue("retencion_hdr_id", NpgsqlDbType.Bigint, retencionHdrId);
+            cmd.Parameters.AddWithValue("retencion_id", NpgsqlDbType.Integer, r.RetencionId);
+            cmd.Parameters.AddWithValue("codigo", NpgsqlDbType.Varchar, info.Codigo ?? r.RetencionId.ToString());
+            cmd.Parameters.AddWithValue("nombre", NpgsqlDbType.Varchar, info.Nombre ?? "Retencion");
+            cmd.Parameters.AddWithValue("porcentaje", NpgsqlDbType.Numeric, r.Porcentaje);
+            cmd.Parameters.AddWithValue("base_linea", NpgsqlDbType.Numeric, r.Base);
+            cmd.Parameters.AddWithValue("monto_retenido", NpgsqlDbType.Numeric, r.Monto);
+            cmd.Parameters.AddWithValue("account_id", NpgsqlDbType.Bigint, r.CuentaId);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    /// <summary>Reserva el siguiente folio de retencion de la empresa (upsert atomico, serializado por el row lock).</summary>
+    private static async Task<int> ReserveFolioRetencionAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, long companyId, CancellationToken ct)
+    {
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = @"
+INSERT INTO public.prv_retencion_correlativo (company_id, ultimo_folio)
+VALUES (@company_id, 1)
+ON CONFLICT (company_id) DO UPDATE SET ultimo_folio = prv_retencion_correlativo.ultimo_folio + 1
+RETURNING ultimo_folio;";
+        cmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        var scalar = await cmd.ExecuteScalarAsync(ct);
+        return Convert.ToInt32(scalar);
+    }
+
+    /// <summary>Resuelve el poliza_number legible de la partida POSTED (snapshot). null si no hay partida.</summary>
+    private static async Task<string?> LoadPolizaNumberAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, long companyId, long? partidaId, CancellationToken ct)
+    {
+        if (partidaId is null || partidaId.Value <= 0)
+            return null;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = "SELECT poliza_number FROM public.con_partida_hdr WHERE company_id = @company_id AND poliza_id = @poliza_id;";
+        cmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        cmd.Parameters.AddWithValue("poliza_id", NpgsqlDbType.Bigint, partidaId.Value);
+        var scalar = await cmd.ExecuteScalarAsync(ct);
+        return scalar is null || scalar is DBNull ? null : scalar.ToString();
+    }
+
+    /// <summary>Trae codigo/nombre de cfg_retencion para los ids dados (snapshot al momento del pago).</summary>
+    private static async Task<Dictionary<int, (string? Codigo, string? Nombre)>> LoadRetencionSnapshotAsync(
+        NpgsqlConnection connection, NpgsqlTransaction transaction, int[] ids, CancellationToken ct)
+    {
+        var map = new Dictionary<int, (string? Codigo, string? Nombre)>();
+        if (ids is null || ids.Length == 0)
+            return map;
+
+        await using var cmd = connection.CreateCommand();
+        cmd.Transaction = transaction;
+        cmd.CommandText = "SELECT id, codigo, nombre FROM public.cfg_retencion WHERE id = ANY(@ids);";
+        cmd.Parameters.AddWithValue("ids", NpgsqlDbType.Array | NpgsqlDbType.Integer, ids);
+        await using var reader = await cmd.ExecuteReaderAsync(ct);
+        while (await reader.ReadAsync(ct))
+        {
+            map[reader.GetInt32(0)] = (
+                reader.IsDBNull(1) ? null : reader.GetString(1),
+                reader.IsDBNull(2) ? null : reader.GetString(2));
+        }
+        return map;
     }
 
     private async Task<List<PartidaLineaOrden>> BuildProviderProcessingPartidaLineasAsync(
@@ -1873,6 +2119,55 @@ VALUES
         return lineas;
     }
 
+    /// <summary>
+    /// Postea el asiento de PAGO (procesar/abono) por el motor config-driven (module=PROV) via
+    /// <see cref="PrvContabilidad.PostearPagoAsync"/>, en lugar del camino viejo
+    /// <see cref="RegisterPartidaContableAsync"/> (que deja la partida en borrador y NO llega al mayor).
+    /// La llave de idempotencia/reverso es (module=PROV, docType=OPD-ABO{numeroAbono}, documentId=numeroOrden):
+    /// numeroAbono identifica el pago dentro del compromiso (el procesar tambien inserta su fila de abono).
+    /// Convierte <see cref="PartidaLineaOrden"/> → líneas del motor (descarta CostCenterId y tercero, siempre
+    /// null aqui — el tercero es F4). Devuelve el poliza_id, o null si el motor encola por falta de periodo.
+    /// </summary>
+    private async Task<long?> PostearPagoMotorAsync(
+        NpgsqlConnection connection,
+        NpgsqlTransaction transaction,
+        long companyId,
+        int numeroOrden,
+        int numeroAbono,
+        DateTime fecha,
+        string descripcion,
+        string usuario,
+        IReadOnlyList<PartidaLineaOrden> lineas,
+        CancellationToken ct)
+    {
+        var lineasMotor = lineas
+            .Select(l => (l.AccountId, l.Debit, l.Credit, (string?)l.Description))
+            .ToList();
+
+        // document_number se mantiene "OPD-{numeroOrden}" (igual que el camino viejo, para continuidad
+        // de reportes/referencia). La distinción por pago vive en docType=OPD-ABO{numeroAbono} + documentId,
+        // no en el document_number (el motor idempotiza y revierte por module+docType+documentId).
+        return await PrvContabilidad.PostearPagoAsync(
+            connection,
+            transaction,
+            companyId,
+            BuildPagoDocType(numeroAbono),
+            numeroOrden,
+            BuildDocumentNumber(numeroOrden),
+            DateOnly.FromDateTime(fecha),
+            descripcion,
+            usuario,
+            lineasMotor,
+            ct);
+    }
+
+    /// <summary>
+    /// docType del asiento de pago para el motor config-driven: <c>OPD-ABO{numeroAbono}</c>. Único por pago
+    /// dentro del compromiso (numeroAbono es monótono por company+numero_orden). Disjunto del docType viejo
+    /// <c>'OPD'</c> (borrador), lo que permite distinguir pagos post-F0 de los pre-F0 al anular.
+    /// </summary>
+    private static string BuildPagoDocType(int numeroAbono) => $"OPD-ABO{numeroAbono}";
+
     private async Task<long?> RegisterPartidaContableAsync(
         NpgsqlConnection connection,
         NpgsqlTransaction transaction,
@@ -2054,7 +2349,7 @@ WHERE numero_orden = @numero_orden
         string descripcion,
         string usuario,
         string metodoPago,
-        long partidaId,
+        long? partidaId,
         IReadOnlyList<NormalizedContraProcessingLine> lineasContra,
         string origenCheque,
         string? beneficiario,
@@ -2164,7 +2459,7 @@ WHERE numero_orden = @numero_orden
         string descripcion,
         string usuario,
         string metodoPago,
-        long partidaId,
+        long? partidaId,
         IReadOnlyList<PartidaLineaOrdenPagoDto> lineasBanco,
         string origenCheque,
         string? beneficiario,
@@ -2265,7 +2560,7 @@ WHERE numero_orden = @numero_orden
         decimal tasaCambio,
         decimal monto,
         string usuario,
-        long partidaId,
+        long? partidaId,
         int numeroOrden,
         CancellationToken ct)
     {
@@ -2308,15 +2603,20 @@ WHERE numero_orden = @numero_orden
             throw new InvalidOperationException("No fue posible registrar la transaccion bancaria vinculada al compromiso.");
         }
 
-        await LinkCompromisoBankMovementAsync(
-            connection,
-            transaction,
-            kardexId,
-            partidaId,
-            numeroOrden,
-            fechaMovimiento,
-            usuario,
-            ct);
+        // Si la partida quedo encolada (motor sin periodo abierto → partidaId null), el kardex se registra
+        // igual (el dinero salio) y el vinculo con la poliza queda diferido; no hay poliza que enlazar.
+        if (partidaId is > 0)
+        {
+            await LinkCompromisoBankMovementAsync(
+                connection,
+                transaction,
+                kardexId,
+                partidaId.Value,
+                numeroOrden,
+                fechaMovimiento,
+                usuario,
+                ct);
+        }
 
         return kardexId;
     }
@@ -3129,14 +3429,27 @@ ORDER BY line_number;";
             var transaction = _context.Database.CurrentTransaction?.GetDbTransaction() as NpgsqlTransaction
                 ?? throw new InvalidOperationException("No se pudo obtener la transaccion activa para la contrapartida del abono.");
 
-            // (a) Partida inversa por el poliza_id guardado en el abono.
-            var lineasReversa = await LoadPartidaLineasReversaPorPolizaIdAsync(connection, transaction, abono.partida_id ?? 0, ct);
-            if (lineasReversa.Count > 0)
+            // (a) Reverso del asiento de pago, bifurcado por el origen de la partida del abono:
+            //   - Post-F0 (posteado por el motor): revertir por (module=PROV, docType=OPD-ABO{numeroAbono},
+            //     documentId=numeroOrden). El motor genera la partida de reverso y, si estaba encolado,
+            //     descarta la pendiente. Devuelve el poliza revertido (>0).
+            //   - Pre-F0 (posteado por el camino viejo, sin comprobante del motor con esa llave) o post-F0
+            //     encolado ya descartado: RevertirPagoAsync devuelve null → contrapartida invertida por el
+            //     poliza_id guardado en el abono (camino histórico intacto).
+            partidaReversoId = await PrvContabilidad.RevertirPagoAsync(
+                connection, transaction, companyId,
+                new[] { BuildPagoDocType(abono.numero_abono) }, numeroOrden, usuarioActual, ct);
+
+            if (partidaReversoId is null or <= 0)
             {
-                partidaReversoId = await RegisterPartidaContableAsync(
-                    connection, transaction, BuildDocumentNumber(numeroOrden),
-                    BuildPartidaNumber(numeroOrden, $"RAB{abono.numero_abono}"),
-                    fechaReverso, descripcionRev, usuarioActual, lineasReversa, ct);
+                var lineasReversa = await LoadPartidaLineasReversaPorPolizaIdAsync(connection, transaction, abono.partida_id ?? 0, ct);
+                if (lineasReversa.Count > 0)
+                {
+                    partidaReversoId = await RegisterPartidaContableAsync(
+                        connection, transaction, BuildDocumentNumber(numeroOrden),
+                        BuildPartidaNumber(numeroOrden, $"RAB{abono.numero_abono}"),
+                        fechaReverso, descripcionRev, usuarioActual, lineasReversa, ct);
+                }
             }
 
             // (b) Marcar el abono anulado + auditoria + trazas de reverso.
@@ -3151,6 +3464,22 @@ ORDER BY line_number;";
                     WHERE company_id = {companyId}
                       AND numero_orden = {numeroOrden}
                       AND numero_abono = {numeroAbono}",
+                ct);
+
+            // (b.2) F4: marcar el registro fiscal de retencion como Anulado (si el pago tenia
+            // retencion). El reverso de la partida ya lo hizo RevertirPagoAsync arriba; aca solo el hdr.
+            await _context.Database.ExecuteSqlInterpolatedAsync(
+                $@"UPDATE public.prv_retencion_hdr
+                      SET estado_id = {EstadoRetencion.Anulada},
+                          motivo_anulacion = {motivo},
+                          usuario_anulacion = {usuarioActual},
+                          fecha_anulacion = {fechaReverso},
+                          usuario_modifica = {usuarioActual},
+                          fecha_modificacion = {fechaReverso}
+                    WHERE company_id = {companyId}
+                      AND numero_orden = {numeroOrden}
+                      AND numero_abono = {numeroAbono}
+                      AND estado_id = {EstadoRetencion.Vigente}",
                 ct);
 
             // (c) Si el compromiso estaba Pagado, al quitar este abono el saldo vuelve a ser > 0.

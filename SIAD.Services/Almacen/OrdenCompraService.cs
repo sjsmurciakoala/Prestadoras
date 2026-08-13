@@ -16,11 +16,14 @@ public sealed class OrdenCompraService : IOrdenCompraService
 {
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _company;
+    private readonly ITasaIsvArticuloResolver _tasas;
 
-    public OrdenCompraService(SiadDbContext context, ICurrentCompanyService company)
+    public OrdenCompraService(
+        SiadDbContext context, ICurrentCompanyService company, ITasaIsvArticuloResolver tasas)
     {
         _context = context;
         _company = company;
+        _tasas = tasas;
     }
 
     public async Task<IReadOnlyList<OrdenCompraListItemDto>> GetAsync(OrdenCompraFilterDto? filtro, CancellationToken ct = default)
@@ -110,6 +113,21 @@ public sealed class OrdenCompraService : IOrdenCompraService
             })
             .ToList();
 
+        // Tasa de ISV por renglón (capa 1): alimenta el espejo de la pantalla y el aviso de
+        // "sin ISV configurado". Se evalúa a la fecha de la orden, igual que al guardar.
+        var fechaOrden = o.fecha ?? DateOnly.FromDateTime(DateTime.Today);
+        var tasas = await _tasas.ResolverAsync(
+            o.detalles.Select(d => d.articulo_id).ToList(), fechaOrden, ct);
+        foreach (var det in dto.Detalles)
+        {
+            if (tasas.TryGetValue(det.ArticuloId, out var t))
+            {
+                det.TasaIsv = t.Porcentaje;
+                det.IsvConfigurado = t.TipoTieneTasa;
+                det.TipoArticuloNombre = t.TipoNombre;
+            }
+        }
+
         await ResolverProveedoresAsync(new[] { dto.CodProveedor },
             (cod, nombre) => dto.ProveedorNombre = nombre, ct);
 
@@ -127,6 +145,12 @@ public sealed class OrdenCompraService : IOrdenCompraService
         await ValidarProveedorAsync(cod, companyId, ct);
         var upcs = await ValidarRenglonesAsync(dto.Detalles, cod, ct);
 
+        // El ISV lo calcula el servidor desde la tasa del tipo de artículo (capa 1), vigente a
+        // la fecha de la orden: NO se confía en el impuesto que mande el cliente.
+        var fecha = dto.Fecha ?? DateOnly.FromDateTime(DateTime.Today);
+        var tasas = await _tasas.ResolverAsync(
+            dto.Detalles.Select(d => d.ArticuloId).ToList(), fecha, ct);
+
         var usuario = ClasificacionNormalizer.Usuario(user);
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
@@ -139,7 +163,7 @@ public sealed class OrdenCompraService : IOrdenCompraService
         var entity = new alm_orden_compra
         {
             numero = numero,
-            fecha = dto.Fecha ?? DateOnly.FromDateTime(DateTime.Today),
+            fecha = fecha,
             fecha_emision = dto.FechaEmision,
             cod_proveedor = cod,
             terminos_pago = ClasificacionNormalizer.Opcional(dto.TerminosPago, 100),
@@ -153,7 +177,7 @@ public sealed class OrdenCompraService : IOrdenCompraService
             usuariocreacion = usuario,
             fechacreacion = ahora
         };
-        AplicarRenglonesYTotales(entity, dto, upcs);
+        AplicarRenglonesYTotales(entity, dto, upcs, tasas);
 
         _context.alm_orden_compras.Add(entity);
         await _context.SaveChangesAsync(ct);
@@ -183,8 +207,13 @@ public sealed class OrdenCompraService : IOrdenCompraService
         await ValidarProveedorAsync(cod, companyId, ct);
         var upcs = await ValidarRenglonesAsync(dto.Detalles, cod, ct);
 
+        // Igual que en el alta: el ISV se recalcula desde la tasa del tipo, a la fecha de la orden.
+        var fecha = dto.Fecha ?? entity.fecha ?? DateOnly.FromDateTime(DateTime.Today);
+        var tasas = await _tasas.ResolverAsync(
+            dto.Detalles.Select(d => d.ArticuloId).ToList(), fecha, ct);
+
         entity.cod_proveedor = cod;
-        entity.fecha = dto.Fecha ?? entity.fecha;
+        entity.fecha = fecha;
         entity.fecha_emision = dto.FechaEmision;
         entity.terminos_pago = ClasificacionNormalizer.Opcional(dto.TerminosPago, 100);
         entity.destino_uso = ClasificacionNormalizer.Opcional(dto.DestinoUso, 250);
@@ -198,7 +227,7 @@ public sealed class OrdenCompraService : IOrdenCompraService
         // Reemplazo total de renglones (la orden en Borrador se re-arma).
         _context.alm_orden_compra_detalles.RemoveRange(entity.detalles);
         entity.detalles.Clear();
-        AplicarRenglonesYTotales(entity, dto, upcs);
+        AplicarRenglonesYTotales(entity, dto, upcs, tasas);
 
         await _context.SaveChangesAsync(ct);
         return (await GetByIdAsync(entity.id, ct))!;
@@ -286,10 +315,29 @@ public sealed class OrdenCompraService : IOrdenCompraService
                 EF.Functions.ILike(x.CodigoUpc, like));
         }
 
-        return await query
+        var lista = await query
             .OrderBy(x => x.CodigoArticulo)
             .Take(200)
             .ToListAsync(ct);
+
+        // Tasa de ISV propuesta (capa 1, vigente hoy) + si el tipo la tiene configurada, para
+        // avisar en pantalla cuando un artículo iría sin ISV por falta de configuración.
+        if (lista.Count > 0)
+        {
+            var hoy = DateOnly.FromDateTime(DateTime.Today);
+            var tasas = await _tasas.ResolverAsync(lista.Select(x => x.ArticuloId).ToList(), hoy, ct);
+            foreach (var item in lista)
+            {
+                if (tasas.TryGetValue(item.ArticuloId, out var t))
+                {
+                    item.TasaIsv = t.Porcentaje;
+                    item.TieneIsvConfigurado = t.TipoTieneTasa;
+                    item.TipoArticuloNombre = t.TipoNombre;
+                }
+            }
+        }
+
+        return lista;
     }
 
     // ── Piezas internas ──────────────────────────────────────────────────────
@@ -333,15 +381,22 @@ public sealed class OrdenCompraService : IOrdenCompraService
     /// <c>alm_articulo_proveedor</c> que ya se validó), NO del DTO: el snapshot debe ser el
     /// código real con que el proveedor identifica el artículo, no lo que mande el cliente.
     /// </para>
+    /// <para>
+    /// El ISV de cada renglón se CALCULA desde la tasa del tipo de artículo
+    /// (<paramref name="tasas"/>) × total del renglón; el impuesto que venga en el DTO se
+    /// ignora. Si la orden no calcula ISV, o el artículo no tiene tasa, el renglón va sin ISV.
+    /// </para>
     /// </summary>
     private static void AplicarRenglonesYTotales(
-        alm_orden_compra entity, OrdenCompraDto dto, IReadOnlyDictionary<int, string> upcs)
+        alm_orden_compra entity, OrdenCompraDto dto, IReadOnlyDictionary<int, string> upcs,
+        IReadOnlyDictionary<int, TasaIsvArticulo> tasas)
     {
         decimal subTotal = 0m, impuesto = 0m;
         foreach (var d in dto.Detalles)
         {
             var totalRenglon = Redondear2(d.CantidadPedida * d.CostoUnitario);
-            var isvRenglon = entity.calcula_isv ? Redondear2(d.Impuesto) : 0m;
+            var pct = entity.calcula_isv && tasas.TryGetValue(d.ArticuloId, out var t) ? t.Porcentaje : 0m;
+            var isvRenglon = Redondear2(totalRenglon * pct / 100m);
             ExigirMonto(totalRenglon, "El total de un renglón");
             ExigirMonto(isvRenglon, "El impuesto de un renglón");
             subTotal += totalRenglon;
@@ -447,10 +502,8 @@ public sealed class OrdenCompraService : IOrdenCompraService
             {
                 throw new InvalidOperationException("El costo unitario debe ser mayor que cero.");
             }
-            if (d.Impuesto < 0)
-            {
-                throw new InvalidOperationException("El impuesto de un renglón no puede ser negativo.");
-            }
+            // El ISV del renglón no se valida aquí: lo calcula el servidor desde la tasa del tipo
+            // (ver AplicarRenglonesYTotales); el impuesto que venga en el DTO se ignora.
             ExigirCantidad(d.CantidadPedida, "La cantidad pedida");
             ExigirCantidad(d.CostoUnitario, "El costo unitario");
         }

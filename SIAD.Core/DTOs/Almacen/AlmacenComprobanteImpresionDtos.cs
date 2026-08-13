@@ -57,6 +57,94 @@ public sealed class MovimientoImpresionDto : ComprobanteAlmacenImpresionBase
 }
 
 /// <summary>
+/// Datos de impresión de la PARTIDA CONTABLE (asiento de doble entrada) que generó un movimiento
+/// de almacén. Se arma desde <c>con_partida_hdr</c>/<c>con_partida_dtl</c> vía la póliza del
+/// documento (module ALMACEN / docType MOVIMIENTO / id del movimiento). Existe solo si el módulo
+/// de almacén está integrado a contabilidad y hubo período abierto al postear.
+/// </summary>
+public sealed class PartidaContableImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    /// <summary>Número de póliza asignado por el motor contable (<c>poliza_number</c>).</summary>
+    public string Numero { get; set; } = string.Empty;
+
+    public DateTime Fecha { get; set; }
+
+    /// <summary>Concepto de la partida (descripción del asiento).</summary>
+    public string? Descripcion { get; set; }
+
+    /// <summary>Documento origen legible, p. ej. "Movimiento No. 00042".</summary>
+    public string DocumentoReferencia { get; set; } = string.Empty;
+
+    /// <summary>REGISTRADA / ANULADA — para la caja del encabezado.</summary>
+    public string EstadoTexto { get; set; } = string.Empty;
+
+    /// <summary>La partida está revertida (documento anulado): el reporte pinta la marca de agua.</summary>
+    public bool Anulada { get; set; }
+
+    public decimal TotalDebe { get; set; }
+    public decimal TotalHaber { get; set; }
+
+    public List<PartidaContableLineaImpresionDto> Lineas { get; set; } = new();
+
+    /// <summary>Total de la partida en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string TotalEnLetras { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Datos de impresión del comprobante de un PAGO (abono) a una cuenta por pagar de compra: el
+/// documento operativo del egreso (proveedor, factura, método, banco/cheque, saldos). El asiento
+/// contable del pago se imprime aparte, con <see cref="PartidaContableImpresionDto"/>.
+/// </summary>
+public sealed class PagoCompraImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public int NumeroAbono { get; set; }
+    public DateOnly Fecha { get; set; }
+
+    public string CodProveedor { get; set; } = string.Empty;
+    public string? Proveedor { get; set; }
+
+    /// <summary>No. de factura del proveedor (SAR) o correlativo interno de la compra.</summary>
+    public string NumeroFactura { get; set; } = string.Empty;
+    public decimal MontoFactura { get; set; }
+
+    public decimal Monto { get; set; }
+    public decimal SaldoAnterior { get; set; }
+    public decimal SaldoRestante { get; set; }
+
+    /// <summary>Método de pago legible (Efectivo / Cheque / Transferencia).</summary>
+    public string MetodoPago { get; set; } = string.Empty;
+
+    /// <summary>Banco y cuenta de origen cuando el pago es bancario; nulos si es en efectivo.</summary>
+    public string? Banco { get; set; }
+    public string? CuentaBancaria { get; set; }
+    public string? NumCheque { get; set; }
+
+    /// <summary>No. de la partida contable del pago, si generó asiento (nulo si no).</summary>
+    public string? NumeroPartida { get; set; }
+
+    public string? Observaciones { get; set; }
+
+    /// <summary>El pago está anulado: el reporte pinta la marca de agua.</summary>
+    public bool Anulada { get; set; }
+
+    /// <summary>VIGENTE / ANULADO — para la caja del encabezado.</summary>
+    public string EstadoTexto { get; set; } = string.Empty;
+
+    /// <summary>Monto del pago en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}
+
+/// <summary>Renglón del asiento: cuenta (código + nombre) y su importe al Debe o al Haber.</summary>
+public sealed class PartidaContableLineaImpresionDto
+{
+    public string CuentaCodigo { get; set; } = string.Empty;
+    public string CuentaNombre { get; set; } = string.Empty;
+    public decimal Debe { get; set; }
+    public decimal Haber { get; set; }
+    public string? Descripcion { get; set; }
+}
+
+/// <summary>
 /// Datos de impresión del comprobante de ENVÍO de un traslado entre bodegas (directo o en tránsito):
 /// la mercadería que sale de la bodega origen hacia la destino. En el traslado con recepción este vale
 /// acompaña la salida; cada recepción en destino se respalda con <see cref="TrasladoRecepcionImpresionDto"/>.
