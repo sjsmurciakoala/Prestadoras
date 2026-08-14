@@ -1,0 +1,554 @@
+@page "/proveedores/incidencias"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Proveedores
+
+@inject IJSRuntime JS
+@inject RecepcionIncidenciaClient IncidenciasClient
+@inject ProveedoresClient ProveedoresClient
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - Incidencias de recepción</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="IncidenciasToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Incidencias de recepción</h2>
+            <p class="page-subtitle">Devoluciones, daños, faltantes y especificaciones distintas: alimentan el criterio de calidad del proveedor</p>
+        </div>
+
+        <DxButton Text="Registrar incidencia" IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" Click="AbrirNueva" />
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@incidencias" KeyFieldName="@nameof(RecepcionIncidenciaDto.Id)"
+                    PageSize="15" PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar por descripción, factura o proveedor..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 260px;" />
+
+                        <DxComboBox Data="@tiposFiltro" Value="@tipoFiltro"
+                                    ValueChanged="@((TipoOpcion? t) => OnTipoChanged(t))"
+                                    ValueExpression="@(() => tipoFiltro)"
+                                    TextFieldName="@nameof(TipoOpcion.Etiqueta)"
+                                    NullText="Todos los tipos"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 190px;" CssClass="me-1" />
+
+                        <DxDateEdit @bind-Date="fechaDesde" NullText="Desde"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+                        <DxDateEdit @bind-Date="fechaHasta" NullText="Hasta"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    CssClass="me-1" Style="min-width: 130px;" />
+
+                        <DxButton Text="Consultar" IconCssClass="bi bi-search"
+                                  RenderStyle="ButtonRenderStyle.Primary" Click="CargarAsync" CssClass="me-1" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@incidencias.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(RecepcionIncidenciaDto.Fecha)" Caption="Fecha" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionIncidenciaDto item)
+                            {
+                                <span>@item.Fecha.ToString("dd/MM/yyyy")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionIncidenciaDto.ProveedorNombre)"
+                                      Caption="Proveedor" MinWidth="200">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionIncidenciaDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span class="text-dark fw-semibold">
+                                        @(string.IsNullOrWhiteSpace(item.ProveedorNombre) ? item.CodProveedor : item.ProveedorNombre)
+                                    </span>
+                                    <span class="text-muted small">@item.CodProveedor</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Documento" Width="170px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionIncidenciaDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span>@item.DocumentoTexto</span>
+                                    <span class="text-muted small">recibida @item.RecepcionFecha.ToString("dd/MM/yyyy")</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionIncidenciaDto.Tipo)" Caption="Tipo" Width="150px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionIncidenciaDto item)
+                            {
+                                <span class="chip-tipo @ChipTipo(item.Tipo)">@item.TipoDescripcion</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionIncidenciaDto.Descripcion)"
+                                      Caption="Descripción" MinWidth="240" />
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionIncidenciaDto.Cantidad)"
+                                      Caption="Cantidad" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionIncidenciaDto item)
+                            {
+                                <span>@(item.Cantidad.HasValue ? item.Cantidad.Value.ToString("N2") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(RecepcionIncidenciaDto.Monto)"
+                                      Caption="Monto" Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionIncidenciaDto item)
+                            {
+                                <span>@(item.Monto.HasValue ? item.Monto.Value.ToString("N2") : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RecepcionIncidenciaDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEdicionAsync(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmarEliminar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        No hay incidencias registradas para los filtros seleccionados.
+                        <div class="small mt-1">
+                            Mientras no exista ninguna, el criterio <strong>Calidad de lo recibido</strong>
+                            no puntúa en la evaluación: su peso se reparte entre los demás.
+                        </div>
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@* ── Alta / edición ────────────────────────────────────────────────────────── *@
+<DxPopup @bind-Visible="editorVisible" Width="min(640px, 94vw)"
+         HeaderText="@(editandoId.HasValue ? "Editar incidencia" : "Registrar incidencia")"
+         ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="row g-3">
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Proveedor <span class="text-danger">*</span></label>
+                    <DxComboBox Data="@proveedores" Value="@proveedorSeleccionado"
+                                ValueChanged="@((ProveedorComboItem? p) => OnProveedorChangedAsync(p))"
+                                ValueExpression="@(() => proveedorSeleccionado)"
+                                TextFieldName="@nameof(ProveedorComboItem.Display)"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="Seleccione o busque un proveedor..."
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                CssClass="w-100" />
+                </div>
+
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Recepción afectada <span class="text-danger">*</span></label>
+                    <DxComboBox Data="@recepciones" Value="@recepcionSeleccionada"
+                                ValueChanged="@((RecepcionIncidenciaLookupDto? r) => recepcionSeleccionada = r)"
+                                ValueExpression="@(() => recepcionSeleccionada)"
+                                TextFieldName="@nameof(RecepcionIncidenciaLookupDto.Display)"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="@(proveedorSeleccionado is null ? "Elija primero el proveedor" : "Seleccione la factura recibida")"
+                                Enabled="@(proveedorSeleccionado is not null)"
+                                CssClass="w-100" />
+                    @if (proveedorSeleccionado is not null && recepciones.Count == 0)
+                    {
+                        <div class="form-text text-warning">
+                            Este proveedor no tiene recepciones registradas (o están anuladas).
+                        </div>
+                    }
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">Tipo <span class="text-danger">*</span></label>
+                    <DxComboBox Data="@tiposAlta" Value="@tipoSeleccionado"
+                                ValueChanged="@((TipoOpcion? t) => tipoSeleccionado = t)"
+                                ValueExpression="@(() => tipoSeleccionado)"
+                                TextFieldName="@nameof(TipoOpcion.Etiqueta)"
+                                CssClass="w-100" />
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">Fecha de detección</label>
+                    <DxDateEdit @bind-Date="fechaIncidencia" NullText="La de la recepción" CssClass="w-100" />
+                </div>
+
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Cantidad</label>
+                    <DxSpinEdit @bind-Value="cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                </div>
+
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Monto</label>
+                    <DxSpinEdit @bind-Value="monto" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Descripción <span class="text-danger">*</span></label>
+                    <DxMemo @bind-Text="descripcion" Rows="3" MaxLength="500"
+                            NullText="Qué pasó: material dañado, faltante, especificación distinta..."
+                            CssClass="w-100" />
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => editorVisible = false)" />
+                <DxButton Text="@(editandoId.HasValue ? "Guardar cambios" : "Registrar")"
+                          IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!guardando)" Click="GuardarAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@* ── Confirmar eliminación ─────────────────────────────────────────────────── *@
+<DxPopup @bind-Visible="confirmarBorrarVisible" Width="min(430px, 90vw)"
+         HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-danger"><i class="bi bi-trash" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Eliminar la incidencia?</h5>
+            <p class="text-muted">
+                Deja de contar para la calidad del proveedor. Si el período ya se calculó,
+                hay que recalcularlo para que el cambio se refleje.
+            </p>
+            <div class="d-flex justify-content-center gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => confirmarBorrarVisible = false)" />
+                <DxButton Text="Eliminar" RenderStyle="ButtonRenderStyle.Danger"
+                          Enabled="@(!guardando)" Click="EliminarAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private const string GridLayoutStorageKey = "proveedores-incidencias-grid-layout";
+
+    /// <summary>Item del combo de proveedores: mismo patrón que la orden de compra.</summary>
+    private sealed class ProveedorComboItem
+    {
+        public string Codigo { get; set; } = string.Empty;
+        public string Nombre { get; set; } = string.Empty;
+        public string Display => $"{Codigo} — {Nombre}";
+    }
+
+    /// <summary>
+    /// Opción del combo de tipos. Se bindea el OBJETO y no el short: un Value nullable sobre un
+    /// ValueFieldName no-nullable tumba el circuito de Blazor.
+    /// </summary>
+    private sealed class TipoOpcion
+    {
+        public short Valor { get; init; }
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    private static readonly TipoOpcion[] TodosLosTipos =
+    [
+        new() { Valor = TipoIncidenciaRecepcion.Devolucion,     Etiqueta = "Devolución" },
+        new() { Valor = TipoIncidenciaRecepcion.Dano,           Etiqueta = "Daño" },
+        new() { Valor = TipoIncidenciaRecepcion.Especificacion, Etiqueta = "Especificación distinta" },
+        new() { Valor = TipoIncidenciaRecepcion.Faltante,       Etiqueta = "Faltante" },
+        new() { Valor = TipoIncidenciaRecepcion.Otro,           Etiqueta = "Otro" }
+    ];
+
+    private List<RecepcionIncidenciaDto> incidencias = new();
+    private List<ProveedorComboItem> proveedores = new();
+    private List<RecepcionIncidenciaLookupDto> recepciones = new();
+    private readonly TipoOpcion[] tiposFiltro = TodosLosTipos;
+    private readonly TipoOpcion[] tiposAlta = TodosLosTipos;
+
+    private string filtroBusqueda = string.Empty;
+    private TipoOpcion? tipoFiltro;
+    private DateTime? fechaDesde;
+    private DateTime? fechaHasta;
+
+    private bool isLoading = true;
+    private bool guardando;
+    private bool editorVisible;
+    private bool confirmarBorrarVisible;
+
+    // Editor
+    private int? editandoId;
+    private ProveedorComboItem? proveedorSeleccionado;
+    private RecepcionIncidenciaLookupDto? recepcionSeleccionada;
+    private TipoOpcion? tipoSeleccionado = TodosLosTipos[0];
+    private DateTime? fechaIncidencia;
+    private decimal cantidad;
+    private decimal monto;
+    private string? descripcion;
+
+    private RecepcionIncidenciaDto? aBorrar;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarProveedoresAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        try
+        {
+            incidencias = (await IncidenciasClient.ObtenerAsync(
+                desde: fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+                hasta: fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null,
+                tipo: tipoFiltro?.Valor,
+                search: filtroBusqueda)).ToList();
+        }
+        catch (Exception ex)
+        {
+            incidencias = new List<RecepcionIncidenciaDto>();
+            Toast("Error", $"No se pudieron cargar las incidencias: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarProveedoresAsync()
+    {
+        try
+        {
+            var lista = await ProveedoresClient.BuscarAsync(new ProveedorFilterDto { SoloActivos = true });
+            proveedores = lista
+                .Select(p => new ProveedorComboItem { Codigo = p.Codigo, Nombre = p.Nombre })
+                .OrderBy(p => p.Codigo)
+                .ToList();
+        }
+        catch
+        {
+            proveedores = new List<ProveedorComboItem>();
+        }
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnTipoChanged(TipoOpcion? valor)
+    {
+        tipoFiltro = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnProveedorChangedAsync(ProveedorComboItem? proveedor)
+    {
+        proveedorSeleccionado = proveedor;
+        recepcionSeleccionada = null;
+        recepciones = new List<RecepcionIncidenciaLookupDto>();
+
+        if (proveedor is null) return;
+
+        try
+        {
+            recepciones = (await IncidenciasClient.BuscarRecepcionesAsync(proveedor.Codigo)).ToList();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar las recepciones: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void AbrirNueva()
+    {
+        editandoId = null;
+        proveedorSeleccionado = null;
+        recepcionSeleccionada = null;
+        recepciones = new List<RecepcionIncidenciaLookupDto>();
+        tipoSeleccionado = TodosLosTipos[0];
+        fechaIncidencia = null;
+        cantidad = 0m;
+        monto = 0m;
+        descripcion = null;
+        editorVisible = true;
+    }
+
+    private async Task AbrirEdicionAsync(RecepcionIncidenciaDto item)
+    {
+        editandoId = item.Id;
+        proveedorSeleccionado = proveedores.FirstOrDefault(p => p.Codigo == item.CodProveedor)
+            ?? new ProveedorComboItem { Codigo = item.CodProveedor, Nombre = item.ProveedorNombre ?? string.Empty };
+
+        recepciones = (await IncidenciasClient.BuscarRecepcionesAsync(item.CodProveedor)).ToList();
+        recepcionSeleccionada = recepciones.FirstOrDefault(r => r.Id == item.CompraHdrId);
+
+        tipoSeleccionado = TodosLosTipos.FirstOrDefault(t => t.Valor == item.Tipo) ?? TodosLosTipos[0];
+        fechaIncidencia = item.Fecha.ToDateTime(TimeOnly.MinValue);
+        cantidad = item.Cantidad ?? 0m;
+        monto = item.Monto ?? 0m;
+        descripcion = item.Descripcion;
+        editorVisible = true;
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (recepcionSeleccionada is null)
+        {
+            Toast("Validación", "Seleccione la recepción afectada.", ToastRenderStyle.Warning);
+            return;
+        }
+        if (string.IsNullOrWhiteSpace(descripcion))
+        {
+            Toast("Validación", "Describa la incidencia.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        var dto = new RecepcionIncidenciaUpsertDto
+        {
+            CompraHdrId = recepcionSeleccionada.Id,
+            Fecha = fechaIncidencia.HasValue ? DateOnly.FromDateTime(fechaIncidencia.Value) : null,
+            Tipo = tipoSeleccionado?.Valor ?? TipoIncidenciaRecepcion.Devolucion,
+            // 0 significa "no aplica": la columna admite NULL y así no se inventa un dato.
+            Cantidad = cantidad > 0m ? cantidad : null,
+            Monto = monto > 0m ? monto : null,
+            Descripcion = descripcion!
+        };
+
+        guardando = true;
+        try
+        {
+            if (editandoId.HasValue)
+            {
+                await IncidenciasClient.ActualizarAsync(editandoId.Value, dto);
+                Toast("Éxito", "Incidencia actualizada.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await IncidenciasClient.CrearAsync(dto);
+                Toast("Éxito",
+                    "Incidencia registrada. Recalcule el período para que afecte la calificación del proveedor.",
+                    ToastRenderStyle.Success);
+            }
+
+            editorVisible = false;
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void ConfirmarEliminar(RecepcionIncidenciaDto item)
+    {
+        aBorrar = item;
+        confirmarBorrarVisible = true;
+    }
+
+    private async Task EliminarAsync()
+    {
+        if (aBorrar is null) return;
+
+        guardando = true;
+        try
+        {
+            await IncidenciasClient.EliminarAsync(aBorrar.Id);
+            Toast("Éxito", "Incidencia eliminada.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+            confirmarBorrarVisible = false;
+            aBorrar = null;
+        }
+    }
+
+    private static string ChipTipo(short tipo) => tipo switch
+    {
+        TipoIncidenciaRecepcion.Devolucion     => "tipo-devolucion",
+        TipoIncidenciaRecepcion.Dano           => "tipo-dano",
+        TipoIncidenciaRecepcion.Especificacion => "tipo-especificacion",
+        TipoIncidenciaRecepcion.Faltante       => "tipo-faltante",
+        _                                      => "tipo-otro"
+    };
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "IncidenciasToast"
+        });
+}

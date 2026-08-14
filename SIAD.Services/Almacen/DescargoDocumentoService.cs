@@ -24,15 +24,18 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
     private readonly ICurrentCompanyService _company;
     private readonly IInventarioPostingService _posting;
     private readonly IArticuloRollupService _rollup;
+    private readonly IAlertasStockNotificador _alertas;
 
     public DescargoDocumentoService(
         SiadDbContext context, ICurrentCompanyService company,
-        IInventarioPostingService posting, IArticuloRollupService rollup)
+        IInventarioPostingService posting, IArticuloRollupService rollup,
+        IAlertasStockNotificador alertas)
     {
         _context = context;
         _company = company;
         _posting = posting;
         _rollup = rollup;
+        _alertas = alertas;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -346,6 +349,7 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
         await _context.SaveChangesAsync(ct);   // las líneas necesitan su id: es el documento del asiento
 
         var articulosAfectados = new SortedSet<int>();
+        var cruces = new List<(int articuloId, int bodegaId)>();
         decimal total = 0m;
 
         for (var i = 0; i < items.Count; i++)
@@ -374,6 +378,7 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
                 await _context.alm_requisicions.Where(l => l.id == reqLineaId)
                     .ExecuteUpdateAsync(s => s.SetProperty(l => l.cantidad_despachada, l => l.cantidad_despachada + it.Cantidad), ct);
 
+            if (r.CruzoAlerta) cruces.Add((it.ArticuloId, bodegaId));
             articulosAfectados.Add(it.ArticuloId);
         }
 
@@ -396,7 +401,26 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
 
         await RecalcularRollupAsync(articulosAfectados, ct);
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+
+        // Post-commit y best-effort: un solo aviso por documento con los artículos que cruzaron a
+        // alerta. Un fallo del correo NO afecta el descargo, que ya está confirmado.
+        await AvisarCrucesAsync(cruces, $"Descargo {numero:00000}", ct);
+
         return (await GetByIdAsync(hdr.id, ct))!;
+    }
+
+    private async Task AvisarCrucesAsync(
+        IReadOnlyCollection<(int articuloId, int bodegaId)> cruces, string documento, CancellationToken ct)
+    {
+        if (cruces.Count == 0) return;
+        try
+        {
+            await _alertas.EnviarCrucesAsync(cruces, documento, ct);
+        }
+        catch
+        {
+            // Best-effort: el descargo ya está confirmado; no se propaga un fallo de notificación.
+        }
     }
 
     // ─────────────────────────────────────────────────────────────────────────

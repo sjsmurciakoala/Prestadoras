@@ -201,6 +201,68 @@ public sealed class CorreoConfigService : ICorreoConfigService, ICorreoEnvioReso
         };
     }
 
+    public async Task<EnvioCorreoResueltoDto?> ResolverTransporteAsync(long companyId, string tipoRemitente, CancellationToken ct = default)
+    {
+        if (companyId <= 0) return null;
+        var tipoNorm = (tipoRemitente ?? string.Empty).Trim().ToUpperInvariant();
+
+        // Cross-tenant DOCUMENTADO: los correos de sistema (Identity) se envían sin sesión, así que la
+        // empresa NO es la "actual" — se recibe explícita y se ignora el filtro global de tenant.
+        var conexion = await _context.cfg_correos.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+        if (conexion is null || !conexion.activo || string.IsNullOrEmpty(conexion.api_key_cifrada))
+            return null;
+
+        string? apiKey;
+        try { apiKey = _protector.Unprotect(conexion.api_key_cifrada); }
+        catch (CryptographicException) { return null; } // key-ring cambió → no se puede descifrar
+        if (string.IsNullOrEmpty(apiKey)) return null;
+
+        // El área del tipo (si existe) aporta el remitente override; si está inactiva, apaga ese tipo.
+        var area = await _context.cfg_notificacions.IgnoreQueryFilters().AsNoTracking()
+            .FirstOrDefaultAsync(n => n.company_id == companyId && n.tipo == tipoNorm, ct);
+        if (area is not null && !area.activo)
+            return null;
+
+        var remitenteEmail = string.IsNullOrWhiteSpace(area?.remitente_email)
+            ? conexion.remitente_email_default : area!.remitente_email;
+        if (string.IsNullOrWhiteSpace(remitenteEmail))
+            return null; // sin remitente no se puede enviar
+
+        return new EnvioCorreoResueltoDto
+        {
+            Proveedor = conexion.proveedor,
+            ApiKey = apiKey,
+            RemitenteEmail = remitenteEmail,
+            RemitenteNombre = string.IsNullOrWhiteSpace(area?.remitente_nombre)
+                ? conexion.remitente_nombre_default : area!.remitente_nombre
+        };
+    }
+
+    public async Task<EnvioCorreoResueltoDto?> ResolverPruebaAsync(CancellationToken ct = default)
+    {
+        // Empresa ACTUAL (filtro global). Probar NO respeta el interruptor 'activo': es explícito.
+        var conexion = await _context.cfg_correos.AsNoTracking().FirstOrDefaultAsync(ct);
+        if (conexion is null || string.IsNullOrEmpty(conexion.api_key_cifrada))
+            return null;
+
+        string? apiKey;
+        try { apiKey = _protector.Unprotect(conexion.api_key_cifrada); }
+        catch (CryptographicException) { return null; }
+        if (string.IsNullOrEmpty(apiKey)) return null;
+
+        if (string.IsNullOrWhiteSpace(conexion.remitente_email_default))
+            return null; // sin remitente no se puede enviar la prueba
+
+        return new EnvioCorreoResueltoDto
+        {
+            Proveedor = conexion.proveedor,
+            ApiKey = apiKey,
+            RemitenteEmail = conexion.remitente_email_default,
+            RemitenteNombre = conexion.remitente_nombre_default
+        };
+    }
+
     // ─────────────────────────────────────────────────────────── helpers
 
     private static NotificacionCorreoDto ToDto(cfg_notificacion n) => new()

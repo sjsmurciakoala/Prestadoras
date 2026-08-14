@@ -226,7 +226,14 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddSignInManager()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+// Envío real de correos de Identity por SendGrid (reemplaza el No-Op). Scoped: resuelve la
+// configuración cifrada desde la BD vía ICorreoNotificador (que a su vez usa SiadDbContext).
+builder.Services.AddScoped<IEmailSender<ApplicationUser>, CorreoIdentityEmailSender>();
+
+// Resumen diario de alertas de stock por correo: barrido reutilizable + BackgroundService que lo
+// dispara a la hora configurada (Almacen:AlertasStock). Solo el portal lo corre (no los WS hosts).
+builder.Services.AddSingleton<apc.BackgroundServices.AlertasStockBarrido>();
+builder.Services.AddHostedService<apc.BackgroundServices.AlertasStockDiarioService>();
 
 // Wire SIAD layered services
 builder.Services.AddSiadServices();

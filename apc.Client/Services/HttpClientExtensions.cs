@@ -120,7 +120,7 @@ public static class HttpClientExtensions
     /// Obtiene un mensaje de error de una respuesta HTTP, intentando parsear JSON o devolviendo el contenido como texto.
     /// </summary>
     public static async Task<string?> ObtenerMensajeErrorAsync(
-        HttpResponseMessage response,
+        this HttpResponseMessage response,
         CancellationToken cancellationToken = default)
     {
         var contenido = await response.Content.ReadAsStringAsync(cancellationToken);

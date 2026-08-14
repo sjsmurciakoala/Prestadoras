@@ -28,7 +28,7 @@ Tests automatizados de integración para el motor V3 / SAR compliance (Sprint 3 
 
 ```powershell
 # Apuntar a una BD de prueba (NO PROD APC, NO Azure demo si está en uso)
-$env:SIAD_TEST_DB = "Host=localhost;Port=5432;Database=siad_v3_test;Username=postgres;Password=root;Timeout=10"
+$env:SIAD_TEST_DB = "Host=localhost;Port=5432;Database=siad_v3_test;Username=postgres;Password=<password>;Timeout=10"
 $env:SIAD_TEST_COMPANY_ID = "2"   # opcional, default 2
 
 dotnet test SIAD.Tests/SIAD.Tests.csproj --logger "console;verbosity=normal"

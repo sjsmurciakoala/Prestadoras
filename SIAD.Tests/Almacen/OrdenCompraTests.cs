@@ -421,6 +421,122 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
         Assert.DoesNotContain(soloAprobadas, o => o.Id == borrador.Id);
     }
 
+    // ── Fecha de entrega pactada ─────────────────────────────────────────────
+
+    [SkippableFact]
+    public async Task Crear_SinFechaEntregaPactada_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Es el insumo del criterio de puntualidad: sin ella la orden no se guarda ni en borrador.
+        var dto = NuevaOrden();
+        dto.FechaEntregaPactada = null;
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("fecha de entrega pactada", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_FechaEntregaAnteriorALaOrden_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.FechaEntregaPactada = dto.Fecha!.Value.AddDays(-1);   // nacería vencida
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("anterior a la fecha de la orden", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_FechaEntregaDemasiadoLejos_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Dedazo típico en el año: sin la cota entraría y ensuciaría el indicador de puntualidad.
+        var dto = NuevaOrden();
+        dto.FechaEntregaPactada = dto.Fecha!.Value.AddYears(6);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("revise el año", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Crear_GuardaLaFechaDeCabeceraYLaDelRenglon()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        var pactadaRenglon = dto.Fecha!.Value.AddDays(20);
+        dto.Detalles.Single().FechaEntregaPactada = pactadaRenglon;
+
+        var creada = await _service!.CrearAsync(dto, "tester");
+
+        Assert.Equal(dto.FechaEntregaPactada, creada.FechaEntregaPactada);
+        Assert.Equal(pactadaRenglon, creada.Detalles.Single().FechaEntregaPactada);
+
+        // Y se relee igual desde la BD, no sólo del objeto que devolvió el alta.
+        var releida = await _service.GetByIdAsync(creada.Id);
+        Assert.Equal(dto.FechaEntregaPactada, releida!.FechaEntregaPactada);
+        Assert.Equal(pactadaRenglon, releida.Detalles.Single().FechaEntregaPactada);
+    }
+
+    [SkippableFact]
+    public async Task Crear_RenglonSinFechaPropia_QuedaNulo()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // NULL en el renglón significa "rige la de la cabecera": no se copia la de arriba.
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        Assert.NotNull(creada.FechaEntregaPactada);
+        Assert.Null(creada.Detalles.Single().FechaEntregaPactada);
+    }
+
+    [SkippableFact]
+    public async Task Crear_RenglonConFechaAnteriorALaOrden_Lanza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var dto = NuevaOrden();
+        dto.Detalles.Single().FechaEntregaPactada = dto.Fecha!.Value.AddDays(-3);
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => _service!.CrearAsync(dto, "tester"));
+        Assert.Contains("fecha de entrega del renglón", ex.Message);
+    }
+
+    [SkippableFact]
+    public async Task Actualizar_CambiaLaFechaEntregaPactada()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var cambios = NuevaOrden();
+        cambios.FechaEntregaPactada = creada.Fecha!.Value.AddDays(30);
+
+        var actualizada = await _service.ActualizarAsync(creada.Id, cambios, "tester");
+
+        Assert.Equal(cambios.FechaEntregaPactada, actualizada.FechaEntregaPactada);
+    }
+
+    [SkippableFact]
+    public async Task Get_ElListadoTraeLaFechaEntregaPactada()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var lista = await _service.GetAsync(new OrdenCompraFilterDto());
+        var fila = Assert.Single(lista, o => o.Id == creada.Id);
+
+        Assert.Equal(creada.FechaEntregaPactada, fila.FechaEntregaPactada);
+    }
+
     // ── Apoyo ────────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -432,6 +548,8 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
     {
         CodProveedor = _codProveedor,
         Fecha = DateOnly.FromDateTime(DateTime.Today),
+        // Obligatoria desde el borrador (2026-08-14_alm_orden_compra_fecha_entrega.sql).
+        FechaEntregaPactada = DateOnly.FromDateTime(DateTime.Today).AddDays(7),
         CalculaIsv = true,
         Descuento = descuento,
         OtrosGastos = 0m,

@@ -17,4 +17,11 @@
     <PackageReference Include="Swashbuckle.AspNetCore" Version="7.2.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- appsettings.Local.json es por dev/server: cada entorno mantiene el suyo, NO va al publish.
+         OJO: en el SDK web los appsettings*.json son items Content, no None — el guard debe ser
+         Content Update (con None Update no matchea y el archivo VIAJA al publish; bug 2026-07-14). -->
+    <Content Update="appsettings.Local.json" CopyToPublishDirectory="Never" CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

@@ -743,9 +743,13 @@ public class ProveedoresService : IProveedoresService
         await SyncContactosAsync(codigoNormalizado, contactos, user, cancellationToken);
 
         // Término de pago del proveedor (columna nueva; se fija o se limpia según lo enviado).
+        // El parámetro va TIPADO (OptionalInt): pasar DBNull.Value suelto rompía el guardado de
+        // cualquier proveedor SIN término de pago con "no store type mapping for properties of
+        // type 'DBNull'" — la misma trampa que ya documentaba OptionalText.
         await _context.Database.ExecuteSqlRawAsync(
             "UPDATE public.prv_proveedores SET termino_pago_id = {1} WHERE cod_proveedor = {0}",
-            new object[] { codigoNormalizado, dto.TerminoPagoId.HasValue ? (object)dto.TerminoPagoId.Value : DBNull.Value });
+            new object[] { codigoNormalizado, OptionalInt(dto.TerminoPagoId) },
+            cancellationToken);
 
         await tx.CommitAsync(cancellationToken);
     }
@@ -1746,6 +1750,10 @@ LIMIT 1;";
     // NpgsqlParameter makes EF use it directly instead of inferring, so NULL works.
     private static NpgsqlParameter OptionalText(string? value) =>
         new() { NpgsqlDbType = NpgsqlDbType.Varchar, Value = (object?)value ?? DBNull.Value };
+
+    /// <summary>Misma razón que <see cref="OptionalText"/>, para enteros opcionales.</summary>
+    private static NpgsqlParameter OptionalInt(int? value) =>
+        new() { NpgsqlDbType = NpgsqlDbType.Integer, Value = (object?)value ?? DBNull.Value };
 
     private static string? NormalizeOptional(string? value, int maxLength, string fieldName)
     {

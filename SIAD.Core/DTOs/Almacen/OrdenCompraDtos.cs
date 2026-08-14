@@ -40,6 +40,12 @@ public sealed class OrdenCompraDetalleDto
     public decimal Total { get; set; }
     public decimal CantidadAplicada { get; set; }
 
+    /// <summary>
+    /// Fecha pactada de ESTE renglón cuando la entrega es escalonada. Opcional:
+    /// vacía = rige la de la cabecera (<see cref="OrdenCompraDto.FechaEntregaPactada"/>).
+    /// </summary>
+    public DateOnly? FechaEntregaPactada { get; set; }
+
     /// <summary>Porcentaje de ISV que aplica a este artículo (capa 1), vigente a la fecha de la orden.</summary>
     public decimal TasaIsv { get; set; }
 
@@ -60,6 +66,14 @@ public sealed class OrdenCompraDto
     public int Numero { get; set; }
     public DateOnly? Fecha { get; set; }
     public DateOnly? FechaEmision { get; set; }
+
+    /// <summary>
+    /// Fecha en que el proveedor se compromete a entregar. Obligatoria desde el borrador
+    /// (decisión usuario 2026-08-14); sólo viene vacía en las órdenes anteriores a esa fecha.
+    /// Es contra esto que se mide la puntualidad del proveedor.
+    /// </summary>
+    public DateOnly? FechaEntregaPactada { get; set; }
+
     public string CodProveedor { get; set; } = string.Empty;
     public string? ProveedorNombre { get; set; }
     public string? TerminosPago { get; set; }
@@ -93,6 +107,10 @@ public sealed class OrdenCompraListItemDto
     public int Id { get; set; }
     public int Numero { get; set; }
     public DateOnly? Fecha { get; set; }
+
+    /// <summary>Fecha pactada de la cabecera. Vacía sólo en órdenes anteriores al 2026-08-14.</summary>
+    public DateOnly? FechaEntregaPactada { get; set; }
+
     public string CodProveedor { get; set; } = string.Empty;
     public string? ProveedorNombre { get; set; }
     public decimal Total { get; set; }

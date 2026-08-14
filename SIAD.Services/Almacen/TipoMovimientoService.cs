@@ -41,6 +41,7 @@ public sealed class TipoMovimientoService : ITipoMovimientoService
                 Nombre = t.nombre,
                 Clase = t.clase,
                 RequiereAutorizacion = t.requiere_autorizacion,
+                NotificaCorreo = t.notifica_correo,
                 Activo = t.activo,
                 // Derivado de alm_movimiento_dtl desde la Fase 2: si está en uso, la pantalla
                 // bloquea el cambio de clase (y el servicio lo rechaza igual del lado servidor).
@@ -62,6 +63,7 @@ public sealed class TipoMovimientoService : ITipoMovimientoService
                 Nombre = t.nombre,
                 Clase = t.clase,
                 RequiereAutorizacion = t.requiere_autorizacion,
+                NotificaCorreo = t.notifica_correo,
                 CuentaContable = t.cuenta_contable,
                 Activo = t.activo,
                 Orden = t.orden
@@ -88,6 +90,7 @@ public sealed class TipoMovimientoService : ITipoMovimientoService
             nombre = nombre,
             clase = clase,
             requiere_autorizacion = dto.RequiereAutorizacion,
+            notifica_correo = dto.NotificaCorreo,
             cuenta_contable = ClasificacionNormalizer.Opcional(dto.CuentaContable, 20),
             activo = dto.Activo,
             orden = dto.Orden,
@@ -133,6 +136,7 @@ public sealed class TipoMovimientoService : ITipoMovimientoService
         entity.nombre = nombre;
         entity.clase = clase;
         entity.requiere_autorizacion = dto.RequiereAutorizacion;
+        entity.notifica_correo = dto.NotificaCorreo;
         entity.cuenta_contable = ClasificacionNormalizer.Opcional(dto.CuentaContable, 20);
         entity.activo = dto.Activo;
         entity.orden = dto.Orden;

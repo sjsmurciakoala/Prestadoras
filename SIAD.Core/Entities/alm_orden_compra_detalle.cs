@@ -29,6 +29,12 @@ public partial class alm_orden_compra_detalle : ICompanyScopedEntity
     /// <summary>Cantidad ya recibida contra este renglón. La incrementa la recepción.</summary>
     public decimal cantidad_aplicada { get; set; }
 
+    /// <summary>
+    /// Fecha pactada de ESTE renglón cuando la entrega es escalonada. NULL = rige la de
+    /// la cabecera (<see cref="alm_orden_compra.fecha_entrega_pactada"/>).
+    /// </summary>
+    public DateOnly? fecha_entrega_pactada { get; set; }
+
     public virtual alm_orden_compra? orden { get; set; }
     public virtual alm_articulo? articulo { get; set; }
 }

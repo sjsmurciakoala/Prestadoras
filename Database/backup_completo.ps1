@@ -4,10 +4,12 @@
 # Genera un .backup (formato custom de pg_dump, comprimido) listo
 # para compartir y restaurar con pg_restore.
 #
+# La contraseña NO se versiona: pasala con -Password o exportá PGPASSWORD antes de correr.
+#
 # Uso típico:
-#   .\backup_completo.ps1                      # BD local de trabajo (siad_v3_test)
-#   .\backup_completo.ps1 -Origen prod         # producción 172.16.0.9 (SOLO LECTURA)
-#   .\backup_completo.ps1 -DbHost otro -Db x -Password y   # cualquier servidor
+#   $env:PGPASSWORD = '<password>'; .\backup_completo.ps1      # BD local de trabajo (siad_v3_test)
+#   .\backup_completo.ps1 -Origen prod -Password '<password>'  # producción 172.16.0.9 (SOLO LECTURA)
+#   .\backup_completo.ps1 -DbHost otro -Db x -Password '<password>'   # cualquier servidor
 #
 # Restaurar en otra máquina (ejemplo):
 #   createdb -h localhost -U postgres siad_v3_test
@@ -25,7 +27,8 @@ param(
     [int]$Port = 5432,
     [string]$Db = $null,
     [string]$Usuario = 'postgres',
-    [string]$Password = 'root',
+    # Sin default: la contraseña no se versiona. Pasala con -Password o exportá PGPASSWORD antes.
+    [string]$Password = $null,
 
     # Carpeta de salida (por defecto Database\Backups junto a este script)
     [string]$Salida = $null
@@ -58,14 +61,22 @@ $archivo = Join-Path $Salida ("{0}_{1}_{2}.backup" -f $Db, $DbHost.Replace('.', 
 
 Write-Host "Backup de $Db en ${DbHost}:$Port -> $archivo" -ForegroundColor Cyan
 
-$env:PGPASSWORD = $Password
+# Sin -Password se respeta el PGPASSWORD que ya tenga el entorno (o el .pgpass del usuario).
+$passwordInyectada = $false
+if ($Password) {
+    $env:PGPASSWORD = $Password
+    $passwordInyectada = $true
+}
+elseif (-not $env:PGPASSWORD) {
+    Write-Host "AVISO: sin -Password ni PGPASSWORD; pg_dump pedira la clave o usara .pgpass." -ForegroundColor Yellow
+}
 try {
     & pg_dump --host=$DbHost --port=$Port --username=$Usuario --dbname=$Db `
               --format=custom --blobs --file="$archivo"
     if ($LASTEXITCODE -ne 0) { throw "pg_dump devolvio codigo $LASTEXITCODE" }
 }
 finally {
-    Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue
+    if ($passwordInyectada) { Remove-Item Env:\PGPASSWORD -ErrorAction SilentlyContinue }
 }
 
 $mb = [math]::Round((Get-Item $archivo).Length / 1MB, 2)

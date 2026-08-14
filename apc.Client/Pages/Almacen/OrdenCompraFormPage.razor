@@ -104,12 +104,18 @@
                                 CssClass="w-100" />
                     <div class="form-text">Define qué artículos se pueden pedir: sólo los que tienen su código de proveedor.</div>
                 </div>
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Entrega pactada <span class="text-danger">*</span></label>
+                    <DxDateEdit Date="@fechaEntregaPactada" DateChanged="@((DateTime? d) => fechaEntregaPactada = d)"
+                                Enabled="@(!SoloLectura)" NullText="Seleccione la fecha" CssClass="w-100" />
+                    <div class="form-text">Fecha comprometida por el proveedor: contra ella se mide su puntualidad.</div>
+                </div>
+                <div class="col-12 col-md-3">
                     <label class="form-label fw-semibold">Destino / uso</label>
                     <DxTextBox @bind-Text="modelo.DestinoUso" MaxLength="250"
                                Enabled="@(!SoloLectura)" NullText="Ej. reposición bodega central" CssClass="w-100" />
                 </div>
-                <div class="col-12 col-md-2 d-flex align-items-end">
+                <div class="col-12">
                     <DxCheckBox Checked="modelo.CalculaIsv"
                                 CheckedExpression="@(() => modelo.CalculaIsv)"
                                 CheckedChanged="@((bool v) => { modelo.CalculaIsv = v; })"
@@ -184,6 +190,7 @@
                             <th>Cód. proveedor</th>
                             <th>Descripción</th>
                             <th>Centro de costo</th>
+                            <th>Entrega pactada</th>
                             <th class="text-end">Cant. pedida</th>
                             <th class="text-end">Costo unitario</th>
                             <th class="text-end">ISV</th>
@@ -198,7 +205,7 @@
                         @if (modelo.Detalles.Count == 0)
                         {
                             <tr>
-                                <td colspan="@(SoloLectura ? 8 : 9)" class="text-center text-muted py-4">
+                                <td colspan="@(SoloLectura ? 9 : 10)" class="text-center text-muted py-4">
                                     La orden aún no tiene renglones.
                                 </td>
                             </tr>
@@ -219,6 +226,25 @@
                                         else
                                         {
                                             <DxTextBox @bind-Text="d.CentroCosto" MaxLength="40" NullText="Opcional" CssClass="w-100" />
+                                        }
+                                    </td>
+                                    <td style="min-width:150px">
+                                        @* Opcional: sólo para entregas escalonadas. Vacía = rige la fecha de la orden. *@
+                                        @if (SoloLectura)
+                                        {
+                                            <span class="text-muted">
+                                                @(d.FechaEntregaPactada.HasValue
+                                                    ? d.FechaEntregaPactada.Value.ToString("dd/MM/yyyy")
+                                                    : "Igual que la orden")
+                                            </span>
+                                        }
+                                        else
+                                        {
+                                            <DxDateEdit Date="@FechaRenglon(d)"
+                                                        DateChanged="@((DateTime? v) => FechaRenglonChanged(d, v))"
+                                                        NullText="Igual que la orden"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        CssClass="w-100" />
                                         }
                                     </td>
                                     <td class="text-end" style="min-width:120px">
@@ -383,6 +409,17 @@
     private DateTime? fecha = DateTime.Today;
     private DateTime? fechaEmision;
 
+    /// <summary>Fecha comprometida por el proveedor. Obligatoria desde el borrador.</summary>
+    private DateTime? fechaEntregaPactada;
+
+    // DxDateEdit trabaja con DateTime?; el DTO viaja en DateOnly?. Estos dos puentes evitan
+    // repetir la conversión en cada renglón.
+    private static DateTime? FechaRenglon(OrdenCompraDetalleDto d)
+        => d.FechaEntregaPactada?.ToDateTime(TimeOnly.MinValue);
+
+    private static void FechaRenglonChanged(OrdenCompraDetalleDto d, DateTime? v)
+        => d.FechaEntregaPactada = v.HasValue ? DateOnly.FromDateTime(v.Value) : null;
+
     private bool cargando = true;
     private bool guardando;
     private string? errorCarga;
@@ -472,6 +509,8 @@
             modelo = orden;
             fecha = orden.Fecha?.ToDateTime(TimeOnly.MinValue);
             fechaEmision = orden.FechaEmision?.ToDateTime(TimeOnly.MinValue);
+            // Vacía en las órdenes anteriores al 2026-08-14: al editarlas habrá que llenarla.
+            fechaEntregaPactada = orden.FechaEntregaPactada?.ToDateTime(TimeOnly.MinValue);
 
             if (!SoloLectura && !string.IsNullOrWhiteSpace(modelo.CodProveedor))
             {
@@ -568,12 +607,15 @@
             Toast("Validación", "Agregue al menos un renglón.", ToastRenderStyle.Warning);
             return;
         }
+        if (!ValidarEntregaPactada())
+        {
+            return;
+        }
 
         guardando = true;
         try
         {
-            modelo.Fecha = fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : null;
-            modelo.FechaEmision = fechaEmision.HasValue ? DateOnly.FromDateTime(fechaEmision.Value) : null;
+            VolcarFechas();
 
             var guardada = EsEdicion
                 ? await OrdenesClient.ActualizarAsync(Id!.Value, modelo)
@@ -605,14 +647,58 @@
         }
     }
 
+    /// <summary>
+    /// La entrega pactada es obligatoria (el servidor también la exige; esto sólo evita el
+    /// viaje) y no puede quedar antes de la fecha de la orden, ni en la cabecera ni en un renglón.
+    /// </summary>
+    private bool ValidarEntregaPactada()
+    {
+        if (!fechaEntregaPactada.HasValue)
+        {
+            Toast("Validación", "Indique la fecha de entrega pactada con el proveedor.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (fecha.HasValue && fechaEntregaPactada.Value.Date < fecha.Value.Date)
+        {
+            Toast("Validación", "La fecha de entrega pactada no puede ser anterior a la fecha de la orden.", ToastRenderStyle.Warning);
+            return false;
+        }
+        if (fecha.HasValue)
+        {
+            var fueraDeRango = modelo.Detalles.Any(d =>
+                d.FechaEntregaPactada.HasValue &&
+                d.FechaEntregaPactada.Value < DateOnly.FromDateTime(fecha.Value));
+            if (fueraDeRango)
+            {
+                Toast("Validación", "Hay un renglón con fecha de entrega anterior a la fecha de la orden.", ToastRenderStyle.Warning);
+                return false;
+            }
+        }
+        return true;
+    }
+
+    /// <summary>Pasa las tres fechas de la pantalla (DateTime?) al modelo (DateOnly?).</summary>
+    private void VolcarFechas()
+    {
+        modelo.Fecha = fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : null;
+        modelo.FechaEmision = fechaEmision.HasValue ? DateOnly.FromDateTime(fechaEmision.Value) : null;
+        modelo.FechaEntregaPactada = fechaEntregaPactada.HasValue
+            ? DateOnly.FromDateTime(fechaEntregaPactada.Value)
+            : null;
+    }
+
     private async Task AprobarAsync()
     {
+        if (!ValidarEntregaPactada())
+        {
+            return;
+        }
+
         guardando = true;
         try
         {
             // Se guarda primero para que se apruebe exactamente lo que está en pantalla.
-            modelo.Fecha = fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : null;
-            modelo.FechaEmision = fechaEmision.HasValue ? DateOnly.FromDateTime(fechaEmision.Value) : null;
+            VolcarFechas();
             modelo = await OrdenesClient.ActualizarAsync(Id!.Value, modelo);
 
             if (await OrdenesClient.AprobarAsync(Id!.Value))

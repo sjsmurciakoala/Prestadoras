@@ -781,6 +781,8 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
     {
         CodProveedor = _codProveedor,
         Fecha = DateOnly.FromDateTime(DateTime.Today),
+        // Obligatoria desde el borrador (2026-08-14_alm_orden_compra_fecha_entrega.sql).
+        FechaEntregaPactada = DateOnly.FromDateTime(DateTime.Today).AddDays(7),
         CalculaIsv = false,
         Detalles = new List<OrdenCompraDetalleDto>
         {

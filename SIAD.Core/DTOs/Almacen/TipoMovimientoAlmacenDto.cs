@@ -28,6 +28,9 @@ public sealed class TipoMovimientoAlmacenDto
 
     public bool RequiereAutorizacion { get; set; }
 
+    /// <summary>Solo aplica a clase SALIDA: envía aviso por correo al cruzar bajo mínimo.</summary>
+    public bool NotificaCorreo { get; set; }
+
     [StringLength(20, ErrorMessage = "La cuenta contable no puede superar los 20 caracteres.")]
     public string? CuentaContable { get; set; }
 

@@ -1,0 +1,702 @@
+@page "/proveedores/evaluacion/criterios"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Proveedores
+
+@inject IJSRuntime JS
+@inject EvaluacionProveedorClient EvaluacionClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - Criterios de evaluación</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CriteriosToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Criterios de evaluación</h2>
+            <p class="page-subtitle">Qué se mide, cuánto pesa cada cosa y cómo se traduce el puntaje en una clase</p>
+        </div>
+
+        <div class="header-actions d-flex gap-2 flex-wrap">
+            <DxButton Text="Volver a la evaluación" IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern"
+                      Click="@(() => Navigation.NavigateTo("/proveedores/evaluacion"))" />
+            <DxButton Text="Nuevo criterio" IconCssClass="bi bi-plus-lg"
+                      RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" Click="NuevoCriterio" />
+        </div>
+    </div>
+
+    <div class="modern-card mb-3 suma-card">
+        <div>
+            <div class="summary-label">Suma de los pesos activos</div>
+            <div class="summary-value @(SumaEsCien ? "text-success" : "text-warning")">@SumaPesos.ToString("N2")</div>
+        </div>
+        <div class="suma-nota">
+            @if (SumaEsCien)
+            {
+                <span><i class="bi bi-check-circle text-success me-1"></i>Los pesos suman 100: cada criterio vale lo que dice.</span>
+            }
+            else
+            {
+                <span>
+                    <i class="bi bi-info-circle text-warning me-1"></i>
+                    Los pesos no suman 100. <strong>No es un error que bloquee</strong>: el cálculo normaliza sobre
+                    la suma de los criterios con datos, así que el puntaje sigue siendo sobre 100. Aun así conviene
+                    cuadrarlo en 100 para que el peso que se lee en pantalla sea el que se aplica.
+                </span>
+            }
+        </div>
+    </div>
+
+    <div class="modern-card position-relative mb-4">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="gridCriterios" Data="@criterios" KeyFieldName="@nameof(EvaluacionCriterioDto.Id)"
+                    PageSize="15" PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutCriteriosSaving"
+                    LayoutAutoLoading="OnLayoutCriteriosLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <span class="fw-semibold">Criterios</span>
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooserCriterios"
+                                  CssClass="ms-2" />
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@criterios.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionCriterioDto.Orden)" Caption="#" Width="70px"
+                                      TextAlignment="GridTextAlignment.Right" />
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionCriterioDto.Nombre)" Caption="Criterio" MinWidth="220">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionCriterioDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span class="text-dark fw-semibold">@item.Nombre</span>
+                                    <span class="text-muted small">@item.Codigo</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionCriterioDto.Peso)" Caption="Peso"
+                                      Width="100px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionCriterioDto item)
+                            {
+                                <span class="fw-semibold">@item.Peso.ToString("N2")%</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionCriterioDto.Origen)" Caption="Origen" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionCriterioDto item)
+                            {
+                                <span class="tag-origen @(item.EsManual ? "manual" : "auto")">@item.OrigenDescripcion</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionCriterioDto.Metrica)" Caption="Métrica" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionCriterioDto item)
+                            {
+                                <span class="@(string.IsNullOrWhiteSpace(item.Metrica) ? "text-muted" : "font-monospace small")">
+                                    @(string.IsNullOrWhiteSpace(item.Metrica) ? "—" : item.Metrica)
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionCriterioDto.Meta)" Caption="Meta"
+                                      Width="90px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionCriterioDto item)
+                            {
+                                <span>@(item.Meta.HasValue ? $"{item.Meta.Value:N0}%" : "—")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionCriterioDto.Activo)" Caption="Estado"
+                                      Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionCriterioDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">
+                                    @(item.Activo ? "Activo" : "Inactivo")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionCriterioDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => EditarCriterio(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmarBorrarCriterio(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay criterios configurados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title" style="font-size:1.35rem">Escala de clasificación</h2>
+            <p class="page-subtitle">En qué clase cae cada puntaje. Los rangos activos no se pueden solapar.</p>
+        </div>
+        <DxButton Text="Nueva clase" IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern" Click="NuevaClase" />
+    </div>
+
+    <div class="modern-card">
+        <div class="grid-wrapper">
+            <DxGrid @ref="gridClases" Data="@clases" KeyFieldName="@nameof(EvaluacionClaseDto.Id)"
+                    PageSize="15" PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutClasesSaving"
+                    LayoutAutoLoading="OnLayoutClasesLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <span class="fw-semibold">Clases</span>
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooserClases"
+                                  CssClass="ms-2" />
+                        <div class="ms-auto text-muted small">
+                            Total: <span class="fw-bold">@clases.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionClaseDto.Codigo)" Caption="Clase" Width="110px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionClaseDto item)
+                            {
+                                <span class="fw-bold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionClaseDto.Nombre)" Caption="Nombre" MinWidth="160" />
+
+                    <DxGridDataColumn Caption="Rango de puntaje" Width="180px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionClaseDto item)
+                            {
+                                <span class="font-monospace">@item.PuntajeDesde.ToString("N2") – @item.PuntajeHasta.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(EvaluacionClaseDto.Descripcion)" Caption="Qué implica" MinWidth="240" />
+
+                    <DxGridDataColumn Caption="Acciones" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EvaluacionClaseDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => EditarClase(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Eliminar"
+                                            @onclick="() => ConfirmarBorrarClase(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-trash"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay clases configuradas.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@* ── Editor de criterio ────────────────────────────────────────────────────── *@
+<DxPopup @bind-Visible="criterioVisible" Width="min(680px, 94vw)"
+         HeaderText="@(criterioId.HasValue ? "Editar criterio" : "Nuevo criterio")" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="row g-3">
+                <div class="col-12 col-md-3">
+                    <label class="form-label fw-semibold">Código <span class="text-danger">*</span></label>
+                    <DxTextBox @bind-Text="criterio.Codigo" MaxLength="20" NullText="Ej. ENTREGA" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+                    <DxTextBox @bind-Text="criterio.Nombre" MaxLength="100"
+                               NullText="Ej. Cumplimiento de entrega" CssClass="w-100" />
+                </div>
+                <div class="col-6 col-md-3">
+                    <label class="form-label fw-semibold">Peso (%)</label>
+                    <DxSpinEdit @bind-Value="criterio.Peso" DisplayFormat="N2" MinValue="0" MaxValue="100" CssClass="w-100" />
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Descripción</label>
+                    <DxTextBox @bind-Text="criterio.Descripcion" MaxLength="300"
+                               NullText="Qué mide este criterio" CssClass="w-100" />
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">Origen</label>
+                    <DxComboBox Data="@origenes" Value="@origenSeleccionado"
+                                ValueChanged="@((OrigenOpcion? o) => OnOrigenChanged(o))"
+                                ValueExpression="@(() => origenSeleccionado)"
+                                TextFieldName="@nameof(OrigenOpcion.Etiqueta)" CssClass="w-100" />
+                </div>
+
+                <div class="col-12 col-md-4">
+                    <label class="form-label fw-semibold">
+                        Métrica @if (EsAutomatico) { <span class="text-danger">*</span> }
+                    </label>
+                    <DxComboBox Data="@metricas" Value="@metricaSeleccionada"
+                                ValueChanged="@((MetricaOpcion? m) => metricaSeleccionada = m)"
+                                ValueExpression="@(() => metricaSeleccionada)"
+                                TextFieldName="@nameof(MetricaOpcion.Etiqueta)"
+                                Enabled="@EsAutomatico"
+                                NullText="@(EsAutomatico ? "Elija qué la alimenta" : "No aplica: es manual")"
+                                CssClass="w-100" />
+                    <div class="form-text">
+                        Un criterio automático toma su número de la métrica; uno manual lo califica el comprador.
+                    </div>
+                </div>
+
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Meta (%)</label>
+                    <DxSpinEdit @bind-Value="meta" DisplayFormat="N0" MinValue="0" MaxValue="100" CssClass="w-100" />
+                </div>
+
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Orden</label>
+                    <DxSpinEdit @bind-Value="orden" DisplayFormat="N0" MinValue="0" MaxValue="99" CssClass="w-100" />
+                </div>
+
+                @if (EsPrecio)
+                {
+                    <div class="col-12 col-md-4">
+                        <label class="form-label fw-semibold">Tolerancia de precio (%)</label>
+                        <DxSpinEdit @bind-Value="parametro" DisplayFormat="N2" MinValue="0" MaxValue="100" CssClass="w-100" />
+                        <div class="form-text">Desviación aceptada entre lo facturado y el costo pactado.</div>
+                    </div>
+                }
+
+                <div class="col-12">
+                    <DxCheckBox @bind-Checked="criterio.Activo">Activo (participa del cálculo)</DxCheckBox>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => criterioVisible = false)" />
+                <DxButton Text="Guardar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!guardando)" Click="GuardarCriterioAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@* ── Editor de clase ───────────────────────────────────────────────────────── *@
+<DxPopup @bind-Visible="claseVisible" Width="min(560px, 94vw)"
+         HeaderText="@(claseId.HasValue ? "Editar clase" : "Nueva clase")" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="row g-3">
+                <div class="col-6 col-md-3">
+                    <label class="form-label fw-semibold">Código <span class="text-danger">*</span></label>
+                    <DxTextBox @bind-Text="clase.Codigo" MaxLength="10" NullText="Ej. A" CssClass="w-100" />
+                </div>
+                <div class="col-6 col-md-5">
+                    <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+                    <DxTextBox @bind-Text="clase.Nombre" MaxLength="60" NullText="Ej. Confiable" CssClass="w-100" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Desde</label>
+                    <DxSpinEdit @bind-Value="clase.PuntajeDesde" DisplayFormat="N2" MinValue="0" MaxValue="100" CssClass="w-100" />
+                </div>
+                <div class="col-6 col-md-2">
+                    <label class="form-label fw-semibold">Hasta</label>
+                    <DxSpinEdit @bind-Value="clase.PuntajeHasta" DisplayFormat="N2" MinValue="0" MaxValue="100" CssClass="w-100" />
+                </div>
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Qué implica</label>
+                    <DxTextBox @bind-Text="clase.Descripcion" MaxLength="300"
+                               NullText="Ej. Requiere plan de acción y segunda cotización" CssClass="w-100" />
+                </div>
+
+                <div class="col-6 col-md-3">
+                    <label class="form-label fw-semibold">Orden</label>
+                    <DxSpinEdit @bind-Value="ordenClase" DisplayFormat="N0" MinValue="0" MaxValue="99" CssClass="w-100" />
+                </div>
+                <div class="col-6 col-md-9 d-flex align-items-end">
+                    <DxCheckBox @bind-Checked="clase.Activo">Activa</DxCheckBox>
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => claseVisible = false)" />
+                <DxButton Text="Guardar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!guardando)" Click="GuardarClaseAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@* ── Confirmar borrado ─────────────────────────────────────────────────────── *@
+<DxPopup @bind-Visible="confirmarVisible" Width="min(430px, 90vw)"
+         HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-danger"><i class="bi bi-trash" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">@textoConfirmacion</h5>
+            <p class="text-muted">Los períodos ya calculados conservan su historia; el cambio aplica al recalcular.</p>
+            <div class="d-flex justify-content-center gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => confirmarVisible = false)" />
+                <DxButton Text="Eliminar" RenderStyle="ButtonRenderStyle.Danger"
+                          Enabled="@(!guardando)" Click="EliminarAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? gridCriterios;
+    private DxGrid? gridClases;
+    private const string LayoutCriterios = "proveedores-evaluacion-criterios-grid-layout";
+    private const string LayoutClases = "proveedores-evaluacion-clases-grid-layout";
+
+    private sealed class OrigenOpcion
+    {
+        public short Valor { get; init; }
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    private sealed class MetricaOpcion
+    {
+        public string Valor { get; init; } = string.Empty;
+        public string Etiqueta { get; init; } = string.Empty;
+    }
+
+    private readonly OrigenOpcion[] origenes =
+    [
+        new() { Valor = OrigenCriterioEvaluacion.Automatico, Etiqueta = "Automático" },
+        new() { Valor = OrigenCriterioEvaluacion.Manual,     Etiqueta = "Manual" }
+    ];
+
+    private readonly MetricaOpcion[] metricas =
+    [
+        new() { Valor = MetricaEvaluacion.Entrega,   Etiqueta = "ENTREGA — recepciones dentro de la fecha pactada" },
+        new() { Valor = MetricaEvaluacion.Completo,  Etiqueta = "COMPLETO — cantidad recibida vs pedida" },
+        new() { Valor = MetricaEvaluacion.Precio,    Etiqueta = "PRECIO — facturado vs costo pactado" },
+        new() { Valor = MetricaEvaluacion.Calidad,   Etiqueta = "CALIDAD — recepciones sin incidencias" },
+        new() { Valor = MetricaEvaluacion.Documento, Etiqueta = "DOCUMENTO — facturas con CAI y SAR" }
+    ];
+
+    private List<EvaluacionCriterioDto> criterios = new();
+    private List<EvaluacionClaseDto> clases = new();
+
+    private bool isLoading = true;
+    private bool guardando;
+    private bool criterioVisible;
+    private bool claseVisible;
+    private bool confirmarVisible;
+
+    private int? criterioId;
+    private EvaluacionCriterioUpsertDto criterio = new();
+    private OrigenOpcion? origenSeleccionado;
+    private MetricaOpcion? metricaSeleccionada;
+    private decimal meta;
+    private decimal orden;
+    private decimal parametro;
+
+    private int? claseId;
+    private EvaluacionClaseUpsertDto clase = new();
+    private decimal ordenClase;
+
+    private string textoConfirmacion = string.Empty;
+    private int? aBorrarCriterio;
+    private int? aBorrarClase;
+
+    private bool EsAutomatico => origenSeleccionado?.Valor == OrigenCriterioEvaluacion.Automatico;
+
+    private bool EsPrecio => EsAutomatico
+        && string.Equals(metricaSeleccionada?.Valor, MetricaEvaluacion.Precio, StringComparison.OrdinalIgnoreCase);
+
+    private decimal SumaPesos
+    {
+        get
+        {
+            decimal total = 0m;
+            foreach (var c in criterios)
+            {
+                if (c.Activo) total += c.Peso;
+            }
+
+            return total;
+        }
+    }
+
+    private bool SumaEsCien => Math.Abs(SumaPesos - 100m) < 0.01m;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        try
+        {
+            criterios = (await EvaluacionClient.ObtenerCatalogoCriteriosAsync()).ToList();
+            clases = (await EvaluacionClient.ObtenerClasesAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudo cargar el catálogo: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    // ── Criterios ────────────────────────────────────────────────────────────
+
+    private void NuevoCriterio()
+    {
+        criterioId = null;
+        criterio = new EvaluacionCriterioUpsertDto { Activo = true };
+        origenSeleccionado = origenes[0];
+        metricaSeleccionada = null;
+        meta = 0m;
+        orden = criterios.Count + 1;
+        parametro = 0m;
+        criterioVisible = true;
+    }
+
+    private void EditarCriterio(EvaluacionCriterioDto item)
+    {
+        criterioId = item.Id;
+        criterio = new EvaluacionCriterioUpsertDto
+        {
+            Codigo = item.Codigo,
+            Nombre = item.Nombre,
+            Descripcion = item.Descripcion,
+            Peso = item.Peso,
+            Origen = item.Origen,
+            Activo = item.Activo
+        };
+
+        origenSeleccionado = origenes.FirstOrDefault(o => o.Valor == item.Origen) ?? origenes[0];
+        metricaSeleccionada = metricas.FirstOrDefault(m =>
+            string.Equals(m.Valor, item.Metrica, StringComparison.OrdinalIgnoreCase));
+        meta = item.Meta ?? 0m;
+        orden = item.Orden;
+        parametro = item.Parametro ?? 0m;
+        criterioVisible = true;
+    }
+
+    private void OnOrigenChanged(OrigenOpcion? valor)
+    {
+        origenSeleccionado = valor;
+        if (!EsAutomatico) metricaSeleccionada = null;
+    }
+
+    private async Task GuardarCriterioAsync()
+    {
+        criterio.Origen = origenSeleccionado?.Valor ?? OrigenCriterioEvaluacion.Automatico;
+        criterio.Metrica = EsAutomatico ? metricaSeleccionada?.Valor : null;
+        criterio.Meta = meta > 0m ? meta : null;
+        criterio.Orden = (short)orden;
+        // La tolerancia sólo tiene sentido en PRECIO; en el resto se guarda vacía.
+        criterio.Parametro = EsPrecio && parametro > 0m ? parametro : null;
+
+        guardando = true;
+        try
+        {
+            await EvaluacionClient.GuardarCriterioAsync(criterioId, criterio);
+            Toast("Éxito",
+                "Criterio guardado. Recalcule los períodos abiertos para aplicar el cambio.",
+                ToastRenderStyle.Success);
+            criterioVisible = false;
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void ConfirmarBorrarCriterio(EvaluacionCriterioDto item)
+    {
+        aBorrarCriterio = item.Id;
+        aBorrarClase = null;
+        textoConfirmacion = $"¿Eliminar el criterio «{item.Nombre}»?";
+        confirmarVisible = true;
+    }
+
+    // ── Clases ───────────────────────────────────────────────────────────────
+
+    private void NuevaClase()
+    {
+        claseId = null;
+        clase = new EvaluacionClaseUpsertDto { Activo = true };
+        ordenClase = clases.Count + 1;
+        claseVisible = true;
+    }
+
+    private void EditarClase(EvaluacionClaseDto item)
+    {
+        claseId = item.Id;
+        clase = new EvaluacionClaseUpsertDto
+        {
+            Codigo = item.Codigo,
+            Nombre = item.Nombre,
+            Descripcion = item.Descripcion,
+            PuntajeDesde = item.PuntajeDesde,
+            PuntajeHasta = item.PuntajeHasta,
+            Activo = true
+        };
+        ordenClase = item.Orden;
+        claseVisible = true;
+    }
+
+    private async Task GuardarClaseAsync()
+    {
+        clase.Orden = (short)ordenClase;
+
+        guardando = true;
+        try
+        {
+            await EvaluacionClient.GuardarClaseAsync(claseId, clase);
+            Toast("Éxito", "Clase guardada.", ToastRenderStyle.Success);
+            claseVisible = false;
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void ConfirmarBorrarClase(EvaluacionClaseDto item)
+    {
+        aBorrarClase = item.Id;
+        aBorrarCriterio = null;
+        textoConfirmacion = $"¿Eliminar la clase «{item.Codigo} · {item.Nombre}»?";
+        confirmarVisible = true;
+    }
+
+    private async Task EliminarAsync()
+    {
+        guardando = true;
+        try
+        {
+            if (aBorrarCriterio.HasValue)
+            {
+                await EvaluacionClient.EliminarCriterioAsync(aBorrarCriterio.Value);
+            }
+            else if (aBorrarClase.HasValue)
+            {
+                await EvaluacionClient.EliminarClaseAsync(aBorrarClase.Value);
+            }
+
+            Toast("Éxito", "Eliminado.", ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+            confirmarVisible = false;
+            aBorrarCriterio = null;
+            aBorrarClase = null;
+        }
+    }
+
+    // ── Grids ────────────────────────────────────────────────────────────────
+
+    private Task OnLayoutCriteriosSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, LayoutCriterios, e);
+
+    private Task OnLayoutCriteriosLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, LayoutCriterios, e);
+
+    private Task OnLayoutClasesSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, LayoutClases, e);
+
+    private Task OnLayoutClasesLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, LayoutClases, e);
+
+    private void MostrarColumnChooserCriterios() => gridCriterios?.ShowColumnChooser();
+
+    private void MostrarColumnChooserClases() => gridClases?.ShowColumnChooser();
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "CriteriosToast"
+        });
+}

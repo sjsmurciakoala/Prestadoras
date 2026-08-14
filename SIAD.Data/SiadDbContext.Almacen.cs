@@ -948,6 +948,8 @@ public partial class SiadDbContext
 
             entity.Property(e => e.fecha).HasColumnType("date");
             entity.Property(e => e.fecha_emision).HasColumnType("date");
+            // 2026-08-14_alm_orden_compra_fecha_entrega.sql
+            entity.Property(e => e.fecha_entrega_pactada).HasColumnType("date");
             entity.Property(e => e.cod_proveedor).HasMaxLength(20);
             entity.Property(e => e.terminos_pago).HasMaxLength(100);
             entity.Property(e => e.destino_uso).HasMaxLength(250);
@@ -991,6 +993,8 @@ public partial class SiadDbContext
             entity.Property(e => e.impuesto).HasPrecision(14, 2).HasDefaultValue(0m);
             entity.Property(e => e.total).HasPrecision(14, 2).HasDefaultValue(0m);
             entity.Property(e => e.cantidad_aplicada).HasPrecision(14, 4).HasDefaultValue(0m);
+            // 2026-08-14_alm_orden_compra_fecha_entrega.sql (NULL = rige la de la cabecera)
+            entity.Property(e => e.fecha_entrega_pactada).HasColumnType("date");
 
             entity.HasOne(e => e.articulo).WithMany()
                 .HasForeignKey(e => e.articulo_id)

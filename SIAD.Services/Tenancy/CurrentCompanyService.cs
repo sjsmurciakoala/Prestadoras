@@ -16,6 +16,13 @@ public sealed class CurrentCompanyService : ICurrentCompanyService
 
     public long GetCompanyId()
     {
+        // Override de batch/background (procesos sin sesión, p. ej. el barrido diario de alertas de
+        // stock): tiene prioridad sobre el claim. En un request normal nadie lo fija. Ver TenantOverride.
+        if (TenantOverride.CompanyId is long empresaFijada && empresaFijada > 0)
+        {
+            return empresaFijada;
+        }
+
         var httpContext = _httpContextAccessor.HttpContext;
         var user = httpContext?.User;
         var claimValue = user?.FindFirst(TenantClaimTypes.CompanyId)?.Value;

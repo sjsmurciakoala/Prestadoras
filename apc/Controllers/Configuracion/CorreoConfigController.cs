@@ -21,8 +21,13 @@ namespace apc.Controllers.Configuracion;
 public sealed class CorreoConfigController : ControllerBase
 {
     private readonly ICorreoConfigService _service;
+    private readonly ICorreoNotificador _notificador;
 
-    public CorreoConfigController(ICorreoConfigService service) => _service = service;
+    public CorreoConfigController(ICorreoConfigService service, ICorreoNotificador notificador)
+    {
+        _service = service;
+        _notificador = notificador;
+    }
 
     private string Usuario => User?.Identity?.Name ?? "system";
 
@@ -65,4 +70,12 @@ public sealed class CorreoConfigController : ControllerBase
             return BadRequest(new { message = ex.Message });
         }
     }
+
+    // -------------------------------------------------------------------- probar
+    // POST, pero se exige el permiso de EDICIÓN (no Create): probar es una operación sobre la
+    // configuración existente. El atributo a nivel de método anula el de la clase.
+    [HttpPost("probar")]
+    [ModuleAuthorize(PermissionModules.Configuracion, PermissionResources.Configuracion.Correo, PermissionAction.Edit)]
+    public async Task<IActionResult> Probar([FromBody] ProbarConexionRequest req, CancellationToken ct)
+        => Ok(await _notificador.ProbarConexionAsync(req?.Destinatario ?? string.Empty, ct));
 }

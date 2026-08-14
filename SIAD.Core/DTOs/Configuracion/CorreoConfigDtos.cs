@@ -67,3 +67,35 @@ public sealed class EnvioCorreoResueltoDto
     public List<string> Para { get; set; } = new();
     public List<string> ConCopia { get; set; } = new();
 }
+
+/// <summary>Mensaje listo para enviar por el transporte (SendGrid). La API key va aquí (descifrada), en memoria.</summary>
+public sealed class CorreoMensaje
+{
+    public string ApiKey { get; set; } = string.Empty;
+    public string? FromEmail { get; set; }
+    public string? FromName { get; set; }
+    public List<string> Para { get; set; } = new();
+    public List<string> ConCopia { get; set; } = new();
+    public string Asunto { get; set; } = string.Empty;
+    public string HtmlBody { get; set; } = string.Empty;
+}
+
+/// <summary>Resultado de un intento de envío: enviado, omitido por configuración, o fallo del proveedor.</summary>
+public sealed class CorreoEnvioResultado
+{
+    public bool Exito { get; init; }
+    /// <summary>No se envió por configuración (envío apagado, sin destinatarios, sin API key…). No es un error.</summary>
+    public bool Omitido { get; init; }
+    public int? StatusCode { get; init; }
+    public string? Error { get; init; }
+
+    public static CorreoEnvioResultado Ok(int statusCode) => new() { Exito = true, StatusCode = statusCode };
+    public static CorreoEnvioResultado Skip(string motivo) => new() { Omitido = true, Error = motivo };
+    public static CorreoEnvioResultado Fallo(int? statusCode, string error) => new() { StatusCode = statusCode, Error = error };
+}
+
+/// <summary>Petición del botón "Probar conexión": envía un correo de prueba a <see cref="Destinatario"/>.</summary>
+public sealed class ProbarConexionRequest
+{
+    public string Destinatario { get; set; } = string.Empty;
+}

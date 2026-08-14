@@ -9,7 +9,7 @@
 ## Scaffold aplicado
 ```powershell
 dotnet tool run dotnet-ef dbcontext scaffold `
-    'Host=3.208.232.209;Port=5432;Database=bdnes;Username=postgres;Password=Koala@2021;Timeout=10;SslMode=Prefer' `
+    'Host=3.208.232.209;Port=5432;Database=bdnes;Username=postgres;Password=<password>;Timeout=10;SslMode=Prefer' `
     Npgsql.EntityFrameworkCore.PostgreSQL `
     -p SIAD.Data/SIAD.Data.csproj `
     -s apc/apc.csproj `

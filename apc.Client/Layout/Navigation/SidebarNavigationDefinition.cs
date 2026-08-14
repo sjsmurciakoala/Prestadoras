@@ -263,8 +263,11 @@ public static class SidebarNavigationDefinition
                     Children =
                     [
                         new SidebarNavItem { Id = "prov-lista", Text = "Proveedores", NavigateUrl = "/proveedores", MatchPrefixes = ["/proveedores"], MatchExact = true, IconCssClass = "bi bi-truck" },
+                        new SidebarNavItem { Id = "prov-antiguedad-saldos", Text = "Antigüedad de saldos", NavigateUrl = "/proveedores/antiguedad-saldos", MatchPrefixes = ["/proveedores/antiguedad-saldos"], MatchExact = true, IconCssClass = "bi bi-hourglass-split" },
                         new SidebarNavItem { Id = "prov-retenciones", Text = "Retenciones", NavigateUrl = "/proveedores/retenciones", MatchPrefixes = ["/proveedores/retenciones"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
-                        new SidebarNavItem { Id = "prov-retenciones-declaracion", Text = "Declaración de retenciones", NavigateUrl = "/proveedores/retenciones/declaracion", MatchPrefixes = ["/proveedores/retenciones/declaracion"], IconCssClass = "bi bi-file-earmark-spreadsheet" }
+                        new SidebarNavItem { Id = "prov-retenciones-declaracion", Text = "Declaración de retenciones", NavigateUrl = "/proveedores/retenciones/declaracion", MatchPrefixes = ["/proveedores/retenciones/declaracion"], IconCssClass = "bi bi-file-earmark-spreadsheet" },
+                        new SidebarNavItem { Id = "prov-evaluacion", Text = "Evaluación", NavigateUrl = "/proveedores/evaluacion", MatchPrefixes = ["/proveedores/evaluacion"], IconCssClass = "bi bi-clipboard-data" },
+                        new SidebarNavItem { Id = "prov-incidencias", Text = "Incidencias de recepción", NavigateUrl = "/proveedores/incidencias", MatchPrefixes = ["/proveedores/incidencias"], IconCssClass = "bi bi-exclamation-diamond" }
                     ]
                 },
                 new SidebarNavItem
@@ -359,7 +362,7 @@ public static class SidebarNavigationDefinition
                     Id = "cfg-sistema",
                     Text = "Sistema",
                     IconCssClass = "bi bi-shield-lock",
-                    MatchPrefixes = ["/parametros", "/mi-app/usuarios", "/contabilidad/empresas", "/tipos-documento-fiscal", "/auditoria", "/informes/reportes", "/informes/datasets"],
+                    MatchPrefixes = ["/parametros", "/mi-app/usuarios", "/contabilidad/empresas", "/tipos-documento-fiscal", "/auditoria", "/informes/reportes", "/informes/datasets", "/configuracion/correo"],
                     Children =
                     [
                         new SidebarNavItem { Id = "param-usuarios", Text = "Usuarios", NavigateUrl = "/parametros/usuarios", MatchPrefixes = ["/parametros/usuarios"], IconCssClass = "bi bi-people-fill", SoloSuperAdmin = true },
@@ -369,6 +372,7 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "cb-crear-empresa", Text = "Crear empresa", NavigateUrl = "/contabilidad/empresas/nueva", MatchPrefixes = ["/contabilidad/empresas/nueva"], IconCssClass = "bi bi-plus-circle" },
                         new SidebarNavItem { Id = "param-branding", Text = "Branding del Portal", NavigateUrl = "/parametros/branding", MatchPrefixes = ["/parametros/branding"], IconCssClass = "bi bi-palette", SoloSuperAdmin = true },
                         new SidebarNavItem { Id = "tipos-documento-fiscal", Text = "Tipos de documento (SAR)", NavigateUrl = "/tipos-documento-fiscal", MatchPrefixes = ["/tipos-documento-fiscal"], IconCssClass = "bi bi-file-earmark-text" },
+                        new SidebarNavItem { Id = "cfg-correo", Text = "Correo y notificaciones", NavigateUrl = "/configuracion/correo", MatchPrefixes = ["/configuracion/correo"], IconCssClass = "bi bi-envelope-gear", SoloSuperAdmin = true },
                         new SidebarNavItem { Id = "auditoria-config", Text = "Configuración de auditoría", NavigateUrl = "/auditoria/configuracion", MatchPrefixes = ["/auditoria/configuracion"], IconCssClass = "bi bi-sliders", SoloSuperAdmin = true },
                         new SidebarNavItem { Id = "auditoria-bitacora-maestros", Text = "Bitácora de maestros", NavigateUrl = "/auditoria/bitacora-maestros", MatchPrefixes = ["/auditoria/bitacora-maestros"], IconCssClass = "bi bi-clock-history" },
                         new SidebarNavItem { Id = "informes-reportes", Text = "Diseño Web (informes)", NavigateUrl = "/informes/reportes", MatchPrefixes = ["/informes/reportes"], IconCssClass = "bi bi-layout-text-window-reverse" },

@@ -43,6 +43,12 @@ public partial class alm_tipo_movimiento : ICompanyScopedEntity
     public bool requiere_autorizacion { get; set; }
 
     /// <summary>
+    /// Solo tiene efecto en clase <c>SALIDA</c>: si true, un movimiento genérico con este concepto
+    /// envía aviso por correo al área ALMACÉN cuando un artículo cruza bajo mínimo. Default false.
+    /// </summary>
+    public bool notifica_correo { get; set; }
+
+    /// <summary>
     /// Override de la cuenta contable del asiento. NULL = el asiento hereda la cuenta del tipo
     /// de artículo. Sólo se llena cuando el tipo exige una cuenta distinta (p. ej. Donación).
     /// </summary>

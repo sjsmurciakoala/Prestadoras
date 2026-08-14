@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
 using Microsoft.EntityFrameworkCore;
+using NSubstitute;
 using Xunit;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
@@ -41,7 +42,7 @@ public class DescargoFlujoTests : IntegrationTestBase, IAsyncLifetime
             var rollup = new ArticuloRollupService(_context);
             var motor = new InventarioPostingService(_context, company, rollup);
             _req = new RequisicionDocumentoService(_context, company);
-            _desc = new DescargoDocumentoService(_context, company, motor, rollup);
+            _desc = new DescargoDocumentoService(_context, company, motor, rollup, Substitute.For<IAlertasStockNotificador>());
         }
     }
 

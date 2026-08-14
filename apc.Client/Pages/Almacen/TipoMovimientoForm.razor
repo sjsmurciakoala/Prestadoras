@@ -99,6 +99,14 @@
                 </div>
                 <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" />
             </div>
+            <div class="cm-toggle-card">
+                <div>
+                    <div class="cm-toggle-title">Notificar por correo</div>
+                    <div class="cm-hint">Solo salidas: avisa por correo al área Almacén cuando un artículo cruza bajo mínimo.</div>
+                </div>
+                <DxCheckBox @bind-Checked="Model.NotificaCorreo" CheckType="CheckType.Switch"
+                            Enabled="@(Model.Clase == "SALIDA")" />
+            </div>
         </div>
     </div>
 

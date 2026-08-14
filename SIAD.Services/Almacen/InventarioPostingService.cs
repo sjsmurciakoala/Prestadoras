@@ -92,6 +92,12 @@ public sealed class InventarioPostingService : IInventarioPostingService
         var (existenciaResultante, costoPromedioResultante, ingresos, salidas, costoAsiento) =
             Calcular(movimiento, fila, original);
 
+        // Cruce a alerta: estado del par ANTES (existencia previa, aún en fila) vs DESPUÉS. Solo se
+        // marca cuando pasa de "en orden" a alerta, no en cada salida estando ya bajo (anti-spam).
+        var severidadAntes = StockSeveridad.Clasificar(fila.existencia, fila.existencia_minima);
+        var severidadDespues = StockSeveridad.Clasificar(existenciaResultante, fila.existencia_minima);
+        var cruzoAlerta = severidadAntes is null && severidadDespues is not null;
+
         // ── 5. Aplicar sobre la fila (ASIGNACIÓN, nunca +=) ──────────────────
         fila.existencia = existenciaResultante;
         fila.costo_promedio = costoPromedioResultante;
@@ -183,7 +189,9 @@ public sealed class InventarioPostingService : IInventarioPostingService
             Uuid = uuid,
             YaExistia = false,
             ExistenciaResultante = existenciaResultante,
-            CostoPromedioResultante = costoPromedioResultante
+            CostoPromedioResultante = costoPromedioResultante,
+            CruzoAlerta = cruzoAlerta,
+            SeveridadAlerta = cruzoAlerta ? severidadDespues : null
         };
     }
 

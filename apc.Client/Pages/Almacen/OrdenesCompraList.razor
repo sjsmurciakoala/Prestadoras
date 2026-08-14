@@ -140,6 +140,25 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
+                    <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.FechaEntregaPactada)" Caption="Entrega pactada" Width="140px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is OrdenCompraListItemDto item)
+                            {
+                                @if (!item.FechaEntregaPactada.HasValue)
+                                {
+                                    @* Órdenes anteriores al 2026-08-14: nacieron sin este dato. *@
+                                    <span class="text-muted">—</span>
+                                }
+                                else
+                                {
+                                    <span class="@(EntregaVencida(item) ? "text-danger fw-semibold" : "")">
+                                        @item.FechaEntregaPactada.Value.ToString("dd/MM/yyyy")
+                                    </span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
                     <DxGridDataColumn FieldName="@nameof(OrdenCompraListItemDto.ProveedorNombre)" Caption="Proveedor" MinWidth="240">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is OrdenCompraListItemDto item)
@@ -424,6 +443,15 @@
             ordenAccion = null;
         }
     }
+
+    /// <summary>
+    /// La entrega pactada ya pasó y la orden sigue pendiente de recibir. Cerrada o anulada no
+    /// se marcan: ahí la fecha ya no exige nada.
+    /// </summary>
+    private static bool EntregaVencida(OrdenCompraListItemDto item)
+        => item.FechaEntregaPactada.HasValue
+        && item.FechaEntregaPactada.Value < DateOnly.FromDateTime(DateTime.Today)
+        && item.Estado is EstadoOrdenCompra.Aprobada or EstadoOrdenCompra.RecibidaParcial;
 
     private static string ClaseEstado(short estado) => estado switch
     {

@@ -46,7 +46,7 @@ public class MovimientoAlmacenTests : IntegrationTestBase, IAsyncLifetime
             var rollup = new ArticuloRollupService(_context);
             var motor = new InventarioPostingService(_context, company, rollup);
             var poliza = new SIAD.Services.Contabilidad.PolizaService(_context, company);
-            _service = new MovimientoAlmacenService(_context, company, motor, poliza);
+            _service = new MovimientoAlmacenService(_context, company, motor, poliza, new AlertasStockNotificadorNoop());
 
             // Prueba la MECÁNICA (kardex/existencia/costo/idempotencia), no la contabilidad: se apaga
             // la integración para aislar el test del estado de los flags en la base de prueba.

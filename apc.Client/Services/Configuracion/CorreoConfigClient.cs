@@ -21,6 +21,9 @@ public sealed class CorreoConfigClient
     public async Task<ConexionCorreoDto> GuardarConexionAsync(ConexionCorreoUpsertDto dto, CancellationToken ct = default)
     {
         var r = await _http.PutAsJsonAsync("api/configuracion/correo/conexion", dto, ct);
+        if (!r.IsSuccessStatusCode)
+            throw new InvalidOperationException(
+                await HttpClientExtensions.ObtenerMensajeErrorAsync(r, ct) ?? "No se pudo guardar la conexión.");
         return await r.ReadFromJsonAsyncWithAuthCheck<ConexionCorreoDto>(ct)
                ?? throw new InvalidOperationException("Respuesta vacía del servidor.");
     }
@@ -36,7 +39,21 @@ public sealed class CorreoConfigClient
     public async Task<NotificacionCorreoDto> GuardarNotificacionAsync(NotificacionCorreoDto dto, CancellationToken ct = default)
     {
         var r = await _http.PutAsJsonAsync("api/configuracion/correo/notificaciones", dto, ct);
+        if (!r.IsSuccessStatusCode)
+            throw new InvalidOperationException(
+                await HttpClientExtensions.ObtenerMensajeErrorAsync(r, ct) ?? "No se pudo guardar el área.");
         return await r.ReadFromJsonAsyncWithAuthCheck<NotificacionCorreoDto>(ct)
+               ?? throw new InvalidOperationException("Respuesta vacía del servidor.");
+    }
+
+    public async Task<CorreoEnvioResultado> ProbarConexionAsync(string destinatario, CancellationToken ct = default)
+    {
+        var r = await _http.PostAsJsonAsync("api/configuracion/correo/probar",
+            new ProbarConexionRequest { Destinatario = destinatario }, ct);
+        if (!r.IsSuccessStatusCode)
+            throw new InvalidOperationException(
+                await HttpClientExtensions.ObtenerMensajeErrorAsync(r, ct) ?? "No se pudo probar la conexión.");
+        return await r.ReadFromJsonAsyncWithAuthCheck<CorreoEnvioResultado>(ct)
                ?? throw new InvalidOperationException("Respuesta vacía del servidor.");
     }
 }

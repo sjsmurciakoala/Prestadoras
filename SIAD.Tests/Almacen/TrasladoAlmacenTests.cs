@@ -41,7 +41,7 @@ public class TrasladoAlmacenTests : IntegrationTestBase, IAsyncLifetime
             var motor = new InventarioPostingService(_context, company, rollup);
             _service = new TrasladoAlmacenService(_context, company, motor, rollup);
             var poliza = new SIAD.Services.Contabilidad.PolizaService(_context, company);
-            _movService = new MovimientoAlmacenService(_context, company, motor, poliza);
+            _movService = new MovimientoAlmacenService(_context, company, motor, poliza, new AlertasStockNotificadorNoop());
         }
     }
 

@@ -234,3 +234,76 @@ public static class EstadoRetencion
         _       => "VIGENTE"
     };
 }
+
+// Período de evaluación de proveedores (prv_evaluacion_periodo.estado). CHECK en BD: IN (1,2).
+// Abierto se puede recalcular cuantas veces se quiera; cerrado queda congelado como historia.
+public static class EstadoEvaluacionPeriodo
+{
+    public const short Abierto = 1;
+    public const short Cerrado = 2;
+
+    public static string Descripcion(short? id) => id switch
+    {
+        Cerrado => "Cerrado",
+        _       => "Abierto"
+    };
+}
+
+// Evaluación de un proveedor en un período (prv_evaluacion_hdr.estado). CHECK en BD: IN (1,2).
+public static class EstadoEvaluacionProveedor
+{
+    public const short Calculada = 1;
+    public const short Cerrada   = 2;
+
+    public static string Descripcion(short? id) => id switch
+    {
+        Cerrada => "Cerrada",
+        _       => "Calculada"
+    };
+}
+
+// Origen del criterio (prv_evaluacion_criterio.origen). CHECK en BD: IN (1,2).
+// Automático lo calcula fn_prv_evaluacion_metricas; manual lo captura el comprador en la ficha.
+public static class OrigenCriterioEvaluacion
+{
+    public const short Automatico = 1;
+    public const short Manual     = 2;
+
+    public static string Descripcion(short? id) => id switch
+    {
+        Manual => "Manual",
+        _      => "Automático"
+    };
+}
+
+// Métricas que alimentan a los criterios automáticos (prv_evaluacion_criterio.metrica).
+// Son las columnas que devuelve fn_prv_evaluacion_metricas: si aquí se agrega una, hay que
+// agregarla también en la función y en el servicio.
+public static class MetricaEvaluacion
+{
+    public const string Entrega    = "ENTREGA";
+    public const string Completo   = "COMPLETO";
+    public const string Precio     = "PRECIO";
+    public const string Calidad    = "CALIDAD";
+    public const string Documento  = "DOCUMENTO";
+}
+
+// Incidencia detectada al recibir (prv_recepcion_incidencia.tipo). CHECK en BD: IN (1,2,3,4,9).
+public static class TipoIncidenciaRecepcion
+{
+    public const short Devolucion     = 1;
+    public const short Dano           = 2;
+    public const short Especificacion = 3;
+    public const short Faltante       = 4;
+    public const short Otro           = 9;
+
+    public static string Descripcion(short? id) => id switch
+    {
+        Devolucion     => "Devolución",
+        Dano           => "Daño",
+        Especificacion => "Especificación distinta",
+        Faltante       => "Faltante",
+        Otro           => "Otro",
+        _              => "—"
+    };
+}

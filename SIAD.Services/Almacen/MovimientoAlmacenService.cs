@@ -25,15 +25,17 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
     private readonly ICurrentCompanyService _company;
     private readonly IInventarioPostingService _posting;
     private readonly IPolizaService _poliza;
+    private readonly IAlertasStockNotificador _alertas;
 
     public MovimientoAlmacenService(
         SiadDbContext context, ICurrentCompanyService company, IInventarioPostingService posting,
-        IPolizaService poliza)
+        IPolizaService poliza, IAlertasStockNotificador alertas)
     {
         _context = context;
         _company = company;
         _posting = posting;
         _poliza = poliza;
+        _alertas = alertas;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -302,6 +304,10 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
 
         var tipoMotor = TipoMovimientoDe(tipo.clase);
 
+        // Aviso por evento: solo si el concepto es de SALIDA y tiene el flag encendido (configurable
+        // en el mantenimiento de conceptos). Se acumulan los cruces y se envía UN correo post-commit.
+        var notificarStock = tipo.clase == ClaseMovimientoInventario.Salida && tipo.notifica_correo;
+
         var bodega = await _context.alm_bodegas.AsNoTracking()
             .FirstOrDefaultAsync(b => b.id == dto.BodegaId, ct)
             ?? throw new InvalidOperationException("La bodega no existe en la empresa actual.");
@@ -378,6 +384,7 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
         // Renglones que alimentan la partida contable (uno por línea con valor). En ENTRADA/SALIDA
         // el valor es el total del renglón (positivo); en VALOR es el delta con signo.
         var renglonesContables = new List<(int ArticuloId, decimal Valor)>();
+        var cruces = new List<(int articuloId, int bodegaId)>();
 
         decimal total = 0m;
 
@@ -414,6 +421,9 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
                 _ => 0m
             };
             renglonesContables.Add((linea.articulo_id, valorContable));
+
+            if (notificarStock && resultado.CruzoAlerta)
+                cruces.Add((linea.articulo_id, dto.BodegaId));
         }
 
         cabecera.total = Math.Round(total, 2, MidpointRounding.AwayFromZero);
@@ -429,6 +439,19 @@ public sealed class MovimientoAlmacenService : IMovimientoAlmacenService
 
         await _context.SaveChangesAsync(ct);
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+
+        // Post-commit y best-effort: un fallo del correo no afecta el movimiento ya confirmado.
+        if (cruces.Count > 0)
+        {
+            try
+            {
+                await _alertas.EnviarCrucesAsync(cruces, $"Movimiento {numero:00000} · {tipo.nombre}", ct);
+            }
+            catch
+            {
+                // El movimiento ya está confirmado; no se propaga un fallo de notificación.
+            }
+        }
 
         return (await GetByIdAsync(cabecera.id, ct))!;
     }

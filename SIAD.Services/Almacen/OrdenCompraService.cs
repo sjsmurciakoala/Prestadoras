@@ -66,6 +66,7 @@ public sealed class OrdenCompraService : IOrdenCompraService
                 Id = o.id,
                 Numero = o.numero,
                 Fecha = o.fecha,
+                FechaEntregaPactada = o.fecha_entrega_pactada,
                 CodProveedor = o.cod_proveedor,
                 Total = o.total,
                 Estado = o.estado,
@@ -109,7 +110,8 @@ public sealed class OrdenCompraService : IOrdenCompraService
                 CostoUnitario = d.costo_unitario,
                 Impuesto = d.impuesto,
                 Total = d.total,
-                CantidadAplicada = d.cantidad_aplicada
+                CantidadAplicada = d.cantidad_aplicada,
+                FechaEntregaPactada = d.fecha_entrega_pactada
             })
             .ToList();
 
@@ -141,13 +143,15 @@ public sealed class OrdenCompraService : IOrdenCompraService
         if (companyId <= 0) throw new InvalidOperationException("No se pudo resolver la empresa actual.");
 
         var cod = NormalizarCodProveedor(dto.CodProveedor);
-        ValidarCabecera(dto);
+        // La fecha de la orden se resuelve ANTES de validar: es la referencia contra la que se
+        // acota la fecha de entrega pactada (cabecera y renglones).
+        var fecha = dto.Fecha ?? DateOnly.FromDateTime(DateTime.Today);
+        ValidarCabecera(dto, fecha);
         await ValidarProveedorAsync(cod, companyId, ct);
-        var upcs = await ValidarRenglonesAsync(dto.Detalles, cod, ct);
+        var upcs = await ValidarRenglonesAsync(dto.Detalles, cod, fecha, ct);
 
         // El ISV lo calcula el servidor desde la tasa del tipo de artículo (capa 1), vigente a
         // la fecha de la orden: NO se confía en el impuesto que mande el cliente.
-        var fecha = dto.Fecha ?? DateOnly.FromDateTime(DateTime.Today);
         var tasas = await _tasas.ResolverAsync(
             dto.Detalles.Select(d => d.ArticuloId).ToList(), fecha, ct);
 
@@ -165,6 +169,7 @@ public sealed class OrdenCompraService : IOrdenCompraService
             numero = numero,
             fecha = fecha,
             fecha_emision = dto.FechaEmision,
+            fecha_entrega_pactada = dto.FechaEntregaPactada,
             cod_proveedor = cod,
             terminos_pago = ClasificacionNormalizer.Opcional(dto.TerminosPago, 100),
             destino_uso = ClasificacionNormalizer.Opcional(dto.DestinoUso, 250),
@@ -203,18 +208,19 @@ public sealed class OrdenCompraService : IOrdenCompraService
 
         var companyId = _company.GetCompanyId();
         var cod = NormalizarCodProveedor(dto.CodProveedor);
-        ValidarCabecera(dto);
+        var fecha = dto.Fecha ?? entity.fecha ?? DateOnly.FromDateTime(DateTime.Today);
+        ValidarCabecera(dto, fecha);
         await ValidarProveedorAsync(cod, companyId, ct);
-        var upcs = await ValidarRenglonesAsync(dto.Detalles, cod, ct);
+        var upcs = await ValidarRenglonesAsync(dto.Detalles, cod, fecha, ct);
 
         // Igual que en el alta: el ISV se recalcula desde la tasa del tipo, a la fecha de la orden.
-        var fecha = dto.Fecha ?? entity.fecha ?? DateOnly.FromDateTime(DateTime.Today);
         var tasas = await _tasas.ResolverAsync(
             dto.Detalles.Select(d => d.ArticuloId).ToList(), fecha, ct);
 
         entity.cod_proveedor = cod;
         entity.fecha = fecha;
         entity.fecha_emision = dto.FechaEmision;
+        entity.fecha_entrega_pactada = dto.FechaEntregaPactada;
         entity.terminos_pago = ClasificacionNormalizer.Opcional(dto.TerminosPago, 100);
         entity.destino_uso = ClasificacionNormalizer.Opcional(dto.DestinoUso, 250);
         entity.calcula_isv = dto.CalculaIsv;
@@ -412,7 +418,11 @@ public sealed class OrdenCompraService : IOrdenCompraService
                 costo_unitario = d.CostoUnitario,
                 impuesto = isvRenglon,
                 total = totalRenglon,
-                cantidad_aplicada = 0m
+                cantidad_aplicada = 0m,
+                // NULL a propósito cuando el renglón no trae fecha propia: la de la cabecera
+                // rige, y guardarla duplicada aquí haría que editar la orden dejara renglones
+                // con la fecha vieja.
+                fecha_entrega_pactada = d.FechaEntregaPactada
             });
         }
 
@@ -434,6 +444,7 @@ public sealed class OrdenCompraService : IOrdenCompraService
         Numero = o.numero,
         Fecha = o.fecha,
         FechaEmision = o.fecha_emision,
+        FechaEntregaPactada = o.fecha_entrega_pactada,
         CodProveedor = o.cod_proveedor,
         TerminosPago = o.terminos_pago,
         DestinoUso = o.destino_uso,
@@ -460,8 +471,15 @@ public sealed class OrdenCompraService : IOrdenCompraService
         }
     }
 
-    /// <summary>Cotas de la cabecera. El descuento es PORCENTAJE: fuera de 0–100 el total saldría negativo.</summary>
-    private static void ValidarCabecera(OrdenCompraDto dto)
+    /// <summary>
+    /// Cotas de la cabecera. El descuento es PORCENTAJE: fuera de 0–100 el total saldría negativo.
+    /// <para>
+    /// La fecha de entrega pactada es OBLIGATORIA desde el borrador (decisión usuario
+    /// 2026-08-14): es lo único contra lo que se puede medir la puntualidad del proveedor.
+    /// La columna admite NULL en la BD sólo por las órdenes anteriores a ese cambio.
+    /// </para>
+    /// </summary>
+    private static void ValidarCabecera(OrdenCompraDto dto, DateOnly fechaOrden)
     {
         if (dto.Descuento < 0m || dto.Descuento > 100m)
         {
@@ -472,6 +490,32 @@ public sealed class OrdenCompraService : IOrdenCompraService
             throw new InvalidOperationException("Los otros gastos no pueden ser negativos.");
         }
         ExigirMonto(dto.OtrosGastos, "Los otros gastos");
+
+        if (dto.FechaEntregaPactada is null)
+        {
+            throw new InvalidOperationException("Indique la fecha de entrega pactada con el proveedor.");
+        }
+        ExigirFechaPactada(dto.FechaEntregaPactada.Value, fechaOrden, "La fecha de entrega pactada");
+    }
+
+    /// <summary>Años máximos entre la fecha de la orden y la entrega pactada (atajo contra el dedazo de año).</summary>
+    private const int MaxAniosEntrega = 5;
+
+    /// <summary>
+    /// Acota una fecha pactada: no puede quedar antes de la orden (sería una entrega ya vencida
+    /// al nacer) ni a más de <see cref="MaxAniosEntrega"/> años (típico error de tecleo del año,
+    /// que ensuciaría el indicador de puntualidad sin que nadie lo note).
+    /// </summary>
+    private static void ExigirFechaPactada(DateOnly valor, DateOnly fechaOrden, string que)
+    {
+        if (valor < fechaOrden)
+        {
+            throw new InvalidOperationException($"{que} no puede ser anterior a la fecha de la orden.");
+        }
+        if (valor > fechaOrden.AddYears(MaxAniosEntrega))
+        {
+            throw new InvalidOperationException($"{que} está demasiado lejos: revise el año.");
+        }
     }
 
     /// <summary>
@@ -482,7 +526,7 @@ public sealed class OrdenCompraService : IOrdenCompraService
     /// </summary>
     /// <returns>Mapa artículo → código de proveedor, usado como snapshot del renglón.</returns>
     private async Task<IReadOnlyDictionary<int, string>> ValidarRenglonesAsync(
-        IReadOnlyCollection<OrdenCompraDetalleDto> detalles, string cod, CancellationToken ct)
+        IReadOnlyCollection<OrdenCompraDetalleDto> detalles, string cod, DateOnly fechaOrden, CancellationToken ct)
     {
         if (detalles is null || detalles.Count == 0)
         {
@@ -506,6 +550,13 @@ public sealed class OrdenCompraService : IOrdenCompraService
             // (ver AplicarRenglonesYTotales); el impuesto que venga en el DTO se ignora.
             ExigirCantidad(d.CantidadPedida, "La cantidad pedida");
             ExigirCantidad(d.CostoUnitario, "El costo unitario");
+
+            // La fecha por renglón es OPCIONAL (sólo entregas escalonadas): vacía = rige la de
+            // la cabecera. Si viene, se acota igual que aquélla.
+            if (d.FechaEntregaPactada is not null)
+            {
+                ExigirFechaPactada(d.FechaEntregaPactada.Value, fechaOrden, "La fecha de entrega del renglón");
+            }
         }
 
         var articuloIds = detalles.Select(d => d.ArticuloId).Distinct().ToList();

@@ -1,0 +1,789 @@
+<title>Antigüedad de Saldos</title>
+
+<style>
+  *, *::before, *::after { box-sizing: border-box; }
+  html { -webkit-text-size-adjust: 100%; }
+  body, h1, h2, h3, h4, p, figure, table, ul, ol, li { margin: 0; padding: 0; }
+  ul, ol { list-style: none; }
+  button { font: inherit; color: inherit; }
+  table { border-collapse: collapse; }
+
+  :root {
+    --ground:      #f3f5f6;
+    --surface:     #ffffff;
+    --surface-2:   #eceff1;
+    --line:        #d8dee1;
+    --line-soft:   #e7ebed;
+    --ink:         #16222b;
+    --ink-2:       #4a5a64;
+    --ink-3:       #74858e;
+    --accent:      #0f6e64;
+    --accent-soft: #e2efec;
+    --ok:          #1e7a4d;
+    --ok-soft:     #e3f2e8;
+    --warn:        #b0761a;
+    --warn-soft:   #fbf0dc;
+    --bad:         #ae3a31;
+    --bad-soft:    #fbe6e3;
+    --grid:        #cfd7da;
+    --shadow:      0 1px 2px rgba(22,34,43,.06), 0 8px 24px -16px rgba(22,34,43,.35);
+
+    /* rampa de calor de antigüedad: verde → rojo oscuro (6 tramos) */
+    --age0: #1e7a4d; --age0-soft: #e3f2e8;   /* corriente / por vencer */
+    --age1: #6f9c1e; --age1-soft: #eef4dc;   /* 1 – 30   */
+    --age2: #c79214; --age2-soft: #fbf0dc;   /* 31 – 60  */
+    --age3: #c2662a; --age3-soft: #f7e7d7;   /* 61 – 90  */
+    --age4: #b0472b; --age4-soft: #f6e2da;   /* 91 – 120 */
+    --age5: #8f2620; --age5-soft: #f7dbd7;   /* + 120    */
+
+    --serif: "Palatino Linotype", Palatino, "Iowan Old Style", Georgia, ui-serif, serif;
+    --sans: "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+    --mono: ui-monospace, "Cascadia Mono", Consolas, "SF Mono", Menlo, monospace;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --ground:      #0e161b;
+      --surface:     #16222b;
+      --surface-2:   #1d2c36;
+      --line:        #2c3d48;
+      --line-soft:   #24343e;
+      --ink:         #e4ecef;
+      --ink-2:       #a9bcc5;
+      --ink-3:       #7d939d;
+      --accent:      #45b3a4;
+      --accent-soft: #123832;
+      --ok:          #5cbc86;
+      --ok-soft:     #12301f;
+      --warn:        #d9a441;
+      --warn-soft:   #33260e;
+      --bad:         #e0736a;
+      --bad-soft:    #371a17;
+      --grid:        #33454f;
+      --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+
+      --age0: #5cbc86; --age0-soft: #12301f;
+      --age1: #9fc65a; --age1-soft: #26300f;
+      --age2: #d9a441; --age2-soft: #33260e;
+      --age3: #db8a4a; --age3-soft: #331f0e;
+      --age4: #e0736a; --age4-soft: #371a17;
+      --age5: #cf4b42; --age5-soft: #3a1512;
+    }
+  }
+  :root[data-theme="dark"] {
+    --ground:      #0e161b;
+    --surface:     #16222b;
+    --surface-2:   #1d2c36;
+    --line:        #2c3d48;
+    --line-soft:   #24343e;
+    --ink:         #e4ecef;
+    --ink-2:       #a9bcc5;
+    --ink-3:       #7d939d;
+    --accent:      #45b3a4;
+    --accent-soft: #123832;
+    --ok:          #5cbc86;
+    --ok-soft:     #12301f;
+    --warn:        #d9a441;
+    --warn-soft:   #33260e;
+    --bad:         #e0736a;
+    --bad-soft:    #371a17;
+    --grid:        #33454f;
+    --shadow:      0 1px 2px rgba(0,0,0,.4), 0 10px 28px -18px rgba(0,0,0,.8);
+    --age0: #5cbc86; --age0-soft: #12301f;
+    --age1: #9fc65a; --age1-soft: #26300f;
+    --age2: #d9a441; --age2-soft: #33260e;
+    --age3: #db8a4a; --age3-soft: #331f0e;
+    --age4: #e0736a; --age4-soft: #371a17;
+    --age5: #cf4b42; --age5-soft: #3a1512;
+  }
+
+  body {
+    background: var(--ground);
+    color: var(--ink);
+    font-family: var(--sans);
+    font-size: 14px;
+    line-height: 1.5;
+  }
+
+  .wrap { max-width: 1180px; margin-inline: auto; padding: 0 20px 64px; }
+
+  /* ---------- barra de contexto ---------- */
+  .topbar { background: var(--surface); border-bottom: 1px solid var(--line); position: sticky; top: 0; z-index: 20; }
+  .topbar-inner { max-width: 1180px; margin-inline: auto; padding: 12px 20px; display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+  .mark { display: flex; align-items: center; gap: 10px; font-weight: 600; letter-spacing: .01em; }
+  .mark-badge { width: 30px; height: 30px; border-radius: 7px; background: var(--accent); color: #fff; display: grid; place-items: center; font-family: var(--mono); font-size: 12px; font-weight: 700; }
+  .mark small { display: block; font-weight: 400; font-size: 11px; color: var(--ink-3); letter-spacing: .06em; text-transform: uppercase; }
+  .ctx { margin-left: auto; display: flex; gap: 18px; flex-wrap: wrap; }
+  .ctx div { font-size: 12px; color: var(--ink-3); }
+  .ctx strong { display: block; font-size: 13px; color: var(--ink); font-weight: 600; }
+
+  /* ---------- pestañas ---------- */
+  .tabs { display: flex; gap: 2px; flex-wrap: wrap; border-bottom: 1px solid var(--line); margin: 22px 0 26px; }
+  .tab { background: none; border: 0; cursor: pointer; padding: 10px 16px; margin-bottom: -1px; color: var(--ink-2); font-size: 13.5px; font-weight: 500; border-bottom: 2px solid transparent; border-radius: 4px 4px 0 0; transition: color .15s, background .15s, border-color .15s; }
+  .tab:hover { color: var(--ink); background: var(--surface-2); }
+  .tab[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent); font-weight: 600; }
+  .tab:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .panel[hidden] { display: none; }
+
+  /* ---------- tipografía ---------- */
+  .page-title { font-family: var(--serif); font-weight: 600; font-size: 27px; line-height: 1.2; letter-spacing: -.01em; text-wrap: balance; }
+  .page-sub { color: var(--ink-2); font-size: 14px; max-width: 72ch; margin-top: 6px; }
+  .eyebrow { font-size: 11px; letter-spacing: .09em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  h3.sec { font-family: var(--serif); font-size: 17px; font-weight: 600; }
+
+  /* ---------- tarjetas ---------- */
+  .card { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; box-shadow: var(--shadow); }
+  .card-head { padding: 14px 18px; border-bottom: 1px solid var(--line-soft); display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+  .card-head p { color: var(--ink-3); font-size: 12.5px; }
+  .card-body { padding: 18px; }
+  .stack { display: flex; flex-direction: column; gap: 22px; }
+
+  /* ---------- filtros ---------- */
+  .filters { display: flex; gap: 14px; flex-wrap: wrap; align-items: flex-end; padding: 14px 18px; }
+  .field { display: flex; flex-direction: column; gap: 5px; }
+  .field label { font-size: 11px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .control { background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 7px; padding: 7px 11px; font-size: 13.5px; min-width: 172px; }
+  .control:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+  .btn { border: 1px solid var(--line); background: var(--surface); color: var(--ink); border-radius: 7px; padding: 8px 14px; font-size: 13.5px; font-weight: 500; cursor: pointer; transition: background .15s, border-color .15s; }
+  .btn:hover { background: var(--surface-2); }
+  .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+  .btn.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn.primary:hover { filter: brightness(1.08); }
+  .btn-row { margin-left: auto; display: flex; gap: 8px; }
+
+  /* ---------- KPI ---------- */
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 14px; }
+  .kpi { padding: 16px 18px; position: relative; }
+  .kpi .label { font-size: 11.5px; letter-spacing: .07em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; }
+  .kpi .value { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 27px; font-weight: 600; letter-spacing: -.02em; margin-top: 6px; }
+  .kpi .value small { font-size: 15px; color: var(--ink-3); font-weight: 500; }
+  .kpi .foot { font-size: 12.5px; color: var(--ink-2); margin-top: 4px; display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+  .kpi .rail { position: absolute; left: 0; top: 14px; bottom: 14px; width: 3px; border-radius: 3px; }
+  .delta { font-family: var(--mono); font-size: 12px; padding: 1px 6px; border-radius: 20px; }
+  .delta.up { background: var(--ok-soft); color: var(--ok); }
+  .delta.down { background: var(--bad-soft); color: var(--bad); }
+
+  /* ---------- tablas ---------- */
+  .table-scroll { overflow-x: auto; }
+  table.grid { width: 100%; font-size: 13px; min-width: 1160px; }
+  table.grid th { text-align: left; font-size: 11px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; padding: 10px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; background: var(--surface); }
+  table.grid td { padding: 9px 12px; border-bottom: 1px solid var(--line-soft); vertical-align: middle; }
+  table.grid tbody tr:hover td { background: var(--surface-2); }
+  .num { font-family: var(--mono); font-variant-numeric: tabular-nums; text-align: right; white-space: nowrap; }
+  .code { font-family: var(--mono); color: var(--ink-2); }
+  .name { font-weight: 600; }
+  .sub { display: block; font-size: 11.5px; color: var(--ink-3); font-weight: 400; }
+  .z { color: var(--ink-3); opacity: .5; }
+  td.tot, th.tot { border-left: 1px solid var(--line); }
+  tfoot td { padding: 11px 12px; border-top: 2px solid var(--line); font-weight: 700; background: var(--surface-2); }
+  tfoot .pct { display: block; font-size: 10.5px; font-weight: 500; color: var(--ink-3); font-family: var(--sans); }
+  .lnk { color: var(--accent); font-weight: 600; text-decoration: none; cursor: pointer; }
+  .lnk:hover { text-decoration: underline; }
+
+  /* ---------- chips ---------- */
+  .chip { display: inline-flex; align-items: center; gap: 5px; padding: 2px 9px; border-radius: 20px; font-size: 11.5px; font-weight: 600; letter-spacing: .02em; white-space: nowrap; }
+  .chip.a { background: var(--ok-soft); color: var(--ok); }
+  .chip.neutral { background: var(--surface-2); color: var(--ink-2); }
+  .chip.warn { background: var(--warn-soft); color: var(--warn); }
+  .chip.bad { background: var(--bad-soft); color: var(--bad); }
+  .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .swatch { width: 10px; height: 10px; border-radius: 3px; flex: none; }
+
+  /* ---------- barra de distribución apilada ---------- */
+  .distro { display: flex; height: 30px; border-radius: 7px; overflow: hidden; border: 1px solid var(--line); }
+  .distro i { display: block; height: 100%; }
+  .distro i.s0 { background: var(--age0); } .distro i.s1 { background: var(--age1); }
+  .distro i.s2 { background: var(--age2); } .distro i.s3 { background: var(--age3); }
+  .distro i.s4 { background: var(--age4); } .distro i.s5 { background: var(--age5); }
+  .legend { display: grid; grid-template-columns: repeat(auto-fit, minmax(158px, 1fr)); gap: 10px 18px; margin-top: 16px; }
+  .legend-item { display: flex; align-items: center; gap: 9px; }
+  .legend-item .swatch { width: 12px; height: 12px; }
+  .legend-item .lg-txt b { font-size: 11px; letter-spacing: .05em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; display: block; }
+  .legend-item .lg-txt span { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 13.5px; font-weight: 600; }
+  .legend-item .lg-txt span small { color: var(--ink-3); font-weight: 500; }
+
+  /* mini-barra de mezcla por fila */
+  .mix { display: flex; height: 8px; width: 128px; border-radius: 4px; overflow: hidden; background: var(--surface-2); }
+  .mix i { display: block; height: 100%; }
+  .mix i.s0 { background: var(--age0); } .mix i.s1 { background: var(--age1); }
+  .mix i.s2 { background: var(--age2); } .mix i.s3 { background: var(--age3); }
+  .mix i.s4 { background: var(--age4); } .mix i.s5 { background: var(--age5); }
+
+  /* ---------- detalle del proveedor ---------- */
+  .ficha-head { display: flex; gap: 22px; align-items: center; flex-wrap: wrap; padding: 20px; }
+  .saldo-big { display: flex; flex-direction: column; align-items: center; justify-content: center; width: 168px; padding: 16px; border-radius: 12px; flex: none; background: var(--bad-soft); color: var(--bad); }
+  .saldo-big b { font-family: var(--mono); font-size: 27px; font-weight: 700; letter-spacing: -.02em; line-height: 1; }
+  .saldo-big span { font-size: 10.5px; letter-spacing: .08em; text-transform: uppercase; margin-top: 7px; font-weight: 600; }
+  .ficha-meta { display: flex; gap: 26px; flex-wrap: wrap; margin-top: 12px; }
+  .ficha-meta div { font-size: 12px; color: var(--ink-3); }
+  .ficha-meta strong { display: block; font-size: 13.5px; color: var(--ink); font-weight: 600; }
+  .tramo-cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(144px, 1fr)); gap: 12px; }
+  .tramo-card { border: 1px solid var(--line); border-radius: 9px; padding: 13px 14px; border-top: 3px solid var(--tc); }
+  .tramo-card .t-lbl { font-size: 11px; letter-spacing: .04em; text-transform: uppercase; color: var(--ink-3); font-weight: 600; display: flex; align-items: center; gap: 6px; }
+  .tramo-card .t-val { font-family: var(--mono); font-variant-numeric: tabular-nums; font-size: 19px; font-weight: 600; margin-top: 7px; }
+  .tramo-card .t-pct { font-size: 12px; color: var(--ink-3); margin-top: 2px; }
+
+  /* ---------- reporte (papel) ---------- */
+  .paper-rail { display: flex; gap: 24px; overflow-x: auto; padding: 6px 2px 18px; }
+  .paper { background: #ffffff; color: #1b2228; width: 880px; flex: none; border: 1px solid #d3d8dc; border-radius: 3px; box-shadow: 0 12px 36px -20px rgba(0,0,0,.55); padding: 30px 32px; font-size: 11px; line-height: 1.45; }
+  .paper .emp { text-align: center; font-weight: 700; font-size: 12.5px; letter-spacing: .06em; }
+  .paper .sub-emp { text-align: center; font-size: 10.5px; color: #5c676f; }
+  .paper h4 { font-family: var(--serif); font-size: 15px; text-align: center; letter-spacing: .02em; margin-top: 6px; }
+  .paper .rango { text-align: center; font-size: 10.5px; color: #5c676f; margin-bottom: 12px; }
+  .paper hr { border: 0; border-top: 1px solid #c9d0d5; margin: 12px 0; }
+  .paper table { width: 100%; font-size: 9.5px; }
+  .paper th { text-align: right; border-bottom: 1px solid #98a3aa; padding: 5px 4px; font-size: 8.5px; letter-spacing: .02em; text-transform: uppercase; color: #4d585f; }
+  .paper th.l { text-align: left; }
+  .paper td { padding: 4px 4px; border-bottom: 1px solid #e8ebee; }
+  .paper td.n { font-family: var(--mono); text-align: right; font-variant-numeric: tabular-nums; }
+  .paper tfoot td { border-top: 1.5px solid #98a3aa; border-bottom: 0; font-weight: 700; padding-top: 6px; }
+  .paper .r90 { color: #ae3a31; }
+  .firmas { display: flex; gap: 40px; margin-top: 44px; }
+  .firma { flex: 1; border-top: 1px solid #8d979e; padding-top: 5px; text-align: center; font-size: 10px; color: #4d585f; }
+  .paper-label { font-size: 12px; color: var(--ink-3); margin-bottom: 8px; }
+
+  /* ---------- cómo se calcula ---------- */
+  .rule-row td:first-child { font-weight: 600; }
+  .gap-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 14px; }
+  .gap { border: 1px solid var(--line); border-radius: 9px; padding: 16px; display: flex; flex-direction: column; gap: 8px; background: var(--surface); }
+  .gap .chip { align-self: flex-start; }
+  .gap h4 { font-size: 13.5px; font-weight: 600; }
+  .gap p { font-size: 12.5px; color: var(--ink-2); }
+  .gap code { font-family: var(--mono); font-size: 11.5px; background: var(--surface-2); padding: 1px 5px; border-radius: 4px; color: var(--ink-2); }
+  ul.notes { display: flex; flex-direction: column; gap: 10px; }
+  ul.notes li { display: flex; gap: 10px; font-size: 13px; color: var(--ink-2); }
+  ul.notes li::before { content: ""; width: 5px; height: 5px; border-radius: 50%; background: var(--accent); margin-top: 8px; flex: none; }
+  ol.decisiones { display: flex; flex-direction: column; gap: 12px; counter-reset: d; }
+  ol.decisiones li { display: grid; grid-template-columns: auto 1fr; gap: 12px; align-items: baseline; font-size: 13px; }
+  ol.decisiones li::before { counter-increment: d; content: "D" counter(d); font-family: var(--mono); font-size: 11.5px; font-weight: 700; color: var(--accent); background: var(--accent-soft); border-radius: 5px; padding: 2px 7px; }
+  ol.decisiones b { font-weight: 600; }
+  ol.decisiones span { color: var(--ink-2); }
+
+  .footnote { font-size: 12px; color: var(--ink-3); margin-top: 26px; text-align: center; }
+
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+</style>
+
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="mark">
+      <span class="mark-badge" aria-hidden="true">AS</span>
+      <span>Antigüedad de saldos<small>Prototipo · no conectado a datos</small></span>
+    </div>
+    <div class="ctx">
+      <div>Empresa<strong>MERENDON</strong></div>
+      <div>Módulo<strong>Cuentas por pagar</strong></div>
+      <div>Corte<strong>14/08/2026</strong></div>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+  <div style="padding-top:26px">
+    <p class="eyebrow">Compras · Proveedores · Cuentas por pagar</p>
+    <h1 class="page-title">Antigüedad de saldos de proveedores</h1>
+    <p class="page-sub">
+      Reparte lo que se le debe a cada proveedor según cuánto tiempo lleva vencido, a una fecha de corte.
+      Parte del mismo cálculo de tramos que ya hace el estado de cuenta del proveedor
+      (<code style="font-family:var(--mono);font-size:12px">fn_prv_estado_cuenta_resumen</code>), corrido sobre
+      <b>todos</b> los proveedores a la vez y abriendo el último tramo en <b>91–120</b> y <b>más de 120 días</b>.
+      Las cifras de este prototipo son de ejemplo.
+    </p>
+  </div>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones del prototipo">
+    <button class="tab" role="tab" id="t-matriz" aria-controls="p-matriz" aria-selected="true">Matriz de antigüedad</button>
+    <button class="tab" role="tab" id="t-detalle" aria-controls="p-detalle" aria-selected="false">Detalle del proveedor</button>
+    <button class="tab" role="tab" id="t-reporte" aria-controls="p-reporte" aria-selected="false">Reporte</button>
+    <button class="tab" role="tab" id="t-datos" aria-controls="p-datos" aria-selected="false">Cómo se calcula</button>
+  </nav>
+
+  <!-- ============ MATRIZ ============ -->
+  <section class="panel stack" id="p-matriz" role="tabpanel" aria-labelledby="t-matriz">
+
+    <div class="card">
+      <div class="filters">
+        <div class="field">
+          <label for="f-corte">Fecha de corte</label>
+          <input class="control" id="f-corte" value="14/08/2026" style="min-width:150px">
+        </div>
+        <div class="field">
+          <label for="f-tipo">Tipo de proveedor</label>
+          <select class="control" id="f-tipo">
+            <option>Todos</option>
+            <option>Materiales y suministros</option>
+            <option>Servicios</option>
+            <option>Transporte</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-origen">Origen</label>
+          <select class="control" id="f-origen">
+            <option>Compras + compromisos</option>
+            <option>Solo facturas de compra</option>
+            <option>Solo compromisos</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="f-inc">Mostrar</label>
+          <select class="control" id="f-inc">
+            <option>Por vencer + vencido</option>
+            <option>Solo lo vencido</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn">Exportar</button>
+          <button class="btn primary">Recalcular</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpis">
+      <div class="card kpi">
+        <span class="rail" style="background:var(--ink-3)"></span>
+        <div class="label">Deuda total</div>
+        <div class="value">L 1,932,200<small>.00</small></div>
+        <div class="foot">10 proveedores con saldo · 35 documentos</div>
+      </div>
+      <div class="card kpi">
+        <span class="rail" style="background:var(--age0)"></span>
+        <div class="label">Por vencer</div>
+        <div class="value">L 1,052,800<small>.00</small></div>
+        <div class="foot"><span class="chip a" style="padding:1px 7px">54.5%</span> L 84,300 vence en ≤ 7 días</div>
+      </div>
+      <div class="card kpi">
+        <span class="rail" style="background:var(--age2)"></span>
+        <div class="label">Vencido</div>
+        <div class="value">L 879,400<small>.00</small></div>
+        <div class="foot"><span class="delta down">45.5%</span> de la deuda ya venció</div>
+      </div>
+      <div class="card kpi">
+        <span class="rail" style="background:var(--age5)"></span>
+        <div class="label">Crítico · más de 120 días</div>
+        <div class="value">L 122,400<small>.00</small></div>
+        <div class="foot"><span class="chip bad" style="padding:1px 7px">6.3%</span> 4 proveedores concentran el atraso</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Distribución de la deuda por antigüedad</h3>
+        <p>a qué tramo pertenece cada lempira que se debe</p>
+      </div>
+      <div class="card-body">
+        <div class="distro" role="img" aria-label="Distribución: por vencer 54.5%, 1-30 días 25%, 31-60 días 7.3%, 61-90 días 3.8%, 91-120 días 3.1%, más de 120 días 6.3%">
+          <i class="s0" style="width:54.49%"></i>
+          <i class="s1" style="width:24.99%"></i>
+          <i class="s2" style="width:7.27%"></i>
+          <i class="s3" style="width:3.79%"></i>
+          <i class="s4" style="width:3.13%"></i>
+          <i class="s5" style="width:6.33%"></i>
+        </div>
+        <div class="legend">
+          <div class="legend-item"><span class="swatch" style="background:var(--age0)"></span><div class="lg-txt"><b>Por vencer</b><span>L 1,052,800 <small>· 54.5%</small></span></div></div>
+          <div class="legend-item"><span class="swatch" style="background:var(--age1)"></span><div class="lg-txt"><b>1 – 30 días</b><span>L 482,800 <small>· 25.0%</small></span></div></div>
+          <div class="legend-item"><span class="swatch" style="background:var(--age2)"></span><div class="lg-txt"><b>31 – 60 días</b><span>L 140,500 <small>· 7.3%</small></span></div></div>
+          <div class="legend-item"><span class="swatch" style="background:var(--age3)"></span><div class="lg-txt"><b>61 – 90 días</b><span>L 73,200 <small>· 3.8%</small></span></div></div>
+          <div class="legend-item"><span class="swatch" style="background:var(--age4)"></span><div class="lg-txt"><b>91 – 120 días</b><span>L 60,500 <small>· 3.1%</small></span></div></div>
+          <div class="legend-item"><span class="swatch" style="background:var(--age5)"></span><div class="lg-txt"><b>Más de 120 días</b><span>L 122,400 <small>· 6.3%</small></span></div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Saldo por proveedor y tramo</h3>
+        <p>10 proveedores · ordenado por deuda total</p>
+        <div class="btn-row"><button class="btn">Columnas</button></div>
+      </div>
+      <div class="table-scroll">
+        <table class="grid">
+          <thead>
+            <tr>
+              <th>Proveedor</th>
+              <th class="num">Por vencer</th>
+              <th class="num">1 – 30 días</th>
+              <th class="num">31 – 60 días</th>
+              <th class="num">61 – 90 días</th>
+              <th class="num">91 – 120 días</th>
+              <th class="num">Más de 120 días</th>
+              <th class="num tot">Total</th>
+              <th>Mezcla</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="name">Químicos del Valle, S. de R.L.<span class="sub code">0142 · Materiales</span></span></td>
+              <td class="num">420,000.00</td><td class="num">180,000.00</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td>
+              <td class="num tot">600,000.00</td>
+              <td><div class="mix"><i class="s0" style="flex:420000"></i><i class="s1" style="flex:180000"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Tubos y Conexiones Sula<span class="sub code">0207 · Materiales</span></span></td>
+              <td class="num">210,500.00</td><td class="num">95,000.00</td><td class="num" style="color:var(--age2)">48,000.00</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td>
+              <td class="num tot">353,500.00</td>
+              <td><div class="mix"><i class="s0" style="flex:210500"></i><i class="s1" style="flex:95000"></i><i class="s2" style="flex:48000"></i></div></td>
+            </tr>
+            <tr style="background:var(--accent-soft)">
+              <td><span class="name"><a class="lnk" id="go-detalle">Distribuidora Ferretera El Yunque</a><span class="sub code">0088 · Materiales</span></span></td>
+              <td class="num">84,300.00</td><td class="num">62,000.00</td><td class="num" style="color:var(--age2)">41,700.00</td><td class="num" style="color:var(--age3)">28,900.00</td><td class="num" style="color:var(--age4)">9,600.00</td><td class="num" style="color:var(--age5)">6,000.00</td>
+              <td class="num tot">232,500.00</td>
+              <td><div class="mix"><i class="s0" style="flex:84300"></i><i class="s1" style="flex:62000"></i><i class="s2" style="flex:41700"></i><i class="s3" style="flex:28900"></i><i class="s4" style="flex:9600"></i><i class="s5" style="flex:6000"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Suministros Eléctricos Cortés<span class="sub code">0311 · Materiales</span></span></td>
+              <td class="num">156,200.00</td><td class="num">62,400.00</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td>
+              <td class="num tot">218,600.00</td>
+              <td><div class="mix"><i class="s0" style="flex:156200"></i><i class="s1" style="flex:62400"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Lubricantes Merendón<span class="sub code">0455 · Materiales</span></span></td>
+              <td class="num">96,000.00</td><td class="num">34,200.00</td><td class="num" style="color:var(--age2)">12,800.00</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td>
+              <td class="num tot">143,000.00</td>
+              <td><div class="mix"><i class="s0" style="flex:96000"></i><i class="s1" style="flex:34200"></i><i class="s2" style="flex:12800"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Transportes Ulúa<span class="sub code">0519 · Transporte</span></span></td>
+              <td class="num z">—</td><td class="num">18,500.00</td><td class="num" style="color:var(--age2)">22,400.00</td><td class="num" style="color:var(--age3)">19,800.00</td><td class="num" style="color:var(--age4)">18,000.00</td><td class="num" style="color:var(--age5)">28,200.00</td>
+              <td class="num tot">106,900.00</td>
+              <td><div class="mix"><i class="s1" style="flex:18500"></i><i class="s2" style="flex:22400"></i><i class="s3" style="flex:19800"></i><i class="s4" style="flex:18000"></i><i class="s5" style="flex:28200"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Repuestos Diesel del Norte<span class="sub code">0274 · Materiales</span></span></td>
+              <td class="num">12,400.00</td><td class="num z">—</td><td class="num" style="color:var(--age2)">8,900.00</td><td class="num" style="color:var(--age3)">15,300.00</td><td class="num" style="color:var(--age4)">20,500.00</td><td class="num" style="color:var(--age5)">68,700.00</td>
+              <td class="num tot">105,300.00</td>
+              <td><div class="mix"><i class="s0" style="flex:12400"></i><i class="s2" style="flex:8900"></i><i class="s3" style="flex:15300"></i><i class="s4" style="flex:20500"></i><i class="s5" style="flex:68700"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Empaques del Caribe<span class="sub code">0391 · Materiales</span></span></td>
+              <td class="num">44,800.00</td><td class="num">21,300.00</td><td class="num" style="color:var(--age2)">6,700.00</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td>
+              <td class="num tot">72,800.00</td>
+              <td><div class="mix"><i class="s0" style="flex:44800"></i><i class="s1" style="flex:21300"></i><i class="s2" style="flex:6700"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Servicios Industriales GEA<span class="sub code">0603 · Servicios</span></span></td>
+              <td class="num z">—</td><td class="num z">—</td><td class="num z">—</td><td class="num" style="color:var(--age3)">9,200.00</td><td class="num" style="color:var(--age4)">12,400.00</td><td class="num" style="color:var(--age5)">40,000.00</td>
+              <td class="num tot">61,600.00</td>
+              <td><div class="mix"><i class="s3" style="flex:9200"></i><i class="s4" style="flex:12400"></i><i class="s5" style="flex:40000"></i></div></td>
+            </tr>
+            <tr>
+              <td><span class="name">Papelería y Equipos Central<span class="sub code">0132 · Materiales</span></span></td>
+              <td class="num">28,600.00</td><td class="num">9,400.00</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td><td class="num z">—</td>
+              <td class="num tot">38,000.00</td>
+              <td><div class="mix"><i class="s0" style="flex:28600"></i><i class="s1" style="flex:9400"></i></div></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td>Total general<span class="pct">10 proveedores</span></td>
+              <td class="num">1,052,800.00<span class="pct">54.5%</span></td>
+              <td class="num">482,800.00<span class="pct">25.0%</span></td>
+              <td class="num">140,500.00<span class="pct">7.3%</span></td>
+              <td class="num">73,200.00<span class="pct">3.8%</span></td>
+              <td class="num">60,500.00<span class="pct">3.1%</span></td>
+              <td class="num">122,400.00<span class="pct">6.3%</span></td>
+              <td class="num tot">1,932,200.00<span class="pct">100%</span></td>
+              <td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="card-head" style="border-top:1px solid var(--line-soft); border-bottom:0">
+        <span style="color:var(--ink-3); font-size:12.5px">Cada fila reparte el saldo pendiente del proveedor por días vencidos al corte. Clic en un proveedor abre su detalle. El color del número marca la severidad del tramo.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ DETALLE ============ -->
+  <section class="panel stack" id="p-detalle" role="tabpanel" aria-labelledby="t-detalle" hidden>
+
+    <div class="card">
+      <div class="ficha-head">
+        <div class="saldo-big">
+          <b>L 232,500</b><span>Saldo total</span>
+        </div>
+        <div style="flex:1; min-width:260px">
+          <p class="eyebrow">Proveedor 0088</p>
+          <h2 class="page-title" style="font-size:22px">Distribuidora Ferretera El Yunque</h2>
+          <div class="ficha-meta">
+            <div>RTN<strong>08019014235871</strong></div>
+            <div>Tipo<strong>Materiales y suministros</strong></div>
+            <div>Término de pago<strong>Crédito 30 días</strong></div>
+            <div>Vencido<strong style="color:var(--bad)">L 148,200.00</strong></div>
+            <div>Último pago<strong>L 40,000 · 28/07/2026</strong></div>
+          </div>
+        </div>
+        <div class="btn-row" style="align-self:flex-start">
+          <button class="btn">Estado de cuenta</button>
+          <button class="btn">Imprimir</button>
+          <button class="btn primary">Registrar pago</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Saldo por tramo</h3><p>en qué punto de la antigüedad está su deuda</p></div>
+      <div class="card-body">
+        <div class="tramo-cards">
+          <div class="tramo-card" style="--tc:var(--age0)"><div class="t-lbl"><span class="swatch" style="background:var(--age0)"></span>Por vencer</div><div class="t-val">L 84,300</div><div class="t-pct">36.3% · 2 docs</div></div>
+          <div class="tramo-card" style="--tc:var(--age1)"><div class="t-lbl"><span class="swatch" style="background:var(--age1)"></span>1 – 30 días</div><div class="t-val">L 62,000</div><div class="t-pct">26.7% · 2 docs</div></div>
+          <div class="tramo-card" style="--tc:var(--age2)"><div class="t-lbl"><span class="swatch" style="background:var(--age2)"></span>31 – 60 días</div><div class="t-val">L 41,700</div><div class="t-pct">17.9% · 1 doc</div></div>
+          <div class="tramo-card" style="--tc:var(--age3)"><div class="t-lbl"><span class="swatch" style="background:var(--age3)"></span>61 – 90 días</div><div class="t-val">L 28,900</div><div class="t-pct">12.4% · 1 doc</div></div>
+          <div class="tramo-card" style="--tc:var(--age4)"><div class="t-lbl"><span class="swatch" style="background:var(--age4)"></span>91 – 120 días</div><div class="t-val">L 9,600</div><div class="t-pct">4.1% · 1 doc</div></div>
+          <div class="tramo-card" style="--tc:var(--age5)"><div class="t-lbl"><span class="swatch" style="background:var(--age5)"></span>Más de 120 días</div><div class="t-val">L 6,000</div><div class="t-pct">2.6% · 1 doc</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Documentos pendientes</h3>
+        <p>de dónde sale el saldo de cada tramo</p>
+      </div>
+      <div class="table-scroll">
+        <table class="grid" style="min-width:820px">
+          <thead>
+            <tr>
+              <th>Documento</th><th>Origen</th><th>Emitido</th><th>Vence</th>
+              <th class="num">Días</th><th class="num">Monto</th><th class="num">Abonado</th><th class="num">Saldo</th><th>Tramo</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td class="code">F-01044</td><td>Compra</td><td>05/08/2026</td><td>20/08/2026</td>
+              <td class="num" style="color:var(--ok)">(6)</td><td class="num">52,300.00</td><td class="num z">—</td><td class="num">52,300.00</td>
+              <td><span class="chip" style="background:var(--age0-soft);color:var(--age0)"><i class="dot"></i>Por vencer</span></td>
+            </tr>
+            <tr>
+              <td class="code">OPD-00518</td><td>Compromiso</td><td>12/08/2026</td><td>28/08/2026</td>
+              <td class="num" style="color:var(--ok)">(14)</td><td class="num">32,000.00</td><td class="num z">—</td><td class="num">32,000.00</td>
+              <td><span class="chip" style="background:var(--age0-soft);color:var(--age0)"><i class="dot"></i>Por vencer</span></td>
+            </tr>
+            <tr>
+              <td class="code">F-01002</td><td>Compra</td><td>15/07/2026</td><td>30/07/2026</td>
+              <td class="num">15</td><td class="num">38,500.00</td><td class="num z">—</td><td class="num">38,500.00</td>
+              <td><span class="chip" style="background:var(--age1-soft);color:var(--age1)"><i class="dot"></i>1 – 30 días</span></td>
+            </tr>
+            <tr>
+              <td class="code">F-01019</td><td>Compra</td><td>07/07/2026</td><td>22/07/2026</td>
+              <td class="num">23</td><td class="num">23,500.00</td><td class="num z">—</td><td class="num">23,500.00</td>
+              <td><span class="chip" style="background:var(--age1-soft);color:var(--age1)"><i class="dot"></i>1 – 30 días</span></td>
+            </tr>
+            <tr>
+              <td class="code">F-00981</td><td>Compra</td><td>20/06/2026</td><td>05/07/2026</td>
+              <td class="num" style="color:var(--age2)">40</td><td class="num">60,000.00</td><td class="num">18,300.00</td><td class="num">41,700.00</td>
+              <td><span class="chip" style="background:var(--age2-soft);color:var(--age2)"><i class="dot"></i>31 – 60 días</span></td>
+            </tr>
+            <tr>
+              <td class="code">F-00944</td><td>Compra</td><td>28/05/2026</td><td>12/06/2026</td>
+              <td class="num" style="color:var(--age3)">63</td><td class="num">28,900.00</td><td class="num z">—</td><td class="num">28,900.00</td>
+              <td><span class="chip" style="background:var(--age3-soft);color:var(--age3)"><i class="dot"></i>61 – 90 días</span></td>
+            </tr>
+            <tr>
+              <td class="code">F-00918</td><td>Compra</td><td>25/04/2026</td><td>10/05/2026</td>
+              <td class="num" style="color:var(--age4)">96</td><td class="num">9,600.00</td><td class="num z">—</td><td class="num">9,600.00</td>
+              <td><span class="chip" style="background:var(--age4-soft);color:var(--age4)"><i class="dot"></i>91 – 120 días</span></td>
+            </tr>
+            <tr>
+              <td class="code">F-00887</td><td>Compra</td><td>20/03/2026</td><td>08/04/2026</td>
+              <td class="num" style="color:var(--age5)">128</td><td class="num">6,000.00</td><td class="num z">—</td><td class="num">6,000.00</td>
+              <td><span class="chip" style="background:var(--age5-soft);color:var(--age5)"><i class="dot"></i>Más de 120 días</span></td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td colspan="5">8 documentos pendientes</td>
+              <td class="num">250,800.00</td><td class="num">18,300.00</td><td class="num">232,500.00</td><td></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <div class="card-head" style="border-top:1px solid var(--line-soft); border-bottom:0">
+        <span style="color:var(--ink-3); font-size:12.5px">Días = corte (14/08/2026) − vencimiento. En paréntesis, lo que aún falta para vencer. El mismo documento y su saldo se ven en el <b>estado de cuenta del proveedor</b>, que ya existe; la antigüedad solo lo clasifica por tramo.</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ REPORTE ============ -->
+  <section class="panel stack" id="p-reporte" role="tabpanel" aria-labelledby="t-reporte" hidden>
+
+    <div class="card">
+      <div class="filters">
+        <div class="field">
+          <label for="r-formato">Formato</label>
+          <select class="control" id="r-formato">
+            <option>Resumen por proveedor</option>
+            <option>Detalle por documento</option>
+          </select>
+        </div>
+        <div class="field">
+          <label for="r-corte">Corte</label>
+          <input class="control" id="r-corte" value="14/08/2026" style="min-width:150px">
+        </div>
+        <div class="field">
+          <label for="r-agrup">Agrupar por</label>
+          <select class="control" id="r-agrup">
+            <option>Ninguno</option>
+            <option>Tipo de proveedor</option>
+            <option>Cuenta contable</option>
+          </select>
+        </div>
+        <div class="btn-row">
+          <button class="btn">Excel</button>
+          <button class="btn primary">Generar PDF</button>
+        </div>
+      </div>
+    </div>
+
+    <div>
+      <p class="paper-label">Vista previa · cómo se vería impreso</p>
+      <div class="paper-rail">
+        <div class="paper">
+          <div class="emp">MERENDON</div>
+          <div class="sub-emp">RTN 08019000123456 · San Pedro Sula, Cortés</div>
+          <h4>Antigüedad de saldos de proveedores</h4>
+          <div class="rango">Cuentas por pagar al corte 14/08/2026 · días vencidos · valores en Lempiras</div>
+          <table>
+            <thead>
+              <tr>
+                <th class="l">Código</th><th class="l">Proveedor</th>
+                <th>Por vencer</th><th>1 – 30 días</th><th>31 – 60 días</th><th>61 – 90 días</th><th>91 – 120 días</th><th>Más de 120 días</th><th>Total</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr><td>0142</td><td>Químicos del Valle, S. de R.L.</td><td class="n">420,000.00</td><td class="n">180,000.00</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">600,000.00</td></tr>
+              <tr><td>0207</td><td>Tubos y Conexiones Sula</td><td class="n">210,500.00</td><td class="n">95,000.00</td><td class="n">48,000.00</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">353,500.00</td></tr>
+              <tr><td>0088</td><td>Distribuidora Ferretera El Yunque</td><td class="n">84,300.00</td><td class="n">62,000.00</td><td class="n">41,700.00</td><td class="n">28,900.00</td><td class="n r90">9,600.00</td><td class="n r90">6,000.00</td><td class="n">232,500.00</td></tr>
+              <tr><td>0311</td><td>Suministros Eléctricos Cortés</td><td class="n">156,200.00</td><td class="n">62,400.00</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">218,600.00</td></tr>
+              <tr><td>0455</td><td>Lubricantes Merendón</td><td class="n">96,000.00</td><td class="n">34,200.00</td><td class="n">12,800.00</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">143,000.00</td></tr>
+              <tr><td>0519</td><td>Transportes Ulúa</td><td class="n">—</td><td class="n">18,500.00</td><td class="n">22,400.00</td><td class="n">19,800.00</td><td class="n r90">18,000.00</td><td class="n r90">28,200.00</td><td class="n">106,900.00</td></tr>
+              <tr><td>0274</td><td>Repuestos Diesel del Norte</td><td class="n">12,400.00</td><td class="n">—</td><td class="n">8,900.00</td><td class="n">15,300.00</td><td class="n r90">20,500.00</td><td class="n r90">68,700.00</td><td class="n">105,300.00</td></tr>
+              <tr><td>0391</td><td>Empaques del Caribe</td><td class="n">44,800.00</td><td class="n">21,300.00</td><td class="n">6,700.00</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">72,800.00</td></tr>
+              <tr><td>0603</td><td>Servicios Industriales GEA</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">9,200.00</td><td class="n r90">12,400.00</td><td class="n r90">40,000.00</td><td class="n">61,600.00</td></tr>
+              <tr><td>0132</td><td>Papelería y Equipos Central</td><td class="n">28,600.00</td><td class="n">9,400.00</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">—</td><td class="n">38,000.00</td></tr>
+            </tbody>
+            <tfoot>
+              <tr>
+                <td colspan="2">TOTAL GENERAL</td>
+                <td class="n">1,052,800.00</td><td class="n">482,800.00</td><td class="n">140,500.00</td><td class="n">73,200.00</td><td class="n r90">60,500.00</td><td class="n r90">122,400.00</td><td class="n">1,932,200.00</td>
+              </tr>
+              <tr>
+                <td colspan="2" style="color:#5c676f; font-weight:400; border-bottom:0">Participación</td>
+                <td class="n" style="font-weight:400; color:#5c676f; border-bottom:0">54.5%</td><td class="n" style="font-weight:400; color:#5c676f; border-bottom:0">25.0%</td><td class="n" style="font-weight:400; color:#5c676f; border-bottom:0">7.3%</td><td class="n" style="font-weight:400; color:#5c676f; border-bottom:0">3.8%</td><td class="n" style="font-weight:400; color:#5c676f; border-bottom:0">3.1%</td><td class="n" style="font-weight:400; color:#5c676f; border-bottom:0">6.3%</td><td class="n" style="font-weight:400; color:#5c676f; border-bottom:0">100%</td>
+              </tr>
+            </tfoot>
+          </table>
+          <div class="firmas">
+            <div class="firma">Elaboró</div>
+            <div class="firma">Revisó</div>
+            <div class="firma">Autorizó · Gerencia</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============ CÓMO SE CALCULA ============ -->
+  <section class="panel stack" id="p-datos" role="tabpanel" aria-labelledby="t-datos" hidden>
+
+    <div class="card">
+      <div class="card-head">
+        <h3 class="sec">Cómo se arma cada tramo</h3>
+        <p>días = fecha de corte − fecha de vencimiento del documento</p>
+      </div>
+      <div class="table-scroll">
+        <table class="grid" style="min-width:720px">
+          <thead>
+            <tr><th>Tramo</th><th>Regla (días vencidos)</th><th>Significado</th><th>Color</th></tr>
+          </thead>
+          <tbody>
+            <tr class="rule-row"><td>Por vencer / corriente</td><td class="code">días ≤ 0</td><td>Aún dentro de plazo. Incluye lo que vence hoy.</td><td><span class="chip" style="background:var(--age0-soft);color:var(--age0)"><i class="dot"></i>Verde</span></td></tr>
+            <tr class="rule-row"><td>1 – 30 días</td><td class="code">1 ≤ días ≤ 30</td><td>Atraso reciente, gestión normal de pago.</td><td><span class="chip" style="background:var(--age1-soft);color:var(--age1)"><i class="dot"></i>Lima</span></td></tr>
+            <tr class="rule-row"><td>31 – 60 días</td><td class="code">31 ≤ días ≤ 60</td><td>Requiere seguimiento con el proveedor.</td><td><span class="chip" style="background:var(--age2-soft);color:var(--age2)"><i class="dot"></i>Ámbar</span></td></tr>
+            <tr class="rule-row"><td>61 – 90 días</td><td class="code">61 ≤ días ≤ 90</td><td>Atraso serio; riesgo de suspensión de crédito.</td><td><span class="chip" style="background:var(--age3-soft);color:var(--age3)"><i class="dot"></i>Naranja</span></td></tr>
+            <tr class="rule-row"><td>91 – 120 días</td><td class="code">91 ≤ días ≤ 120</td><td>Muy vencido; entra a la prioridad de pago.</td><td><span class="chip" style="background:var(--age4-soft);color:var(--age4)"><i class="dot"></i>Terracota</span></td></tr>
+            <tr class="rule-row"><td>Más de 120 días</td><td class="code">días &gt; 120</td><td>Crítico. Pago urgente o negociación formal.</td><td><span class="chip" style="background:var(--age5-soft);color:var(--age5)"><i class="dot"></i>Rojo</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+      <div class="card-head" style="border-top:1px solid var(--line-soft); border-bottom:0">
+        <span style="color:var(--ink-3); font-size:12.5px">Los primeros cuatro cortes (30/60/90) son los mismos que ya usan el estado de cuenta del proveedor y el aging de clientes. Aquí el último tramo se abre en <b>91–120</b> y <b>más de 120 días</b>, que es la granularidad que pidió el manejo de cuentas por pagar.</span>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">De dónde sale el saldo</h3><p>la deuda con un proveedor vive en dos módulos</p></div>
+      <div class="card-body">
+        <div class="gap-grid">
+          <div class="gap">
+            <span class="chip a"><i class="dot"></i>Ya disponible</span>
+            <h4>Facturas de compra al crédito</h4>
+            <p>Tabla <code>alm_compra_cxp</code>. Trae su fecha de vencimiento y el saldo pendiente tras abonos. Origen <b>«Compra»</b> en el detalle.</p>
+          </div>
+          <div class="gap">
+            <span class="chip a"><i class="dot"></i>Ya disponible</span>
+            <h4>Compromisos y órdenes de pago directo</h4>
+            <p>Tabla <code>prv_compromiso_hdr</code>. Incluye los 4,297 compromisos migrados de SIMAFI. Origen <b>«Compromiso»</b> (p. ej. OPD-00518).</p>
+          </div>
+          <div class="gap">
+            <span class="chip warn"><i class="dot"></i>A decidir</span>
+            <h4>La fecha de vencimiento</h4>
+            <p>Cuando el documento no la trae, se deriva del <b>término de pago del proveedor</b> (<code>alm_termino_pago</code>) sobre la fecha de emisión. Falta fijar la regla para los migrados sin término.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Qué falta para que sea real</h3><p>el cálculo por proveedor ya existe; falta consolidarlo y abrir los tramos</p></div>
+      <div class="card-body">
+        <ul class="notes">
+          <li>Una función <code>fn_prv_antiguedad_saldos(company_id, corte, filtros)</code> que corra los tramos para <b>todos</b> los proveedores con saldo. Hoy <code>fn_prv_estado_cuenta_resumen</code> calcula los tramos pero solo por proveedor y corta en «más de 90»: hay que extenderla a <b>91–120</b> y <b>más de 120</b>, y correrla sobre todos.</li>
+          <li>La pantalla matriz de este prototipo, con clic al <b>estado de cuenta del proveedor</b> que ya está en producción.</li>
+          <li>El reporte DevExpress (PDF + Excel), reutilizando el patrón del estado de cuenta del proveedor y del reporte de antigüedad de clientes.</li>
+          <li>Respeta la multiempresa (<code>company_id</code>) y los permisos del módulo de proveedores, igual que el resto de cuentas por pagar.</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h3 class="sec">Decisiones para el arranque</h3><p>lo que conviene confirmar antes de implementar</p></div>
+      <div class="card-body">
+        <ol class="decisiones">
+          <li><b>Base del vencimiento.</b><span>Para los documentos sin fecha de vencimiento explícita, ¿se usa el término de pago del proveedor, o la fecha de emisión + N días fijos por empresa?</span></li>
+          <li><b>Por vencer, ¿se muestra?</b><span>El aging clásico solo lista lo vencido. Aquí se propone incluir «por vencer» para que el total cuadre con el saldo del proveedor; se puede ocultar con el filtro.</span></li>
+          <li><b>Tramos.</b><span>El prototipo usa seis: por vencer, 1–30, 31–60, 61–90, 91–120 y más de 120 días. Se deja definir si quedan fijos o configurables por empresa.</span></li>
+          <li><b>Agrupación del reporte.</b><span>¿Se agrupa por tipo de proveedor, por cuenta contable de la CxP, o plano? El PDF trae las tres opciones.</span></li>
+          <li><b>Moneda.</b><span>El prototipo asume todo en Lempiras. Si hay compras en otra moneda, se define si se convierte al corte o se separa por moneda.</span></li>
+        </ol>
+      </div>
+    </div>
+  </section>
+
+  <p class="footnote">Prototipo de interfaz · datos de ejemplo, no conectados a la base · MERENDON · 14/08/2026</p>
+</main>
+
+<script>
+  (function () {
+    var tabs = Array.prototype.slice.call(document.querySelectorAll('.tab'));
+    function select(tab) {
+      tabs.forEach(function (t) {
+        var on = t === tab;
+        t.setAttribute('aria-selected', on ? 'true' : 'false');
+        document.getElementById(t.getAttribute('aria-controls')).hidden = !on;
+      });
+    }
+    tabs.forEach(function (tab, i) {
+      tab.addEventListener('click', function () { select(tab); });
+      tab.addEventListener('keydown', function (e) {
+        if (e.key !== 'ArrowRight' && e.key !== 'ArrowLeft') return;
+        e.preventDefault();
+        var next = e.key === 'ArrowRight' ? (i + 1) % tabs.length : (i - 1 + tabs.length) % tabs.length;
+        tabs[next].focus(); select(tabs[next]);
+      });
+    });
+    var go = document.getElementById('go-detalle');
+    if (go) go.addEventListener('click', function () { select(document.getElementById('t-detalle')); window.scrollTo({ top: 0, behavior: 'smooth' }); });
+  })();
+</script>

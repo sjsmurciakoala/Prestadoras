@@ -1,0 +1,668 @@
+@page "/proveedores/evaluacion"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Proveedores
+
+@inject IJSRuntime JS
+@inject EvaluacionProveedorClient EvaluacionClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - Evaluación de proveedores</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="EvaluacionProveedoresToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Evaluación de proveedores</h2>
+            <p class="page-subtitle">Calificación por período: entrega, completitud, precio, calidad y documentación</p>
+        </div>
+
+        <div class="header-actions d-flex gap-2 flex-wrap">
+            <DxButton Text="Criterios" IconCssClass="bi bi-sliders"
+                      RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern"
+                      Click="@(() => Navigation.NavigateTo("/proveedores/evaluacion/criterios"))" />
+            <DxButton Text="Nuevo período" IconCssClass="bi bi-calendar-plus"
+                      RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern" Click="@(() => nuevoPeriodoVisible = true)" />
+            <DxButton Text="Recalcular" IconCssClass="bi bi-arrow-repeat"
+                      RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                      Enabled="@(PeriodoSeleccionado is not null && !PeriodoSeleccionado.Cerrado && !ocupado)"
+                      Click="CalcularAsync" />
+            <DxButton Text="Cuadro comparativo (PDF)" IconCssClass="bi bi-file-earmark-pdf"
+                      RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                      CssClass="btn-modern"
+                      Enabled="@(periodoSeleccionado is not null && ranking.Count > 0)"
+                      Click="AbrirComparativoPdfAsync" />
+            <DxButton Text="Cerrar período" IconCssClass="bi bi-lock"
+                      RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern"
+                      Enabled="@(PeriodoSeleccionado is not null && !PeriodoSeleccionado.Cerrado && !ocupado)"
+                      Click="@(() => confirmarCierreVisible = true)" />
+        </div>
+    </div>
+
+    @if (periodos.Count == 0 && !isLoading)
+    {
+        <div class="modern-card text-center py-5">
+            <i class="bi bi-calendar-range fs-1 text-muted"></i>
+            <h5 class="mt-3">Todavía no hay períodos de evaluación</h5>
+            <p class="text-muted mb-3">
+                Un período es un rango de fechas con nombre (por ejemplo «2026-T2»). Al calcularlo,
+                el sistema califica a cada proveedor con compras registradas en ese rango.
+            </p>
+            <DxButton Text="Crear el primer período" IconCssClass="bi bi-calendar-plus"
+                      RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                      Click="@(() => nuevoPeriodoVisible = true)" />
+        </div>
+    }
+    else
+    {
+        <div class="modern-card mb-3">
+            <div class="d-flex flex-wrap gap-3 align-items-end">
+                <div style="min-width:340px">
+                    <label class="form-label fw-semibold">Período</label>
+                    @*
+                        Se bindea el OBJETO, no el Id: con Value de tipo int? y ValueFieldName
+                        apuntando a una propiedad int, DevExpress tumba el circuito de Blazor.
+                        Es el mismo patrón que usa el combo de estados en OrdenesCompraList.
+                    *@
+                    <DxComboBox Data="@periodos" Value="@periodoSeleccionado"
+                                ValueChanged="@((EvaluacionPeriodoDto? p) => OnPeriodoChangedAsync(p))"
+                                ValueExpression="@(() => periodoSeleccionado)"
+                                TextFieldName="@nameof(EvaluacionPeriodoDto.Display)"
+                                NullText="Seleccione un período" CssClass="w-100" />
+                </div>
+
+                @if (PeriodoSeleccionado is not null)
+                {
+                    <div class="periodo-meta">
+                        <span class="badge-status @(PeriodoSeleccionado.Cerrado ? "inactive" : "active")">
+                            @PeriodoSeleccionado.EstadoDescripcion
+                        </span>
+                        @if (PeriodoSeleccionado.FechaCalculo.HasValue)
+                        {
+                            <span class="text-muted small">
+                                Calculado el @PeriodoSeleccionado.FechaCalculo.Value.ToString("dd/MM/yyyy HH:mm")
+                                @if (!string.IsNullOrWhiteSpace(PeriodoSeleccionado.UsuarioCalculo))
+                                {
+                                    <span> por @PeriodoSeleccionado.UsuarioCalculo</span>
+                                }
+                            </span>
+                        }
+                        else
+                        {
+                            <span class="text-muted small">Sin calcular: use «Recalcular» para generar las evaluaciones.</span>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+
+        @if (criteriosSinDatos.Count > 0)
+        {
+            <div class="alert alert-warning py-2 mb-3" role="alert">
+                <i class="bi bi-exclamation-triangle me-1"></i>
+                Sin datos en el período: <strong>@string.Join(", ", criteriosSinDatos)</strong>.
+                Su peso se repartió entre los demás criterios, así que nadie fue penalizado por el hueco.
+            </div>
+        }
+
+        <div class="row g-3 mb-4">
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Proveedores evaluados</div>
+                    <div class="summary-value">@ranking.Count.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Calificación promedio</div>
+                    <div class="summary-value">@(Promedio.HasValue ? Promedio.Value.ToString("N1") : "—")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card">
+                    <div class="summary-label">Clase A</div>
+                    <div class="summary-value">@ClaseA.ToString("N0")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-3">
+                <div class="modern-card summary-card summary-warning">
+                    <div class="summary-label">Condicionados o no aceptables</div>
+                    <div class="summary-value">@Condicionados.ToString("N0")</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="modern-card position-relative">
+            <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+            <div class="grid-wrapper">
+                <DxGrid @ref="grid" Data="@ranking" KeyFieldName="@nameof(EvaluacionRankingItemDto.Id)"
+                        PageSize="15" PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes"
+                        LayoutAutoSaving="OnLayoutAutoSaving"
+                        LayoutAutoLoading="OnLayoutAutoLoading">
+
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                       TextExpression="@(() => filtroBusqueda)"
+                                       Placeholder="Buscar proveedor..." InputDelay="600"
+                                       ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                       CssClass="me-1" Style="min-width: 240px;" />
+
+                            <DxComboBox Data="@clases" Value="@filtroClase"
+                                        ValueChanged="@((string? v) => OnClaseChanged(v))"
+                                        ValueFieldName="@nameof(EvaluacionClaseDto.Codigo)"
+                                        TextFieldName="@nameof(EvaluacionClaseDto.Display)"
+                                        NullText="Todas las clases"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        Style="min-width: 190px;" CssClass="me-1" />
+
+                            <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                            <div class="ms-auto text-muted small">
+                                Total: <span class="fw-bold">@ranking.Count.ToString("N0")</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
+
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(EvaluacionRankingItemDto.ProveedorNombre)"
+                                          Caption="Proveedor" MinWidth="230">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is EvaluacionRankingItemDto item)
+                                {
+                                    <div class="d-flex flex-column">
+                                        <span class="text-dark fw-semibold">
+                                            @(string.IsNullOrWhiteSpace(item.ProveedorNombre) ? item.CodProveedor : item.ProveedorNombre)
+                                        </span>
+                                        <span class="text-muted small">@item.CodProveedor</span>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(EvaluacionRankingItemDto.ComprasPeriodo)"
+                                          Caption="Compras" Width="130px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is EvaluacionRankingItemDto item)
+                                {
+                                    <span class="fw-semibold">@item.ComprasPeriodo.ToString("N2")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(EvaluacionRankingItemDto.Recepciones)"
+                                          Caption="Facturas" Width="95px" TextAlignment="GridTextAlignment.Right" />
+
+                        @*
+                            Desglose en UNA columna, no una por criterio: generar columnas con un
+                            @foreach dentro de <Columns> mete a DxGrid en un bucle de renderizado
+                            (recrea la colección de columnas en cada render y vuelve a pedirlas).
+                            Además, las columnas sin FieldName no ordenan ni filtran, así que no se
+                            perdió nada: cada chip lleva el nombre y la evidencia en el tooltip.
+                        *@
+                        <DxGridDataColumn Caption="Desglose por criterio" MinWidth="260">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is EvaluacionRankingItemDto item)
+                                {
+                                    <div class="desglose">
+                                        @foreach (var r in item.Criterios)
+                                        {
+                                            <span class="chip-criterio @(r.SinDatos ? "sin-datos" : ClaseLogro(r.Logro!.Value))"
+                                                  title="@Tooltip(r)">
+                                                @Abreviatura(r.CriterioNombre)
+                                                <b>@(r.SinDatos ? "—" : r.Logro!.Value.ToString("N0"))</b>
+                                            </span>
+                                        }
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(EvaluacionRankingItemDto.Puntaje)"
+                                          Caption="Calificación" Width="150px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is EvaluacionRankingItemDto item)
+                                {
+                                    @if (!item.Puntaje.HasValue)
+                                    {
+                                        <span class="text-muted">sin datos</span>
+                                    }
+                                    else
+                                    {
+                                        <div class="d-flex align-items-center justify-content-end gap-2">
+                                            <div class="meter"><span class="@BarraClase(item.ClaseCodigo)"
+                                                                     style="width:@(Ancho(item.Puntaje.Value))%"></span></div>
+                                            <b>@item.Puntaje.Value.ToString("N1")</b>
+                                        </div>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(EvaluacionRankingItemDto.ClaseCodigo)"
+                                          Caption="Clase" Width="130px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is EvaluacionRankingItemDto item)
+                                {
+                                    @if (string.IsNullOrWhiteSpace(item.ClaseCodigo))
+                                    {
+                                        <span class="text-muted">—</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="chip-clase @ChipClase(item.ClaseCodigo)"
+                                              title="@item.ClaseNombre">@item.ClaseCodigo · @item.ClaseNombre</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn Caption="Tendencia" Width="110px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is EvaluacionRankingItemDto item)
+                                {
+                                    @if (item.Variacion is null)
+                                    {
+                                        <span class="text-muted" title="No hay período anterior para comparar.">—</span>
+                                    }
+                                    else if (item.Variacion.Value > 0)
+                                    {
+                                        <span class="text-success">▲ @item.Variacion.Value.ToString("N1")</span>
+                                    }
+                                    else if (item.Variacion.Value < 0)
+                                    {
+                                        <span class="text-danger">▼ @Math.Abs(item.Variacion.Value).ToString("N1")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">= 0.0</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn Caption="Acciones" Width="90px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is EvaluacionRankingItemDto item)
+                                {
+                                    <button type="button" class="btn-icon btn-edit" title="Ver ficha"
+                                            @onclick="() => AbrirFicha(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-clipboard-data"></i>
+                                    </button>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">
+                            Este período aún no tiene evaluaciones. Use <strong>Recalcular</strong> para generarlas.
+                        </div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        </div>
+    }
+</div>
+
+@* ── Nuevo período ─────────────────────────────────────────────────────────── *@
+<DxPopup @bind-Visible="nuevoPeriodoVisible" Width="min(520px, 92vw)"
+         HeaderText="Nuevo período de evaluación" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="row g-3">
+                <div class="col-12 col-md-5">
+                    <label class="form-label fw-semibold">Código <span class="text-danger">*</span></label>
+                    <DxTextBox @bind-Text="nuevoPeriodo.Codigo" MaxLength="20" NullText="Ej. 2026-T2" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-7">
+                    <label class="form-label fw-semibold">Nombre <span class="text-danger">*</span></label>
+                    <DxTextBox @bind-Text="nuevoPeriodo.Nombre" MaxLength="100"
+                               NullText="Ej. Trimestre II 2026" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Desde</label>
+                    <DxDateEdit @bind-Date="nuevoDesde" CssClass="w-100" />
+                </div>
+                <div class="col-12 col-md-6">
+                    <label class="form-label fw-semibold">Hasta</label>
+                    <DxDateEdit @bind-Date="nuevoHasta" CssClass="w-100" />
+                </div>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => nuevoPeriodoVisible = false)" />
+                <DxButton Text="Crear período" IconCssClass="bi bi-check-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!ocupado)" Click="CrearPeriodoAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@* ── Confirmar cierre ──────────────────────────────────────────────────────── *@
+<DxPopup @bind-Visible="confirmarCierreVisible" Width="min(430px, 90vw)"
+         HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-lock" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Cerrar el período?</h5>
+            <p class="text-muted">
+                Queda congelado como historia: no se podrá recalcular ni calificar criterios.
+            </p>
+            <div class="d-flex justify-content-center gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => confirmarCierreVisible = false)" />
+                <DxButton Text="Cerrar período" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!ocupado)" Click="CerrarPeriodoAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private const string GridLayoutStorageKey = "proveedores-evaluacion-grid-layout";
+
+    private List<EvaluacionPeriodoDto> periodos = new();
+    private List<EvaluacionCriterioDto> criterios = new();
+    private List<EvaluacionClaseDto> clases = new();
+    private List<EvaluacionRankingItemDto> ranking = new();
+    private List<string> criteriosSinDatos = new();
+
+    private EvaluacionPeriodoDto? periodoSeleccionado;
+    private string filtroBusqueda = string.Empty;
+    private string? filtroClase;
+
+    private bool isLoading = true;
+    private bool ocupado;
+    private bool nuevoPeriodoVisible;
+    private bool confirmarCierreVisible;
+
+    private EvaluacionPeriodoUpsertDto nuevoPeriodo = new();
+    private DateTime? nuevoDesde = new DateTime(DateTime.Today.Year, DateTime.Today.Month, 1);
+    private DateTime? nuevoHasta = DateTime.Today;
+
+    private EvaluacionPeriodoDto? PeriodoSeleccionado => periodoSeleccionado;
+
+    // ── KPIs (espejo de lo que ya vino calculado del servidor) ───────────────
+    private decimal? Promedio
+    {
+        get
+        {
+            decimal suma = 0m;
+            var n = 0;
+            foreach (var item in ranking)
+            {
+                if (!item.Puntaje.HasValue) continue;
+                suma += item.Puntaje.Value;
+                n++;
+            }
+
+            return n > 0 ? Math.Round(suma / n, 1, MidpointRounding.AwayFromZero) : null;
+        }
+    }
+
+    private int ClaseA => ranking.Count(r => string.Equals(r.ClaseCodigo, "A", StringComparison.OrdinalIgnoreCase));
+
+    private int Condicionados => ranking.Count(r =>
+        string.Equals(r.ClaseCodigo, "C", StringComparison.OrdinalIgnoreCase) ||
+        string.Equals(r.ClaseCodigo, "D", StringComparison.OrdinalIgnoreCase));
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            periodos = (await EvaluacionClient.ObtenerPeriodosAsync()).ToList();
+            criterios = (await EvaluacionClient.ObtenerCriteriosAsync()).ToList();
+            clases = (await EvaluacionClient.ObtenerClasesAsync()).ToList();
+
+            // Arranca en el período más reciente: es el que se está trabajando.
+            periodoSeleccionado = periodos.FirstOrDefault();
+            if (periodoSeleccionado is not null)
+            {
+                await CargarRankingAsync();
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudo cargar la evaluación: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnPeriodoChangedAsync(EvaluacionPeriodoDto? valor)
+    {
+        periodoSeleccionado = valor;
+        criteriosSinDatos.Clear();
+        await CargarRankingAsync();
+    }
+
+    private async Task CargarRankingAsync()
+    {
+        if (periodoSeleccionado is null)
+        {
+            ranking = new List<EvaluacionRankingItemDto>();
+            return;
+        }
+
+        isLoading = true;
+        try
+        {
+            ranking = (await EvaluacionClient.ObtenerRankingAsync(
+                periodoSeleccionado.Id, filtroBusqueda, filtroClase)).ToList();
+        }
+        catch (Exception ex)
+        {
+            ranking = new List<EvaluacionRankingItemDto>();
+            Toast("Error", $"No se pudo cargar el ranking: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarRankingAsync();
+    }
+
+    private async Task OnClaseChanged(string? valor)
+    {
+        filtroClase = valor;
+        await CargarRankingAsync();
+    }
+
+    private async Task CalcularAsync()
+    {
+        if (periodoSeleccionado is null) return;
+
+        ocupado = true;
+        try
+        {
+            var resultado = await EvaluacionClient.CalcularAsync(periodoSeleccionado.Id);
+            criteriosSinDatos = resultado.CriteriosSinDatos.ToList();
+
+            Toast("Éxito",
+                resultado.Evaluados == 0
+                    ? "El período no tiene compras registradas: no se evaluó a ningún proveedor."
+                    : $"Se evaluaron {resultado.Evaluados} proveedor(es)."
+                      + (resultado.PromedioPuntaje.HasValue ? $" Promedio: {resultado.PromedioPuntaje.Value:N1}." : string.Empty),
+                resultado.Evaluados == 0 ? ToastRenderStyle.Warning : ToastRenderStyle.Success);
+
+            await RefrescarPeriodosAsync();
+            await CargarRankingAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    private async Task CerrarPeriodoAsync()
+    {
+        if (periodoSeleccionado is null) return;
+
+        ocupado = true;
+        try
+        {
+            await EvaluacionClient.CerrarPeriodoAsync(periodoSeleccionado.Id);
+            Toast("Éxito", "Período cerrado.", ToastRenderStyle.Success);
+            await RefrescarPeriodosAsync();
+            await CargarRankingAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            ocupado = false;
+            confirmarCierreVisible = false;
+        }
+    }
+
+    private async Task CrearPeriodoAsync()
+    {
+        nuevoPeriodo.FechaDesde = nuevoDesde.HasValue
+            ? DateOnly.FromDateTime(nuevoDesde.Value)
+            : DateOnly.FromDateTime(DateTime.Today);
+        nuevoPeriodo.FechaHasta = nuevoHasta.HasValue
+            ? DateOnly.FromDateTime(nuevoHasta.Value)
+            : DateOnly.FromDateTime(DateTime.Today);
+
+        ocupado = true;
+        try
+        {
+            var creado = await EvaluacionClient.CrearPeriodoAsync(nuevoPeriodo);
+            await RefrescarPeriodosAsync(creado.Id);
+            nuevoPeriodo = new EvaluacionPeriodoUpsertDto();
+            nuevoPeriodoVisible = false;
+
+            Toast("Éxito", $"Período {creado.Codigo} creado. Use «Recalcular» para evaluarlo.",
+                ToastRenderStyle.Success);
+            await CargarRankingAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            ocupado = false;
+        }
+    }
+
+    /// <summary>
+    /// Recarga la lista de períodos y vuelve a apuntar la selección a la MISMA fila de la nueva
+    /// lista: el combo compara por referencia, así que conservar el objeto viejo lo dejaría vacío.
+    /// </summary>
+    private async Task RefrescarPeriodosAsync(int? seleccionar = null)
+    {
+        var objetivo = seleccionar ?? periodoSeleccionado?.Id;
+        periodos = (await EvaluacionClient.ObtenerPeriodosAsync()).ToList();
+        periodoSeleccionado = objetivo.HasValue
+            ? periodos.FirstOrDefault(p => p.Id == objetivo.Value)
+            : periodos.FirstOrDefault();
+    }
+
+    private void AbrirFicha(EvaluacionRankingItemDto item)
+    {
+        if (periodoSeleccionado is null) return;
+        Navigation.NavigateTo(
+            $"/proveedores/evaluacion/{periodoSeleccionado.Id}/{Uri.EscapeDataString(item.CodProveedor)}");
+    }
+
+    /// <summary>Abre el PDF en pestaña nueva, con los mismos filtros que se ven en pantalla.</summary>
+    private async Task AbrirComparativoPdfAsync()
+    {
+        if (periodoSeleccionado is null) return;
+
+        var url = EvaluacionProveedorClient.GetComparativoPdfUrl(
+            periodoSeleccionado.Id, filtroBusqueda, filtroClase);
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    /// <summary>Etiqueta corta del criterio para el chip ("Cumplimiento de entrega" → "Cumpl.").</summary>
+    private static string Abreviatura(string nombre)
+    {
+        if (string.IsNullOrWhiteSpace(nombre)) return "—";
+        var limpio = nombre.Trim();
+        return limpio.Length <= 6 ? limpio : limpio[..5] + ".";
+    }
+
+    /// <summary>Nombre completo + evidencia: es lo que explica el número del chip.</summary>
+    private static string Tooltip(EvaluacionCriterioResultadoDto r)
+        => string.IsNullOrWhiteSpace(r.Detalle)
+            ? r.CriterioNombre
+            : $"{r.CriterioNombre}: {r.Detalle}";
+
+    private static string ClaseLogro(decimal logro) => logro switch
+    {
+        >= 90m => "logro-alto",
+        >= 75m => "logro-medio",
+        >= 60m => "logro-bajo",
+        _      => "logro-critico"
+    };
+
+    private static string ChipClase(string? clase) => (clase ?? string.Empty).ToUpperInvariant() switch
+    {
+        "A" => "clase-a",
+        "B" => "clase-b",
+        "C" => "clase-c",
+        _   => "clase-d"
+    };
+
+    private static string BarraClase(string? clase) => (clase ?? string.Empty).ToUpperInvariant() switch
+    {
+        "A" => "barra-a",
+        "B" => "barra-b",
+        "C" => "barra-c",
+        _   => "barra-d"
+    };
+
+    private static int Ancho(decimal puntaje) => (int)Math.Clamp(puntaje, 0m, 100m);
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "EvaluacionProveedoresToast"
+        });
+}

@@ -475,7 +475,7 @@ Primer script de la iniciativa de correo/notificaciones (rama `feat/almacen-inte
 
 | Script | Qué aporta | Naturaleza | Mirror | SRV |
 |---|---|---|:--:|:--:|
-| `2026-08-13_cfg_correo_notificaciones.sql` | `cfg_correo` (la **conexión**, 1 por empresa: proveedor + **API key cifrada** con DataProtection + remitente por defecto + activo global; UNIQUE(company_id, proveedor), CHECK proveedor ∈ SENDGRID/SMTP) + `cfg_notificacion` (**área/tipo**, N por empresa: remitente propio opcional; UNIQUE(company_id, tipo), CHECK tipo ∈ ADMINISTRACION/ALMACEN/COBRANZA/SISTEMA) + `cfg_notificacion_destinatario` (**destinatarios** TO/CC, N por área; FK → `cfg_notificacion` ON DELETE CASCADE, UNIQUE(notificacion_id, lower(correo), clase)) | Aditivo idempotente (`CREATE … IF NOT EXISTS`) — **re-ejecutable** | **pendiente** | **pendiente** |
+| `2026-08-13_cfg_correo_notificaciones.sql` | `cfg_correo` (la **conexión**, 1 por empresa: proveedor + **API key cifrada** con DataProtection + remitente por defecto + activo global; UNIQUE(company_id, proveedor), CHECK proveedor ∈ SENDGRID/SMTP) + `cfg_notificacion` (**área/tipo**, N por empresa: remitente propio opcional; UNIQUE(company_id, tipo), CHECK tipo ∈ ADMINISTRACION/ALMACEN/COBRANZA/SISTEMA) + `cfg_notificacion_destinatario` (**destinatarios** TO/CC, N por área; FK → `cfg_notificacion` ON DELETE CASCADE, UNIQUE(notificacion_id, lower(correo), clase)) | Aditivo idempotente (`CREATE … IF NOT EXISTS`) — **re-ejecutable** | **sí (2026-08-13)** | **pendiente** |
 
 - **Dependencias:** ninguna externa. La única FK es interna (destinatario → notificación, ambas en
   este script). Tenant-scoped por `company_id` (sin FK a `cfg_company`, igual que el resto). **No**
@@ -608,6 +608,190 @@ en 7 documentos, vencido L 69,586.00, último pago L 150.00 del 2026-08-13; los 
 
 ---
 
+### 3.17 Órdenes de compra — fecha de entrega pactada (2026-08-14)
+
+La O/C guardaba `fecha`, `fecha_emision` y `fecha_aprobacion`, pero **no** cuándo se comprometió el
+proveedor a entregar, así que la puntualidad no era medible: lo único comparable contra la recepción
+era la fecha de aprobación, que mide el ciclo interno y no el cumplimiento del proveedor. Es el
+insumo del criterio de mayor peso del scorecard de proveedores
+([docs/prototipos/2026-08-14-evaluacion-proveedores.html](../docs/prototipos/2026-08-14-evaluacion-proveedores.html)).
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-14_alm_orden_compra_fecha_entrega.sql` | `alm_orden_compra.fecha_entrega_pactada` (fecha comprometida de la orden) + `alm_orden_compra_detalle.fecha_entrega_pactada` (fecha propia del renglón para entregas escalonadas; NULL = rige la de la cabecera). Ambas DATE NULL, sin DEFAULT y sin CHECK | **Aditivo idempotente** (`ADD COLUMN IF NOT EXISTS` × 2 + 2 `COMMENT`) — **re-ejecutable**. No reescribe filas ni crea índices | **sí (2026-08-14)** | **pendiente** |
+
+- **Dependencias:** paso 23 del runbook (`2026-07-30_alm_orden_compra.sql`, que crea las dos tablas).
+  Independiente del resto de la tanda.
+- **Lleva binario:** sí, y en los dos sentidos. El servicio nuevo **exige** la fecha al crear o editar
+  una orden (decisión usuario 2026-08-14: obligatoria desde el borrador) y la lee en el listado y el
+  detalle; sin la columna, EF falla con `42703` al abrir la pantalla de órdenes. El script **sin** el
+  binario es inocuo: dos columnas que nadie llena.
+- **Obligatoriedad:** vive en `OrdenCompraService`, no en la BD. Las órdenes creadas antes de este
+  cambio quedan con la columna en NULL y siguen abriéndose y recibiéndose; al **editarlas** habrá que
+  llenar la fecha (el borrador ya no se guarda sin ella). Por eso la columna admite NULL.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-14_alm_orden_compra_fecha_entrega.sql
+```
+
+¿Ya aplicado? (deben salir las 2 filas, `date` / `YES` / sin default)
+
+```sql
+SELECT table_name, column_name, data_type, is_nullable, column_default
+  FROM information_schema.columns
+ WHERE column_name = 'fecha_entrega_pactada'
+   AND table_name IN ('alm_orden_compra','alm_orden_compra_detalle')
+ ORDER BY table_name;
+```
+
+Verificación posterior (ninguna orden existente debe haber cambiado):
+
+```sql
+SELECT count(*) AS ordenes, count(fecha_entrega_pactada) AS con_fecha FROM alm_orden_compra;
+-- con_fecha = 0 justo después de aplicar; sube conforme se capturen órdenes nuevas.
+```
+
+**Verificado en el mirror el 2026-08-14:** las 2 columnas quedaron `date` / nullable / sin default y
+las 9 órdenes existentes siguen con `con_fecha = 0`. Suite completa de `SIAD.Tests` en verde
+(696 pasan, 0 fallan, 47 omitidas), con 7 pruebas nuevas de la fecha pactada.
+
+---
+
+### 3.18 Evaluación de proveedores — F0: estructura, semilla y métricas (2026-08-14)
+
+**F0** de la iniciativa "evaluación de proveedores"
+([docs/plans/2026-08-14-evaluacion-proveedores-plan.md](../docs/plans/2026-08-14-evaluacion-proveedores-plan.md)).
+No existía nada de evaluación/calificación: lo único parecido es el estado de cuenta (§3.16), que
+mide deuda, no desempeño. Crea el modelo para calificar por período y la función que calcula las
+métricas automáticas desde órdenes y recepciones.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-14_prv_evaluacion.sql` | 6 tablas (`prv_evaluacion_periodo`, `_criterio`, `_clase`, `_hdr`, `_dtl`, `prv_recepcion_incidencia`) + `fn_prv_evaluacion_metricas` (solo lectura) + semilla de 6 criterios y 4 clases por empresa | **Aditivo idempotente** (`CREATE … IF NOT EXISTS`, `CREATE OR REPLACE FUNCTION`, `INSERT … WHERE NOT EXISTS`) — **re-ejecutable** (probado). No altera ninguna tabla existente | **sí (2026-08-14)** | **pendiente** |
+
+- **Dependencias:** `alm_compra_hdr` (§paso 25 del runbook, por la FK compuesta de incidencias),
+  `alm_orden_compra(_detalle)` (paso 23) y **§3.17** (`fecha_entrega_pactada`, sin la cual la
+  función no compila). `cfg_company` para la semilla. Va **después** de §3.17.
+- **Lleva binario:** todavía no. F0 es sólo la base; el servicio y las pantallas son F1–F2. El
+  script sin binario es inocuo (6 tablas vacías que nadie lee).
+- **La semilla es una propuesta** (D4 del plan): 6 criterios sumando 100 y 4 clases A–D. Se edita
+  desde la pantalla del catálogo (F3), no con SQL.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-14_prv_evaluacion.sql
+```
+
+¿Ya aplicado? (deben salir las 6 tablas y la función)
+
+```sql
+SELECT count(*) AS tablas FROM information_schema.tables
+ WHERE table_name IN ('prv_evaluacion_periodo','prv_evaluacion_criterio','prv_evaluacion_clase',
+                      'prv_evaluacion_hdr','prv_evaluacion_dtl','prv_recepcion_incidencia');
+SELECT proname FROM pg_proc WHERE proname = 'fn_prv_evaluacion_metricas';
+```
+
+Verificación posterior (la semilla debe sumar 100 por empresa y la función correr sin escribir):
+
+```sql
+SELECT company_id, count(*) AS criterios, sum(peso) AS peso_total
+  FROM prv_evaluacion_criterio GROUP BY company_id;   -- 6 criterios · 100.00
+SELECT * FROM fn_prv_evaluacion_metricas(2, '2026-01-01', '2026-12-31');
+```
+
+**Verificado en el mirror el 2026-08-14:** 6 tablas, 4 FK compuestas tenant-safe, semilla 6/100.00 y
+4 clases cubriendo 0–100. La función devolvió 3 proveedores con datos reales (0088 con 8 recepciones
+y L 76,344.75). Dos lecturas que confirman el diseño: `ENTREGA` sale **0/0** porque ninguna recepción
+existente viene de una O/C con fecha pactada, y `CALIDAD` sale **0/0** porque todavía no hay
+incidencias — ambos casos los redistribuye el servicio en vez de puntuar cero.
+
+### 3.19 Almacén — flag "notificar por correo" en los conceptos de movimiento (2026-08-13)
+
+Parte de la iniciativa de notificaciones de stock bajo (rama `feat/almacen-integracion-contable`).
+**Aditivo, bajo riesgo:** una columna nueva con DEFAULT; no borra ni reescribe datos.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-13_alm_tipo_movimiento_notifica_correo.sql` | `alm_tipo_movimiento.notifica_correo` BOOLEAN NOT NULL DEFAULT false. Solo tiene efecto en conceptos de clase SALIDA: si true, un movimiento genérico con ese concepto envía aviso por correo al área ALMACEN al cruzar bajo mínimo | Aditivo idempotente (`ADD COLUMN IF NOT EXISTS`) — **re-ejecutable** | **sí (2026-08-13)** | **pendiente** |
+
+- **Dependencias:** `alm_tipo_movimiento` (ya en prod). No asume ningún `company_id`.
+- **⚠️ Con binario:** la entidad `alm_tipo_movimiento` y `TipoMovimientoService` leen/escriben la columna,
+  el mantenimiento de conceptos trae el checkbox, y `MovimientoAlmacenService` la usa para gatear el aviso.
+  El binario **sin** la columna rompe toda consulta de conceptos (columna inexistente). **Aplicar en la
+  misma ventana que el despliegue del portal.**
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-13_alm_tipo_movimiento_notifica_correo.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT count(*) AS col FROM information_schema.columns
+ WHERE table_name = 'alm_tipo_movimiento' AND column_name = 'notifica_correo';   -- esperado: 1
+```
+
+### 3.20 Proveedores — antigüedad de saldos: F0 (2026-08-14)
+
+**F0** de la iniciativa "antigüedad de saldos del proveedor" (aging de cuentas por pagar,
+[docs/plans/2026-08-14-antiguedad-saldos-proveedor-plan.md](../docs/plans/2026-08-14-antiguedad-saldos-proveedor-plan.md)).
+Consolida el saldo por pagar de **todos** los proveedores repartido por antigüedad a una fecha de
+corte, en **6 tramos** (por vencer / 1-30 / 31-60 / 61-90 / **91-120** / **+120**). El cálculo por
+proveedor ya existía en el estado de cuenta (§3.16), pero corría de a uno y cortaba en «>90»: esta
+función lo corre sobre todos reutilizando la misma función base, y abre el último tramo en dos.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-14_prv_antiguedad_saldos.sql` | `CREATE OR REPLACE FUNCTION fn_prv_antiguedad_saldos(company, corte, incluir_por_vencer, origen, tipoproveedor)` (solo lectura). Reutiliza `fn_prv_estado_cuenta_documentos` vía `CROSS JOIN LATERAL` — **no duplica** las reglas de vigencia (anuladas, compat legacy, abonos 'V'). No asume `company_id` | **Objetos** — aditivo, no destructivo, **idempotente / re-ejecutable** (lleva `DROP FUNCTION IF EXISTS` de su firma). No crea ni altera tablas, columnas, índices ni datos | **sí (2026-08-14)** | **pendiente** |
+
+> **Firma:** `(bigint, date, boolean, integer, integer)`. `p_origen` y `p_cod_tipoproveedor` son **`integer`, no `smallint`** — con `smallint` los literales enteros de la llamada (`...(2, NULL, TRUE, 0, NULL)`) no resuelven la sobrecarga (`integer` no se reduce a `smallint`). Corregido antes de dejarlo fijo.
+
+- **Dependencias:** `fn_prv_estado_cuenta_documentos` (§3.16 — aplicar **antes**), y por transitividad
+  `alm_compra_cxp` (§3.10), `prv_compromiso_hdr`/`prv_compromiso_abono` y `prv_proveedores` /
+  `prv_tipoproveedor` (ya en prod). Va **después** de §3.16.
+- **Lleva binario:** todavía no. F0 es solo la función; el servicio, la pantalla matriz y el PDF son
+  F1–F3. El script sin binario es inocuo (una función que nadie llama). Cuando llegue el binario, el
+  endpoint sin el script respondería `42883`.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-14_prv_antiguedad_saldos.sql
+```
+
+¿Ya aplicado? (debe aparecer la función)
+
+```sql
+SELECT proname, pg_get_function_identity_arguments(oid) AS args
+  FROM pg_proc WHERE proname = 'fn_prv_antiguedad_saldos';
+```
+
+Verificación posterior (el cuadre contra el estado de cuenta debe dar `true` en las 4 columnas):
+
+```sql
+WITH ag AS (SELECT * FROM fn_prv_antiguedad_saldos(2, NULL, TRUE, 0, NULL) WHERE cod_proveedor = '0088'),
+     rs AS (SELECT * FROM fn_prv_estado_cuenta_resumen(2, '0088', NULL))
+SELECT ag.saldo_total = rs.saldo_total                            AS cuadra_total,
+       ag.por_vencer  = rs.saldo_por_vencer                       AS cuadra_por_vencer,
+       ag.vencido     = rs.saldo_vencido                          AS cuadra_vencido,
+       (ag.tramo_91_120 + ag.tramo_mas_120) = rs.antiguedad_mas90 AS cuadra_tramo_abierto
+  FROM ag, rs;
+```
+
+**Verificado en el mirror el 2026-08-14** (empresa 2): **7 proveedores** con saldo, total **L 322,960.99**.
+El cuadre exhaustivo (cada proveedor del aging vs su `fn_prv_estado_cuenta_resumen`) dio **7/7** en las
+cuatro columnas (total, por vencer, vencido y tramo abierto 91-120 + >120 == antigüedad >90), y el
+cuadre global igualó exacto la suma de la función base sobre el universo. El proveedor 0088 dio
+L 73,327.50 en 7 documentos, idéntico a §3.16. Los tramos de 61 días en adelante salen en 0 porque en
+el mirror aún no hay deuda tan añeja — las columnas existen y funcionan.
+
+---
+
 ## 4. Orden de aplicación recomendado
 
 ```
@@ -695,10 +879,10 @@ inocuos, el binario sin ellos rompe el registro de la factura y la pantalla de p
 no para desplegar el binario.
 
 **Correo y notificaciones — F1 (2026-08-13):** `2026-08-13_cfg_correo_notificaciones.sql` (§3.13) está
-**sin commitear** y **sin aplicar** (ni mirror ni SRV — no me conecté a ninguna base; lo aplicás vos).
-Versionarlo junto con el binario del mantenimiento `/configuracion/correo` (Fases F2/F3, pendientes) y
-con el cambio de F0 en `Program.cs` (key-ring de DataProtection estable en producción). El SQL sin el
-binario es inocuo.
+**sin commitear**; **aplicado al mirror `siad_v3_restore` el 2026-08-13** (con orden explícita del
+usuario, para correr los tests de F4 — 14/14 verdes), **SRV pendiente**. Versionarlo junto con el
+binario del mantenimiento `/configuracion/correo` (F2 hecho, F3 pendiente) y con el cambio de F0 en
+`Program.cs` (key-ring de DataProtection estable en producción). El SQL sin el binario es inocuo.
 
 **Saneo numero_cuenta de bancos (2026-08-13):** `2026-08-13_ban_cuenta_sanear_numero_cuenta.sql`
 (§3.14) está **sin commitear** y **sin aplicar** (ni mirror ni SRV). Es sólo datos, no lleva binario:
@@ -709,3 +893,24 @@ es la limpieza cosmética del dato. Independiente del resto de la tanda; aplicab
 **sin commitear**; **aplicado al mirror** el 2026-08-13, **SRV pendiente**. Es prerrequisito para
 pagar compras con **cheque** (sin él, el pago con cheque revienta el INSERT en `ban_cheque`). Aditivo
 al CHECK, no lleva binario nuevo (el código que usa 'COMPRA_CXP' ya está en la rama de compras).
+
+**Estado de cuenta del proveedor (2026-08-13):** `2026-08-13_prv_estado_cuenta.sql` (§3.16) está
+**sin commitear**; **aplicado al mirror** el 2026-08-13, **SRV pendiente**. Versionarlo junto con el
+binario del estado de cuenta (`ProveedorEstadoCuentaService` + la pantalla y el PDF). El SQL sin el
+binario es inocuo; el binario sin el SQL responde `42883`.
+
+**Evaluación de proveedores — F0 (2026-08-14):** `2026-08-14_prv_evaluacion.sql` (§3.18) está
+**sin commitear**; **aplicado al mirror** el 2026-08-14, **SRV pendiente**. No lleva binario todavía
+(F1–F2 son el servicio y las pantallas), así que puede aplicarse solo. Va **después** de §3.17.
+
+**Fecha de entrega pactada en la O/C (2026-08-14):** `2026-08-14_alm_orden_compra_fecha_entrega.sql`
+(§3.17) está **sin commitear**; **aplicado al mirror** el 2026-08-14 (con orden explícita del usuario)
+y **SRV pendiente**. Versionarlo junto con el binario de órdenes de compra (`OrdenCompraService` exige
+la fecha desde el borrador; la captura y el listado la muestran). **Va en la misma ventana que el
+binario**: sin la columna, la pantalla de órdenes falla con `42703` al leerla. El SQL solo es inocuo.
+
+**Antigüedad de saldos del proveedor — F0 (2026-08-14):** `2026-08-14_prv_antiguedad_saldos.sql`
+(§3.20) está **sin commitear**; **aplicado al mirror** el 2026-08-14 (con orden explícita del usuario) y
+verificado (cuadre 7/7), **SRV pendiente**. Solo lectura, no lleva binario todavía (F1–F3 son el
+servicio, la pantalla matriz y el PDF), así que puede aplicarse solo. Va **después** de §3.16
+(`fn_prv_estado_cuenta_documentos`), de la que depende vía `LATERAL`. El SQL sin el binario es inocuo.

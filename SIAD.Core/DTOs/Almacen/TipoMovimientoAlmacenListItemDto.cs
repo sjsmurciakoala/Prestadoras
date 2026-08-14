@@ -19,6 +19,10 @@ public sealed class TipoMovimientoAlmacenListItemDto
     public string Clase { get; init; } = string.Empty;
 
     public bool RequiereAutorizacion { get; init; }
+
+    /// <summary>Solo aplica a clase SALIDA: envía aviso por correo al cruzar bajo mínimo.</summary>
+    public bool NotificaCorreo { get; init; }
+
     public bool Activo { get; init; }
 
     /// <summary>

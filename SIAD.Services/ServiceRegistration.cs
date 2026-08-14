@@ -46,6 +46,12 @@ public static class ServiceRegistration
         services.AddScoped<IClientesService, ClientesService>();
         services.AddScoped<IProveedoresService, ProveedoresService>();
         services.AddScoped<IProveedorEstadoCuentaService, ProveedorEstadoCuentaService>();
+        // Antigüedad de saldos (2026-08-14_prv_antiguedad_saldos.sql, F1). Aging de CxP por tramo.
+        services.AddScoped<IAntiguedadSaldosProveedorService, AntiguedadSaldosProveedorService>();
+        // Scorecard de proveedores (2026-08-14_prv_evaluacion.sql, F1).
+        services.AddScoped<IEvaluacionProveedorService, EvaluacionProveedorService>();
+        // Incidencias de recepción (F4): alimentan el criterio CALIDAD del scorecard.
+        services.AddScoped<IRecepcionIncidenciaService, RecepcionIncidenciaService>();
 
         //solicitudes
         services.AddScoped<ISolicitudesService, SolicitudesService>();
@@ -130,6 +136,18 @@ public static class ServiceRegistration
             sp => sp.GetRequiredService<SIAD.Services.Configuracion.CorreoConfigService>());
         services.AddScoped<SIAD.Services.Configuracion.ICorreoEnvioResolver>(
             sp => sp.GetRequiredService<SIAD.Services.Configuracion.CorreoConfigService>());
+        // Envío real de correo: transporte SendGrid (HttpClient tipado a la API v3) + notificador
+        // de alto nivel (notificaciones por área + correos de sistema de Identity).
+        services.AddHttpClient<SIAD.Services.Configuracion.ISendGridCorreoTransport,
+                               SIAD.Services.Configuracion.SendGridCorreoTransport>(c =>
+        {
+            c.BaseAddress = new Uri("https://api.sendgrid.com");
+            c.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<SIAD.Services.Configuracion.ICorreoNotificador,
+                           SIAD.Services.Configuracion.CorreoNotificador>();
+        // Alertas de stock por correo (reusa GetAlertasStock + NotificarArea ALMACÉN).
+        services.AddScoped<IAlertasStockNotificador, AlertasStockNotificador>();
         // Capa 1 del ISV de compras (tasa por tipo de artículo, vigente a la fecha). Fuente única
         // que consumen las órdenes de compra y la recepción de facturas.
         services.AddScoped<ITasaIsvArticuloResolver, TasaIsvArticuloResolver>();

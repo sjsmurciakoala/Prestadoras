@@ -1,0 +1,385 @@
+@page "/proveedores/evaluacion/{PeriodoId:int}/{Codigo}"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Proveedores
+
+@inject IJSRuntime JS
+@inject EvaluacionProveedorClient EvaluacionClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - Ficha de evaluación</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="EvaluacionFichaToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center form-icon">
+                <i class="bi bi-clipboard-data"></i>
+            </div>
+            <div>
+                <h2 class="page-title">Ficha de evaluación</h2>
+                <p class="page-subtitle">
+                    @if (ficha is not null)
+                    {
+                        <span class="fw-semibold">@ficha.CodProveedor</span>
+                        <span> — @ficha.ProveedorNombre</span>
+                        <span class="text-muted"> · @ficha.PeriodoCodigo (@ficha.FechaDesde.ToString("dd/MM/yyyy") al @ficha.FechaHasta.ToString("dd/MM/yyyy"))</span>
+                    }
+                    else
+                    {
+                        <span>Desglose de la calificación del proveedor</span>
+                    }
+                </p>
+            </div>
+        </div>
+
+        <div class="header-actions d-flex gap-2 flex-wrap">
+            @if (ficha is not null)
+            {
+                <DxButton Text="Imprimir ficha (PDF)" IconCssClass="bi bi-file-earmark-pdf"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          CssClass="btn-modern" Click="AbrirPdfAsync" />
+                <DxButton Text="Estado de cuenta" IconCssClass="bi bi-journal-text"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          CssClass="btn-modern" Click="AbrirEstadoCuenta" />
+            }
+            <DxButton Text="Volver" IconCssClass="bi bi-arrow-left"
+                      RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern" Click="Volver" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card d-flex justify-content-center py-5">
+            <DxLoadingPanel Visible="true" Text="Cargando ficha..." />
+        </div>
+    }
+    else if (ficha is null)
+    {
+        <div class="alert alert-warning" role="alert">
+            Este proveedor no tiene evaluación en el período seleccionado.
+        </div>
+    }
+    else
+    {
+        <div class="modern-card mb-3">
+            <div class="ficha-head">
+                <div class="score-big @ClaseFondo(ficha.ClaseCodigo)">
+                    <b>@(ficha.Puntaje.HasValue ? ficha.Puntaje.Value.ToString("N1") : "—")</b>
+                    <span>@(string.IsNullOrWhiteSpace(ficha.ClaseCodigo) ? "sin clase" : $"Clase {ficha.ClaseCodigo}")</span>
+                </div>
+
+                <div class="ficha-datos">
+                    <div class="dato">
+                        <div class="dato-label">Clasificación</div>
+                        <div class="dato-valor">@(string.IsNullOrWhiteSpace(ficha.ClaseNombre) ? "—" : ficha.ClaseNombre)</div>
+                    </div>
+                    <div class="dato">
+                        <div class="dato-label">Compras del período</div>
+                        <div class="dato-valor">@ficha.ComprasPeriodo.ToString("N2")</div>
+                    </div>
+                    <div class="dato">
+                        <div class="dato-label">Facturas</div>
+                        <div class="dato-valor">@ficha.Recepciones.ToString("N0")</div>
+                    </div>
+                    <div class="dato">
+                        <div class="dato-label">Órdenes</div>
+                        <div class="dato-valor">@ficha.Ordenes.ToString("N0")</div>
+                    </div>
+                    <div class="dato">
+                        <div class="dato-label">RTN</div>
+                        <div class="dato-valor">@(string.IsNullOrWhiteSpace(ficha.Rtn) ? "—" : ficha.Rtn)</div>
+                    </div>
+                    <div class="dato">
+                        <div class="dato-label">Estado</div>
+                        <div class="dato-valor">
+                            <span class="badge-status @(ficha.PeriodoCerrado ? "inactive" : "active")">
+                                @(ficha.PeriodoCerrado ? "Período cerrado" : "Período abierto")
+                            </span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        @if (ficha.CriteriosSinDatos > 0)
+        {
+            <div class="alert alert-info py-2 mb-3" role="alert">
+                <i class="bi bi-info-circle me-1"></i>
+                <strong>@ficha.CriteriosSinDatos</strong> criterio(s) sin datos en el período.
+                No cuentan como cero: su peso se repartió entre los demás, y por eso el
+                <strong>peso aplicado</strong> de cada criterio no coincide con su peso configurado.
+            </div>
+        }
+
+        <div class="row g-3">
+            <div class="col-12 col-lg-8">
+                <div class="modern-card">
+                    <h6 class="seccion-titulo"><i class="bi bi-list-check me-2"></i>Desglose por criterio</h6>
+
+                    @foreach (var c in ficha.Criterios)
+                    {
+                        <div class="criterio">
+                            <div class="criterio-top">
+                                <b>@c.CriterioNombre</b>
+                                <span class="text-muted small">peso @c.Peso.ToString("N0")%</span>
+                                @if (c.EsManual)
+                                {
+                                    <span class="tag-origen manual">Manual</span>
+                                }
+                                else
+                                {
+                                    <span class="tag-origen auto">Automático</span>
+                                }
+                                @if (c.PesoEfectivo.HasValue && c.PesoEfectivo.Value != c.Peso)
+                                {
+                                    <span class="text-muted small" title="El peso se ajustó porque otros criterios no tuvieron datos.">
+                                        · aplicado @c.PesoEfectivo.Value.ToString("N1")%
+                                    </span>
+                                }
+                                <span class="criterio-puntos">
+                                    @(c.Puntos.HasValue ? c.Puntos.Value.ToString("N2") : "—")
+                                    <small class="text-muted">
+                                        / @(c.PesoEfectivo.HasValue ? c.PesoEfectivo.Value.ToString("N2") : c.Peso.ToString("N2"))
+                                    </small>
+                                </span>
+                            </div>
+
+                            <div class="criterio-evidencia">@c.Detalle</div>
+
+                            <div class="barra">
+                                @if (c.Logro.HasValue)
+                                {
+                                    <i class="@BarraLogro(c.Logro.Value)" style="width:@Ancho(c.Logro.Value)%"></i>
+                                }
+                            </div>
+
+                            @if (c.EsManual && !ficha.PeriodoCerrado)
+                            {
+                                @* Se bindea un objeto propio, no un indexador de diccionario:
+                                   @bind sobre capturas[clave] no es un destino estable. *@
+                                var edicion = BuscarEdicion(c.CriterioCodigo);
+                                <div class="criterio-captura">
+                                    <DxSpinEdit @bind-Value="edicion.Valor" DisplayFormat="N0"
+                                                MinValue="0" MaxValue="100" Style="width:110px" />
+                                    <span class="text-muted small">de 100</span>
+                                    <DxButton Text="Calificar" IconCssClass="bi bi-check-lg"
+                                              RenderStyle="ButtonRenderStyle.Primary"
+                                              Enabled="@(!guardando)"
+                                              Click="@(() => CalificarAsync(c.CriterioCodigo))" />
+                                    @if (c.Logro.HasValue)
+                                    {
+                                        <DxButton Text="Quitar nota" RenderStyle="ButtonRenderStyle.Secondary"
+                                                  RenderStyleMode="ButtonRenderStyleMode.Outline"
+                                                  Enabled="@(!guardando)"
+                                                  Click="@(() => QuitarNotaAsync(c.CriterioCodigo))" />
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    <div class="criterio-total">
+                        <span>Calificación final</span>
+                        <span class="valor">@(ficha.Puntaje.HasValue ? ficha.Puntaje.Value.ToString("N2") : "sin datos")</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-12 col-lg-4">
+                <div class="modern-card mb-3">
+                    <h6 class="seccion-titulo"><i class="bi bi-graph-up me-2"></i>Historial</h6>
+
+                    @if (ficha.Historial.Count == 0)
+                    {
+                        <p class="text-muted small mb-0">Es el primer período evaluado de este proveedor.</p>
+                    }
+                    else
+                    {
+                        <div class="hist">
+                            @foreach (var h in ficha.Historial)
+                            {
+                                <div class="hist-col @(h.PeriodoId == ficha.PeriodoId ? "now" : "")">
+                                    <b>@(h.Puntaje.HasValue ? h.Puntaje.Value.ToString("N1") : "—")</b>
+                                    <div class="hist-bar" style="height:@(h.Puntaje.HasValue ? Ancho(h.Puntaje.Value) : 2)%"></div>
+                                    <span>@h.PeriodoCodigo</span>
+                                </div>
+                            }
+                        </div>
+                    }
+                </div>
+
+                <div class="modern-card">
+                    <h6 class="seccion-titulo"><i class="bi bi-chat-left-text me-2"></i>Observaciones y plan de acción</h6>
+                    <DxMemo @bind-Text="observaciones" Rows="5" MaxLength="1000"
+                            Enabled="@(!ficha.PeriodoCerrado)"
+                            NullText="Compromisos acordados, seguimiento, plan de mejora..."
+                            CssClass="w-100" />
+
+                    @if (!ficha.PeriodoCerrado)
+                    {
+                        <div class="d-flex justify-content-end mt-3">
+                            <DxButton Text="Guardar" IconCssClass="bi bi-save"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Enabled="@(!guardando)" Click="GuardarObservacionesAsync" />
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public int PeriodoId { get; set; }
+    [Parameter] public string Codigo { get; set; } = string.Empty;
+
+    private EvaluacionFichaDto? ficha;
+    private string? observaciones;
+
+    /// <summary>
+    /// Respaldo mutable de lo que se teclea en cada criterio manual. Es una clase (no un
+    /// diccionario) porque <c>@bind-Value</c> necesita un destino estable, no un indexador.
+    /// </summary>
+    private sealed class CapturaEditable
+    {
+        public string Codigo { get; init; } = string.Empty;
+        public decimal Valor { get; set; }
+    }
+
+    private List<CapturaEditable> ediciones = new();
+
+    private bool cargando = true;
+    private bool guardando;
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            ficha = await EvaluacionClient.ObtenerFichaAsync(PeriodoId, Codigo);
+            observaciones = ficha?.Observaciones;
+            SincronizarEdiciones();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudo cargar la ficha: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    /// <summary>Rehace el respaldo de edición a partir de lo que devolvió el servidor.</summary>
+    private void SincronizarEdiciones()
+    {
+        ediciones = new List<CapturaEditable>();
+        if (ficha is null) return;
+
+        foreach (var c in ficha.Criterios)
+        {
+            if (c.EsManual)
+            {
+                ediciones.Add(new CapturaEditable { Codigo = c.CriterioCodigo, Valor = c.Logro ?? 0m });
+            }
+        }
+    }
+
+    private CapturaEditable BuscarEdicion(string codigo)
+    {
+        foreach (var e in ediciones)
+        {
+            if (string.Equals(e.Codigo, codigo, StringComparison.OrdinalIgnoreCase)) return e;
+        }
+
+        var nueva = new CapturaEditable { Codigo = codigo };
+        ediciones.Add(nueva);
+        return nueva;
+    }
+
+    private async Task CalificarAsync(string criterioCodigo)
+        => await EnviarCapturaAsync(
+            new EvaluacionCapturaDto { CriterioCodigo = criterioCodigo, Logro = BuscarEdicion(criterioCodigo).Valor },
+            "Criterio calificado.");
+
+    private async Task QuitarNotaAsync(string criterioCodigo)
+        => await EnviarCapturaAsync(new EvaluacionCapturaDto { CriterioCodigo = criterioCodigo, Logro = null },
+            "Se quitó la calificación: el criterio vuelve a quedar sin datos.");
+
+    private async Task GuardarObservacionesAsync()
+        => await EnviarCapturaAsync(new EvaluacionCapturaDto { Observaciones = observaciones ?? string.Empty },
+            "Observaciones guardadas.");
+
+    /// <summary>
+    /// Toda captura vuelve con la ficha recalculada por el servidor: calificar cambia el puntaje
+    /// (el peso deja de redistribuirse), así que no se puede refrescar sólo el criterio tocado.
+    /// </summary>
+    private async Task EnviarCapturaAsync(EvaluacionCapturaDto dto, string mensajeOk)
+    {
+        guardando = true;
+        try
+        {
+            ficha = await EvaluacionClient.CapturarAsync(PeriodoId, Codigo, dto);
+            observaciones = ficha.Observaciones;
+            SincronizarEdiciones();
+
+            Toast("Éxito", mensajeOk, ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    /// <summary>Abre la ficha en PDF en pestaña nueva. Sólo lee: es reimprimible.</summary>
+    private async Task AbrirPdfAsync()
+        => await JS.InvokeVoidAsync("open",
+            EvaluacionProveedorClient.GetFichaPdfUrl(PeriodoId, Codigo), "_blank");
+
+    private void Volver() => Navigation.NavigateTo("/proveedores/evaluacion");
+
+    private void AbrirEstadoCuenta()
+        => Navigation.NavigateTo(
+            $"/proveedores/{Uri.EscapeDataString(Codigo)}/estado-cuenta?originUrl=/proveedores/evaluacion/{PeriodoId}/{Uri.EscapeDataString(Codigo)}");
+
+    private static int Ancho(decimal valor) => (int)Math.Clamp(valor, 0m, 100m);
+
+    private static string BarraLogro(decimal logro) => logro switch
+    {
+        >= 90m => "barra-a",
+        >= 75m => "barra-b",
+        >= 60m => "barra-c",
+        _      => "barra-d"
+    };
+
+    private static string ClaseFondo(string? clase) => (clase ?? string.Empty).ToUpperInvariant() switch
+    {
+        "A" => "score-a",
+        "B" => "score-b",
+        "C" => "score-c",
+        "D" => "score-d",
+        _   => "score-sin"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "EvaluacionFichaToast"
+        });
+}

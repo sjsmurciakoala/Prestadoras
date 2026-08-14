@@ -24,6 +24,19 @@ public partial class alm_orden_compra : ICompanyScopedEntity
 
     public DateOnly? fecha { get; set; }
     public DateOnly? fecha_emision { get; set; }
+
+    /// <summary>
+    /// Fecha en que el proveedor se compromete a entregar. Obligatoria en la captura
+    /// (la exige <c>OrdenCompraService</c>, no un NOT NULL): las órdenes anteriores a
+    /// 2026-08-14 no la tienen y deben seguir abriéndose y recibiéndose.
+    /// <para>
+    /// Es lo que hace medible la puntualidad del proveedor: la recepción se compara
+    /// contra esta fecha, no contra <see cref="fecha_aprobacion"/> — esa mide el ciclo
+    /// interno, no el cumplimiento del proveedor.
+    /// </para>
+    /// </summary>
+    public DateOnly? fecha_entrega_pactada { get; set; }
+
     public string cod_proveedor { get; set; } = null!;
     public string? terminos_pago { get; set; }
 

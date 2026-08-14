@@ -26,4 +26,14 @@ public sealed class PosteoResultDto
 
     /// <summary>Costo promedio del par después del asiento.</summary>
     public decimal CostoPromedioResultante { get; init; }
+
+    /// <summary>
+    /// true si este movimiento hizo <b>cruzar</b> el par de "en orden" a un estado de alerta
+    /// (bajo mínimo, sin stock o negativa). Solo el cruce, no cada movimiento estando ya bajo:
+    /// es la base del aviso por evento sin spam.
+    /// </summary>
+    public bool CruzoAlerta { get; init; }
+
+    /// <summary>Severidad resultante (<see cref="StockSeveridad"/>) si <see cref="CruzoAlerta"/>; si no, null.</summary>
+    public string? SeveridadAlerta { get; init; }
 }

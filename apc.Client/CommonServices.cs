@@ -81,6 +81,9 @@ namespace apc.Client
             services.AddScoped<ClientesClient>();
             services.AddScoped<ProveedoresClient>();
             services.AddScoped<ProveedorEstadoCuentaClient>();
+            services.AddScoped<AntiguedadSaldosProveedorClient>();
+            services.AddScoped<EvaluacionProveedorClient>();
+            services.AddScoped<RecepcionIncidenciaClient>();
             services.AddScoped<SolicitudesClient>();
             services.AddScoped<MedidoresClient>();
             services.AddScoped<CatalogosClient>();

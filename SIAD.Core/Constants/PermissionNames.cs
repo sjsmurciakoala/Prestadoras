@@ -136,6 +136,21 @@ public static class PermissionResources
         // Recurso propio porque expone la deuda consolidada del proveedor (compras + compromisos),
         // que no todo usuario del maestro tiene por qué ver.
         public const string EstadoCuenta = "estado_cuenta";
+
+        // Antigüedad de saldos (2026-08-14): aging de CxP de TODOS los proveedores por tramo.
+        // Misma familia que estado_cuenta (lee la misma deuda), pero recurso propio: es un reporte
+        // gerencial de toda la cartera, no la consulta de un proveedor puntual.
+        public const string AntiguedadSaldos = "antiguedad_saldos";
+
+        // Scorecard de proveedores (2026-08-14): calificación por período. Recurso propio porque
+        // califica el desempeño del proveedor —un dato sensible para compras— y porque calificar
+        // y cerrar períodos debe poder concederse aparte de ver el maestro.
+        public const string Evaluacion = "evaluacion";
+
+        // Incidencias de recepción (2026-08-14, F4): alimentan el criterio CALIDAD. Recurso
+        // aparte de `evaluacion` porque quien las registra es quien RECIBE la mercadería
+        // (almacén), no necesariamente quien califica al proveedor.
+        public const string Incidencias = "incidencias";
     }
 }
 
@@ -238,6 +253,37 @@ public static class PermissionNames
         public static class EstadoCuenta
         {
             public const string View = "module.proveedores.estado_cuenta.view";
+        }
+
+        /// <summary>
+        /// Antigüedad de saldos del proveedor (aging de CxP). Solo <c>View</c>: reporte de solo
+        /// lectura que reparte por tramos la misma deuda que calcula el estado de cuenta.
+        /// </summary>
+        public static class AntiguedadSaldos
+        {
+            public const string View = "module.proveedores.antiguedad_saldos.view";
+        }
+
+        /// <summary>
+        /// Scorecard de proveedores. <c>View</c> consulta ranking, ficha y reporte; <c>Edit</c>
+        /// abre y recalcula períodos, califica los criterios manuales y cierra el período —por eso
+        /// son dos permisos y no uno: la mayoría sólo debe poder mirar la calificación.
+        /// </summary>
+        public static class Evaluacion
+        {
+            public const string View = "module.proveedores.evaluacion.view";
+            public const string Edit = "module.proveedores.evaluacion.edit";
+        }
+
+        /// <summary>
+        /// Incidencias de recepción (F4). Las registra almacén al recibir, así que la política
+        /// también acepta los permisos de inventario: exigir permiso de proveedores dejaría al
+        /// bodeguero sin poder anotar la devolución que él mismo detectó.
+        /// </summary>
+        public static class Incidencias
+        {
+            public const string View = "module.proveedores.incidencias.view";
+            public const string Edit = "module.proveedores.incidencias.edit";
         }
     }
 
@@ -505,7 +551,15 @@ public static class PermissionNames
 
             Proveedores.Retenciones.View,
 
-            Proveedores.EstadoCuenta.View
+            Proveedores.EstadoCuenta.View,
+
+            Proveedores.AntiguedadSaldos.View,
+
+            Proveedores.Evaluacion.View,
+            Proveedores.Evaluacion.Edit,
+
+            Proveedores.Incidencias.View,
+            Proveedores.Incidencias.Edit
         };
 
         list.AddRange(PermissionEndpointCatalog.All.Select(e => e.Permission));
@@ -636,7 +690,24 @@ public static class PermissionNames
 
         // Estado de cuenta del proveedor (2026-08-13). Mismo patrón: el permiso fino O el de
         // módulo bastan, así que no restringe a quien ya tiene module.proveedores.*.
-        new PermissionPolicyDefinition(Proveedores.EstadoCuenta.View, [Proveedores.EstadoCuenta.View, Proveedores.View, Legacy.Proveedores])
+        new PermissionPolicyDefinition(Proveedores.EstadoCuenta.View, [Proveedores.EstadoCuenta.View, Proveedores.View, Legacy.Proveedores]),
+
+        // Antigüedad de saldos (2026-08-14). Mismo patrón que estado de cuenta: el permiso fino O el
+        // de módulo bastan.
+        new PermissionPolicyDefinition(Proveedores.AntiguedadSaldos.View, [Proveedores.AntiguedadSaldos.View, Proveedores.View, Legacy.Proveedores]),
+
+        // Scorecard de proveedores (F1). Ver: basta con el permiso de módulo, igual que el estado
+        // de cuenta. Calificar y cerrar períodos exige el permiso fino o el Edit del módulo: no
+        // alcanza con poder ver proveedores.
+        new PermissionPolicyDefinition(Proveedores.Evaluacion.View, [Proveedores.Evaluacion.View, Proveedores.View, Legacy.Proveedores]),
+        new PermissionPolicyDefinition(Proveedores.Evaluacion.Edit, [Proveedores.Evaluacion.Edit, Proveedores.Edit]),
+
+        // Incidencias de recepción (F4): también las concede inventario, porque quien recibe es
+        // quien detecta la devolución o el faltante.
+        new PermissionPolicyDefinition(Proveedores.Incidencias.View,
+            [Proveedores.Incidencias.View, Proveedores.View, Inventario.View, Legacy.Proveedores]),
+        new PermissionPolicyDefinition(Proveedores.Incidencias.Edit,
+            [Proveedores.Incidencias.Edit, Proveedores.Edit, Inventario.Edit])
         };
 
         foreach (var endpoint in PermissionEndpointCatalog.All)

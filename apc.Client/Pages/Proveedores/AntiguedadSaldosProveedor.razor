@@ -1,0 +1,445 @@
+@page "/proveedores/antiguedad-saldos"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Proveedores
+
+@inject AntiguedadSaldosProveedorClient AgingClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Antigüedad de saldos de proveedores</PageTitle>
+
+<div class="page-container">
+
+    <DxToastProvider Name="AntiguedadSaldosToast" MaxToastCount="3" StickToViewport="true" />
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center form-icon">
+                <i class="bi bi-hourglass-split"></i>
+            </div>
+            <div>
+                <h2 class="page-title">Antigüedad de saldos</h2>
+                <p class="page-subtitle">
+                    Cuentas por pagar por tramo de vencimiento
+                    @if (datos is not null)
+                    {
+                        <span class="text-muted"> · corte al @datos.Corte.ToString("dd/MM/yyyy")</span>
+                    }
+                </p>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>@errorMessage
+        </div>
+    }
+
+    @if (datos is not null)
+    {
+        var t = datos.Totales;
+
+        <!-- KPIs -->
+        <div class="row g-3 mb-1">
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label">Deuda total</div>
+                    <div class="kpi-value">@t.SaldoTotal.ToString("N2")</div>
+                    <div class="kpi-sub">@t.Proveedores proveedor(es) · @t.DocumentosPendientes documento(s)</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label"><span class="dot ok"></span>Por vencer</div>
+                    <div class="kpi-value">@t.PorVencer.ToString("N2")</div>
+                    <div class="kpi-sub">@PorcentajeTexto(t.PorVencer) dentro de plazo</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label"><span class="dot warn"></span>Vencido</div>
+                    <div class="kpi-value text-danger">@t.Vencido.ToString("N2")</div>
+                    <div class="kpi-sub">@PorcentajeTexto(t.Vencido) del total</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label"><span class="dot bad"></span>Crítico · +120 días</div>
+                    <div class="kpi-value text-danger">@t.TramoMas120.ToString("N2")</div>
+                    <div class="kpi-sub">@PorcentajeTexto(t.TramoMas120) del total</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Distribución por tramo -->
+        <div class="modern-card mb-3">
+            <div class="d-flex align-items-baseline gap-2 mb-3">
+                <h5 class="m-0 seccion-titulo">Distribución de la deuda por antigüedad</h5>
+                <span class="text-muted small">días transcurridos desde el vencimiento</span>
+            </div>
+
+            @if (t.SaldoTotal <= 0)
+            {
+                <div class="text-muted small">No hay saldo pendiente al corte seleccionado.</div>
+            }
+            else
+            {
+                <div class="aging6-bar" role="img" aria-label="@DistribucionTexto">
+                    @foreach (var tr in TramosTotales)
+                    {
+                        var ancho = Porcentaje(tr.Monto, t.SaldoTotal);
+                        if (ancho > 0)
+                        {
+                            <div class="aging6-seg @tr.Css" style="width:@(ancho.ToString(Cultura))%"
+                                 title="@tr.Titulo: @tr.Monto.ToString("N2")">
+                                @(ancho >= 7 ? $"{Math.Round(ancho)}%" : string.Empty)
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="aging6-legend">
+                    @foreach (var tr in TramosTotales)
+                    {
+                        <span class="legend-item">
+                            <span class="legend-dot @tr.Css"></span>
+                            <span class="legend-amount">@tr.Monto.ToString("N2")</span>
+                            <span class="text-muted">@tr.Titulo</span>
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Matriz -->
+        <div class="modern-card position-relative">
+            <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+            <div class="grid-wrapper">
+                <DxGrid @ref="grid" Data="@datos.Filas" KeyFieldName="@nameof(AntiguedadSaldosProveedorFilaDto.CodProveedor)"
+                        PageSize="15" PageSizeSelectorVisible="true"
+                        PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes"
+                        LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+
+                    <ToolbarTemplate>
+                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <label class="text-muted small mb-0">Corte:</label>
+                            <DxDateEdit Date="@corteFiltro" DateChanged="OnCorteChanged" NullText="hoy"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        CssClass="filtro-fecha" />
+
+                            <DxComboBox Data="@origenesFiltro" Value="@origenFiltro"
+                                        ValueChanged="@((int v) => OnOrigenChanged(v))"
+                                        ValueExpression="@(() => origenFiltro)"
+                                        ValueFieldName="@nameof(OrigenItem.Id)"
+                                        TextFieldName="@nameof(OrigenItem.Nombre)"
+                                        Style="min-width: 200px;" />
+
+                            <div class="d-flex align-items-center me-2">
+                                <DxCheckBox Checked="@soloVencido"
+                                            CheckedChanged="@((bool v) => OnSoloVencidoChanged(v))"
+                                            CheckType="CheckType.Switch">Solo vencido</DxCheckBox>
+                            </div>
+
+                            <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      Click="@(() => grid?.ShowColumnChooser())" CssClass="me-1" />
+
+                            <div class="ms-auto text-muted small">
+                                Total: <span class="fw-bold">@datos.Totales.SaldoTotal.ToString("N2")</span>
+                            </div>
+                        </div>
+                    </ToolbarTemplate>
+
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Nombre)"
+                                          Caption="Proveedor" MinWidth="200">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    <div class="d-flex flex-column">
+                                        <span class="fw-semibold">@f.Nombre</span>
+                                        <span class="small text-muted font-monospace">
+                                            @f.CodProveedor@(string.IsNullOrWhiteSpace(f.TipoNombre) ? "" : $" · {f.TipoNombre}")
+                                        </span>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.PorVencer)"
+                                          Caption="Por vencer" Width="120px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    @(f.PorVencer > 0 ? f.PorVencer.ToString("N2") : "—")
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo30)"
+                                          Caption="1 – 30 días" Width="120px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    @(f.Tramo30 > 0 ? f.Tramo30.ToString("N2") : "—")
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo60)"
+                                          Caption="31 – 60 días" Width="120px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    @(f.Tramo60 > 0 ? f.Tramo60.ToString("N2") : "—")
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo90)"
+                                          Caption="61 – 90 días" Width="120px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    @(f.Tramo90 > 0 ? f.Tramo90.ToString("N2") : "—")
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo120)"
+                                          Caption="91 – 120 días" Width="120px" TextAlignment="GridTextAlignment.Right"
+                                          CssClass="col-critico">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    @(f.Tramo120 > 0 ? f.Tramo120.ToString("N2") : "—")
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.TramoMas120)"
+                                          Caption="Más de 120 días" Width="130px" TextAlignment="GridTextAlignment.Right"
+                                          CssClass="col-critico">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    @(f.TramoMas120 > 0 ? f.TramoMas120.ToString("N2") : "—")
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.SaldoTotal)"
+                                          Caption="Total" Width="130px"
+                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+
+                        <DxGridDataColumn Caption="" Width="56px" AllowSort="false" AllowGroup="false">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is AntiguedadSaldosProveedorFilaDto f)
+                                {
+                                    <button class="btn-icon btn-view" title="Ver estado de cuenta"
+                                            @onclick="@(() => AbrirEstadoCuenta(f))">
+                                        <i class="bi bi-box-arrow-up-right"></i>
+                                    </button>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+
+                    <TotalSummary>
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Count"
+                                           FooterColumnName="@nameof(AntiguedadSaldosProveedorFilaDto.Nombre)" DisplayText="{0} prov." />
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" DisplayText="{0}"
+                                           FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.PorVencer)" ValueDisplayFormat="N2" />
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" DisplayText="{0}"
+                                           FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo30)" ValueDisplayFormat="N2" />
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" DisplayText="{0}"
+                                           FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo60)" ValueDisplayFormat="N2" />
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" DisplayText="{0}"
+                                           FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo90)" ValueDisplayFormat="N2" />
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" DisplayText="{0}"
+                                           FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Tramo120)" ValueDisplayFormat="N2" />
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" DisplayText="{0}"
+                                           FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.TramoMas120)" ValueDisplayFormat="N2" />
+                        <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" DisplayText="{0}"
+                                           FieldName="@nameof(AntiguedadSaldosProveedorFilaDto.SaldoTotal)" ValueDisplayFormat="N2" />
+                    </TotalSummary>
+
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">
+                            <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.5"></i>
+                            @(soloVencido
+                                ? "Ningún proveedor tiene saldo vencido al corte."
+                                : "Ningún proveedor tiene saldo pendiente al corte.")
+                        </div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        </div>
+
+        <div class="scope-note mt-3">
+            <b>Alcance del saldo.</b> Reparte por antigüedad los documentos que registra el portal —facturas
+            de compra y compromisos de pago directo— menos sus abonos vigentes. No incluye la cartera histórica
+            de SIMAFI, que vive en la cuenta contable del proveedor sin documentos operativos, por lo que este
+            saldo puede diferir del mayor. Clic en un proveedor abre su estado de cuenta.
+        </div>
+    }
+    else if (isLoading)
+    {
+        <div class="text-center p-4">
+            <DxLoadingPanel Visible="true" Text="Cargando antigüedad de saldos..." />
+            <div style="height:80px"></div>
+        </div>
+    }
+
+</div>
+
+@code {
+    private static readonly System.Globalization.CultureInfo Cultura =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    private const string GridLayoutStorageKey = "proveedores-antiguedad-saldos-grid-layout";
+
+    private AntiguedadSaldosProveedorDto? datos;
+    private DxGrid? grid;
+    private bool isLoading = true;
+    private string? errorMessage;
+
+    private DateTime? corteFiltro;      // null = hoy
+    private int origenFiltro;           // 0 ambos, 1 compras, 2 compromisos
+    private bool soloVencido;           // false = incluye "por vencer"
+
+    private sealed record OrigenItem(int Id, string Nombre);
+
+    private readonly OrigenItem[] origenesFiltro =
+    {
+        new(0, "Compras + compromisos"),
+        new(1, "Solo facturas de compra"),
+        new(2, "Solo compromisos")
+    };
+
+    private sealed record TramoTotal(string Titulo, decimal Monto, string Css);
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            var corte = corteFiltro.HasValue ? DateOnly.FromDateTime(corteFiltro.Value) : (DateOnly?)null;
+            datos = await AgingClient.ObtenerAsync(
+                corte, incluirPorVencer: !soloVencido, origen: origenFiltro);
+        }
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = "Su sesión expiró o no tiene permiso para ver la antigüedad de saldos.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "No se pudo cargar la antigüedad de saldos.";
+            ToastService.ShowToast(new ToastOptions
+            {
+                ProviderName = "AntiguedadSaldosToast",
+                Title = "Antigüedad de saldos",
+                Text = ex.Message,
+                RenderStyle = ToastRenderStyle.Danger
+            });
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnCorteChanged(DateTime? valor)
+    {
+        corteFiltro = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnOrigenChanged(int valor)
+    {
+        origenFiltro = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnSoloVencidoChanged(bool valor)
+    {
+        soloVencido = valor;
+        await CargarAsync();
+    }
+
+    private void AbrirEstadoCuenta(AntiguedadSaldosProveedorFilaDto fila)
+    {
+        var origin = Uri.EscapeDataString("/proveedores/antiguedad-saldos");
+        var codigo = Uri.EscapeDataString(fila.CodProveedor);
+        Navigation.NavigateTo($"/proveedores/{codigo}/estado-cuenta?originUrl={origin}");
+    }
+
+    // ---------------------------------------------------------------- Presentación
+
+    private List<TramoTotal> TramosTotales
+    {
+        get
+        {
+            var t = datos?.Totales ?? new AntiguedadSaldosTotalesDto();
+            return new List<TramoTotal>
+            {
+                new("Por vencer", t.PorVencer, "age-0"),
+                new("1 – 30 días", t.Tramo30, "age-1"),
+                new("31 – 60 días", t.Tramo60, "age-2"),
+                new("61 – 90 días", t.Tramo90, "age-3"),
+                new("91 – 120 días", t.Tramo120, "age-4"),
+                new("Más de 120 días", t.TramoMas120, "age-5")
+            };
+        }
+    }
+
+    private static double Porcentaje(decimal monto, decimal total)
+    {
+        if (total <= 0 || monto <= 0)
+        {
+            return 0;
+        }
+
+        return (double)(monto / total) * 100d;
+    }
+
+    private string PorcentajeTexto(decimal monto)
+    {
+        var total = datos?.Totales.SaldoTotal ?? 0m;
+        if (total <= 0)
+        {
+            return "0%";
+        }
+
+        return $"{Math.Round(monto / total * 100m):N0}%";
+    }
+
+    private string DistribucionTexto
+    {
+        get
+        {
+            var partes = new List<string>();
+            foreach (var tr in TramosTotales)
+            {
+                partes.Add($"{tr.Titulo}: {tr.Monto:N2}");
+            }
+
+            return string.Join("; ", partes);
+        }
+    }
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+}
