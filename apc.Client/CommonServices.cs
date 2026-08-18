@@ -106,6 +106,7 @@ namespace apc.Client
             services.AddScoped<RequisicionesDocumentoClient>();
             services.AddScoped<DescargosDocumentoClient>();
             services.AddScoped<IsvCompraConfigClient>();
+            services.AddScoped<NegativoInventarioConfigClient>();
             services.AddScoped<GruposClient>();
             services.AddScoped<BodegasClient>();
             services.AddScoped<ExistenciasBodegaClient>();

@@ -18,7 +18,7 @@ public sealed class ExistenciasBodegaClient
         return await _http.GetFromJsonAsyncWithAuthCheck<List<ExistenciaBodegaItemDto>>(url, ct) ?? new List<ExistenciaBodegaItemDto>();
     }
 
-    /// <summary>URL del PDF imprimible del reporte (se abre en pestaña nueva; el endpoint devuelve el PDF inline).</summary>
+    /// <summary>URL del PDF imprimible del reporte (inline); se muestra embebido en la vista.</summary>
     public string GetPdfUrl(ExistenciasBodegaFilterDto filtro) => $"api/almacen/existencias-bodega/pdf{QueryString(filtro)}";
 
     private static string QueryString(ExistenciasBodegaFilterDto f)

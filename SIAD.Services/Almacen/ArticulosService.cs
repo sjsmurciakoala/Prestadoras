@@ -100,7 +100,10 @@ public sealed class ArticulosService : IArticulosService
 
         var conStock = await query.CountAsync(a => a.existencia > 0, ct);
         var bajoMinimo = await query.CountAsync(a => a.existencia_minima > 0 && a.existencia < a.existencia_minima, ct);
-        var valorInventario = await query.SumAsync(a => (decimal?)(a.existencia * a.valor_unitario), ct) ?? 0m;
+        // Σ(existencia × costo promedio) de las bodegas activas, consistente con la columna
+        // Valor del grid y con el kardex (ya no a.existencia × a.valor_unitario, congelado).
+        var valorInventario = await query.SumAsync(a =>
+            (decimal?)a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio), ct) ?? 0m;
         var conDescuadre = await query.CountAsync(
             a => a.existencia != a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia), ct);
 
@@ -250,9 +253,17 @@ public sealed class ArticulosService : IArticulosService
                 ? (sortDesc
                     ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodUnit).Max(u => (decimal?)u.costo_promedio))
                     : query.OrderBy(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodUnit).Max(u => (decimal?)u.costo_promedio)))
+                // Vista global: mismo ponderado consolidado que la columna (Σ valor / Σ existencia),
+                // con guardia de división por cero (Σ existencia 0 → null, ordena al final).
                 : (sortDesc
-                    ? query.OrderByDescending(a => a.valor_unitario)
-                    : query.OrderBy(a => a.valor_unitario)),
+                    ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia) == 0m
+                        ? (decimal?)null
+                        : a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio)
+                          / a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia))
+                    : query.OrderBy(a => a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia) == 0m
+                        ? (decimal?)null
+                        : a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio)
+                          / a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia))),
             nameof(ArticuloListItemDto.UltimoCosto) => bodegaId is int bodUlt
                 ? (sortDesc
                     ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodUlt).Max(u => (decimal?)u.ultimo_costo))
@@ -264,9 +275,10 @@ public sealed class ArticulosService : IArticulosService
                 ? (sortDesc
                     ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodVal).Sum(u => u.existencia * u.costo_promedio))
                     : query.OrderBy(a => a.ubicaciones.Where(u => u.activo && u.bodega_id == bodVal).Sum(u => u.existencia * u.costo_promedio)))
+                // Vista global: Σ(existencia × costo promedio) de bodegas activas, igual que la columna.
                 : (sortDesc
-                    ? query.OrderByDescending(a => a.existencia * a.valor_unitario)
-                    : query.OrderBy(a => a.existencia * a.valor_unitario)),
+                    ? query.OrderByDescending(a => a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio))
+                    : query.OrderBy(a => a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio))),
             _ => sortDesc
                 ? query.OrderByDescending(a => a.codigo_articulo) : query.OrderBy(a => a.codigo_articulo)
         };
@@ -305,18 +317,28 @@ public sealed class ArticulosService : IArticulosService
         ExistenciaMinima = bodegaComoAlcance && bodegaId != null
             ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia_minima)
             : a.existencia_minima,
+        // Vista por bodega: costo promedio de ESA bodega. Vista global: promedio ponderado
+        // CONSOLIDADO de las bodegas activas (Σ valor / Σ existencia), que es el costo que
+        // refleja el kardex — NO la columna legacy a.valor_unitario, que el motor nunca
+        // recalcula. Con existencia total 0 no hay ponderado: se devuelve 0 y la UI lo
+        // muestra como "—".
         ValorUnitario = bodegaComoAlcance && bodegaId != null
             ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Max(u => (decimal?)u.costo_promedio) ?? 0m
-            : a.valor_unitario,
+            : (a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia) == 0m
+                ? 0m
+                : a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio)
+                  / a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia)),
         UltimoCosto = bodegaComoAlcance && bodegaId != null
             ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Max(u => (decimal?)u.ultimo_costo) ?? 0m
             : a.ubicaciones.Where(u => u.activo).Max(u => (decimal?)u.ultimo_costo) ?? a.valor_unitario,
-        // DINERO. Vista global: existencia × valor unitario (la suma cuadra con el KPI
-        // ValorInventario). Vista por bodega: existencia de la bodega × su costo promedio
-        // ponderado (la valuación real de lo que hay físicamente en esa bodega).
+        // DINERO. Vista global: Σ(existencia × costo promedio) de las bodegas ACTIVAS —la
+        // valuación real que cuadra con el kardex y con el nuevo costo promedio ponderado—,
+        // no a.existencia × a.valor_unitario (columna legacy congelada). La suma de la columna
+        // sigue cuadrando con el KPI ValorInventario por construcción. Vista por bodega:
+        // existencia de la bodega × su costo promedio ponderado.
         ValorTotal = bodegaComoAlcance && bodegaId != null
             ? a.ubicaciones.Where(u => u.activo && u.bodega_id == bodegaId).Sum(u => u.existencia * u.costo_promedio)
-            : a.existencia * a.valor_unitario,
+            : a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio),
         // Σ de bodegas ACTIVAS (contrato del rollup): alimenta el detector de descuadre. En vista
         // por bodega el descuadre (cabecera vs Σ bodegas) no aplica: se iguala a la existencia
         // mostrada para que Descuadrado quede en false y no salga el ícono de advertencia.
@@ -604,6 +626,7 @@ public sealed class ArticulosService : IArticulosService
                 a.activo,
                 RowVersion = EF.Property<uint>(a, "xmin"),
                 Existencia = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia),
+                ValorInventario = a.ubicaciones.Where(u => u.activo).Sum(u => u.existencia * u.costo_promedio),
                 UltimoCosto = a.ubicaciones.Where(u => u.activo).Max(u => (decimal?)u.ultimo_costo)
             })
             .FirstOrDefaultAsync(ct);
@@ -614,6 +637,10 @@ public sealed class ArticulosService : IArticulosService
         }
 
         var ultimoCosto = articulo.UltimoCosto ?? articulo.valor_unitario;
+        // Costo promedio y valor a mostrar en la edición: el ponderado real CONSOLIDADO de las
+        // bodegas activas (Σ valor / Σ existencia), el mismo que el maestro y el kardex — no la
+        // columna legacy valor_unitario. Existencia 0 → 0 (la UI lo muestra sin promedio).
+        var costoPromedio = articulo.Existencia == 0m ? 0m : articulo.ValorInventario / articulo.Existencia;
 
         return new ArticuloEditDto
         {
@@ -627,10 +654,12 @@ public sealed class ArticulosService : IArticulosService
             GrupoId = articulo.grupo_id,
             Diametro = articulo.diametro,
             ExistenciaMinima = articulo.existencia_minima,
+            // valor_unitario se conserva tal cual para el round-trip de guardado (queda legacy);
+            // lo que se MUESTRA (Costo promedio / Valor total) es el ponderado real.
             ValorUnitario = articulo.valor_unitario,
-            CostoPromedio = articulo.valor_unitario,
+            CostoPromedio = costoPromedio,
             UltimoCosto = ultimoCosto,
-            ValorTotal = articulo.Existencia * articulo.valor_unitario,
+            ValorTotal = articulo.ValorInventario,
             Activo = articulo.activo,
             RowVersion = articulo.RowVersion,
             Existencia = articulo.Existencia

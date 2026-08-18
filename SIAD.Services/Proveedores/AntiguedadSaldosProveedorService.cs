@@ -44,6 +44,7 @@ public sealed class AntiguedadSaldosProveedorService : IAntiguedadSaldosProveedo
         bool incluirPorVencer = true,
         int origen = 0,
         int? codTipoProveedor = null,
+        string? codProveedor = null,
         CancellationToken cancellationToken = default)
     {
         var companyId = EnsureCompanyId();
@@ -83,7 +84,18 @@ public sealed class AntiguedadSaldosProveedorService : IAntiguedadSaldosProveedo
                 },
                 cancellationToken: cancellationToken));
 
-        var lista = new List<AntiguedadSaldosProveedorFilaDto>(filas);
+        // Filtro opcional por un proveedor puntual: se descarta en memoria (el universo del aging es
+        // chico) en vez de re-consultar; así el reporte de un solo proveedor usa la misma ruta.
+        var cod = codProveedor?.Trim();
+        var lista = new List<AntiguedadSaldosProveedorFilaDto>();
+        foreach (var f in filas)
+        {
+            if (string.IsNullOrEmpty(cod)
+                || string.Equals(f.CodProveedor?.Trim(), cod, StringComparison.OrdinalIgnoreCase))
+            {
+                lista.Add(f);
+            }
+        }
 
         // Totales del pie: se acumulan en una sola pasada. Sin LINQ, por convención del proyecto.
         var totales = new AntiguedadSaldosTotalesDto { Proveedores = lista.Count };
@@ -107,6 +119,55 @@ public sealed class AntiguedadSaldosProveedorService : IAntiguedadSaldosProveedo
             Filas = lista,
             Totales = totales
         };
+    }
+
+    public async Task<AntiguedadSaldosImpresionDto> GetDatosImpresionAsync(
+        DateOnly? corte = null,
+        bool incluirPorVencer = true,
+        int origen = 0,
+        int? codTipoProveedor = null,
+        string? codProveedor = null,
+        string? impresoPor = null,
+        CancellationToken cancellationToken = default)
+    {
+        var dto = await GetAsync(corte, incluirPorVencer, origen, codTipoProveedor, codProveedor, cancellationToken);
+
+        // Identidad de la empresa para el encabezado del reporte (mismo origen que el estado de cuenta).
+        var companyId = EnsureCompanyId();
+        var empresa = await _context.cfg_companies
+            .AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, cancellationToken);
+
+        var items = new List<AntiguedadSaldosProveedorFilaDto>(dto.Filas);
+
+        return new AntiguedadSaldosImpresionDto
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = string.IsNullOrWhiteSpace(impresoPor) ? "sistema" : impresoPor.Trim(),
+            Corte = dto.Corte,
+            Items = items,
+            Totales = dto.Totales,
+            FiltroTexto = BuildFiltroTexto(dto.IncluyePorVencer, origen)
+        };
+    }
+
+    private static string BuildFiltroTexto(bool incluyePorVencer, int origen)
+    {
+        var alcance = incluyePorVencer ? "Incluye por vencer y vencido" : "Solo saldos vencidos";
+        var fuente = origen switch
+        {
+            1 => "solo facturas de compra",
+            2 => "solo compromisos",
+            _ => "compras y compromisos"
+        };
+
+        return $"{alcance} · {fuente}";
     }
 
     private long EnsureCompanyId()

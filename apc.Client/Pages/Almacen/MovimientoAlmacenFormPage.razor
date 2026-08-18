@@ -14,7 +14,6 @@
 @inject ArticulosClient ArticulosClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
-@inject IJSRuntime JS
 
 <PageTitle>SIAD - @(EsLectura ? "Detalle de movimiento" : "Nuevo movimiento")</PageTitle>
 
@@ -30,11 +29,11 @@
             @if (EsLectura)
             {
                 <DxButton Text="Imprimir comprobante" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
-                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirAsync" />
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="MostrarComprobante" />
                 @if (modelo.TienePartidaContable)
                 {
                     <DxButton Text="Imprimir partida contable" IconCssClass="bi bi-journal-text" RenderStyle="ButtonRenderStyle.Secondary"
-                              RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirPartidaAsync" />
+                              RenderStyleMode="ButtonRenderStyleMode.Outline" Click="MostrarPartida" />
                 }
             }
             <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
@@ -219,6 +218,8 @@
     }
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter] public int? Id { get; set; }
 
@@ -228,6 +229,7 @@
     [Parameter, SupplyParameterFromQuery(Name = "articulo")] public int? ArticuloParam { get; set; }
 
     private MovimientoAlmacenDto modelo = new();
+    private PdfPreviewPopup? pdfPopup;
     private DateTime? fecha = DateTime.Today;
 
     private List<TipoMovimientoAlmacenListItemDto> tipos = new();
@@ -394,13 +396,15 @@
         _ => ""
     };
 
-    private async Task ImprimirAsync()
+    private void MostrarComprobante()
         // El botón solo aparece en modo lectura (Id de ruta presente); se usa ese Id, con respaldo en el modelo.
-        => await JS.InvokeVoidAsync("open", MovimientosAlmacenClient.GetComprobantePdfUrl(Id ?? modelo.Id ?? 0), "_blank");
+        => pdfPopup?.Mostrar(MovimientosAlmacenClient.GetComprobantePdfUrl(Id ?? modelo.Id ?? 0),
+            $"Comprobante — Movimiento {modelo.Numero:00000}");
 
-    private async Task ImprimirPartidaAsync()
+    private void MostrarPartida()
         // Solo visible cuando el movimiento tiene partida contable (TienePartidaContable).
-        => await JS.InvokeVoidAsync("open", MovimientosAlmacenClient.GetPartidaPdfUrl(Id ?? modelo.Id ?? 0), "_blank");
+        => pdfPopup?.Mostrar(MovimientosAlmacenClient.GetPartidaPdfUrl(Id ?? modelo.Id ?? 0),
+            $"Partida contable — Movimiento {modelo.Numero:00000}");
 
     private void Toast(string title, string text, ToastRenderStyle style)
         => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "MovFormToast" });

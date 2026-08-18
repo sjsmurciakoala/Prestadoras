@@ -57,7 +57,8 @@ public sealed class ArticuloEditDto
     [Range(0, 99_999_999d, ErrorMessage = "El valor unitario no puede ser negativo.")]
     public decimal ValorUnitario { get; set; }
 
-    /// <summary>Costo promedio unitario del artículo (valor unitario).</summary>
+    /// <summary>Costo promedio unitario del artículo: ponderado real consolidado de las bodegas
+    /// activas (el mismo que el maestro y el kardex). Solo lectura en el form.</summary>
     public decimal CostoPromedio { get; set; }
 
     /// <summary>Último costo de compra / entrada registrado en sus ubicaciones activas.</summary>

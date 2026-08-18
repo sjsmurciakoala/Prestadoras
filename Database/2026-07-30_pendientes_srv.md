@@ -790,6 +790,49 @@ cuadre global igualó exacto la suma de la función base sobre el universo. El p
 L 73,327.50 en 7 documentos, idéntico a §3.16. Los tramos de 61 días en adelante salen en 0 porque en
 el mirror aún no hay deuda tan añeja — las columnas existen y funcionan.
 
+### 3.21 Almacén — interruptor de existencia negativa en salidas: F0 (2026-08-15)
+
+**F0** de la iniciativa "permitir existencia negativa en salidas" (rama `feat/almacen-integracion-contable`,
+[docs/plans/2026-08-15-existencia-negativa-salidas-plan.md](../docs/plans/2026-08-15-existencia-negativa-salidas-plan.md)).
+Hoy el motor de inventario **bloquea** toda salida que cruzaría a existencia negativa; se quiere
+permitirla (desfase físico vs. sistema), pero **NO abierto para todos**: detrás de un interruptor por
+empresa con override opcional por bodega. Este F0 crea **solo el interruptor**; el motor lo lee en F1.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-15_alm_existencia_negativa.sql` | (1) `cfg_inventario_negativo` (interruptor por empresa: PK `company_id`, `permitir` BOOLEAN NOT NULL DEFAULT false + auditoría; semilla idempotente de una fila `false` por empresa con artículos) + (2) `alm_bodega.permite_existencia_negativa` BOOLEAN **NULL** (override tri-estado: NULL=hereda · true=permite · false=bloquea) | **Aditivo idempotente** (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`) — **re-ejecutable**. No borra ni reescribe datos. Reversible (`DROP TABLE` + `DROP COLUMN`, en el script) | **sí (2026-08-15)** | **pendiente** |
+
+- **Dependencias:** `alm_articulo` (para la semilla) y `alm_bodega` (ambas ya en prod). No asume ningún
+  `company_id`. Independiente del resto de la tanda.
+- **Verificado en el mirror el 2026-08-15** (con orden explícita del usuario, para correr F1 con TDD):
+  interruptor creado, semilla `company_id = 2 · permitir = false`, las **3 bodegas heredando** (NULL) y
+  la columna `boolean` / nullable / sin default.
+- **⚠️ Con binario (F1+):** el motor (`InventarioPostingService`) leerá el interruptor para aflojar la
+  guarda de negativo, y la config/UI (F5) escribirán `cfg_inventario_negativo` y la columna de bodega.
+  **Nada nace activado** (`permitir=false`, override NULL) → el SQL **sin** el binario es inocuo y el
+  bloqueo se comporta igual que hoy. Aplicar en la misma ventana que el binario de la iniciativa.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-15_alm_existencia_negativa.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT to_regclass('public.cfg_inventario_negativo') AS interruptor,   -- NULL = falta
+       (SELECT count(*) FROM information_schema.columns
+         WHERE table_name = 'alm_bodega' AND column_name = 'permite_existencia_negativa') AS override_bodega;  -- esperado: 1
+```
+
+Verificación posterior (semilla en false, todas las bodegas heredando):
+
+```sql
+SELECT company_id, permitir FROM public.cfg_inventario_negativo ORDER BY company_id;   -- todas false
+SELECT count(*) FILTER (WHERE permite_existencia_negativa IS NULL) AS heredan, count(*) AS total FROM public.alm_bodega;
+```
+
 ---
 
 ## 4. Orden de aplicación recomendado
@@ -914,3 +957,10 @@ binario**: sin la columna, la pantalla de órdenes falla con `42703` al leerla. 
 verificado (cuadre 7/7), **SRV pendiente**. Solo lectura, no lleva binario todavía (F1–F3 son el
 servicio, la pantalla matriz y el PDF), así que puede aplicarse solo. Va **después** de §3.16
 (`fn_prv_estado_cuenta_documentos`), de la que depende vía `LATERAL`. El SQL sin el binario es inocuo.
+
+**Existencia negativa en salidas — F0 (2026-08-15):** `2026-08-15_alm_existencia_negativa.sql`
+(§3.21) está **sin commitear**; **aplicado al mirror** el 2026-08-15 (con orden explícita del usuario,
+para correr F1 con TDD), **SRV pendiente**. Aditivo/reversible; nada nace activado. Versionarlo junto con el binario de la iniciativa
+(motor F1 + config/UI F5). El SQL sin el binario es inocuo (interruptor apagado); el binario lee el
+interruptor pero, con `permitir=false` y override NULL, se comporta igual que hoy. Independiente del
+resto de la tanda.

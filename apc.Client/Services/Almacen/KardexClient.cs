@@ -118,7 +118,7 @@ public sealed class KardexClient
                ?? new MovimientosBodegaResumenDto();
     }
 
-    /// <summary>URL del PDF del kardex de un artículo (se abre en pestaña nueva).</summary>
+    /// <summary>URL del PDF del kardex de un artículo (inline); se muestra embebido en la vista.</summary>
     public string GetPdfArticuloUrl(KardexFilterDto filtro)
     {
         var p = new List<string>();
@@ -131,7 +131,7 @@ public sealed class KardexClient
         return $"api/almacen/kardex/pdf?{string.Join("&", p)}";
     }
 
-    /// <summary>URL del PDF del libro de movimientos de una bodega (se abre en pestaña nueva).</summary>
+    /// <summary>URL del PDF del libro de movimientos de una bodega (inline); se muestra embebido en la vista.</summary>
     public string GetPdfBodegaUrl(MovimientosBodegaFilterDto filtro)
         => $"api/almacen/kardex/bodega/pdf?{string.Join("&", BuildBodegaParams(filtro))}";
 

@@ -74,7 +74,9 @@ public sealed class ArticuloListItemDto
 
     public decimal ExistenciaMinima { get; init; }
 
-    /// <summary>Costo promedio unitario del artículo (en vista global: valor_unitario de cabecera; en vista bodega: costo_promedio de esa bodega).</summary>
+    /// <summary>Costo promedio unitario del artículo. Vista global: promedio ponderado consolidado
+    /// de las bodegas activas (Σ valor / Σ existencia), el mismo que refleja el kardex. Vista bodega:
+    /// costo_promedio de esa bodega. 0 cuando no hay existencia (la UI lo muestra como "—").</summary>
     public decimal CostoPromedio => ValorUnitario;
 
     public decimal ValorUnitario { get; init; }
@@ -83,10 +85,11 @@ public sealed class ArticuloListItemDto
     public decimal UltimoCosto { get; init; }
 
     /// <summary>
-    /// Valor de inventario en DINERO: existencia (rollup de cabecera) × valor unitario.
-    /// Misma fórmula que <see cref="ArticulosResumenDto.ValorInventario"/>, así la suma de
-    /// esta columna en el grid cuadra con la tarjeta KPI por construcción.
-    /// (Hasta 2026-07-29 era una CANTIDAD: Σ existencias de ubicaciones.)
+    /// Valor de inventario en DINERO: Σ(existencia × costo promedio) de las bodegas activas
+    /// (vista global) o de la bodega filtrada (vista bodega) — la valuación real que cuadra
+    /// con el kardex. Misma fórmula que <see cref="ArticulosResumenDto.ValorInventario"/>, así
+    /// la suma de esta columna en el grid cuadra con la tarjeta KPI por construcción.
+    /// (Hasta 2026-08-15 la vista global usaba existencia × valor_unitario, columna legacy congelada.)
     /// </summary>
     public decimal ValorTotal { get; init; }
 

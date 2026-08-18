@@ -124,8 +124,8 @@
                         <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                             <span class="fw-bold"><i class="bi bi-building me-1"></i>@bodegaSeleccionada.Display</span>
 
-                            <DxButton Text="Imprimir PDF" IconCssClass="bi bi-file-earmark-pdf"
-                                      RenderStyle="ButtonRenderStyle.Secondary" Click="ImprimirPdfAsync" CssClass="ms-auto me-1" />
+                            <DxButton Text="Ver PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarPdf" CssClass="ms-auto me-1" />
                             <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
                                       RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
                             <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
@@ -218,6 +218,28 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
+                        @* Costo promedio del par DESPUÉS del asiento.
+                           A diferencia del kardex por artículo, aquí se muestra el snapshot del motor
+                           y NO un promedio recalculado: el corrido es por par (artículo, bodega) y esta
+                           pantalla pagina en el servidor mezclando artículos, así que derivarlo exigiría
+                           recorrer el libro completo de la bodega en cada página. Por eso el histórico
+                           SIMAFI queda en "—" aquí y sí muestra costo en el kardex por artículo. *@
+                        <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.CostoPromedioResultante)" Caption="Costo prom." Width="110px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is MovimientoBodegaItemDto m)
+                                {
+                                    @if (m.CostoPromedioResultante.HasValue)
+                                    {
+                                        <span class="fw-semibold">@m.CostoPromedioResultante.Value.ToString("N4")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="Histórico migrado de SIMAFI: sin costo materializado. El kardex por artículo sí lo reconstruye.">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
                         @* Saldo del artículo en ESTA bodega DESPUÉS del asiento (snapshot del motor).
                            En el histórico SIMAFI no viene (no lo posteó el motor): se muestra "—". *@
                         <DxGridDataColumn FieldName="@nameof(MovimientoBodegaItemDto.ExistenciaResultante)" Caption="Saldo" Width="110px" TextAlignment="GridTextAlignment.Right">
@@ -278,12 +300,15 @@
             <p class="mt-3 mb-0">Seleccione una bodega para ver su libro de movimientos.</p>
         </div>
     }
+
+    <PdfPreviewPopup @ref="pdfPopup" />
 </div>
 
 @code {
     private const string GridLayoutStorageKey = "almacen-kardex-bodega-grid-layout";
 
     private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
 
     // El grid pagina/ordena en el servidor (fuente remota); no se carga todo el kardex en memoria.
     private MovimientosBodegaGridDataSource dataSource = default!;
@@ -444,14 +469,14 @@
         _ => "mov-otro"
     };
 
-    private async Task ImprimirPdfAsync()
+    private void MostrarPdf()
     {
         if (bodegaSeleccionada is null)
         {
             return;
         }
 
-        await JS.InvokeVoidAsync("open", KardexClient.GetPdfBodegaUrl(BuildFilter()), "_blank");
+        pdfPopup?.Mostrar(KardexClient.GetPdfBodegaUrl(BuildFilter()), $"Movimientos — {bodegaSeleccionada.Display}");
     }
 
     private async Task ExportExcelAsync()

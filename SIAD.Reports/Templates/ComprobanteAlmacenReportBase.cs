@@ -203,13 +203,17 @@ public abstract class ComprobanteAlmacenReportBase : XtraReport
     }
 
     // ── Pie: identificación del documento, quién imprimió y paginación ──
-    protected BottomMarginBand BuildPie(string documentoTexto, string impresoPor)
+    // El ancho es opcional: los comprobantes en vertical usan ContentWidth (750); un reporte
+    // apaisado (p. ej. el kardex a todo lo ancho) pasa su propio ancho para que la línea, el
+    // texto centrado y la paginación queden proporcionales a la página.
+    protected BottomMarginBand BuildPie(string documentoTexto, string impresoPor, float? ancho = null)
     {
+        var w = ancho ?? ContentWidth;
         var pie = new BottomMarginBand { HeightF = 50f };
 
         pie.Controls.Add(new XRLine
         {
-            BoundsF = new RectangleF(0f, 4f, ContentWidth, 2f),
+            BoundsF = new RectangleF(0f, 4f, w, 2f),
             LineStyle = DXDashStyle.Dash,
             LineWidth = 1f,
             ForeColor = Color.LightGray
@@ -217,11 +221,11 @@ public abstract class ComprobanteAlmacenReportBase : XtraReport
 
         AddLabel(pie, documentoTexto, 0f, 10f, 260f, 12f, 7.5f, color: Color.DimGray);
         AddLabel(pie, $"Impreso por {impresoPor} el {DateTime.Now.ToString("dd/MM/yyyy HH:mm", EsHn)}",
-            260f, 10f, 250f, 12f, 7.5f, align: TextAlignment.MiddleCenter, color: Color.DimGray);
+            (w - 250f) / 2f, 10f, 250f, 12f, 7.5f, align: TextAlignment.MiddleCenter, color: Color.DimGray);
 
         pie.Controls.Add(new XRPageInfo
         {
-            BoundsF = new RectangleF(510f, 10f, 240f, 12f),
+            BoundsF = new RectangleF(w - 240f, 10f, 240f, 12f),
             PageInfo = PageInfo.NumberOfTotal,
             TextFormatString = "Pagina {0} de {1}",
             TextAlignment = TextAlignment.MiddleRight,

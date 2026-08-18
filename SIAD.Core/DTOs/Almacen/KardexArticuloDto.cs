@@ -52,5 +52,82 @@ public sealed class KardexArticuloDto
     /// <summary>Suma de salidas de los movimientos mostrados (período/tipo filtrado).</summary>
     public decimal TotalSalidas { get; init; }
 
+    // ── Valorización ─────────────────────────────────────────────────────────
+    // El costo promedio se DERIVA del libro (valor acumulado / cantidad acumulada), la
+    // misma regla del kardex legacy, en vez de leerse de un campo. Así existe también en
+    // los asientos que el motor no posteó.
+
+    /// <summary>Valor monetario de las entradas mostradas (período/tipo filtrado).</summary>
+    public decimal ValorIngresos { get; init; }
+
+    /// <summary>Valor monetario de las salidas mostradas (período/tipo filtrado).</summary>
+    public decimal ValorSalidas { get; init; }
+
+    /// <summary>Valor del inventario al cierre del kardex: Σ (ingresos − salidas) × valor_unitario desde el corte.</summary>
+    public decimal SaldoValorizado { get; init; }
+
+    /// <summary>
+    /// Costo promedio al cierre, derivado del libro. null cuando el saldo no es positivo
+    /// (no hay entre qué dividir).
+    /// </summary>
+    public decimal? CostoPromedioActual { get; init; }
+
+    /// <summary>
+    /// Costo promedio almacenado en <c>alm_articulo_bodega.costo_promedio</c> — el que usan el
+    /// catálogo y el motor para valorizar salidas. Es el valor CONTRA el que se contrasta el
+    /// corrido. Con bodega filtrada es el de esa bodega; sin filtro, el ponderado de las bodegas
+    /// activas. null = sin fila de existencia activa, no hay con qué comparar.
+    /// </summary>
+    public decimal? CostoPromedioCache { get; init; }
+
+    /// <summary>
+    /// Tolerancia del contraste. El corrido acumula el valor sin redondear, mientras el motor
+    /// reconstruye el numerador desde un promedio ya redondeado a 4 decimales: una diferencia de
+    /// centavos es esperable y no es un descuadre.
+    /// </summary>
+    public const decimal ToleranciaCosto = 0.01m;
+
+    /// <summary>
+    /// El libro tiene costo pero la ficha de existencias está en cero: el par nunca recibió
+    /// costo de apertura. No es un descuadre —nada se corrompió— sino un pendiente de costeo,
+    /// y son dos cosas que piden acciones distintas. Se separa porque mientras el corte de
+    /// inventario no se ejecute hay cientos de pares así, y llamarlos a todos "descuadre"
+    /// convertiría la señal en ruido.
+    /// </summary>
+    [JsonIgnore]
+    public bool CostoSinRegistrar => CostoPromedioCache == 0m
+        && CostoPromedioActual.HasValue
+        && CostoPromedioActual.Value != 0m;
+
+    /// <summary>
+    /// true si el costo promedio derivado del libro se aparta del almacenado más allá de
+    /// <see cref="ToleranciaCosto"/>. Mismo criterio que <see cref="SaldoDescuadrado"/>: sin
+    /// cifra con la que comparar no se afirma descuadre. El caso "ficha en cero" queda fuera
+    /// —lo reporta <see cref="CostoSinRegistrar"/>.
+    /// </summary>
+    [JsonIgnore]
+    public bool CostoDescuadrado => CostoPromedioActual.HasValue
+        && CostoPromedioCache.HasValue
+        && CostoPromedioCache.Value != 0m
+        && Math.Abs(CostoPromedioActual.Value - CostoPromedioCache.Value) > ToleranciaCosto;
+
+    // ── Arrastre del período (saldo inicial) ─────────────────────────────────
+    // Al filtrar por fecha, el saldo de la primera fila ya viene arrastrado pero nada lo
+    // explica en pantalla. Estos tres son ese arranque: cantidad, valor y costo promedio
+    // acumulados ANTES de la fecha desde.
+
+    /// <summary>Cantidad acumulada antes del inicio del período. null = sin filtro de fecha desde.</summary>
+    public decimal? CantidadAnterior { get; init; }
+
+    /// <summary>Valor monetario acumulado antes del inicio del período.</summary>
+    public decimal? ValorAnterior { get; init; }
+
+    /// <summary>Costo promedio con el que arranca el período (valor anterior / cantidad anterior).</summary>
+    public decimal? CostoPromedioAnterior { get; init; }
+
+    /// <summary>true si hay un arrastre que mostrar (se consultó con fecha desde y había historia previa).</summary>
+    [JsonIgnore]
+    public bool TieneArrastre => CantidadAnterior.HasValue;
+
     public IReadOnlyList<KardexMovimientoDto> Movimientos { get; init; } = new List<KardexMovimientoDto>();
 }

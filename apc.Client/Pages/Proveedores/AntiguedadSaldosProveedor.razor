@@ -132,8 +132,18 @@
 
                     <ToolbarTemplate>
                         <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                            <DxComboBox Data="@proveedoresCombo" Value="@codProveedorFiltro"
+                                        ValueChanged="@((string? v) => OnProveedorChanged(v))"
+                                        ValueExpression="@(() => codProveedorFiltro)"
+                                        ValueFieldName="@nameof(AntiguedadSaldosProveedorFilaDto.CodProveedor)"
+                                        TextFieldName="@nameof(AntiguedadSaldosProveedorFilaDto.Etiqueta)"
+                                        NullText="Todos los proveedores"
+                                        SearchMode="ListSearchMode.AutoSearch"
+                                        SearchFilterCondition="ListSearchFilterCondition.Contains"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                        Style="min-width: 260px;" />
                             <label class="text-muted small mb-0">Corte:</label>
-                            <DxDateEdit Date="@corteFiltro" DateChanged="OnCorteChanged" NullText="hoy"
+                            <DxDateEdit Date="@corteFiltro" DateChanged="@((DateTime? v) => OnCorteChanged(v))" NullText="hoy"
                                         ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
                                         CssClass="filtro-fecha" />
 
@@ -153,6 +163,12 @@
                             <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
                                       RenderStyle="ButtonRenderStyle.Secondary"
                                       Click="@(() => grid?.ShowColumnChooser())" CssClass="me-1" />
+                            <DxButton Text="PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Click="AbrirPdf" CssClass="me-1" />
+                            <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-spreadsheet"
+                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                      Click="AbrirExcel" CssClass="me-1" />
 
                             <div class="ms-auto text-muted small">
                                 Total: <span class="fw-bold">@datos.Totales.SaldoTotal.ToString("N2")</span>
@@ -312,6 +328,11 @@
     private DateTime? corteFiltro;      // null = hoy
     private int origenFiltro;           // 0 ambos, 1 compras, 2 compromisos
     private bool soloVencido;           // false = incluye "por vencer"
+    private string? codProveedorFiltro; // null = todos los proveedores
+
+    // Lista del selector de proveedor: todos los que tienen saldo. Se repuebla en las cargas
+    // completas (sin proveedor fijado), no cuando se ve uno solo.
+    private List<AntiguedadSaldosProveedorFilaDto> proveedoresCombo = new();
 
     private sealed record OrigenItem(int Id, string Nombre);
 
@@ -335,7 +356,13 @@
         {
             var corte = corteFiltro.HasValue ? DateOnly.FromDateTime(corteFiltro.Value) : (DateOnly?)null;
             datos = await AgingClient.ObtenerAsync(
-                corte, incluirPorVencer: !soloVencido, origen: origenFiltro);
+                corte, incluirPorVencer: !soloVencido, origen: origenFiltro, codProveedor: codProveedorFiltro);
+
+            // Repueblo el selector sólo en las cargas completas, para no perder la lista al fijar uno.
+            if (string.IsNullOrWhiteSpace(codProveedorFiltro) && datos is not null)
+            {
+                proveedoresCombo = new List<AntiguedadSaldosProveedorFilaDto>(datos.Filas);
+            }
         }
         catch (UnauthorizedAccessException)
         {
@@ -361,18 +388,32 @@
     private async Task OnCorteChanged(DateTime? valor)
     {
         corteFiltro = valor;
-        await CargarAsync();
+        await RecargarUniversoAsync();
     }
 
     private async Task OnOrigenChanged(int valor)
     {
         origenFiltro = valor;
-        await CargarAsync();
+        await RecargarUniversoAsync();
     }
 
     private async Task OnSoloVencidoChanged(bool valor)
     {
         soloVencido = valor;
+        await RecargarUniversoAsync();
+    }
+
+    private async Task OnProveedorChanged(string? codProveedor)
+    {
+        codProveedorFiltro = codProveedor;
+        await CargarAsync();
+    }
+
+    // Corte / origen / solo-vencido redefinen el universo de proveedores con saldo, así que limpian
+    // el proveedor fijado antes de recargar (evita quedar mostrando uno que ya no tiene saldo).
+    private async Task RecargarUniversoAsync()
+    {
+        codProveedorFiltro = null;
         await CargarAsync();
     }
 
@@ -381,6 +422,22 @@
         var origin = Uri.EscapeDataString("/proveedores/antiguedad-saldos");
         var codigo = Uri.EscapeDataString(fila.CodProveedor);
         Navigation.NavigateTo($"/proveedores/{codigo}/estado-cuenta?originUrl={origin}");
+    }
+
+    // El reporte refleja los mismos filtros que la matriz, incluido el proveedor seleccionado:
+    // con uno fijado, el PDF/Excel sale sólo de ese proveedor.
+    private async Task AbrirPdf()
+    {
+        var corte = corteFiltro.HasValue ? DateOnly.FromDateTime(corteFiltro.Value) : (DateOnly?)null;
+        var url = AntiguedadSaldosProveedorClient.GetPdfUrl(corte, !soloVencido, origenFiltro, codProveedor: codProveedorFiltro);
+        await JS.InvokeVoidAsync("open", url, "_blank");
+    }
+
+    private async Task AbrirExcel()
+    {
+        var corte = corteFiltro.HasValue ? DateOnly.FromDateTime(corteFiltro.Value) : (DateOnly?)null;
+        var url = AntiguedadSaldosProveedorClient.GetExcelUrl(corte, !soloVencido, origenFiltro, codProveedor: codProveedorFiltro);
+        await JS.InvokeVoidAsync("open", url, "_blank");
     }
 
     // ---------------------------------------------------------------- Presentación

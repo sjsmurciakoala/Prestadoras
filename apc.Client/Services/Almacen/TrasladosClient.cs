@@ -14,7 +14,7 @@ public sealed class TrasladosClient
 
     public TrasladosClient(HttpClient http) => _http = http;
 
-    /// <summary>URL del comprobante (vale) del traslado —el envío— en PDF, para abrirlo en una pestaña nueva.</summary>
+    /// <summary>URL del comprobante (vale) del traslado —el envío— en PDF (inline); se muestra embebido en la vista.</summary>
     public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
 
     /// <summary>URL del comprobante de una recepción del traslado en PDF.</summary>

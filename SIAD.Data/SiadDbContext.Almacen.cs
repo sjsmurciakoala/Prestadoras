@@ -52,6 +52,8 @@ public partial class SiadDbContext
     // Política del ISV en compras por empresa (2026-07-30_cfg_compra_isv.sql). NO es de almacén
     // (es config de empresa); se mapea aquí solo por conveniencia de encadenamiento del modelo.
     public virtual DbSet<cfg_compra_isv> cfg_compra_isvs { get; set; } = null!;
+    // Interruptor de existencia negativa en salidas, por empresa (2026-08-15_alm_existencia_negativa.sql).
+    public virtual DbSet<cfg_inventario_negativo> cfg_inventario_negativos { get; set; } = null!;
 
     private void ConfigureAlmacenModel(ModelBuilder modelBuilder)
     {
@@ -264,6 +266,24 @@ public partial class SiadDbContext
 
             // Sin HasDefaultValue en 'tratamiento': el INSERT lleva SIEMPRE el valor explícito
             // (COSTO/FISCAL), mismo criterio que alm_config_inventario y cfg_impuesto_tasa.
+        });
+
+        // ── Interruptor de existencia negativa en salidas, por empresa ───────────────────
+        // (2026-08-15_alm_existencia_negativa.sql). Config de empresa, no de almacén; se mapea
+        // aquí por conveniencia de encadenamiento del modelo.
+        modelBuilder.Entity<cfg_inventario_negativo>(entity =>
+        {
+            // La PK ES el company_id: un solo interruptor por empresa.
+            entity.HasKey(e => e.company_id).HasName("cfg_inventario_negativo_pkey");
+            entity.ToTable("cfg_inventario_negativo", "public");
+
+            entity.Property(e => e.company_id).ValueGeneratedNever();
+            // Sin HasDefaultValue en 'permitir': el INSERT lleva SIEMPRE el valor explícito,
+            // mismo criterio que cfg_compra_isv y alm_config_inventario.
+            entity.Property(e => e.usuariocreacion).HasMaxLength(100);
+            entity.Property(e => e.fechacreacion).HasColumnType("timestamp without time zone");
+            entity.Property(e => e.usuariomodificacion).HasMaxLength(100);
+            entity.Property(e => e.fechamodificacion).HasColumnType("timestamp without time zone");
         });
 
         modelBuilder.Entity<alm_articulo>(entity =>

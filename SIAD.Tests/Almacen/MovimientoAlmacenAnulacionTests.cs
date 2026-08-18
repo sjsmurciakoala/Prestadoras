@@ -198,6 +198,40 @@ public class MovimientoAlmacenAnulacionTests : IntegrationTestBase, IAsyncLifeti
         Assert.Equal(15m, (await ParAsync(art, bod)).costo_promedio);
     }
 
+    // ── Anular un movimiento de SALIDA devuelve la mercadería ─────────────────
+    /// <summary>
+    /// F2 de la existencia negativa (2026-08-15): un movimiento genérico de SALIDA postea un
+    /// <c>AjusteNegativo</c> (documento_tipo AJUSTE). Antes, revertirlo caía en la rama de RESTA
+    /// del motor y volvía a bajar la existencia (10 → 6 → 2). Con el fix de
+    /// <c>EsReversaDeDevolucion</c> (salidas &gt; 0) la anulación DEVUELVE: vuelve a 10.
+    /// </summary>
+    [SkippableFact]
+    public async Task Anular_MovimientoDeSalida_DevuelveLaMercaderia()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var (art, bod) = await SeedParAsync("ZZAN-SAL");
+        var ent = await SeedTipoAsync("ZZ_ESAL", ClaseAjusteInventario.Entrada);
+        var sal = await SeedTipoAsync("ZZ_SSAL", ClaseAjusteInventario.Salida);
+
+        // Carga stock y luego lo descarga con un movimiento de SALIDA.
+        await _service!.CrearYPostearAsync(new MovimientoAlmacenDto
+        {
+            TipoMovimientoId = ent, BodegaId = bod, Motivo = "carga",
+            Detalles = [new() { ArticuloId = art, Cantidad = 10m, CostoUnitario = 5m }]
+        }, "test", false);
+
+        var salida = await _service.CrearYPostearAsync(new MovimientoAlmacenDto
+        {
+            TipoMovimientoId = sal, BodegaId = bod, Motivo = "salida",
+            Detalles = [new() { ArticuloId = art, Cantidad = 4m }]
+        }, "test", false);
+        Assert.Equal(6m, (await ParAsync(art, bod)).existencia);
+
+        Assert.True(await _service.AnularAsync(salida.Id!.Value, "salida errónea", "tester"));
+        Assert.Equal(10m, (await ParAsync(art, bod)).existencia);   // devuelve, no baja a 2
+    }
+
     // ── Anular sin motivo ─────────────────────────────────────────────────────
     [SkippableFact]
     public async Task Anular_SinMotivo_Rechaza()

@@ -20,19 +20,31 @@ public sealed class AntiguedadSaldosProveedorClient
         bool incluirPorVencer = true,
         int origen = 0,
         int? tipoProveedor = null,
+        string? codProveedor = null,
         CancellationToken ct = default)
     {
-        var url = "api/proveedores/antiguedad-saldos"
-                + Query(
-                    ("corte", Fecha(corte)),
-                    ("incluirPorVencer", incluirPorVencer ? "true" : "false"),
-                    ("origen", origen is 1 or 2 ? origen.ToString() : null),
-                    ("tipoProveedor", tipoProveedor?.ToString()));
+        var url = "api/proveedores/antiguedad-saldos" + BuildQuery(corte, incluirPorVencer, origen, tipoProveedor, codProveedor);
 
         var r = await _http.GetAsync(url, ct);
         return await r.ReadFromJsonAsyncWithAuthCheck<AntiguedadSaldosProveedorDto>(ct)
                ?? new AntiguedadSaldosProveedorDto { Corte = corte ?? DateOnly.FromDateTime(DateTime.Today) };
     }
+
+    /// <summary>URL (relativa a la app) del PDF; la página la abre en pestaña nueva con JS.</summary>
+    public static string GetPdfUrl(DateOnly? corte = null, bool incluirPorVencer = true, int origen = 0, int? tipoProveedor = null, string? codProveedor = null)
+        => "api/proveedores/antiguedad-saldos/pdf" + BuildQuery(corte, incluirPorVencer, origen, tipoProveedor, codProveedor);
+
+    /// <summary>URL (relativa a la app) del Excel; la página la abre en pestaña nueva con JS.</summary>
+    public static string GetExcelUrl(DateOnly? corte = null, bool incluirPorVencer = true, int origen = 0, int? tipoProveedor = null, string? codProveedor = null)
+        => "api/proveedores/antiguedad-saldos/excel" + BuildQuery(corte, incluirPorVencer, origen, tipoProveedor, codProveedor);
+
+    private static string BuildQuery(DateOnly? corte, bool incluirPorVencer, int origen, int? tipoProveedor, string? codProveedor)
+        => Query(
+            ("corte", Fecha(corte)),
+            ("incluirPorVencer", incluirPorVencer ? "true" : "false"),
+            ("origen", origen is 1 or 2 ? origen.ToString() : null),
+            ("tipoProveedor", tipoProveedor?.ToString()),
+            ("proveedor", string.IsNullOrWhiteSpace(codProveedor) ? null : codProveedor.Trim()));
 
     private static string? Fecha(DateOnly? valor) => valor?.ToString("yyyy-MM-dd");
 

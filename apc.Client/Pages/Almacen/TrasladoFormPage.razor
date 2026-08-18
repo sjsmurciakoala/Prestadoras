@@ -14,7 +14,6 @@
 @inject ArticulosClient ArticulosClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
-@inject IJSRuntime JS
 
 <PageTitle>SIAD - @(EsLectura ? "Detalle de traslado" : "Nuevo traslado")</PageTitle>
 
@@ -30,7 +29,7 @@
             @if (EsLectura)
             {
                 <DxButton Text="Imprimir traslado" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
-                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirTrasladoAsync" />
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="MostrarTraslado" />
             }
             <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
                       Click="@(() => Navigation.NavigateTo("/almacen/traslados"))" />
@@ -262,7 +261,7 @@
                             </div>
                         </div>
                         <DxButton Text="Imprimir" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
-                                  RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => ImprimirRecepcionAsync(r.Id))" />
+                                  RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => MostrarRecepcion(r.Id))" />
                     </div>
                 }
             </div>
@@ -309,10 +308,13 @@
     </BodyTemplate>
 </DxPopup>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter] public int? Id { get; set; }
 
     private TrasladoDto modelo = new();
+    private PdfPreviewPopup? pdfPopup;
     private DateTime? fecha = DateTime.Today;
 
     private List<TipoMovimientoAlmacenListItemDto> tipos = new();
@@ -519,11 +521,13 @@
         _ => "bi-info-circle"
     };
 
-    private async Task ImprimirTrasladoAsync()
-        => await JS.InvokeVoidAsync("open", TrasladosClient.GetComprobantePdfUrl(modelo.Id), "_blank");
+    private void MostrarTraslado()
+        => pdfPopup?.Mostrar(TrasladosClient.GetComprobantePdfUrl(modelo.Id),
+            $"Comprobante — Traslado {modelo.Numero:00000}");
 
-    private async Task ImprimirRecepcionAsync(int recepcionId)
-        => await JS.InvokeVoidAsync("open", TrasladosClient.GetRecepcionComprobantePdfUrl(modelo.Id, recepcionId), "_blank");
+    private void MostrarRecepcion(int recepcionId)
+        => pdfPopup?.Mostrar(TrasladosClient.GetRecepcionComprobantePdfUrl(modelo.Id, recepcionId),
+            $"Recepción — Traslado {modelo.Numero:00000}");
 
     private void Toast(string title, string text, ToastRenderStyle style)
         => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "TrasFormToast" });

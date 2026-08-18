@@ -152,6 +152,40 @@ public class AntiguedadSaldosProveedorTests : IntegrationTestBase, IAsyncLifetim
         Assert.Equal(400m, soloCompromisos.SaldoTotal);
     }
 
+    // ---------------------------------------------------------------- Filtro por proveedor
+
+    [SkippableFact]
+    public async Task Filtrar_por_proveedor_devuelve_solo_ese_con_sus_totales()
+    {
+        await SembrarFacturaAsync(1000m, Hoy(-60), Hoy(-15));    // 1 – 30
+        await SembrarFacturaAsync(500m, Hoy(-120), Hoy(-75));    // 61 – 90
+
+        var soloMio = await _service!.GetAsync(codProveedor: _cod);
+
+        // Una sola fila (la mía), pese a que la empresa tiene otros proveedores con saldo.
+        var fila = Assert.Single(soloMio.Filas);
+        Assert.Equal(_cod, fila.CodProveedor);
+        Assert.Equal(1500m, fila.SaldoTotal);
+
+        // Los totales del pie son los de esa fila, no los de toda la cartera.
+        Assert.Equal(1, soloMio.Totales.Proveedores);
+        Assert.Equal(1500m, soloMio.Totales.SaldoTotal);
+        Assert.Equal(1000m, soloMio.Totales.Tramo30);
+        Assert.Equal(500m, soloMio.Totales.Tramo90);
+    }
+
+    [SkippableFact]
+    public async Task Filtrar_por_proveedor_inexistente_devuelve_vacio()
+    {
+        await SembrarFacturaAsync(1000m, Hoy(-60), Hoy(-15));
+
+        var vacio = await _service!.GetAsync(codProveedor: "NO-EXISTE-ZZZ");
+
+        Assert.Empty(vacio.Filas);
+        Assert.Equal(0, vacio.Totales.Proveedores);
+        Assert.Equal(0m, vacio.Totales.SaldoTotal);
+    }
+
     // ---------------------------------------------------------------- Totales del pie
 
     [SkippableFact]

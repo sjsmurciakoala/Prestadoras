@@ -47,6 +47,9 @@ public sealed class AntiguedadSaldosProveedorFilaDto
     public decimal SaldoTotal { get; set; }
 
     public int DocumentosPendientes { get; set; }
+
+    /// <summary>Etiqueta para el selector de proveedor: "código · nombre".</summary>
+    public string Etiqueta => string.IsNullOrWhiteSpace(Nombre) ? CodProveedor : $"{CodProveedor} · {Nombre}";
 }
 
 /// <summary>

@@ -20,10 +20,26 @@ public interface IAntiguedadSaldosProveedorService
     /// <param name="incluirPorVencer"><c>false</c> = solo lo vencido (la columna «por vencer» llega en 0).</param>
     /// <param name="origen">0 = compras + compromisos, 1 = solo facturas de compra, 2 = solo compromisos.</param>
     /// <param name="codTipoProveedor">Filtra por tipo de proveedor; <c>null</c> = todos.</param>
+    /// <param name="codProveedor">Limita a un proveedor puntual; <c>null</c>/vacío = todos.</param>
     Task<AntiguedadSaldosProveedorDto> GetAsync(
         DateOnly? corte = null,
         bool incluirPorVencer = true,
         int origen = 0,
         int? codTipoProveedor = null,
+        string? codProveedor = null,
+        CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// Arma los datos del cuadro de antigüedad para impresión (identidad de empresa + filas + totales),
+    /// con los mismos filtros que <see cref="GetAsync"/>. <paramref name="codProveedor"/> imprime solo
+    /// ese proveedor.
+    /// </summary>
+    Task<AntiguedadSaldosImpresionDto> GetDatosImpresionAsync(
+        DateOnly? corte = null,
+        bool incluirPorVencer = true,
+        int origen = 0,
+        int? codTipoProveedor = null,
+        string? codProveedor = null,
+        string? impresoPor = null,
         CancellationToken cancellationToken = default);
 }

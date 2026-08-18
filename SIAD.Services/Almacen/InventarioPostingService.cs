@@ -92,11 +92,15 @@ public sealed class InventarioPostingService : IInventarioPostingService
         var (existenciaResultante, costoPromedioResultante, ingresos, salidas, costoAsiento) =
             Calcular(movimiento, fila, original);
 
-        // Cruce a alerta: estado del par ANTES (existencia previa, aún en fila) vs DESPUÉS. Solo se
-        // marca cuando pasa de "en orden" a alerta, no en cada salida estando ya bajo (anti-spam).
+        // Cruce a alerta: estado del par ANTES (existencia previa, aún en fila) vs DESPUÉS. Se marca
+        // cuando pasa de "en orden" a alerta (anti-spam: no en cada salida estando ya bajo), MÁS una
+        // excepción (F3, 2026-08-15): cruzar a NEGATIVA siempre avisa aunque ya estuviera en alerta
+        // (bajo mínimo o sin stock → negativa), porque el negativo es la anomalía a reconciliar. Una
+        // caída DENTRO de negativo (-2 → -5) no re-avisa (severidadAntes ya es Negativa).
         var severidadAntes = StockSeveridad.Clasificar(fila.existencia, fila.existencia_minima);
         var severidadDespues = StockSeveridad.Clasificar(existenciaResultante, fila.existencia_minima);
-        var cruzoAlerta = severidadAntes is null && severidadDespues is not null;
+        var cruzoAlerta = (severidadAntes is null && severidadDespues is not null)
+            || (severidadDespues == StockSeveridad.Negativa && severidadAntes != StockSeveridad.Negativa);
 
         // ── 5. Aplicar sobre la fila (ASIGNACIÓN, nunca +=) ──────────────────
         fila.existencia = existenciaResultante;
@@ -333,7 +337,9 @@ public sealed class InventarioPostingService : IInventarioPostingService
 
             case TipoMovimientoInventario.AjusteNegativo:
                 ExigirCantidadPositiva(m);
-                if (fila.existencia - m.Cantidad < 0m)
+                // El bloqueo del negativo cede SOLO si el interruptor (empresa/bodega) lo permite.
+                // Se consulta la config únicamente cuando la salida cruzaría a negativo (corto-circuito).
+                if (fila.existencia - m.Cantidad < 0m && !await PermiteNegativoAsync(fila.bodega_id, ct))
                 {
                     throw new InvalidOperationException(
                         $"El ajuste dejaría la existencia en negativo ({fila.existencia - m.Cantidad:0.####}).");
@@ -365,7 +371,7 @@ public sealed class InventarioPostingService : IInventarioPostingService
                     throw new InvalidOperationException(
                         "La ubicación no tiene costo promedio: no se puede despachar hasta que se le asigne uno (carga inicial o ajuste de valor).");
                 }
-                if (fila.existencia - m.Cantidad < 0m)
+                if (fila.existencia - m.Cantidad < 0m && !await PermiteNegativoAsync(fila.bodega_id, ct))
                 {
                     throw new InvalidOperationException(
                         $"La salida dejaría la existencia en negativo ({fila.existencia - m.Cantidad:0.####}). Disponible: {fila.existencia:0.####}.");
@@ -387,7 +393,7 @@ public sealed class InventarioPostingService : IInventarioPostingService
                     throw new InvalidOperationException(
                         "La ubicación de origen no tiene costo promedio: no se puede trasladar hasta que se le asigne uno (carga inicial o ajuste de valor).");
                 }
-                if (fila.existencia - m.Cantidad < 0m)
+                if (fila.existencia - m.Cantidad < 0m && !await PermiteNegativoAsync(fila.bodega_id, ct))
                 {
                     throw new InvalidOperationException(
                         $"El traslado dejaría la existencia de origen en negativo ({fila.existencia - m.Cantidad:0.####}). Disponible: {fila.existencia:0.####}.");
@@ -472,6 +478,31 @@ public sealed class InventarioPostingService : IInventarioPostingService
     }
 
     /// <summary>
+    /// ¿Esta bodega permite que una salida deje la existencia en NEGATIVO? (2026-08-15, F1.)
+    /// Interruptor en dos niveles: el override por bodega
+    /// (<c>alm_bodega.permite_existencia_negativa</c>, tri-estado) gana sobre el interruptor
+    /// maestro de la empresa (<c>cfg_inventario_negativo.permitir</c>). NULL en la bodega = hereda;
+    /// sin fila de empresa = <c>false</c> (comportamiento por defecto: se bloquea el negativo).
+    /// Ambas consultas van con el filtro global de tenant. Se llama solo cuando la salida cruzaría
+    /// a negativo, así que en el caso normal (interruptor apagado) no hay consulta extra.
+    /// </summary>
+    private async Task<bool> PermiteNegativoAsync(int bodegaId, CancellationToken ct)
+    {
+        var overrideBodega = await _context.alm_bodegas.AsNoTracking()
+            .Where(b => b.id == bodegaId)
+            .Select(b => b.permite_existencia_negativa)
+            .FirstOrDefaultAsync(ct);
+        if (overrideBodega.HasValue)
+        {
+            return overrideBodega.Value;
+        }
+
+        return await _context.cfg_inventario_negativos.AsNoTracking()
+            .Select(c => c.permitir)
+            .FirstOrDefaultAsync(ct);
+    }
+
+    /// <summary>
     /// Devuelve (existencia resultante, costo promedio resultante, ingresos, salidas, costo del asiento).
     /// </summary>
     private static (decimal Existencia, decimal CostoPromedio, decimal Ingresos, decimal Salidas, decimal Costo)
@@ -500,7 +531,12 @@ public sealed class InventarioPostingService : IInventarioPostingService
                 // según la política del tipo de artículo y la empresa — el motor no decide eso, solo
                 // pondera lo que recibe.
                 var existencia = fila.existencia + m.Cantidad;
-                var promedio = existencia == 0m
+                // Borde de existencia NEGATIVA (F1, 2026-08-15): si la base es negativa, el promedio
+                // ponderado clásico fabrica costos inventados o hasta negativos —p. ej. base -3 @ 10 con
+                // 10 @ 20 daría ((-3*10)+(10*20))/7 = 24.28…—. Con base negativa el lote que entra
+                // RE-ESTABLECE el costo (promedio = costo del lote), acotado a un costo real y nunca ≤ 0.
+                // El borde de existencia resultante 0 mantiene su regla (nunca dividir por cero).
+                var promedio = fila.existencia < 0m || existencia == 0m
                     ? m.CostoUnitario
                     : ((fila.existencia * fila.costo_promedio) + (m.Cantidad * m.CostoUnitario)) / existencia;
                 return (existencia, promedio, m.Cantidad, 0m, m.CostoUnitario);
@@ -546,7 +582,9 @@ public sealed class InventarioPostingService : IInventarioPostingService
                 if (EsReversaDeDevolucion(original))
                 {
                     var entra = fila.existencia + cantidad;
-                    var promedioEntrada = entra == 0m
+                    // Mismo borde de base negativa que la entrada normal: si el par ya estaba en
+                    // negativo, la devolución no pondera contra esa base (promedio = costo devuelto).
+                    var promedioEntrada = fila.existencia < 0m || entra == 0m
                         ? costo
                         : ((fila.existencia * fila.costo_promedio) + (cantidad * costo)) / entra;
                     return (entra, promedioEntrada, cantidad, 0m, costo);
@@ -594,15 +632,21 @@ public sealed class InventarioPostingService : IInventarioPostingService
 
     /// <summary>
     /// ¿La reversa devuelve mercadería a la bodega (suma), en vez de sacarla (resta)? Es el ESPEJO:
-    /// revertir una salida por descargo o el ENVÍO de un traslado (<c>salidas &gt; 0</c>) suma. Es
-    /// seguro mirar <c>salidas</c> en el traslado —a diferencia de la apertura por reconciliación,
-    /// que escribe <c>ingresos &gt; 0</c> sin mover existencia— porque los dos lados del traslado
-    /// mueven existencia real. Debe usarse en los TRES sitios que discriminan la reversa: el cálculo,
-    /// el código de transacción y la guarda de existencia negativa (diseño §3).
+    /// revertir CUALQUIER salida real —descargo, envío de un traslado o ajuste negativo genérico—
+    /// devuelve. El discriminador es <c>salidas &gt; 0</c>: es seguro mirar las salidas —a diferencia
+    /// de los ingresos, porque la apertura por reconciliación escribe <c>ingresos &gt; 0</c> sin mover
+    /// existencia— ya que todo asiento con <c>salidas &gt; 0</c> sacó existencia real (y no se puede
+    /// revertir una reversa, así que aquí <c>original</c> nunca es una reversa).
+    /// <para>
+    /// Ampliado el 2026-08-15 (F1): antes solo reconocía <c>Descargo</c>/<c>Traslado</c>, así que
+    /// revertir un <c>AjusteNegativo</c> (documento_tipo AJUSTE, p. ej. la anulación de un movimiento
+    /// genérico de salida) caía en la rama de RESTA y volvía a bajar la existencia. Debe usarse en los
+    /// TRES sitios que discriminan la reversa: el cálculo, el código de transacción y la guarda de
+    /// existencia negativa (diseño §3).
+    /// </para>
     /// </summary>
     private static bool EsReversaDeDevolucion(alm_kardex? original) =>
-        original?.documento_tipo == TipoDocumentoInventario.Descargo
-        || (original?.documento_tipo == TipoDocumentoInventario.Traslado && original.salidas > 0m);
+        original?.salidas > 0m;
 
     private static bool EsAjuste(TipoMovimientoInventario tipo) => tipo
         is TipoMovimientoInventario.AjustePositivo

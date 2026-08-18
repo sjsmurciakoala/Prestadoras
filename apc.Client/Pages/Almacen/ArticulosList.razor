@@ -306,11 +306,27 @@
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
 
+                    @* Tres lecturas distintas, y conviene no confundirlas: sin existencia no hay
+                       ponderado que calcular ("—"); con existencia pero sin costo el artículo está
+                       SIN COSTEAR (la apertura de inventario no ha pasado por ese par), y pintar
+                       "0.0000" lo haría pasar por un costo real y por un valor de inventario cero. *@
                     <DxGridDataColumn FieldName="@nameof(ArticuloListItemDto.ValorUnitario)" Caption="@CaptionCostoPromedio" Width="130px" TextAlignment="GridTextAlignment.Right">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
-                                <span class="text-muted" title="Costo promedio ponderado">@item.ValorUnitario.ToString("N4")</span>
+                                @if (item.Existencia == 0)
+                                {
+                                    <span class="text-muted" title="Sin existencia: no hay costo promedio que calcular">—</span>
+                                }
+                                else if (item.ValorUnitario == 0)
+                                {
+                                    <span class="badge-status warning"
+                                          title="Existencia sin costo registrado: este artículo aún no tiene costo de apertura en sus bodegas. Su valor de inventario se reporta en cero y no puede despacharse hasta costearlo.">SIN COSTEAR</span>
+                                }
+                                else
+                                {
+                                    <span class="text-muted" title="Costo promedio ponderado">@item.ValorUnitario.ToString("N4")</span>
+                                }
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -366,7 +382,7 @@
                             @if (cell.DataItem is ArticuloListItemDto item)
                             {
                                 <div class="d-flex justify-content-center gap-2 flex-wrap">
-                                    <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
+                                    <button type="button" class="btn-icon btn-kardex" title="Ver estado de cuenta"
                                             @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
                                         <i class="bi bi-journal-arrow-down"></i>
                                     </button>

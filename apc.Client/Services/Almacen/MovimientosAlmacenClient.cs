@@ -14,7 +14,7 @@ public sealed class MovimientosAlmacenClient
 
     public MovimientosAlmacenClient(HttpClient http) => _http = http;
 
-    /// <summary>URL del comprobante del movimiento en PDF, para abrirlo en una pestaña nueva.</summary>
+    /// <summary>URL del comprobante del movimiento en PDF (inline); se muestra embebido en la vista.</summary>
     public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
 
     /// <summary>URL de la partida contable del movimiento en PDF (existe solo si el movimiento generó asiento).</summary>

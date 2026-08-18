@@ -180,7 +180,7 @@
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is DescargoListItemDto item && (item.ArticuloId.HasValue || !string.IsNullOrWhiteSpace(item.CodigoArticulo)))
                             {
-                                <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
+                                <button type="button" class="btn-icon btn-kardex" title="Ver estado de cuenta"
                                         @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
                                     <i class="bi bi-journal-arrow-down"></i>
                                 </button>

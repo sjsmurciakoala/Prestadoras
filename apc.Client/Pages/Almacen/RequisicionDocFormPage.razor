@@ -14,7 +14,6 @@
 @inject ArticulosClient ArticulosClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
-@inject IJSRuntime JS
 
 <PageTitle>SIAD - @(EsNueva ? "Nueva requisición" : "Requisición")</PageTitle>
 
@@ -30,7 +29,7 @@
             @if (!EsNueva)
             {
                 <DxButton Text="Imprimir comprobante" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
-                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="ImprimirAsync" />
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="MostrarComprobante" />
             }
             <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
                       Click="@(() => Navigation.NavigateTo("/almacen/requisiciones"))" />
@@ -227,10 +226,13 @@
     </BodyTemplate>
 </DxPopup>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter] public int? Id { get; set; }
 
     private RequisicionDocumentoDto modelo = new() { Estado = EstadoRequisicionHdr.Borrador };
+    private PdfPreviewPopup? pdfPopup;
     private DateTime? fecha = DateTime.Today;
     private List<BodegaLookupDto> bodegas = new();
     private List<ArticuloListItemDto> articulos = new();
@@ -354,8 +356,9 @@
         if (doc is not null) { modelo = doc; fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today; }
     }
 
-    private async Task ImprimirAsync()
-        => await JS.InvokeVoidAsync("open", RequisicionesDocumentoClient.GetComprobantePdfUrl(modelo.Id), "_blank");
+    private void MostrarComprobante()
+        => pdfPopup?.Mostrar(RequisicionesDocumentoClient.GetComprobantePdfUrl(modelo.Id),
+            $"Comprobante — Requisición {modelo.Numero:00000}");
 
     private string EstadoTexto => modelo.Estado switch
     {

@@ -14,8 +14,8 @@ namespace SIAD.Tests.Almacen;
 
 /// <summary>
 /// Fase 4 del maestro de almacén (2026-07-29):
-/// (a) ValorTotal del grid es DINERO (existencia × valor unitario) y cuadra con el KPI
-///     ValorInventario por construcción;
+/// (a) ValorTotal / CostoPromedio del grid reflejan el promedio ponderado real del kardex
+///     (Σ existencia×costo de bodegas activas) y cuadran con el KPI ValorInventario;
 /// (b) detector de descuadre cabecera vs Σ bodegas ACTIVAS (filtro ConDescuadre,
 ///     ExistenciaBodegas y contador del resumen);
 /// (c) GetByIdAsync excluye ubicaciones inactivas de la existencia del form.
@@ -99,7 +99,7 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
     /// Desde la Fase 6 la existencia inicial NO se escribe: el servicio la postea como
     /// carga inicial en el kardex, y por eso cada bodega lleva su costo de apertura.
     /// </summary>
-    private async Task<int> CrearArticuloAsync(string codigo, decimal valorUnitario)
+    private async Task<int> CrearArticuloAsync(string codigo, decimal valorUnitario, decimal costoA = 1m, decimal costoB = 1m)
     {
         var bodegaA = await SeedBodegaAsync($"{codigo}A");
         var bodegaB = await SeedBodegaAsync($"{codigo}B");
@@ -115,8 +115,8 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
             ValorUnitario = valorUnitario,
             Ubicaciones =
             {
-                new ArticuloUbicacionDto { BodegaId = bodegaA, Existencia = 10, CostoApertura = 1m },
-                new ArticuloUbicacionDto { BodegaId = bodegaB, Existencia = 5, CostoApertura = 1m }
+                new ArticuloUbicacionDto { BodegaId = bodegaA, Existencia = 10, CostoApertura = costoA },
+                new ArticuloUbicacionDto { BodegaId = bodegaB, Existencia = 5, CostoApertura = costoB }
             }
         }, "tester");
 
@@ -126,27 +126,60 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
     // ── (a) ValorTotal en dinero, cuadrado con el KPI ────────────────────────
 
     [SkippableFact]
-    public async Task SearchPaged_ValorTotalEsDinero_YCuadraConElKpi()
+    public async Task SearchPaged_ValorEsElPonderadoRealDelKardex_YCuadraConElKpi()
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
-        await CrearArticuloAsync("ZZF4V1", valorUnitario: 2.5m);
+        // Costos de apertura DISTINTOS por bodega (10 u @ 2.00 y 5 u @ 5.00). El catálogo
+        // debe mostrar el promedio ponderado consolidado —el que refleja el kardex—, NO el
+        // valor_unitario del maestro (2.50), que quedó congelado desde la migración.
+        await CrearArticuloAsync("ZZF4V1", valorUnitario: 2.5m, costoA: 2m, costoB: 5m);
         var filtro = new ArticuloFilterDto { Search = "ZZF4V1" };
 
         var pagina = await _service!.SearchPagedAsync(filtro, 0, 10, null, false);
         var item = Assert.Single(pagina.Items);
 
-        // 15 unidades × 2.50 = 37.50 de valor, no "15" (la vieja cantidad).
+        // (10 × 2.00 + 5 × 5.00) / 15 = 3.00 de costo; 45.00 de valor. No 2.50 / 37.50.
         Assert.Equal(15m, item.Existencia);
-        Assert.Equal(37.5m, item.ValorTotal);
+        Assert.Equal(3m, item.CostoPromedio);
+        Assert.Equal(45m, item.ValorTotal);
         Assert.Equal(15m, item.ExistenciaBodegas);
         Assert.False(item.Descuadrado);
 
         // La suma de la columna ES el KPI para el mismo universo filtrado.
         var resumen = await _service.GetResumenAsync(filtro);
         Assert.Equal(1, resumen.Total);
-        Assert.Equal(37.5m, resumen.ValorInventario);
+        Assert.Equal(45m, resumen.ValorInventario);
         Assert.Equal(0, resumen.ConDescuadre);
+    }
+
+    [SkippableFact]
+    public async Task SearchPaged_SinExistencia_CostoYValorEnCero_SinDivisionPorCero()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // Bodega activa pero existencia 0: no hay ponderado computable. El servicio no debe
+        // dividir por cero; devuelve costo y valor 0 (la UI lo muestra como "—").
+        var bodega = await SeedBodegaAsync("ZZF4Z0");
+        var tipo = await SeedTipoAsync("ZZF4ZT");
+
+        var art = new alm_articulo
+        {
+            codigo_articulo = "ZZF4Z1",
+            descripcion = "Artículo sin existencia",
+            tipo_articulo_id = tipo,
+            existencia = 0m
+        };
+        art.ubicaciones.Add(new alm_articulo_bodega { bodega_id = bodega, existencia = 0m, costo_promedio = 0m, activo = true, principal = true });
+        _context!.alm_articulos.Add(art);
+        await _context.SaveChangesAsync();
+
+        var pagina = await _service!.SearchPagedAsync(new ArticuloFilterDto { Search = "ZZF4Z1" }, 0, 10, null, false);
+        var item = Assert.Single(pagina.Items);
+
+        Assert.Equal(0m, item.Existencia);
+        Assert.Equal(0m, item.CostoPromedio);
+        Assert.Equal(0m, item.ValorTotal);
     }
 
     // ── (b) Detector de descuadre ────────────────────────────────────────────
@@ -220,6 +253,23 @@ public class ArticulosValorYDescuadreTests : IntegrationTestBase, IAsyncLifetime
         Assert.NotNull(dto);
         // Antes del fix devolvía 15 (sumaba también la inactiva) y el form contradecía al maestro.
         Assert.Equal(10m, dto!.Existencia);
+    }
+
+    [SkippableFact]
+    public async Task GetById_CostoPromedioYValor_SonElPonderadoReal_NoValorUnitario()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        // 10 u @ 2.00 + 5 u @ 5.00 → ponderado 3.00, valor 45.00. El maestro tiene
+        // valor_unitario = 2.50; la vista de edición debe mostrar el ponderado, igual que el grid.
+        var id = await CrearArticuloAsync("ZZF4GP", valorUnitario: 2.5m, costoA: 2m, costoB: 5m);
+
+        var dto = await _service!.GetByIdAsync(id);
+
+        Assert.NotNull(dto);
+        Assert.Equal(15m, dto!.Existencia);
+        Assert.Equal(3m, dto.CostoPromedio);   // no 2.50 (valor_unitario)
+        Assert.Equal(45m, dto.ValorTotal);
     }
 
     private class TestCurrentCompanyService : ICurrentCompanyService

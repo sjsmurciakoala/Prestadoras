@@ -18,7 +18,7 @@ public sealed class ValuacionInventarioClient
         return await _http.GetFromJsonAsyncWithAuthCheck<List<ExistenciaBodegaItemDto>>(url, ct) ?? new List<ExistenciaBodegaItemDto>();
     }
 
-    /// <summary>URL del PDF de la valuación (se abre en pestaña nueva; el endpoint devuelve el PDF inline).</summary>
+    /// <summary>URL del PDF de la valuación (inline); se muestra embebido en la vista.</summary>
     public string GetPdfUrl(ValuacionInventarioFilterDto filtro) => $"api/almacen/valuacion-inventario/pdf{QueryString(filtro)}";
 
     private static string QueryString(ValuacionInventarioFilterDto f)

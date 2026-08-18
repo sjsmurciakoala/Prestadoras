@@ -9,7 +9,6 @@
 @inject ValuacionInventarioClient ValuacionClient
 @inject BodegasClient BodegasClient
 @inject TiposArticuloClient TiposClient
-@inject IJSRuntime JS
 
 <PageTitle>SIAD - Valuación de inventario</PageTitle>
 
@@ -93,8 +92,8 @@
                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
                                    Style="min-width: 200px;" />
 
-                        <DxButton Text="Imprimir PDF" IconCssClass="bi bi-file-earmark-pdf"
-                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ImprimirPdfAsync" CssClass="ms-auto me-1" />
+                        <DxButton Text="Ver PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarPdf" CssClass="ms-auto me-1" />
                         <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
                                   RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-3" />
 
@@ -184,10 +183,13 @@
             </DxGrid>
         </div>
     </div>
+
+    <PdfPreviewPopup @ref="pdfPopup" />
 </div>
 
 @code {
     private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
 
     private List<ExistenciaBodegaItemDto> items = new();
     private List<BodegaLookupDto> bodegas = new();
@@ -284,8 +286,8 @@
         await CargarAsync();
     }
 
-    private async Task ImprimirPdfAsync()
-        => await JS.InvokeVoidAsync("open", ValuacionClient.GetPdfUrl(BuildFilter()), "_blank");
+    private void MostrarPdf()
+        => pdfPopup?.Mostrar(ValuacionClient.GetPdfUrl(BuildFilter()), "Valuación de inventario");
 
     private async Task ExportExcelAsync()
     {

@@ -15,7 +15,7 @@ public sealed class RequisicionesDocumentoClient
 
     public RequisicionesDocumentoClient(HttpClient http) => _http = http;
 
-    /// <summary>URL del comprobante (vale) en PDF, para abrirlo en una pestaña nueva.</summary>
+    /// <summary>URL del comprobante (vale) en PDF (inline); se muestra embebido en la vista.</summary>
     public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
 
     public async Task<List<RequisicionDocumentoListItemDto>> GetAsync(

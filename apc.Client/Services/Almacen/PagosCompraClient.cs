@@ -64,7 +64,7 @@ public sealed class PagosCompraClient
         return await r.ReadFromJsonAsyncWithAuthCheck<CompraCxpPartidaDto>(ct);
     }
 
-    /// <summary>URL del comprobante de pago (PDF inline). Se abre con window.open, como los demás comprobantes.</summary>
+    /// <summary>URL del comprobante de pago (PDF inline). Se muestra embebido en la vista, como los demás comprobantes.</summary>
     public static string GetComprobantePagoPdfUrl(int cxpId, int numeroAbono)
         => $"/{BaseUrl}/{cxpId}/abonos/{numeroAbono}/comprobante/pdf";
 

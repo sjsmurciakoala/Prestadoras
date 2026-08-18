@@ -223,16 +223,15 @@ public static class SidebarNavigationDefinition
                     Id = "inv-almacen",
                     Text = "Almacén",
                     IconCssClass = "bi bi-box-seam",
-                    MatchPrefixes = ["/almacen/articulos", "/almacen/kardex", "/almacen/alertas-stock", "/almacen/bodegas", "/almacen/existencias-bodega", "/almacen/kardex-bodega", "/almacen/valuacion-inventario"],
+                    MatchPrefixes = ["/almacen/articulos", "/almacen/kardex", "/almacen/alertas-stock", "/almacen/existencias-bodega", "/almacen/kardex-bodega", "/almacen/valuacion-inventario"],
                     Children =
                     [
                         new SidebarNavItem { Id = "alm-articulos", Text = "Artículos", NavigateUrl = "/almacen/articulos", MatchPrefixes = ["/almacen/articulos"], IconCssClass = "bi bi-box-seam" },
-                        new SidebarNavItem { Id = "alm-kardex", Text = "Kardex", NavigateUrl = "/almacen/kardex", MatchPrefixes = ["/almacen/kardex"], MatchExact = true, IconCssClass = "bi bi-journal-arrow-down" },
+                        new SidebarNavItem { Id = "alm-kardex", Text = "Estado de cuenta de artículos", NavigateUrl = "/almacen/kardex", MatchPrefixes = ["/almacen/kardex"], MatchExact = true, IconCssClass = "bi bi-journal-arrow-down" },
                         new SidebarNavItem { Id = "alm-existencias-bodega", Text = "Existencias por bodega", NavigateUrl = "/almacen/existencias-bodega", MatchPrefixes = ["/almacen/existencias-bodega"], IconCssClass = "bi bi-boxes" },
                         new SidebarNavItem { Id = "alm-kardex-bodega", Text = "Movimientos por bodega", NavigateUrl = "/almacen/kardex-bodega", MatchPrefixes = ["/almacen/kardex-bodega"], IconCssClass = "bi bi-journal-text" },
                         new SidebarNavItem { Id = "alm-valuacion", Text = "Valuación de inventario", NavigateUrl = "/almacen/valuacion-inventario", MatchPrefixes = ["/almacen/valuacion-inventario"], IconCssClass = "bi bi-cash-stack" },
-                        new SidebarNavItem { Id = "alm-alertas", Text = "Alertas de stock", NavigateUrl = "/almacen/alertas-stock", MatchPrefixes = ["/almacen/alertas-stock"], IconCssClass = "bi bi-exclamation-triangle" },
-                        new SidebarNavItem { Id = "alm-bodegas", Text = "Bodegas", NavigateUrl = "/almacen/bodegas", MatchPrefixes = ["/almacen/bodegas"], IconCssClass = "bi bi-building" }
+                        new SidebarNavItem { Id = "alm-alertas", Text = "Alertas de stock", NavigateUrl = "/almacen/alertas-stock", MatchPrefixes = ["/almacen/alertas-stock"], IconCssClass = "bi bi-exclamation-triangle" }
                     ]
                 },
                 new SidebarNavItem
@@ -275,7 +274,7 @@ public static class SidebarNavigationDefinition
                     Id = "inv-catalogos",
                     Text = "Catálogos de almacén",
                     IconCssClass = "bi bi-tags",
-                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida", "/almacen/conceptos-movimiento", "/almacen/isv-compras", "/almacen/terminos-pago"],
+                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida", "/almacen/conceptos-movimiento", "/almacen/isv-compras", "/almacen/existencia-negativa", "/almacen/terminos-pago", "/almacen/bodegas"],
                     Children =
                     [
                         new SidebarNavItem { Id = "alm-tipos-articulo", Text = "Tipos de artículos", NavigateUrl = "/almacen/tipos-articulo", MatchPrefixes = ["/almacen/tipos-articulo"], IconCssClass = "bi bi-tags" },
@@ -283,7 +282,9 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "alm-unidades", Text = "Unidades de medida", NavigateUrl = "/almacen/unidades-medida", MatchPrefixes = ["/almacen/unidades-medida"], IconCssClass = "bi bi-rulers" },
                         new SidebarNavItem { Id = "alm-conceptos-movimiento", Text = "Conceptos de movimiento", NavigateUrl = "/almacen/conceptos-movimiento", MatchPrefixes = ["/almacen/conceptos-movimiento"], IconCssClass = "bi bi-arrow-left-right" },
                         new SidebarNavItem { Id = "alm-terminos-pago", Text = "Términos de pago", NavigateUrl = "/almacen/terminos-pago", MatchPrefixes = ["/almacen/terminos-pago"], IconCssClass = "bi bi-calendar-check" },
-                        new SidebarNavItem { Id = "alm-isv-compras", Text = "ISV en compras", NavigateUrl = "/almacen/isv-compras", MatchPrefixes = ["/almacen/isv-compras"], IconCssClass = "bi bi-percent" }
+                        new SidebarNavItem { Id = "alm-isv-compras", Text = "ISV en compras", NavigateUrl = "/almacen/isv-compras", MatchPrefixes = ["/almacen/isv-compras"], IconCssClass = "bi bi-percent" },
+                        new SidebarNavItem { Id = "alm-existencia-negativa", Text = "Existencia negativa", NavigateUrl = "/almacen/existencia-negativa", MatchPrefixes = ["/almacen/existencia-negativa"], IconCssClass = "bi bi-dash-circle" },
+                        new SidebarNavItem { Id = "alm-bodegas", Text = "Bodegas", NavigateUrl = "/almacen/bodegas", MatchPrefixes = ["/almacen/bodegas"], IconCssClass = "bi bi-building" }
                     ]
                 }
             ]

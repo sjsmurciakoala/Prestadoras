@@ -30,6 +30,7 @@
     <ProjectReference Include="..\SIAD.Core\SIAD.Core.csproj" />
     <ProjectReference Include="..\SIAD.Data\SIAD.Data.csproj" />
     <ProjectReference Include="..\SIAD.Services\SIAD.Services.csproj" />
+    <ProjectReference Include="..\SIAD.Reports\SIAD.Reports.csproj" />
     <ProjectReference Include="..\apc.BancosWs\apc.BancosWs.csproj" />
   </ItemGroup>
 

@@ -331,7 +331,7 @@
                                 <td class="text-center">
                                     <div class="d-inline-flex gap-1">
                                         <button type="button" class="btn-icon" title="Imprimir comprobante de pago"
-                                                @onclick="() => ImprimirComprobantePagoAsync(a.NumeroAbono)">
+                                                @onclick="() => ImprimirComprobantePago(a.NumeroAbono)">
                                             <i class="bi bi-printer"></i>
                                         </button>
                                         @if (a.PartidaId is > 0)
@@ -341,7 +341,7 @@
                                                 <i class="bi bi-journal-text"></i>
                                             </button>
                                             <button type="button" class="btn-icon" title="Imprimir partida contable"
-                                                    @onclick="() => ImprimirPartidaPagoAsync(a.NumeroAbono)">
+                                                    @onclick="() => ImprimirPartidaPago(a.NumeroAbono)">
                                                 <i class="bi bi-file-earmark-pdf"></i>
                                             </button>
                                         }
@@ -448,8 +448,11 @@
     </BodyContentTemplate>
 </DxPopup>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
     private List<CompraCxpListItemDto> cxps = new();
     private List<CuentaBancariaLookupDto> cuentas = new();
     private List<BancoItem> bancosDisponibles = new();
@@ -613,8 +616,9 @@
             seleccionada = null;
             await CargarAsync();
 
-            // Comprobante del pago recién registrado (se abre en pestaña nueva).
-            await JS.InvokeVoidAsync("open", PagosCompraClient.GetComprobantePagoPdfUrl(cxpId, r.NumeroAbono), "_blank");
+            // Comprobante del pago recién registrado (embebido en la misma vista).
+            pdfPopup?.Mostrar(PagosCompraClient.GetComprobantePagoPdfUrl(cxpId, r.NumeroAbono),
+                $"Comprobante de pago #{r.NumeroAbono}");
         }
         catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
         finally { guardando = false; }
@@ -676,18 +680,20 @@
         finally { partidaLoading = false; }
     }
 
-    // ── Comprobantes PDF (se abren en pestaña nueva, como los demás comprobantes) ──
+    // ── Comprobantes PDF (embebidos en la misma vista, como los demás comprobantes) ──
 
-    private async Task ImprimirComprobantePagoAsync(int numeroAbono)
+    private void ImprimirComprobantePago(int numeroAbono)
     {
         if (cxpAbonos is null) return;
-        await JS.InvokeVoidAsync("open", PagosCompraClient.GetComprobantePagoPdfUrl(cxpAbonos.Id, numeroAbono), "_blank");
+        pdfPopup?.Mostrar(PagosCompraClient.GetComprobantePagoPdfUrl(cxpAbonos.Id, numeroAbono),
+            $"Comprobante de pago #{numeroAbono}");
     }
 
-    private async Task ImprimirPartidaPagoAsync(int numeroAbono)
+    private void ImprimirPartidaPago(int numeroAbono)
     {
         if (cxpAbonos is null) return;
-        await JS.InvokeVoidAsync("open", PagosCompraClient.GetPartidaPagoPdfUrl(cxpAbonos.Id, numeroAbono), "_blank");
+        pdfPopup?.Mostrar(PagosCompraClient.GetPartidaPagoPdfUrl(cxpAbonos.Id, numeroAbono),
+            $"Partida contable — Pago #{numeroAbono}");
     }
 
     // ── Semáforo de vencimiento ──────────────────────────────────────────────

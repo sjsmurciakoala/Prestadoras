@@ -37,6 +37,51 @@ public sealed class AntiguedadSaldosController : ControllerBase
         [FromQuery] bool incluirPorVencer = true,
         [FromQuery] int origen = 0,
         [FromQuery] int? tipoProveedor = null,
+        [FromQuery] string? proveedor = null,
         CancellationToken ct = default)
-        => Ok(await _service.GetAsync(corte, incluirPorVencer, origen, tipoProveedor, ct));
+        => Ok(await _service.GetAsync(corte, incluirPorVencer, origen, tipoProveedor, proveedor, ct));
+
+    /// <summary>Cuadro de antigüedad en PDF (inline). Mismos filtros que la matriz.</summary>
+    [HttpGet("pdf")]
+    public async Task<IActionResult> GetPdf(
+        [FromQuery] DateOnly? corte,
+        [FromQuery] bool incluirPorVencer = true,
+        [FromQuery] int origen = 0,
+        [FromQuery] int? tipoProveedor = null,
+        [FromQuery] string? proveedor = null,
+        CancellationToken ct = default)
+    {
+        var datos = await _service.GetDatosImpresionAsync(
+            corte, incluirPorVencer, origen, tipoProveedor, proveedor, User?.Identity?.Name, ct);
+
+        using var report = new SIAD.Reports.Rpt_Dev_AntiguedadSaldos_Proveedor(datos);
+        using var ms = new MemoryStream();
+        report.ExportToPdf(ms);
+
+        Response.Headers.ContentDisposition = $"inline; filename=antiguedad_saldos_{Stamp()}.pdf";
+        return File(ms.ToArray(), "application/pdf");
+    }
+
+    /// <summary>Cuadro de antigüedad en Excel (descarga).</summary>
+    [HttpGet("excel")]
+    public async Task<IActionResult> GetExcel(
+        [FromQuery] DateOnly? corte,
+        [FromQuery] bool incluirPorVencer = true,
+        [FromQuery] int origen = 0,
+        [FromQuery] int? tipoProveedor = null,
+        [FromQuery] string? proveedor = null,
+        CancellationToken ct = default)
+    {
+        var datos = await _service.GetDatosImpresionAsync(
+            corte, incluirPorVencer, origen, tipoProveedor, proveedor, User?.Identity?.Name, ct);
+
+        using var report = new SIAD.Reports.Rpt_Dev_AntiguedadSaldos_Proveedor(datos);
+        using var ms = new MemoryStream();
+        report.ExportToXlsx(ms);
+
+        var nombre = $"antiguedad_saldos_{Stamp()}.xlsx";
+        return File(ms.ToArray(), "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", nombre);
+    }
+
+    private static string Stamp() => DateTime.Now.ToString("yyyyMMdd_HHmm");
 }
