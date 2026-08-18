@@ -41,9 +41,9 @@ public sealed class Rpt_Dev_Comprobante_RecepcionCompra : ComprobanteAlmacenRepo
             meta.Add($"Fecha: {doc.Fecha.Value.ToString("dd/MM/yyyy", EsHn)}");
         }
 
-        if (!string.IsNullOrWhiteSpace(doc.NumeroFacturaSar))
+        if (doc.FechaVencimiento.HasValue)
         {
-            meta.Add($"Factura: {doc.NumeroFacturaSar}");
+            meta.Add($"Vence: {doc.FechaVencimiento.Value.ToString("dd/MM/yyyy", EsHn)}");
         }
 
         var y = BuildEncabezado(band, datos, "FACTURA DE COMPRA", doc.Numero.ToString("00000"), meta,
@@ -88,16 +88,14 @@ public sealed class Rpt_Dev_Comprobante_RecepcionCompra : ComprobanteAlmacenRepo
         AddLabel(band, string.IsNullOrWhiteSpace(doc.BodegaNombre) ? "-" : doc.BodegaNombre!, 462f, y, 288f, 15f, 10f);
         y += 18f;
 
+        // El término de pago suele nombrar ya la condición ("Crédito 30 días"); se muestra la
+        // condición aparte sólo cuando no hay término, para no repetir "Crédito 30 días (Crédito)".
+        // El vencimiento va en la caja del encabezado (meta), no aquí.
         var pago = string.IsNullOrWhiteSpace(doc.TerminosPago)
             ? doc.CondicionPagoDescripcion
-            : $"{doc.TerminosPago} ({doc.CondicionPagoDescripcion})";
+            : doc.TerminosPago!;
         AddLabel(band, "Cond. de pago:", 0f, y, 100f, 15f, 10f, bold: true);
-        AddLabel(band, pago, 102f, y, 280f, 15f, 10f);
-        if (doc.FechaVencimiento.HasValue)
-        {
-            AddLabel(band, "Vencimiento:", 400f, y, 90f, 15f, 10f, bold: true);
-            AddLabel(band, doc.FechaVencimiento.Value.ToString("dd/MM/yyyy", EsHn), 492f, y, 258f, 15f, 10f);
-        }
+        AddLabel(band, pago, 102f, y, 648f, 15f, 10f);
         y += 18f;
 
         return y + 6f;
@@ -155,7 +153,8 @@ public sealed class Rpt_Dev_Comprobante_RecepcionCompra : ComprobanteAlmacenRepo
         y = AddTotalLinea(band, y, "Subtotal:", Money(doc.SubTotal));
         if (doc.Descuento > 0m)
         {
-            y = AddTotalLinea(band, y, $"Descuento ({Cantidad(doc.Descuento)}%):", string.Empty);
+            var montoDescuento = Math.Round(doc.SubTotal * doc.Descuento / 100m, 2, MidpointRounding.AwayFromZero);
+            y = AddTotalLinea(band, y, $"Descuento ({doc.Descuento.ToString("0.##", EsHn)}%):", $"-{Money(montoDescuento)}");
         }
         if (doc.OtrosGastos > 0m)
         {

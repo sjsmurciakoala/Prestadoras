@@ -151,7 +151,8 @@ public sealed class Rpt_Dev_Comprobante_OrdenCompra : ComprobanteAlmacenReportBa
         y = AddTotalLinea(band, y, "Subtotal:", Money(doc.SubTotal));
         if (doc.Descuento > 0m)
         {
-            y = AddTotalLinea(band, y, $"Descuento ({Cantidad(doc.Descuento)}%):", string.Empty);
+            var montoDescuento = Math.Round(doc.SubTotal * doc.Descuento / 100m, 2, MidpointRounding.AwayFromZero);
+            y = AddTotalLinea(band, y, $"Descuento ({doc.Descuento.ToString("0.##", EsHn)}%):", $"-{Money(montoDescuento)}");
         }
         if (doc.OtrosGastos > 0m)
         {
