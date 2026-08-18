@@ -833,6 +833,111 @@ SELECT company_id, permitir FROM public.cfg_inventario_negativo ORDER BY company
 SELECT count(*) FILTER (WHERE permite_existencia_negativa IS NULL) AS heredan, count(*) AS total FROM public.alm_bodega;
 ```
 
+### 3.22 Almacén — backfill del costo promedio / existencia resultante en el kardex histórico (2026-08-18)
+
+Backfill de datos de la iniciativa "que el costo promedio quede almacenado por cada registro"
+(rama `feat/almacen-integracion-contable`). El motor de posteo ya persiste `existencia_resultante`
+y `costo_promedio_resultante` en cada asiento **nuevo** de `alm_kardex`; el **histórico migrado de
+SIMAFI** (asientos con `uuid` NULL) las trae en **NULL**, y por eso el libro por bodega imprime "—"
+y la vista por artículo tiene que derivar el corrido al vuelo. Este script rellena esas columnas
+recorriendo cada par (artículo, bodega) en orden `(fecha, id)` y calculando el saldo y el costo
+promedio **corrido** con window functions — la MISMA fórmula que `KardexService.AplicarPuntoDeCorte`.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-18_alm_kardex_backfill_resultantes_historico.sql` | `UPDATE` de `existencia_resultante` (15,2) y `costo_promedio_resultante` (12,4) en los ~47.203 asientos históricos (`uuid IS NULL AND articulo_id IS NOT NULL`, 588 pares, company_id=2) con el saldo/costo corrido. Excluye 12 asientos basura (sin artículo, todo en 0 → quedan NULL) | **Datos, one-shot idempotente** (`WHERE … existencia_resultante IS NULL`) — **re-ejecutable** (no re-toca lo ya rellenado ni los snapshots del motor). **Requiere la escotilla** `DISABLE/ENABLE TRIGGER trg_alm_kardex_inmutable` dentro de la transacción | **pendiente** | **pendiente** |
+
+- **Dependencias:** los 6 scripts del kardex (**§3.1**), en particular `2026-07-14_alm_kardex_trazabilidad.sql`,
+  que crea las columnas resultantes **y** el trigger de inmutabilidad. Sin ellos el `UPDATE` falla
+  (columnas inexistentes) o el `DISABLE TRIGGER` no encuentra el trigger. **No** depende del corte de
+  inventario (Fase 7) ni lo reemplaza: sólo rellena las resultantes del histórico.
+- **⚠️ Requiere OWNER de `alm_kardex`** (para `DISABLE/ENABLE TRIGGER`) y **ventana de bajo uso** (el
+  script hace `LOCK TABLE … SHARE ROW EXCLUSIVE`). El trigger de inmutabilidad queda desactivado **sólo
+  durante el UPDATE**, dentro de la transacción, y se reactiva antes del `COMMIT`; si algo falla, el
+  `ROLLBACK` revierte también el `DISABLE` (es transaccional en Postgres).
+- **No lleva binario:** las columnas ya existen y el código no cambió. La presentación se conserva igual
+  (KardexService sigue derivando el corrido como verificador); el beneficio observable es que el **libro
+  por bodega** deja de mostrar "—" en el histórico. Aplicable en cualquier momento, independiente del
+  despliegue del portal.
+- **Bordes medidos en el mirror (2026-08-18, company_id=2):** interleaving 0, revaluación real 0,
+  huérfanos con código 0 → la window pura es exacta (sin PL/pgSQL). **Verificado con test de integración**
+  `KardexBackfillHistoricoTests` (3/3: el backfill SQL coincide con la derivación de KardexService y no
+  toca los snapshots del motor) y **suite Almacén 327/327**. **Aún NO aplicado en firme a ninguna base**
+  (el test corre en transacción con ROLLBACK).
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-18_alm_kardex_backfill_resultantes_historico.sql
+```
+
+¿Ya aplicado? (si devuelve ~47.203 falta; si devuelve 12 ya está — sólo quedan los basura)
+
+```sql
+SELECT count(*) AS historico_sin_resultante
+  FROM alm_kardex WHERE uuid IS NULL AND existencia_resultante IS NULL;
+```
+
+Verificación posterior (los snapshots del motor no cambian; el histórico del 634 queda con costo):
+
+```sql
+SELECT count(*) AS motor FROM alm_kardex WHERE uuid IS NOT NULL;   -- igual que antes
+SELECT id, fecha, existencia_resultante, costo_promedio_resultante
+  FROM alm_kardex WHERE company_id=2 AND articulo_id=634 AND uuid IS NULL
+ ORDER BY fecha, id;   -- ya sin NULL en las resultantes
+```
+
+---
+
+### 3.23 Retenciones en "Pagos a proveedores" — unificación en el libro fiscal (2026-08-18)
+
+Nueva iniciativa (rama `feat/almacen-integracion-contable`): permitir **retener al pagar una factura
+de compra** desde `/almacen/compras/pagos` (CxP de compras), reusando el MISMO libro fiscal de
+retenciones (`prv_retencion_hdr/dtl`, §3.6) del flujo de compromisos, con un discriminador de
+**origen**. Así la constancia y la declaración mensual (SAR) toman ambos orígenes sin duplicar
+reportes ni folios (decisión del usuario: "completo, unificado").
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-18_alm_retencion_compras_unificada.sql` | (1) `alm_compra_cxp_abono.retenido` (14,2, default 0) — el bruto sigue en `monto`, el neto al banco = `monto - retenido`; (2) `prv_retencion_hdr`: `numero_orden` **pasa a anulable** + `origen` SMALLINT (1 compromiso / 2 compra, default 1) + `cxp_id` INT + FK `(company_id,cxp_id)→alm_compra_cxp` (MATCH SIMPLE, exime a OPD) + CHECK de coherencia origen↔referencia + índice único parcial `uq_prv_retencion_hdr_cxp_pago` para compras | **Aditivo idempotente** salvo aflojar el NOT NULL de `numero_orden` (no borra ni cambia datos; las filas OPD reciben `origen=1` por default y cumplen el CHECK) — **re-ejecutable** (`ADD COLUMN IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, guardas por `pg_constraint`) | **sí (2026-08-18)** | **pendiente** |
+
+- **Dependencias:** `alm_compra_cxp` + `alm_compra_cxp_abono` (**§3.10** — aplicar **antes**) y
+  `prv_retencion_hdr` + `prv_retencion_dtl` (**§3.6** — aplicar **antes**). Va **después** de ambas.
+  No asume ningún `company_id` (el default `origen=1` aplica a todas las filas existentes).
+- **Con binario:** el popup de retención en `/almacen/compras/pagos`, el endpoint de retenciones
+  aplicables bajo el módulo Compras, el posteo de la retención al mayor (HABER "retenciones por
+  pagar", banco por el neto) y la ramificación por origen en `RetencionRegistroService`
+  (constancia + declaración resuelven el nombre del proveedor desde la CxP cuando `origen=2`)
+  dependen de este SQL. Apagar/encender el posteo sigue gobernado por `activo_compras` (§3.11).
+- **No es destructivo para el flujo de compromisos:** las filas OPD siguen con `origen=1`,
+  `numero_orden` no nulo, `cxp_id` NULL, y la FK/constancia/declaración de compromisos no cambian.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-18_alm_retencion_compras_unificada.sql
+```
+
+¿Ya aplicado? (si alguna devuelve NULL/`f`, falta)
+
+```sql
+SELECT to_regclass('public.uq_prv_retencion_hdr_cxp_pago')                              AS idx_compras,   -- NULL = falta
+       EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name='prv_retencion_hdr' AND column_name='origen')          AS col_origen,
+       EXISTS (SELECT 1 FROM information_schema.columns
+                WHERE table_name='alm_compra_cxp_abono' AND column_name='retenido')     AS col_retenido;
+```
+
+Verificación posterior (numero_orden quedó anulable; los 3 constraints existen):
+
+```sql
+SELECT is_nullable FROM information_schema.columns
+ WHERE table_name='prv_retencion_hdr' AND column_name='numero_orden';   -- YES
+SELECT conname FROM pg_constraint
+ WHERE conname IN ('ck_alm_compra_cxp_abono_retenido','fk_prv_retencion_hdr_cxp','ck_prv_retencion_hdr_origen')
+ ORDER BY conname;   -- 3 filas
+```
+
 ---
 
 ## 4. Orden de aplicación recomendado
@@ -964,3 +1069,9 @@ para correr F1 con TDD), **SRV pendiente**. Aditivo/reversible; nada nace activa
 (motor F1 + config/UI F5). El SQL sin el binario es inocuo (interruptor apagado); el binario lee el
 interruptor pero, con `permitir=false` y override NULL, se comporta igual que hoy. Independiente del
 resto de la tanda.
+
+**Backfill resultantes del kardex histórico (2026-08-18):** `2026-08-18_alm_kardex_backfill_resultantes_historico.sql`
+(§3.22) está **sin commitear** y **sin aplicar en firme** (ni mirror ni SRV; sólo probado en transacción
+con ROLLBACK vía `KardexBackfillHistoricoTests`, 3/3). Es sólo datos, no lleva binario. Depende de los 6
+del kardex (§3.1). Requiere **OWNER** de `alm_kardex` y **ventana de bajo uso** (usa la escotilla del
+trigger de inmutabilidad). Aplicable en cualquier momento, independiente del resto de la tanda.

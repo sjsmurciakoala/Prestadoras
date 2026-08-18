@@ -33,7 +33,7 @@ public sealed class Rpt_Dev_Constancia_Retencion : ComprobanteAlmacenReportBase
         detail.HeightF = BuildDocumento(detail, datos);
 
         Bands.Add(BuildPie(
-            $"Constancia de retención folio {datos.Folio} — OPD-{datos.NumeroOrden}/abono {datos.NumeroAbono}",
+            $"Constancia de retención folio {datos.Folio} · {datos.DocumentoTexto}",
             datos.ImpresoPor));
 
         if (datos.Anulada)
@@ -123,9 +123,9 @@ public sealed class Rpt_Dev_Constancia_Retencion : ComprobanteAlmacenReportBase
             y += 18f;
         }
 
-        // ── Documento origen ──
+        // ── Documento origen (compromiso u orden de compra, según el origen) ──
         AddLabel(band, "Documento:", 0f, y, 90f, 15f, 10f, bold: true);
-        AddLabel(band, $"Compromiso/Orden No. {d.NumeroOrden} — Abono No. {d.NumeroAbono}", 92f, y, 658f, 15f, 10f);
+        AddLabel(band, d.DocumentoTexto, 92f, y, 658f, 15f, 10f);
         y += 18f;
 
         if (!string.IsNullOrWhiteSpace(d.Concepto))

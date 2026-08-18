@@ -23,8 +23,17 @@ public sealed class ConstanciaRetencionImpresionDto
     public string? ProveedorRtn { get; init; }
 
     // ── Documento origen + folio interno ──
-    public int NumeroOrden { get; init; }
+    /// <summary>Compromiso origen; NULL cuando la retención nace de una factura de compra (origen=2).</summary>
+    public int? NumeroOrden { get; init; }
     public int NumeroAbono { get; init; }
+
+    /// <summary>Origen del pago: 1 compromiso (OPD), 2 factura de compra (CxP).</summary>
+    public short Origen { get; init; }
+
+    /// <summary>Referencia legible del documento origen ("Orden No. 15 — Abono 2" o "Factura … — Pago 1").
+    /// La compone el builder según el origen; el reporte la imprime tal cual.</summary>
+    public string DocumentoTexto { get; init; } = string.Empty;
+
     public string? Concepto { get; init; }
     public int Folio { get; init; }
     public DateOnly FechaEmision { get; init; }

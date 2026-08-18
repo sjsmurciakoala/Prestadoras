@@ -103,8 +103,11 @@
 
 <DxToastProvider Name="RetencionesDeclaracionToast" MaxToastCount="3" StickToViewport="true" />
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
     private IReadOnlyList<RetencionDeclaracionLineaDto> filas = Array.Empty<RetencionDeclaracionLineaDto>();
 
     private DateTime? filtroDesde;
@@ -157,10 +160,10 @@
         }
     }
 
-    private async Task ImprimirPdf()
+    private void ImprimirPdf()
     {
         if (filas.Count == 0) return;
-        await JS.InvokeVoidAsync("open", RegistroClient.GetDeclaracionPdfUrl(BuildFiltro()), "_blank");
+        pdfPopup?.Mostrar(RegistroClient.GetDeclaracionPdfUrl(BuildFiltro()), "Declaración de retenciones");
     }
 
     private async Task ExportarExcel()

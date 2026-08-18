@@ -15,6 +15,9 @@ public sealed class OrdenesCompraClient
         _http = http;
     }
 
+    /// <summary>URL del comprobante de la orden de compra en PDF (inline); se muestra embebido en la vista.</summary>
+    public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
+
     public async Task<List<OrdenCompraListItemDto>> GetAsync(OrdenCompraFilterDto? filtro = null, CancellationToken ct = default)
     {
         var f = filtro ?? new OrdenCompraFilterDto();

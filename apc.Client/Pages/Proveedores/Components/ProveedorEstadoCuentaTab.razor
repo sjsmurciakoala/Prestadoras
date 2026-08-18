@@ -334,6 +334,8 @@
     }
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter, EditorRequired]
     public string Codigo { get; set; } = string.Empty;
@@ -351,6 +353,7 @@
     private readonly List<ProveedorEstadoCuentaMovimientoDto> movimientos = new();
 
     private DxGrid? gridDocumentos;
+    private PdfPreviewPopup? pdfPopup;
     private int activeTabIndex;
     private bool isLoading = true;
     private bool movimientosCargados;
@@ -516,10 +519,10 @@
 
     // El PDF refleja el mismo alcance que el grid: si el usuario apagó "Solo con saldo",
     // el reporte también trae los documentos ya pagados.
-    private async Task AbrirPdf()
+    private void AbrirPdf()
     {
         var url = ProveedorEstadoCuentaClient.GetPdfUrl(Codigo, soloPendientes: soloPendientes);
-        await JS.InvokeVoidAsync("open", url, "_blank");
+        pdfPopup?.Mostrar(url, "Estado de cuenta del proveedor");
     }
 
     private void AbrirDocumento(ProveedorEstadoCuentaDocumentoDto documento)

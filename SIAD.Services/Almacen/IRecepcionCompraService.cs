@@ -23,6 +23,9 @@ public interface IRecepcionCompraService
     /// <summary>Recepción completa (cabecera + renglones), o null si no existe en la empresa actual.</summary>
     Task<RecepcionCompraDto?> GetByIdAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Datos de impresión del comprobante (PDF) de la factura de compra: empresa emisora + la factura + total en letras. Null si no existe.</summary>
+    Task<RecepcionCompraImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default);
+
     /// <summary>
     /// Registra la factura y postea sus renglones al kardex, todo en una transacción: o entra
     /// completa o no entra nada.

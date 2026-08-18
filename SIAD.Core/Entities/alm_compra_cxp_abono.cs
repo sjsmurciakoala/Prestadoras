@@ -19,7 +19,12 @@ public partial class alm_compra_cxp_abono : ICompanyScopedEntity
     public int numero_abono { get; set; }
 
     public DateOnly fecha { get; set; }
+
+    /// <summary>Bruto aplicado a la deuda (baja el saldo de la CxP por este monto).</summary>
     public decimal monto { get; set; }
+
+    /// <summary>Suma retenida en este pago (0 si no hubo). El neto pagado al banco/caja = monto − retenido.</summary>
+    public decimal retenido { get; set; }
 
     /// <summary>efectivo / cheque / transferencia.</summary>
     public string? metodo_pago { get; set; }

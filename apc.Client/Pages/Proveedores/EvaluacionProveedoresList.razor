@@ -377,8 +377,11 @@
     </BodyTemplate>
 </DxPopup>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
     private const string GridLayoutStorageKey = "proveedores-evaluacion-grid-layout";
 
     private List<EvaluacionPeriodoDto> periodos = new();
@@ -599,14 +602,14 @@
             $"/proveedores/evaluacion/{periodoSeleccionado.Id}/{Uri.EscapeDataString(item.CodProveedor)}");
     }
 
-    /// <summary>Abre el PDF en pestaña nueva, con los mismos filtros que se ven en pantalla.</summary>
-    private async Task AbrirComparativoPdfAsync()
+    /// <summary>Abre el PDF en un popup embebido, con los mismos filtros que se ven en pantalla.</summary>
+    private void AbrirComparativoPdfAsync()
     {
         if (periodoSeleccionado is null) return;
 
         var url = EvaluacionProveedorClient.GetComparativoPdfUrl(
             periodoSeleccionado.Id, filtroBusqueda, filtroClase);
-        await JS.InvokeVoidAsync("open", url, "_blank");
+        pdfPopup?.Mostrar(url, "Evaluación de proveedores");
     }
 
     /// <summary>Etiqueta corta del criterio para el chip ("Cumplimiento de entrega" → "Cumpl.").</summary>

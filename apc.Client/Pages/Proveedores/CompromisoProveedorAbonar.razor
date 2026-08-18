@@ -662,6 +662,8 @@
                            Mensaje="El abono se registró y se emitió el cheque. ¿Qué desea imprimir?" />
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter]
     public int NumeroOrden { get; set; }
@@ -730,6 +732,7 @@
     private PolizaConLineasDto? partidaSeleccionada;
 
     private ErrorNotice errorNotice = default!;
+    private PdfPreviewPopup? pdfPopup;
     private readonly List<string> validationMessages = new();
     private string usuarioActual = "SISTEMA";
 
@@ -1142,8 +1145,9 @@
             {
                 if (result.NumeroAbono > 0)
                 {
-                    await JS.InvokeVoidAsync("open",
-                        OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, result.NumeroAbono), "_blank");
+                    pdfPopup?.Mostrar(
+                        OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, result.NumeroAbono),
+                        $"Comprobante de abono {result.NumeroAbono}");
                 }
 
                 await CargarAsync();
@@ -1204,8 +1208,8 @@
         }
     }
 
-    private async Task VerComprobanteAsync(int numeroAbono)
-        => await JS.InvokeVoidAsync("open", OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, numeroAbono), "_blank");
+    private void VerComprobanteAsync(int numeroAbono)
+        => pdfPopup?.Mostrar(OrdenesPagoDirectoClient.GetComprobanteAbonoUrl(NumeroOrden, numeroAbono), $"Comprobante de abono {numeroAbono}");
 
     /// <summary>
     /// Abre el detalle contable (lineas debito/credito) de la partida ABO que genero el abono.

@@ -108,6 +108,10 @@ public sealed class PagoCompraImpresionDto : ComprobanteAlmacenImpresionBase
     public decimal MontoFactura { get; set; }
 
     public decimal Monto { get; set; }
+
+    /// <summary>Suma retenida en el pago (0 si no hubo). El neto pagado al banco/caja = Monto − Retenido.</summary>
+    public decimal Retenido { get; set; }
+
     public decimal SaldoAnterior { get; set; }
     public decimal SaldoRestante { get; set; }
 
@@ -167,5 +171,31 @@ public sealed class TrasladoRecepcionImpresionDto : ComprobanteAlmacenImpresionB
     public TrasladoRecepcionDto Recepcion { get; set; } = new();
 
     /// <summary>Total recibido en esta tanda, en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Datos de impresión del comprobante de una ORDEN DE COMPRA a un proveedor: el documento con que se
+/// formaliza el pedido (proveedor, términos de pago, destino/uso y fecha de entrega pactada) y sus
+/// renglones valorizados con ISV. No mueve inventario; se imprime para autorizar y enviar al proveedor.
+/// </summary>
+public sealed class OrdenCompraImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public OrdenCompraDto Documento { get; set; } = new();
+
+    /// <summary>Total de la orden en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
+    public string MontoEnLetras { get; set; } = string.Empty;
+}
+
+/// <summary>
+/// Datos de impresión del comprobante de una FACTURA DE COMPRA (recepción de mercadería del
+/// proveedor): el documento que ingresa la compra al inventario —proveedor, No. de factura del
+/// proveedor (SAR), O/C origen si la hay, bodega— y sus renglones valorizados con ISV.
+/// </summary>
+public sealed class RecepcionCompraImpresionDto : ComprobanteAlmacenImpresionBase
+{
+    public RecepcionCompraDto Documento { get; set; } = new();
+
+    /// <summary>Total de la factura en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
     public string MontoEnLetras { get; set; } = string.Empty;
 }

@@ -4,6 +4,8 @@
 @using DevExpress.Blazor
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Retenciones
+@using SIAD.Core.Retenciones
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
 
@@ -193,7 +195,8 @@
             <div class="row g-3">
                 <div class="col-6">
                     <label class="form-label fw-semibold">Monto a pagar</label>
-                    <DxSpinEdit @bind-Value="pago.Monto" DisplayFormat="N2" MinValue="0" MaxValue="@seleccionada.Saldo" CssClass="w-100" />
+                    <DxSpinEdit Value="pago.Monto" ValueChanged="@((decimal v) => OnMontoChanged(v))" ValueExpression="@(() => pago.Monto)"
+                                DisplayFormat="N2" MinValue="0" MaxValue="@seleccionada.Saldo" CssClass="w-100" />
                 </div>
                 <div class="col-6">
                     <label class="form-label fw-semibold">Fecha</label>
@@ -246,6 +249,63 @@
                     <label class="form-label fw-semibold">Observaciones</label>
                     <DxTextBox @bind-Text="pago.Observaciones" MaxLength="300" NullText="Opcional" CssClass="w-100" />
                 </div>
+
+                <div class="col-12">
+                    <div class="d-flex align-items-center justify-content-between mb-1">
+                        <label class="form-label fw-semibold mb-0">Retenciones <span class="text-muted small fw-normal">(opcional)</span></label>
+                        @if (retencionesPago.Count > 0)
+                        {
+                            <span class="small text-muted">Retenido: <b>@TotalRetenidoPago.ToString("N2")</b></span>
+                        }
+                    </div>
+                    <div class="row g-2 align-items-end">
+                        <div class="col-12 col-sm-5">
+                            <DxComboBox Data="@retencionesAplicables" TData="RetencionAplicableDto" TValue="int?"
+                                        Value="@retSelId" ValueChanged="@((int? v) => OnRetTipoChanged(v))"
+                                        ValueExpression="@(() => retSelId)"
+                                        ValueFieldName="@nameof(RetencionAplicableDto.RetencionId)"
+                                        TextFieldName="@nameof(RetencionAplicableDto.Display)"
+                                        NullText="Tipo de retención..." FilteringMode="DataGridFilteringMode.Contains"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <DxSpinEdit Value="retBase" ValueChanged="@((decimal v) => OnRetBaseChanged(v))" ValueExpression="@(() => retBase)"
+                                        DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                        </div>
+                        <div class="col-6 col-sm-3">
+                            <DxSpinEdit @bind-Value="retMonto" DisplayFormat="N2" MinValue="0" CssClass="w-100" />
+                        </div>
+                        <div class="col-12 col-sm-1 d-grid">
+                            <DxButton IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Secondary" title="Agregar retención"
+                                      Enabled="@(retSelId.HasValue && retMonto > 0)" Click="AgregarRetencion" />
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between text-muted small mt-1">
+                        <span>Base y monto se calculan del monto a pagar; puede ajustarlos.</span>
+                    </div>
+                    @if (!string.IsNullOrWhiteSpace(retAviso))
+                    {
+                        <div class="form-text text-warning"><i class="bi bi-exclamation-triangle me-1"></i>@retAviso</div>
+                    }
+                    @if (retencionesPago.Count > 0)
+                    {
+                        <ul class="list-unstyled small mt-2 mb-1">
+                            @foreach (var it in retencionesPago.Select((x, i) => new { x, i }))
+                            {
+                                <li class="d-flex justify-content-between align-items-center border-bottom py-1">
+                                    <span>@it.x.Nombre <span class="text-muted">(@it.x.Porcentaje.ToString("0.##")% s/ @it.x.Base.ToString("N2"))</span></span>
+                                    <span class="d-flex align-items-center gap-2">
+                                        <span class="money">@it.x.Monto.ToString("N2")</span>
+                                        <button type="button" class="btn-icon btn-delete" title="Quitar" @onclick="() => QuitarRetencion(it.i)"><i class="bi bi-x"></i></button>
+                                    </span>
+                                </li>
+                            }
+                        </ul>
+                        <div class="d-flex justify-content-between fw-semibold">
+                            <span>Neto a pagar</span><span class="money @(NetoPago <= 0 ? "text-danger" : "")">@NetoPago.ToString("N2")</span>
+                        </div>
+                    }
+                </div>
             </div>
 
             <div class="alert @(contabilidadActiva ? "alert-success" : "alert-info") py-2 mt-3 mb-0 small">
@@ -268,7 +328,7 @@
                 <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
                           Enabled="@(!guardando)" Click="CerrarPago" />
                 <DxButton Text="Registrar pago" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
-                          Enabled="@(!guardando && pago.Monto > 0)" Click="GuardarPagoAsync" />
+                          Enabled="@(!guardando && pago.Monto > 0 && (retencionesPago.Count == 0 || NetoPago > 0))" Click="GuardarPagoAsync" />
             </div>
         }
     </BodyContentTemplate>
@@ -312,7 +372,7 @@
                 <table class="table table-sm align-middle">
                     <thead>
                         <tr>
-                            <th>No.</th><th>Fecha</th><th class="text-end">Monto</th><th>Método</th>
+                            <th>No.</th><th>Fecha</th><th class="text-end">Monto</th><th class="text-end">Retenido</th><th>Método</th>
                             <th>Cheque</th><th class="text-center">Estado</th><th></th>
                         </tr>
                     </thead>
@@ -323,6 +383,7 @@
                                 <td>@a.NumeroAbono</td>
                                 <td>@a.Fecha.ToString("dd/MM/yyyy")</td>
                                 <td class="text-end money">@a.Monto.ToString("N2")</td>
+                                <td class="text-end money @(a.Retenido > 0 ? "text-muted" : "text-muted opacity-50")">@(a.Retenido > 0 ? a.Retenido.ToString("N2") : "—")</td>
                                 <td class="small">@a.MetodoPago</td>
                                 <td class="small">@(string.IsNullOrWhiteSpace(a.NumCheque) ? "—" : a.NumCheque)</td>
                                 <td class="text-center">
@@ -471,6 +532,30 @@
     private CompraCxpAbonoUpsertDto pago = new();
     private DateTime? fechaPago = DateTime.Today;
 
+    // Retención del pago: el monto a pagar es el BRUTO (baja la deuda); el banco/caja paga el NETO.
+    private readonly List<RetencionAplicableDto> retencionesAplicables = new();
+    private decimal? tasaIsvGeneral;
+    private int? retSelId;
+    private decimal retBase;
+    private decimal retMonto;
+    private string? retAviso;
+    private readonly List<RetLinea> retencionesPago = new();
+
+    private decimal TotalRetenidoPago => retencionesPago.Sum(x => x.Monto);
+    private decimal NetoPago => pago.Monto - TotalRetenidoPago;
+    private RetencionAplicableDto? RetActual => retSelId.HasValue ? retencionesAplicables.FirstOrDefault(r => r.RetencionId == retSelId) : null;
+
+    private sealed class RetLinea
+    {
+        public int RetencionId { get; set; }
+        public long CuentaId { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string? BaseCalculo { get; set; }
+        public decimal Porcentaje { get; set; }
+        public decimal Base { get; set; }
+        public decimal Monto { get; set; }
+    }
+
     private bool abonosVisible, abonosLoading;
     private CompraCxpListItemDto? cxpAbonos;
     private List<CompraCxpAbonoListItemDto> abonos = new();
@@ -547,6 +632,15 @@
 
         try { cuentasContables = await PagosClient.ListarCuentasContablesAsync(); } catch { cuentasContables = new(); }
         try { contabilidadActiva = await PagosClient.ObtenerContabilidadActivaAsync(); } catch { contabilidadActiva = false; }
+
+        try
+        {
+            var apl = await PagosClient.GetRetencionesAplicablesAsync();
+            retencionesAplicables.Clear();
+            retencionesAplicables.AddRange(apl.Retenciones);
+            tasaIsvGeneral = apl.TasaIsvGeneral;
+        }
+        catch { /* sin catálogo de retención: el pago funciona igual, sólo sin la sección */ }
     }
 
     private CompraCxpFilterDto BuildFilter() => new()
@@ -573,6 +667,8 @@
         pago = new CompraCxpAbonoUpsertDto { Monto = item.Saldo, MetodoPago = MetodoPagoCompra.Efectivo };
         bancoSeleccionadoId = null;
         fechaPago = DateTime.Today;
+        retencionesPago.Clear();
+        retSelId = null; retBase = 0m; retMonto = 0m; retAviso = null;
         pagoVisible = true;
     }
 
@@ -600,9 +696,23 @@
             return;
         }
 
+        if (retencionesPago.Count > 0 && NetoPago <= 0m)
+        {
+            Toast("Retenciones", "El neto a pagar (monto − retenciones) debe ser mayor que cero.", ToastRenderStyle.Warning);
+            return;
+        }
+
         guardando = true;
         try
         {
+            pago.Retenciones = retencionesPago.Select(rl => new RetencionAplicadaDto
+            {
+                RetencionId = rl.RetencionId,
+                CuentaId = rl.CuentaId,
+                Base = rl.Base,
+                Porcentaje = rl.Porcentaje,
+                Monto = rl.Monto
+            }).ToList();
             pago.Fecha = fechaPago.HasValue ? DateOnly.FromDateTime(fechaPago.Value) : DateOnly.FromDateTime(DateTime.Today);
             var cxpId = seleccionada.Id;
             var r = await PagosClient.RegistrarAbonoAsync(cxpId, pago);
@@ -622,6 +732,84 @@
         }
         catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
         finally { guardando = false; }
+    }
+
+    // ── Retenciones del pago ──────────────────────────────────────────────────
+
+    private void OnMontoChanged(decimal v)
+    {
+        pago.Monto = v;
+        // Recalcula base/monto de las retenciones catalogadas ya agregadas (las manuales sin % quedan fijas).
+        foreach (var rl in retencionesPago.Where(x => x.Porcentaje > 0m))
+        {
+            rl.Base = RetencionCalculator.CalcularBase(pago.Monto, rl.BaseCalculo, tasaIsvGeneral);
+            rl.Monto = RetencionCalculator.MontoDesdeBase(rl.Base, rl.Porcentaje);
+        }
+        if (RetActual is { } ret) RecalcularEditorPara(ret);
+    }
+
+    private void OnRetTipoChanged(int? id)
+    {
+        retSelId = id;
+        retAviso = null;
+        if (id is null) { retBase = 0m; retMonto = 0m; return; }
+        var ret = retencionesAplicables.FirstOrDefault(r => r.RetencionId == id);
+        if (ret is null) return;
+        if (!ret.CuentaConfigurada)
+            retAviso = "Esta retención no tiene cuenta contable configurada para la empresa (Mantenimientos → Retenciones).";
+        RecalcularEditorPara(ret);
+    }
+
+    private void OnRetBaseChanged(decimal v)
+    {
+        retBase = v;
+        var ret = RetActual;
+        if (ret is not null && ret.Porcentaje is > 0m)
+            retMonto = RetencionCalculator.MontoDesdeBase(retBase, ret.Porcentaje);
+    }
+
+    private void RecalcularEditorPara(RetencionAplicableDto ret)
+    {
+        retBase = RetencionCalculator.CalcularBase(pago.Monto, ret.BaseCalculo, tasaIsvGeneral);
+        if (RetencionCalculator.RequiereTasaIsvYNoHay(ret.BaseCalculo, tasaIsvGeneral))
+            retAviso = "No hay tasa de ISV vigente: la base no se redujo. Ajuste la base o el monto si corresponde.";
+        if (ret.Porcentaje is > 0m)
+        {
+            retMonto = RetencionCalculator.MontoDesdeBase(retBase, ret.Porcentaje);
+        }
+        else
+        {
+            retMonto = 0m;
+            if (string.IsNullOrWhiteSpace(retAviso))
+                retAviso = "Esta retención no tiene tasa vigente (pendiente SAR): capture el monto a mano.";
+        }
+    }
+
+    private void AgregarRetencion()
+    {
+        var ret = RetActual;
+        if (ret is null || retMonto <= 0m) return;
+        if (!ret.CuentaConfigurada)
+        {
+            Toast("Retención sin cuenta", "Configure la cuenta contable de la retención antes de usarla.", ToastRenderStyle.Warning);
+            return;
+        }
+        retencionesPago.Add(new RetLinea
+        {
+            RetencionId = ret.RetencionId,
+            CuentaId = ret.CuentaAccountId!.Value,
+            Nombre = $"{ret.Codigo} - {ret.Nombre}",
+            BaseCalculo = ret.BaseCalculo,
+            Porcentaje = ret.Porcentaje ?? 0m,
+            Base = retBase,
+            Monto = retMonto
+        });
+        retSelId = null; retBase = 0m; retMonto = 0m; retAviso = null;
+    }
+
+    private void QuitarRetencion(int index)
+    {
+        if (index >= 0 && index < retencionesPago.Count) retencionesPago.RemoveAt(index);
     }
 
     // ── Ver / anular pagos ────────────────────────────────────────────────────

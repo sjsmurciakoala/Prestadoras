@@ -15,6 +15,9 @@ public sealed class RecepcionesCompraClient
         _http = http;
     }
 
+    /// <summary>URL del comprobante de la factura de compra en PDF (inline); se muestra embebido en la vista.</summary>
+    public static string GetComprobantePdfUrl(int id) => $"/{BaseUrl}/{id}/comprobante/pdf";
+
     public async Task<List<RecepcionCompraListItemDto>> GetAsync(
         RecepcionCompraFilterDto? filtro = null, CancellationToken ct = default)
     {

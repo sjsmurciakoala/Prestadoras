@@ -86,6 +86,8 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
                 FechaEmision = x.fecha_emision,
                 NumeroOrden = x.numero_orden,
                 NumeroAbono = x.numero_abono,
+                Origen = x.origen,
+                CxpId = x.cxp_id,
                 CodProveedor = x.cod_proveedor,
                 RtnProveedor = x.rtn_proveedor,
                 BaseTotal = x.base_total,
@@ -112,6 +114,8 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
                 FechaEmision = x.fecha_emision,
                 NumeroOrden = x.numero_orden,
                 NumeroAbono = x.numero_abono,
+                Origen = x.origen,
+                CxpId = x.cxp_id,
                 CodProveedor = x.cod_proveedor,
                 RtnProveedor = x.rtn_proveedor,
                 BaseTotal = x.base_total,
@@ -175,14 +179,39 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
         var company = await _context.cfg_companies.AsNoTracking()
             .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
 
-        // Nombre del proveedor + concepto del compromiso origen (tenant-scoped; numero_orden único por empresa).
-        var compromiso = await _context.prv_compromiso_hdrs.AsNoTracking()
-            .Where(c => c.numero_orden == hdr.numero_orden)
-            .Select(c => new { c.nombre_proveedor, c.concepto })
-            .FirstOrDefaultAsync(ct);
+        // Nombre del proveedor + concepto + referencia del documento origen, según el origen del pago:
+        // compromiso (origen=1, join a prv_compromiso_hdr) o factura de compra (origen=2, join a la CxP).
+        string? nombreProveedor;
+        string? concepto;
+        string? documentoTexto;
+        if (hdr.origen == OrigenRetencion.Compra && hdr.cxp_id is { } cxpId)
+        {
+            var cxp = await _context.alm_compra_cxps.AsNoTracking()
+                .Where(c => c.id == cxpId)
+                .Select(c => new { c.proveedor, c.numero_factura_sar, c.compra_hdr_id })
+                .FirstOrDefaultAsync(ct);
+            var numeroFactura = cxp is null
+                ? null
+                : !string.IsNullOrWhiteSpace(cxp.numero_factura_sar) ? cxp.numero_factura_sar!.Trim() : $"#{cxp.compra_hdr_id}";
+            nombreProveedor = cxp?.proveedor;
+            concepto = numeroFactura is null ? null : $"Factura {numeroFactura}";
+            documentoTexto = numeroFactura is null
+                ? $"Compra — Pago No. {hdr.numero_abono}"
+                : $"Factura {numeroFactura} — Pago No. {hdr.numero_abono}";
+        }
+        else
+        {
+            var compromiso = await _context.prv_compromiso_hdrs.AsNoTracking()
+                .Where(c => c.numero_orden == hdr.numero_orden)
+                .Select(c => new { c.nombre_proveedor, c.concepto })
+                .FirstOrDefaultAsync(ct);
+            nombreProveedor = compromiso?.nombre_proveedor;
+            concepto = compromiso?.concepto;
+            documentoTexto = null;   // el builder compone "Orden No. … — Abono No. …"
+        }
 
         return ConstanciaRetencionBuilder.Build(
-            hdr, lineas, company, compromiso?.nombre_proveedor, compromiso?.concepto, impresoPor);
+            hdr, lineas, company, nombreProveedor, concepto, impresoPor, documentoTexto);
     }
 
     public async Task<IReadOnlyList<RetencionDeclaracionLineaDto>> BuscarDeclaracionAsync(
@@ -228,6 +257,7 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
                 x.h.fecha_emision,
                 x.h.numero_orden,
                 x.h.numero_abono,
+                x.h.origen,
                 x.h.cod_proveedor,
                 x.h.rtn_proveedor,
                 x.h.estado_id,
@@ -237,9 +267,15 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
                 x.d.porcentaje,
                 x.d.base_linea,
                 x.d.monto_retenido,
-                NombreProveedor = _context.prv_compromiso_hdrs
+                // Nombre del proveedor: del compromiso (origen=1) o de la CxP de compra (origen=2). Los
+                // dos subqueries se excluyen mutuamente por el NULL (numero_orden / cxp_id).
+                NombreProveedorCompromiso = _context.prv_compromiso_hdrs
                     .Where(cc => cc.numero_orden == x.h.numero_orden)
                     .Select(cc => cc.nombre_proveedor)
+                    .FirstOrDefault(),
+                NombreProveedorCompra = _context.alm_compra_cxps
+                    .Where(cc => cc.id == x.h.cxp_id)
+                    .Select(cc => (string?)cc.proveedor)
                     .FirstOrDefault()
             })
             .ToListAsync(ct);
@@ -250,8 +286,9 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
             FechaEmision = r.fecha_emision,
             NumeroOrden = r.numero_orden,
             NumeroAbono = r.numero_abono,
+            Origen = r.origen,
             CodProveedor = r.cod_proveedor,
-            NombreProveedor = r.NombreProveedor,
+            NombreProveedor = r.NombreProveedorCompromiso ?? r.NombreProveedorCompra,
             RtnProveedor = r.rtn_proveedor,
             RetencionId = r.retencion_id,
             TipoCodigo = r.codigo,
@@ -322,6 +359,8 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
         FechaEmision = x.FechaEmision,
         NumeroOrden = x.NumeroOrden,
         NumeroAbono = x.NumeroAbono,
+        Origen = x.Origen,
+        OrigenDescripcion = OrigenRetencion.Descripcion(x.Origen),
         CodProveedor = x.CodProveedor,
         RtnProveedor = x.RtnProveedor,
         BaseTotal = x.BaseTotal,
@@ -339,8 +378,10 @@ public sealed class RetencionRegistroService : IRetencionRegistroService
         public long RetencionHdrId { get; init; }
         public int Folio { get; init; }
         public DateOnly FechaEmision { get; init; }
-        public int NumeroOrden { get; init; }
+        public int? NumeroOrden { get; init; }
         public int NumeroAbono { get; init; }
+        public short Origen { get; init; }
+        public int? CxpId { get; init; }
         public string? CodProveedor { get; init; }
         public string? RtnProveedor { get; init; }
         public decimal BaseTotal { get; init; }

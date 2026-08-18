@@ -81,10 +81,20 @@
                             </div>
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
-                    <DxGridDataColumn FieldName="NumeroOrden" Caption="Orden / Abono" Width="120px">
+                    <DxGridDataColumn FieldName="NumeroOrden" Caption="Origen / documento" Width="150px">
                         <CellDisplayTemplate Context="cell">
                             @{ var r = (RetencionRegistroListItemDto)cell.DataItem; }
-                            <span>@r.NumeroOrden <span class="text-muted">/ @r.NumeroAbono</span></span>
+                            <span>
+                                <span class="text-muted small">@r.OrigenDescripcion</span>
+                                @if (r.NumeroOrden.HasValue)
+                                {
+                                    <text> · @r.NumeroOrden <span class="text-muted">/ @r.NumeroAbono</span></text>
+                                }
+                                else
+                                {
+                                    <text> · <span class="text-muted">abono @r.NumeroAbono</span></text>
+                                }
+                            </span>
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
                     <DxGridDataColumn FieldName="BaseTotal" Caption="Base" Width="120px" TextAlignment="GridTextAlignment.Right">
@@ -135,7 +145,7 @@
                 <div>
                     <span class="fw-semibold">Detalle — folio @cabeceraSeleccionada.Folio</span>
                     <span class="text-muted small ms-2">
-                        @cabeceraSeleccionada.CodProveedor · orden @cabeceraSeleccionada.NumeroOrden / abono @cabeceraSeleccionada.NumeroAbono
+                        @cabeceraSeleccionada.CodProveedor · @cabeceraSeleccionada.OrigenDescripcion@(cabeceraSeleccionada.NumeroOrden.HasValue ? $" orden {cabeceraSeleccionada.NumeroOrden}" : "") / abono @cabeceraSeleccionada.NumeroAbono
                     </span>
                 </div>
                 <div class="d-flex align-items-center gap-2">
@@ -186,8 +196,11 @@
 
 <DxToastProvider Name="RetencionesConsultaToast" MaxToastCount="3" StickToViewport="true" />
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
     private RetencionesConsultaGridDataSource dataSource = default!;
 
     private string filtroBusqueda = string.Empty;
@@ -262,10 +275,10 @@
         }
     }
 
-    private async Task ImprimirConstancia()
+    private void ImprimirConstancia()
     {
         if (cabeceraSeleccionada is null) return;
-        await JS.InvokeVoidAsync("open", RegistroClient.GetConstanciaPdfUrl(cabeceraSeleccionada.RetencionHdrId), "_blank");
+        pdfPopup?.Mostrar(RegistroClient.GetConstanciaPdfUrl(cabeceraSeleccionada.RetencionHdrId), "Constancia de retención");
     }
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();

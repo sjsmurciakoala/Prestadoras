@@ -7,10 +7,12 @@ using NSubstitute;
 using Xunit;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Retenciones;
 using SIAD.Core.Entities;
 using SIAD.Services.Almacen;
 using SIAD.Services.Bancos;
 using SIAD.Services.Contabilidad;
+using SIAD.Services.Retenciones;
 using SIAD.Core.Tenancy;
 using SIAD.Data;
 using SIAD.Tests.Infrastructure;
@@ -293,7 +295,260 @@ public class CompraCxpTests : IntegrationTestBase, IAsyncLifetime
         Assert.NotNull(abono.partida_id);                         // el abono quedó ligado a su póliza
     }
 
+    // ── Retención en el pago (libro fiscal compartido, origen=compra) ────────────
+
+    [SkippableFact]
+    public async Task RegistrarAbono_Efectivo_ConRetencion_CuadraYEscribeElRegistroFiscal()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await ConfigurarCuentasAsync(_codProveedor, _articuloA);
+        await SembrarAsientoComprasAsync();
+        await EncenderModuloAsync("activo_compras");
+
+        var cuenta = await ResolverCuentaContablePosteableAsync();
+        Skip.If(cuenta is null, "El tenant de prueba no tiene cuenta contable posteable");
+        var retencionId = await PrimeraRetencionIdAsync();
+        Skip.If(retencionId is null, "El mirror no tiene catálogo de retenciones (cfg_retencion)");
+
+        var (cxpId, monto) = await CrearCxpAsync();
+        // Retención 12.5% sobre 200 = 25; bruto aplicado 200, neto en caja 175.
+        var ret = Retencion(retencionId.Value, cuenta!.Value, 200m, 12.5m);
+        var dto = new CompraCxpAbonoUpsertDto
+        {
+            Monto = 200m,
+            MetodoPago = MetodoPagoCompra.Efectivo,
+            CuentaContableId = cuenta.Value,
+            Fecha = DateOnly.FromDateTime(DateTime.Today),
+            Retenciones = new List<RetencionAplicadaDto> { ret }
+        };
+
+        var r = await _service!.RegistrarAbonoAsync(cxpId, dto, "tester");
+
+        Assert.True(r.Success);
+        Assert.Equal(25m, r.Retenido);
+        Assert.Equal(monto - 200m, r.Saldo);   // el saldo baja por el BRUTO (200), no por el neto
+
+        var abono = await _context!.alm_compra_cxp_abonos.AsNoTracking().FirstAsync(a => a.cxp_id == cxpId && a.numero_abono == 1);
+        Assert.Equal(200m, abono.monto);       // monto = bruto
+        Assert.Equal(25m, abono.retenido);
+
+        var resumen = await ResumenPartidaAsync("COMPRAS", "CXP-ABO1", cxpId);
+        Skip.If(resumen is null || resumen.Value.Lineas == 0, "Sin período contable abierto en el mirror: el asiento se encoló.");
+        Assert.Equal(resumen!.Value.Debe, resumen.Value.Haber);   // cuadra
+        Assert.Equal(200m, resumen.Value.Debe);                   // DEBE proveedor = bruto
+
+        // Registro fiscal escrito: origen=compra, ligado a la CxP (sin compromiso) y a la partida.
+        var fiscal = await LeerRetencionFiscalAsync(cxpId, 1);
+        Assert.NotNull(fiscal);
+        Assert.Equal(OrigenRetencion.Compra, fiscal!.Value.Origen);
+        Assert.Equal(cxpId, fiscal.Value.CxpId);
+        Assert.Null(fiscal.Value.NumeroOrden);
+        Assert.Equal(25m, fiscal.Value.TotalRetenido);
+        Assert.Equal(EstadoRetencion.Vigente, fiscal.Value.EstadoId);
+        Assert.Equal(1, fiscal.Value.DtlCount);
+        Assert.NotNull(fiscal.Value.PartidaId);
+    }
+
+    [SkippableFact]
+    public async Task RegistrarAbono_Transferencia_ConRetencion_ElBancoMueveElNeto()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        var cuenta = await ResolverCuentaContablePosteableAsync();
+        Skip.If(cuenta is null, "El tenant de prueba no tiene cuenta contable posteable");
+        var retencionId = await PrimeraRetencionIdAsync();
+        Skip.If(retencionId is null, "El mirror no tiene catálogo de retenciones (cfg_retencion)");
+
+        var (cxpId, _) = await CrearCxpAsync();
+        var bancoCuentaId = await SembrarCuentaBancariaAsync(cuenta!.Value);
+        // Retención 12.5% sobre 100 = 12.5; bruto 100, neto al banco 87.5.
+        var ret = Retencion(retencionId.Value, cuenta.Value, 100m, 12.5m);
+        var dto = new CompraCxpAbonoUpsertDto
+        {
+            Monto = 100m,
+            MetodoPago = MetodoPagoCompra.Transferencia,
+            BancoCuentaId = bancoCuentaId,
+            Retenciones = new List<RetencionAplicadaDto> { ret }
+        };
+
+        var r = await _service!.RegistrarAbonoAsync(cxpId, dto, "tester");
+
+        Assert.Equal(12.5m, r.Retenido);
+        var abono = await _context!.alm_compra_cxp_abonos.AsNoTracking().FirstAsync(a => a.cxp_id == cxpId && a.numero_abono == 1);
+        Assert.Equal(100m, abono.monto);       // el saldo/monto es el bruto
+        Assert.NotNull(abono.ban_kardex_id);
+        var mov = await _context.ban_kardex.AsNoTracking().FirstAsync(k => k.ban_kardex_id == abono.ban_kardex_id!.Value);
+        Assert.Equal(87.5m, Math.Abs(mov.monto));   // el banco movió el NETO, no el bruto
+    }
+
+    [SkippableFact]
+    public async Task RegistrarAbono_RetencionDejaNetoCero_Rechaza()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        var cuenta = await ResolverCuentaContablePosteableAsync();
+        Skip.If(cuenta is null, "El tenant de prueba no tiene cuenta contable posteable");
+        var retencionId = await PrimeraRetencionIdAsync();
+        Skip.If(retencionId is null, "El mirror no tiene catálogo de retenciones (cfg_retencion)");
+
+        var (cxpId, _) = await CrearCxpAsync();
+        // Retención del 100% ⇒ neto 0 ⇒ rechaza (no se puede pagar 0 al banco/caja).
+        var ret = Retencion(retencionId.Value, cuenta!.Value, 100m, 100m);
+        var dto = new CompraCxpAbonoUpsertDto
+        {
+            Monto = 100m,
+            MetodoPago = MetodoPagoCompra.Efectivo,
+            CuentaContableId = cuenta.Value,
+            Retenciones = new List<RetencionAplicadaDto> { ret }
+        };
+
+        var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service!.RegistrarAbonoAsync(cxpId, dto, "tester"));
+        Assert.Contains("neto", ex.Message, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [SkippableFact]
+    public async Task RegistrarAbono_ConRetencion_ComprasApagado_EscribeFiscalSinPartida()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        // El setup dejó activo_compras apagado: no hay partida, pero el registro fiscal SÍ se escribe.
+        var cuenta = await ResolverCuentaContablePosteableAsync();
+        Skip.If(cuenta is null, "El tenant de prueba no tiene cuenta contable posteable");
+        var retencionId = await PrimeraRetencionIdAsync();
+        Skip.If(retencionId is null, "El mirror no tiene catálogo de retenciones (cfg_retencion)");
+
+        var (cxpId, _) = await CrearCxpAsync();
+        var ret = Retencion(retencionId.Value, cuenta!.Value, 100m, 12.5m);
+        var dto = new CompraCxpAbonoUpsertDto
+        {
+            Monto = 100m,
+            MetodoPago = MetodoPagoCompra.Efectivo,
+            CuentaContableId = cuenta.Value,
+            Retenciones = new List<RetencionAplicadaDto> { ret }
+        };
+
+        var r = await _service!.RegistrarAbonoAsync(cxpId, dto, "tester");
+
+        Assert.Equal(12.5m, r.Retenido);
+        Assert.Equal(0, await ContarPartidasAsync("COMPRAS", "CXP-ABO1", cxpId));   // sin partida
+        var fiscal = await LeerRetencionFiscalAsync(cxpId, 1);
+        Assert.NotNull(fiscal);
+        Assert.Equal(OrigenRetencion.Compra, fiscal!.Value.Origen);   // el libro fiscal se escribe igual
+        Assert.Equal(12.5m, fiscal.Value.TotalRetenido);
+        Assert.Null(fiscal.Value.PartidaId);                          // sin partida (compras apagado)
+    }
+
+    [SkippableFact]
+    public async Task AnularAbono_ConRetencion_MarcaElRegistroFiscalAnuladoYReabre()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        await ConfigurarCuentasAsync(_codProveedor, _articuloA);
+        await SembrarAsientoComprasAsync();
+        await EncenderModuloAsync("activo_compras");
+
+        var cuenta = await ResolverCuentaContablePosteableAsync();
+        Skip.If(cuenta is null, "El tenant de prueba no tiene cuenta contable posteable");
+        var retencionId = await PrimeraRetencionIdAsync();
+        Skip.If(retencionId is null, "El mirror no tiene catálogo de retenciones (cfg_retencion)");
+
+        var (cxpId, monto) = await CrearCxpAsync();
+        var ret = Retencion(retencionId.Value, cuenta!.Value, 200m, 12.5m);
+        var dto = new CompraCxpAbonoUpsertDto
+        {
+            Monto = 200m,
+            MetodoPago = MetodoPagoCompra.Efectivo,
+            CuentaContableId = cuenta.Value,
+            Retenciones = new List<RetencionAplicadaDto> { ret }
+        };
+        await _service!.RegistrarAbonoAsync(cxpId, dto, "tester");
+
+        Assert.True(await _service.AnularAbonoAsync(cxpId, 1, "pago mal aplicado", "tester"));
+
+        var fiscal = await LeerRetencionFiscalAsync(cxpId, 1);
+        Assert.NotNull(fiscal);
+        Assert.Equal(EstadoRetencion.Anulada, fiscal!.Value.EstadoId);   // registro fiscal anulado
+
+        var cxp = await _context!.alm_compra_cxps.AsNoTracking().FirstAsync(c => c.id == cxpId);
+        Assert.Equal(monto, cxp.saldo);                                  // reabre por el bruto
+        Assert.Equal(EstadoCompraCxp.Pendiente, cxp.estado_id);
+    }
+
+    [SkippableFact]
+    public async Task Declaracion_IncluyeLaRetencionDeCompra_ConNombreDelProveedor()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        var cuenta = await ResolverCuentaContablePosteableAsync();
+        Skip.If(cuenta is null, "El tenant de prueba no tiene cuenta contable posteable");
+        var retencionId = await PrimeraRetencionIdAsync();
+        Skip.If(retencionId is null, "El mirror no tiene catálogo de retenciones (cfg_retencion)");
+
+        var (cxpId, _) = await CrearCxpAsync();
+        var ret = Retencion(retencionId.Value, cuenta!.Value, 100m, 12.5m);
+        var dto = new CompraCxpAbonoUpsertDto
+        {
+            Monto = 100m,
+            MetodoPago = MetodoPagoCompra.Efectivo,
+            CuentaContableId = cuenta.Value,
+            Retenciones = new List<RetencionAplicadaDto> { ret }
+        };
+        await _service!.RegistrarAbonoAsync(cxpId, dto, "tester");
+
+        var cxpProv = await _context!.alm_compra_cxps.AsNoTracking().Where(c => c.id == cxpId).Select(c => c.proveedor).FirstAsync();
+
+        // El servicio de consulta (constancia/declaración) resuelve el nombre desde la CxP cuando origen=compra.
+        var registro = new RetencionRegistroService(_context, new TestCurrentCompanyService(CompanyId));
+        var lineas = await registro.BuscarDeclaracionAsync(new RetencionDeclaracionFilterDto());
+        var mia = lineas.FirstOrDefault(l => l.Origen == OrigenRetencion.Compra && l.CodProveedor == _codProveedor && l.MontoRetenido == 12.5m);
+
+        Assert.NotNull(mia);
+        Assert.Null(mia!.NumeroOrden);                 // compras no lleva compromiso
+        Assert.Equal(cxpProv, mia.NombreProveedor);    // nombre resuelto desde la CxP
+    }
+
     // ── Helpers ─────────────────────────────────────────────────────────────────
+
+    private static RetencionAplicadaDto Retencion(int retencionId, long cuentaId, decimal baseImp, decimal pct) => new()
+    {
+        RetencionId = retencionId,
+        CuentaId = cuentaId,
+        Base = baseImp,
+        Porcentaje = pct,
+        Monto = Math.Round(baseImp * pct / 100m, 2, MidpointRounding.AwayFromZero)
+    };
+
+    private async Task<int?> PrimeraRetencionIdAsync()
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = "SELECT id FROM public.cfg_retencion WHERE activo = TRUE ORDER BY id LIMIT 1;";
+        var v = await cmd.ExecuteScalarAsync();
+        return v is null or DBNull ? null : Convert.ToInt32(v);
+    }
+
+    private async Task<(short Origen, int? CxpId, int? NumeroOrden, decimal TotalRetenido, short EstadoId, long? PartidaId, int DtlCount)?>
+        LeerRetencionFiscalAsync(int cxpId, int numeroAbono)
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = @"
+SELECT h.origen, h.cxp_id, h.numero_orden, h.total_retenido, h.estado_id, h.partida_id,
+       (SELECT count(*) FROM public.prv_retencion_dtl d
+         WHERE d.company_id = h.company_id AND d.retencion_hdr_id = h.retencion_hdr_id)
+  FROM public.prv_retencion_hdr h
+ WHERE h.company_id = @c AND h.origen = @origen AND h.cxp_id = @cxp AND h.numero_abono = @num
+ LIMIT 1;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        cmd.Parameters.AddWithValue("origen", (short)OrigenRetencion.Compra);
+        cmd.Parameters.AddWithValue("cxp", cxpId);
+        cmd.Parameters.AddWithValue("num", numeroAbono);
+        await using var r = await cmd.ExecuteReaderAsync();
+        if (!await r.ReadAsync()) return null;
+        return (
+            r.GetInt16(0),
+            r.IsDBNull(1) ? (int?)null : r.GetInt32(1),
+            r.IsDBNull(2) ? (int?)null : r.GetInt32(2),
+            r.GetDecimal(3),
+            r.GetInt16(4),
+            r.IsDBNull(5) ? (long?)null : r.GetInt64(5),
+            Convert.ToInt32(r.GetValue(6)));
+    }
 
     private static CompraCxpAbonoUpsertDto Pago(decimal monto, string metodo) =>
         new() { Monto = monto, MetodoPago = metodo, Fecha = DateOnly.FromDateTime(DateTime.Today) };

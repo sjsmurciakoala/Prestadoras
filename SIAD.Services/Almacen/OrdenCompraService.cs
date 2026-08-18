@@ -3,6 +3,7 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Core.Utilities;
 using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
@@ -134,6 +135,34 @@ public sealed class OrdenCompraService : IOrdenCompraService
             (cod, nombre) => dto.ProveedorNombre = nombre, ct);
 
         return dto;
+    }
+
+    public async Task<OrdenCompraImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default)
+    {
+        var doc = await GetByIdAsync(id, ct);
+        if (doc is null) return null;
+
+        var empresa = await CargarEmpresaAsync(ct);
+        return new OrdenCompraImpresionDto
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = ClasificacionNormalizer.Usuario(impresoPor),
+            Documento = doc,
+            MontoEnLetras = doc.Total > 0m ? NumerosALetras.Convertir(doc.Total) : string.Empty
+        };
+    }
+
+    private async Task<cfg_company?> CargarEmpresaAsync(CancellationToken ct)
+    {
+        var companyId = _company.GetCompanyId();
+        return await _context.cfg_companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
     }
 
     public async Task<OrdenCompraDto> CrearAsync(OrdenCompraDto dto, string user, CancellationToken ct = default)

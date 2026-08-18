@@ -1136,6 +1136,7 @@ public partial class SiadDbContext
 
             entity.Property(e => e.fecha).HasColumnType("date");
             entity.Property(e => e.monto).HasPrecision(14, 2);
+            entity.Property(e => e.retenido).HasPrecision(14, 2);
             entity.Property(e => e.metodo_pago).HasMaxLength(20);
             entity.Property(e => e.num_cheque).HasMaxLength(20);
             entity.Property(e => e.estado).HasMaxLength(1).HasDefaultValue("V");

@@ -14,9 +14,17 @@ public partial class prv_retencion_hdr : ICompanyScopedEntity
 
     public long company_id { get; set; }
 
-    public int numero_orden { get; set; }
+    // Anulable desde 2026-08-18: NULL cuando el pago retenido nace de una factura de compra
+    // (origen=2), que no tiene compromiso. Las filas OPD (origen=1) lo conservan NOT NULL vía CHECK.
+    public int? numero_orden { get; set; }
 
     public int numero_abono { get; set; }
+
+    // Origen del pago (1 compromiso/OPD, 2 compra/CxP). Discrimina de dónde viene la retención.
+    public short origen { get; set; } = OrigenRetencion.Compromiso;
+
+    // Referencia a la CxP de compra (alm_compra_cxp.id) cuando origen=2; NULL para compromisos.
+    public int? cxp_id { get; set; }
 
     public int folio { get; set; }
 

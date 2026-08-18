@@ -1,6 +1,8 @@
 using System;
+using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using SIAD.Core.Constants;
+using SIAD.Core.DTOs.Retenciones;
 
 namespace SIAD.Core.DTOs.Almacen;
 
@@ -62,6 +64,14 @@ public sealed class CompraCxpAbonoUpsertDto
 
     [StringLength(300)]
     public string? Observaciones { get; set; }
+
+    /// <summary>
+    /// Retenciones aplicadas en este pago (en paralelo, patrón del flujo de compromisos). El
+    /// <see cref="Monto"/> es el BRUTO aplicado a la deuda; el banco/caja paga el NETO = Monto −
+    /// Σ Retenciones.Monto. El backend arma la partida (retención al HABER) y el registro fiscal, y
+    /// valida Σ Monto == Σ crédito de esas cuentas. Vacía = pago sin retención (comportamiento previo).
+    /// </summary>
+    public List<RetencionAplicadaDto> Retenciones { get; set; } = new();
 }
 
 /// <summary>Resultado de registrar o anular un pago.</summary>
@@ -76,6 +86,9 @@ public sealed class CompraCxpAbonoResultadoDto
     public decimal? NumeroCheque { get; set; }
     public long? ChequeId { get; set; }
     public string? Message { get; set; }
+
+    /// <summary>Suma retenida en este pago (0 si no hubo). El neto pagado al banco/caja = Monto − Retenido.</summary>
+    public decimal Retenido { get; set; }
 }
 
 /// <summary>Cuenta bancaria de origen para el combo de pago.</summary>
@@ -96,6 +109,10 @@ public sealed class CompraCxpAbonoListItemDto
     public int NumeroAbono { get; set; }
     public DateOnly Fecha { get; set; }
     public decimal Monto { get; set; }
+
+    /// <summary>Suma retenida en este pago (0 si no hubo). El neto pagado al banco/caja = Monto − Retenido.</summary>
+    public decimal Retenido { get; set; }
+
     public string? MetodoPago { get; set; }
     public string? NumCheque { get; set; }
     public string Estado { get; set; } = "V";

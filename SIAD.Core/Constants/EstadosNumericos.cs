@@ -235,6 +235,22 @@ public static class EstadoRetencion
     };
 }
 
+// Origen del pago retenido (prv_retencion_hdr.origen). CHECK en BD: coherencia origen↔referencia
+// (origen=1 ⇒ numero_orden y sin cxp; origen=2 ⇒ cxp_id y sin orden). Permite que un mismo libro
+// fiscal (constancia + declaración) cubra las retenciones de compromisos y las de facturas de compra.
+public static class OrigenRetencion
+{
+    public const short Compromiso = 1;   // orden de pago directo (prv_compromiso_hdr)
+    public const short Compra     = 2;   // factura de compra (alm_compra_cxp)
+
+    /// <summary>Etiqueta legible del origen (nunca el código).</summary>
+    public static string Descripcion(short? id) => id switch
+    {
+        Compra => "Compra",
+        _      => "Compromiso"
+    };
+}
+
 // Período de evaluación de proveedores (prv_evaluacion_periodo.estado). CHECK en BD: IN (1,2).
 // Abierto se puede recalcular cuantas veces se quiera; cerrado queda congelado como historia.
 public static class EstadoEvaluacionPeriodo

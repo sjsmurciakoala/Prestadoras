@@ -3,6 +3,7 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Core.Utilities;
 using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
@@ -220,6 +221,34 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
             (cod, nombre) => { foreach (var f in filas.Where(x => x.CodProveedor == cod)) f.ProveedorNombre = nombre; }, ct);
 
         return filas;
+    }
+
+    public async Task<RecepcionCompraImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default)
+    {
+        var doc = await GetByIdAsync(id, ct);
+        if (doc is null) return null;
+
+        var empresa = await CargarEmpresaAsync(ct);
+        return new RecepcionCompraImpresionDto
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = ClasificacionNormalizer.Usuario(impresoPor),
+            Documento = doc,
+            MontoEnLetras = doc.Total > 0m ? NumerosALetras.Convertir(doc.Total) : string.Empty
+        };
+    }
+
+    private async Task<cfg_company?> CargarEmpresaAsync(CancellationToken ct)
+    {
+        var companyId = _company.GetCompanyId();
+        return await _context.cfg_companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
     }
 
     // ── Alta ─────────────────────────────────────────────────────────────────

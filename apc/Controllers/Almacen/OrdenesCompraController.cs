@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Reports;
 using SIAD.Services.Almacen;
 using apc.Security;
 
@@ -46,6 +47,24 @@ public sealed class OrdenesCompraController : ControllerBase
     {
         var orden = await _service.GetByIdAsync(id, ct);
         return orden is null ? NotFound() : Ok(orden);
+    }
+
+    /// <summary>Comprobante de la orden de compra en PDF (inline), para autorizar y enviar al proveedor.</summary>
+    [HttpGet("{id:int}/comprobante/pdf")]
+    public async Task<IActionResult> GetComprobantePdf(int id, CancellationToken ct)
+    {
+        var datos = await _service.GetDatosImpresionAsync(id, Usuario, ct);
+        if (datos is null)
+        {
+            return NotFound(new { message = $"No se encontró la orden de compra {id}." });
+        }
+
+        using var report = new Rpt_Dev_Comprobante_OrdenCompra(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=OrdenCompra-{datos.Documento.Numero:00000}.pdf";
+        return File(stream.ToArray(), "application/pdf");
     }
 
     [HttpPost]

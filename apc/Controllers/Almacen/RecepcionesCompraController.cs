@@ -3,6 +3,7 @@ using Microsoft.EntityFrameworkCore;
 using Npgsql;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Reports;
 using SIAD.Services.Almacen;
 using apc.Security;
 
@@ -40,6 +41,24 @@ public sealed class RecepcionesCompraController : ControllerBase
     {
         var recepcion = await _service.GetByIdAsync(id, ct);
         return recepcion is null ? NotFound() : Ok(recepcion);
+    }
+
+    /// <summary>Comprobante de la factura de compra (recepción) en PDF (inline).</summary>
+    [HttpGet("{id:int}/comprobante/pdf")]
+    public async Task<IActionResult> GetComprobantePdf(int id, CancellationToken ct)
+    {
+        var datos = await _service.GetDatosImpresionAsync(id, Usuario, ct);
+        if (datos is null)
+        {
+            return NotFound(new { message = $"No se encontró la factura de compra {id}." });
+        }
+
+        using var report = new Rpt_Dev_Comprobante_RecepcionCompra(datos);
+        using var stream = new MemoryStream();
+        report.ExportToPdf(stream);
+
+        Response.Headers.ContentDisposition = $"inline; filename=FacturaCompra-{datos.Documento.Numero:00000}.pdf";
+        return File(stream.ToArray(), "application/pdf");
     }
 
     /// <summary>Órdenes de compra que todavía admiten recepción (Aprobadas o Recibidas parcialmente).</summary>

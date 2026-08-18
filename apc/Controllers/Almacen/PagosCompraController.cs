@@ -1,8 +1,10 @@
+using System;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Reports;
 using SIAD.Services.Almacen;
+using SIAD.Services.Retenciones;
 using apc.Security;
 
 namespace apc.Controllers.Almacen;
@@ -42,6 +44,19 @@ public sealed class PagosCompraController : ControllerBase
     [HttpGet("contabilidad-activa")]
     public async Task<IActionResult> GetContabilidadActiva(CancellationToken ct)
         => Ok(new CompraContabilidadEstadoDto { ContabilidadActiva = await _service.ObtenerContabilidadActivaAsync(ct) });
+
+    /// <summary>
+    /// Retenciones aplicables a una fecha (catálogo + tasa vigente + cuenta del pasivo) para el popup
+    /// de retención del pago. Se aloja bajo el módulo Compras —no en RetencionesController, que exige
+    /// <c>configuracion.retenciones</c>— por paridad de autorización con la pantalla de pagos; la
+    /// lógica de dominio sigue en <see cref="IRetencionesService"/>.
+    /// </summary>
+    [HttpGet("retenciones-aplicables")]
+    public async Task<IActionResult> GetRetencionesAplicables(
+        [FromQuery] DateOnly? fecha,
+        [FromServices] IRetencionesService retenciones,
+        CancellationToken ct)
+        => Ok(await retenciones.GetAplicablesAsync(fecha ?? DateOnly.FromDateTime(DateTime.Today), ct));
 
     [HttpGet("{cxpId:int}/abonos/{numeroAbono:int}/partida")]
     public async Task<IActionResult> GetPartidaAbono(int cxpId, int numeroAbono, CancellationToken ct)

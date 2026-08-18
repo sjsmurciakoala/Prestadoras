@@ -236,11 +236,14 @@
     }
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter] public int PeriodoId { get; set; }
     [Parameter] public string Codigo { get; set; } = string.Empty;
 
     private EvaluacionFichaDto? ficha;
+    private PdfPreviewPopup? pdfPopup;
     private string? observaciones;
 
     /// <summary>
@@ -344,10 +347,10 @@
         }
     }
 
-    /// <summary>Abre la ficha en PDF en pestaña nueva. Sólo lee: es reimprimible.</summary>
-    private async Task AbrirPdfAsync()
-        => await JS.InvokeVoidAsync("open",
-            EvaluacionProveedorClient.GetFichaPdfUrl(PeriodoId, Codigo), "_blank");
+    /// <summary>Abre la ficha en PDF en un popup embebido. Sólo lee: es reimprimible.</summary>
+    private void AbrirPdfAsync()
+        => pdfPopup?.Mostrar(
+            EvaluacionProveedorClient.GetFichaPdfUrl(PeriodoId, Codigo), "Ficha de evaluación");
 
     private void Volver() => Navigation.NavigateTo("/proveedores/evaluacion");
 

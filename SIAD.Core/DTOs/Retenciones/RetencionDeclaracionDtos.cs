@@ -30,9 +30,13 @@ public sealed class RetencionDeclaracionLineaDto
 
     public DateOnly FechaEmision { get; init; }
 
-    public int NumeroOrden { get; init; }
+    /// <summary>Compromiso origen; NULL cuando la retención nace de una factura de compra (origen=2).</summary>
+    public int? NumeroOrden { get; init; }
 
     public int NumeroAbono { get; init; }
+
+    /// <summary>Origen del pago: 1 compromiso (OPD), 2 factura de compra (CxP).</summary>
+    public short Origen { get; init; }
 
     public string? CodProveedor { get; init; }
 

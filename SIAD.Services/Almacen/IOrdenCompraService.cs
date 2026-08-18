@@ -16,6 +16,9 @@ public interface IOrdenCompraService
     /// <summary>Orden completa (cabecera + renglones) por id, o null si no existe en la empresa actual.</summary>
     Task<OrdenCompraDto?> GetByIdAsync(int id, CancellationToken ct = default);
 
+    /// <summary>Datos de impresión del comprobante (PDF) de la orden: empresa emisora + la orden + total en letras. Null si no existe.</summary>
+    Task<OrdenCompraImpresionDto?> GetDatosImpresionAsync(int id, string impresoPor, CancellationToken ct = default);
+
     /// <summary>
     /// Crea una orden en Borrador. Valida el proveedor y que cada artículo tenga código
     /// de proveedor activo (regla D-B); asigna el correlativo por empresa y calcula totales.

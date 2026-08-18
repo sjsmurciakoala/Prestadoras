@@ -118,6 +118,9 @@ public partial class SiadDbContext
             entity.HasIndex(e => new { e.company_id, e.retencion_hdr_id }, "uq_prv_retencion_hdr_tenant").IsUnique();
             entity.HasIndex(e => new { e.company_id, e.fecha_emision }, "ix_prv_retencion_hdr_company_fecha");
             entity.HasIndex(e => new { e.company_id, e.cod_proveedor }, "ix_prv_retencion_hdr_proveedor");
+            // Unicidad del pago para compras (origen=2): la UNIQUE por numero_orden no cubre los NULL.
+            entity.HasIndex(e => new { e.company_id, e.cxp_id, e.numero_abono }, "uq_prv_retencion_hdr_cxp_pago")
+                  .IsUnique().HasFilter("origen = 2");
 
             entity.Property(e => e.retencion_hdr_id).UseIdentityAlwaysColumn();
             entity.Property(e => e.fecha_emision).HasColumnType("date");
@@ -134,9 +137,11 @@ public partial class SiadDbContext
             entity.Property(e => e.fecha_modificacion).HasColumnType("timestamp without time zone");
             entity.Property(e => e.usuario_anulacion).HasMaxLength(100);
             entity.Property(e => e.fecha_anulacion).HasColumnType("timestamp without time zone");
-            // Sin HasDefaultValue en estado_id: el CHECK va explícito en el INSERT (raw SQL en el servicio).
-            // La FK (company_id, numero_orden) → prv_compromiso_hdr vive en la BD; no se modela como
-            // navegación (el hdr no navega al compromiso desde EF).
+            // Sin HasDefaultValue en estado_id ni origen: el registro fiscal se escribe por raw SQL en
+            // el servicio (no por EF SaveChanges), así que el sentinel de EF no aplica y el CHECK/DEFAULT
+            // viven en la BD. Las FKs (company_id, numero_orden) → prv_compromiso_hdr y
+            // (company_id, cxp_id) → alm_compra_cxp viven en la BD (MATCH SIMPLE, se eximen mutuamente
+            // por el NULL); no se modelan como navegación (el hdr no navega al origen desde EF).
         });
 
         modelBuilder.Entity<prv_retencion_dtl>(entity =>

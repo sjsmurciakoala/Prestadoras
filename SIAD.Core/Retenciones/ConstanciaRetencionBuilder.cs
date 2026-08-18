@@ -22,10 +22,19 @@ public static class ConstanciaRetencionBuilder
         cfg_company? company,
         string? nombreProveedor,
         string? concepto,
-        string? impresoPor)
+        string? impresoPor,
+        string? documentoTexto = null)
     {
         ArgumentNullException.ThrowIfNull(hdr);
         lineas ??= Array.Empty<RetencionRegistroLineaDto>();
+
+        // Referencia legible del documento origen. Si el servicio no la pasa (flujo de compromisos),
+        // se compone desde el compromiso; para compras el servicio pasa "Factura … — Pago N".
+        var docTexto = !string.IsNullOrWhiteSpace(documentoTexto)
+            ? documentoTexto!.Trim()
+            : hdr.origen == OrigenRetencion.Compra
+                ? $"Compra — Pago No. {hdr.numero_abono}"
+                : $"Orden No. {hdr.numero_orden} — Abono No. {hdr.numero_abono}";
 
         return new ConstanciaRetencionImpresionDto
         {
@@ -46,6 +55,8 @@ public static class ConstanciaRetencionBuilder
             // Documento origen + folio interno.
             NumeroOrden = hdr.numero_orden,
             NumeroAbono = hdr.numero_abono,
+            Origen = hdr.origen,
+            DocumentoTexto = docTexto,
             Concepto = concepto,
             Folio = hdr.folio,
             FechaEmision = hdr.fecha_emision,

@@ -7,6 +7,7 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.DTOs.Bancos;
 using SIAD.Core.DTOs.Contabilidad;
+using SIAD.Core.DTOs.Retenciones;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
@@ -166,6 +167,7 @@ public sealed class CompraCxpService : ICompraCxpService
                 NumeroAbono = a.numero_abono,
                 Fecha = a.fecha,
                 Monto = a.monto,
+                Retenido = a.retenido,
                 MetodoPago = a.metodo_pago,
                 NumCheque = a.num_cheque,
                 Estado = a.estado,
@@ -283,6 +285,7 @@ public sealed class CompraCxpService : ICompraCxpService
             NumeroFactura = numeroFactura,
             MontoFactura = cxp.monto,
             Monto = abono.monto,
+            Retenido = abono.retenido,
             SaldoAnterior = saldoAnterior,
             SaldoRestante = saldoRestante,
             MetodoPago = FormatearMetodo(abono.metodo_pago),
@@ -390,6 +393,18 @@ public sealed class CompraCxpService : ICompraCxpService
         var fecha = dto.Fecha ?? DateOnly.FromDateTime(DateTime.Today);
         var esBancario = MetodoPagoCompra.EsBancario(metodo);
 
+        // Retenciones: dto.Monto es el BRUTO (baja la deuda por él); el banco/caja paga el NETO =
+        // bruto − Σretención. La partida lleva la retención al HABER y el registro fiscal la asienta.
+        var retenciones = dto.Retenciones ?? new List<RetencionAplicadaDto>();
+        ValidarRetenciones(retenciones);
+        var retenido = retenciones.Sum(r => r.Monto);
+        var neto = dto.Monto - retenido;
+        if (retenciones.Count > 0 && neto <= 0m)
+        {
+            throw new InvalidOperationException(
+                "El neto a pagar (monto − retenciones) debe ser mayor que cero. Revise las retenciones cargadas.");
+        }
+
         // El tipo de transacción bancaria se resuelve ANTES de la transacción (sólo lectura).
         string? tipoTransaccion = null;
         if (esBancario)
@@ -450,21 +465,22 @@ public sealed class CompraCxpService : ICompraCxpService
             if (esBancario)
             {
                 var referencia = $"CXP-{cxpId}-{MetodoPagoCompra.Abrev(metodo)}-{numeroAbono}";
+                // El banco mueve el NETO (bruto − retención); el saldo de la CxP baja por el bruto.
                 banKardexId = await RegistrarKardexBancarioAsync(
                     connection, tx, companyId, dto.BancoCuentaId!.Value, tipoTransaccion!, fecha,
-                    descripcion, referencia, dto.Monto, usuario, ct);
+                    descripcion, referencia, neto, usuario, ct);
 
                 if (metodo == MetodoPagoCompra.Cheque)
                 {
-                    // La póliza se difiere (Fase 2): el cheque va sin partida, como el kardex.
+                    // La póliza se difiere (Fase 2): el cheque va sin partida, como el kardex. Por el neto.
                     (chequeId, numeroCheque) = await _cheques.EmitirChequeAsync(
-                        connection, tx, dto.BancoCuentaId.Value, dto.Monto,
+                        connection, tx, dto.BancoCuentaId.Value, neto,
                         cxp.Proveedor ?? cxp.CodProveedor, descripcion, ChequeOrigen.CompraCxp, $"CXP-{cxpId}",
                         banKardexId, partidaId: null, usuario, fecha.ToDateTime(TimeOnly.MinValue), ct);
                 }
             }
 
-            await InsertarAbonoAsync(connection, tx, companyId, cxpId, numeroAbono, fecha, dto.Monto,
+            await InsertarAbonoAsync(connection, tx, companyId, cxpId, numeroAbono, fecha, dto.Monto, retenido,
                 metodo, dto.BancoCuentaId, numeroCheque?.ToString("0"), banKardexId, dto.Observaciones, usuario, ct);
 
             var nuevoSaldo = cxp.Saldo - dto.Monto;
@@ -472,12 +488,21 @@ public sealed class CompraCxpService : ICompraCxpService
             if (nuevoSaldo < 0m) nuevoSaldo = 0m;
             await ActualizarCxpAsync(connection, tx, companyId, cxpId, nuevoSaldo, estado, usuario, ct);
 
-            // Fase 2: asiento contable del pago (DEBE proveedor / HABER banco o caja), módulo COMPRAS,
-            // gated por activo_compras (Compras es su propio módulo contable, separado de PROV/inventario).
-            // Bancario → contrapartida = cuenta contable del banco; efectivo → cuenta contable elegida
-            // por el usuario. No-op si el módulo COMPRAS está inactivo.
-            await ContabilizarPagoAsync(connection, tx, companyId, cxp, dto.Monto, esBancario,
-                dto.BancoCuentaId, dto.CuentaContableId, cxpId, numeroAbono, fecha, usuario, ct);
+            // Fase 2: asiento contable del pago (DEBE proveedor bruto / HABER retención(es) + banco o
+            // caja por el neto), módulo COMPRAS, gated por activo_compras. Devuelve la partida (null si
+            // el módulo está inactivo o el motor encoló). Bancario → contrapartida = cuenta del banco;
+            // efectivo → cuenta contable elegida por el usuario.
+            var partidaId = await ContabilizarPagoAsync(connection, tx, companyId, cxp, dto.Monto, neto, retenciones,
+                esBancario, dto.BancoCuentaId, dto.CuentaContableId, cxpId, numeroAbono, fecha, usuario, ct);
+
+            // Registro fiscal de la retención (libro compartido prv_retencion_hdr/dtl, origen=compra). Se
+            // escribe SIEMPRE que haya retención, independiente de activo_compras: es la obligación SAR
+            // (constancia + declaración), no el asiento contable. Va ligado a la partida si la hubo.
+            if (retenciones.Count > 0)
+            {
+                await PersistRetencionesCompraAsync(connection, tx, companyId, cxpId, numeroAbono, fecha,
+                    cxp.CodProveedor, dto.Monto, partidaId, retenciones, usuario, ct);
+            }
 
             if (ownsTx) await tx.CommitAsync(ct);
 
@@ -489,7 +514,8 @@ public sealed class CompraCxpService : ICompraCxpService
                 Saldo = nuevoSaldo,
                 EstadoId = estado,
                 NumeroCheque = numeroCheque,
-                ChequeId = chequeId
+                ChequeId = chequeId,
+                Retenido = retenido
             };
         }
         catch
@@ -568,6 +594,10 @@ public sealed class CompraCxpService : ICompraCxpService
             }
 
             await MarcarAbonoAnuladoAsync(connection, tx, companyId, cxpId, numeroAbono, banKardexReverso, motivoNorm, usuario, ct);
+
+            // Registro fiscal: marca la retención de este pago como anulada (no-op si el pago no tuvo
+            // retención). El reverso del asiento (arriba, módulo COMPRAS) ya voltea la partida completa.
+            await MarcarRetencionCompraAnuladaAsync(connection, tx, companyId, cxpId, numeroAbono, motivoNorm, usuario, ct);
 
             // Reabre la CxP: el saldo sube por el monto revertido.
             var cxp = await BloquearCxpAsync(connection, tx, companyId, cxpId, ct)!;
@@ -685,21 +715,22 @@ SELECT c.saldo, c.estado_id, c.monto, c.cod_proveedor, c.proveedor, c.numero_fac
 
     private static async Task InsertarAbonoAsync(
         NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, int numeroAbono, DateOnly fecha,
-        decimal monto, string metodo, long? bancoCuentaId, string? numCheque, long? banKardexId,
+        decimal monto, decimal retenido, string metodo, long? bancoCuentaId, string? numCheque, long? banKardexId,
         string? observaciones, string usuario, CancellationToken ct)
     {
         await using var cmd = cn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = @"
 INSERT INTO public.alm_compra_cxp_abono
-    (company_id, cxp_id, numero_abono, fecha, monto, metodo_pago, banco_cuenta_id, num_cheque,
+    (company_id, cxp_id, numero_abono, fecha, monto, retenido, metodo_pago, banco_cuenta_id, num_cheque,
      ban_kardex_id, estado, observaciones, usuariocreacion)
-VALUES (@c, @cxp, @num, @fecha, @monto, @metodo, @banco, @cheque, @kardex, 'V', @obs, @user)";
+VALUES (@c, @cxp, @num, @fecha, @monto, @retenido, @metodo, @banco, @cheque, @kardex, 'V', @obs, @user)";
         cmd.Parameters.AddWithValue("c", NpgsqlDbType.Bigint, companyId);
         cmd.Parameters.AddWithValue("cxp", NpgsqlDbType.Integer, cxpId);
         cmd.Parameters.AddWithValue("num", NpgsqlDbType.Integer, numeroAbono);
         cmd.Parameters.AddWithValue("fecha", NpgsqlDbType.Date, fecha);
         cmd.Parameters.AddWithValue("monto", NpgsqlDbType.Numeric, monto);
+        cmd.Parameters.AddWithValue("retenido", NpgsqlDbType.Numeric, retenido);
         cmd.Parameters.AddWithValue("metodo", NpgsqlDbType.Varchar, metodo);
         cmd.Parameters.Add(new NpgsqlParameter("banco", NpgsqlDbType.Integer) { Value = bancoCuentaId.HasValue ? (int)bancoCuentaId.Value : DBNull.Value });
         cmd.Parameters.Add(new NpgsqlParameter("cheque", NpgsqlDbType.Varchar) { Value = (object?)numCheque ?? DBNull.Value });
@@ -781,12 +812,13 @@ UPDATE public.alm_compra_cxp_abono
 
     // ── Contabilidad del pago (Fase 2, módulo COMPRAS, gated por activo_compras) ──
 
-    private static async Task ContabilizarPagoAsync(
-        NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, CxpLock cxp, decimal monto, bool esBancario,
+    private static async Task<long?> ContabilizarPagoAsync(
+        NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, CxpLock cxp, decimal monto, decimal neto,
+        IReadOnlyList<RetencionAplicadaDto> retenciones, bool esBancario,
         long? bancoCuentaId, long? cuentaContableId, int cxpId, int numeroAbono, DateOnly fecha, string usuario, CancellationToken ct)
     {
         var config = await IntegracionContableConfigSql.ObtenerConfigAsync(cn, companyId, tx, ct);
-        if (config is null || !config.ActivoCompras) return;
+        if (config is null || !config.ActivoCompras) return null;
 
         var ctaProveedor = await ResolverCuentaProveedorAsync(cn, tx, companyId, cxp.CodProveedor, ct);
 
@@ -809,11 +841,17 @@ UPDATE public.alm_compra_cxp_abono
         }
 
         var desc = $"Pago factura {cxp.NumeroFacturaSar ?? cxp.Numero.ToString("00000")} · {cxp.CodProveedor}";
+        // DEBE proveedor por el BRUTO / HABER retención(es) + contrapartida (banco o caja) por el NETO.
+        // Sin retención neto == monto ⇒ la partida queda idéntica a la de siempre (2 líneas).
         var lineas = new List<IntegracionContableConfigSql.ComprobanteLinea>
         {
-            new(ctaProveedor, monto, 0m, "Proveedor"),
-            new(ctaContrapartida, 0m, monto, etiqueta)
+            new(ctaProveedor, monto, 0m, "Proveedor")
         };
+        foreach (var r in retenciones)
+        {
+            lineas.Add(new(r.CuentaId, 0m, r.Monto, "Retención"));
+        }
+        lineas.Add(new(ctaContrapartida, 0m, neto, etiqueta));
 
         // El pago de la CxP de compra es del MÓDULO COMPRAS (no PROV): mismo motor, distinto diario/tipo.
         var polizaId = await IntegracionContableConfigSql.GenerarComprobanteAsync(
@@ -831,6 +869,8 @@ UPDATE public.alm_compra_cxp_abono
             cmd.Parameters.AddWithValue("n", NpgsqlDbType.Integer, numeroAbono);
             await cmd.ExecuteNonQueryAsync(ct);
         }
+
+        return polizaId;
     }
 
     private static async Task<long> ResolverCuentaProveedorAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, string codProveedor, CancellationToken ct)
@@ -918,5 +958,176 @@ SELECT c.account_id
                 $"No hay un tipo de transacción bancaria de salida configurado para {metodo}. Configúrelo en Bancos.");
         }
         return tipo;
+    }
+
+    // ── Retenciones: validación + registro fiscal (libro compartido prv_retencion_hdr/dtl) ────────
+
+    /// <summary>Sanidad por línea de las retenciones aplicadas (cuenta, monto>0, monto ≈ base×%). El
+    /// cuadre contra la partida está garantizado por construcción (la partida se arma con estas líneas).</summary>
+    private static void ValidarRetenciones(IReadOnlyList<RetencionAplicadaDto> retenciones)
+    {
+        if (retenciones is null || retenciones.Count == 0) return;
+        foreach (var r in retenciones)
+        {
+            if (r.CuentaId <= 0)
+                throw new InvalidOperationException("Una retención no tiene cuenta contable.");
+            if (r.Monto <= 0m)
+                throw new InvalidOperationException("Una retención tiene un monto no positivo.");
+            var esperado = Math.Round(r.Base * r.Porcentaje / 100m, 2, MidpointRounding.AwayFromZero);
+            if (Math.Abs(r.Monto - esperado) > 0.02m)
+                throw new InvalidOperationException(
+                    $"El monto de la retención ({r.Monto:N2}) no coincide con base × % ({esperado:N2}).");
+        }
+    }
+
+    /// <summary>Escribe el registro fiscal de la(s) retención(es) del pago de compra en el libro compartido
+    /// (prv_retencion_hdr/dtl), con origen=Compra y referencia a la CxP (numero_orden NULL). Se ejecuta en la
+    /// misma transacción del pago, ligado a la partida si la hubo. Reserva folio por empresa y snapshotea
+    /// código/nombre del catálogo y número de póliza.</summary>
+    private static async Task PersistRetencionesCompraAsync(
+        NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, int numeroAbono, DateOnly fecha,
+        string codProveedor, decimal baseTotal, long? partidaId, IReadOnlyList<RetencionAplicadaDto> retenciones,
+        string usuario, CancellationToken ct)
+    {
+        if (retenciones is null || retenciones.Count == 0) return;
+
+        var folio = await ReserveFolioRetencionAsync(cn, tx, companyId, ct);
+        var rtn = await ResolverRtnProveedorAsync(cn, tx, companyId, codProveedor, ct);
+        var polizaNumber = partidaId.HasValue ? await LoadPolizaNumberAsync(cn, tx, companyId, partidaId.Value, ct) : null;
+        var totalRetenido = retenciones.Sum(r => r.Monto);
+        var snapshot = await LoadRetencionSnapshotAsync(cn, tx, retenciones.Select(r => r.RetencionId).Distinct().ToArray(), ct);
+
+        long retencionHdrId;
+        await using (var cmd = cn.CreateCommand())
+        {
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+INSERT INTO public.prv_retencion_hdr
+    (company_id, numero_orden, numero_abono, origen, cxp_id, folio, fecha_emision, cod_proveedor,
+     rtn_proveedor, base_total, total_retenido, partida_id, poliza_number, estado_id, usuario_creo)
+VALUES
+    (@company_id, NULL, @numero_abono, @origen, @cxp_id, @folio, @fecha_emision, @cod_proveedor,
+     @rtn_proveedor, @base_total, @total_retenido, @partida_id, @poliza_number, @estado_id, @usuario_creo)
+RETURNING retencion_hdr_id;";
+            cmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+            cmd.Parameters.AddWithValue("numero_abono", NpgsqlDbType.Integer, numeroAbono);
+            cmd.Parameters.AddWithValue("origen", NpgsqlDbType.Smallint, OrigenRetencion.Compra);
+            cmd.Parameters.AddWithValue("cxp_id", NpgsqlDbType.Integer, cxpId);
+            cmd.Parameters.AddWithValue("folio", NpgsqlDbType.Integer, folio);
+            cmd.Parameters.AddWithValue("fecha_emision", NpgsqlDbType.Date, fecha);
+            cmd.Parameters.Add(new NpgsqlParameter("cod_proveedor", NpgsqlDbType.Varchar) { Value = (object?)codProveedor ?? DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter("rtn_proveedor", NpgsqlDbType.Varchar) { Value = (object?)rtn ?? DBNull.Value });
+            cmd.Parameters.AddWithValue("base_total", NpgsqlDbType.Numeric, baseTotal);
+            cmd.Parameters.AddWithValue("total_retenido", NpgsqlDbType.Numeric, totalRetenido);
+            cmd.Parameters.Add(new NpgsqlParameter("partida_id", NpgsqlDbType.Bigint) { Value = partidaId.HasValue ? partidaId.Value : (object)DBNull.Value });
+            cmd.Parameters.Add(new NpgsqlParameter("poliza_number", NpgsqlDbType.Varchar) { Value = (object?)polizaNumber ?? DBNull.Value });
+            cmd.Parameters.AddWithValue("estado_id", NpgsqlDbType.Smallint, EstadoRetencion.Vigente);
+            cmd.Parameters.AddWithValue("usuario_creo", NpgsqlDbType.Varchar, usuario);
+            var scalar = await cmd.ExecuteScalarAsync(ct);
+            retencionHdrId = Convert.ToInt64(scalar);
+        }
+
+        foreach (var r in retenciones)
+        {
+            snapshot.TryGetValue(r.RetencionId, out var info);
+            await using var cmd = cn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = @"
+INSERT INTO public.prv_retencion_dtl
+    (company_id, retencion_hdr_id, retencion_id, codigo, nombre, porcentaje, base_linea, monto_retenido, account_id)
+VALUES
+    (@company_id, @retencion_hdr_id, @retencion_id, @codigo, @nombre, @porcentaje, @base_linea, @monto_retenido, @account_id);";
+            cmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+            cmd.Parameters.AddWithValue("retencion_hdr_id", NpgsqlDbType.Bigint, retencionHdrId);
+            cmd.Parameters.AddWithValue("retencion_id", NpgsqlDbType.Integer, r.RetencionId);
+            cmd.Parameters.AddWithValue("codigo", NpgsqlDbType.Varchar, info.Codigo ?? r.RetencionId.ToString());
+            cmd.Parameters.AddWithValue("nombre", NpgsqlDbType.Varchar, info.Nombre ?? "Retención");
+            cmd.Parameters.AddWithValue("porcentaje", NpgsqlDbType.Numeric, r.Porcentaje);
+            cmd.Parameters.AddWithValue("base_linea", NpgsqlDbType.Numeric, r.Base);
+            cmd.Parameters.AddWithValue("monto_retenido", NpgsqlDbType.Numeric, r.Monto);
+            cmd.Parameters.AddWithValue("account_id", NpgsqlDbType.Bigint, r.CuentaId);
+            await cmd.ExecuteNonQueryAsync(ct);
+        }
+    }
+
+    private static async Task<int> ReserveFolioRetencionAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, CancellationToken ct)
+    {
+        await using var cmd = cn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = @"
+INSERT INTO public.prv_retencion_correlativo (company_id, ultimo_folio)
+VALUES (@company_id, 1)
+ON CONFLICT (company_id) DO UPDATE SET ultimo_folio = prv_retencion_correlativo.ultimo_folio + 1
+RETURNING ultimo_folio;";
+        cmd.Parameters.AddWithValue("company_id", NpgsqlDbType.Bigint, companyId);
+        return Convert.ToInt32(await cmd.ExecuteScalarAsync(ct));
+    }
+
+    private static async Task<string?> LoadPolizaNumberAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, long partidaId, CancellationToken ct)
+    {
+        await using var cmd = cn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "SELECT poliza_number FROM public.con_partida_hdr WHERE company_id = @c AND poliza_id = @p LIMIT 1";
+        cmd.Parameters.AddWithValue("c", NpgsqlDbType.Bigint, companyId);
+        cmd.Parameters.AddWithValue("p", NpgsqlDbType.Bigint, partidaId);
+        var v = await cmd.ExecuteScalarAsync(ct);
+        return v is null or DBNull ? null : Convert.ToString(v);
+    }
+
+    /// <summary>Código/nombre del catálogo GLOBAL de retenciones (cfg_retencion, sin company_id) para el snapshot del dtl.</summary>
+    private static async Task<Dictionary<int, (string? Codigo, string? Nombre)>> LoadRetencionSnapshotAsync(
+        NpgsqlConnection cn, NpgsqlTransaction tx, int[] ids, CancellationToken ct)
+    {
+        var map = new Dictionary<int, (string? Codigo, string? Nombre)>();
+        if (ids is null || ids.Length == 0) return map;
+        await using var cmd = cn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "SELECT id, codigo, nombre FROM public.cfg_retencion WHERE id = ANY(@ids)";
+        cmd.Parameters.Add(new NpgsqlParameter("ids", NpgsqlDbType.Array | NpgsqlDbType.Integer) { Value = ids });
+        await using var r = await cmd.ExecuteReaderAsync(ct);
+        while (await r.ReadAsync(ct))
+        {
+            var id = r.GetInt32(0);
+            var codigo = r.IsDBNull(1) ? null : r.GetString(1);
+            var nombre = r.IsDBNull(2) ? null : r.GetString(2);
+            map[id] = (codigo, nombre);
+        }
+        return map;
+    }
+
+    private static async Task<string?> ResolverRtnProveedorAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, string codProveedor, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(codProveedor)) return null;
+        await using var cmd = cn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "SELECT rtn FROM public.prv_proveedores WHERE company_id = @c AND cod_proveedor = @prov LIMIT 1";
+        cmd.Parameters.AddWithValue("c", NpgsqlDbType.Bigint, companyId);
+        cmd.Parameters.AddWithValue("prov", NpgsqlDbType.Varchar, codProveedor);
+        var v = await cmd.ExecuteScalarAsync(ct);
+        return v is null or DBNull ? null : Convert.ToString(v);
+    }
+
+    /// <summary>Marca la retención del pago de compra como anulada (estado_id=9 + motivo). No-op si el pago
+    /// no generó retención (0 filas). El reverso del asiento lo hace el motor al anular el abono.</summary>
+    private static async Task MarcarRetencionCompraAnuladaAsync(
+        NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, int numeroAbono,
+        string motivo, string usuario, CancellationToken ct)
+    {
+        await using var cmd = cn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = @"
+UPDATE public.prv_retencion_hdr
+   SET estado_id = @anulada, motivo_anulacion = @motivo,
+       usuario_anulacion = @user, fecha_anulacion = (now() AT TIME ZONE 'utc')
+ WHERE company_id = @c AND origen = @origen AND cxp_id = @cxp AND numero_abono = @num
+   AND estado_id <> @anulada";
+        cmd.Parameters.AddWithValue("anulada", NpgsqlDbType.Smallint, EstadoRetencion.Anulada);
+        cmd.Parameters.AddWithValue("motivo", NpgsqlDbType.Varchar, motivo);
+        cmd.Parameters.AddWithValue("user", NpgsqlDbType.Varchar, usuario);
+        cmd.Parameters.AddWithValue("c", NpgsqlDbType.Bigint, companyId);
+        cmd.Parameters.AddWithValue("origen", NpgsqlDbType.Smallint, OrigenRetencion.Compra);
+        cmd.Parameters.AddWithValue("cxp", NpgsqlDbType.Integer, cxpId);
+        cmd.Parameters.AddWithValue("num", NpgsqlDbType.Integer, numeroAbono);
+        await cmd.ExecuteNonQueryAsync(ct);
     }
 }

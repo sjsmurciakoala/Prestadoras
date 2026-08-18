@@ -49,6 +49,11 @@
                 <span class="text-muted small align-self-center me-2">
                     <i class="bi bi-lock me-1"></i>Sólo lectura: una factura registrada ya movió el kardex
                 </span>
+                <DxButton Text="Imprimir" Click="MostrarComprobante"
+                          IconCssClass="bi bi-printer"
+                          RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          CssClass="btn-modern" />
             }
             <DxButton Text="Volver" Click="Volver"
                       IconCssClass="bi bi-arrow-left"
@@ -548,6 +553,8 @@
     }
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     [Parameter] public int? Id { get; set; }
 
@@ -562,6 +569,7 @@
     }
 
     private RecepcionCompraDto modelo = new();
+    private PdfPreviewPopup? pdfPopup;
     private List<ProveedorComboItem> proveedores = new();
     private List<BodegaLookupDto> bodegas = new();
     private List<OrdenCompraArticuloLookupDto> articulosProveedor = new();
@@ -992,6 +1000,10 @@
     }
 
     private void Volver() => Navigation.NavigateTo("/almacen/compras/recepciones");
+
+    private void MostrarComprobante()
+        => pdfPopup?.Mostrar(RecepcionesCompraClient.GetComprobantePdfUrl(modelo.Id),
+            $"Factura de compra {modelo.Numero:00000}");
 
     private static string ClaseEstado(short estado) => estado switch
     {

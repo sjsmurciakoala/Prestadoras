@@ -314,6 +314,8 @@
 
 </div>
 
+<PdfPreviewPopup @ref="pdfPopup" />
+
 @code {
     private static readonly System.Globalization.CultureInfo Cultura =
         System.Globalization.CultureInfo.InvariantCulture;
@@ -322,6 +324,7 @@
 
     private AntiguedadSaldosProveedorDto? datos;
     private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
     private bool isLoading = true;
     private string? errorMessage;
 
@@ -426,11 +429,11 @@
 
     // El reporte refleja los mismos filtros que la matriz, incluido el proveedor seleccionado:
     // con uno fijado, el PDF/Excel sale sólo de ese proveedor.
-    private async Task AbrirPdf()
+    private void AbrirPdf()
     {
         var corte = corteFiltro.HasValue ? DateOnly.FromDateTime(corteFiltro.Value) : (DateOnly?)null;
         var url = AntiguedadSaldosProveedorClient.GetPdfUrl(corte, !soloVencido, origenFiltro, codProveedor: codProveedorFiltro);
-        await JS.InvokeVoidAsync("open", url, "_blank");
+        pdfPopup?.Mostrar(url, "Antigüedad de saldos de proveedor");
     }
 
     private async Task AbrirExcel()

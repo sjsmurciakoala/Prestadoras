@@ -116,6 +116,22 @@ public sealed class Rpt_Dev_Comprobante_PagoCompra : ComprobanteAlmacenReportBas
             (Money(datos.Monto), TextAlignment.TopRight)
         ], bold: true);
 
+        // Retención (si la hubo): desglose del neto realmente pagado al banco/caja.
+        if (datos.Retenido > 0m)
+        {
+            y = AddGridRow(band, y, 17f, anchos,
+            [
+                ("(−) Retención", TextAlignment.TopLeft),
+                (Money(datos.Retenido), TextAlignment.TopRight)
+            ]);
+
+            y = AddGridRow(band, y, 17f, anchos,
+            [
+                ("Neto pagado", TextAlignment.TopLeft),
+                (Money(datos.Monto - datos.Retenido), TextAlignment.TopRight)
+            ], bold: true);
+        }
+
         y = AddGridRow(band, y, 19f, anchos,
         [
             ("SALDO RESTANTE", TextAlignment.MiddleRight),

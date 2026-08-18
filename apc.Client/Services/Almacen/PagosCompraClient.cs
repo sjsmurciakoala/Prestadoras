@@ -1,5 +1,6 @@
 using apc.Client.Services;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Retenciones;
 
 namespace apc.Client.Services.Almacen;
 
@@ -54,6 +55,17 @@ public sealed class PagosCompraClient
         var r = await _http.GetAsync($"{BaseUrl}/contabilidad-activa", ct);
         var estado = await r.ReadFromJsonAsyncWithAuthCheck<CompraContabilidadEstadoDto>(ct);
         return estado?.ContabilidadActiva ?? false;
+    }
+
+    /// <summary>Retenciones aplicables a una fecha (catálogo + tasa vigente + cuenta del pasivo) para el
+    /// popup de retención del pago. Alojado bajo el módulo Compras por paridad de autorización.</summary>
+    public async Task<RetencionesAplicablesDto> GetRetencionesAplicablesAsync(DateOnly? fecha = null, CancellationToken ct = default)
+    {
+        var url = fecha.HasValue
+            ? $"{BaseUrl}/retenciones-aplicables?fecha={fecha.Value:yyyy-MM-dd}"
+            : $"{BaseUrl}/retenciones-aplicables";
+        var r = await _http.GetAsync(url, ct);
+        return await r.ReadFromJsonAsyncWithAuthCheck<RetencionesAplicablesDto>(ct) ?? new RetencionesAplicablesDto();
     }
 
     /// <summary>Devuelve la partida contable de un pago, o null si el pago no generó asiento.</summary>
