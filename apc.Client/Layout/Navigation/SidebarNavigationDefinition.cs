@@ -290,7 +290,30 @@ public static class SidebarNavigationDefinition
             ]
         },
 
-        // ===== 5. CONFIGURACIÓN (al final, decisión del usuario 2026-08-05) (TODOS los mantenimientos + admin del sistema) =====
+        // ===== 5. TALENTO HUMANO (2026-08-19) =====
+        new SidebarNavSection
+        {
+            Id = "talento-humano",
+            Label = "Talento Humano",
+            Items =
+            [
+                new SidebarNavItem { Id = "th-empleados", Text = "Empleados", NavigateUrl = "/talento-humano/empleados", MatchPrefixes = ["/talento-humano/empleados"], IconCssClass = "bi bi-person-badge" },
+                new SidebarNavItem
+                {
+                    Id = "th-catalogos",
+                    Text = "Catálogos",
+                    IconCssClass = "bi bi-tags",
+                    MatchPrefixes = ["/talento-humano/cargos", "/talento-humano/departamentos"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "th-cargos", Text = "Cargos", NavigateUrl = "/talento-humano/cargos", MatchPrefixes = ["/talento-humano/cargos"], IconCssClass = "bi bi-person-workspace" },
+                        new SidebarNavItem { Id = "th-departamentos", Text = "Departamentos", NavigateUrl = "/talento-humano/departamentos", MatchPrefixes = ["/talento-humano/departamentos"], IconCssClass = "bi bi-diagram-3" }
+                    ]
+                }
+            ]
+        },
+
+        // ===== 6. CONFIGURACIÓN (al final, decisión del usuario 2026-08-05) (TODOS los mantenimientos + admin del sistema) =====
         new SidebarNavSection
         {
             Id = "configuracion",

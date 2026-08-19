@@ -1,0 +1,350 @@
+@page "/talento-humano/empleados"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Components.Forms
+@using SIAD.Core.DTOs.TalentoHumano
+@using apc.Client.Services
+@using apc.Client.Services.TalentoHumano
+
+@inject EmpleadosClient EmpleadosClient
+@inject CatalogosThClient CatalogosClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Empleados</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="EmpleadosToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Empleados</h2>
+            <p class="page-subtitle">Catálogo de empleados de Talento Humano</p>
+        </div>
+        <div class="d-flex gap-2">
+            <DxButton Text="Plantilla Excel" IconCssClass="bi bi-file-earmark-arrow-down"
+                      RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern" Click="DescargarPlantilla" />
+            <DxButton Text="Importar Excel" IconCssClass="bi bi-file-earmark-arrow-up"
+                      RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern" Click="AbrirImportar" />
+            <DxButton Text="Nuevo empleado" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                      CssClass="btn-modern" Click="AbrirNuevo" />
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@empleados" KeyFieldName="@nameof(EmpleadoListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar código o nombre..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activos</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@empleados.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(EmpleadoListItemDto.Codigo)" Caption="Código" Width="110px" />
+                    <DxGridDataColumn FieldName="@nameof(EmpleadoListItemDto.CodigoSimafi)" Caption="Cód. SIMAFI" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EmpleadoListItemDto item)
+                            { <span class="text-muted">@(string.IsNullOrWhiteSpace(item.CodigoSimafi) ? "—" : item.CodigoSimafi)</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(EmpleadoListItemDto.Nombre)" Caption="Nombre" MinWidth="200" />
+                    <DxGridDataColumn FieldName="@nameof(EmpleadoListItemDto.Identidad)" Caption="Identidad" Width="150px" />
+                    <DxGridDataColumn FieldName="@nameof(EmpleadoListItemDto.CargoNombre)" Caption="Cargo" MinWidth="130">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EmpleadoListItemDto item)
+                            { <span class="@(string.IsNullOrWhiteSpace(item.CargoNombre) ? "text-muted fst-italic" : "")">@(string.IsNullOrWhiteSpace(item.CargoNombre) ? "Sin asignar" : item.CargoNombre)</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(EmpleadoListItemDto.DepartamentoNombre)" Caption="Departamento" MinWidth="130">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EmpleadoListItemDto item)
+                            { <span class="@(string.IsNullOrWhiteSpace(item.DepartamentoNombre) ? "text-muted fst-italic" : "")">@(string.IsNullOrWhiteSpace(item.DepartamentoNombre) ? "Sin asignar" : item.DepartamentoNombre)</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EmpleadoListItemDto item)
+                            { <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVO" : "INACTIVO")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is EmpleadoListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">No hay empleados para mostrar.</div></EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(560px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:80px"></div></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3"><div class="alert alert-danger" role="alert">@formError</div></div>
+        }
+        else
+        {
+            <EmpleadoForm Model="formModel" Cargos="cargos" Departamentos="departamentos"
+                          OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar empleado?</h5>
+            <p class="text-muted">El empleado quedará inactivo y no aparecerá en los combos que lo usan.</p>
+            @if (paraDesactivar is not null) { <div class="fw-semibold">@paraDesactivar.Codigo — @paraDesactivar.Nombre</div> }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarDesactivar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="importVisible" Width="min(520px, 95vw)" HeaderText="Importar empleados desde Excel"
+         CloseOnOutsideClick="false">
+    <BodyContentTemplate>
+        <div class="p-3">
+            <p class="text-muted">
+                El archivo debe tener las columnas <strong>CodigoSimafi</strong>, <strong>Nombre</strong>,
+                <strong>Identidad</strong>, <strong>Cargo</strong>, <strong>Departamento</strong> y
+                <strong>Activo</strong> (las cuatro últimas opcionales). El <strong>código SIMAFI</strong>
+                identifica al empleado: si ya existe se actualiza; si no, se crea con un
+                <strong>código interno generado automáticamente</strong>. El cargo y el departamento se
+                buscan en su catálogo; si el valor no existe, el empleado entra <strong>sin asignar</strong>.
+                Use el botón "Plantilla Excel" para partir del formato correcto.
+            </p>
+            <InputFile OnChange="OnArchivoSeleccionado" accept=".xlsx" class="form-control mb-3" />
+
+            @if (importResultado is not null)
+            {
+                <div class="alert @(importResultado.Errores.Count > 0 ? "alert-warning" : "alert-success")">
+                    <div>Insertados: <strong>@importResultado.Insertados</strong> · Actualizados: <strong>@importResultado.Actualizados</strong></div>
+                    @if (importResultado.Errores.Count > 0)
+                    {
+                        <hr />
+                        <div class="small">
+                            @foreach (var err in importResultado.Errores)
+                            {
+                                <div>Fila @err.Fila: @err.Mensaje</div>
+                            }
+                        </div>
+                    }
+                </div>
+            }
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Importar" RenderStyle="ButtonRenderStyle.Primary" IconCssClass="bi bi-upload"
+                          Enabled="@(archivoSeleccionado is not null && !importEnCurso)" Click="ImportarAsync" />
+                <DxButton Text="Cerrar" RenderStyle="ButtonRenderStyle.Secondary" Enabled="@(!importEnCurso)" Click="CerrarImportar" />
+            </div>
+        </div>
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<EmpleadoListItemDto> empleados = new();
+
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible, formLoading, isSaving;
+    private string? formError;
+    private EmpleadoEditDto formModel = new();
+
+    private bool confirmVisible;
+    private EmpleadoListItemDto? paraDesactivar;
+
+    private bool importVisible, importEnCurso;
+    private IBrowserFile? archivoSeleccionado;
+    private EmpleadoImportResultDto? importResultado;
+
+    private List<CatalogoThLookupDto> cargos = new();
+    private List<CatalogoThLookupDto> departamentos = new();
+
+    private const string GridLayoutStorageKey = "talento-humano-empleados-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar empleado" : "Nuevo empleado";
+    private string PopupSubtitle => formModel.Id.HasValue ? "Actualice los datos del empleado" : "Registre un empleado en el catálogo";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-person-plus";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarLookupsAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarLookupsAsync()
+    {
+        try { cargos = await CatalogosClient.GetLookupAsync(CatalogosThClient.Cargos); } catch { cargos = new(); }
+        try { departamentos = await CatalogosClient.GetLookupAsync(CatalogosThClient.Departamentos); } catch { departamentos = new(); }
+    }
+
+    private EmpleadoFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Activo = soloActivos ? true : null
+    };
+
+    private async Task CargarAsync()
+    {
+        try { isLoading = true; errorMessage = null; empleados = await EmpleadosClient.GetAsync(BuildFilter()); }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar los empleados: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChanged(bool v) { soloActivos = v; await CargarAsync(); }
+
+    private void AbrirNuevo() { formError = null; formModel = new EmpleadoEditDto(); formVisible = true; }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null; formLoading = true; formVisible = true;
+        try
+        {
+            var d = await EmpleadosClient.GetByIdAsync(id);
+            if (d is null) { formError = "No se encontró el empleado."; formModel = new(); return; }
+            formModel = d;
+        }
+        catch (Exception ex) { formError = $"Error al cargar: {ex.Message}"; }
+        finally { formLoading = false; }
+    }
+
+    private void CerrarForm() { if (isSaving) return; formVisible = false; formError = null; formModel = new(); }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (formModel.Id.HasValue) { await EmpleadosClient.UpdateAsync(formModel.Id.Value, formModel); Toast("Éxito", "Empleado actualizado.", ToastRenderStyle.Success); }
+            else { await EmpleadosClient.CreateAsync(formModel); Toast("Éxito", "Empleado registrado.", ToastRenderStyle.Success); }
+            formVisible = false; formModel = new(); await CargarAsync();
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { isSaving = false; }
+    }
+
+    private void ConfirmarDesactivar(EmpleadoListItemDto e) { paraDesactivar = e; confirmVisible = true; }
+    private void CancelarDesactivar() { confirmVisible = false; paraDesactivar = null; }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (paraDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            var ok = await EmpleadosClient.DeactivateAsync(paraDesactivar.Id);
+            if (!ok) Toast("Error", "No se pudo desactivar.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Empleado desactivado.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { confirmVisible = false; paraDesactivar = null; }
+    }
+
+    private void DescargarPlantilla() => Navigation.NavigateTo(EmpleadosClient.PlantillaExcelUrl, forceLoad: true);
+
+    private void AbrirImportar()
+    {
+        archivoSeleccionado = null;
+        importResultado = null;
+        importVisible = true;
+    }
+
+    private void OnArchivoSeleccionado(InputFileChangeEventArgs args) => archivoSeleccionado = args.File;
+
+    private async Task ImportarAsync()
+    {
+        if (archivoSeleccionado is null) return;
+        importEnCurso = true;
+        try
+        {
+            importResultado = await EmpleadosClient.ImportarExcelAsync(archivoSeleccionado);
+            Toast("Importación completa",
+                $"Insertados: {importResultado.Insertados} · Actualizados: {importResultado.Actualizados} · Errores: {importResultado.Errores.Count}",
+                importResultado.Errores.Count > 0 ? ToastRenderStyle.Warning : ToastRenderStyle.Success);
+            await CargarAsync();
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { importEnCurso = false; }
+    }
+
+    private void CerrarImportar() { if (importEnCurso) return; importVisible = false; archivoSeleccionado = null; importResultado = null; }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "EmpleadosToast" });
+}

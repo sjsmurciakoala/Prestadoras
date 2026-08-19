@@ -28,6 +28,7 @@ using SIAD.Services.AppLectores;
 using SIAD.Services.Tarifario;
 using SIAD.Services.Presupuesto;
 using SIAD.Services.Auditoria;
+using SIAD.Services.TalentoHumano;
 
 namespace SIAD.Services;
 
@@ -52,6 +53,11 @@ public static class ServiceRegistration
         services.AddScoped<IEvaluacionProveedorService, EvaluacionProveedorService>();
         // Incidencias de recepción (F4): alimentan el criterio CALIDAD del scorecard.
         services.AddScoped<IRecepcionIncidenciaService, RecepcionIncidenciaService>();
+
+        // Talento Humano (2026-08-19_th_empleado.sql): catálogo de empleados.
+        services.AddScoped<IEmpleadosService, EmpleadosService>();
+        // Catálogos de cargos y departamentos (2026-08-19_th_cargo_departamento.sql).
+        services.AddScoped<ICatalogoThService, CatalogoThService>();
 
         //solicitudes
         services.AddScoped<ISolicitudesService, SolicitudesService>();

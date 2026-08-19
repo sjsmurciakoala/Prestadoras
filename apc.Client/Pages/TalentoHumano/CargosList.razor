@@ -1,0 +1,10 @@
+@page "/talento-humano/cargos"
+@attribute [Authorize]
+@using apc.Client.Services.TalentoHumano
+
+<PageTitle>SIAD - Cargos</PageTitle>
+
+<CatalogoThManager Recurso="@CatalogosThClient.Cargos"
+                   Titulo="Cargos"
+                   Subtitulo="Catálogo de cargos de los empleados"
+                   Singular="cargo" />

@@ -63,12 +63,19 @@ public sealed class RequisicionDocumentoDetalleDto
     /// <summary>Cantidad ya entregada por descargos. Pendiente = Cantidad − CantidadDespachada.</summary>
     public decimal CantidadDespachada { get; set; }
 
+    /// <summary>Costo unitario del artículo (valor unitario consolidado). Solo lectura: viene del catálogo.</summary>
     public decimal PrecioUnitario { get; set; }
     public decimal Total { get; set; }
     public string? CuentaContable { get; set; }
 
     /// <summary>Existencia actual del par (artículo, bodega de la requisición), para orientar al capturar.</summary>
     public decimal? ExistenciaBodega { get; set; }
+
+    /// <summary>Costo promedio ponderado del artículo EN la bodega de la requisición (referencia, solo lectura).</summary>
+    public decimal? CostoPromedio { get; set; }
+
+    /// <summary>Último costo de compra/entrada del artículo (referencia, solo lectura).</summary>
+    public decimal? UltimoCosto { get; set; }
 }
 
 public sealed class RequisicionDocumentoListItemDto

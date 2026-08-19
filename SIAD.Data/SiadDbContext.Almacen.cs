@@ -509,7 +509,8 @@ public partial class SiadDbContext
             entity.Property(e => e.total).HasPrecision(13, 2).HasDefaultValue(0m);
             entity.Property(e => e.tipo_requisicion).HasDefaultValue((short)1);
             entity.Property(e => e.oficina).HasMaxLength(20);
-            entity.Property(e => e.departamento).HasMaxLength(3);
+            // El renglón copia el departamento de la cabecera (ahora nombre del catálogo): VARCHAR(80).
+            entity.Property(e => e.departamento).HasMaxLength(80);
             entity.Property(e => e.solicitante).HasMaxLength(120);
             entity.Property(e => e.cargo_solicitante).HasMaxLength(80);
             entity.Property(e => e.diametro).HasMaxLength(80);
@@ -568,7 +569,8 @@ public partial class SiadDbContext
 
             entity.Property(e => e.fecha).HasColumnType("date");
             entity.Property(e => e.fecha_requerida).HasColumnType("date");
-            entity.Property(e => e.departamento).HasMaxLength(3);
+            // El departamento pasó a elegirse del catálogo th_departamento (se guarda el nombre): VARCHAR(80).
+            entity.Property(e => e.departamento).HasMaxLength(80);
             entity.Property(e => e.solicitante).HasMaxLength(120);
             entity.Property(e => e.cargo_solicitante).HasMaxLength(80);
             entity.Property(e => e.usuario_solicita).HasMaxLength(100);

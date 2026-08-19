@@ -217,7 +217,7 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
                 fecha = fecha,
                 fecha_requerida = dto.FechaRequerida,
                 bodega_id = dto.BodegaId,
-                departamento = Limpiar(dto.Departamento, 3),
+                departamento = Limpiar(dto.Departamento, 80),
                 solicitante = solicitante,
                 cargo_solicitante = Limpiar(dto.CargoSolicitante, 80),
                 usuario_solicita = usuario,
@@ -257,8 +257,9 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
 
         var hdr = await _context.alm_requisicion_hdrs.FirstOrDefaultAsync(h => h.id == id, ct)
             ?? throw new InvalidOperationException("La requisición no existe en la empresa actual.");
-        if (hdr.estado != EstadoRequisicionHdr.Borrador)
-            throw new InvalidOperationException("Solo se puede editar una requisición en borrador.");
+        // Editable mientras no se haya aprobado/despachado: borrador o en revisión (aún sin salida de inventario).
+        if (hdr.estado != EstadoRequisicionHdr.Borrador && hdr.estado != EstadoRequisicionHdr.EnRevision)
+            throw new InvalidOperationException("Solo se puede editar una requisición en borrador o en revisión.");
 
         var (solicitante, _, pares) = await ValidarCabeceraYRenglonesAsync(dto, ct);
         var usuario = ClasificacionNormalizer.Usuario(user);
@@ -270,7 +271,7 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         hdr.fecha = dto.Fecha ?? hdr.fecha;
         hdr.fecha_requerida = dto.FechaRequerida;
         hdr.bodega_id = dto.BodegaId;
-        hdr.departamento = Limpiar(dto.Departamento, 3);
+        hdr.departamento = Limpiar(dto.Departamento, 80);
         hdr.solicitante = solicitante;
         hdr.cargo_solicitante = Limpiar(dto.CargoSolicitante, 80);
         hdr.aplicacion = Limpiar(dto.Aplicacion, 254);
@@ -278,7 +279,7 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         hdr.usuariomodificacion = usuario;
         hdr.fechamodificacion = ahora;
 
-        // Reemplazo de renglones: en borrador no hay descargos, así que borrar e insertar es seguro.
+        // Reemplazo de renglones: en borrador y en revisión aún no hay descargos, así que borrar e insertar es seguro.
         var viejas = await _context.alm_requisicions.Where(l => l.requisicion_hdr_id == id).ToListAsync(ct);
         _context.alm_requisicions.RemoveRange(viejas);
         await _context.SaveChangesAsync(ct);
@@ -422,11 +423,19 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         }
 
         // Se permiten artículos repetidos (cada renglón es una línea de solicitud independiente; su
-        // parcialidad se controla por línea). Solo se valida que el artículo exista y esté activo.
+        // parcialidad se controla por línea). Se valida que el artículo exista, esté activo y esté
+        // ASIGNADO a la bodega.
         var ids = dto.Detalles.Select(d => d.ArticuloId).Distinct().ToList();
         var arts = await _context.alm_articulos.AsNoTracking()
             .Where(a => ids.Contains(a.id))
             .Select(a => new { a.id, a.codigo_articulo, a.activo })
+            .ToListAsync(ct);
+
+        // Asignado = tiene una ubicación activa en esa bodega (alm_articulo_bodega), aunque su
+        // existencia sea 0. La requisición es una SOLICITUD, no la salida: no se exige stock.
+        var asignadosBodega = await _context.alm_articulo_bodegas.AsNoTracking()
+            .Where(u => u.activo && u.bodega_id == dto.BodegaId && ids.Contains(u.articulo_id))
+            .Select(u => u.articulo_id)
             .ToListAsync(ct);
 
         var pares = new Dictionary<int, ParArticulo>();
@@ -435,6 +444,8 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
             var a = arts.FirstOrDefault(x => x.id == artId)
                 ?? throw new InvalidOperationException($"El artículo {artId} no existe en la empresa actual.");
             if (!a.activo) throw new InvalidOperationException($"El artículo {a.codigo_articulo ?? artId.ToString()} está inactivo.");
+            if (!asignadosBodega.Contains(artId))
+                throw new InvalidOperationException($"El artículo {a.codigo_articulo ?? artId.ToString()} no está asignado a la bodega '{bodega.nombre}'.");
             pares[artId] = new ParArticulo(artId, a.codigo_articulo);
         }
         return (solicitante, bodega, pares);

@@ -5,13 +5,17 @@
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Components.Authorization
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.TalentoHumano
 @using SIAD.Core.Constants
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
+@using apc.Client.Services.TalentoHumano
 
 @inject RequisicionesDocumentoClient ReqClient
 @inject BodegasClient BodegasClient
 @inject ArticulosClient ArticulosClient
+@inject EmpleadosClient EmpleadosClient
+@inject CatalogosThClient CatalogosClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -59,24 +63,51 @@
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label small fw-semibold">Solicitante *</label>
-                    @if (EsEditable) { <DxTextBox @bind-Text="modelo.Solicitante" NullText="Nombre de quien solicita" MaxLength="120" CssClass="w-100" /> }
-                    else { <div class="form-control-plaintext fw-semibold">@modelo.Solicitante</div> }
+                    @if (EsEditable)
+                    {
+                        <DxComboBox Data="@empleados" TData="EmpleadoLookupDto" TValue="string"
+                                    Value="@modelo.Solicitante" ValueChanged="@((string v) => OnSolicitanteChanged(v))"
+                                    ValueExpression="@(() => modelo.Solicitante)"
+                                    ValueFieldName="@nameof(EmpleadoLookupDto.Nombre)" TextFieldName="@nameof(EmpleadoLookupDto.Nombre)"
+                                    AllowUserInput="true" DropDownStyle="DropDownStyle.DropDown"
+                                    SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" SearchDelay="200"
+                                    NullText="Empleado, o busque por código" MaxLength="120"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100">
+                            <Columns>
+                                <DxListEditorColumn FieldName="@nameof(EmpleadoLookupDto.Codigo)" Caption="Código" />
+                                <DxListEditorColumn FieldName="@nameof(EmpleadoLookupDto.Nombre)" Caption="Nombre" />
+                            </Columns>
+                        </DxComboBox>
+                        @if (!string.IsNullOrWhiteSpace(modelo.CargoSolicitante)) { <div class="form-text">Cargo: @modelo.CargoSolicitante</div> }
+                    }
+                    else
+                    {
+                        <div class="form-control-plaintext fw-semibold">@modelo.Solicitante</div>
+                        @if (!string.IsNullOrWhiteSpace(modelo.CargoSolicitante)) { <div class="text-muted small">@modelo.CargoSolicitante</div> }
+                    }
                 </div>
-                <div class="col-md-4">
+                <div class="col-md-3">
                     <label class="form-label small fw-semibold">Bodega *</label>
                     @if (EsEditable)
                     {
                         <DxComboBox Data="@bodegas" TData="BodegaLookupDto" TValue="int?"
                                     Value="@(modelo.BodegaId == 0 ? (int?)null : modelo.BodegaId)"
-                                    ValueChanged="@((int? v) => modelo.BodegaId = v ?? 0)"
+                                    ValueChanged="@((int? v) => OnBodegaChanged(v))"
                                     ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
                                     NullText="Seleccione..." CssClass="w-100" />
                     }
                     else { <div class="form-control-plaintext">@modelo.BodegaNombre</div> }
                 </div>
-                <div class="col-md-2">
+                <div class="col-md-3">
                     <label class="form-label small fw-semibold">Departamento</label>
-                    @if (EsEditable) { <DxTextBox @bind-Text="modelo.Departamento" NullText="Ej. OPE" MaxLength="3" CssClass="w-100" /> }
+                    @if (EsEditable)
+                    {
+                        <DxComboBox Data="@departamentos" TData="CatalogoThLookupDto" TValue="string"
+                                    @bind-Value="modelo.Departamento"
+                                    ValueFieldName="@nameof(CatalogoThLookupDto.Nombre)" TextFieldName="@nameof(CatalogoThLookupDto.Nombre)"
+                                    NullText="Sin asignar" FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                    }
                     else { <div class="form-control-plaintext">@(string.IsNullOrWhiteSpace(modelo.Departamento) ? "—" : modelo.Departamento)</div> }
                 </div>
                 <div class="col-md-2">
@@ -106,11 +137,20 @@
                                     ValueFieldName="@nameof(ArticuloListItemDto.Id)" TextFieldName="ComboTexto"
                                     FilteringMode="DataGridFilteringMode.Contains" NullText="Busque por código o descripción..."
                                     ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                                    Enabled="@(articulos.Count > 0)" CssClass="w-100" />
+                                    Enabled="@(modelo.BodegaId > 0 && articulos.Count > 0)" CssClass="w-100" />
                     </div>
                     <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Secondary"
                               Click="AgregarRenglon" Enabled="@(articuloSeleccionado.HasValue)" />
+                    @if (modelo.BodegaId <= 0)
+                    {
+                        <span class="text-muted small ms-2"><i class="bi bi-info-circle me-1"></i>Elija primero la bodega.</span>
+                    }
+                    else if (articulos.Count == 0)
+                    {
+                        <span class="text-muted small ms-2"><i class="bi bi-info-circle me-1"></i>La bodega no tiene artículos asignados.</span>
+                    }
                 </div>
+                <div class="small text-muted mt-2"><i class="bi bi-lightbulb me-1"></i>Solo se listan los artículos asignados a la bodega (aunque no tengan existencia).</div>
             </div>
         }
 
@@ -123,9 +163,13 @@
                 <table class="table table-sm align-middle">
                     <thead>
                         <tr class="text-muted small">
-                            <th style="min-width:220px;">Artículo</th>
+                            <th style="width:70px;">ID</th>
+                            <th style="min-width:200px;">Artículo</th>
+                            <th class="text-end" style="width:100px;">Existencia</th>
+                            <th class="text-end" style="width:110px;">Costo unit.</th>
+                            <th class="text-end" style="width:110px;">Costo prom.</th>
+                            <th class="text-end" style="width:110px;">Últ. costo</th>
                             <th class="text-end" style="width:120px;">Cantidad</th>
-                            <th class="text-end" style="width:120px;">Precio unit.</th>
                             @if (!EsEditable)
                             {
                                 <th class="text-end" style="width:110px;">Despachado</th>
@@ -137,21 +181,22 @@
                     <tbody>
                         @if (modelo.Detalles.Count == 0)
                         {
-                            <tr><td colspan="@(EsEditable ? 4 : 5)" class="text-center text-muted p-3">Sin renglones.</td></tr>
+                            <tr><td colspan="@(EsEditable ? 8 : 9)" class="text-center text-muted p-3">Sin renglones.</td></tr>
                         }
                         else
                         {
                             @foreach (var d in modelo.Detalles)
                             {
                                 <tr>
-                                    <td><span class="fw-semibold">@(d.CodigoArticulo ?? d.ArticuloId.ToString())</span><span class="text-muted"> — @d.NombreArticulo</span></td>
+                                    <td class="text-muted">@d.ArticuloId</td>
+                                    <td><span class="fw-semibold">@(!string.IsNullOrWhiteSpace(d.NombreArticulo) ? d.NombreArticulo : d.Descripcion)</span></td>
+                                    <td class="text-end @(d.ExistenciaBodega is <= 0m ? "text-danger" : "text-muted")">@Ref(d.ExistenciaBodega)</td>
+                                    <td class="text-end text-muted">@Ref(d.PrecioUnitario)</td>
+                                    <td class="text-end text-muted">@Ref(d.CostoPromedio)</td>
+                                    <td class="text-end text-muted">@Ref(d.UltimoCosto)</td>
                                     <td class="text-end">
                                         @if (EsEditable) { <DxSpinEdit @bind-Value="d.Cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" /> }
                                         else { @d.Cantidad.ToString("N2") }
-                                    </td>
-                                    <td class="text-end">
-                                        @if (EsEditable) { <DxSpinEdit @bind-Value="d.PrecioUnitario" DisplayFormat="N2" MinValue="0" CssClass="w-100" /> }
-                                        else { @d.PrecioUnitario.ToString("N2") }
                                     </td>
                                     @if (!EsEditable)
                                     {
@@ -174,7 +219,7 @@
             </div>
 
             <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
-                @if (EsEditable)
+                @if (EsNueva || modelo.Estado == EstadoRequisicionHdr.Borrador)
                 {
                     <DxButton Text="Guardar borrador" IconCssClass="bi bi-save" RenderStyle="ButtonRenderStyle.Secondary"
                               Click="@(() => GuardarAsync(enviar: false))" Enabled="@(!procesando)" />
@@ -188,6 +233,9 @@
                 }
                 else if (modelo.Estado == EstadoRequisicionHdr.EnRevision)
                 {
+                    @* En revisión se puede editar: se guardan los cambios sin cambiar el estado. *@
+                    <DxButton Text="Guardar cambios" IconCssClass="bi bi-save" RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="@(() => GuardarAsync(enviar: false))" Enabled="@(!procesando)" />
                     <AuthorizeView Policy="@PermissionNames.Inventario.Requisiciones.Aprobar">
                         <DxButton Text="Aprobar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Success"
                                   Click="AprobarAsync" Enabled="@(!procesando)" />
@@ -236,6 +284,8 @@
     private DateTime? fecha = DateTime.Today;
     private List<BodegaLookupDto> bodegas = new();
     private List<ArticuloListItemDto> articulos = new();
+    private List<EmpleadoLookupDto> empleados = new();
+    private List<CatalogoThLookupDto> departamentos = new();
     private int? articuloSeleccionado;
 
     private bool cargando = true, procesando;
@@ -246,12 +296,14 @@
     private MotivoAccion motivoAccion;
 
     private bool EsNueva => !Id.HasValue;
-    private bool EsEditable => EsNueva || modelo.Estado == EstadoRequisicionHdr.Borrador;
+    // Editable mientras no se apruebe/despache: nueva, borrador o en revisión.
+    private bool EsEditable => EsNueva || modelo.Estado == EstadoRequisicionHdr.Borrador || modelo.Estado == EstadoRequisicionHdr.EnRevision;
 
     protected override async Task OnInitializedAsync()
     {
         try { bodegas = await BodegasClient.GetLookupAsync(); } catch { bodegas = new(); }
-        try { articulos = await ArticulosClient.GetAsync(new ArticuloFilterDto()); } catch { articulos = new(); }
+        try { empleados = await EmpleadosClient.GetLookupAsync(); } catch { empleados = new(); }
+        try { departamentos = await CatalogosClient.GetLookupAsync(CatalogosThClient.Departamentos); } catch { departamentos = new(); }
 
         if (!EsNueva)
         {
@@ -259,7 +311,51 @@
             if (doc is null) Toast("Error", "La requisición no existe.", ToastRenderStyle.Danger);
             else { modelo = doc; fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today; }
         }
+        // El combo de artículos se limita a los asignados a la bodega elegida (incluye existencia 0).
+        articulos = await CargarArticulosAsync(modelo.BodegaId);
+        EnriquecerRenglones();
         cargando = false;
+    }
+
+    private async Task<List<ArticuloListItemDto>> CargarArticulosAsync(int bodega)
+    {
+        if (bodega <= 0) return new();
+        try { return await ArticulosClient.GetAsync(new ArticuloFilterDto { BodegaId = bodega }); }
+        catch { return new(); }
+    }
+
+    /// <summary>
+    /// Al cambiar la bodega, recarga el catálogo de artículos con los asignados a esa bodega y limpia
+    /// los renglones (dependen de la bodega): un artículo de otra bodega no puede quedar en la solicitud.
+    /// </summary>
+    private async Task OnBodegaChanged(int? v)
+    {
+        var nueva = v ?? 0;
+        if (nueva == modelo.BodegaId) return;
+        modelo.BodegaId = nueva;
+        articuloSeleccionado = null;
+        if (modelo.Detalles.Count > 0)
+        {
+            modelo.Detalles.Clear();
+            Toast("Aviso", "Se limpiaron los renglones porque los artículos dependen de la bodega.", ToastRenderStyle.Warning);
+        }
+        articulos = await CargarArticulosAsync(nueva);
+    }
+
+    /// <summary>
+    /// Guarda el nombre del solicitante y, si coincide con un empleado del catálogo, autollena su cargo
+    /// y autoselecciona su departamento (el usuario puede cambiarlo después). Con texto libre (empleado
+    /// no registrado) conserva lo escrito y no toca cargo ni departamento.
+    /// </summary>
+    private void OnSolicitanteChanged(string? valor)
+    {
+        modelo.Solicitante = valor;
+        var emp = empleados.FirstOrDefault(e => string.Equals(e.Nombre, valor, StringComparison.OrdinalIgnoreCase));
+        if (emp is not null)
+        {
+            modelo.CargoSolicitante = emp.CargoNombre;
+            modelo.Departamento = emp.DepartamentoNombre;
+        }
     }
 
     private void AgregarRenglon()
@@ -269,10 +365,38 @@
         if (art is null) return;
         modelo.Detalles.Add(new RequisicionDocumentoDetalleDto
         {
-            ArticuloId = art.Id, CodigoArticulo = art.Codigo, NombreArticulo = art.Descripcion, Cantidad = 0m, PrecioUnitario = art.ValorUnitario
+            ArticuloId = art.Id,
+            CodigoArticulo = art.Codigo,
+            NombreArticulo = art.Descripcion,
+            Cantidad = 0m,
+            PrecioUnitario = art.ValorUnitario,          // costo unitario (solo lectura)
+            ExistenciaBodega = art.ExistenciaEnBodega,    // existencia en la bodega
+            CostoPromedio = art.CostoPromedioEnBodega,    // costo promedio en la bodega
+            UltimoCosto = art.UltimoCosto                 // último costo
         });
         articuloSeleccionado = null;
     }
+
+    /// <summary>
+    /// Rellena existencia y costos de referencia (solo lectura) de cada renglón desde el catálogo
+    /// de artículos ya cargado para la bodega. Se usa al abrir/recargar una requisición existente,
+    /// donde esos datos no vienen del backend sino del estado actual del artículo en la bodega.
+    /// </summary>
+    private void EnriquecerRenglones()
+    {
+        foreach (var d in modelo.Detalles)
+        {
+            var art = articulos.FirstOrDefault(a => a.Id == d.ArticuloId);
+            if (art is null) continue;
+            d.ExistenciaBodega = art.ExistenciaEnBodega;
+            d.CostoPromedio = art.CostoPromedioEnBodega;
+            d.UltimoCosto = art.UltimoCosto;
+        }
+    }
+
+    /// <summary>Formato de referencia: el número con 2 decimales, o "—" si no hay dato.</summary>
+    private static string Ref(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "—";
+    private static string Ref(decimal v) => v.ToString("N2");
 
     private async Task GuardarAsync(bool enviar)
     {
@@ -353,7 +477,13 @@
     private async Task RecargarAsync(int id)
     {
         var doc = await ReqClient.GetByIdAsync(id);
-        if (doc is not null) { modelo = doc; fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today; }
+        if (doc is not null)
+        {
+            modelo = doc;
+            fecha = doc.Fecha?.ToDateTime(TimeOnly.MinValue) ?? DateTime.Today;
+            // Los artículos ya están cargados para esta bodega; refresca existencia y costos de referencia.
+            EnriquecerRenglones();
+        }
     }
 
     private void MostrarComprobante()

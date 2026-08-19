@@ -1,0 +1,209 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.TalentoHumano
+@using apc.Client.Services
+@using apc.Client.Services.TalentoHumano
+
+@inject CatalogosThClient CatalogosClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<div class="page-container">
+    <DxToastProvider Name="@ToastProvider" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">@Titulo</h2>
+            <p class="page-subtitle">@Subtitulo</p>
+        </div>
+        <DxButton Text="@($"Nuevo {Singular}")" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@items" KeyFieldName="@nameof(CatalogoThListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar nombre..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activos</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@items.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(CatalogoThListItemDto.Nombre)" Caption="Nombre" MinWidth="220" />
+                    <DxGridDataColumn FieldName="@nameof(CatalogoThListItemDto.Empleados)" Caption="Empleados" Width="130px" TextAlignment="GridTextAlignment.Center" />
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CatalogoThListItemDto item)
+                            { <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVO" : "INACTIVO")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="130px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is CatalogoThListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate><div class="p-4 text-center text-muted">No hay registros para mostrar.</div></EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(480px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false"
+         HeaderText="@(formModel.Id.HasValue ? $"Editar {Singular}" : $"Nuevo {Singular}")">
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:60px"></div></div>
+        }
+        else
+        {
+            <CatalogoThForm Model="formModel" Singular="@Singular" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(420px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar @Singular?</h5>
+            <p class="text-muted">Quedará inactivo y no se podrá elegir en el maestro de empleados. Los empleados que ya lo tienen no cambian.</p>
+            @if (paraDesactivar is not null) { <div class="fw-semibold">@paraDesactivar.Nombre</div> }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarDesactivar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    [Parameter, EditorRequired] public string Recurso { get; set; } = default!;
+    [Parameter, EditorRequired] public string Titulo { get; set; } = default!;
+    [Parameter, EditorRequired] public string Subtitulo { get; set; } = default!;
+    [Parameter, EditorRequired] public string Singular { get; set; } = default!;
+
+    private DxGrid? grid;
+    private List<CatalogoThListItemDto> items = new();
+
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible, formLoading, isSaving;
+    private CatalogoThEditDto formModel = new();
+
+    private bool confirmVisible;
+    private CatalogoThListItemDto? paraDesactivar;
+
+    private string ToastProvider => $"CatTh-{Recurso}-Toast";
+    private string GridLayoutStorageKey => $"talento-humano-{Recurso}-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e) => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e) => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    protected override async Task OnParametersSetAsync() => await CargarAsync();
+
+    private CatalogoThFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Activo = soloActivos ? true : null
+    };
+
+    private async Task CargarAsync()
+    {
+        try { isLoading = true; errorMessage = null; items = await CatalogosClient.GetAsync(Recurso, BuildFilter()); }
+        catch (Exception ex) { errorMessage = $"No se pudo cargar el catálogo: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChanged(bool v) { soloActivos = v; await CargarAsync(); }
+
+    private void AbrirNuevo() { formModel = new CatalogoThEditDto(); formVisible = true; }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formLoading = true; formVisible = true;
+        try
+        {
+            var d = await CatalogosClient.GetByIdAsync(Recurso, id);
+            formModel = d ?? new CatalogoThEditDto();
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { formLoading = false; }
+    }
+
+    private void CerrarForm() { if (isSaving) return; formVisible = false; formModel = new(); }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (formModel.Id.HasValue) { await CatalogosClient.UpdateAsync(Recurso, formModel.Id.Value, formModel); Toast("Éxito", "Registro actualizado.", ToastRenderStyle.Success); }
+            else { await CatalogosClient.CreateAsync(Recurso, formModel); Toast("Éxito", "Registro creado.", ToastRenderStyle.Success); }
+            formVisible = false; formModel = new(); await CargarAsync();
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { isSaving = false; }
+    }
+
+    private void ConfirmarDesactivar(CatalogoThListItemDto x) { paraDesactivar = x; confirmVisible = true; }
+    private void CancelarDesactivar() { confirmVisible = false; paraDesactivar = null; }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (paraDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            var ok = await CatalogosClient.DeactivateAsync(Recurso, paraDesactivar.Id);
+            if (!ok) Toast("Error", "No se pudo desactivar.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Registro desactivado.", ToastRenderStyle.Success); await CargarAsync(); }
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { confirmVisible = false; paraDesactivar = null; }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = ToastProvider });
+}

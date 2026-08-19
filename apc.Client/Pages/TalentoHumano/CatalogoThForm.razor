@@ -1,0 +1,35 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.TalentoHumano
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
+    <DataAnnotationsValidator />
+
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Nombre *" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Nombre" NullText="@($"Nombre del {Singular}")" MaxLength="80" />
+            <ValidationMessage For="() => Model.Nombre" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Activo" ColSpanMd="12">
+            <Template>
+                <div class="pt-2"><DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" LabelText="Activo" /></div>
+            </Template>
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <div class="d-flex justify-content-end gap-2 mt-2">
+        <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary" Text="Guardar" SubmitFormOnClick="true" Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!IsBusy)" Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public CatalogoThEditDto Model { get; set; } = default!;
+    [Parameter] public string Singular { get; set; } = "registro";
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+
+    private async Task HandleValidSubmit() { if (OnValidSubmit.HasDelegate) await OnValidSubmit.InvokeAsync(); }
+    private async Task Cancel() { if (OnCancel.HasDelegate) await OnCancel.InvokeAsync(); }
+}

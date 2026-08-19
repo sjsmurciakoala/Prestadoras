@@ -940,6 +940,134 @@ SELECT conname FROM pg_constraint
 
 ---
 
+### 3.24 Talento Humano — catálogo de empleados (2026-08-19)
+
+Módulo **nuevo** (rama `feat/almacen-integracion-contable`): catálogo de empleados en un módulo
+propio "Talento Humano". Primer consumidor: el campo **"Recibe"** del Descargo de almacén
+(`alm_descargo_hdr.recibido_por`), que pasa de un `DxTextBox` de texto 100% libre a un `DxComboBox`
+con autocompletar alimentado por este catálogo (mismo patrón que "Banco" en Proveedores:
+`AllowUserInput=true`, sigue aceptando texto libre). **No hay FK** desde el descargo: `recibido_por`
+sigue siendo `VARCHAR(120)`; el catálogo solo alimenta las sugerencias.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-19_th_empleado.sql` | `th_empleado` (catálogo por empresa: `id` serial PK, `company_id` bigint, `codigo` varchar(20), `nombre` varchar(120), **`identidad` varchar(20) null, `cargo` varchar(80) null, `departamento` varchar(80) null**, `activo` boolean default true + auditoría) + `UNIQUE (company_id, codigo)` + índice `ix_th_empleado_company`. El script trae las 3 columnas opcionales en el `CREATE` **y** un bloque `ALTER … ADD COLUMN IF NOT EXISTS` para tablas ya creadas con la versión inicial | **Aditivo idempotente** (`CREATE TABLE IF NOT EXISTS`, `CREATE INDEX IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`) — **re-ejecutable**. Tabla nueva, no toca ninguna existente. **Sin seed** (arranca vacía; se llena a mano o importando Excel desde el maestro) | **sí (2026-08-19)** | **pendiente** |
+
+- **Dependencias:** ninguna (tabla nueva independiente). No asume ningún `company_id` (arranca vacía;
+  `SiadDbContext` no la estampa porque el acceso va por Dapper con `company_id` explícito).
+- **Verificado en el mirror el 2026-08-19** (con orden explícita del usuario): tabla creada, PK,
+  `UNIQUE (company_id, codigo)`, índice de `company_id` y las 12 columnas (incluidas `identidad`,
+  `cargo`, `departamento` nullable) confirmadas por `information_schema.columns`.
+- **`identidad`/`cargo`/`departamento`** son opcionales y **sin unicidad forzada** (para no bloquear
+  importaciones con datos incompletos). El maestro y la importación Excel esperan las columnas en el
+  orden `Codigo, Nombre, Identidad, Cargo, Departamento, Activo`.
+- **Con binario:** el maestro `/talento-humano/empleados` (CRUD + importación Excel vía ClosedXML) y el
+  nuevo módulo de permisos `talentohumano` (`EmpleadosService`/`EmpleadosController`/`EmpleadosClient`),
+  más el cambio del combo "Recibe" en `DescargoDocFormPage`. **El SQL sin el binario es inocuo** (nadie
+  lee la tabla); **el binario sin el SQL** responde `42P01` al abrir el maestro o el descargo directo.
+  Aplicar en la misma ventana que el binario. Independiente del resto de la tanda.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-19_th_empleado.sql
+```
+
+¿Ya aplicado? (NULL = falta)
+
+```sql
+SELECT to_regclass('public.th_empleado') AS tabla;
+```
+
+Verificación posterior (constraint único, índice de empresa y columnas nuevas):
+
+```sql
+SELECT conname FROM pg_constraint WHERE conname = 'uq_th_empleado_company_codigo';   -- 1 fila
+SELECT indexname FROM pg_indexes WHERE tablename = 'th_empleado' ORDER BY indexname;  -- pkey + ix_company + uq
+SELECT column_name FROM information_schema.columns
+ WHERE table_name = 'th_empleado' AND column_name IN ('identidad','cargo','departamento','codigo_simafi');  -- 4 filas
+```
+
+---
+
+### 3.25 Talento Humano — catálogos de Cargos y Departamentos (2026-08-19)
+
+Continuación de §3.24. El empleado deja de guardar cargo/departamento como texto libre y pasa a
+elegirlos de un **catálogo** (selección **estricta** en el formulario). Depende de que `th_empleado`
+ya exista (§3.24) — **aplicar 3.24 antes que 3.25**.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-19_th_cargo_departamento.sql` | `th_cargo` y `th_departamento` (catálogos por empresa: id, company_id, nombre varchar80, activo + auditoría; `UNIQUE(company_id,nombre)` + `UNIQUE(company_id,id)`) · `th_empleado.cargo_id`/`departamento_id` (INTEGER NULL, **FK compuestas** `(company_id,id)` ON DELETE SET NULL) · **migración**: siembra los catálogos con los valores DISTINTOS ya usados en `th_empleado.cargo`/`departamento` y enlaza cada empleado por nombre | **Aditivo + datos idempotente** (`CREATE TABLE/INDEX IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, FK vía `DO $$ IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`, `UPDATE … WHERE _id IS NULL`) — **re-ejecutable** | **sí (2026-08-19)** | **pendiente** |
+
+- **Dependencia dura:** requiere §3.24 aplicado (usa `th_empleado` y sus columnas de texto `cargo`/`departamento`).
+- Las **columnas de texto** `th_empleado.cargo`/`departamento` **se conservan** (snapshot/legacy); su `DROP`
+  se decidirá aparte. El binario ya usa `cargo_id`/`departamento_id` (JOIN para mostrar el nombre).
+- **Verificado en el mirror el 2026-08-19** (con orden explícita): sembró 17 cargos + 10 departamentos y
+  enlazó los 34 empleados (`UPDATE 34` / `UPDATE 34`).
+- **Con binario:** mantenimientos `/talento-humano/cargos` y `/talento-humano/departamentos`
+  (`CatalogoThService` + `CargosController`/`DepartamentosController` bajo el módulo `talentohumano`),
+  el maestro de empleados con combos estrictos, y la importación Excel que resuelve el texto contra el
+  catálogo (**sin asignar** si no existe, no auto-crea). **El SQL sin el binario es inocuo**; **el binario
+  sin el SQL** responde `42P01`/columna inexistente al abrir el maestro. Aplicar en la misma ventana.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-19_th_cargo_departamento.sql
+```
+
+¿Ya aplicado? (NULL = falta)
+
+```sql
+SELECT to_regclass('public.th_cargo') AS cargo, to_regclass('public.th_departamento') AS depto;
+```
+
+Verificación posterior (FKs y enlace):
+
+```sql
+SELECT conname FROM pg_constraint WHERE conname IN ('fk_th_empleado_cargo','fk_th_empleado_departamento');  -- 2 filas
+SELECT count(*) FILTER (WHERE cargo_id IS NOT NULL) AS con_cargo,
+       count(*) FILTER (WHERE departamento_id IS NOT NULL) AS con_depto
+  FROM public.th_empleado;
+```
+
+---
+
+### 3.26 Requisiciones — el departamento se elige del catálogo th_departamento (2026-08-19)
+
+El control "Departamento" de la requisición deja de ser un código libre de 3 letras y pasa a listar
+el catálogo `th_departamento` (§3.25), guardando el **nombre**. Para que quepan los nombres se amplía
+la columna. Depende de que `th_departamento` exista (§3.25) para que el combo tenga qué listar, pero el
+`ALTER` en sí es independiente.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-19_alm_requisicion_departamento_catalogo.sql` | `ALTER TABLE alm_requisicion_hdr ALTER COLUMN departamento TYPE VARCHAR(80)` (widening 3→80) | **Cambio de tipo — widening, no destructivo.** No trunca ni reescribe datos (los códigos legacy de 3 letras siguen cabiendo). Re-ejecutar al mismo tipo es no-op | **sí (2026-08-19)** | **pendiente** |
+
+- **No agrega FK ni migra datos:** el histórico conserva su texto; las requisiciones nuevas guardan el
+  nombre del departamento elegido del catálogo. El mapeo EF (`SiadDbContext.Almacen.cs`) también pasó a
+  `HasMaxLength(80)` y el servicio a `Limpiar(dto.Departamento, 80)`.
+- **Con binario:** `RequisicionDocFormPage` con el combo estricto de departamentos (`CatalogosThClient`).
+  **El SQL sin el binario es inocuo**; **el binario sin el SQL** truncaría a 3 el nombre al guardar
+  (error de longitud o dato cortado). Aplicar en la misma ventana.
+- **Verificado en el mirror el 2026-08-19** (con orden explícita): `character_maximum_length = 80`.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-19_alm_requisicion_departamento_catalogo.sql
+```
+
+¿Ya aplicado? (3 = falta, 80 = aplicado)
+
+```sql
+SELECT character_maximum_length FROM information_schema.columns
+ WHERE table_name = 'alm_requisicion_hdr' AND column_name = 'departamento';
+```
+
+---
+
 ## 4. Orden de aplicación recomendado
 
 ```

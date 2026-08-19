@@ -14,6 +14,10 @@ public static class PermissionModules
     public const string Reporteria = "reporteria";
     public const string Configuracion = "configuracion";
 
+    // Talento Humano (2026-08-19): catálogo de empleados. Primer consumidor: el combo
+    // "Recibe" del Descargo de almacén.
+    public const string TalentoHumano = "talentohumano";
+
     public static readonly string[] All =
     [
         Ventas,
@@ -23,7 +27,8 @@ public static class PermissionModules
         Inventario,
         Contabilidad,
         Reporteria,
-        Configuracion
+        Configuracion,
+        TalentoHumano
     ];
 }
 
@@ -408,6 +413,18 @@ public static class PermissionNames
         public const string Delete = "module.reporteria.delete";
     }
 
+    /// <summary>
+    /// Talento Humano (2026-08-19): catálogo de empleados. Módulo simple sin recurso fino —
+    /// es la única entidad del módulo por ahora, igual que Ventas/Bancos/Compras.
+    /// </summary>
+    public static class TalentoHumano
+    {
+        public const string View = "module.talentohumano.view";
+        public const string Create = "module.talentohumano.create";
+        public const string Edit = "module.talentohumano.edit";
+        public const string Delete = "module.talentohumano.delete";
+    }
+
     public static class Configuracion
     {
         public const string View = "module.configuracion.view";
@@ -488,6 +505,11 @@ public static class PermissionNames
             Configuracion.Create,
             Configuracion.Edit,
             Configuracion.Delete,
+
+            TalentoHumano.View,
+            TalentoHumano.Create,
+            TalentoHumano.Edit,
+            TalentoHumano.Delete,
 
             Ventas.Clientes.View,
             Ventas.Clientes.Create,
@@ -607,6 +629,12 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Configuracion.Create, [Configuracion.Create]),
         new PermissionPolicyDefinition(Configuracion.Edit, [Configuracion.Edit]),
         new PermissionPolicyDefinition(Configuracion.Delete, [Configuracion.Delete]),
+
+        // Talento Humano: módulo nuevo, sin permiso legacy previo (no hay fallback a Legacy.*).
+        new PermissionPolicyDefinition(TalentoHumano.View, [TalentoHumano.View]),
+        new PermissionPolicyDefinition(TalentoHumano.Create, [TalentoHumano.Create]),
+        new PermissionPolicyDefinition(TalentoHumano.Edit, [TalentoHumano.Edit]),
+        new PermissionPolicyDefinition(TalentoHumano.Delete, [TalentoHumano.Delete]),
 
         new PermissionPolicyDefinition(Ventas.Clientes.View, [Ventas.Clientes.View, Ventas.View, Legacy.Ventas]),
         new PermissionPolicyDefinition(Ventas.Clientes.Create, [Ventas.Clientes.Create, Ventas.Create]),

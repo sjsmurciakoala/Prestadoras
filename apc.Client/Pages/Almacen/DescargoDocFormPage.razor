@@ -4,14 +4,17 @@
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.TalentoHumano
 @using SIAD.Core.Constants
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
+@using apc.Client.Services.TalentoHumano
 
 @inject DescargosDocumentoClient DescClient
 @inject RequisicionesDocumentoClient ReqClient
 @inject BodegasClient BodegasClient
 @inject ArticulosClient ArticulosClient
+@inject EmpleadosClient EmpleadosClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -65,7 +68,10 @@
         </div>
 
         <div class="modern-card">
-            <div class="fw-semibold mb-2">Renglones entregados</div>
+            <div class="fw-semibold mb-2 d-flex align-items-center justify-content-between">
+                <span>Renglones entregados</span>
+                <span class="badge bg-secondary-subtle text-secondary-emphasis border">@EtiquetaArticulos(modelo.Detalles.Count)</span>
+            </div>
             <div style="overflow-x:auto;">
                 <table class="table table-sm align-middle">
                     <thead><tr class="text-muted small">
@@ -78,7 +84,7 @@
                         @foreach (var d in modelo.Detalles)
                         {
                             <tr>
-                                <td><span class="fw-semibold">@(d.CodigoArticulo ?? d.ArticuloId.ToString())</span><span class="text-muted"> — @d.NombreArticulo</span></td>
+                                <td><span class="fw-semibold text-muted">@d.ArticuloId</span><span> — @d.NombreArticulo</span></td>
                                 <td class="text-end">@d.Cantidad.ToString("N2")</td>
                                 <td class="text-end">@d.PrecioUnitario.ToString("N4")</td>
                                 <td class="text-end">@d.Total.ToString("N2")</td>
@@ -114,7 +120,18 @@
                     }
                 </div>
                 <div class="col-md-4"><label class="form-label small fw-semibold">Recibe</label>
-                    <DxTextBox @bind-Text="recibidoPor" NullText="Quien retira" MaxLength="120" CssClass="w-100" /></div>
+                    <DxComboBox Data="@empleados" TData="EmpleadoLookupDto" TValue="string"
+                                @bind-Value="recibidoPor"
+                                ValueFieldName="@nameof(EmpleadoLookupDto.Nombre)" TextFieldName="@nameof(EmpleadoLookupDto.Nombre)"
+                                AllowUserInput="true" DropDownStyle="DropDownStyle.DropDown"
+                                SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" SearchDelay="200"
+                                NullText="Nombre, o busque por código de empleado" MaxLength="120"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100">
+                        <Columns>
+                            <DxListEditorColumn FieldName="@nameof(EmpleadoLookupDto.Codigo)" Caption="Código" />
+                            <DxListEditorColumn FieldName="@nameof(EmpleadoLookupDto.Nombre)" Caption="Nombre" />
+                        </Columns>
+                    </DxComboBox></div>
                 <div class="col-md-4"><label class="form-label small fw-semibold">Fecha</label>
                     <DxDateEdit @bind-Date="fecha" CssClass="w-100" /></div>
                 @if (EsDirecto)
@@ -151,26 +168,48 @@
         }
 
         <div class="modern-card">
-            <div class="fw-semibold mb-2">Renglones a entregar</div>
+            <div class="fw-semibold mb-2 d-flex align-items-center justify-content-between">
+                <span>Renglones a entregar</span>
+                <span class="badge bg-secondary-subtle text-secondary-emphasis border">@EtiquetaArticulos(EsContraReq ? lineasReq.Count : lineasDirectas.Count)</span>
+            </div>
             <div style="overflow-x:auto;">
                 <table class="table table-sm align-middle">
                     <thead><tr class="text-muted small">
-                        <th style="min-width:220px;">Artículo</th>
-                        @if (EsContraReq) { <th class="text-end" style="width:110px;">Pendiente</th> }
-                        <th class="text-end" style="width:140px;">Entregar</th>
-                        @if (EsDirecto) { <th style="width:50px;"></th> }
+                        @if (EsContraReq)
+                        {
+                            <th style="width:70px;">ID</th>
+                            <th style="min-width:200px;">Artículo</th>
+                            <th class="text-end" style="width:100px;">Existencia</th>
+                            <th class="text-end" style="width:100px;">Costo unit.</th>
+                            <th class="text-end" style="width:100px;">Costo prom.</th>
+                            <th class="text-end" style="width:100px;">Últ. costo</th>
+                            <th class="text-end" style="width:100px;">Pendiente</th>
+                            <th class="text-end" style="width:140px;">Entregar</th>
+                        }
+                        else
+                        {
+                            <th style="min-width:220px;">Artículo</th>
+                            <th class="text-end" style="width:110px;">Existencia</th>
+                            <th class="text-end" style="width:140px;">Entregar</th>
+                            <th style="width:50px;"></th>
+                        }
                     </tr></thead>
                     <tbody>
                         @if (EsContraReq)
                         {
                             @if (lineasReq.Count == 0)
-                            { <tr><td colspan="3" class="text-center text-muted p-3">La requisición no tiene renglones pendientes.</td></tr> }
+                            { <tr><td colspan="8" class="text-center text-muted p-3">La requisición no tiene renglones pendientes.</td></tr> }
                             else
                             {
                                 @foreach (var l in lineasReq)
                                 {
                                     <tr>
+                                        <td class="text-muted">@l.ArticuloId</td>
                                         <td>@l.Nombre</td>
+                                        <td class="text-end @(l.ExistenciaBodega is <= 0m ? "text-danger" : "text-muted")">@Ref(l.ExistenciaBodega)</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoUnitario)</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoPromedio)</td>
+                                        <td class="text-end text-muted">@Ref(l.UltimoCosto)</td>
                                         <td class="text-end text-muted">@l.Pendiente.ToString("N2")</td>
                                         <td class="text-end"><DxSpinEdit @bind-Value="l.Entregar" DisplayFormat="N2" MinValue="0" MaxValue="@l.Pendiente" CssClass="w-100" /></td>
                                     </tr>
@@ -180,13 +219,14 @@
                         else
                         {
                             @if (lineasDirectas.Count == 0)
-                            { <tr><td colspan="3" class="text-center text-muted p-3">Sin renglones.</td></tr> }
+                            { <tr><td colspan="4" class="text-center text-muted p-3">Sin renglones.</td></tr> }
                             else
                             {
                                 @foreach (var l in lineasDirectas)
                                 {
                                     <tr>
                                         <td>@l.Nombre</td>
+                                        <td class="text-end @(l.Cantidad > l.ExistenciaEnBodega ? "text-danger fw-semibold" : "text-muted")">@l.ExistenciaEnBodega.ToString("N2")</td>
                                         <td class="text-end"><DxSpinEdit @bind-Value="l.Cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" /></td>
                                         <td class="text-center"><button type="button" class="btn-icon btn-delete" title="Quitar" @onclick="() => lineasDirectas.Remove(l)"><i class="bi bi-trash"></i></button></td>
                                     </tr>
@@ -242,6 +282,7 @@
 
     // Directo
     private List<BodegaLookupDto> bodegas = new();
+    private List<EmpleadoLookupDto> empleados = new();
     private List<ArticuloListItemDto> articulos = new();
     private int? articuloSeleccionado;
     private readonly List<DirectaLinea> lineasDirectas = new();
@@ -260,6 +301,10 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // El combo "Recibe" (empleados) aparece tanto en la entrega de requisición como en el descargo
+        // directo: se carga SIEMPRE, no solo en el directo.
+        try { empleados = await EmpleadosClient.GetLookupAsync(); } catch { empleados = new(); }
+
         if (EsDetalle)
         {
             var doc = await DescClient.GetByIdAsync(Id!.Value);
@@ -275,17 +320,27 @@
             else
             {
                 reqHdrId = req.Id; reqNumero = req.Numero; bodegaId = req.BodegaId; bodegaNombre = req.BodegaNombre;
+                // Artículos de la bodega de la requisición: existencia y costos de referencia por renglón.
+                articulos = await CargarArticulosAsync(bodegaId);
                 foreach (var d in req.Detalles)
                 {
                     var pendiente = d.Cantidad - d.CantidadDespachada;
                     if (pendiente > 0m)
+                    {
+                        var art = articulos.FirstOrDefault(a => a.Id == d.ArticuloId);
                         lineasReq.Add(new EntregaLinea
                         {
                             ReqLineaId = d.Id,
-                            Nombre = $"{d.CodigoArticulo ?? d.ArticuloId.ToString()} — {d.NombreArticulo}",
+                            ArticuloId = d.ArticuloId,
+                            Nombre = !string.IsNullOrWhiteSpace(d.NombreArticulo) ? d.NombreArticulo : (d.Descripcion ?? string.Empty),
                             Pendiente = pendiente,
-                            Entregar = pendiente   // por defecto, todo lo pendiente
+                            Entregar = pendiente,   // por defecto, todo lo pendiente
+                            ExistenciaBodega = art?.ExistenciaEnBodega,
+                            CostoUnitario = art?.ValorUnitario,
+                            CostoPromedio = art?.CostoPromedioEnBodega,
+                            UltimoCosto = art?.UltimoCosto
                         });
+                    }
                 }
             }
         }
@@ -317,7 +372,7 @@
         { Toast("Aviso", "Ese artículo ya está en un renglón.", ToastRenderStyle.Warning); return; }
         var art = articulos.FirstOrDefault(a => a.Id == articuloSeleccionado.Value);
         if (art is null) return;
-        lineasDirectas.Add(new DirectaLinea { ArticuloId = art.Id, Nombre = $"{art.Codigo} — {art.Descripcion}", Cantidad = 0m });
+        lineasDirectas.Add(new DirectaLinea { ArticuloId = art.Id, Nombre = $"{art.Id} — {art.Descripcion}", Cantidad = 0m, ExistenciaEnBodega = art.ExistenciaEnBodega ?? 0m });
         articuloSeleccionado = null;
     }
 
@@ -390,6 +445,22 @@
     private void Toast(string title, string text, ToastRenderStyle style)
         => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "DescFormToast" });
 
-    private sealed class EntregaLinea { public int ReqLineaId { get; set; } public string Nombre { get; set; } = ""; public decimal Pendiente { get; set; } public decimal Entregar { get; set; } }
-    private sealed class DirectaLinea { public int ArticuloId { get; set; } public string Nombre { get; set; } = ""; public decimal Cantidad { get; set; } }
+    private static string EtiquetaArticulos(int cantidad) => $"{cantidad:N0} {(cantidad == 1 ? "artículo" : "artículos")}";
+
+    /// <summary>Formato de referencia (solo lectura): "—" cuando el dato no está disponible.</summary>
+    private static string Ref(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "—";
+
+    private sealed class EntregaLinea
+    {
+        public int ReqLineaId { get; set; }
+        public int ArticuloId { get; set; }
+        public string Nombre { get; set; } = "";
+        public decimal Pendiente { get; set; }
+        public decimal Entregar { get; set; }
+        public decimal? ExistenciaBodega { get; set; }
+        public decimal? CostoUnitario { get; set; }
+        public decimal? CostoPromedio { get; set; }
+        public decimal? UltimoCosto { get; set; }
+    }
+    private sealed class DirectaLinea { public int ArticuloId { get; set; } public string Nombre { get; set; } = ""; public decimal Cantidad { get; set; } public decimal ExistenciaEnBodega { get; set; } }
 }
