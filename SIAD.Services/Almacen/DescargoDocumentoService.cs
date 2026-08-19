@@ -365,6 +365,7 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
                 Fecha = fecha,
                 DocumentoId = linea.id,
                 DeferirRollup = true,
+                PermitirNegativo = dto.PermitirNegativo,   // el usuario confirmó el negativo en pantalla
                 Observacion = $"Descargo {numero:00000}"
             }, user, ct);
 

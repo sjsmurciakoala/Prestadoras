@@ -71,6 +71,14 @@ public sealed class MovimientoInventarioDto
     public string? Observacion { get; init; }
 
     /// <summary>
+    /// Si es <c>true</c>, una SALIDA DE DESCARGO puede dejar la existencia en negativo aunque el
+    /// interruptor de existencia negativa (empresa/bodega) esté apagado: el usuario ya confirmó el
+    /// negativo en la pantalla del descargo. Solo lo respeta <see cref="TipoMovimientoInventario.SalidaDescargo"/>;
+    /// el resto de los movimientos sigue gobernado por <c>PermiteNegativoAsync</c>. Default <c>false</c>.
+    /// </summary>
+    public bool PermitirNegativo { get; init; }
+
+    /// <summary>
     /// Discriminador de reintento del uuid de apertura: 1 + número de aperturas del par ya
     /// revertidas. Lo calcula el servicio; permite reabrir un par sin chocar con el índice
     /// único. Ver decisión 3 del diseño.

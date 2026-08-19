@@ -371,7 +371,9 @@ public sealed class InventarioPostingService : IInventarioPostingService
                     throw new InvalidOperationException(
                         "La ubicación no tiene costo promedio: no se puede despachar hasta que se le asigne uno (carga inicial o ajuste de valor).");
                 }
-                if (fila.existencia - m.Cantidad < 0m && !await PermiteNegativoAsync(fila.bodega_id, ct))
+                // El descargo puede dejar negativo si el usuario lo confirmó en pantalla (PermitirNegativo),
+                // aunque el interruptor de existencia negativa esté apagado; si no confirmó, sigue la config.
+                if (fila.existencia - m.Cantidad < 0m && !m.PermitirNegativo && !await PermiteNegativoAsync(fila.bodega_id, ct))
                 {
                     throw new InvalidOperationException(
                         $"La salida dejaría la existencia en negativo ({fila.existencia - m.Cantidad:0.####}). Disponible: {fila.existencia:0.####}.");

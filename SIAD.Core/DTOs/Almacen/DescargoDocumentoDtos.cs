@@ -28,6 +28,13 @@ public sealed class DescargoDocumentoDto
     public string? Motivo { get; set; }
     public string? Observaciones { get; set; }
 
+    /// <summary>
+    /// El usuario confirmó en pantalla procesar la salida aunque deje existencia negativa. Cuando es
+    /// <c>true</c>, el descargo puede postear en negativo aunque el interruptor de existencia negativa
+    /// (empresa/bodega) esté apagado. Default <c>false</c>.
+    /// </summary>
+    public bool PermitirNegativo { get; set; }
+
     public decimal Total { get; set; }
     public short Estado { get; set; }
     public bool Posteado { get; set; }

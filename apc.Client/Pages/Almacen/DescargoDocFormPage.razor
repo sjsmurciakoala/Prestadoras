@@ -270,6 +270,44 @@
     </BodyTemplate>
 </DxPopup>
 
+<DxPopup @bind-Visible="negativoVisible" Width="min(580px, 94vw)" HeaderText="Existencia negativa" ShowFooter="false" CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="d-flex align-items-start gap-2 mb-3">
+                <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size:1.6rem;"></i>
+                <p class="text-muted mb-0">Estos artículos quedarán con <strong>existencia negativa</strong> en la bodega tras la entrega. ¿Desea continuar de todos modos?</p>
+            </div>
+            <div style="overflow-x:auto; max-height:260px;">
+                <table class="table table-sm align-middle">
+                    <thead><tr class="text-muted small">
+                        <th style="min-width:200px;">Artículo</th>
+                        <th class="text-end" style="width:100px;">Existencia</th>
+                        <th class="text-end" style="width:100px;">Entregar</th>
+                        <th class="text-end" style="width:110px;">Resultante</th>
+                    </tr></thead>
+                    <tbody>
+                        @foreach (var a in avisosNegativo)
+                        {
+                            <tr>
+                                <td>@a.Nombre</td>
+                                <td class="text-end text-muted">@a.Existencia.ToString("N2")</td>
+                                <td class="text-end">@a.Cantidad.ToString("N2")</td>
+                                <td class="text-end text-danger fw-semibold">@a.Resultante.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => negativoVisible = false)" Enabled="@(!procesando)" />
+                <DxButton Text="Sí, continuar" RenderStyle="ButtonRenderStyle.Warning" IconCssClass="bi bi-exclamation-triangle"
+                          Click="@(() => ProcesarEntregaAsync(permitirNegativo: true))" Enabled="@(!procesando)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
 <PdfPreviewPopup @ref="pdfPopup" />
 
 @code {
@@ -301,6 +339,10 @@
 
     private bool anularVisible;
     private string motivoAnulacion = string.Empty;
+
+    private bool negativoVisible;
+    private List<AvisoNegativo> avisosNegativo = new();
+    private sealed record AvisoNegativo(string Nombre, decimal Existencia, decimal Cantidad, decimal Resultante);
 
     private bool EsDetalle => Id.HasValue;
     private bool EsContraReq => !Id.HasValue && RequisicionParam is > 0;
@@ -395,11 +437,59 @@
 
     private async Task EntregarAsync()
     {
+        // Validaciones propias del descargo directo antes de calcular negativos.
+        if (EsDirecto)
+        {
+            if (bodegaId <= 0) { Toast("Error", "Seleccione la bodega.", ToastRenderStyle.Warning); return; }
+            if (string.IsNullOrWhiteSpace(motivo)) { Toast("Error", "Un descargo directo requiere motivo.", ToastRenderStyle.Warning); return; }
+        }
+
+        // Si algún renglón dejaría la existencia en negativo, se alerta y el usuario decide si continúa.
+        var negativos = DetectarNegativos();
+        if (negativos.Count > 0)
+        {
+            avisosNegativo = negativos;
+            negativoVisible = true;
+            return;
+        }
+
+        await ProcesarEntregaAsync(permitirNegativo: false);
+    }
+
+    /// <summary>Renglones (con cantidad &gt; 0) cuya salida dejaría la existencia de la bodega en negativo.</summary>
+    private List<AvisoNegativo> DetectarNegativos()
+    {
+        var avisos = new List<AvisoNegativo>();
+        if (EsContraReq)
+        {
+            foreach (var l in lineasReq.Where(l => l.Entregar > 0m))
+            {
+                var existencia = l.ExistenciaBodega ?? 0m;
+                if (l.Entregar > existencia)
+                    avisos.Add(new AvisoNegativo(l.Nombre, existencia, l.Entregar, existencia - l.Entregar));
+            }
+        }
+        else
+        {
+            foreach (var l in lineasDirectas.Where(l => l.Cantidad > 0m))
+            {
+                if (l.Cantidad > l.ExistenciaEnBodega)
+                    avisos.Add(new AvisoNegativo(l.Nombre, l.ExistenciaEnBodega, l.Cantidad, l.ExistenciaEnBodega - l.Cantidad));
+            }
+        }
+        return avisos;
+    }
+
+    private async Task ProcesarEntregaAsync(bool permitirNegativo)
+    {
+        negativoVisible = false;
+
         var dto = new DescargoDocumentoDto
         {
             Fecha = DateOnly.FromDateTime(fecha ?? DateTime.Today),
             RecibidoPor = recibidoPor,
             Observaciones = observaciones,
+            PermitirNegativo = permitirNegativo,
             Uuid = Guid.NewGuid()
         };
 
