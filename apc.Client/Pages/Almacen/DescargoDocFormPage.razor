@@ -188,8 +188,12 @@
                         }
                         else
                         {
-                            <th style="min-width:220px;">Artículo</th>
-                            <th class="text-end" style="width:110px;">Existencia</th>
+                            <th style="width:70px;">ID</th>
+                            <th style="min-width:200px;">Artículo</th>
+                            <th class="text-end" style="width:100px;">Existencia</th>
+                            <th class="text-end" style="width:100px;">Costo unit.</th>
+                            <th class="text-end" style="width:100px;">Costo prom.</th>
+                            <th class="text-end" style="width:100px;">Últ. costo</th>
                             <th class="text-end" style="width:140px;">Entregar</th>
                             <th style="width:50px;"></th>
                         }
@@ -219,14 +223,18 @@
                         else
                         {
                             @if (lineasDirectas.Count == 0)
-                            { <tr><td colspan="4" class="text-center text-muted p-3">Sin renglones.</td></tr> }
+                            { <tr><td colspan="8" class="text-center text-muted p-3">Sin renglones.</td></tr> }
                             else
                             {
                                 @foreach (var l in lineasDirectas)
                                 {
                                     <tr>
+                                        <td class="text-muted">@l.ArticuloId</td>
                                         <td>@l.Nombre</td>
                                         <td class="text-end @(l.Cantidad > l.ExistenciaEnBodega ? "text-danger fw-semibold" : "text-muted")">@l.ExistenciaEnBodega.ToString("N2")</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoUnitario)</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoPromedio)</td>
+                                        <td class="text-end text-muted">@Ref(l.UltimoCosto)</td>
                                         <td class="text-end"><DxSpinEdit @bind-Value="l.Cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" /></td>
                                         <td class="text-center"><button type="button" class="btn-icon btn-delete" title="Quitar" @onclick="() => lineasDirectas.Remove(l)"><i class="bi bi-trash"></i></button></td>
                                     </tr>
@@ -372,7 +380,16 @@
         { Toast("Aviso", "Ese artículo ya está en un renglón.", ToastRenderStyle.Warning); return; }
         var art = articulos.FirstOrDefault(a => a.Id == articuloSeleccionado.Value);
         if (art is null) return;
-        lineasDirectas.Add(new DirectaLinea { ArticuloId = art.Id, Nombre = $"{art.Id} — {art.Descripcion}", Cantidad = 0m, ExistenciaEnBodega = art.ExistenciaEnBodega ?? 0m });
+        lineasDirectas.Add(new DirectaLinea
+        {
+            ArticuloId = art.Id,
+            Nombre = art.Descripcion,   // el ID va en su propia columna
+            Cantidad = 0m,
+            ExistenciaEnBodega = art.ExistenciaEnBodega ?? 0m,
+            CostoUnitario = art.ValorUnitario,
+            CostoPromedio = art.CostoPromedioEnBodega,
+            UltimoCosto = art.UltimoCosto
+        });
         articuloSeleccionado = null;
     }
 
@@ -462,5 +479,14 @@
         public decimal? CostoPromedio { get; set; }
         public decimal? UltimoCosto { get; set; }
     }
-    private sealed class DirectaLinea { public int ArticuloId { get; set; } public string Nombre { get; set; } = ""; public decimal Cantidad { get; set; } public decimal ExistenciaEnBodega { get; set; } }
+    private sealed class DirectaLinea
+    {
+        public int ArticuloId { get; set; }
+        public string Nombre { get; set; } = "";
+        public decimal Cantidad { get; set; }
+        public decimal ExistenciaEnBodega { get; set; }
+        public decimal? CostoUnitario { get; set; }
+        public decimal? CostoPromedio { get; set; }
+        public decimal? UltimoCosto { get; set; }
+    }
 }

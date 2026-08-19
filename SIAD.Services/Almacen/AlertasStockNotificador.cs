@@ -60,14 +60,14 @@ public sealed class AlertasStockNotificador : IAlertasStockNotificador
         sb.Append("<table cellpadding=\"6\" cellspacing=\"0\" border=\"1\" ")
           .Append("style=\"border-collapse:collapse;font-family:Arial,sans-serif;font-size:13px;\">");
         sb.Append("<tr style=\"background:#f2f2f2;\">")
-          .Append("<th align=\"left\">Severidad</th><th align=\"left\">Código</th><th align=\"left\">Descripción</th>")
+          .Append("<th align=\"left\">Severidad</th><th align=\"left\">ID</th><th align=\"left\">Descripción</th>")
           .Append("<th align=\"left\">Bodega</th><th align=\"right\">Existencia</th><th align=\"right\">Mínimo</th></tr>");
 
         foreach (var a in alertas)
         {
             sb.Append("<tr>")
               .Append("<td>").Append(SeveridadLabel(a.Severidad)).Append("</td>")
-              .Append("<td>").Append(WebUtility.HtmlEncode(a.Codigo)).Append("</td>")
+              .Append("<td>").Append(a.Id).Append("</td>")
               .Append("<td>").Append(WebUtility.HtmlEncode(a.Descripcion)).Append("</td>")
               .Append("<td>").Append(WebUtility.HtmlEncode(a.BodegaNombre ?? string.Empty)).Append("</td>")
               .Append("<td align=\"right\">").Append(a.Existencia.ToString("N2")).Append("</td>")
