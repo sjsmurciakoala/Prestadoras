@@ -41,15 +41,6 @@
             </Template>
         </DxFormLayoutItem>
 
-        <DxFormLayoutItem Caption="Existencia negativa en salidas" ColSpanMd="12">
-            <DxComboBox Data="ModosNegativo" TData="ModoOpt" TValue="string"
-                        ValueFieldName="@nameof(ModoOpt.Code)" TextFieldName="@nameof(ModoOpt.Label)"
-                        @bind-Value="ModoNegativo" />
-            <div class="text-muted small mt-1">
-                «Heredar» sigue el interruptor de la empresa. «Permitir» o «Bloquear» fuerzan el
-                comportamiento solo en esta bodega.
-            </div>
-        </DxFormLayoutItem>
     </DxFormLayout>
 
     <ValidationSummary class="text-danger mb-3" />
@@ -69,20 +60,4 @@
 
     private async Task HandleValidSubmit() { if (OnValidSubmit.HasDelegate) await OnValidSubmit.InvokeAsync(); }
     private async Task Cancel() { if (OnCancel.HasDelegate) await OnCancel.InvokeAsync(); }
-
-    // Override tri-estado de existencia negativa. Se bindea un string NO nulo (Code) al combo para
-    // no caer en el bucle de reconexión del DxComboBox con Value nullable.
-    private sealed record ModoOpt(string Code, string Label);
-    private static readonly ModoOpt[] ModosNegativo =
-    [
-        new("HEREDA", "Heredar de la empresa"),
-        new("PERMITE", "Permitir existencia negativa"),
-        new("BLOQUEA", "Bloquear (nunca negativo)")
-    ];
-
-    private string ModoNegativo
-    {
-        get => Model.PermiteExistenciaNegativa switch { true => "PERMITE", false => "BLOQUEA", _ => "HEREDA" };
-        set => Model.PermiteExistenciaNegativa = value switch { "PERMITE" => true, "BLOQUEA" => false, _ => (bool?)null };
-    }
 }

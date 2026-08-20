@@ -21,11 +21,4 @@ public sealed class BodegaEditDto
     public string? Responsable { get; set; }
 
     public bool Activo { get; set; } = true;
-
-    /// <summary>
-    /// Override del interruptor de existencia negativa, por bodega (tri-estado): <c>null</c> =
-    /// hereda del interruptor de la empresa; <c>true</c> = fuerza permitir aquí; <c>false</c> =
-    /// fuerza bloquear aquí.
-    /// </summary>
-    public bool? PermiteExistenciaNegativa { get; set; }
 }

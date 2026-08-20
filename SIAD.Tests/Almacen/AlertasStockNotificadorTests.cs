@@ -47,7 +47,8 @@ public class AlertasStockNotificadorTests
 
         Assert.True(r.Exito);
         await correo.Received(1).NotificarAreaAsync(TipoNotificacion.Almacen, Arg.Any<string>(), Arg.Any<string>(), Arg.Any<CancellationToken>());
-        Assert.Contains("ART-1", html);
+        // El correo identifica el artículo por ID interno + descripción (commit ad987d1, "correo de
+        // stock por ID"); el código de negocio (ART-1) ya no se imprime.
         Assert.Contains("Tornillo 1/2", html);
     }
 
@@ -87,9 +88,11 @@ public class AlertasStockNotificadorTests
         var r = await sut.EnviarCrucesAsync(new[] { (2, 1) }, "Descargo 00007");
 
         Assert.True(r.Exito);
-        Assert.Contains("A-2", html);       // el que cruzó
-        Assert.DoesNotContain("A-1", html); // los otros no
-        Assert.DoesNotContain("A-3", html);
+        // El correo imprime la descripción del artículo (no el código, ver commit ad987d1):
+        // "Dos" (id 2) cruzó y sigue en alerta; "Uno" (id 1) y "Tres" (id 3) quedaron fuera.
+        Assert.Contains("Dos", html);       // el que cruzó
+        Assert.DoesNotContain("Uno", html); // los otros no
+        Assert.DoesNotContain("Tres", html);
     }
 
     [Fact]

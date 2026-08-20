@@ -59,8 +59,7 @@ public sealed class BodegaService : IBodegaService
                 Nombre = b.nombre,
                 Direccion = b.direccion,
                 Responsable = b.responsable,
-                Activo = b.activo,
-                PermiteExistenciaNegativa = b.permite_existencia_negativa
+                Activo = b.activo
             })
             .FirstOrDefaultAsync(ct);
     }
@@ -92,7 +91,6 @@ public sealed class BodegaService : IBodegaService
             direccion = ClasificacionNormalizer.Opcional(dto.Direccion, 200),
             responsable = ClasificacionNormalizer.Opcional(dto.Responsable, 100),
             activo = dto.Activo,
-            permite_existencia_negativa = dto.PermiteExistenciaNegativa,
             usuariocreacion = ClasificacionNormalizer.Usuario(user),
             fechacreacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified)
         };
@@ -123,7 +121,6 @@ public sealed class BodegaService : IBodegaService
         entity.direccion = ClasificacionNormalizer.Opcional(dto.Direccion, 200);
         entity.responsable = ClasificacionNormalizer.Opcional(dto.Responsable, 100);
         entity.activo = dto.Activo;
-        entity.permite_existencia_negativa = dto.PermiteExistenciaNegativa;
         entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);

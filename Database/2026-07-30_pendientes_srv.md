@@ -792,6 +792,10 @@ el mirror aún no hay deuda tan añeja — las columnas existen y funcionan.
 
 ### 3.21 Almacén — interruptor de existencia negativa en salidas: F0 (2026-08-15)
 
+> ⛔ **ANULADO por §3.28 (2026-08-20).** La iniciativa se revirtió: una salida nunca puede dejar la
+> existencia en negativo. **En el SRV NO apliques este script** (crearía una función que el binario ya
+> no usa). En el mirror ya se había aplicado y §3.28 lo revierte. Se conserva la sección como historia.
+
 **F0** de la iniciativa "permitir existencia negativa en salidas" (rama `feat/almacen-integracion-contable`,
 [docs/plans/2026-08-15-existencia-negativa-salidas-plan.md](../docs/plans/2026-08-15-existencia-negativa-salidas-plan.md)).
 Hoy el motor de inventario **bloquea** toda salida que cruzaría a existencia negativa; se quiere
@@ -800,7 +804,7 @@ empresa con override opcional por bodega. Este F0 crea **solo el interruptor**; 
 
 | Script | Qué aporta | Naturaleza | Mirror | SRV |
 |---|---|---|:--:|:--:|
-| `2026-08-15_alm_existencia_negativa.sql` | (1) `cfg_inventario_negativo` (interruptor por empresa: PK `company_id`, `permitir` BOOLEAN NOT NULL DEFAULT false + auditoría; semilla idempotente de una fila `false` por empresa con artículos) + (2) `alm_bodega.permite_existencia_negativa` BOOLEAN **NULL** (override tri-estado: NULL=hereda · true=permite · false=bloquea) | **Aditivo idempotente** (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`) — **re-ejecutable**. No borra ni reescribe datos. Reversible (`DROP TABLE` + `DROP COLUMN`, en el script) | **sí (2026-08-15)** | **pendiente** |
+| `2026-08-15_alm_existencia_negativa.sql` | (1) `cfg_inventario_negativo` (interruptor por empresa: PK `company_id`, `permitir` BOOLEAN NOT NULL DEFAULT false + auditoría; semilla idempotente de una fila `false` por empresa con artículos) + (2) `alm_bodega.permite_existencia_negativa` BOOLEAN **NULL** (override tri-estado: NULL=hereda · true=permite · false=bloquea) | **Aditivo idempotente** (`CREATE TABLE IF NOT EXISTS`, `ADD COLUMN IF NOT EXISTS`, `INSERT … ON CONFLICT DO NOTHING`) — **re-ejecutable**. No borra ni reescribe datos. Reversible (`DROP TABLE` + `DROP COLUMN`, en el script) | **sí (2026-08-15)** | **anulado (§3.28)** |
 
 - **Dependencias:** `alm_articulo` (para la semilla) y `alm_bodega` (ambas ya en prod). No asume ningún
   `company_id`. Independiente del resto de la tanda.
@@ -1098,6 +1102,44 @@ psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-19_alm_descargo_departamento_
 ```sql
 SELECT character_maximum_length FROM information_schema.columns
  WHERE table_name = 'alm_descargo_hdr' AND column_name = 'departamento';
+```
+
+### 3.28 Almacén — ELIMINAR la función de existencia negativa en salidas (2026-08-20)
+
+Revierte §3.21. Decisión de negocio: una salida de inventario (descargo, ajuste negativo, traslado)
+**nunca** debe dejar la existencia en negativo. Se elimina por completo la función que introdujo §3.21
+—interruptor por empresa `cfg_inventario_negativo`, override por bodega
+`alm_bodega.permite_existencia_negativa` y la confirmación en pantalla del descargo—. El motor
+(`InventarioPostingService.ValidarAsync`) ahora rechaza SIEMPRE la salida a negativo, y el código EF
+dejó de mapear la tabla y la columna.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-20_alm_quitar_existencia_negativa.sql` | (1) `DROP COLUMN alm_bodega.permite_existencia_negativa` + (2) `DROP TABLE cfg_inventario_negativo` | **Destructivo, impacto nulo** (`DROP … IF EXISTS`, **re-ejecutable**). Rollback exacto de §3.21; reversible re-aplicando `2026-08-15_alm_existencia_negativa.sql` | **pendiente** | **pendiente** |
+
+- **Impacto real (medido en el mirror el 2026-08-20, `company_id=2`):** la tabla tenía **1 fila** en su
+  default (`permitir=false`), las **3 bodegas en NULL** (0 overrides) y **0 FK** entrantes. No se pierde
+  ninguna configuración de negocio: todo estaba en "bloquear", que es justo el comportamiento nuevo.
+- **⚠️ Interacción con §3.21:** §3.21 quedó **anulado**. En el SRV, §3.21 estaba **pendiente** (nunca se
+  aplicó), así que allá **NO apliques §3.21**; este §3.28 con `DROP … IF EXISTS` es **inocuo** aunque la
+  tabla/columna no existan (no-op). En el **mirror**, §3.21 sí se había aplicado, y §3.28 lo revierte.
+  Resultado neto en ambas bases: sin la tabla ni la columna.
+- **Dependencias:** ninguna estructural (los `DROP … IF EXISTS` no fallan). Va **con el binario** que ya
+  no mapea la tabla/columna; el SQL sin el binario es inocuo, y el binario sin el SQL también funciona
+  (EF ignora la columna/tabla sobrantes).
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-20_alm_quitar_existencia_negativa.sql
+```
+
+¿Ya aplicado? (NULL y 0 = eliminado)
+
+```sql
+SELECT to_regclass('public.cfg_inventario_negativo') AS interruptor,   -- NULL = eliminado
+       (SELECT count(*) FROM information_schema.columns
+         WHERE table_name = 'alm_bodega' AND column_name = 'permite_existencia_negativa') AS override_bodega;  -- 0 = eliminado
 ```
 
 ---

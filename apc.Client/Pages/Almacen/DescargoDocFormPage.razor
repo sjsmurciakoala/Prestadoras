@@ -279,12 +279,12 @@
     </BodyTemplate>
 </DxPopup>
 
-<DxPopup @bind-Visible="negativoVisible" Width="min(580px, 94vw)" HeaderText="Existencia negativa" ShowFooter="false" CloseOnOutsideClick="false">
+<DxPopup @bind-Visible="negativoVisible" Width="min(580px, 94vw)" HeaderText="Existencia insuficiente" ShowFooter="false" CloseOnOutsideClick="false">
     <BodyTemplate>
         <div class="p-3">
             <div class="d-flex align-items-start gap-2 mb-3">
-                <i class="bi bi-exclamation-triangle-fill text-warning" style="font-size:1.6rem;"></i>
-                <p class="text-muted mb-0">Estos artículos quedarán con <strong>existencia negativa</strong> en la bodega tras la entrega. ¿Desea continuar de todos modos?</p>
+                <i class="bi bi-x-circle-fill text-danger" style="font-size:1.6rem;"></i>
+                <p class="text-muted mb-0">No se puede procesar la entrega: estos artículos quedarían con <strong>existencia negativa</strong> en la bodega. Ajuste las cantidades a entregar (no más que la existencia disponible) y vuelva a intentarlo.</p>
             </div>
             <div style="overflow-x:auto; max-height:260px;">
                 <table class="table table-sm align-middle">
@@ -308,10 +308,8 @@
                 </table>
             </div>
             <div class="d-flex justify-content-end gap-2 mt-3">
-                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                <DxButton Text="Entendido" RenderStyle="ButtonRenderStyle.Primary"
                           Click="@(() => negativoVisible = false)" Enabled="@(!procesando)" />
-                <DxButton Text="Sí, continuar" RenderStyle="ButtonRenderStyle.Warning" IconCssClass="bi bi-exclamation-triangle"
-                          Click="@(() => ProcesarEntregaAsync(permitirNegativo: true))" Enabled="@(!procesando)" />
             </div>
         </div>
     </BodyTemplate>
@@ -460,7 +458,8 @@
         if (string.IsNullOrWhiteSpace(recibidoPor)) { Toast("Error", "Indique quién recibe.", ToastRenderStyle.Warning); return; }
         if (string.IsNullOrWhiteSpace(departamentoSel)) { Toast("Error", "Seleccione el departamento donde se entrega.", ToastRenderStyle.Warning); return; }
 
-        // Si algún renglón dejaría la existencia en negativo, se alerta y el usuario decide si continúa.
+        // Regla firme: si algún renglón dejaría la existencia en negativo se BLOQUEA la entrega
+        // (el motor la rechazaría igual). El usuario debe ajustar las cantidades a lo disponible.
         var negativos = DetectarNegativos();
         if (negativos.Count > 0)
         {
@@ -469,7 +468,7 @@
             return;
         }
 
-        await ProcesarEntregaAsync(permitirNegativo: false);
+        await ProcesarEntregaAsync();
     }
 
     /// <summary>Renglones (con cantidad &gt; 0) cuya salida dejaría la existencia de la bodega en negativo.</summary>
@@ -496,7 +495,7 @@
         return avisos;
     }
 
-    private async Task ProcesarEntregaAsync(bool permitirNegativo)
+    private async Task ProcesarEntregaAsync()
     {
         negativoVisible = false;
 
@@ -506,7 +505,6 @@
             RecibidoPor = recibidoPor,
             Departamento = departamentoSel,
             Observaciones = observaciones,
-            PermitirNegativo = permitirNegativo,
             Uuid = Guid.NewGuid()
         };
 

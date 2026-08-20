@@ -56,10 +56,18 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         return b.id;
     }
 
-    private async Task<int> SeedArticuloAsync(string codigo)
+    // Crear una requisición exige que cada artículo esté ASIGNADO a la bodega: una fila activa en
+    // alm_articulo_bodega (aunque la existencia sea 0 — la requisición es solicitud, no salida).
+    private async Task<int> SeedArticuloAsync(string codigo, int bodegaId)
     {
         var a = new alm_articulo { codigo_articulo = codigo, descripcion = $"Artículo {codigo}", existencia = 0m, activo = true };
         _context!.alm_articulos.Add(a);
+        await _context.SaveChangesAsync();
+        _context.alm_articulo_bodegas.Add(new alm_articulo_bodega
+        {
+            articulo_id = a.id, bodega_id = bodegaId, existencia = 0m,
+            costo_promedio = 0m, activo = true, principal = true
+        });
         await _context.SaveChangesAsync();
         return a.id;
     }
@@ -88,8 +96,8 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ1");
-        var a1 = await SeedArticuloAsync("ZZRQ1-A");
-        var a2 = await SeedArticuloAsync("ZZRQ1-B");
+        var a1 = await SeedArticuloAsync("ZZRQ1-A", bod);
+        var a2 = await SeedArticuloAsync("ZZRQ1-B", bod);
 
         var doc = await _service!.CrearAsync(Nueva(bod, "Ana", (a1, 5m, 10m), (a2, 3m, 20m)), "tester");
 
@@ -126,7 +134,7 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
     {
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
         var bod = await SeedBodegaAsync("ZZRQ2b");
-        var a1 = await SeedArticuloAsync("ZZRQ2b-A");
+        var a1 = await SeedArticuloAsync("ZZRQ2b-A", bod);
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _service!.CrearAsync(Nueva(bod, "  ", (a1, 1m, 1m)), "tester"));
         Assert.Contains("solicitante", ex.Message);
@@ -139,8 +147,8 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ3");
-        var a1 = await SeedArticuloAsync("ZZRQ3-A");
-        var a2 = await SeedArticuloAsync("ZZRQ3-B");
+        var a1 = await SeedArticuloAsync("ZZRQ3-A", bod);
+        var a2 = await SeedArticuloAsync("ZZRQ3-B", bod);
         var doc = await _service!.CrearAsync(Nueva(bod, "Ana", (a1, 5m, 10m)), "tester");
 
         var editar = new RequisicionDocumentoDto
@@ -164,7 +172,7 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ4");
-        var a1 = await SeedArticuloAsync("ZZRQ4-A");
+        var a1 = await SeedArticuloAsync("ZZRQ4-A", bod);
         var doc = await _service!.CrearAsync(Nueva(bod, "Ana", (a1, 5m, 10m)), "solicitante1");
 
         var enrev = await _service.EnviarARevisionAsync(doc.Id, "solicitante1");
@@ -184,7 +192,7 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ5");
-        var a1 = await SeedArticuloAsync("ZZRQ5-A");
+        var a1 = await SeedArticuloAsync("ZZRQ5-A", bod);
         var doc = await _service!.CrearAsync(Nueva(bod, "Ana", (a1, 5m, 10m)), "solicitante1");
         await _service.EnviarARevisionAsync(doc.Id, "solicitante1");
 
@@ -203,7 +211,7 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ6");
-        var a1 = await SeedArticuloAsync("ZZRQ6-A");
+        var a1 = await SeedArticuloAsync("ZZRQ6-A", bod);
         var doc = await _service!.CrearAsync(Nueva(bod, "Ana", (a1, 5m, 10m)), "tester");   // Borrador
 
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() => _service.AprobarAsync(doc.Id, "jefe1"));
@@ -217,7 +225,7 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ7");
-        var a1 = await SeedArticuloAsync("ZZRQ7-A");
+        var a1 = await SeedArticuloAsync("ZZRQ7-A", bod);
         var doc = await _service!.CrearAsync(Nueva(bod, "Ana", (a1, 5m, 10m)), "tester");
 
         // Simula una entrega parcial escribiendo cantidad_despachada (aún no hay servicio de descargo).
@@ -242,7 +250,7 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ8");
-        var a1 = await SeedArticuloAsync("ZZRQ8-A");
+        var a1 = await SeedArticuloAsync("ZZRQ8-A", bod);
         var dto = Nueva(bod, "Ana", (a1, 5m, 10m));
 
         var d1 = await _service!.CrearAsync(dto, "tester");
@@ -259,7 +267,7 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
         Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
 
         var bod = await SeedBodegaAsync("ZZRQ9");
-        var a1 = await SeedArticuloAsync("ZZRQ9-A");
+        var a1 = await SeedArticuloAsync("ZZRQ9-A", bod);
         var d1 = await _service!.CrearAsync(Nueva(bod, "Ana", (a1, 1m, 1m)), "tester");
         var d2 = await _service.CrearAsync(Nueva(bod, "Ana", (a1, 1m, 1m)), "tester");
 

@@ -315,7 +315,7 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
             fecha = fecha,
             requisicion_hdr_id = reqHdr?.id,
             bodega_id = bodegaId,
-            departamento = Limpiar(dto.Departamento, 3),
+            departamento = Limpiar(dto.Departamento, 80),
             entregado_por = usuario,
             recibido_por = Limpiar(dto.RecibidoPor, 120),
             motivo = motivo,
@@ -337,7 +337,7 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
             cantidad = it.Cantidad,
             precio_unitario = 0m,
             total = 0m,
-            // El departamento vive en la cabecera (VARCHAR 3); la columna plana es VARCHAR(2) y
+            // El departamento vive en la cabecera (VARCHAR 80); la columna plana es VARCHAR(2) y
             // copiarlo divergiría o truncaría. Las lecturas nuevas lo toman del hdr.
             departamento = null,
             numero_requisicion = reqHdr?.numero,
@@ -371,7 +371,6 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
                 Fecha = fecha,
                 DocumentoId = linea.id,
                 DeferirRollup = true,
-                PermitirNegativo = dto.PermitirNegativo,   // el usuario confirmó el negativo en pantalla
                 Observacion = $"Descargo {numero:00000}"
             }, user, ct);
 

@@ -88,9 +88,12 @@ public class DescargoFlujoTests : IntegrationTestBase, IAsyncLifetime
         return await _req.AprobarAsync(req.Id, "jefe");
     }
 
+    // Toda entrega nueva exige quién recibe y el departamento (obligatorios desde el commit b817c72).
     private static DescargoDocumentoDto Entrega(int reqHdrId, params (int reqLineaId, decimal cant)[] lineas) => new()
     {
         RequisicionHdrId = reqHdrId,
+        RecibidoPor = "Juan Pérez",
+        Departamento = "ALM",
         Uuid = Guid.NewGuid(),
         Detalles = lineas.Select(l => new DescargoDocumentoDetalleDto { RequisicionLineaId = l.reqLineaId, Cantidad = l.cant }).ToList()
     };
@@ -101,6 +104,8 @@ public class DescargoFlujoTests : IntegrationTestBase, IAsyncLifetime
         => (await _context!.alm_requisicion_hdrs.AsNoTracking().FirstAsync(h => h.id == reqId)).estado;
     private async Task<decimal> DespachadaAsync(int reqLineaId)
         => (await _context!.alm_requisicions.AsNoTracking().FirstAsync(l => l.id == reqLineaId)).cantidad_despachada;
+    private async Task<string?> DepartamentoHdrAsync(int hdrId)
+        => (await _context!.alm_descargo_hdrs.AsNoTracking().FirstAsync(h => h.id == hdrId)).departamento;
 
     // ── 1 — el descargo SÍ postea y baja la existencia ────────────────────────
     [SkippableFact]
@@ -196,14 +201,14 @@ public class DescargoFlujoTests : IntegrationTestBase, IAsyncLifetime
 
         var sinMotivo = new DescargoDocumentoDto
         {
-            BodegaId = bod, Uuid = Guid.NewGuid(),
+            BodegaId = bod, RecibidoPor = "Juan Pérez", Departamento = "ALM", Uuid = Guid.NewGuid(),
             Detalles = [new() { ArticuloId = art, Cantidad = 3m }]
         };
         await Assert.ThrowsAsync<InvalidOperationException>(() => _desc!.EntregarAsync(sinMotivo, "bodeguero"));
 
         var conMotivo = new DescargoDocumentoDto
         {
-            BodegaId = bod, Motivo = "consumo interno", Uuid = Guid.NewGuid(),
+            BodegaId = bod, Motivo = "consumo interno", RecibidoPor = "Juan Pérez", Departamento = "ALM", Uuid = Guid.NewGuid(),
             Detalles = [new() { ArticuloId = art, Cantidad = 3m }]
         };
         var desc = await _desc!.EntregarAsync(conMotivo, "bodeguero");
@@ -266,6 +271,29 @@ public class DescargoFlujoTests : IntegrationTestBase, IAsyncLifetime
         var ex = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _desc!.EntregarAsync(Entrega(req.Id, (reqLinea, 5m)), "bodeguero"));
         Assert.Contains("aprobada", ex.Message);
+    }
+
+    // ── 9 — el nombre del departamento se guarda completo, no truncado (regresión b817c72) ──
+    // La cabecera pasó a VARCHAR(80) para guardar el NOMBRE del catálogo th_departamento; el
+    // servicio llegó a truncarlo a 3 (Limpiar(...,3)), degradando "CONTABILIDAD" → "CON".
+    [SkippableFact]
+    public async Task Entrega_GuardaNombreDepartamentoCompleto_NoTrunca()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var bod = await SeedBodegaAsync("ZZDF9");
+        var art = await SeedArticuloConParAsync("ZZDF9-A", bod, existencia: 50m, costo: 8m);
+
+        var dto = new DescargoDocumentoDto
+        {
+            BodegaId = bod, Motivo = "consumo interno", RecibidoPor = "Juan Pérez",
+            Departamento = "CONTABILIDAD", Uuid = Guid.NewGuid(),   // 12 chars > 3
+            Detalles = [new() { ArticuloId = art, Cantidad = 3m }]
+        };
+        var desc = await _desc!.EntregarAsync(dto, "bodeguero");
+
+        // Se lee la fila real: el nombre debe quedar íntegro en alm_descargo_hdr, no recortado a "CON".
+        Assert.Equal("CONTABILIDAD", await DepartamentoHdrAsync(desc.Id));
     }
 
     private sealed class TestCurrentCompanyService : ICurrentCompanyService

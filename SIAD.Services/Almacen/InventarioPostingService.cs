@@ -337,9 +337,8 @@ public sealed class InventarioPostingService : IInventarioPostingService
 
             case TipoMovimientoInventario.AjusteNegativo:
                 ExigirCantidadPositiva(m);
-                // El bloqueo del negativo cede SOLO si el interruptor (empresa/bodega) lo permite.
-                // Se consulta la config únicamente cuando la salida cruzaría a negativo (corto-circuito).
-                if (fila.existencia - m.Cantidad < 0m && !await PermiteNegativoAsync(fila.bodega_id, ct))
+                // Regla firme de inventario: una salida NUNCA puede dejar la existencia en negativo.
+                if (fila.existencia - m.Cantidad < 0m)
                 {
                     throw new InvalidOperationException(
                         $"El ajuste dejaría la existencia en negativo ({fila.existencia - m.Cantidad:0.####}).");
@@ -371,9 +370,9 @@ public sealed class InventarioPostingService : IInventarioPostingService
                     throw new InvalidOperationException(
                         "La ubicación no tiene costo promedio: no se puede despachar hasta que se le asigne uno (carga inicial o ajuste de valor).");
                 }
-                // El descargo puede dejar negativo si el usuario lo confirmó en pantalla (PermitirNegativo),
-                // aunque el interruptor de existencia negativa esté apagado; si no confirmó, sigue la config.
-                if (fila.existencia - m.Cantidad < 0m && !m.PermitirNegativo && !await PermiteNegativoAsync(fila.bodega_id, ct))
+                // Regla firme de inventario: una salida por descargo NUNCA puede dejar la existencia
+                // en negativo. No hay confirmación en pantalla ni interruptor que lo habilite.
+                if (fila.existencia - m.Cantidad < 0m)
                 {
                     throw new InvalidOperationException(
                         $"La salida dejaría la existencia en negativo ({fila.existencia - m.Cantidad:0.####}). Disponible: {fila.existencia:0.####}.");
@@ -395,7 +394,7 @@ public sealed class InventarioPostingService : IInventarioPostingService
                     throw new InvalidOperationException(
                         "La ubicación de origen no tiene costo promedio: no se puede trasladar hasta que se le asigne uno (carga inicial o ajuste de valor).");
                 }
-                if (fila.existencia - m.Cantidad < 0m && !await PermiteNegativoAsync(fila.bodega_id, ct))
+                if (fila.existencia - m.Cantidad < 0m)
                 {
                     throw new InvalidOperationException(
                         $"El traslado dejaría la existencia de origen en negativo ({fila.existencia - m.Cantidad:0.####}). Disponible: {fila.existencia:0.####}.");
@@ -477,31 +476,6 @@ public sealed class InventarioPostingService : IInventarioPostingService
             throw new InvalidOperationException(
                 "La ubicación ya tiene una carga inicial vigente. Para corregirla, revierta la apertura y vuelva a abrirla.");
         }
-    }
-
-    /// <summary>
-    /// ¿Esta bodega permite que una salida deje la existencia en NEGATIVO? (2026-08-15, F1.)
-    /// Interruptor en dos niveles: el override por bodega
-    /// (<c>alm_bodega.permite_existencia_negativa</c>, tri-estado) gana sobre el interruptor
-    /// maestro de la empresa (<c>cfg_inventario_negativo.permitir</c>). NULL en la bodega = hereda;
-    /// sin fila de empresa = <c>false</c> (comportamiento por defecto: se bloquea el negativo).
-    /// Ambas consultas van con el filtro global de tenant. Se llama solo cuando la salida cruzaría
-    /// a negativo, así que en el caso normal (interruptor apagado) no hay consulta extra.
-    /// </summary>
-    private async Task<bool> PermiteNegativoAsync(int bodegaId, CancellationToken ct)
-    {
-        var overrideBodega = await _context.alm_bodegas.AsNoTracking()
-            .Where(b => b.id == bodegaId)
-            .Select(b => b.permite_existencia_negativa)
-            .FirstOrDefaultAsync(ct);
-        if (overrideBodega.HasValue)
-        {
-            return overrideBodega.Value;
-        }
-
-        return await _context.cfg_inventario_negativos.AsNoTracking()
-            .Select(c => c.permitir)
-            .FirstOrDefaultAsync(ct);
     }
 
     /// <summary>

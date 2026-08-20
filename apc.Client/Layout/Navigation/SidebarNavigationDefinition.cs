@@ -274,7 +274,7 @@ public static class SidebarNavigationDefinition
                     Id = "inv-catalogos",
                     Text = "Catálogos de almacén",
                     IconCssClass = "bi bi-tags",
-                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida", "/almacen/conceptos-movimiento", "/almacen/isv-compras", "/almacen/existencia-negativa", "/almacen/terminos-pago", "/almacen/bodegas"],
+                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida", "/almacen/conceptos-movimiento", "/almacen/isv-compras", "/almacen/terminos-pago", "/almacen/bodegas"],
                     Children =
                     [
                         new SidebarNavItem { Id = "alm-tipos-articulo", Text = "Tipos de artículos", NavigateUrl = "/almacen/tipos-articulo", MatchPrefixes = ["/almacen/tipos-articulo"], IconCssClass = "bi bi-tags" },
@@ -283,7 +283,6 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "alm-conceptos-movimiento", Text = "Conceptos de movimiento", NavigateUrl = "/almacen/conceptos-movimiento", MatchPrefixes = ["/almacen/conceptos-movimiento"], IconCssClass = "bi bi-arrow-left-right" },
                         new SidebarNavItem { Id = "alm-terminos-pago", Text = "Términos de pago", NavigateUrl = "/almacen/terminos-pago", MatchPrefixes = ["/almacen/terminos-pago"], IconCssClass = "bi bi-calendar-check" },
                         new SidebarNavItem { Id = "alm-isv-compras", Text = "ISV en compras", NavigateUrl = "/almacen/isv-compras", MatchPrefixes = ["/almacen/isv-compras"], IconCssClass = "bi bi-percent" },
-                        new SidebarNavItem { Id = "alm-existencia-negativa", Text = "Existencia negativa", NavigateUrl = "/almacen/existencia-negativa", MatchPrefixes = ["/almacen/existencia-negativa"], IconCssClass = "bi bi-dash-circle" },
                         new SidebarNavItem { Id = "alm-bodegas", Text = "Bodegas", NavigateUrl = "/almacen/bodegas", MatchPrefixes = ["/almacen/bodegas"], IconCssClass = "bi bi-building" }
                     ]
                 }

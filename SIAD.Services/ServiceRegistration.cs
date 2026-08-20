@@ -135,7 +135,6 @@ public static class ServiceRegistration
         services.AddScoped<ICompraCxpService, CompraCxpService>();
         services.AddScoped<ITipoArticuloService, TipoArticuloService>();
         services.AddScoped<IIsvCompraConfigService, IsvCompraConfigService>();
-        services.AddScoped<INegativoInventarioConfigService, NegativoInventarioConfigService>();
         // Correo y notificaciones por empresa: conexión SendGrid (API key cifrada) + enrutamiento
         // por área (F2). Una sola instancia sirve a las dos interfaces (config y resolver de envío).
         services.AddScoped<SIAD.Services.Configuracion.CorreoConfigService>();
