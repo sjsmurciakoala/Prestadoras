@@ -15,6 +15,7 @@
 @inject BodegasClient BodegasClient
 @inject ArticulosClient ArticulosClient
 @inject EmpleadosClient EmpleadosClient
+@inject CatalogosThClient CatalogosClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -62,6 +63,8 @@
                     <div class="form-control-plaintext">@(modelo.EntregadoPor ?? "—")</div></div>
                 <div class="col-md-3"><label class="form-label small fw-semibold">Recibió</label>
                     <div class="form-control-plaintext">@(modelo.RecibidoPor ?? "—")</div></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Departamento</label>
+                    <div class="form-control-plaintext">@(string.IsNullOrWhiteSpace(modelo.Departamento) ? "—" : modelo.Departamento)</div></div>
                 @if (!string.IsNullOrWhiteSpace(modelo.Motivo))
                 { <div class="col-12"><label class="form-label small fw-semibold">Motivo</label><div class="form-control-plaintext">@modelo.Motivo</div></div> }
             </div>
@@ -108,7 +111,7 @@
         @* ── Nueva entrega ── *@
         <div class="modern-card mb-3">
             <div class="row g-3">
-                <div class="col-md-4"><label class="form-label small fw-semibold">Bodega *</label>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Bodega *</label>
                     @if (EsContraReq)
                     { <div class="form-control-plaintext fw-semibold">@bodegaNombre</div> }
                     else
@@ -119,7 +122,7 @@
                                     NullText="Seleccione..." CssClass="w-100" />
                     }
                 </div>
-                <div class="col-md-4"><label class="form-label small fw-semibold">Recibe</label>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Recibe *</label>
                     <DxComboBox Data="@empleados" TData="EmpleadoLookupDto" TValue="string"
                                 @bind-Value="recibidoPor"
                                 ValueFieldName="@nameof(EmpleadoLookupDto.Nombre)" TextFieldName="@nameof(EmpleadoLookupDto.Nombre)"
@@ -132,7 +135,13 @@
                             <DxListEditorColumn FieldName="@nameof(EmpleadoLookupDto.Nombre)" Caption="Nombre" />
                         </Columns>
                     </DxComboBox></div>
-                <div class="col-md-4"><label class="form-label small fw-semibold">Fecha</label>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Departamento *</label>
+                    <DxComboBox Data="@departamentos" TData="CatalogoThLookupDto" TValue="string"
+                                @bind-Value="departamentoSel"
+                                ValueFieldName="@nameof(CatalogoThLookupDto.Nombre)" TextFieldName="@nameof(CatalogoThLookupDto.Nombre)"
+                                NullText="Seleccione..." FilteringMode="DataGridFilteringMode.Contains"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" /></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Fecha</label>
                     <DxDateEdit @bind-Date="fecha" CssClass="w-100" /></div>
                 @if (EsDirecto)
                 {
@@ -329,12 +338,14 @@
     // Directo
     private List<BodegaLookupDto> bodegas = new();
     private List<EmpleadoLookupDto> empleados = new();
+    private List<CatalogoThLookupDto> departamentos = new();
     private List<ArticuloListItemDto> articulos = new();
     private int? articuloSeleccionado;
     private readonly List<DirectaLinea> lineasDirectas = new();
     private string? motivo;
 
     private string? recibidoPor;
+    private string? departamentoSel;
     private string? observaciones;
 
     private bool anularVisible;
@@ -351,9 +362,10 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // El combo "Recibe" (empleados) aparece tanto en la entrega de requisición como en el descargo
-        // directo: se carga SIEMPRE, no solo en el directo.
+        // El combo "Recibe" (empleados) y el de departamento aparecen tanto en la entrega de requisición
+        // como en el descargo directo: se cargan SIEMPRE, no solo en el directo.
         try { empleados = await EmpleadosClient.GetLookupAsync(); } catch { empleados = new(); }
+        try { departamentos = await CatalogosClient.GetLookupAsync(CatalogosThClient.Departamentos); } catch { departamentos = new(); }
 
         if (EsDetalle)
         {
@@ -444,6 +456,10 @@
             if (string.IsNullOrWhiteSpace(motivo)) { Toast("Error", "Un descargo directo requiere motivo.", ToastRenderStyle.Warning); return; }
         }
 
+        // Obligatorios en ambas vistas: quién recibe y el departamento donde se entrega.
+        if (string.IsNullOrWhiteSpace(recibidoPor)) { Toast("Error", "Indique quién recibe.", ToastRenderStyle.Warning); return; }
+        if (string.IsNullOrWhiteSpace(departamentoSel)) { Toast("Error", "Seleccione el departamento donde se entrega.", ToastRenderStyle.Warning); return; }
+
         // Si algún renglón dejaría la existencia en negativo, se alerta y el usuario decide si continúa.
         var negativos = DetectarNegativos();
         if (negativos.Count > 0)
@@ -488,6 +504,7 @@
         {
             Fecha = DateOnly.FromDateTime(fecha ?? DateTime.Today),
             RecibidoPor = recibidoPor,
+            Departamento = departamentoSel,
             Observaciones = observaciones,
             PermitirNegativo = permitirNegativo,
             Uuid = Guid.NewGuid()

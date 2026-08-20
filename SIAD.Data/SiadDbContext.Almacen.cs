@@ -661,7 +661,8 @@ public partial class SiadDbContext
             entity.HasIndex(e => new { e.company_id, e.requisicion_hdr_id }, "ix_alm_descargo_hdr_requisicion");
 
             entity.Property(e => e.fecha).HasColumnType("date");
-            entity.Property(e => e.departamento).HasMaxLength(3);
+            // El departamento del descargo pasó a elegirse del catálogo th_departamento (nombre): VARCHAR(80).
+            entity.Property(e => e.departamento).HasMaxLength(80);
             entity.Property(e => e.entregado_por).HasMaxLength(100);
             entity.Property(e => e.recibido_por).HasMaxLength(120);
             entity.Property(e => e.motivo).HasMaxLength(120);

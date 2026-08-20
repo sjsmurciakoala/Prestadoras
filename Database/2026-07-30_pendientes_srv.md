@@ -1068,6 +1068,40 @@ SELECT character_maximum_length FROM information_schema.columns
 
 ---
 
+### 3.27 Descargo — departamento del catálogo (obligatorio) + recibe obligatorio (2026-08-19)
+
+En el descargo directo y la entrega de requisición, "quién recibe" pasa a ser **obligatorio** y se agrega
+la selección del **departamento** donde se entrega, del catálogo `th_departamento` (§3.25), guardando el
+**nombre**. Para que quepan los nombres se amplía la columna de la cabecera.
+
+| Script | Qué aporta | Naturaleza | Mirror | SRV |
+|---|---|---|:--:|:--:|
+| `2026-08-19_alm_descargo_departamento_catalogo.sql` | `ALTER TABLE alm_descargo_hdr ALTER COLUMN departamento TYPE VARCHAR(80)` (widening 3→80) | **Cambio de tipo — widening, no destructivo.** No trunca ni reescribe datos. Re-ejecutar al mismo tipo es no-op | **sí (2026-08-19)** | **pendiente** |
+
+- **Solo la cabecera** (`alm_descargo_hdr`): las líneas planas (`alm_descargo`) van NULL por diseño, no se tocan.
+  No agrega FK ni migra datos. Mapeo EF a `HasMaxLength(80)` y servicio a `Limpiar(dto.Departamento, 80)`.
+- **Obligatoriedad** (recibido_por y departamento) se valida en la UI (`DescargoDocFormPage`) y en el
+  servicio (`DescargoDocumentoService.EntregarInternoAsync`): las entregas nuevas exigen ambos; el
+  histórico no se revalida.
+- **Con binario:** el combo de departamento (`CatalogosThClient`) en el descargo. **El SQL sin el binario
+  es inocuo**; **el binario sin el SQL** truncaría el nombre a 3 al guardar. Aplicar en la misma ventana.
+- **Verificado en el mirror el 2026-08-19**: `character_maximum_length = 80`.
+
+Comando:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-19_alm_descargo_departamento_catalogo.sql
+```
+
+¿Ya aplicado? (3 = falta, 80 = aplicado)
+
+```sql
+SELECT character_maximum_length FROM information_schema.columns
+ WHERE table_name = 'alm_descargo_hdr' AND column_name = 'departamento';
+```
+
+---
+
 ## 4. Orden de aplicación recomendado
 
 ```

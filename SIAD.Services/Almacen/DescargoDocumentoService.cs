@@ -215,6 +215,12 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
         foreach (var d in dto.Detalles)
             if (d.Cantidad <= 0m) throw new InvalidOperationException("La cantidad a entregar debe ser mayor que cero.");
 
+        // Quién recibe y el departamento de entrega son obligatorios en las entregas nuevas.
+        if (string.IsNullOrWhiteSpace(dto.RecibidoPor))
+            throw new InvalidOperationException("Debe indicar quién recibe.");
+        if (string.IsNullOrWhiteSpace(dto.Departamento))
+            throw new InvalidOperationException("Debe indicar el departamento donde se entrega.");
+
         var contraRequisicion = dto.RequisicionHdrId is > 0;
         var motivo = Limpiar(dto.Motivo, 120);
         var usuario = ClasificacionNormalizer.Usuario(user);
