@@ -1144,6 +1144,62 @@ SELECT to_regclass('public.cfg_inventario_negativo') AS interruptor,   -- NULL =
 
 ---
 
+### 3.29 Configuración — catálogo de formatos fiscales (No. factura SAR y CAI) (2026-08-22)
+
+Iniciativa nueva (rama `feat/almacen-integracion-contable`). Da un mantenimiento donde se configura,
+por empresa, la **máscara** del "No. factura (SAR)" y del "CAI" que se transcriben del proveedor en la
+factura de compra; de la máscara se derivan el ejemplo, la expresión regular de validación y la máscara
+de DevExpress. Antes esos dos campos eran texto libre sin ninguna validación, y el servicio los
+truncaba en silencio a 30 / 50 caracteres.
+
+**Los tres scripts son aditivos y de bajo riesgo:** ninguno lleva `DROP`, `ALTER`, `RENAME`, `TRUNCATE`
+ni `DELETE`. La tabla es nueva y los dos de datos solo insertan filas propias con guarda de duplicado.
+
+| # | Script | Qué aporta | Naturaleza | Mirror | SRV |
+|:-:|---|---|---|:--:|:--:|
+| 1 | `2026-08-22_cfg_formato_fiscal.sql` | `cfg_formato_fiscal` (catálogo por empresa: `codigo` + `nombre` + `mascara` + `patron` + `modo_validacion` + `obligatorio`/`normalizar`/`mayusculas`/`activo`; UNIQUE(company_id, codigo), CHECK del modo, índice por empresa) | Aditivo idempotente (`CREATE … IF NOT EXISTS`) — **re-ejecutable** | **sí (2026-08-22)** | **pendiente** |
+| 2 | `2026-08-22_cfg_formato_fiscal_seed.sql` | 2 filas para `company_id = 2`: `NUMERO_SAR` (`###-###-##-########`) y `CAI` (32 hex en 6 grupos), ambas en modo **bloquea** y no obligatorias | Datos idempotente (`ON CONFLICT DO NOTHING`) — **re-ejecutable**. **OPCIONAL** | **sí (2026-08-22)** | **pendiente** |
+| 3 | `2026-08-22_bitacora_config_formato_fiscal.sql` | Alta de `cfg_formato_fiscal` en la bitácora de maestros: 1 fila en `bitacora_maestro_catalogo` + 1 en `bitacora_maestro_config` (los 4 flags en `true`), por cada empresa que ya tenga catálogo | Datos idempotente (`INSERT … WHERE NOT EXISTS`) — **re-ejecutable** | **sí (2026-08-22)** | **pendiente** |
+
+- **Orden:** 1 → 2 → 3. El 3 necesita que la tabla exista (por coherencia del catálogo, no por FK);
+  el 2 necesita la tabla del 1.
+- **Dependencias externas:** el paso 3 asume `bitacora_maestro_catalogo` y `bitacora_maestro_config`
+  (`2026-07-17_bitacora_maestros.sql` y `2026-07-17_bitacora_maestro_catalogo.sql`).
+- **⚠️ El seed asume `company_id = 2`.** En el SRV la empresa puede preferir definir los suyos desde
+  la pantalla `/mantenimientos/formatos-fiscales`: por eso es opcional.
+- **⚠️ Cache de 30 minutos.** `AuditableCatalogProvider` y `AuditConfigProvider` cachean en
+  `IMemoryCache` con TTL de 30 min: el alta del paso 3 hecha directo en SQL tarda hasta media hora en
+  surtir efecto, o hay que **reiniciar el host `apc`**.
+- **Con binario, pero inocuo por separado:** la pantalla y el cableo en la recepción de compra leen
+  `cfg_formato_fiscal`. **Sin catálogo (o con la fila inactiva) los dos campos siguen siendo texto
+  libre, exactamente como hoy** — el SQL sin el binario no cambia nada, y el binario sin el seed
+  tampoco. Se puede aplicar en cualquier ventana.
+- **Ojo con lo que se guarda:** con el formato activo el valor pasa a guardarse **normalizado**
+  (`0000010100000123`) y se muestra con la máscara. Los registros viejos conservan sus guiones, así
+  que el índice antiduplicado `uq_alm_compra_hdr_factura_prov` compara dos formas distintas entre lo
+  viejo y lo nuevo. El saneo que normalizaría el histórico **no está en esta tanda** (es un `UPDATE`
+  masivo y lleva su propia aprobación); mientras no se haga, el riesgo es solo que una misma factura
+  capturada antes y después no colisione.
+
+Comandos:
+
+```
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-22_cfg_formato_fiscal.sql
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-22_cfg_formato_fiscal_seed.sql
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-08-22_bitacora_config_formato_fiscal.sql
+```
+
+¿Ya aplicado?
+
+```sql
+SELECT to_regclass('public.cfg_formato_fiscal')                                          AS tabla,        -- NULL = falta
+       (SELECT count(*) FROM public.cfg_formato_fiscal)                                  AS formatos,     -- 2 con el seed
+       (SELECT count(*) FROM public.bitacora_maestro_catalogo WHERE tabla   = 'cfg_formato_fiscal') AS bit_catalogo,
+       (SELECT count(*) FROM public.bitacora_maestro_config   WHERE entidad = 'cfg_formato_fiscal') AS bit_config;
+```
+
+---
+
 ## 4. Orden de aplicación recomendado
 
 ```
@@ -1279,3 +1335,15 @@ resto de la tanda.
 con ROLLBACK vía `KardexBackfillHistoricoTests`, 3/3). Es sólo datos, no lleva binario. Depende de los 6
 del kardex (§3.1). Requiere **OWNER** de `alm_kardex` y **ventana de bajo uso** (usa la escotilla del
 trigger de inmutabilidad). Aplicable en cualquier momento, independiente del resto de la tanda.
+
+**Formatos fiscales — No. factura (SAR) y CAI (2026-08-22):** `2026-08-22_cfg_formato_fiscal.sql`,
+`2026-08-22_cfg_formato_fiscal_seed.sql` y `2026-08-22_bitacora_config_formato_fiscal.sql` (§3.29) están
+**sin commitear**; los tres **aplicados al mirror `siad_v3_restore` el 2026-08-22** (con orden explícita
+del usuario) y verificada su idempotencia reejecutándolos, **SRV pendiente**. Versionarlos junto con el
+binario de la iniciativa: el catálogo `/mantenimientos/formatos-fiscales` con su historial, el cableo en
+la recepción de compra (máscara al teclear + validación al guardar, en pantalla y en
+`RecepcionCompraService`), y el formateo al mostrar en los grids de recepciones, pagos e incidencias y en
+el comprobante PDF. **El SQL sin el binario es inocuo y el binario sin el seed también**: sin formato
+configurado los dos campos siguen siendo texto libre, como hoy. Independiente del resto de la tanda.
+Queda **fuera** el saneo que normalizaría el histórico de `numero_factura_sar` — es un `UPDATE` masivo
+que no se ha escrito y llevará su propia aprobación.

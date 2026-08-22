@@ -850,5 +850,43 @@ public static class PermissionEndpointCatalog
             Route: "api/almacen/descargos/documentos/{id:int}/anular"),
     ];
 
-    public static IEnumerable<EndpointPermissionDefinition> All => [.. Ventas, .. Contabilidad, .. Inventario];
+    public static readonly EndpointPermissionDefinition[] Configuracion =
+    [
+        // Catálogo de formatos fiscales (2026-08-22): máscara del No. de factura (SAR) y del CAI
+        // que se transcriben del proveedor. 'desactivar' es POST pero se cataloga como Edit:
+        // cambia el estado de un formato existente, no crea uno nuevo (mismo criterio que los
+        // conceptos de movimiento). El endpoint 'lookup' NO se cataloga a propósito: vive en otro
+        // controlador con [Authorize] a secas, porque quien captura una recepción de compra puede
+        // no tener acceso al módulo Configuración y sin él no podría ni teclear la factura.
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/mantenimientos/formatos-fiscales"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/mantenimientos/formatos-fiscales"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales",
+            Action: PermissionAction.Edit,
+            HttpMethod: "PUT",
+            Route: "api/mantenimientos/formatos-fiscales/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales_desactivar",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/mantenimientos/formatos-fiscales/{id:int}/desactivar"),
+    ];
+
+    public static IEnumerable<EndpointPermissionDefinition> All => [.. Ventas, .. Contabilidad, .. Inventario, .. Configuracion];
 }

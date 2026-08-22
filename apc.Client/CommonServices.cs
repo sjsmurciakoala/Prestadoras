@@ -55,6 +55,8 @@ namespace apc.Client
             services.AddScoped<FacturacionMiscelaneosClient>();
             services.AddScoped<NotasCreditoDebitoClient>();
             services.AddScoped<MantenimientosClient>();
+            services.AddScoped<FormatosFiscalesClient>();
+            services.AddScoped<FormatoFiscalState>();
             services.AddScoped<CobranzaClient>();
             services.AddScoped<CorteMasivoClient>();
             services.AddScoped<ClientesCobroClient>();

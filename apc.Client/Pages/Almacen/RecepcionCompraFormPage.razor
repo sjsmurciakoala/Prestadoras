@@ -8,6 +8,7 @@
 @using SIAD.Core.DTOs.Proveedores
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
+@using apc.Client.Services.Mantenimientos
 @using apc.Client.Services.Proveedores
 
 @inject RecepcionesCompraClient RecepcionesClient
@@ -15,6 +16,7 @@
 @inject BodegasClient BodegasClient
 @inject TerminosPagoClient TerminosClient
 @inject ProveedoresClient ProveedoresClient
+@inject FormatoFiscalState FormatoFiscal
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -169,10 +171,25 @@
                     }
                 </div>
                 <div class="col-12 col-md-3">
-                    <label class="form-label fw-semibold">No. factura (SAR)</label>
+                    <label class="form-label fw-semibold">
+                        No. factura (SAR)
+                        @if (!EsConsulta && FormatoFiscal.EsObligatorio(FormatoFiscalState.CodigoNumeroSar))
+                        {
+                            <span class="text-danger">*</span>
+                        }
+                    </label>
                     @if (EsConsulta)
                     {
-                        <div class="valor-solo-lectura">@(string.IsNullOrWhiteSpace(modelo.NumeroFacturaSar) ? "—" : modelo.NumeroFacturaSar)</div>
+                        <div class="valor-solo-lectura">@MostrarFiscal(FormatoFiscalState.CodigoNumeroSar, modelo.NumeroFacturaSar)</div>
+                    }
+                    else if (FormatoFiscal.TieneFormato(FormatoFiscalState.CodigoNumeroSar))
+                    {
+                        <DxMaskedInput @bind-Value="modelo.NumeroFacturaSar"
+                                       Mask="@FormatoFiscal.MascaraDevExpress(FormatoFiscalState.CodigoNumeroSar)"
+                                       NullText="@FormatoFiscal.Ejemplo(FormatoFiscalState.CodigoNumeroSar)"
+                                       CssClass="w-100">
+                            <DxTextMaskProperties Placeholder="@('_')" />
+                        </DxMaskedInput>
                     }
                     else
                     {
@@ -181,10 +198,25 @@
                     }
                 </div>
                 <div class="col-12 col-md-3">
-                    <label class="form-label fw-semibold">CAI</label>
+                    <label class="form-label fw-semibold">
+                        CAI
+                        @if (!EsConsulta && FormatoFiscal.EsObligatorio(FormatoFiscalState.CodigoCai))
+                        {
+                            <span class="text-danger">*</span>
+                        }
+                    </label>
                     @if (EsConsulta)
                     {
-                        <div class="valor-solo-lectura">@(string.IsNullOrWhiteSpace(modelo.Cai) ? "—" : modelo.Cai)</div>
+                        <div class="valor-solo-lectura">@MostrarFiscal(FormatoFiscalState.CodigoCai, modelo.Cai)</div>
+                    }
+                    else if (FormatoFiscal.TieneFormato(FormatoFiscalState.CodigoCai))
+                    {
+                        <DxMaskedInput @bind-Value="modelo.Cai"
+                                       Mask="@FormatoFiscal.MascaraDevExpress(FormatoFiscalState.CodigoCai)"
+                                       NullText="@FormatoFiscal.Ejemplo(FormatoFiscalState.CodigoCai)"
+                                       CssClass="w-100">
+                            <DxTextMaskProperties Placeholder="@('_')" />
+                        </DxMaskedInput>
                     }
                     else
                     {
@@ -619,6 +651,10 @@
     {
         try
         {
+            // Formato del No. de factura (SAR) y del CAI. Si no hay ninguno configurado,
+            // los dos campos se comportan como antes: texto libre sin validar.
+            await FormatoFiscal.EnsureLoadedAsync();
+
             if (EsConsulta)
             {
                 var cargada = await RecepcionesClient.GetByIdAsync(Id!.Value);
@@ -931,6 +967,58 @@
 
     private void QuitarRenglon(RecepcionCompraDetalleDto d) => modelo.Detalles.Remove(d);
 
+    /// <summary>
+    /// Cómo se muestra un código fiscal guardado. Sin formato configurado sale tal cual se guardó;
+    /// con formato, con su máscara (aunque en la base viva normalizado).
+    /// </summary>
+    private string MostrarFiscal(string codigo, string? valor)
+    {
+        if (string.IsNullOrWhiteSpace(valor)) return "—";
+        var texto = FormatoFiscal.Formatear(codigo, valor);
+        return string.IsNullOrWhiteSpace(texto) ? "—" : texto;
+    }
+
+    /// <summary>
+    /// Contrasta el No. de factura (SAR) y el CAI contra el formato configurado.
+    /// Devuelve false solo cuando hay que cortar el guardado: campo obligatorio vacío,
+    /// o valor que no cumple con el formato en modo bloqueante. En modo advertencia avisa y sigue.
+    /// </summary>
+    private bool ValidarFormatosFiscales()
+    {
+        return ValidarCampoFiscal(FormatoFiscalState.CodigoNumeroSar, modelo.NumeroFacturaSar, "No. de factura (SAR)")
+            && ValidarCampoFiscal(FormatoFiscalState.CodigoCai, modelo.Cai, "CAI");
+    }
+
+    private bool ValidarCampoFiscal(string codigo, string? valor, string etiqueta)
+    {
+        var formato = FormatoFiscal.Get(codigo);
+        if (formato is null) return true;
+
+        var vacio = string.IsNullOrWhiteSpace(valor);
+        if (vacio)
+        {
+            if (!formato.Obligatorio) return true;
+            Toast("Faltan datos", $"Debe indicar el {etiqueta}.", ToastRenderStyle.Warning);
+            return false;
+        }
+
+        if (FormatoFiscal.EsValido(codigo, valor)) return true;
+
+        var mensaje = FormatoFiscal.MensajeFormato(codigo);
+        if (formato.Bloquea)
+        {
+            Toast("Formato inválido", mensaje, ToastRenderStyle.Danger);
+            return false;
+        }
+
+        if (formato.Advierte)
+        {
+            Toast("Aviso", $"{mensaje} Se guardará de todos modos.", ToastRenderStyle.Warning);
+        }
+
+        return true;
+    }
+
     private async Task GuardarAsync()
     {
         if (guardando) return;
@@ -965,10 +1053,16 @@
             Toast("Faltan datos", "El costo unitario debe ser mayor que cero en todos los renglones.", ToastRenderStyle.Warning);
             return;
         }
+        if (!ValidarFormatosFiscales())
+        {
+            return;
+        }
 
         guardando = true;
         try
         {
+            modelo.NumeroFacturaSar = FormatoFiscal.Normalizar(FormatoFiscalState.CodigoNumeroSar, modelo.NumeroFacturaSar);
+            modelo.Cai = FormatoFiscal.Normalizar(FormatoFiscalState.CodigoCai, modelo.Cai);
             modelo.Fecha = fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : DateOnly.FromDateTime(DateTime.Today);
             modelo.FechaFactura = fechaFactura.HasValue ? DateOnly.FromDateTime(fechaFactura.Value) : null;
             modelo.FechaVencimiento = fechaVencimiento.HasValue ? DateOnly.FromDateTime(fechaVencimiento.Value) : null;

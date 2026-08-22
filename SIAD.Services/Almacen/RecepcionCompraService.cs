@@ -1,6 +1,7 @@
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Mantenimientos;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
@@ -228,6 +229,10 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         var doc = await GetByIdAsync(id, ct);
         if (doc is null) return null;
 
+        // El No. de factura y el CAI se guardan normalizados: se imprimen con la máscara
+        // configurada. El reporte no consulta el catálogo, recibe el texto ya listo.
+        await AplicarFormatosFiscalesAsync(doc, ct);
+
         var empresa = await CargarEmpresaAsync(ct);
         return new RecepcionCompraImpresionDto
         {
@@ -250,6 +255,102 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         return await _context.cfg_companies.AsNoTracking()
             .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
     }
+
+    /// <summary>
+    /// Contrasta el No. de factura del proveedor y el CAI contra el catálogo de formatos fiscales
+    /// y los deja normalizados como se van a guardar. Sin formato configurado (o inactivo) no toca
+    /// nada: el campo sigue siendo texto libre, igual que antes del catálogo.
+    /// </summary>
+    /// <remarks>
+    /// La pantalla ya valida y avisa; esto es la última palabra, porque el POST puede venir de
+    /// cualquier lado y porque lo que se guarda tiene que quedar en una sola forma canónica —
+    /// si no, el índice antiduplicado uq_alm_compra_hdr_factura_prov compara peras con manzanas.
+    /// </remarks>
+    private async Task ValidarYNormalizarCodigosFiscalesAsync(RecepcionCompraDto dto, CancellationToken ct)
+    {
+        var formatos = await _context.cfg_formato_fiscals.AsNoTracking()
+            .Where(f => f.activo)
+            .Select(f => new
+            {
+                f.codigo,
+                f.nombre,
+                f.mascara,
+                f.patron,
+                f.modo_validacion,
+                f.obligatorio,
+                f.normalizar,
+                f.mayusculas
+            })
+            .ToListAsync(ct);
+
+        if (formatos.Count == 0) return;
+
+        foreach (var f in formatos)
+        {
+            var esSar = string.Equals(f.codigo, CodigoFormatoNumeroSar, StringComparison.OrdinalIgnoreCase);
+            var esCai = string.Equals(f.codigo, CodigoFormatoCai, StringComparison.OrdinalIgnoreCase);
+            if (!esSar && !esCai) continue;
+
+            var valor = esSar ? dto.NumeroFacturaSar : dto.Cai;
+
+            if (string.IsNullOrWhiteSpace(valor))
+            {
+                if (f.obligatorio)
+                {
+                    throw new InvalidOperationException($"Debe indicar el {f.nombre}.");
+                }
+                continue;
+            }
+
+            if (f.modo_validacion == ModoValidacionFormatoFiscal.Bloquea
+                && !FiscalCodeFormatter.EsValido(valor, f.mascara, f.patron, f.mayusculas))
+            {
+                throw new InvalidOperationException(
+                    $"El {f.nombre} debe tener el formato {FiscalCodeFormatter.Ejemplo(f.mascara)}.");
+            }
+
+            var guardado = f.normalizar
+                ? FiscalCodeFormatter.Normalizar(valor, f.mayusculas)
+                : (f.mayusculas ? valor.Trim().ToUpperInvariant() : valor.Trim());
+
+            if (esSar) dto.NumeroFacturaSar = guardado;
+            else dto.Cai = guardado;
+        }
+    }
+
+    /// <summary>
+    /// Pone la máscara del catálogo de formatos fiscales al No. de factura del proveedor y al CAI.
+    /// Sin formato configurado (o inactivo) los deja como están: es lo que se imprimía antes.
+    /// </summary>
+    private async Task AplicarFormatosFiscalesAsync(RecepcionCompraDto doc, CancellationToken ct)
+    {
+        if (string.IsNullOrWhiteSpace(doc.NumeroFacturaSar) && string.IsNullOrWhiteSpace(doc.Cai))
+        {
+            return;
+        }
+
+        var formatos = await _context.cfg_formato_fiscals.AsNoTracking()
+            .Where(f => f.activo)
+            .Select(f => new { f.codigo, f.mascara, f.mayusculas })
+            .ToListAsync(ct);
+
+        foreach (var f in formatos)
+        {
+            if (string.Equals(f.codigo, CodigoFormatoNumeroSar, StringComparison.OrdinalIgnoreCase)
+                && !string.IsNullOrWhiteSpace(doc.NumeroFacturaSar))
+            {
+                doc.NumeroFacturaSar = FiscalCodeFormatter.Formatear(doc.NumeroFacturaSar, f.mascara, f.mayusculas);
+            }
+            else if (string.Equals(f.codigo, CodigoFormatoCai, StringComparison.OrdinalIgnoreCase)
+                     && !string.IsNullOrWhiteSpace(doc.Cai))
+            {
+                doc.Cai = FiscalCodeFormatter.Formatear(doc.Cai, f.mascara, f.mayusculas);
+            }
+        }
+    }
+
+    private const string CodigoFormatoNumeroSar = "NUMERO_SAR";
+    private const string CodigoFormatoCai = "CAI";
 
     // ── Alta ─────────────────────────────────────────────────────────────────
 
@@ -275,6 +376,7 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
 
         var cod = NormalizarCodProveedor(dto.CodProveedor);
         ValidarCabecera(dto);
+        await ValidarYNormalizarCodigosFiscalesAsync(dto, ct);
         await ValidarProveedorAsync(cod, companyId, ct);
         var bodega = await ValidarBodegaAsync(dto.BodegaId, ct);
         var upcs = await ValidarRenglonesAsync(dto.Detalles, cod, ct);

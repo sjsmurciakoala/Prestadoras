@@ -1,0 +1,26 @@
+/* Estilos propios del formulario de formato fiscal.
+   Lo compartido (tarjetas, badges, grid) vive en apc/wwwroot/css/siad-grid.css. */
+
+.valor-solo-lectura {
+    min-height: 34px;
+    display: flex;
+    align-items: center;
+    font-weight: 600;
+    color: #344767;
+}
+
+/* Caja de vista previa: se recalcula al teclear la máscara. */
+.preview-formato {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 0.85rem 1rem;
+}
+
+.preview-label {
+    color: #7f8c8d;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 600;
+    margin-bottom: 0.15rem;
+}

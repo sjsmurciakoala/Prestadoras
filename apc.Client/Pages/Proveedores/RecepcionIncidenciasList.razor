@@ -5,11 +5,13 @@
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Proveedores
 @using apc.Client.Services
+@using apc.Client.Services.Mantenimientos
 @using apc.Client.Services.Proveedores
 
 @inject IJSRuntime JS
 @inject RecepcionIncidenciaClient IncidenciasClient
 @inject ProveedoresClient ProveedoresClient
+@inject FormatoFiscalState FormatoFiscal
 @inject IToastNotificationService ToastService
 
 <PageTitle>SIAD - Incidencias de recepción</PageTitle>
@@ -105,7 +107,7 @@
                             @if (cell.DataItem is RecepcionIncidenciaDto item)
                             {
                                 <div class="d-flex flex-column">
-                                    <span>@item.DocumentoTexto</span>
+                                    <span>@DocumentoTexto(item)</span>
                                     <span class="text-muted small">recibida @item.RecepcionFecha.ToString("dd/MM/yyyy")</span>
                                 </div>
                             }
@@ -339,8 +341,19 @@
 
     private RecepcionIncidenciaDto? aBorrar;
 
+    /// <summary>
+    /// Igual que <c>RecepcionIncidenciaDto.DocumentoTexto</c>, pero con la máscara del No. de
+    /// factura aplicada: el DTO no puede conocer el formato configurado de la empresa.
+    /// </summary>
+    private string DocumentoTexto(RecepcionIncidenciaDto item)
+        => string.IsNullOrWhiteSpace(item.NumeroFacturaSar)
+            ? item.DocumentoTexto
+            : $"Factura {FormatoFiscal.Formatear(FormatoFiscalState.CodigoNumeroSar, item.NumeroFacturaSar)}";
+
     protected override async Task OnInitializedAsync()
     {
+        // Máscara del No. de factura: el valor viaja normalizado y aquí se muestra formateado.
+        await FormatoFiscal.EnsureLoadedAsync();
         await CargarProveedoresAsync();
         await CargarAsync();
     }

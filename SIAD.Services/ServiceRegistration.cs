@@ -91,8 +91,9 @@ public static class ServiceRegistration
         // notas crédito/débito
         services.AddScoped<INotasCreditoDebitoService, NotasCreditoDebitoService>();
 
-        // mantenimientos (recargo mora, ajustes tarifarios)
+        // mantenimientos (recargo mora, ajustes tarifarios, formatos fiscales)
         services.AddScoped<IMantenimientosService, MantenimientosService>();
+        services.AddScoped<IFormatoFiscalService, FormatoFiscalService>();
 
         // cobranza
         services.AddScoped<ICobranzaService, CobranzaService>();

@@ -8,8 +8,10 @@
 @using SIAD.Core.Retenciones
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
+@using apc.Client.Services.Mantenimientos
 
 @inject PagosCompraClient PagosClient
+@inject FormatoFiscalState FormatoFiscal
 @inject IToastNotificationService ToastService
 @inject IJSRuntime JS
 
@@ -107,7 +109,7 @@
                     <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.NumeroFacturaSar)" Caption="No. factura" Width="150px">
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is CompraCxpListItemDto item)
-                            { <span class="font-monospace small text-muted">@(string.IsNullOrWhiteSpace(item.NumeroFacturaSar) ? item.Numero.ToString("00000") : item.NumeroFacturaSar)</span> }
+                            { <span class="font-monospace small text-muted">@NumeroFacturaTexto(item.NumeroFacturaSar, item.Numero)</span> }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
                     <DxGridDataColumn FieldName="@nameof(CompraCxpListItemDto.FechaVencimiento)" Caption="Vence" Width="150px">
@@ -344,7 +346,7 @@
             <div>
                 <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Pagos de la factura</div>
                 <div class="small text-muted" style="font-weight:normal;">
-                    @(cxpAbonos?.Proveedor ?? cxpAbonos?.CodProveedor) · @(string.IsNullOrWhiteSpace(cxpAbonos?.NumeroFacturaSar) ? cxpAbonos?.Numero.ToString("00000") : cxpAbonos?.NumeroFacturaSar)
+                    @(cxpAbonos?.Proveedor ?? cxpAbonos?.CodProveedor) · @(cxpAbonos is null ? "" : NumeroFacturaTexto(cxpAbonos.NumeroFacturaSar, cxpAbonos.Numero))
                 </div>
             </div>
         </div>
@@ -616,8 +618,18 @@
     private decimal TotalPorVencer => cxps.Where(x => !EsVencida(x) && DiasParaVencer(x) <= 7).Sum(x => x.Saldo);
     private int ContarVencidas => cxps.Count(EsVencida);
 
+    /// <summary>
+    /// El No. de factura del proveedor con su máscara; si la factura no lo trae, el correlativo interno.
+    /// </summary>
+    private string NumeroFacturaTexto(string? numeroFacturaSar, int numeroInterno)
+        => string.IsNullOrWhiteSpace(numeroFacturaSar)
+            ? numeroInterno.ToString("00000")
+            : FormatoFiscal.Formatear(FormatoFiscalState.CodigoNumeroSar, numeroFacturaSar);
+
     protected override async Task OnInitializedAsync()
     {
+        // Máscara del No. de factura: el valor viaja normalizado y aquí se muestra formateado.
+        await FormatoFiscal.EnsureLoadedAsync();
         await CargarAsync();
         try
         {

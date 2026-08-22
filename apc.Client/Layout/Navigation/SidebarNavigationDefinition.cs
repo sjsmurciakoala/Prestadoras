@@ -324,7 +324,7 @@ public static class SidebarNavigationDefinition
                     Id = "cfg-catalogos-comerciales",
                     Text = "Catálogos comerciales",
                     IconCssClass = "bi bi-journal-bookmark",
-                    MatchPrefixes = ["/mantenimientos/barrios", "/ciclos", "/libretas", "/medidores", "/mantenimientos/clases-medidor", "/facturacion/condiciones-lectura", "/mantenimientos/codigo-cliente", "/abogados", "/tarifario/cai-offline"],
+                    MatchPrefixes = ["/mantenimientos/barrios", "/ciclos", "/libretas", "/medidores", "/mantenimientos/clases-medidor", "/facturacion/condiciones-lectura", "/mantenimientos/codigo-cliente", "/mantenimientos/formatos-fiscales", "/abogados", "/tarifario/cai-offline"],
                     Children =
                     [
                         new SidebarNavItem { Id = "mant-barrios", Text = "Barrios", NavigateUrl = "/mantenimientos/barrios", MatchPrefixes = ["/mantenimientos/barrios"], IconCssClass = "bi bi-map-fill" },
@@ -334,6 +334,7 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "mant-clases-medidor", Text = "Clases de medidor", NavigateUrl = "/mantenimientos/clases-medidor", MatchPrefixes = ["/mantenimientos/clases-medidor"], IconCssClass = "bi bi-speedometer" },
                         new SidebarNavItem { Id = "fact-condiciones-lectura", Text = "Condiciones de lectura", NavigateUrl = "/facturacion/condiciones-lectura", MatchPrefixes = ["/facturacion/condiciones-lectura"], IconCssClass = "bi bi-list-check" },
                         new SidebarNavItem { Id = "mant-codigo-cliente", Text = "Código de cliente", NavigateUrl = "/mantenimientos/codigo-cliente", MatchPrefixes = ["/mantenimientos/codigo-cliente"], IconCssClass = "bi bi-123" },
+                        new SidebarNavItem { Id = "mant-formatos-fiscales", Text = "Formatos fiscales", NavigateUrl = "/mantenimientos/formatos-fiscales", MatchPrefixes = ["/mantenimientos/formatos-fiscales"], IconCssClass = "bi bi-input-cursor-text" },
                         new SidebarNavItem { Id = "abogados", Text = "Abogados", NavigateUrl = "/abogados", MatchPrefixes = ["/abogados"], IconCssClass = "bi bi-briefcase" },
                         new SidebarNavItem { Id = "tarv3-cai-offline", Text = "CAI offline", NavigateUrl = "/tarifario/cai-offline", MatchPrefixes = ["/tarifario/cai-offline"], IconCssClass = "bi bi-upc-scan" }
                     ]

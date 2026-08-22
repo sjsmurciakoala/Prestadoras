@@ -129,6 +129,11 @@ public static class PermissionResources
         // + áreas de notificación (remitente y destinatarios por área). Recurso propio para poder
         // restringir el manejo del secreto aparte del resto de configuración.
         public const string Correo = "correo";
+
+        // Catálogo de formatos fiscales (2026-08-22): máscara y validación del No. de factura (SAR)
+        // y del CAI que se transcriben del proveedor. Recurso propio porque cambiar la máscara puede
+        // trabar la captura de facturas: no todo usuario de configuración debe poder tocarla.
+        public const string FormatosFiscales = "formatos_fiscales";
     }
 
     public static class Proveedores
@@ -453,6 +458,18 @@ public static class PermissionNames
             public const string View = "module.configuracion.correo.view";
             public const string Edit = "module.configuracion.correo.edit";
         }
+
+        /// <summary>
+        /// Catálogo de formatos fiscales (2026-08-22): máscara del No. de factura (SAR) y del CAI.
+        /// Sin <c>Delete</c>: un formato no se borra, se desactiva — borrarlo dejaría sin explicación
+        /// los valores ya guardados con esa máscara.
+        /// </summary>
+        public static class FormatosFiscales
+        {
+            public const string View = "module.configuracion.formatos_fiscales.view";
+            public const string Create = "module.configuracion.formatos_fiscales.create";
+            public const string Edit = "module.configuracion.formatos_fiscales.edit";
+        }
     }
 
     public static class Legacy
@@ -570,6 +587,9 @@ public static class PermissionNames
 
             Configuracion.Correo.View,
             Configuracion.Correo.Edit,
+            Configuracion.FormatosFiscales.View,
+            Configuracion.FormatosFiscales.Create,
+            Configuracion.FormatosFiscales.Edit,
 
             Proveedores.Retenciones.View,
 
@@ -711,6 +731,9 @@ public static class PermissionNames
         // de módulo bastan, así que no restringe a quien ya tiene module.configuracion.*.
         new PermissionPolicyDefinition(Configuracion.Correo.View, [Configuracion.Correo.View, Configuracion.View, Legacy.Configuracion]),
         new PermissionPolicyDefinition(Configuracion.Correo.Edit, [Configuracion.Correo.Edit, Configuracion.Edit]),
+        new PermissionPolicyDefinition(Configuracion.FormatosFiscales.View, [Configuracion.FormatosFiscales.View, Configuracion.View, Legacy.Configuracion]),
+        new PermissionPolicyDefinition(Configuracion.FormatosFiscales.Create, [Configuracion.FormatosFiscales.Create, Configuracion.Create]),
+        new PermissionPolicyDefinition(Configuracion.FormatosFiscales.Edit, [Configuracion.FormatosFiscales.Edit, Configuracion.Edit]),
 
         // Registro fiscal de retenciones aplicadas (F4): consulta bajo el módulo Proveedores. El
         // permiso fino O el de módulo bastan (no restringe a quien ya tiene module.proveedores.*).

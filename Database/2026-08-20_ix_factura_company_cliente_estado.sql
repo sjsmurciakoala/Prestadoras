@@ -1,0 +1,66 @@
+-- =============================================================================
+-- Índice de apoyo para sp_obtener_cliente_saldo — factura (company_id, clientecodigo, estado)
+-- Fecha: 2026-08-20  ·  Fase B
+--
+-- Base objetivo: siad_v4 @ 172.16.0.9  (la base ACTIVA; NO siad_v3)
+--
+-- POR QUÉ
+--   sp_obtener_cliente_saldo(p_company_id, pcodigocliente) existe y está en uso en siad_v4,
+--   y filtra factura por clientecodigo + estado. La tabla tiene 3.896.635 filas (906 MB).
+--   Arriba solo existe ix_factura_company_clientecodigo (company_id, clientecodigo): cubre
+--   las dos primeras columnas, no el estado.
+--   El índice lo diseñó 2026-07-28_uc_f4_sp_saldo_documentos.sql; este script lo extrae
+--   para poder crearlo CONCURRENTLY (aquel lo crea dentro de una transacción).
+--
+-- -----------------------------------------------------------------------------
+-- ⚠️ NO ENVOLVER EN UNA TRANSACCIÓN
+--   CREATE INDEX CONCURRENTLY no puede correr dentro de BEGIN/COMMIT. Por eso este
+--   script no los lleva. Correrlo tal cual, sin -1 y sin envolverlo.
+--
+-- ⚠️ POR QUÉ CONCURRENTLY
+--   Un CREATE INDEX normal toma un lock que BLOQUEA TODAS LAS ESCRITURAS de factura
+--   mientras construye el índice. Sobre 3,9 M filas eso es parar la facturación.
+--   CONCURRENTLY no bloquea, a cambio de hacer dos pasadas y tardar más.
+--
+--   Requisitos: que no haya transacciones largas abiertas sobre factura. Si las hay,
+--   CONCURRENTLY espera a que terminen.
+-- -----------------------------------------------------------------------------
+--
+-- ADITIVO: no toca ninguna fila, columna ni índice existente.
+-- IDEMPOTENTE: CREATE INDEX CONCURRENTLY IF NOT EXISTS.
+-- Tamaño estimado: ~35 MB (el de 2 columnas pesa 27 MB).
+--
+-- ¿YA APLICADO?
+--   SELECT indexname FROM pg_indexes
+--    WHERE schemaname='public' AND indexname='ix_factura_company_cliente_estado';
+--
+-- REVERSIBLE:
+--   DROP INDEX CONCURRENTLY IF EXISTS public.ix_factura_company_cliente_estado;
+-- =============================================================================
+
+CREATE INDEX CONCURRENTLY IF NOT EXISTS ix_factura_company_cliente_estado
+    ON public.factura (company_id, clientecodigo, estado);
+
+-- =============================================================================
+-- VERIFICACIÓN (correr después, en otra sesión)
+--
+-- 1. El índice existe y quedó VÁLIDO:
+--
+--    SELECT c.relname,
+--           i.indisvalid  AS valido,
+--           pg_size_pretty(pg_relation_size(c.oid)) AS tamano
+--      FROM pg_class c
+--      JOIN pg_index i ON i.indexrelid = c.oid
+--     WHERE c.relname = 'ix_factura_company_cliente_estado';
+--
+--    ⚠️ Si valido = false, el CONCURRENTLY falló a mitad y dejó un índice INVÁLIDO
+--       que Postgres NO usa pero que sí pesa y sí frena las escrituras. Hay que
+--       eliminarlo y volver a crearlo:
+--
+--         DROP INDEX CONCURRENTLY IF EXISTS public.ix_factura_company_cliente_estado;
+--
+-- 2. Que el planner lo use (opcional):
+--
+--    EXPLAIN SELECT 1 FROM factura
+--     WHERE company_id = 2 AND clientecodigo = '<algún código real>' AND estado = 'A';
+-- =============================================================================
