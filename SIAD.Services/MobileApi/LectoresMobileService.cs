@@ -392,6 +392,28 @@ public sealed class LectoresMobileService : ILectoresMobileService
 
     public async Task<LecturaV3Respuesta> ActualizarLecturaAsync(LecturaV3Request request, long companyId, CancellationToken ct = default)
     {
+        // Red de seguridad: ninguna regla de negocio de Postgres debe salir como
+        // excepción. De los métodos que consultan la base en este flujo, sólo el que
+        // llama a sp_lectura_v3 protegía PostgresException; el resto (identidad,
+        // factura existente, preflight de total, CAI sync) la dejaba escapar hasta el
+        // catch-all de LecturasController, que responde 500 "No se pudo registrar la
+        // lectura" — un mensaje que no dice nada y que la app reintenta para siempre.
+        try
+        {
+            return await ActualizarLecturaCoreAsync(request, companyId, ct);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Npgsql.PostgresException ex)
+        {
+            return MapearErrorCai(ex);
+        }
+    }
+
+    private async Task<LecturaV3Respuesta> ActualizarLecturaCoreAsync(LecturaV3Request request, long companyId, CancellationToken ct)
+    {
         ArgumentNullException.ThrowIfNull(request);
         if (string.IsNullOrWhiteSpace(request.Clave))
         {
@@ -420,23 +442,44 @@ public sealed class LectoresMobileService : ILectoresMobileService
                 return Fail("CAI_FORMAL_REQUERIDO", "IdCai, CorrelativoCai y NumeroFactura deben venir juntos.");
             }
 
-            // Prepara el correlativo CAI (idempotente en el SP); avanza el estado de sync.
-            await PrepararCorrelativoAsync(conn, companyId, identidad, request, ct);
-
-            // Idempotencia: si la factura ya existe (mismo tenant/cliente/número), la
-            // subida es un reintento → se devuelve la existente sin re-postear (evita
+            // Idempotencia PRIMERO: si la factura ya existe (mismo tenant/cliente/número),
+            // la subida es un reintento → se devuelve la existente sin re-postear (evita
             // el "Ya existe factura" de sp_lectura_v3). numfactura es único por cliente.
+            //
+            // Va ANTES de preparar el correlativo a propósito: sp_adm_prepare_correlativo_cai_sync
+            // sólo es idempotente cuando (cai_id, correlativo, numero_factura) coincide exacto;
+            // si difiere en cualquier parte hace RAISE CORRELATIVO_DUPLICADO. Preparando primero,
+            // un reintento de una lectura ya registrada podía morir en el RAISE sin llegar nunca
+            // a este atajo. `sp_adm_confirmar_correlativo_cai_sync` inserta la fila si no existe,
+            // así que confirmar sin preparar antes es seguro.
             var facturaExistente = await FacturaRegistradaAsync(conn, companyId, identidad.ClienteClave, request.NumeroFactura!, ct);
             if (facturaExistente is not null)
             {
-                var confirmIdem = await ConfirmarCorrelativoAsync(conn, companyId, identidad, request, facturaExistente.FacturaId, ct);
+                var confirmIdem = await EjecutarCaiSyncAsync(
+                    () => ConfirmarCorrelativoAsync(conn, companyId, identidad, request, facturaExistente.FacturaId, ct));
+
                 var existente = ConstruirRespuestaExistente(identidad, facturaExistente, request);
-                if (!confirmIdem.Success)
+                if (confirmIdem.Error is not null)
+                {
+                    existente.Warnings.Add($"La factura ya existía pero la confirmación del correlativo CAI falló: {confirmIdem.Error.Mensaje}");
+                }
+                else if (confirmIdem.Row is { Success: false })
                 {
                     existente.Warnings.Add("La factura ya existía pero la confirmación del correlativo CAI falló.");
                 }
 
                 return existente;
+            }
+
+            // Prepara el correlativo CAI; avanza el estado de sync. Sus reglas de negocio
+            // viajan por RAISE, así que se traducen a respuestas tipadas del contrato: sin
+            // esto salían por el catch-all del controller como un 500 genérico que el
+            // lector reintentaba para siempre.
+            var prepare = await EjecutarCaiSyncAsync(
+                () => PrepararCorrelativoAsync(conn, companyId, identidad, request, ct));
+            if (prepare.Error is not null)
+            {
+                return prepare.Error;
             }
 
             // Preflight de total: si el dispositivo envía un total, debe coincidir con el
@@ -456,8 +499,17 @@ public sealed class LectoresMobileService : ILectoresMobileService
 
         if (respuesta.Success && requiereCai && respuesta.FacturaId > 0)
         {
-            var confirm = await ConfirmarCorrelativoAsync(conn, companyId, identidad, request, respuesta.FacturaId, ct);
-            if (!confirm.Success)
+            // La lectura YA quedó registrada: un fallo confirmando el correlativo no
+            // puede tumbar la respuesta ni volverse un 500 — se reporta como warning.
+            var confirm = await EjecutarCaiSyncAsync(
+                () => ConfirmarCorrelativoAsync(conn, companyId, identidad, request, respuesta.FacturaId, ct));
+
+            if (confirm.Error is not null)
+            {
+                respuesta.Codigo = "OK_WITH_SYNC_CONFLICT";
+                respuesta.Warnings.Add($"La lectura se registró pero falló la confirmación del correlativo CAI: {confirm.Error.Mensaje}");
+            }
+            else if (confirm.Row is { Success: false })
             {
                 respuesta.Codigo = "OK_WITH_SYNC_CONFLICT";
                 respuesta.Warnings.Add("La lectura se registró pero falló la confirmación del correlativo CAI.");
@@ -849,6 +901,66 @@ public sealed class LectoresMobileService : ILectoresMobileService
 
     private static LecturaV3Respuesta Fail(string codigo, string mensaje) =>
         new() { Success = false, Codigo = codigo, Mensaje = mensaje };
+
+    /// <summary>
+    /// Resultado de un SP de CAI sync: o la fila, o la respuesta de error ya tipada.
+    /// </summary>
+    private readonly record struct CaiSyncResultado(CaiSyncRow? Row, LecturaV3Respuesta? Error);
+
+    /// <summary>
+    /// Ejecuta un SP de CAI sync traduciendo sus <c>RAISE</c> a respuestas del contrato.
+    /// </summary>
+    /// <remarks>
+    /// Los SP de CAI validan reglas de negocio con <c>RAISE EXCEPTION 'CODIGO: detalle'</c>.
+    /// Sin esta traducción la <see cref="Npgsql.PostgresException"/> escapaba del servicio y
+    /// salía por el <c>catch</c> genérico de <c>LecturasController</c> como un 500
+    /// "No se pudo registrar la lectura": la app lo clasificaba como error reintentable y el
+    /// lector quedaba reintentando contra una falla permanente, sin pista de la causa.
+    /// </remarks>
+    private static async Task<CaiSyncResultado> EjecutarCaiSyncAsync(Func<Task<CaiSyncRow>> sp)
+    {
+        try
+        {
+            return new CaiSyncResultado(await sp(), null);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Npgsql.PostgresException ex)
+        {
+            return new CaiSyncResultado(null, MapearErrorCai(ex));
+        }
+    }
+
+    /// <summary>
+    /// Traduce el código de un <c>RAISE</c> de los SP de CAI al vocabulario del contrato.
+    /// </summary>
+    private static LecturaV3Respuesta MapearErrorCai(Npgsql.PostgresException ex)
+    {
+        var texto = ex.MessageText ?? string.Empty;
+        var codigo = texto.Split(':', 2)[0].Trim();
+
+        return codigo switch
+        {
+            // El correlativo/número ya pertenece a OTRA lectura (el SP sí es idempotente
+            // cuando la terna cai_id/correlativo/numero_factura coincide exacto). Es un
+            // conflicto real que exige supervisor: se responde con el código de conflicto
+            // que la app ya conoce, para que lo marque SYNC_CONFLICT y deje de reintentar.
+            // El controller mapea FACTURA_YA_EMITIDA a 409.
+            "CORRELATIVO_DUPLICADO" or "FACTURA_YA_CONFIRMADA"
+                => Fail("FACTURA_YA_EMITIDA", texto),
+
+            // El dispositivo mandó una terna CAI que no corresponde a un bloque válido
+            // o vigente: no se arregla reintentando, hay que redescargar la ruta.
+            "BLOQUE_INVALIDO" or "CAI_VENCIDO" or "CAI_DATOS_REQUERIDOS"
+                => Fail("CAI_FORMAL_REQUERIDO", texto),
+
+            // Cualquier otra regla del SP: se devuelve con el mensaje REAL de Postgres,
+            // no con el genérico del catch-all.
+            _ => Fail("ERROR_LECTURA_V3", texto.Length > 0 ? texto : ex.Message),
+        };
+    }
 
     private static string NormalizarRuta(string? ruta)
     {

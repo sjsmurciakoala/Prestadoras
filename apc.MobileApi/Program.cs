@@ -16,6 +16,13 @@ var builder = WebApplication.CreateBuilder(args);
 // (appsettings.Local.json, gitignored) — el publish viaja sin credenciales.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+// Log a archivo: el host corre bajo IIS con stdoutLogEnabled=false, así que sin esto
+// todo LogError se descarta y un error de campo no deja rastro en ningún lado.
+// Se configura en MobileApi:Log (Directorio, NivelMinimo, RetencionDias).
+var logOptions = builder.Configuration.GetSection("MobileApi:Log").Get<FileLoggerOptions>()
+                 ?? new FileLoggerOptions();
+builder.Logging.AddProvider(new FileLoggerProvider(logOptions, builder.Environment.ContentRootPath));
+
 builder.Services.AddDbContext<SiadDbContext>(options =>
     options.UseNpgsql(builder.Configuration.GetConnectionString("DefaultConnection")));
 
