@@ -53,7 +53,11 @@ public sealed class LecturasController : ControllerBase
                 "TENANT_MISMATCH" => StatusCode(StatusCodes.Status403Forbidden, respuesta),
                 "CLIENTE_NO_ENCONTRADO" => NotFound(respuesta),
                 "CLAVE_REQUERIDA" or "CAI_FORMAL_REQUERIDO" => BadRequest(respuesta),
-                "SYNC_CONFLICT_TOTAL" or "FACTURA_YA_EMITIDA" => Conflict(respuesta),
+                // PERIODO_CERRADO va con los conflictos: es un rechazo definitivo que
+                // exige una decisión humana (reabrir el período o descartar la lectura),
+                // no un error que se resuelva reintentando.
+                "SYNC_CONFLICT_TOTAL" or "FACTURA_YA_EMITIDA" or "PERIODO_CERRADO"
+                    => Conflict(respuesta),
                 _ => Ok(respuesta),
             };
         }

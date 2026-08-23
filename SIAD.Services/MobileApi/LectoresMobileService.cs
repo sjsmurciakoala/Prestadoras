@@ -747,7 +747,7 @@ public sealed class LectoresMobileService : ILectoresMobileService
             // sp_lectura_v3 valida reglas de negocio con RAISE (número de factura
             // requerido, duplicado, etc.): se devuelven como error de negocio,
             // igual que el ERROR_LECTURA_V3 del WS viejo.
-            return Fail("ERROR_LECTURA_V3", ex.MessageText);
+            return MapearErrorLectura(ex);
         }
 
         if (row is null)
@@ -931,6 +931,36 @@ public sealed class LectoresMobileService : ILectoresMobileService
         {
             return new CaiSyncResultado(null, MapearErrorCai(ex));
         }
+    }
+
+    /// <summary>
+    /// Traduce los <c>RAISE</c> de <c>sp_lectura_v3</c> al vocabulario del contrato.
+    /// </summary>
+    /// <remarks>
+    /// Sólo se tipa el período cerrado. Es un rechazo <b>definitivo</b>: la lectura viaja
+    /// con el ciclo que tenía el paquete descargado, y si ese período se cerró mientras el
+    /// lector estaba en campo, ningún reintento la va a hacer entrar. Devuelto como
+    /// <c>ERROR_LECTURA_V3</c> la app lo tomaba por transitorio y reintentaba para siempre:
+    /// en el piloto un teléfono acumuló 16 lecturas de junio reintentando contra un período
+    /// que ya no existía, sin forma de sacarlas de la cola.
+    ///
+    /// El SP no emite código —su RAISE es texto libre— así que se reconoce por el mensaje.
+    /// El <c>switch</c> acepta igual el código tipado, para cuando el SP se actualice.
+    /// El resto de los RAISE sigue saliendo con el mensaje real de Postgres.
+    /// </remarks>
+    private static LecturaV3Respuesta MapearErrorLectura(Npgsql.PostgresException ex)
+    {
+        var texto = ex.MessageText ?? string.Empty;
+        var codigo = texto.Split(':', 2)[0].Trim();
+
+        var esPeriodoCerrado =
+            codigo.Equals("PERIODO_CERRADO", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("periodo abierto", StringComparison.OrdinalIgnoreCase)
+            || texto.Contains("período abierto", StringComparison.OrdinalIgnoreCase);
+
+        return esPeriodoCerrado
+            ? Fail("PERIODO_CERRADO", texto)
+            : Fail("ERROR_LECTURA_V3", texto.Length > 0 ? texto : ex.Message);
     }
 
     /// <summary>
