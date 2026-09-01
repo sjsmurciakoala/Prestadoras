@@ -1,0 +1,30 @@
+/* Solo lo específico de esta pantalla: el resto del look (page-container,
+   modern-card, summary-card, grid-solicitudes, badges) vive una sola vez en
+   apc/wwwroot/css/siad-grid.css y NO se copia aquí. */
+
+/* siad-grid.css define .summary-warning; el corte necesita además el rojo del
+   bloqueo (negativas) y el verde de lo que ya se puede postear. */
+.summary-danger .summary-value {
+    color: #dc3545;
+}
+
+.summary-success .summary-value {
+    color: #198754;
+}
+
+/* La tabla de captura de costos: compacta, para ver muchas filas sin scroll. */
+.table-responsive {
+    max-height: 420px;
+    overflow-y: auto;
+}
+
+.table-responsive thead th {
+    position: sticky;
+    top: 0;
+    background: #fff;
+    z-index: 1;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.4px;
+    color: #7f8c8d;
+}

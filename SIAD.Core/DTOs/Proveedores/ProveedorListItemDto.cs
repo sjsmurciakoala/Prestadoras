@@ -8,4 +8,5 @@ public record ProveedorListItemDto(
     string? Telefono,
     bool Activo,
     string? TipoNombre = null,
-    int TipoId = 0);
+    int TipoId = 0,
+    int? TerminoPagoId = null);

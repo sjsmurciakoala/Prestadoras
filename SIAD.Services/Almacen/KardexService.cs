@@ -1,5 +1,10 @@
+using System.Linq.Expressions;
 using Microsoft.EntityFrameworkCore;
+using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Common;
+using SIAD.Core.Entities;
+using SIAD.Core.Tenancy;
 using SIAD.Data;
 
 namespace SIAD.Services.Almacen;
@@ -14,10 +19,12 @@ namespace SIAD.Services.Almacen;
 public sealed class KardexService : IKardexService
 {
     private readonly SiadDbContext _context;
+    private readonly ICurrentCompanyService _company;
 
-    public KardexService(SiadDbContext context)
+    public KardexService(SiadDbContext context, ICurrentCompanyService company)
     {
         _context = context;
+        _company = company;
     }
 
     public async Task<KardexArticuloDto?> GetByArticuloAsync(KardexFilterDto filtro, CancellationToken ct = default)
@@ -103,19 +110,15 @@ public sealed class KardexService : IKardexService
                 ValorUnitario = k.valor_unitario,
                 Total = k.total,
                 UsuarioCreacion = k.usuariocreacion,
-                FechaCreacion = k.fechacreacion
+                FechaCreacion = k.fechacreacion,
+                DocumentoTipo = k.documento_tipo,
+                DocumentoId = k.documento_id,
+                ExistenciaResultante = k.existencia_resultante,
+                CostoPromedioResultante = k.costo_promedio_resultante
             })
             .ToListAsync(ct);
 
-        // Saldo corrido sobre TODOS los movimientos.
-        decimal saldo = 0m;
-        foreach (var m in movimientos)
-        {
-            saldo += m.Ingresos - m.Salidas;
-            m.Saldo = saldo;
-        }
-
-        var saldoCalculado = saldo;
+        var corrido = AplicarPuntoDeCorte(movimientos, filtro.FechaDesde);
 
         // Filtro de presentación (no afecta el saldo histórico ya calculado).
         IEnumerable<KardexMovimientoDto> filtrados = movimientos;
@@ -155,19 +158,247 @@ public sealed class KardexService : IKardexService
                 .FirstOrDefaultAsync(ct);
         }
 
+        var costoCache = await ObtenerCostoPromedioCacheAsync(articuloId, filtro.BodegaId, ct);
+
         return new KardexArticuloDto
         {
             Codigo = articulo.codigo_articulo,
             Descripcion = articulo.descripcion,
             UnidadMedida = articulo.UnidadCodigo ?? articulo.unidad_medida,
             ExistenciaRegistrada = articulo.existencia,
-            SaldoCalculado = saldoCalculado,
+            SaldoCalculado = corrido.Saldo,
             BodegaId = filtro.BodegaId,
             ExistenciaBodega = existenciaBodega,
             TotalIngresos = lista.Sum(m => m.Ingresos),
             TotalSalidas = lista.Sum(m => m.Salidas),
+            // Valor del período: se pondera cada movimiento por SU costo, no por el promedio
+            // final. Es la Σ VALOR_MOVIL del kardex legacy, separada en cargos y créditos.
+            ValorIngresos = lista.Sum(m => m.Ingresos * m.ValorUnitario),
+            ValorSalidas = lista.Sum(m => m.Salidas * m.ValorUnitario),
+            SaldoValorizado = corrido.Valor,
+            CostoPromedioActual = corrido.Saldo > 0m ? corrido.Valor / corrido.Saldo : null,
+            CostoPromedioCache = costoCache,
+            CantidadAnterior = corrido.CantidadAnterior,
+            ValorAnterior = corrido.ValorAnterior,
+            CostoPromedioAnterior = corrido.CantidadAnterior > 0m
+                ? corrido.ValorAnterior / corrido.CantidadAnterior
+                : null,
             Movimientos = lista
         };
+    }
+
+    /// <summary>
+    /// Costo promedio ALMACENADO del ámbito consultado, para contrastarlo contra el que se
+    /// deriva del libro. Con bodega filtrada es el de esa bodega; sin filtro, el ponderado de
+    /// las bodegas activas — la misma fórmula que el maestro usa para la vista global
+    /// (<c>ArticulosService.ProyeccionLista</c>), porque comparar contra otra cosa reportaría
+    /// descuadres inexistentes en artículos multi-bodega.
+    /// </summary>
+    private async Task<decimal?> ObtenerCostoPromedioCacheAsync(int articuloId, int? bodegaId, CancellationToken ct)
+    {
+        if (bodegaId.HasValue)
+        {
+            return await _context.alm_articulo_bodegas
+                .AsNoTracking()
+                .Where(u => u.articulo_id == articuloId && u.bodega_id == bodegaId.Value && u.activo)
+                .Select(u => (decimal?)u.costo_promedio)
+                .FirstOrDefaultAsync(ct);
+        }
+
+        var activas = await _context.alm_articulo_bodegas
+            .AsNoTracking()
+            .Where(u => u.articulo_id == articuloId && u.activo)
+            .Select(u => new { u.existencia, u.costo_promedio })
+            .ToListAsync(ct);
+
+        if (activas.Count == 0)
+        {
+            return null;
+        }
+
+        var existencia = activas.Sum(u => u.existencia);
+        return existencia > 0m
+            ? activas.Sum(u => u.existencia * u.costo_promedio) / existencia
+            : null;
+    }
+
+    /// <summary>
+    /// Resultado del recorrido del libro: saldo y valor al cierre, más el arrastre con que
+    /// arranca el período cuando se consultó con fecha desde.
+    /// </summary>
+    private readonly record struct ResumenCorrido(
+        decimal Saldo,
+        decimal Valor,
+        decimal? CantidadAnterior,
+        decimal? ValorAnterior);
+
+    /// <summary>
+    /// Aplica el PUNTO DE CORTE y lleva el saldo corrido en CANTIDAD y en VALOR, del que se
+    /// deriva el costo promedio de cada fila.
+    /// <para>
+    /// Sin esto, postear la carga inicial <b>empeoraría</b> la pantalla: el saldo sumaría
+    /// los ~47 mil asientos migrados de SIMAFI MÁS la apertura, y nunca cuadraría contra la
+    /// existencia registrada. La regla: el saldo <b>arranca en cero en el asiento de carga
+    /// inicial</b> de cada par (artículo, bodega); todo lo anterior es histórico informativo
+    /// y se devuelve con <c>Saldo = null</c>.
+    /// </para>
+    /// <para>
+    /// Compatibilidad hacia atrás: un par SIN carga inicial se comporta como siempre —el
+    /// saldo corre desde el primer movimiento—, que es lo que mantiene usable la pantalla
+    /// durante la transición, mientras unos pares ya tienen apertura y otros no.
+    /// </para>
+    /// <para>
+    /// <b>Costeo (promedio ponderado móvil, la regla del kardex legacy).</b> Cada asiento
+    /// aporta <c>(ingresos − salidas) × valor_unitario</c> al valor acumulado, y el costo
+    /// promedio de la fila es <c>valor acumulado / cantidad acumulada</c>. Una salida se
+    /// posteó al promedio vigente, así que retira exactamente su parte y <b>no mueve</b> el
+    /// promedio; una entrada lo pondera. El valor se acumula <b>sin redondear</b> —redondear
+    /// en cada paso fuga centavos en cadenas largas—; el redondeo es cosa de la presentación.
+    /// </para>
+    /// <para>
+    /// Se recalcula en vez de leer <c>alm_kardex.costo_promedio_resultante</c> porque ese
+    /// snapshot sólo existe en los asientos que posteó el motor: viene NULL en todo el
+    /// histórico migrado. Derivarlo da una columna continua y, de paso, un verificador del
+    /// costo almacenado en <c>alm_articulo_bodega</c>.
+    /// </para>
+    /// </summary>
+    /// <param name="movimientos">Movimientos del artículo en orden cronológico (fecha, id).</param>
+    /// <param name="fechaDesde">Inicio del período consultado; si viene, se calcula el arrastre.</param>
+    private static ResumenCorrido AplicarPuntoDeCorte(List<KardexMovimientoDto> movimientos, DateOnly? fechaDesde)
+    {
+        // El corte es POR PAR (artículo, bodega): en una consulta sin filtro de bodega
+        // conviven varios pares y cada uno tiene su propia apertura.
+        // Los movimientos ya vienen en orden cronológico (fecha, id).
+        var corteDeBodega = new Dictionary<int, int>();
+        foreach (var m in movimientos)
+        {
+            if (m.DocumentoTipo != TipoDocumentoInventario.CargaInicial || m.Ingresos <= 0)
+            {
+                continue;
+            }
+
+            // La apertura vigente es la PRIMERA no revertida. Una apertura revertida tiene
+            // su REVERSA en la lista; ambas quedan del lado pre-corte y no se cuentan dos veces.
+            var clave = m.BodegaId ?? 0;
+            var revertida = movimientos.Any(r =>
+                r.DocumentoTipo == TipoDocumentoInventario.Reversa && r.DocumentoId == m.Id);
+
+            if (!revertida && !corteDeBodega.ContainsKey(clave))
+            {
+                corteDeBodega[clave] = m.Id;
+                m.EsLineaDeCorte = true;
+            }
+        }
+
+        var saldoPorBodega = new Dictionary<int, decimal>();
+        var valorPorBodega = new Dictionary<int, decimal>();
+        var alcanzoCorte = new Dictionary<int, bool>();
+
+        // Arrastre: estado del par en el último asiento ANTERIOR a la fecha desde. Sale del
+        // mismo recorrido porque el corrido ya barre la lista completa antes de que el filtro
+        // de presentación la recorte.
+        var arrastreCantidad = new Dictionary<int, decimal>();
+        var arrastreValor = new Dictionary<int, decimal>();
+        var hayArrastre = false;
+
+        foreach (var m in movimientos)
+        {
+            var clave = m.BodegaId ?? 0;
+            var tieneCorte = corteDeBodega.TryGetValue(clave, out var corteId);
+
+            if (tieneCorte)
+            {
+                if (!alcanzoCorte.GetValueOrDefault(clave))
+                {
+                    if (m.Id == corteId)
+                    {
+                        // La línea de corte ABRE el saldo: arranca en cero y suma su apertura.
+                        alcanzoCorte[clave] = true;
+                    }
+                    else
+                    {
+                        // Anterior al corte: histórico informativo, sin saldo ni costo. El
+                        // costo tampoco tiene significado aquí: el histórico migrado no
+                        // arranca de un valor conocido y trae asientos sin costo.
+                        m.EsPreCorte = true;
+                        m.Saldo = null;
+                        m.ExistenciaAnterior = null;
+                        m.SaldoValorizado = null;
+                        m.CostoPromedioAnterior = null;
+                        m.CostoPromedioCorrido = null;
+                        continue;
+                    }
+                }
+            }
+
+            var cantidadPrevia = saldoPorBodega.GetValueOrDefault(clave);
+            var valorPrevio = valorPorBodega.GetValueOrDefault(clave);
+
+            m.ExistenciaAnterior = cantidadPrevia;
+            m.CostoPromedioAnterior = cantidadPrevia > 0m ? valorPrevio / cantidadPrevia : null;
+
+            // VALOR_MOVIL del kardex legacy: el signo lo pone la dirección del movimiento.
+            var saldo = cantidadPrevia + m.Ingresos - m.Salidas;
+
+            // Ajuste de COSTO (revaluación): el único asiento del motor que deja entradas y
+            // salidas en cero. No mueve unidades pero sí re-fija el costo, así que el valor
+            // pasa a ser existencia × costo nuevo. Sin este caso el corrido lo ignoraría y
+            // marcaría descuadre para siempre contra un costo almacenado que sí cambió.
+            var esRevaluacion = m.Ingresos == 0m && m.Salidas == 0m && cantidadPrevia != 0m;
+
+            var valor = esRevaluacion
+                ? cantidadPrevia * m.ValorUnitario
+                : valorPrevio + ((m.Ingresos - m.Salidas) * m.ValorUnitario);
+
+            saldoPorBodega[clave] = saldo;
+            valorPorBodega[clave] = valor;
+
+            m.Saldo = saldo;
+            m.SaldoValorizado = valor;
+            // El legacy dividía sin guarda y reventaba con saldo cero; aquí se devuelve null
+            // y la pantalla pinta "—". Un saldo negativo tampoco produce un costo con sentido.
+            m.CostoPromedioCorrido = saldo > 0m ? valor / saldo : null;
+
+            if (fechaDesde.HasValue && m.Fecha.HasValue && m.Fecha.Value < fechaDesde.Value)
+            {
+                arrastreCantidad[clave] = saldo;
+                arrastreValor[clave] = valor;
+                hayArrastre = true;
+            }
+        }
+
+        // El saldo comparable contra la existencia es la suma de los saldos por bodega
+        // (con una sola bodega filtrada, es el de esa bodega).
+        decimal saldoTotal = 0m;
+        foreach (var s in saldoPorBodega.Values)
+        {
+            saldoTotal += s;
+        }
+
+        decimal valorTotal = 0m;
+        foreach (var v in valorPorBodega.Values)
+        {
+            valorTotal += v;
+        }
+
+        if (!hayArrastre)
+        {
+            return new ResumenCorrido(saldoTotal, valorTotal, null, null);
+        }
+
+        decimal cantidadAnterior = 0m;
+        foreach (var c in arrastreCantidad.Values)
+        {
+            cantidadAnterior += c;
+        }
+
+        decimal valorAnterior = 0m;
+        foreach (var v in arrastreValor.Values)
+        {
+            valorAnterior += v;
+        }
+
+        return new ResumenCorrido(saldoTotal, valorTotal, cantidadAnterior, valorAnterior);
     }
 
     public async Task<IReadOnlyList<TipoMovimientoDto>> GetTiposMovimientoAsync(CancellationToken ct = default)
@@ -184,4 +415,319 @@ public sealed class KardexService : IKardexService
             .Select(c => new TipoMovimientoDto { Codigo = c, Descripcion = TipoMovimientoKardex.Describir(c) })
             .ToList();
     }
+
+    // ── Libro de movimientos de bodega ───────────────────────────────────────
+    // A diferencia del kardex por artículo, aquí el eje es la BODEGA: una página de todos
+    // los asientos de la bodega (cualquier artículo). No hay saldo corrido "mezclado" —cada
+    // fila trae su existencia_resultante materializada—, así que se pagina en el servidor
+    // sin recomputar nada (el kardex de una bodega puede tener decenas de miles de filas).
+
+    public async Task<PagedResult<MovimientoBodegaItemDto>> GetMovimientosBodegaPagedAsync(
+        MovimientosBodegaFilterDto filtro, int skip, int take, string? sortField, bool sortDesc, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        // La bodega es el eje del libro: sin ella no hay universo que paginar.
+        if (!filtro.BodegaId.HasValue)
+        {
+            return new PagedResult<MovimientoBodegaItemDto>();
+        }
+
+        var query = AplicarFiltrosBodega(filtro);
+        var total = await query.CountAsync(ct);
+
+        skip = Math.Max(skip, 0);
+        take = take <= 0 ? 50 : take;
+
+        var items = await AplicarOrdenBodega(query, sortField, sortDesc)
+            .Skip(skip)
+            .Take(take)
+            .Select(ProyeccionBodega())
+            .ToListAsync(ct);
+
+        return new PagedResult<MovimientoBodegaItemDto>(items, total);
+    }
+
+    public async Task<MovimientosBodegaResumenDto> GetResumenBodegaAsync(MovimientosBodegaFilterDto filtro, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        if (!filtro.BodegaId.HasValue)
+        {
+            return new MovimientosBodegaResumenDto();
+        }
+
+        // Agregados en el servidor sobre TODO el universo filtrado (no la página visible).
+        // Consultas separadas (como el resumen del maestro) en vez de GroupBy: garantiza la
+        // traducción a SQL. El (decimal?) ... ?? 0m evita el fallo de Sum sobre secuencia vacía.
+        var query = AplicarFiltrosBodega(filtro);
+
+        var totalMovimientos = await query.CountAsync(ct);
+        var totalIngresos = await query.SumAsync(k => (decimal?)k.ingresos, ct) ?? 0m;
+        var totalSalidas = await query.SumAsync(k => (decimal?)k.salidas, ct) ?? 0m;
+        var valorMovido = await query.SumAsync(k => (decimal?)k.total, ct) ?? 0m;
+
+        return new MovimientosBodegaResumenDto
+        {
+            TotalMovimientos = totalMovimientos,
+            TotalIngresos = totalIngresos,
+            TotalSalidas = totalSalidas,
+            ValorMovido = valorMovido
+        };
+    }
+
+    /// <summary>Universo del libro: asientos de la bodega, acotados por período/tipo/artículo/búsqueda.</summary>
+    private IQueryable<alm_kardex> AplicarFiltrosBodega(MovimientosBodegaFilterDto filtro)
+    {
+        var query = _context.alm_kardexs
+            .AsNoTracking()
+            .Where(k => k.bodega_id == filtro.BodegaId!.Value);
+
+        if (filtro.ArticuloId.HasValue)
+        {
+            query = query.Where(k => k.articulo_id == filtro.ArticuloId.Value);
+        }
+
+        if (filtro.FechaDesde.HasValue)
+        {
+            query = query.Where(k => k.fecha != null && k.fecha >= filtro.FechaDesde.Value);
+        }
+
+        if (filtro.FechaHasta.HasValue)
+        {
+            query = query.Where(k => k.fecha != null && k.fecha <= filtro.FechaHasta.Value);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.TipoTransaccion))
+        {
+            var tipo = filtro.TipoTransaccion.Trim();
+            query = query.Where(k => k.tipo_transaccion == tipo);
+        }
+
+        if (!string.IsNullOrWhiteSpace(filtro.Search))
+        {
+            var term = filtro.Search.Trim();
+            var likePattern = $"%{term}%";
+
+            if (_context.Database.IsRelational())
+            {
+                query = query.Where(k =>
+                    EF.Functions.ILike(k.codigo_articulo ?? string.Empty, likePattern)
+                    || EF.Functions.ILike(k.descripcion ?? string.Empty, likePattern)
+                    || (k.articulo_ref != null && (
+                        EF.Functions.ILike(k.articulo_ref.codigo_articulo ?? string.Empty, likePattern)
+                        || EF.Functions.ILike(k.articulo_ref.descripcion, likePattern))));
+            }
+            else
+            {
+                var lowered = term.ToLowerInvariant();
+                query = query.Where(k =>
+                    (k.codigo_articulo ?? string.Empty).ToLowerInvariant().Contains(lowered)
+                    || (k.descripcion ?? string.Empty).ToLowerInvariant().Contains(lowered)
+                    || (k.articulo_ref != null && (
+                        (k.articulo_ref.codigo_articulo ?? string.Empty).ToLowerInvariant().Contains(lowered)
+                        || k.articulo_ref.descripcion.ToLowerInvariant().Contains(lowered))));
+            }
+        }
+
+        return query;
+    }
+
+    /// <summary>Orden del grid remoto. Por defecto: cronológico DESCENDENTE (lo más reciente primero).</summary>
+    private static IQueryable<alm_kardex> AplicarOrdenBodega(IQueryable<alm_kardex> query, string? sortField, bool sortDesc)
+        => sortField switch
+        {
+            nameof(MovimientoBodegaItemDto.Fecha) => sortDesc
+                ? query.OrderByDescending(k => k.fecha).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.fecha).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.ArticuloDescripcion) => sortDesc
+                ? query.OrderByDescending(k => k.articulo_ref!.descripcion).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.articulo_ref!.descripcion).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.Ingresos) => sortDesc
+                ? query.OrderByDescending(k => k.ingresos).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.ingresos).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.Salidas) => sortDesc
+                ? query.OrderByDescending(k => k.salidas).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.salidas).ThenBy(k => k.id),
+            nameof(MovimientoBodegaItemDto.Total) => sortDesc
+                ? query.OrderByDescending(k => k.total).ThenByDescending(k => k.id)
+                : query.OrderBy(k => k.total).ThenBy(k => k.id),
+            _ => query.OrderByDescending(k => k.fecha).ThenByDescending(k => k.id)
+        };
+
+    private static Expression<Func<alm_kardex, MovimientoBodegaItemDto>> ProyeccionBodega() => k => new MovimientoBodegaItemDto
+    {
+        Id = k.id,
+        Fecha = k.fecha,
+        NumeroDocumento = k.numero_documento,
+        TipoTransaccion = k.tipo_transaccion,
+        ArticuloId = k.articulo_id,
+        // Código del catálogo si está enlazado; si no, el snapshot SIMAFI (histórico sin re-enlazar).
+        ArticuloCodigo = k.articulo_ref != null ? k.articulo_ref.codigo_articulo : k.codigo_articulo,
+        ArticuloDescripcion = k.articulo_ref != null ? k.articulo_ref.descripcion : null,
+        Descripcion = k.descripcion,
+        Ingresos = k.ingresos,
+        Salidas = k.salidas,
+        ValorUnitario = k.valor_unitario,
+        Total = k.total,
+        ExistenciaResultante = k.existencia_resultante,
+        CostoPromedioResultante = k.costo_promedio_resultante,
+        DocumentoTipo = k.documento_tipo,
+        DocumentoId = k.documento_id,
+        UsuarioCreacion = k.usuariocreacion,
+        FechaCreacion = k.fechacreacion
+    };
+
+    // ── Impresión (PDF) del kardex ───────────────────────────────────────────
+
+    public async Task<IReadOnlyList<MovimientoBodegaItemDto>> GetMovimientosBodegaAsync(
+        MovimientosBodegaFilterDto filtro, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+        if (!filtro.BodegaId.HasValue)
+        {
+            return new List<MovimientoBodegaItemDto>();
+        }
+
+        // Para el PDF (libro imprimible) el orden es cronológico ASCENDENTE, y sin paginar.
+        return await AplicarFiltrosBodega(filtro)
+            .OrderBy(k => k.fecha).ThenBy(k => k.id)
+            .Select(ProyeccionBodega())
+            .ToListAsync(ct);
+    }
+
+    public async Task<MovimientosKardexImpresionDto> GetDatosImpresionArticuloAsync(
+        KardexFilterDto filtro, string impresoPor, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        var empresa = await CargarEmpresaAsync(ct);
+        var kardex = await GetByArticuloAsync(filtro, ct);
+
+        if (kardex is null)
+        {
+            return BuildImpresion(empresa, impresoPor, "ESTADO DE CUENTA POR ARTÍCULO", "Artículo no encontrado",
+                "Bodega", string.Empty, new List<MovimientoKardexImpresionRow>(), 0m, 0m);
+        }
+
+        // Estado de cuenta: el concepto se funde en la descripción (Compra · a proveedor X), la
+        // cantidad va con signo y se muestra el saldo valorizado; se quitan Doc./Tipo/Contexto.
+        var filas = kardex.Movimientos.Select(x => new MovimientoKardexImpresionRow
+        {
+            Fecha = x.Fecha.HasValue ? x.Fecha.Value.ToString("dd/MM/yyyy") : "—",
+            Descripcion = x.DescripcionCompleta,
+            Entradas = x.Ingresos,
+            Salidas = x.Salidas,
+            CantidadFirmada = x.CantidadFirmada,
+            ValorUnitario = x.ValorUnitario,
+            Saldo = x.Saldo,
+            SaldoValorizado = x.SaldoValorizado,
+            CostoPromedio = x.CostoPromedioCorrido,
+            ValorMovimiento = x.ValorMovimiento
+        }).ToList();
+
+        var subtitulo = string.IsNullOrWhiteSpace(kardex.Codigo) ? kardex.Descripcion : $"{kardex.Codigo} — {kardex.Descripcion}";
+        var bodegaTxt = filtro.BodegaId.HasValue
+            ? (kardex.Movimientos.FirstOrDefault(m => m.BodegaId == filtro.BodegaId)?.BodegaNombre ?? "bodega filtrada")
+            : "todas las bodegas";
+        var filtroTexto = $"{PeriodoTexto(filtro.FechaDesde, filtro.FechaHasta)} · {bodegaTxt}";
+
+        var dto = BuildImpresion(empresa, impresoPor, "ESTADO DE CUENTA POR ARTÍCULO", subtitulo,
+            "Bodega", filtroTexto, filas, kardex.TotalIngresos, kardex.TotalSalidas);
+
+        dto.ModoEstadoCuenta = true;
+        dto.ValorEntradas = kardex.ValorIngresos;
+        dto.ValorSalidas = kardex.ValorSalidas;
+        dto.SaldoValorizado = kardex.SaldoValorizado;
+        dto.CostoPromedioFinal = kardex.CostoPromedioActual;
+        dto.MuestraSaldoValorizado = true;
+        dto.CantidadAnterior = kardex.CantidadAnterior;
+        dto.ValorAnterior = kardex.ValorAnterior;
+        dto.CostoPromedioAnterior = kardex.CostoPromedioAnterior;
+
+        return dto;
+    }
+
+    public async Task<MovimientosKardexImpresionDto> GetDatosImpresionBodegaAsync(
+        MovimientosBodegaFilterDto filtro, string impresoPor, CancellationToken ct = default)
+    {
+        ArgumentNullException.ThrowIfNull(filtro);
+
+        var empresa = await CargarEmpresaAsync(ct);
+        var movs = await GetMovimientosBodegaAsync(filtro, ct);
+
+        var bodega = filtro.BodegaId.HasValue
+            ? await _context.alm_bodegas.AsNoTracking()
+                .Where(b => b.id == filtro.BodegaId.Value)
+                .Select(b => new { b.codigo, b.nombre })
+                .FirstOrDefaultAsync(ct)
+            : null;
+        var subtitulo = bodega != null ? $"Bodega: {bodega.codigo} — {bodega.nombre}" : "Bodega";
+
+        var filas = movs.Select(x => new MovimientoKardexImpresionRow
+        {
+            Fecha = x.Fecha.HasValue ? x.Fecha.Value.ToString("dd/MM/yyyy") : "—",
+            Documento = x.NumeroDocumento.HasValue ? x.NumeroDocumento.Value.ToString("0") : "—",
+            Tipo = x.TipoDescripcion,
+            Contexto = string.IsNullOrWhiteSpace(x.ArticuloCodigo) ? "—" : x.ArticuloCodigo,
+            Descripcion = x.ArticuloDescripcion ?? string.Empty,
+            Entradas = x.Ingresos,
+            Salidas = x.Salidas,
+            ValorUnitario = x.ValorUnitario,
+            Saldo = x.ExistenciaResultante,
+            // Snapshot del motor, no un corrido: el libro mezcla artículos y el promedio es por
+            // par (artículo, bodega). Viene NULL en el histórico migrado y se imprime "-".
+            CostoPromedio = x.CostoPromedioResultante,
+            ValorMovimiento = (x.Ingresos - x.Salidas) * x.ValorUnitario
+        }).ToList();
+
+        var dto = BuildImpresion(empresa, impresoPor, "MOVIMIENTOS POR BODEGA", subtitulo,
+            "Artículo", PeriodoTexto(filtro.FechaDesde, filtro.FechaHasta), filas,
+            movs.Sum(x => x.Ingresos), movs.Sum(x => x.Salidas));
+
+        dto.ValorEntradas = movs.Sum(x => x.Ingresos * x.ValorUnitario);
+        dto.ValorSalidas = movs.Sum(x => x.Salidas * x.ValorUnitario);
+        // Sin cierre valorizado: sumar los saldos de artículos distintos no significa nada.
+        dto.MuestraSaldoValorizado = false;
+
+        return dto;
+    }
+
+    private async Task<cfg_company?> CargarEmpresaAsync(CancellationToken ct)
+    {
+        var companyId = _company.GetCompanyId();
+        return await _context.cfg_companies.AsNoTracking()
+            .FirstOrDefaultAsync(c => c.company_id == companyId, ct);
+    }
+
+    private static string PeriodoTexto(DateOnly? desde, DateOnly? hasta)
+    {
+        if (desde.HasValue && hasta.HasValue) return $"Del {desde.Value:dd/MM/yyyy} al {hasta.Value:dd/MM/yyyy}";
+        if (desde.HasValue) return $"Desde {desde.Value:dd/MM/yyyy}";
+        if (hasta.HasValue) return $"Hasta {hasta.Value:dd/MM/yyyy}";
+        return "Todas las fechas";
+    }
+
+    private static MovimientosKardexImpresionDto BuildImpresion(
+        cfg_company? empresa, string impresoPor, string titulo, string subtitulo,
+        string columnaContexto, string filtroTexto, List<MovimientoKardexImpresionRow> filas,
+        decimal totalEntradas, decimal totalSalidas)
+        => new()
+        {
+            EmpresaNombre = empresa?.commercial_name ?? string.Empty,
+            EmpresaRazonSocial = empresa?.legal_name,
+            EmpresaRtn = empresa?.tax_id,
+            EmpresaDireccion = empresa?.address,
+            EmpresaTelefono = empresa?.phone,
+            EmpresaEmail = empresa?.email,
+            EmpresaLogo = empresa?.logo,
+            ImpresoPor = string.IsNullOrWhiteSpace(impresoPor) ? "sistema" : impresoPor.Trim(),
+            Titulo = titulo,
+            Subtitulo = subtitulo,
+            ColumnaContexto = columnaContexto,
+            FiltroTexto = filtroTexto,
+            Filas = filas,
+            TotalEntradas = totalEntradas,
+            TotalSalidas = totalSalidas
+        };
 }

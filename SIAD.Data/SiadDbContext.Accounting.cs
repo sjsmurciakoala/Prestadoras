@@ -1030,6 +1030,12 @@ public partial class SiadDbContext
         // Catálogo global de impuestos y sus tasas con vigencia (2026-07-14)
         ConfigureImpuestosModel(modelBuilder);
 
+        // Catálogo de retenciones a proveedores (global) + cuenta del pasivo por empresa (2026-08-06, F1)
+        ConfigureRetencionesModel(modelBuilder);
+
+        // Correo y notificaciones por empresa: conexión SendGrid + enrutamiento por área (2026-08-13)
+        ConfigureCorreoModel(modelBuilder);
+
         // Libretas globales — libro del lector, sin ciclo (2026-07-16)
         ConfigureLibretasModel(modelBuilder);
 

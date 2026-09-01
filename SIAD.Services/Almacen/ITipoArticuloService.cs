@@ -10,4 +10,10 @@ public interface ITipoArticuloService
     Task<TipoArticuloEditDto> CreateAsync(TipoArticuloEditDto dto, string user, CancellationToken ct = default);
     Task<TipoArticuloEditDto> UpdateAsync(int id, TipoArticuloEditDto dto, string user, CancellationToken ct = default);
     Task<bool> DeactivateAsync(int id, string user, CancellationToken ct = default);
+
+    /// <summary>
+    /// Tasas del ISV disponibles para asignar a un tipo (activas y vigentes hoy). Alimenta
+    /// el selector "ISV en compras" del formulario del tipo de artículo.
+    /// </summary>
+    Task<IReadOnlyList<TasaIsvOpcionDto>> GetTasasIsvAsync(CancellationToken ct = default);
 }

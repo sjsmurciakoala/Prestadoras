@@ -1,0 +1,149 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Contabilidad
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
+    <DataAnnotationsValidator />
+
+    @if (EditFormContext.GetValidationMessages().Any())
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atención</h6>
+            <ValidationSummary />
+        </div>
+    }
+
+    <div class="cm-form">
+        <div class="cm-section-label">Identidad</div>
+        <div class="cm-row cm-row-identidad">
+            <div class="cm-field">
+                <label class="cm-label">
+                    Código <span class="cm-req">*</span>
+                    <i class="bi bi-info-circle cm-info" title="Ancla estable del concepto: queda en el histórico y en los reportes. No lo cambie una vez usado."></i>
+                </label>
+                <DxTextBox @bind-Text="Model.Codigo" NullText="MERMA" MaxLength="20" CssClass="w-100" />
+                <div class="cm-hint">No lo cambie una vez usado.</div>
+                <ValidationMessage For="() => Model.Codigo" />
+            </div>
+            <div class="cm-field">
+                <label class="cm-label">Nombre <span class="cm-req">*</span></label>
+                <DxTextBox @bind-Text="Model.Nombre" NullText="Ej. Merma por vencimiento" MaxLength="80" CssClass="w-100" />
+                <div class="cm-hint">Se puede editar después sin romper el histórico.</div>
+                <ValidationMessage For="() => Model.Nombre" />
+            </div>
+        </div>
+
+        <div class="cm-section-label">Comportamiento</div>
+        <div class="cm-row cm-row-comportamiento">
+            <div class="cm-field">
+                <label class="cm-label">Tipo <span class="cm-req">*</span></label>
+                <DxComboBox Data="@ClasesDisponibles" TData="ClaseOpcion" TValue="string"
+                            @bind-Value="Model.Clase"
+                            ValueFieldName="@nameof(ClaseOpcion.Valor)"
+                            TextFieldName="@nameof(ClaseOpcion.Display)"
+                            NullText="Seleccione el tipo..."
+                            Enabled="@(!ClaseBloqueada)" CssClass="w-100" />
+                <ValidationMessage For="() => Model.Clase" />
+            </div>
+            <div class="cm-field cm-field-orden">
+                <label class="cm-label">Orden</label>
+                @* T explícito: Orden es short y MinValue/MaxValue son del mismo tipo T que Value. *@
+                <DxSpinEdit T="short" @bind-Value="Model.Orden" MinValue="0" MaxValue="999" CssClass="w-100" />
+                <div class="cm-hint">Posición en el combo de captura.</div>
+            </div>
+        </div>
+
+        @if (ClaseBloqueada)
+        {
+            <div class="cm-banda cm-banda-warning">
+                <i class="bi bi-lock-fill"></i>
+                <span>Este concepto ya tiene movimientos posteados: no se puede cambiar su tipo, porque reinterpretaría los asientos ya registrados. Si necesita otro comportamiento, cree un concepto nuevo.</span>
+            </div>
+        }
+        else
+        {
+            <div class="cm-banda cm-banda-info">
+                <i class="bi bi-lightbulb"></i>
+                <span>El tipo gobierna el inventario: <strong>Entrada</strong> suma y recalcula el costo · <strong>Salida</strong> resta al promedio vigente · <strong>Corrección de valor</strong> ajusta sólo el costo.</span>
+            </div>
+        }
+
+        <div class="cm-section-label">Contabilidad</div>
+        <div class="cm-field">
+            <label class="cm-label">Cuenta contable</label>
+            <DxComboBox Data="@CuentasContables" TData="CuentaContableLookupDto" TValue="string"
+                        @bind-Value="Model.CuentaContable"
+                        ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
+                        TextFieldName="@nameof(CuentaContableLookupDto.Display)"
+                        FilteringMode="DataGridFilteringMode.Contains"
+                        NullText="Hereda la cuenta del tipo de artículo"
+                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                        Enabled="@(CuentasContables.Count > 0)" CssClass="w-100" />
+            <div class="cm-hint">Opcional. Sólo se llena si el concepto exige una cuenta distinta (por ejemplo, una donación contra una cuenta de gasto).</div>
+            <ValidationMessage For="() => Model.CuentaContable" />
+        </div>
+
+        <div class="cm-section-label">Estado</div>
+        <div class="cm-row cm-row-estado">
+            <div class="cm-toggle-card">
+                <div>
+                    <div class="cm-toggle-title">Requiere autorización</div>
+                    <div class="cm-hint">Exige un permiso adicional para usarlo. No abre un flujo de aprobación.</div>
+                </div>
+                <DxCheckBox @bind-Checked="Model.RequiereAutorizacion" CheckType="CheckType.Switch" />
+            </div>
+            <div class="cm-toggle-card">
+                <div>
+                    <div class="cm-toggle-title">Activo</div>
+                    <div class="cm-hint">Inactivo se oculta de la captura; el histórico lo sigue mostrando.</div>
+                </div>
+                <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch" />
+            </div>
+            <div class="cm-toggle-card">
+                <div>
+                    <div class="cm-toggle-title">Notificar por correo</div>
+                    <div class="cm-hint">Solo salidas: avisa por correo al área Almacén cuando un artículo cruza bajo mínimo.</div>
+                </div>
+                <DxCheckBox @bind-Checked="Model.NotificaCorreo" CheckType="CheckType.Switch"
+                            Enabled="@(Model.Clase == "SALIDA")" />
+            </div>
+        </div>
+    </div>
+
+    <ValidationSummary class="text-danger mb-3" />
+
+    <div class="d-flex justify-content-end gap-2 mt-3">
+        <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!IsBusy)" Click="Cancel" />
+        <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar" SubmitFormOnClick="true" Enabled="@(!IsBusy)" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public TipoMovimientoAlmacenDto Model { get; set; } = default!;
+    [Parameter] public IReadOnlyList<CuentaContableLookupDto> CuentasContables { get; set; } = Array.Empty<CuentaContableLookupDto>();
+
+    /// <summary>
+    /// true = el concepto ya tiene movimientos posteados. Bloquea el tipo en la UI para que el
+    /// usuario vea la regla antes de intentarla; el servicio la impone igual del lado del servidor.
+    /// </summary>
+    [Parameter] public bool ClaseBloqueada { get; set; }
+
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+
+    /// <summary>Espejo de <c>ClaseAjusteInventario</c>, con el nombre que entiende el usuario.
+    /// En la UI se rotula "Tipo"; en el modelo el campo sigue siendo <c>Clase</c>.</summary>
+    public sealed record ClaseOpcion(string Valor, string Display);
+
+    private static readonly ClaseOpcion[] ClasesDisponibles =
+    [
+        new("ENTRADA", "Entrada — suma existencia"),
+        new("SALIDA",  "Salida — resta existencia"),
+        new("VALOR",   "Corrección de valor — sólo costo")
+    ];
+
+    private async Task HandleValidSubmit() { if (OnValidSubmit.HasDelegate) await OnValidSubmit.InvokeAsync(); }
+    private async Task Cancel() { if (OnCancel.HasDelegate) await OnCancel.InvokeAsync(); }
+}

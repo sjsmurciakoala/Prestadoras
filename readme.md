@@ -31,6 +31,48 @@ El objetivo es migrar el sistema SIAD (actualmente en ASPNET_Core_3) hacia una s
 - QA: despliegue automatizado vía pipeline, seeds controlados por migraciones.
 - Producción: configuración externa de cadenas de conexión y secrets, pipelines aprobados manualmente.
 
+### 2.4.1 Credenciales locales — `appsettings.Local.json`
+
+**Ninguna credencial real entra al repo.** Los `appsettings.json` / `appsettings.Development.json`
+versionados llevan sólo plantillas con el marcador `__SET_IN_appsettings.Local.json__`. La cadena de
+conexión real (host, base, usuario, contraseña) y las API keys de cada entorno viven en un
+`appsettings.Local.json` por host, que está en `.gitignore` (`**/appsettings.Local.json`) y excluido
+del publish vía `<Content Update="appsettings.Local.json" CopyToPublishDirectory="Never" ...>` en el
+`.csproj` de cada host.
+
+Cada host lo carga al final de la cadena de configuración
+(`builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, ...)`), por lo que sus
+valores **ganan** sobre `appsettings.json` y `appsettings.{Environment}.json`.
+
+Al clonar el repo hay que crear el archivo a mano en cada host que se vaya a correr —
+`apc/`, `apc.BancosWs/` y `apc.MobileApi/`:
+
+```jsonc
+// apc/appsettings.Local.json  (gitignored — NO commitear)
+{
+  "ConnectionStrings": {
+    "DefaultConnection": "Host=localhost;Port=5432;Database=<base>;Username=postgres;Password=<password>;Timeout=10;SslMode=Disable"
+  },
+  // Sólo el portal (apc): claves de mapas, si se usan.
+  "Maps": {
+    "AzureApiKey": "<key>",
+    "GoogleApiKey": "<key>"
+  }
+}
+```
+
+Sin el archivo la app arranca pero falla al conectar, porque la cadena versionada trae el marcador
+en lugar de una base y una contraseña reales.
+
+Notas:
+- Para apuntar a otro servidor (mirror, desarrollo, producción) se cambia **este** archivo, nunca el
+  `appsettings.json` versionado.
+- El servidor on-prem mantiene su propio `appsettings.Local.json`; el publish viaja sin credenciales.
+- La API key de SendGrid **no** va aquí: se guarda cifrada por empresa en `cfg_correo.api_key_cifrada`
+  (ASP.NET Core DataProtection) y se administra desde la pantalla de configuración de correo.
+- Para correr los tests, la cadena va en la variable de entorno `SIAD_TEST_DB`, no en un archivo
+  (ver [SIAD.Tests/README.md](SIAD.Tests/README.md)).
+
 ### 2.5 Estructura interna sugerida
 - SIAD.Core/
   - Domain/Entities
@@ -86,7 +128,7 @@ El objetivo es migrar el sistema SIAD (actualmente en ASPNET_Core_3) hacia una s
     dotnet restore
 ## 2.7 Scaffold
  * dotnet tool run dotnet-ef dbcontext scaffold `
-    "Host=3.208.232.209;Port=5432;Database=bdnes;Username=postgres;Password=Koala@2021;Timeout=10;SslMode=Prefer" `
+    "Host=3.208.232.209;Port=5432;Database=bdnes;Username=postgres;Password=<password>;Timeout=10;SslMode=Prefer" `
     Npgsql.EntityFrameworkCore.PostgreSQL `
     -p SIAD.Data/SIAD.Data.csproj `
     -s apc/apc.csproj `

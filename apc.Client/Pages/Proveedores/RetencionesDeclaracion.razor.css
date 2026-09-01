@@ -1,0 +1,13 @@
+/* Específico de la pantalla; el look del grid vive en apc/wwwroot/css/siad-grid.css. */
+
+.form-label-sm {
+    display: block;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: var(--bs-secondary-color, #6c757d);
+    margin-bottom: 0.15rem;
+}
+
+.total-declarar {
+    font-size: 0.9rem;
+}

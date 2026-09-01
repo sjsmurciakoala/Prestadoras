@@ -1,0 +1,302 @@
+@page "/almacen/valuacion-inventario"
+@attribute [Authorize(Policy = PermissionNames.Inventario.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject ValuacionInventarioClient ValuacionClient
+@inject BodegasClient BodegasClient
+@inject TiposArticuloClient TiposClient
+
+<PageTitle>SIAD - Valuación de inventario</PageTitle>
+
+<div class="page-container">
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Valuación de inventario</h2>
+            <p class="page-subtitle">Existencia y valor por artículo a una fecha de corte (reconstruido del kardex)</p>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Líneas</div>
+                <div class="summary-value">@totalLineas.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-6 col-md-3">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Bodegas</div>
+                <div class="summary-value">@totalBodegas.ToString("N0")</div>
+            </div>
+        </div>
+        <div class="col-12 col-md-6">
+            <div class="modern-card summary-card">
+                <div class="summary-label">Valor del inventario @(fechaCorte.HasValue ? $"al {fechaCorte.Value:dd/MM/yyyy}" : "")</div>
+                <div class="summary-value">@valorTotal.ToString("N2")</div>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="alert alert-info d-flex align-items-center mb-3" role="alert">
+        <i class="bi bi-info-circle me-2"></i>
+        <span>La valuación parte de la <strong>carga inicial</strong> del inventario: reconstruye el saldo con los movimientos posteados por el sistema. Los movimientos históricos migrados de SIMAFI no entran en el cálculo.</span>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@items" KeyFieldName="@nameof(ExistenciaBodegaItemDto.Id)" PageSize="50"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 25, 50, 100, 200 }"
+                    PagerPosition="GridPagerPosition.Bottom" ShowGroupPanel="false"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer" FocusedRowEnabled="false"
+                    AutoExpandAllGroupRows="true" CssClass="grid-solicitudes">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <div class="d-flex align-items-center me-1">
+                            <span class="text-muted small fw-semibold me-2">Corte al</span>
+                            <DxDateEdit Date="@fechaCorte" DateChanged="@((DateTime? d) => OnFechaChanged(d))"
+                                        NullText="Hoy" Style="min-width: 150px;" />
+                        </div>
+
+                        <DxComboBox Data="@bodegas" Value="@filtroBodegaId"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)"
+                                    TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Todas las bodegas"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((int? v) => OnBodegaChanged(v))"
+                                    Style="min-width: 190px;" CssClass="me-1" />
+
+                        <DxComboBox Data="@tipos" Value="@filtroTipoId"
+                                    ValueFieldName="@nameof(TipoArticuloLookupDto.Id)"
+                                    TextFieldName="@nameof(TipoArticuloLookupDto.Display)"
+                                    NullText="Todos los tipos"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    ValueChanged="@((int? v) => OnTipoChanged(v))"
+                                    Style="min-width: 190px;" CssClass="me-1" />
+
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)"
+                                   Placeholder="Buscar artículo..." InputDelay="600"
+                                   ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="me-1"
+                                   Style="min-width: 200px;" />
+
+                        <DxButton Text="Ver PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarPdf" CssClass="ms-auto me-1" />
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-3" />
+
+                        <div class="text-muted small">
+                            Total: <span class="fw-bold">@totalLineas.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(ExistenciaBodegaItemDto.BodegaDisplay)" Caption="Bodega" GroupIndex="0" />
+
+                    <DxGridDataColumn FieldName="@nameof(ExistenciaBodegaItemDto.ArticuloDescripcion)" Caption="Artículo" MinWidth="260">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ExistenciaBodegaItemDto m)
+                            {
+                                <div class="articulo-cell">
+                                    <div class="articulo-title" title="@m.ArticuloDescripcion">@m.ArticuloDescripcion</div>
+                                    <div class="articulo-sub">
+                                        <i class="bi bi-upc"></i>
+                                        <span>@(string.IsNullOrWhiteSpace(m.ArticuloCodigo) ? "—" : m.ArticuloCodigo)</span>
+                                    </div>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ExistenciaBodegaItemDto.UnidadMedida)" Caption="Unidad" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ExistenciaBodegaItemDto m)
+                            {
+                                <span class="text-muted">@(string.IsNullOrWhiteSpace(m.UnidadMedida) ? "—" : m.UnidadMedida)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ExistenciaBodegaItemDto.TipoArticulo)" Caption="Tipo" MinWidth="160" Visible="false">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ExistenciaBodegaItemDto m)
+                            {
+                                <span class="text-muted" title="@m.TipoArticulo">@(string.IsNullOrWhiteSpace(m.TipoArticulo) ? "—" : m.TipoArticulo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ExistenciaBodegaItemDto.Existencia)" Caption="Existencia" Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ExistenciaBodegaItemDto m)
+                            {
+                                <span class="text-dark">@m.Existencia.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ExistenciaBodegaItemDto.CostoPromedio)" Caption="Costo prom." Width="120px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ExistenciaBodegaItemDto m)
+                            {
+                                <span class="text-muted">@m.CostoPromedio.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(ExistenciaBodegaItemDto.Valor)" Caption="Valor" Width="140px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is ExistenciaBodegaItemDto m)
+                            {
+                                <span class="text-dark fw-semibold">@m.Valor.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <GroupSummary>
+                    <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" FieldName="@nameof(ExistenciaBodegaItemDto.Valor)" ValueDisplayFormat="N2" />
+                    <DxGridSummaryItem SummaryType="GridSummaryItemType.Count" FieldName="@nameof(ExistenciaBodegaItemDto.ArticuloId)" />
+                </GroupSummary>
+
+                <TotalSummary>
+                    <DxGridSummaryItem SummaryType="GridSummaryItemType.Sum" FieldName="@nameof(ExistenciaBodegaItemDto.Valor)"
+                                       DisplayText="Valor total: {0}" ValueDisplayFormat="N2" />
+                </TotalSummary>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay inventario valorizado para la fecha y los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+
+    <PdfPreviewPopup @ref="pdfPopup" />
+</div>
+
+@code {
+    private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
+
+    private List<ExistenciaBodegaItemDto> items = new();
+    private List<BodegaLookupDto> bodegas = new();
+    private List<TipoArticuloLookupDto> tipos = new();
+
+    private DateTime? fechaCorte = DateTime.Today;
+    private int? filtroBodegaId;
+    private int? filtroTipoId;
+    private string filtroBusqueda = string.Empty;
+
+    private int totalLineas;
+    private int totalBodegas;
+    private decimal valorTotal;
+
+    private bool isLoading;
+    private string? errorMessage;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await CargarCatalogosAsync();
+        await CargarAsync();
+    }
+
+    private ValuacionInventarioFilterDto BuildFilter() => new()
+    {
+        FechaCorte = fechaCorte.HasValue ? DateOnly.FromDateTime(fechaCorte.Value) : DateOnly.FromDateTime(DateTime.Today),
+        BodegaId = filtroBodegaId,
+        TipoArticuloId = filtroTipoId,
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda
+    };
+
+    private async Task CargarCatalogosAsync()
+    {
+        try
+        {
+            bodegas = await BodegasClient.GetLookupAsync();
+            tipos = await TiposClient.GetLookupAsync();
+        }
+        catch
+        {
+            bodegas = new List<BodegaLookupDto>();
+            tipos = new List<TipoArticuloLookupDto>();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            items = await ValuacionClient.GetAsync(BuildFilter());
+
+            totalLineas = items.Count;
+            totalBodegas = items.Select(i => i.BodegaId).Distinct().Count();
+            valorTotal = items.Sum(i => i.Valor);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudo cargar la valuación: {ex.Message}";
+            items = new List<ExistenciaBodegaItemDto>();
+            totalLineas = 0;
+            totalBodegas = 0;
+            valorTotal = 0m;
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnFechaChanged(DateTime? valor)
+    {
+        fechaCorte = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnBodegaChanged(int? valor)
+    {
+        filtroBodegaId = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnTipoChanged(int? valor)
+    {
+        filtroTipoId = valor;
+        await CargarAsync();
+    }
+
+    private async Task OnBusquedaChanged(string valor)
+    {
+        filtroBusqueda = valor;
+        await CargarAsync();
+    }
+
+    private void MostrarPdf()
+        => pdfPopup?.Mostrar(ValuacionClient.GetPdfUrl(BuildFilter()), "Valuación de inventario");
+
+    private async Task ExportExcelAsync()
+    {
+        if (grid is null)
+        {
+            return;
+        }
+
+        var stamp = DateTime.Now.ToString("yyyyMMdd_HHmm");
+        await grid.ExportToXlsxAsync($"valuacion_inventario_{stamp}.xlsx", new GridXlExportOptions());
+    }
+}

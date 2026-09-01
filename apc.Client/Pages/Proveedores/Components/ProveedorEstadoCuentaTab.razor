@@ -1,0 +1,649 @@
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Proveedores
+@using apc.Client.Services
+@using apc.Client.Services.Proveedores
+
+@inject ProveedorEstadoCuentaClient EstadoCuentaClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+@inject IJSRuntime JS
+
+@* Estado de cuenta del proveedor: resumen, antigüedad, documentos por pagar y libro de
+   movimientos. Lo usan la página /proveedores/{codigo}/estado-cuenta y la pestaña del detalle. *@
+
+<div class="estado-cuenta">
+
+    <DxToastProvider Name="ProveedorEstadoCuentaToast" MaxToastCount="3" StickToViewport="true" />
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">
+            <i class="bi bi-exclamation-triangle me-2"></i>@errorMessage
+        </div>
+    }
+
+    @if (isLoading)
+    {
+        <div class="text-center p-4">
+            <DxLoadingPanel Visible="true" Text="Cargando estado de cuenta..." />
+            <div style="height:80px"></div>
+        </div>
+    }
+    else if (estado is not null)
+    {
+        var r = estado.Resumen;
+
+        <!-- KPIs -->
+        <div class="row g-3 mb-1">
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label">Saldo total</div>
+                    <div class="kpi-value">@r.SaldoTotal.ToString("N2")</div>
+                    <div class="kpi-sub">@r.DocumentosPendientes documento(s) con saldo</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label"><span class="dot bad"></span>Vencido</div>
+                    <div class="kpi-value text-danger">@r.SaldoVencido.ToString("N2")</div>
+                    <div class="kpi-sub">@PorcentajeVencidoTexto</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label"><span class="dot warn"></span>Vence en 7 días</div>
+                    <div class="kpi-value text-warning">@r.SaldoVence7Dias.ToString("N2")</div>
+                    <div class="kpi-sub">dentro de plazo</div>
+                </div>
+            </div>
+            <div class="col-6 col-lg-3">
+                <div class="kpi-card">
+                    <div class="kpi-label">Último pago</div>
+                    <div class="kpi-value">@(r.UltimoPagoMonto.HasValue ? r.UltimoPagoMonto.Value.ToString("N2") : "—")</div>
+                    <div class="kpi-sub">@(r.UltimoPagoFecha.HasValue ? r.UltimoPagoFecha.Value.ToString("dd/MM/yyyy") : "sin pagos registrados")</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Antigüedad -->
+        <div class="modern-card mb-3">
+            <div class="d-flex align-items-baseline gap-2 mb-3">
+                <h5 class="m-0 seccion-titulo">Antigüedad del saldo</h5>
+                <span class="text-muted small">días transcurridos desde el vencimiento</span>
+            </div>
+
+            @if (r.SaldoTotal <= 0)
+            {
+                <div class="text-muted small">Este proveedor no tiene saldo pendiente.</div>
+            }
+            else
+            {
+                <div class="aging-bar" role="img" aria-label="@AntiguedadResumenTexto">
+                    @foreach (var tramo in Tramos)
+                    {
+                        var ancho = PorcentajeTramo(tramo.Monto);
+                        if (ancho > 0)
+                        {
+                            <div class="aging-seg @tramo.Css" style="width:@(ancho.ToString(Cultura))%"
+                                 title="@tramo.Titulo: @tramo.Monto.ToString("N2")">
+                                @(ancho >= 8 ? $"{Math.Round(ancho)}%" : string.Empty)
+                            </div>
+                        }
+                    }
+                </div>
+
+                <div class="aging-legend">
+                    @foreach (var tramo in Tramos)
+                    {
+                        <span class="legend-item">
+                            <span class="legend-dot @tramo.Css"></span>
+                            <span class="legend-amount">@tramo.Monto.ToString("N2")</span>
+                            <span class="text-muted">@tramo.Titulo</span>
+                        </span>
+                    }
+                </div>
+            }
+        </div>
+
+        <!-- Documentos y movimientos -->
+        <div class="modern-card position-relative">
+            <DxTabs @bind-ActiveTabIndex="activeTabIndex" CssClass="mb-3">
+                <DxTabPage Text="Documentos pendientes">
+                    <ContentTemplate>
+                        @if (activeTabIndex == 0)
+                        {
+                            <div class="grid-wrapper">
+                                <DxGrid @ref="gridDocumentos" Data="@documentos"
+                                        KeyFieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.ClaveGrid)"
+                                        PageSize="15" PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="new int[] { 10, 15, 25, 50, 100 }"
+                                        PagerPosition="GridPagerPosition.Bottom"
+                                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                    <ToolbarTemplate>
+                                        <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                                            <DxComboBox Data="@origenesFiltro" Value="@origenFiltro"
+                                                        ValueChanged="@((short? v) => OnOrigenChanged(v))"
+                                                        ValueExpression="@(() => origenFiltro)"
+                                                        ValueFieldName="@nameof(OrigenFiltroItem.Id)"
+                                                        TextFieldName="@nameof(OrigenFiltroItem.Nombre)"
+                                                        NullText="Todos los orígenes"
+                                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                        Style="min-width: 190px;" />
+                                            <div class="d-flex align-items-center me-2">
+                                                <DxCheckBox Checked="@soloPendientes"
+                                                            CheckedChanged="@((bool v) => OnSoloPendientesChanged(v))"
+                                                            CheckType="CheckType.Switch">Solo con saldo</DxCheckBox>
+                                            </div>
+                                            <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                                      RenderStyle="ButtonRenderStyle.Secondary"
+                                                      Click="@(() => gridDocumentos?.ShowColumnChooser())" CssClass="me-1" />
+                                            <DxButton Text="Imprimir PDF" IconCssClass="bi bi-printer"
+                                                      RenderStyle="ButtonRenderStyle.Primary"
+                                                      Click="AbrirPdf" CssClass="me-1" />
+                                            <div class="ms-auto text-muted small">
+                                                Saldo en pantalla: <span class="fw-bold">@SaldoEnPantalla.ToString("N2")</span>
+                                            </div>
+                                        </div>
+                                    </ToolbarTemplate>
+                                    <Columns>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.Fecha)"
+                                                          Caption="Fecha" Width="110px" DisplayFormat="d" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.FechaVencimiento)"
+                                                          Caption="Vence" Width="120px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaDocumentoDto d)
+                                                {
+                                                    <div class="d-flex flex-column">
+                                                        <span>@d.FechaVencimiento.ToString("dd/MM/yyyy")</span>
+                                                        <span class="small @(d.Vencido ? "text-danger fw-bold" : "text-muted")">
+                                                            @DiasTexto(d)
+                                                        </span>
+                                                    </div>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.OrigenDescripcion)"
+                                                          Caption="Origen" Width="130px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaDocumentoDto d)
+                                                {
+                                                    <span class="chip-origen @(d.Origen == OrigenDocumentoProveedor.Compra ? "chip-compra" : "chip-compromiso")">
+                                                        @d.OrigenDescripcion
+                                                    </span>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.NumeroDocumento)"
+                                                          Caption="Documento" Width="180px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaDocumentoDto d)
+                                                {
+                                                    <span class="font-monospace small">@d.NumeroDocumento</span>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.Concepto)"
+                                                          Caption="Concepto" MinWidth="200" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.Monto)"
+                                                          Caption="Monto" Width="130px"
+                                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.Abonado)"
+                                                          Caption="Abonado" Width="130px"
+                                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.Saldo)"
+                                                          Caption="Saldo" Width="130px"
+                                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaDocumentoDto.EstadoDescripcion)"
+                                                          Caption="Estado" Width="120px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaDocumentoDto d)
+                                                {
+                                                    <span class="badge-status @EstadoCss(d)">@EstadoTexto(d)</span>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn Caption="" Width="60px" AllowSort="false">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaDocumentoDto d)
+                                                {
+                                                    <button class="btn-icon btn-view" title="Ir al documento"
+                                                            @onclick="@(() => AbrirDocumento(d))">
+                                                        <i class="bi bi-box-arrow-up-right"></i>
+                                                    </button>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                    </Columns>
+                                    <EmptyDataAreaTemplate>
+                                        <div class="p-4 text-center text-muted">
+                                            <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.5"></i>
+                                            @(soloPendientes
+                                                ? "Este proveedor no tiene documentos con saldo."
+                                                : "Este proveedor no tiene documentos registrados.")
+                                        </div>
+                                    </EmptyDataAreaTemplate>
+                                </DxGrid>
+                            </div>
+                        }
+                    </ContentTemplate>
+                </DxTabPage>
+
+                <DxTabPage Text="Movimientos">
+                    <ContentTemplate>
+                        @if (activeTabIndex == 1)
+                        {
+                            <div class="d-flex flex-wrap gap-2 align-items-center mb-3">
+                                <label class="text-muted small mb-0">Desde:</label>
+                                <DxDateEdit @bind-Date="filtroDesde" NullText="—"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                            CssClass="filtro-fecha" />
+                                <label class="text-muted small mb-0">Hasta:</label>
+                                <DxDateEdit @bind-Date="filtroHasta" NullText="—"
+                                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                            CssClass="filtro-fecha" />
+                                <DxButton Text="Aplicar" IconCssClass="bi bi-funnel"
+                                          RenderStyle="ButtonRenderStyle.Primary" Click="CargarMovimientosAsync" />
+                                <DxButton Text="Limpiar" RenderStyle="ButtonRenderStyle.Secondary"
+                                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="LimpiarFiltroFechas" />
+                                <div class="ms-auto text-muted small">
+                                    Movimientos: <span class="fw-bold">@movimientos.Count.ToString("N0")</span>
+                                </div>
+                            </div>
+
+                            <div class="alert alert-light border small py-2 mb-3">
+                                <i class="bi bi-info-circle me-1"></i>
+                                El filtro acota las filas visibles; el saldo de cada línea es el acumulado
+                                histórico real del proveedor.
+                            </div>
+
+                            <div class="grid-wrapper">
+                                <DxGrid Data="@movimientos" PageSize="20" PageSizeSelectorVisible="true"
+                                        PageSizeSelectorItems="new int[] { 10, 20, 50, 100 }"
+                                        PagerPosition="GridPagerPosition.Bottom"
+                                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                                    <Columns>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.Fecha)"
+                                                          Caption="Fecha" Width="110px" DisplayFormat="d" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.TipoDescripcion)"
+                                                          Caption="Tipo" Width="100px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaMovimientoDto m)
+                                                {
+                                                    <span class="@(m.Tipo == TipoMovimientoProveedor.Abono ? "text-success" : "text-dark")">
+                                                        @m.TipoDescripcion
+                                                    </span>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.OrigenDescripcion)"
+                                                          Caption="Origen" Width="130px">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaMovimientoDto m)
+                                                {
+                                                    <span class="chip-origen @(m.Origen == OrigenDocumentoProveedor.Compra ? "chip-compra" : "chip-compromiso")">
+                                                        @m.OrigenDescripcion
+                                                    </span>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.NumeroDocumento)"
+                                                          Caption="Documento" MinWidth="200">
+                                            <CellDisplayTemplate Context="cell">
+                                                @if (cell.DataItem is ProveedorEstadoCuentaMovimientoDto m)
+                                                {
+                                                    <span class="font-monospace small">@m.NumeroDocumento</span>
+                                                }
+                                            </CellDisplayTemplate>
+                                        </DxGridDataColumn>
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.Referencia)"
+                                                          Caption="Referencia" MinWidth="180" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.Cargo)"
+                                                          Caption="Cargo" Width="120px"
+                                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.Abono)"
+                                                          Caption="Abono" Width="120px"
+                                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+                                        <DxGridDataColumn FieldName="@nameof(ProveedorEstadoCuentaMovimientoDto.SaldoCorrido)"
+                                                          Caption="Saldo" Width="130px"
+                                                          TextAlignment="GridTextAlignment.Right" DisplayFormat="N2" />
+                                    </Columns>
+                                    <EmptyDataAreaTemplate>
+                                        <div class="p-4 text-center text-muted">
+                                            <i class="bi bi-inbox d-block mb-2" style="font-size:2rem;opacity:.5"></i>
+                                            No hay movimientos en el rango seleccionado.
+                                        </div>
+                                    </EmptyDataAreaTemplate>
+                                </DxGrid>
+                            </div>
+                        }
+                    </ContentTemplate>
+                </DxTabPage>
+            </DxTabs>
+        </div>
+
+        <!-- Alcance del saldo: es la nota que evita que esto se reporte como bug contable. -->
+        <div class="scope-note mt-3">
+            <b>Alcance del saldo.</b> Suma los documentos que registra el portal —facturas de compra
+            y compromisos de pago directo— menos sus abonos vigentes. No incluye la cartera histórica
+            de SIMAFI, que vive en la cuenta contable del proveedor y no tiene documentos operativos
+            en el sistema, por lo que este saldo puede diferir del mayor.
+        </div>
+    }
+</div>
+
+<PdfPreviewPopup @ref="pdfPopup" />
+
+@code {
+    [Parameter, EditorRequired]
+    public string Codigo { get; set; } = string.Empty;
+
+    /// <summary>Se dispara al cargar el resumen, para que el anfitrión muestre la identidad.</summary>
+    [Parameter]
+    public EventCallback<ProveedorEstadoCuentaDto?> OnResumenCargado { get; set; }
+
+    private static readonly System.Globalization.CultureInfo Cultura =
+        System.Globalization.CultureInfo.InvariantCulture;
+
+    private ProveedorEstadoCuentaDto? estado;
+    private readonly List<ProveedorEstadoCuentaDocumentoDto> documentosTodos = new();
+    private readonly List<ProveedorEstadoCuentaDocumentoDto> documentos = new();
+    private readonly List<ProveedorEstadoCuentaMovimientoDto> movimientos = new();
+
+    private DxGrid? gridDocumentos;
+    private PdfPreviewPopup? pdfPopup;
+    private int activeTabIndex;
+    private bool isLoading = true;
+    private bool movimientosCargados;
+    private string? errorMessage;
+
+    private bool soloPendientes = true;
+    private short? origenFiltro;
+    private DateTime? filtroDesde;
+    private DateTime? filtroHasta;
+
+    private string? codigoCargado;
+
+    private sealed record OrigenFiltroItem(short? Id, string Nombre);
+
+    private readonly OrigenFiltroItem[] origenesFiltro =
+    {
+        new(OrigenDocumentoProveedor.Compra, "Compras"),
+        new(OrigenDocumentoProveedor.Compromiso, "Compromisos")
+    };
+
+    private sealed record TramoAntiguedad(string Titulo, decimal Monto, string Css);
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (string.Equals(codigoCargado, Codigo, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        codigoCargado = Codigo;
+        activeTabIndex = 0;
+        movimientosCargados = false;
+        await CargarAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        // El libro se pide sólo cuando el usuario abre su pestaña.
+        if (activeTabIndex == 1 && !movimientosCargados && !isLoading)
+        {
+            movimientosCargados = true;
+            await CargarMovimientosAsync();
+        }
+    }
+
+    private async Task CargarAsync()
+    {
+        if (string.IsNullOrWhiteSpace(Codigo))
+        {
+            return;
+        }
+
+        isLoading = true;
+        errorMessage = null;
+
+        try
+        {
+            estado = await EstadoCuentaClient.ObtenerResumenAsync(Codigo);
+
+            if (estado is null)
+            {
+                errorMessage = "No se encontró el proveedor.";
+                documentosTodos.Clear();
+                AplicarFiltroOrigen();
+                return;
+            }
+
+            await CargarDocumentosAsync();
+
+            if (OnResumenCargado.HasDelegate)
+            {
+                await OnResumenCargado.InvokeAsync(estado);
+            }
+        }
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = "Su sesión expiró o no tiene permiso para ver el estado de cuenta.";
+        }
+        catch (Exception ex)
+        {
+            errorMessage = "No se pudo cargar el estado de cuenta.";
+            MostrarError(ex);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task CargarDocumentosAsync()
+    {
+        var filas = await EstadoCuentaClient.ObtenerDocumentosAsync(Codigo, soloPendientes: soloPendientes);
+
+        documentosTodos.Clear();
+        foreach (var fila in filas)
+        {
+            documentosTodos.Add(fila);
+        }
+
+        AplicarFiltroOrigen();
+    }
+
+    private async Task CargarMovimientosAsync()
+    {
+        try
+        {
+            var desde = filtroDesde.HasValue ? DateOnly.FromDateTime(filtroDesde.Value) : (DateOnly?)null;
+            var hasta = filtroHasta.HasValue ? DateOnly.FromDateTime(filtroHasta.Value) : (DateOnly?)null;
+
+            var filas = await EstadoCuentaClient.ObtenerMovimientosAsync(Codigo, desde, hasta);
+
+            movimientos.Clear();
+            foreach (var fila in filas)
+            {
+                movimientos.Add(fila);
+            }
+
+            movimientosCargados = true;
+            StateHasChanged();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            errorMessage = "Su sesión expiró o no tiene permiso para ver el estado de cuenta.";
+        }
+        catch (Exception ex)
+        {
+            MostrarError(ex);
+        }
+    }
+
+    // Filtro por origen en memoria: la consulta ya viene acotada al proveedor, así que es un
+    // recorrido corto. Sin LINQ, como el resto del proyecto.
+    private void AplicarFiltroOrigen()
+    {
+        documentos.Clear();
+        foreach (var doc in documentosTodos)
+        {
+            if (origenFiltro is null || doc.Origen == origenFiltro.Value)
+            {
+                documentos.Add(doc);
+            }
+        }
+    }
+
+    private void OnOrigenChanged(short? valor)
+    {
+        origenFiltro = valor;
+        AplicarFiltroOrigen();
+    }
+
+    private async Task OnSoloPendientesChanged(bool valor)
+    {
+        soloPendientes = valor;
+        await CargarDocumentosAsync();
+    }
+
+    private async Task LimpiarFiltroFechas()
+    {
+        filtroDesde = null;
+        filtroHasta = null;
+        await CargarMovimientosAsync();
+    }
+
+    // El PDF refleja el mismo alcance que el grid: si el usuario apagó "Solo con saldo",
+    // el reporte también trae los documentos ya pagados.
+    private void AbrirPdf()
+    {
+        var url = ProveedorEstadoCuentaClient.GetPdfUrl(Codigo, soloPendientes: soloPendientes);
+        pdfPopup?.Mostrar(url, "Estado de cuenta del proveedor");
+    }
+
+    private void AbrirDocumento(ProveedorEstadoCuentaDocumentoDto documento)
+    {
+        var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
+
+        if (documento.Origen == OrigenDocumentoProveedor.Compromiso)
+        {
+            var safeCodigo = Uri.EscapeDataString(Codigo);
+            Navigation.NavigateTo(
+                $"/proveedores/compromisos-proveedor?proveedor={safeCodigo}&originUrl={originUrl}");
+            return;
+        }
+
+        // Las facturas de compra se gestionan (y se pagan) en la vista de pagos de compras.
+        Navigation.NavigateTo("/almacen/compras/pagos");
+    }
+
+    private string GetCurrentRelativeUrl()
+    {
+        var relative = Navigation.ToBaseRelativePath(Navigation.Uri);
+        if (string.IsNullOrWhiteSpace(relative))
+        {
+            return "/proveedores";
+        }
+
+        return relative.StartsWith("/", StringComparison.Ordinal) ? relative : $"/{relative}";
+    }
+
+    private void MostrarError(Exception ex)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "ProveedorEstadoCuentaToast",
+            Title = "Estado de cuenta",
+            Text = ex.Message,
+            RenderStyle = ToastRenderStyle.Danger
+        });
+
+    // ---------------------------------------------------------------- Presentación
+
+    private List<TramoAntiguedad> Tramos
+    {
+        get
+        {
+            var r = estado?.Resumen ?? new ProveedorEstadoCuentaResumenDto();
+            return new List<TramoAntiguedad>
+            {
+                new("Corriente", r.AntiguedadCorriente, "seg-corriente"),
+                new("1 – 30 días", r.Antiguedad30, "seg-30"),
+                new("31 – 60 días", r.Antiguedad60, "seg-60"),
+                new("61 – 90 días", r.Antiguedad90, "seg-90"),
+                new("Más de 90 días", r.AntiguedadMas90, "seg-mas")
+            };
+        }
+    }
+
+    private double PorcentajeTramo(decimal monto)
+    {
+        var total = estado?.Resumen.SaldoTotal ?? 0m;
+        if (total <= 0 || monto <= 0)
+        {
+            return 0;
+        }
+
+        return (double)(monto / total) * 100d;
+    }
+
+    private string PorcentajeVencidoTexto
+    {
+        get
+        {
+            var r = estado?.Resumen;
+            if (r is null || r.SaldoTotal <= 0)
+            {
+                return "sin saldo";
+            }
+
+            var pct = Math.Round(r.SaldoVencido / r.SaldoTotal * 100m);
+            return $"{pct:N0}% del saldo";
+        }
+    }
+
+    private string AntiguedadResumenTexto
+    {
+        get
+        {
+            var partes = new List<string>();
+            foreach (var tramo in Tramos)
+            {
+                partes.Add($"{tramo.Titulo}: {tramo.Monto:N2}");
+            }
+
+            return string.Join("; ", partes);
+        }
+    }
+
+    private decimal SaldoEnPantalla
+    {
+        get
+        {
+            decimal total = 0m;
+            foreach (var doc in documentos)
+            {
+                total += doc.Saldo;
+            }
+
+            return total;
+        }
+    }
+
+    private static string DiasTexto(ProveedorEstadoCuentaDocumentoDto d)
+        => d.DiasVencido > 0
+            ? $"vencido {d.DiasVencido} d"
+            : d.DiasVencido == 0 ? "vence hoy" : $"faltan {-d.DiasVencido} d";
+
+    private static string EstadoCss(ProveedorEstadoCuentaDocumentoDto d)
+    {
+        if (d.EstadoId == EstadoCompraCxp.Pagada) return "active";
+        return d.Vencido ? "vencido" : "pendiente";
+    }
+
+    private static string EstadoTexto(ProveedorEstadoCuentaDocumentoDto d)
+        => d.Vencido && d.EstadoId != EstadoCompraCxp.Pagada ? "Vencido" : d.EstadoDescripcion;
+}

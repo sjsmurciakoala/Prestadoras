@@ -1,0 +1,12 @@
+/* Estilos específicos de la consulta de retenciones (F4). El look del grid y las tarjetas
+   (page-container, modern-card, badge-status, grid-solicitudes) vive en apc/wwwroot/css/siad-grid.css. */
+
+.detalle-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+    margin-bottom: 12px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--dxbl-border-color, #e0e0e0);
+}

@@ -1,0 +1,41 @@
+@* Visor de PDF EMBEBIDO reutilizable: muestra un PDF dentro de un iframe en un DxPopup, en la
+   misma vista. Reemplaza el patrón window.open(url, "_blank"), que bajo InteractiveServer viaja
+   por SignalR, pierde el gesto del usuario y lo tapa el bloqueador de pop-ups. La barra del visor
+   del navegador aporta imprimir y descargar. Mismo comportamiento que "Estado de cuenta de
+   artículos" (KardexArticulo).
+
+   Uso: <PdfPreviewPopup @@ref="pdfPopup" /> y luego pdfPopup.Mostrar(url, titulo) desde el handler.
+   La URL debe apuntar a un endpoint que responda el PDF inline (Content-Disposition: inline). *@
+<DxPopup @bind-Visible="_visible" HeaderText="@_titulo" Width="min(1100px, 96vw)"
+         Height="90vh" Scrollable="false" CloseOnOutsideClick="true" ShowFooter="false"
+         CssClass="pdf-preview-popup">
+    <BodyTemplate>
+        @if (!string.IsNullOrWhiteSpace(_url))
+        {
+            <iframe class="pdf-frame" src="@_url" title="@_titulo"></iframe>
+        }
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private bool _visible;
+    private string? _url;
+    private string _titulo = "Documento";
+
+    /// <summary>
+    /// Muestra el PDF de <paramref name="url"/> embebido en el popup. La URL debe apuntar a un
+    /// endpoint que responda el PDF inline; si viene vacía no hace nada.
+    /// </summary>
+    public void Mostrar(string url, string? titulo = null)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return;
+        }
+
+        _url = url;
+        _titulo = string.IsNullOrWhiteSpace(titulo) ? "Documento" : titulo!;
+        _visible = true;
+        StateHasChanged();
+    }
+}

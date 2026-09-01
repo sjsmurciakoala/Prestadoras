@@ -1,0 +1,96 @@
+/* Lo propio de esta pantalla. El estándar (page-container, modern-card, grid-solicitudes,
+   btn-icon, summary-card…) vive en apc/wwwroot/css/siad-grid.css y NO se copia aquí. */
+
+.filtro-texto {
+    min-width: 240px;
+}
+
+/* Semáforo de utilización: comprometido + ejecutado sobre lo presupuestado. */
+.badge-uso {
+    display: inline-block;
+    min-width: 62px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.uso-normal {
+    background: #e8f3ec;
+    color: #1f6b43;
+}
+
+.uso-alto {
+    background: #fdf0d5;
+    color: #8a6516;
+}
+
+.uso-critico {
+    background: #fbeceb;
+    color: #8c1d18;
+}
+
+.badge-no-controlada {
+    font-size: .7rem;
+    padding: 1px 6px;
+    margin-left: 8px;
+    border-radius: 3px;
+    background: #eceff1;
+    color: #607d8b;
+}
+
+.badge-excedio {
+    font-size: .7rem;
+    padding: 1px 6px;
+    margin-left: 8px;
+    border-radius: 3px;
+    background: #fbeceb;
+    color: #8c1d18;
+}
+
+/* ── Kardex de la partida ──────────────────────────────────────────────────── */
+
+.kardex-encabezado {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+    gap: 16px;
+    padding: 12px 14px;
+    margin-bottom: 12px;
+    background: #f8fafc;
+    border: 1px solid #e3e8ee;
+    border-radius: 6px;
+}
+
+.kardex-tabla {
+    max-height: 55vh;
+    overflow-y: auto;
+}
+
+.kardex-tabla table {
+    font-size: .84rem;
+}
+
+.kardex-tabla thead th {
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    background: #f1f4f7;
+    font-size: .72rem;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: .04em;
+    color: #667680;
+}
+
+/* Los importes se leen en columna: hay que alinear los dígitos. */
+.kardex-tabla td.text-end,
+.kardex-tabla th.text-end {
+    font-variant-numeric: tabular-nums;
+    white-space: nowrap;
+}
+
+.kardex-tabla tr.movimiento-reversado td {
+    color: #9aa4ad;
+    text-decoration: line-through;
+}

@@ -1,0 +1,597 @@
+@page "/almacen/descargos/nuevo"
+@page "/almacen/descargos/{Id:int}"
+@attribute [Authorize(Policy = PermissionNames.Inventario.Create)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.TalentoHumano
+@using SIAD.Core.Constants
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.TalentoHumano
+
+@inject DescargosDocumentoClient DescClient
+@inject RequisicionesDocumentoClient ReqClient
+@inject BodegasClient BodegasClient
+@inject ArticulosClient ArticulosClient
+@inject EmpleadosClient EmpleadosClient
+@inject CatalogosThClient CatalogosClient
+@inject IToastNotificationService ToastService
+@inject NavigationManager Navigation
+
+<PageTitle>SIAD - @(EsDetalle ? "Descargo" : "Nueva entrega")</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="DescFormToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">@Titulo</h2>
+            <p class="page-subtitle">La entrega postea la salida al kardex; se corrige por anulación (reversa)</p>
+        </div>
+        <div class="d-flex gap-2">
+            @if (EsDetalle)
+            {
+                <DxButton Text="Imprimir comprobante" IconCssClass="bi bi-printer" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline" Click="MostrarComprobante" />
+            }
+            <DxButton Text="Volver" IconCssClass="bi bi-arrow-left" RenderStyle="ButtonRenderStyle.Secondary"
+                      Click="@(() => Navigation.NavigateTo("/almacen/descargos"))" />
+        </div>
+    </div>
+
+    @if (cargando)
+    {
+        <div class="modern-card"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:120px"></div></div>
+    }
+    else if (EsDetalle)
+    {
+        <div class="alert @(modelo.Estado == EstadoDescargoHdr.Anulado ? "alert-danger" : "alert-success") mb-3" role="alert">
+            <i class="bi @(modelo.Estado == EstadoDescargoHdr.Anulado ? "bi-x-circle" : "bi-check-circle") me-2"></i>
+            <strong>@(modelo.Estado == EstadoDescargoHdr.Anulado ? "Anulado" : "Registrado")</strong>
+            @if (modelo.Estado == EstadoDescargoHdr.Anulado)
+            { <span> — por @modelo.AnuladoPor el @modelo.FechaAnulacion?.ToString("dd/MM/yyyy HH:mm"). Motivo: @modelo.MotivoAnulacion</span> }
+        </div>
+
+        <div class="modern-card mb-3">
+            <div class="row g-3">
+                <div class="col-md-3"><label class="form-label small fw-semibold">Requisición</label>
+                    <div class="form-control-plaintext">@(modelo.RequisicionNumero?.ToString("00000") ?? "— (directo)")</div></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Bodega</label>
+                    <div class="form-control-plaintext">@modelo.BodegaNombre</div></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Entregó</label>
+                    <div class="form-control-plaintext">@(modelo.EntregadoPor ?? "—")</div></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Recibió</label>
+                    <div class="form-control-plaintext">@(modelo.RecibidoPor ?? "—")</div></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Departamento</label>
+                    <div class="form-control-plaintext">@(string.IsNullOrWhiteSpace(modelo.Departamento) ? "—" : modelo.Departamento)</div></div>
+                @if (!string.IsNullOrWhiteSpace(modelo.Motivo))
+                { <div class="col-12"><label class="form-label small fw-semibold">Motivo</label><div class="form-control-plaintext">@modelo.Motivo</div></div> }
+            </div>
+        </div>
+
+        <div class="modern-card">
+            <div class="fw-semibold mb-2 d-flex align-items-center justify-content-between">
+                <span>Renglones entregados</span>
+                <span class="badge bg-secondary-subtle text-secondary-emphasis border">@EtiquetaArticulos(modelo.Detalles.Count)</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="table table-sm align-middle">
+                    <thead><tr class="text-muted small">
+                        <th style="min-width:220px;">Artículo</th>
+                        <th class="text-end" style="width:110px;">Cantidad</th>
+                        <th class="text-end" style="width:120px;">Costo unit.</th>
+                        <th class="text-end" style="width:120px;">Total</th>
+                    </tr></thead>
+                    <tbody>
+                        @foreach (var d in modelo.Detalles)
+                        {
+                            <tr>
+                                <td><span class="fw-semibold text-muted">@d.ArticuloId</span><span> — @d.NombreArticulo</span></td>
+                                <td class="text-end">@d.Cantidad.ToString("N2")</td>
+                                <td class="text-end">@d.PrecioUnitario.ToString("N4")</td>
+                                <td class="text-end">@d.Total.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                    <tfoot><tr class="fw-semibold"><td class="text-end" colspan="3">Total</td><td class="text-end">L. @modelo.Total.ToString("N2")</td></tr></tfoot>
+                </table>
+            </div>
+            @if (modelo.Estado != EstadoDescargoHdr.Anulado)
+            {
+                <div class="d-flex justify-content-end mt-3">
+                    <DxButton Text="Anular" IconCssClass="bi bi-x-circle" RenderStyle="ButtonRenderStyle.Danger"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline" Click="@(() => anularVisible = true)" Enabled="@(!procesando)" />
+                </div>
+            }
+        </div>
+    }
+    else
+    {
+        @* ── Nueva entrega ── *@
+        <div class="modern-card mb-3">
+            <div class="row g-3">
+                <div class="col-md-3"><label class="form-label small fw-semibold">Bodega *</label>
+                    @if (EsContraReq)
+                    { <div class="form-control-plaintext fw-semibold">@bodegaNombre</div> }
+                    else
+                    {
+                        <DxComboBox Data="@bodegas" TData="BodegaLookupDto" TValue="int?"
+                                    Value="@(bodegaId == 0 ? (int?)null : bodegaId)" ValueChanged="@((int? v) => OnBodegaChanged(v))"
+                                    ValueFieldName="@nameof(BodegaLookupDto.Id)" TextFieldName="@nameof(BodegaLookupDto.Display)"
+                                    NullText="Seleccione..." CssClass="w-100" />
+                    }
+                </div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Recibe *</label>
+                    <DxComboBox Data="@empleados" TData="EmpleadoLookupDto" TValue="string"
+                                @bind-Value="recibidoPor"
+                                ValueFieldName="@nameof(EmpleadoLookupDto.Nombre)" TextFieldName="@nameof(EmpleadoLookupDto.Nombre)"
+                                AllowUserInput="true" DropDownStyle="DropDownStyle.DropDown"
+                                SearchMode="ListSearchMode.AutoSearch" SearchFilterCondition="ListSearchFilterCondition.Contains" SearchDelay="200"
+                                NullText="Nombre, o busque por código de empleado" MaxLength="120"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100">
+                        <Columns>
+                            <DxListEditorColumn FieldName="@nameof(EmpleadoLookupDto.Codigo)" Caption="Código" />
+                            <DxListEditorColumn FieldName="@nameof(EmpleadoLookupDto.Nombre)" Caption="Nombre" />
+                        </Columns>
+                    </DxComboBox></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Departamento *</label>
+                    <DxComboBox Data="@departamentos" TData="CatalogoThLookupDto" TValue="string"
+                                @bind-Value="departamentoSel"
+                                ValueFieldName="@nameof(CatalogoThLookupDto.Nombre)" TextFieldName="@nameof(CatalogoThLookupDto.Nombre)"
+                                NullText="Seleccione..." FilteringMode="DataGridFilteringMode.Contains"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" /></div>
+                <div class="col-md-3"><label class="form-label small fw-semibold">Fecha</label>
+                    <DxDateEdit @bind-Date="fecha" CssClass="w-100" /></div>
+                @if (EsDirecto)
+                {
+                    <div class="col-md-8"><label class="form-label small fw-semibold">Motivo *</label>
+                        <DxTextBox @bind-Text="motivo" NullText="Razón de la salida directa (sin requisición)" MaxLength="120" CssClass="w-100" /></div>
+                }
+                <div class="col-12"><label class="form-label small fw-semibold">Observaciones</label>
+                    <DxTextBox @bind-Text="observaciones" NullText="Opcional" MaxLength="1000" CssClass="w-100" /></div>
+            </div>
+            @if (EsContraReq)
+            {
+                <div class="mt-2 small text-muted"><i class="bi bi-clipboard-check me-1"></i>Entrega contra la requisición <strong>@reqNumero.ToString("00000")</strong>. Puede entregar parcial: lo que quede sigue pendiente.</div>
+            }
+        </div>
+
+        @if (EsDirecto)
+        {
+            <div class="modern-card mb-3">
+                <div class="d-flex flex-wrap gap-2 align-items-end">
+                    <div style="flex:1; min-width:240px;">
+                        <label class="form-label small fw-semibold">Agregar artículo</label>
+                        <DxComboBox Data="@articulos" @bind-Value="articuloSeleccionado" TData="ArticuloListItemDto" TValue="int?"
+                                    ValueFieldName="@nameof(ArticuloListItemDto.Id)" TextFieldName="ComboTexto"
+                                    FilteringMode="DataGridFilteringMode.Contains" NullText="Busque por código o descripción..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Enabled="@(bodegaId > 0 && articulos.Count > 0)" CssClass="w-100" />
+                    </div>
+                    <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Secondary"
+                              Click="AgregarDirecta" Enabled="@(articuloSeleccionado.HasValue)" />
+                    @if (bodegaId <= 0) { <span class="text-muted small ms-2"><i class="bi bi-info-circle me-1"></i>Elija primero la bodega.</span> }
+                </div>
+            </div>
+        }
+
+        <div class="modern-card">
+            <div class="fw-semibold mb-2 d-flex align-items-center justify-content-between">
+                <span>Renglones a entregar</span>
+                <span class="badge bg-secondary-subtle text-secondary-emphasis border">@EtiquetaArticulos(EsContraReq ? lineasReq.Count : lineasDirectas.Count)</span>
+            </div>
+            <div style="overflow-x:auto;">
+                <table class="table table-sm align-middle">
+                    <thead><tr class="text-muted small">
+                        @if (EsContraReq)
+                        {
+                            <th style="width:70px;">ID</th>
+                            <th style="min-width:200px;">Artículo</th>
+                            <th class="text-end" style="width:100px;">Existencia</th>
+                            <th class="text-end" style="width:100px;">Costo unit.</th>
+                            <th class="text-end" style="width:100px;">Costo prom.</th>
+                            <th class="text-end" style="width:100px;">Últ. costo</th>
+                            <th class="text-end" style="width:100px;">Pendiente</th>
+                            <th class="text-end" style="width:140px;">Entregar</th>
+                        }
+                        else
+                        {
+                            <th style="width:70px;">ID</th>
+                            <th style="min-width:200px;">Artículo</th>
+                            <th class="text-end" style="width:100px;">Existencia</th>
+                            <th class="text-end" style="width:100px;">Costo unit.</th>
+                            <th class="text-end" style="width:100px;">Costo prom.</th>
+                            <th class="text-end" style="width:100px;">Últ. costo</th>
+                            <th class="text-end" style="width:140px;">Entregar</th>
+                            <th style="width:50px;"></th>
+                        }
+                    </tr></thead>
+                    <tbody>
+                        @if (EsContraReq)
+                        {
+                            @if (lineasReq.Count == 0)
+                            { <tr><td colspan="8" class="text-center text-muted p-3">La requisición no tiene renglones pendientes.</td></tr> }
+                            else
+                            {
+                                @foreach (var l in lineasReq)
+                                {
+                                    <tr>
+                                        <td class="text-muted">@l.ArticuloId</td>
+                                        <td>@l.Nombre</td>
+                                        <td class="text-end @(l.ExistenciaBodega is <= 0m ? "text-danger" : "text-muted")">@Ref(l.ExistenciaBodega)</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoUnitario)</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoPromedio)</td>
+                                        <td class="text-end text-muted">@Ref(l.UltimoCosto)</td>
+                                        <td class="text-end text-muted">@l.Pendiente.ToString("N2")</td>
+                                        <td class="text-end"><DxSpinEdit @bind-Value="l.Entregar" DisplayFormat="N2" MinValue="0" MaxValue="@l.Pendiente" CssClass="w-100" /></td>
+                                    </tr>
+                                }
+                            }
+                        }
+                        else
+                        {
+                            @if (lineasDirectas.Count == 0)
+                            { <tr><td colspan="8" class="text-center text-muted p-3">Sin renglones.</td></tr> }
+                            else
+                            {
+                                @foreach (var l in lineasDirectas)
+                                {
+                                    <tr>
+                                        <td class="text-muted">@l.ArticuloId</td>
+                                        <td>@l.Nombre</td>
+                                        <td class="text-end @(l.Cantidad > l.ExistenciaEnBodega ? "text-danger fw-semibold" : "text-muted")">@l.ExistenciaEnBodega.ToString("N2")</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoUnitario)</td>
+                                        <td class="text-end text-muted">@Ref(l.CostoPromedio)</td>
+                                        <td class="text-end text-muted">@Ref(l.UltimoCosto)</td>
+                                        <td class="text-end"><DxSpinEdit @bind-Value="l.Cantidad" DisplayFormat="N2" MinValue="0" CssClass="w-100" /></td>
+                                        <td class="text-center"><button type="button" class="btn-icon btn-delete" title="Quitar" @onclick="() => lineasDirectas.Remove(l)"><i class="bi bi-trash"></i></button></td>
+                                    </tr>
+                                }
+                            }
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => Navigation.NavigateTo("/almacen/descargos"))" Enabled="@(!procesando)" />
+                <DxButton Text="Registrar entrega" IconCssClass="bi bi-box-arrow-up" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="EntregarAsync" Enabled="@(!procesando)" />
+            </div>
+        </div>
+    }
+</div>
+
+<DxPopup @bind-Visible="anularVisible" Width="min(460px, 90vw)" HeaderText="Anular descargo" ShowFooter="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <p class="text-muted text-center">Se revierte la salida (la mercadería vuelve a la bodega) y, si venía de una requisición, se devuelve la cantidad. El kardex se corrige con un asiento de reversa.</p>
+            <label class="form-label small fw-semibold">Motivo de la anulación *</label>
+            <DxTextBox @bind-Text="motivoAnulacion" NullText="Explique por qué se anula" MaxLength="500" CssClass="mb-3" />
+            <div class="d-flex justify-content-center gap-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => anularVisible = false)" Enabled="@(!procesando)" />
+                <DxButton Text="Sí, anular" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-x-circle"
+                          Click="AnularConfirmadoAsync" Enabled="@(!procesando)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="negativoVisible" Width="min(580px, 94vw)" HeaderText="Existencia insuficiente" ShowFooter="false" CloseOnOutsideClick="false">
+    <BodyTemplate>
+        <div class="p-3">
+            <div class="d-flex align-items-start gap-2 mb-3">
+                <i class="bi bi-x-circle-fill text-danger" style="font-size:1.6rem;"></i>
+                <p class="text-muted mb-0">No se puede procesar la entrega: estos artículos quedarían con <strong>existencia negativa</strong> en la bodega. Ajuste las cantidades a entregar (no más que la existencia disponible) y vuelva a intentarlo.</p>
+            </div>
+            <div style="overflow-x:auto; max-height:260px;">
+                <table class="table table-sm align-middle">
+                    <thead><tr class="text-muted small">
+                        <th style="min-width:200px;">Artículo</th>
+                        <th class="text-end" style="width:100px;">Existencia</th>
+                        <th class="text-end" style="width:100px;">Entregar</th>
+                        <th class="text-end" style="width:110px;">Resultante</th>
+                    </tr></thead>
+                    <tbody>
+                        @foreach (var a in avisosNegativo)
+                        {
+                            <tr>
+                                <td>@a.Nombre</td>
+                                <td class="text-end text-muted">@a.Existencia.ToString("N2")</td>
+                                <td class="text-end">@a.Cantidad.ToString("N2")</td>
+                                <td class="text-end text-danger fw-semibold">@a.Resultante.ToString("N2")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Entendido" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="@(() => negativoVisible = false)" Enabled="@(!procesando)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<PdfPreviewPopup @ref="pdfPopup" />
+
+@code {
+    [Parameter] public int? Id { get; set; }
+    [Parameter, SupplyParameterFromQuery(Name = "requisicion")] public int? RequisicionParam { get; set; }
+
+    private DescargoDocumentoDto modelo = new();
+    private PdfPreviewPopup? pdfPopup;
+    private DateTime? fecha = DateTime.Today;
+    private bool cargando = true, procesando;
+
+    // Contra requisición
+    private int reqNumero;
+    private int reqHdrId;
+    private int bodegaId;
+    private string? bodegaNombre;
+    private readonly List<EntregaLinea> lineasReq = new();
+
+    // Directo
+    private List<BodegaLookupDto> bodegas = new();
+    private List<EmpleadoLookupDto> empleados = new();
+    private List<CatalogoThLookupDto> departamentos = new();
+    private List<ArticuloListItemDto> articulos = new();
+    private int? articuloSeleccionado;
+    private readonly List<DirectaLinea> lineasDirectas = new();
+    private string? motivo;
+
+    private string? recibidoPor;
+    private string? departamentoSel;
+    private string? observaciones;
+
+    private bool anularVisible;
+    private string motivoAnulacion = string.Empty;
+
+    private bool negativoVisible;
+    private List<AvisoNegativo> avisosNegativo = new();
+    private sealed record AvisoNegativo(string Nombre, decimal Existencia, decimal Cantidad, decimal Resultante);
+
+    private bool EsDetalle => Id.HasValue;
+    private bool EsContraReq => !Id.HasValue && RequisicionParam is > 0;
+    private bool EsDirecto => !Id.HasValue && !EsContraReq;
+    private string Titulo => EsDetalle ? $"Descargo {modelo.Numero:00000}" : EsContraReq ? $"Entrega de requisición {reqNumero:00000}" : "Descargo directo";
+
+    protected override async Task OnInitializedAsync()
+    {
+        // El combo "Recibe" (empleados) y el de departamento aparecen tanto en la entrega de requisición
+        // como en el descargo directo: se cargan SIEMPRE, no solo en el directo.
+        try { empleados = await EmpleadosClient.GetLookupAsync(); } catch { empleados = new(); }
+        try { departamentos = await CatalogosClient.GetLookupAsync(CatalogosThClient.Departamentos); } catch { departamentos = new(); }
+
+        if (EsDetalle)
+        {
+            var doc = await DescClient.GetByIdAsync(Id!.Value);
+            if (doc is null) Toast("Error", "El descargo no existe.", ToastRenderStyle.Danger);
+            else modelo = doc;
+        }
+        else if (EsContraReq)
+        {
+            var req = await ReqClient.GetByIdAsync(RequisicionParam!.Value);
+            if (req is null) { Toast("Error", "La requisición no existe.", ToastRenderStyle.Danger); }
+            else if (req.Estado is not (EstadoRequisicionHdr.Aprobada or EstadoRequisicionHdr.DespachadaParcial))
+            { Toast("Error", "Solo se puede despachar una requisición aprobada.", ToastRenderStyle.Warning); }
+            else
+            {
+                reqHdrId = req.Id; reqNumero = req.Numero; bodegaId = req.BodegaId; bodegaNombre = req.BodegaNombre;
+                // Artículos de la bodega de la requisición: existencia y costos de referencia por renglón.
+                articulos = await CargarArticulosAsync(bodegaId);
+                foreach (var d in req.Detalles)
+                {
+                    var pendiente = d.Cantidad - d.CantidadDespachada;
+                    if (pendiente > 0m)
+                    {
+                        var art = articulos.FirstOrDefault(a => a.Id == d.ArticuloId);
+                        lineasReq.Add(new EntregaLinea
+                        {
+                            ReqLineaId = d.Id,
+                            ArticuloId = d.ArticuloId,
+                            Nombre = !string.IsNullOrWhiteSpace(d.NombreArticulo) ? d.NombreArticulo : (d.Descripcion ?? string.Empty),
+                            Pendiente = pendiente,
+                            Entregar = pendiente,   // por defecto, todo lo pendiente
+                            ExistenciaBodega = art?.ExistenciaEnBodega,
+                            CostoUnitario = art?.ValorUnitario,
+                            CostoPromedio = art?.CostoPromedioEnBodega,
+                            UltimoCosto = art?.UltimoCosto
+                        });
+                    }
+                }
+            }
+        }
+        else
+        {
+            try { bodegas = await BodegasClient.GetLookupAsync(); } catch { bodegas = new(); }
+        }
+        cargando = false;
+    }
+
+    private async Task OnBodegaChanged(int? v)
+    {
+        bodegaId = v ?? 0;
+        lineasDirectas.Clear();
+        articuloSeleccionado = null;
+        articulos = bodegaId > 0 ? await CargarArticulosAsync(bodegaId) : new();
+    }
+
+    private async Task<List<ArticuloListItemDto>> CargarArticulosAsync(int bodega)
+    {
+        try { return await ArticulosClient.GetAsync(new ArticuloFilterDto { BodegaId = bodega }); }
+        catch { return new(); }
+    }
+
+    private void AgregarDirecta()
+    {
+        if (!articuloSeleccionado.HasValue) return;
+        if (lineasDirectas.Any(l => l.ArticuloId == articuloSeleccionado.Value))
+        { Toast("Aviso", "Ese artículo ya está en un renglón.", ToastRenderStyle.Warning); return; }
+        var art = articulos.FirstOrDefault(a => a.Id == articuloSeleccionado.Value);
+        if (art is null) return;
+        lineasDirectas.Add(new DirectaLinea
+        {
+            ArticuloId = art.Id,
+            Nombre = art.Descripcion,   // el ID va en su propia columna
+            Cantidad = 0m,
+            ExistenciaEnBodega = art.ExistenciaEnBodega ?? 0m,
+            CostoUnitario = art.ValorUnitario,
+            CostoPromedio = art.CostoPromedioEnBodega,
+            UltimoCosto = art.UltimoCosto
+        });
+        articuloSeleccionado = null;
+    }
+
+    private async Task EntregarAsync()
+    {
+        // Validaciones propias del descargo directo antes de calcular negativos.
+        if (EsDirecto)
+        {
+            if (bodegaId <= 0) { Toast("Error", "Seleccione la bodega.", ToastRenderStyle.Warning); return; }
+            if (string.IsNullOrWhiteSpace(motivo)) { Toast("Error", "Un descargo directo requiere motivo.", ToastRenderStyle.Warning); return; }
+        }
+
+        // Obligatorios en ambas vistas: quién recibe y el departamento donde se entrega.
+        if (string.IsNullOrWhiteSpace(recibidoPor)) { Toast("Error", "Indique quién recibe.", ToastRenderStyle.Warning); return; }
+        if (string.IsNullOrWhiteSpace(departamentoSel)) { Toast("Error", "Seleccione el departamento donde se entrega.", ToastRenderStyle.Warning); return; }
+
+        // Regla firme: si algún renglón dejaría la existencia en negativo se BLOQUEA la entrega
+        // (el motor la rechazaría igual). El usuario debe ajustar las cantidades a lo disponible.
+        var negativos = DetectarNegativos();
+        if (negativos.Count > 0)
+        {
+            avisosNegativo = negativos;
+            negativoVisible = true;
+            return;
+        }
+
+        await ProcesarEntregaAsync();
+    }
+
+    /// <summary>Renglones (con cantidad &gt; 0) cuya salida dejaría la existencia de la bodega en negativo.</summary>
+    private List<AvisoNegativo> DetectarNegativos()
+    {
+        var avisos = new List<AvisoNegativo>();
+        if (EsContraReq)
+        {
+            foreach (var l in lineasReq.Where(l => l.Entregar > 0m))
+            {
+                var existencia = l.ExistenciaBodega ?? 0m;
+                if (l.Entregar > existencia)
+                    avisos.Add(new AvisoNegativo(l.Nombre, existencia, l.Entregar, existencia - l.Entregar));
+            }
+        }
+        else
+        {
+            foreach (var l in lineasDirectas.Where(l => l.Cantidad > 0m))
+            {
+                if (l.Cantidad > l.ExistenciaEnBodega)
+                    avisos.Add(new AvisoNegativo(l.Nombre, l.ExistenciaEnBodega, l.Cantidad, l.ExistenciaEnBodega - l.Cantidad));
+            }
+        }
+        return avisos;
+    }
+
+    private async Task ProcesarEntregaAsync()
+    {
+        negativoVisible = false;
+
+        var dto = new DescargoDocumentoDto
+        {
+            Fecha = DateOnly.FromDateTime(fecha ?? DateTime.Today),
+            RecibidoPor = recibidoPor,
+            Departamento = departamentoSel,
+            Observaciones = observaciones,
+            Uuid = Guid.NewGuid()
+        };
+
+        if (EsContraReq)
+        {
+            dto.RequisicionHdrId = reqHdrId;
+            dto.Detalles = lineasReq.Where(l => l.Entregar > 0m)
+                .Select(l => new DescargoDocumentoDetalleDto { RequisicionLineaId = l.ReqLineaId, Cantidad = l.Entregar }).ToList();
+        }
+        else
+        {
+            if (bodegaId <= 0) { Toast("Error", "Seleccione la bodega.", ToastRenderStyle.Warning); return; }
+            if (string.IsNullOrWhiteSpace(motivo)) { Toast("Error", "Un descargo directo requiere motivo.", ToastRenderStyle.Warning); return; }
+            dto.BodegaId = bodegaId;
+            dto.Motivo = motivo;
+            dto.Detalles = lineasDirectas.Where(l => l.Cantidad > 0m)
+                .Select(l => new DescargoDocumentoDetalleDto { ArticuloId = l.ArticuloId, Cantidad = l.Cantidad }).ToList();
+        }
+
+        if (dto.Detalles.Count == 0) { Toast("Aviso", "Indique al menos una cantidad a entregar.", ToastRenderStyle.Warning); return; }
+
+        procesando = true;
+        try
+        {
+            var creado = await DescClient.EntregarAsync(dto);
+            Toast("Éxito", $"Descargo {creado.Numero:00000} registrado.", ToastRenderStyle.Success);
+            // Navegar a /{id} reusa este mismo componente (no re-ejecuta OnInitializedAsync): sin esto
+            // el detalle saldría vacío. Como ya tenemos el documento creado, lo mostramos directo.
+            modelo = creado;
+            Navigation.NavigateTo($"/almacen/descargos/{creado.Id}");
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { procesando = false; }
+    }
+
+    private async Task AnularConfirmadoAsync()
+    {
+        if (string.IsNullOrWhiteSpace(motivoAnulacion)) { Toast("Error", "Indique el motivo.", ToastRenderStyle.Warning); return; }
+        procesando = true;
+        try
+        {
+            var ok = await DescClient.AnularAsync(modelo.Id, motivoAnulacion.Trim());
+            if (!ok) Toast("Error", "El descargo ya no existe.", ToastRenderStyle.Danger);
+            else
+            {
+                Toast("Éxito", "Descargo anulado.", ToastRenderStyle.Success);
+                var doc = await DescClient.GetByIdAsync(modelo.Id);
+                if (doc is not null) modelo = doc;
+            }
+            anularVisible = false;
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { procesando = false; }
+    }
+
+    private void MostrarComprobante()
+        => pdfPopup?.Mostrar(DescargosDocumentoClient.GetComprobantePdfUrl(modelo.Id),
+            $"Comprobante — Descargo {modelo.Numero:00000}");
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "DescFormToast" });
+
+    private static string EtiquetaArticulos(int cantidad) => $"{cantidad:N0} {(cantidad == 1 ? "artículo" : "artículos")}";
+
+    /// <summary>Formato de referencia (solo lectura): "—" cuando el dato no está disponible.</summary>
+    private static string Ref(decimal? v) => v.HasValue ? v.Value.ToString("N2") : "—";
+
+    private sealed class EntregaLinea
+    {
+        public int ReqLineaId { get; set; }
+        public int ArticuloId { get; set; }
+        public string Nombre { get; set; } = "";
+        public decimal Pendiente { get; set; }
+        public decimal Entregar { get; set; }
+        public decimal? ExistenciaBodega { get; set; }
+        public decimal? CostoUnitario { get; set; }
+        public decimal? CostoPromedio { get; set; }
+        public decimal? UltimoCosto { get; set; }
+    }
+    private sealed class DirectaLinea
+    {
+        public int ArticuloId { get; set; }
+        public string Nombre { get; set; } = "";
+        public decimal Cantidad { get; set; }
+        public decimal ExistenciaEnBodega { get; set; }
+        public decimal? CostoUnitario { get; set; }
+        public decimal? CostoPromedio { get; set; }
+        public decimal? UltimoCosto { get; set; }
+    }
+}

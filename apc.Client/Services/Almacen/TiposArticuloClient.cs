@@ -27,6 +27,13 @@ public sealed class TiposArticuloClient
         return await r.ReadFromJsonAsyncWithAuthCheck<List<TipoArticuloLookupDto>>(ct) ?? new();
     }
 
+    /// <summary>Tasas del ISV activas y vigentes hoy, para el selector "ISV en compras" del tipo.</summary>
+    public async Task<List<TasaIsvOpcionDto>> GetTasasIsvAsync(CancellationToken ct = default)
+    {
+        var r = await _http.GetAsync("api/almacen/tipos-articulo/tasas-isv", ct);
+        return await r.ReadFromJsonAsyncWithAuthCheck<List<TasaIsvOpcionDto>>(ct) ?? new();
+    }
+
     public async Task<TipoArticuloEditDto?> GetByIdAsync(int id, CancellationToken ct = default)
     {
         if (id <= 0) return null;

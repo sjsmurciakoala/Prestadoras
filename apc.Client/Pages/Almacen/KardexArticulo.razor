@@ -12,12 +12,12 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>SIAD - Kardex de almacén</PageTitle>
+<PageTitle>SIAD - Estado de cuenta de artículos</PageTitle>
 
 <div class="page-container">
     <div class="header-section">
         <div>
-            <h2 class="page-title">Kardex por artículo</h2>
+            <h2 class="page-title">Estado de cuenta de artículos</h2>
             <p class="page-subtitle">Histórico de entradas, salidas y saldo corrido</p>
         </div>
     </div>
@@ -89,28 +89,46 @@
     @if (kardex is not null)
     {
         <div class="row g-3 mb-4">
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-4 col-xl-2">
                 <div class="modern-card summary-card">
                     <div class="summary-label" title="@ExistenciaTooltip">@ExistenciaLabel</div>
                     <div class="summary-value">@ExistenciaTexto</div>
                 </div>
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-4 col-xl-2">
                 <div class="modern-card summary-card @(kardex.SaldoDescuadrado ? "summary-warning" : "")">
                     <div class="summary-label">@(HayBodegaFiltrada ? "Saldo calculado (bodega)" : "Saldo calculado (kardex)")</div>
                     <div class="summary-value">@kardex.SaldoCalculado.ToString("N2")@UnidadSufijo()</div>
                 </div>
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-4 col-xl-2">
                 <div class="modern-card summary-card">
                     <div class="summary-label">Ingresos (período)</div>
                     <div class="summary-value">@kardex.TotalIngresos.ToString("N2")</div>
                 </div>
             </div>
-            <div class="col-6 col-md-3">
+            <div class="col-6 col-md-4 col-xl-2">
                 <div class="modern-card summary-card">
                     <div class="summary-label">Salidas (período)</div>
                     <div class="summary-value">@kardex.TotalSalidas.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="modern-card summary-card">
+                    <div class="summary-label" title="Valor del inventario al cierre del kardex: suma de (entradas − salidas) × costo de cada movimiento.">
+                        Saldo valorizado
+                    </div>
+                    <div class="summary-value">@kardex.SaldoValorizado.ToString("N2")</div>
+                </div>
+            </div>
+            <div class="col-6 col-md-4 col-xl-2">
+                <div class="modern-card summary-card @(kardex.CostoDescuadrado ? "summary-warning" : "")">
+                    <div class="summary-label" title="Costo promedio derivado del libro: saldo valorizado ÷ saldo. Es la misma regla con la que el motor valoriza las salidas.">
+                        Costo prom. (kardex)
+                    </div>
+                    <div class="summary-value">
+                        @(kardex.CostoPromedioActual.HasValue ? kardex.CostoPromedioActual.Value.ToString("N4") : "—")
+                    </div>
                 </div>
             </div>
         </div>
@@ -142,6 +160,53 @@
             </div>
         }
 
+        @* El costo del libro contra el almacenado en la ficha de existencias: es el que usan el
+           catálogo y el motor para valorizar salidas, así que una diferencia real importa. *@
+        @if (kardex.CostoDescuadrado)
+        {
+            <div class="alert alert-warning mb-3" role="alert">
+                El costo promedio que arroja el kardex (@kardex.CostoPromedioActual!.Value.ToString("N4")) no coincide
+                con el costo promedio registrado@(HayBodegaFiltrada ? $" en {BodegaTexto}" : "")
+                (@kardex.CostoPromedioCache!.Value.ToString("N4")).
+            </div>
+        }
+        else if (kardex.CostoSinRegistrar)
+        {
+            @* Pendiente de costeo, no corrupción: el libro sí tiene con qué valorizar. *@
+            <div class="alert alert-info mb-3" role="alert">
+                El kardex valoriza este artículo a @kardex.CostoPromedioActual!.Value.ToString("N4"), pero su ficha de
+                existencias@(HayBodegaFiltrada ? $" en {BodegaTexto}" : "") no tiene costo registrado: mientras siga así
+                se reporta con valor de inventario cero y no puede despacharse.
+            </div>
+        }
+
+        @* Arrastre del período: sin esto la primera fila aparece con un saldo que nada explica. *@
+        @if (kardex.TieneArrastre)
+        {
+            <div class="modern-card mb-3 py-2">
+                <div class="d-flex flex-wrap align-items-center gap-4">
+                    <span class="fw-bold text-muted">
+                        <i class="bi bi-box-arrow-in-right me-1"></i>Saldo anterior
+                    </span>
+                    <span>
+                        <span class="text-muted small">Cantidad:</span>
+                        <span class="fw-semibold ms-1">@kardex.CantidadAnterior!.Value.ToString("N2")@UnidadSufijo()</span>
+                    </span>
+                    <span>
+                        <span class="text-muted small">Valor:</span>
+                        <span class="fw-semibold ms-1">@kardex.ValorAnterior!.Value.ToString("N2")</span>
+                    </span>
+                    <span>
+                        <span class="text-muted small">Costo prom.:</span>
+                        <span class="fw-semibold ms-1">
+                            @(kardex.CostoPromedioAnterior.HasValue ? kardex.CostoPromedioAnterior.Value.ToString("N4") : "—")
+                        </span>
+                    </span>
+                    <span class="text-muted small ms-auto">Acumulado antes del inicio del período</span>
+                </div>
+            </div>
+        }
+
         <div class="modern-card position-relative">
             <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
 
@@ -157,8 +222,10 @@
                     <ToolbarTemplate>
                         <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                             <span class="fw-bold">@kardex.Codigo — @kardex.Descripcion</span>
+                            <DxButton Text="Ver PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarPdf" CssClass="ms-auto me-1" />
                             <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
-                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="ms-auto me-1" />
+                                      RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
                             <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
                                       RenderStyle="ButtonRenderStyle.Secondary" Click="ExportExcelAsync" CssClass="me-3" />
 
@@ -169,7 +236,7 @@
                     </ToolbarTemplate>
 
                     <Columns>
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Fecha)" Caption="Fecha" Width="110px">
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Fecha)" Caption="Fecha" Width="105px">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
@@ -178,65 +245,54 @@
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.NumeroDocumento)" Caption="Doc." Width="90px" TextAlignment="GridTextAlignment.Right">
+                        @* Descripción con el concepto concatenado al frente ("Compra · a proveedor X").
+                           Absorbe las columnas Tipo y Documento que se quitaron; la carga inicial
+                           conserva su marca porque desde ahí corre el saldo. *@
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.DescripcionCompleta)" Caption="Descripción" MinWidth="260">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
-                                    <span class="text-muted">@(m.NumeroDocumento.HasValue ? m.NumeroDocumento.Value.ToString("0") : "—")</span>
+                                    @if (m.EsLineaDeCorte)
+                                    {
+                                        <span class="badge-mov mov-corte me-1" title="Saldo inicial: desde aquí corre el saldo">CARGA INICIAL</span>
+                                        <span title="@m.DescripcionCompleta">@(string.IsNullOrWhiteSpace(m.Descripcion) ? "" : m.Descripcion)</span>
+                                    }
+                                    else
+                                    {
+                                        <span title="@m.DescripcionCompleta">@m.DescripcionCompleta</span>
+                                    }
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.TipoDescripcion)" Caption="Tipo" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        @* Columna combinada: entradas en positivo, salidas en negativo. *@
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.CantidadFirmada)" Caption="Cantidad" Width="115px" TextAlignment="GridTextAlignment.Right">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
-                                    <span class="badge-mov @TipoCssClass(m.TipoTransaccion)">@m.TipoDescripcion</span>
+                                    <span class="@(m.CantidadFirmada > 0 ? "text-success fw-semibold" : m.CantidadFirmada < 0 ? "text-danger fw-semibold" : "text-muted")">
+                                        @(m.CantidadFirmada == 0 ? "—" : m.CantidadFirmada.ToString("N2"))
+                                    </span>
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.BodegaCodigo)" Caption="Bodega" Width="100px" TextAlignment="GridTextAlignment.Center">
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.ValorUnitario)" Caption="Valor unitario" Width="115px" TextAlignment="GridTextAlignment.Right">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
-                                    <span class="text-muted" title="@m.BodegaNombre">@(string.IsNullOrWhiteSpace(m.BodegaCodigo) ? "—" : m.BodegaCodigo)</span>
+                                    <span class="text-muted">@m.ValorUnitario.ToString("N4")</span>
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
 
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Descripcion)" Caption="Descripción / documento" MinWidth="220">
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.ValorMovimiento)" Caption="Valor movimiento" Width="135px" TextAlignment="GridTextAlignment.Right">
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
-                                    <span title="@m.Descripcion">@(string.IsNullOrWhiteSpace(m.Descripcion) ? "—" : m.Descripcion)</span>
-                                }
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
-
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Ingresos)" Caption="Entradas" Width="110px" TextAlignment="GridTextAlignment.Right">
-                            <CellDisplayTemplate Context="cell">
-                                @if (cell.DataItem is KardexMovimientoDto m)
-                                {
-                                    <span class="@(m.Ingresos > 0 ? "text-success fw-semibold" : "text-muted")">@(m.Ingresos > 0 ? m.Ingresos.ToString("N2") : "—")</span>
-                                }
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
-
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.Salidas)" Caption="Salidas" Width="110px" TextAlignment="GridTextAlignment.Right">
-                            <CellDisplayTemplate Context="cell">
-                                @if (cell.DataItem is KardexMovimientoDto m)
-                                {
-                                    <span class="@(m.Salidas > 0 ? "text-danger fw-semibold" : "text-muted")">@(m.Salidas > 0 ? m.Salidas.ToString("N2") : "—")</span>
-                                }
-                            </CellDisplayTemplate>
-                        </DxGridDataColumn>
-
-                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.ValorUnitario)" Caption="Valor unit." Width="110px" TextAlignment="GridTextAlignment.Right">
-                            <CellDisplayTemplate Context="cell">
-                                @if (cell.DataItem is KardexMovimientoDto m)
-                                {
-                                    <span class="text-muted">@m.ValorUnitario.ToString("N2")</span>
+                                    <span class="@(m.ValorMovimiento < 0 ? "text-danger" : m.ValorMovimiento > 0 ? "text-success" : "text-muted")">
+                                        @m.ValorMovimiento.ToString("N2")
+                                    </span>
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
@@ -245,7 +301,68 @@
                             <CellDisplayTemplate Context="cell">
                                 @if (cell.DataItem is KardexMovimientoDto m)
                                 {
-                                    <span class="text-dark fw-bold">@m.Saldo.ToString("N2")</span>
+                                    @if (m.Saldo.HasValue)
+                                    {
+                                        <span class="text-dark fw-bold">@m.Saldo.Value.ToString("N2")</span>
+                                    }
+                                    else
+                                    {
+                                        @* Pre-corte: antes de la apertura no hay un saldo con
+                                           significado (el histórico SIMAFI no arranca de cero). *@
+                                        <span class="text-muted" title="Anterior a la carga inicial: histórico informativo">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.SaldoValorizado)" Caption="Saldo valorizado" Width="140px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    @if (m.SaldoValorizado.HasValue)
+                                    {
+                                        <span class="text-dark fw-bold">@m.SaldoValorizado.Value.ToString("N2")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="Anterior a la carga inicial: histórico informativo">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        @* "Costo ant." arranca oculta (en el selector de columnas): junto al costo
+                           promedio permite leer la línea como "venía a X → queda a Y". *@
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.CostoPromedioAnterior)" Caption="Costo anterior"
+                                          Width="125px" TextAlignment="GridTextAlignment.Right" Visible="false">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    @if (m.CostoPromedioAnterior.HasValue)
+                                    {
+                                        <span class="text-muted">@m.CostoPromedioAnterior.Value.ToString("N4")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="@SinCostoTooltip(m)">—</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+
+                        @* Costo promedio al final del grid. *@
+                        <DxGridDataColumn FieldName="@nameof(KardexMovimientoDto.CostoPromedioCorrido)" Caption="Costo promedio" Width="130px" TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is KardexMovimientoDto m)
+                                {
+                                    @if (m.CostoPromedioCorrido.HasValue)
+                                    {
+                                        <span class="fw-semibold">@m.CostoPromedioCorrido.Value.ToString("N4")</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted" title="@SinCostoTooltip(m)">—</span>
+                                    }
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
@@ -265,6 +382,21 @@
             <p class="mt-3 mb-0">Seleccione un artículo para ver su kardex.</p>
         </div>
     }
+
+    @* Visor del PDF embebido: el reporte se muestra en la misma vista, dentro de un iframe
+       (el endpoint responde el PDF inline). No abre pestaña del navegador ni descarga, así que
+       el bloqueador de pop-ups no interviene. La barra del visor del navegador ya trae imprimir
+       y descargar. *@
+    <DxPopup @bind-Visible="pdfVisible" HeaderText="@pdfTitulo" Width="min(1100px, 96vw)"
+             Height="90vh" Scrollable="false" CloseOnOutsideClick="true" ShowFooter="false"
+             CssClass="kardex-pdf-popup">
+        <BodyTemplate>
+            @if (!string.IsNullOrWhiteSpace(pdfUrl))
+            {
+                <iframe class="pdf-frame" src="@pdfUrl" title="@pdfTitulo"></iframe>
+            }
+        </BodyTemplate>
+    </DxPopup>
 </div>
 
 @code {
@@ -330,6 +462,15 @@
     private RenderFragment? UnidadSufijo() => string.IsNullOrWhiteSpace(UnidadMedida)
         ? null
         : @<span class="fs-6 fw-normal text-muted ms-1">@UnidadMedida</span>;
+
+    /// <summary>
+    /// Por qué una fila no tiene costo promedio. Son dos causas distintas y conviene no
+    /// confundirlas: histórico anterior a la apertura, o saldo no positivo (no hay entre qué
+    /// dividir).
+    /// </summary>
+    private static string SinCostoTooltip(KardexMovimientoDto m) => m.EsPreCorte
+        ? "Anterior a la carga inicial: histórico informativo"
+        : "Sin saldo positivo: no hay cantidad entre la cual repartir el valor";
 
     protected override async Task OnInitializedAsync()
     {
@@ -465,13 +606,36 @@
         }
     }
 
-    private static string TipoCssClass(string? tipo) => tipo switch
+    private bool pdfVisible;
+    private string? pdfUrl;
+    private string pdfTitulo = "Kardex";
+
+    /// <summary>
+    /// Muestra el PDF del kardex EMBEBIDO en la misma vista (iframe dentro de un popup), en vez
+    /// de abrir una pestaña del navegador: bajo InteractiveServer un window.open viaja por
+    /// SignalR, pierde el gesto del usuario y el bloqueador de pop-ups lo tapa. Desde la barra
+    /// del visor el usuario puede imprimir o descargar.
+    /// </summary>
+    private void MostrarPdf()
     {
-        "102" => "mov-entrada",
-        "103" => "mov-ajuste",
-        "202" => "mov-salida",
-        _ => "mov-otro"
-    };
+        if (articuloSeleccionado is null)
+        {
+            return;
+        }
+
+        var filtro = new KardexFilterDto
+        {
+            ArticuloId = articuloSeleccionado.Id,
+            FechaDesde = fechaDesde.HasValue ? DateOnly.FromDateTime(fechaDesde.Value) : null,
+            FechaHasta = fechaHasta.HasValue ? DateOnly.FromDateTime(fechaHasta.Value) : null,
+            TipoTransaccion = tipoSeleccionado?.Codigo,
+            BodegaId = bodegaSeleccionada?.Id
+        };
+
+        pdfTitulo = kardex is not null ? $"Estado de cuenta — {kardex.Codigo} · {kardex.Descripcion}" : "Estado de cuenta";
+        pdfUrl = KardexClient.GetPdfArticuloUrl(filtro);
+        pdfVisible = true;
+    }
 
     private async Task ExportExcelAsync()
     {

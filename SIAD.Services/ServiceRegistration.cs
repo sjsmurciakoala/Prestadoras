@@ -1,7 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using SIAD.Core.Entities;
+using SIAD.Core.Security;
 using SIAD.Core.Tenancy;
 using SIAD.Services;
+using SIAD.Services.Aprobaciones;
+using SIAD.Services.Security;
 using SIAD.Services.Clientes;
 using SIAD.Services.Cobros;
 using SIAD.Services.Proveedores;
@@ -28,6 +31,7 @@ using SIAD.Services.AppLectores;
 using SIAD.Services.Tarifario;
 using SIAD.Services.Presupuesto;
 using SIAD.Services.Auditoria;
+using SIAD.Services.TalentoHumano;
 
 namespace SIAD.Services;
 
@@ -38,10 +42,36 @@ public static class ServiceRegistration
         // Add AutoMapper profiles and service implementations here.
         services.AddAutoMapper(typeof(ServiceRegistration).Assembly);
 
+        // Conversores de Dapper que el paquete no trae (DateOnly como parámetro). Global e idempotente.
+        SIAD.Services.Infrastructure.DapperTypeHandlers.EnsureRegistered();
+
         services.AddScoped<ICurrentCompanyService, CurrentCompanyService>();
+        // Identidad de la sesión para los servicios de dominio (quién firma y con qué roles).
+        // Lo consume el motor de aprobación por niveles; ver SIAD.Core/Security/ICurrentUserService.cs.
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ITenantCompanyService, TenantCompanyService>();
+        // Motor de aprobación por niveles (2026-08-31_apr_niveles_*). Nace APAGADO por empresa:
+        // con cfg_aprobacion_control.modo = 0 ningún documento cambia de comportamiento.
+        services.AddScoped<IAprobacionService, AprobacionService>();
+        services.AddScoped<IAprobacionConfigService, AprobacionConfigService>();
+        services.AddScoped<IAprobacionNotificador, AprobacionNotificador>();
         services.AddScoped<IClientesService, ClientesService>();
         services.AddScoped<IProveedoresService, ProveedoresService>();
+        services.AddScoped<IProveedorEstadoCuentaService, ProveedorEstadoCuentaService>();
+        // Antigüedad de saldos (2026-08-14_prv_antiguedad_saldos.sql, F1). Aging de CxP por tramo.
+        services.AddScoped<IAntiguedadSaldosProveedorService, AntiguedadSaldosProveedorService>();
+        // Cuentas por pagar unificadas (2026-08-22_prv_cxp_unificada.sql): facturas de compra y
+        // compromisos en un solo listado, y el pago en lote que los envuelve en una transacción.
+        services.AddScoped<ICuentasPorPagarService, CuentasPorPagarService>();
+        // Scorecard de proveedores (2026-08-14_prv_evaluacion.sql, F1).
+        services.AddScoped<IEvaluacionProveedorService, EvaluacionProveedorService>();
+        // Incidencias de recepción (F4): alimentan el criterio CALIDAD del scorecard.
+        services.AddScoped<IRecepcionIncidenciaService, RecepcionIncidenciaService>();
+
+        // Talento Humano (2026-08-19_th_empleado.sql): catálogo de empleados.
+        services.AddScoped<IEmpleadosService, EmpleadosService>();
+        // Catálogos de cargos y departamentos (2026-08-19_th_cargo_departamento.sql).
+        services.AddScoped<ICatalogoThService, CatalogoThService>();
 
         //solicitudes
         services.AddScoped<ISolicitudesService, SolicitudesService>();
@@ -75,8 +105,9 @@ public static class ServiceRegistration
         // notas crédito/débito
         services.AddScoped<INotasCreditoDebitoService, NotasCreditoDebitoService>();
 
-        // mantenimientos (recargo mora, ajustes tarifarios)
+        // mantenimientos (recargo mora, ajustes tarifarios, formatos fiscales)
         services.AddScoped<IMantenimientosService, MantenimientosService>();
+        services.AddScoped<IFormatoFiscalService, FormatoFiscalService>();
 
         // cobranza
         services.AddScoped<ICobranzaService, CobranzaService>();
@@ -115,17 +146,71 @@ public static class ServiceRegistration
         services.AddScoped<IDescargosService, DescargosService>();
         services.AddScoped<IUnidadesMedidaService, UnidadesMedidaService>();
         services.AddScoped<ICategoriaUnidadService, CategoriaUnidadService>();
+        services.AddScoped<ITerminoPagoService, TerminoPagoService>();
+        services.AddScoped<ICompraCxpService, CompraCxpService>();
         services.AddScoped<ITipoArticuloService, TipoArticuloService>();
+        services.AddScoped<IIsvCompraConfigService, IsvCompraConfigService>();
+        // Correo y notificaciones por empresa: conexión SendGrid (API key cifrada) + enrutamiento
+        // por área (F2). Una sola instancia sirve a las dos interfaces (config y resolver de envío).
+        services.AddScoped<SIAD.Services.Configuracion.CorreoConfigService>();
+        services.AddScoped<SIAD.Services.Configuracion.ICorreoConfigService>(
+            sp => sp.GetRequiredService<SIAD.Services.Configuracion.CorreoConfigService>());
+        services.AddScoped<SIAD.Services.Configuracion.ICorreoEnvioResolver>(
+            sp => sp.GetRequiredService<SIAD.Services.Configuracion.CorreoConfigService>());
+        // Envío real de correo: transporte SendGrid (HttpClient tipado a la API v3) + notificador
+        // de alto nivel (notificaciones por área + correos de sistema de Identity).
+        services.AddHttpClient<SIAD.Services.Configuracion.ISendGridCorreoTransport,
+                               SIAD.Services.Configuracion.SendGridCorreoTransport>(c =>
+        {
+            c.BaseAddress = new Uri("https://api.sendgrid.com");
+            c.Timeout = TimeSpan.FromSeconds(30);
+        });
+        services.AddScoped<SIAD.Services.Configuracion.ICorreoNotificador,
+                           SIAD.Services.Configuracion.CorreoNotificador>();
+        // Alertas de stock por correo (reusa GetAlertasStock + NotificarArea ALMACÉN).
+        services.AddScoped<IAlertasStockNotificador, AlertasStockNotificador>();
+        // Capa 1 del ISV de compras (tasa por tipo de artículo, vigente a la fecha). Fuente única
+        // que consumen las órdenes de compra y la recepción de facturas.
+        services.AddScoped<ITasaIsvArticuloResolver, TasaIsvArticuloResolver>();
         services.AddScoped<IBodegaService, BodegaService>();
         services.AddScoped<IArticuloUbicacionService, ArticuloUbicacionService>();
         services.AddScoped<IArticuloProveedorService, ArticuloProveedorService>();
+        services.AddScoped<IOrdenCompraService, OrdenCompraService>();
+        services.AddScoped<IRecepcionCompraService, RecepcionCompraService>();
         services.AddScoped<IGrupoService, GrupoService>();
+        // Reporte de existencias por bodega (valorado) — alimenta pantalla y PDF.
+        services.AddScoped<IExistenciasBodegaService, ExistenciasBodegaService>();
+        // Valuación de inventario a una fecha (reconstruye el saldo desde el kardex) — pantalla y PDF.
+        services.AddScoped<IValuacionInventarioService, ValuacionInventarioService>();
+
+        // Motor de movimientos (Fase 1): rollup compartido de cabecera + posteo al kardex.
+        services.AddScoped<IArticuloRollupService, ArticuloRollupService>();
+        services.AddScoped<IInventarioPostingService, InventarioPostingService>();
+
+        // Carga inicial de existencias y ajustes (Fase 4).
+        services.AddScoped<ICargaInicialInventarioService, CargaInicialInventarioService>();
+        services.AddScoped<IAjusteInventarioService, AjusteInventarioService>();
+
+        // Catálogo de tipos de movimiento (movimientos de almacén, Fase 1).
+        services.AddScoped<ITipoMovimientoService, TipoMovimientoService>();
+        services.AddScoped<IMovimientoAlmacenService, MovimientoAlmacenService>();
+        // Traslado entre bodegas (Fase 5).
+        services.AddScoped<ITrasladoAlmacenService, TrasladoAlmacenService>();
+        // Requisición → descargo (Fase 6). El documento de requisición (solicitud, no postea).
+        services.AddScoped<IRequisicionDocumentoService, RequisicionDocumentoService>();
+        // El descargo (la entrega real, sí postea).
+        services.AddScoped<IDescargoDocumentoService, DescargoDocumentoService>();
 
         // ciclos
         services.AddScoped<ICiclosService, CiclosService>();
 
         // presupuesto (de Combinacio_E_J_1.0; mantengo legacy retirado de Letras/Tarifas)
         services.AddScoped<IConfiguracionPresupuestoService, ConfiguracionPresupuestoService>();
+        // Control presupuestario de compras (F2): compromete al aprobar la O/C y libera al anularla.
+        // Apagado por defecto — cfg_presupuesto_control.modo = 0.
+        services.AddScoped<IPresupuestoCompromisoService, PresupuestoCompromisoService>();
+        // Consultas del control (ejecución, compromisos, kardex) y su interruptor.
+        services.AddScoped<IPresupuestoEjecucionService, PresupuestoEjecucionService>();
         services.AddScoped<IOrdenesPagoDirectoService, OrdenesPagoDirectoService>();
 
         // app lectores V3: mantenimiento de credenciales (adm_lector_credencial, bcrypt).
@@ -141,6 +226,15 @@ public static class ServiceRegistration
 
         // impuestos y sus tasas con vigencia (catalogo global SAR; ISV Honduras)
         services.AddScoped<IImpuestosService, ImpuestosService>();
+
+        // retenciones a proveedores: catalogo global (concepto + tasas con vigencia) + cuenta del
+        // pasivo por empresa (2026-08-06, F1)
+        services.AddScoped<SIAD.Services.Retenciones.IRetencionesService,
+                           SIAD.Services.Retenciones.RetencionesService>();
+
+        // retenciones a proveedores: consulta del registro fiscal hdr/dtl (2026-08-07, F4)
+        services.AddScoped<SIAD.Services.Retenciones.IRetencionRegistroService,
+                           SIAD.Services.Retenciones.RetencionRegistroService>();
 
         services.AddScoped<ICuentasBancosService, CuentasBancosService>();
         services.AddScoped<IChequesService, ChequesService>();

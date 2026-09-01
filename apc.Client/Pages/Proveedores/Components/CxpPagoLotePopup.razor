@@ -1,0 +1,1080 @@
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Proveedores
+@using SIAD.Core.DTOs.Retenciones
+@using SIAD.Core.Retenciones
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject CuentasPorPagarClient CxpClient
+@inject PagosCompraClient PagosClient
+
+@*
+    Pago de uno o varios documentos por pagar. Un documento suelto es un lote de uno: mismo
+    formulario, mismo endpoint y las mismas validaciones, así no hay dos caminos que mantener.
+*@
+
+<DxPopup @bind-Visible="visible" Width="min(900px, 96vw)" Height="auto" MaxHeight="92vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center" style="width:38px;height:38px;">
+                <i class="bi bi-cash-coin"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">
+                    @(resultado is not null ? "Pago registrado" : Titulo)
+                </div>
+                <div class="small text-muted" style="font-weight:normal;">@Subtitulo</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (resultado is not null)
+        {
+            <div class="text-center mb-3">
+                <div class="text-success mb-2"><i class="bi bi-check-circle-fill" style="font-size:2.4rem;"></i></div>
+                <div class="fw-bold">Se registraron @resultado.Pagos.Count pago(s)</div>
+                <div class="text-muted small">
+                    Cada documento conserva su comprobante y su partida contable.
+                    Salieron @resultado.Desembolsos desembolso(s) por @resultado.TotalNeto.ToString("N2").
+                </div>
+            </div>
+
+            <div class="table-responsive">
+                <table class="table table-sm align-middle">
+                    <thead>
+                        <tr>
+                            <th>Tipo</th><th>Documento</th><th>Proveedor</th>
+                            <th class="text-end">Aplicado</th><th class="text-end">Saldo</th>
+                            <th class="text-center">Estado</th><th>Cheque</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var p in resultado.Pagos)
+                        {
+                            <tr>
+                                <td><span class="cxp-chip @(p.Origen == OrigenDocumentoProveedor.Compra ? "fac" : "com")">@p.OrigenDescripcion</span></td>
+                                <td class="font-monospace small">@p.NumeroDocumento</td>
+                                <td class="small">@p.CodProveedor</td>
+                                <td class="text-end money">@p.MontoAplicado.ToString("N2")</td>
+                                <td class="text-end money">@p.Saldo.ToString("N2")</td>
+                                <td class="text-center"><span class="badge-status @(p.Saldado ? "active" : "pendiente")">@p.EstadoDescripcion</span></td>
+                                <td class="small">@(p.NumeroCheque.HasValue ? p.NumeroCheque.Value.ToString("0") : "—")</td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+
+            <div class="d-flex justify-content-end mt-3">
+                <DxButton Text="Cerrar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary" Click="CerrarConResultado" />
+            </div>
+        }
+        else
+        {
+            <div class="row g-3">
+                <div class="col-12">
+                    <label class="form-label fw-semibold mb-1">Cómo se reparte el dinero</label>
+                    <div class="d-flex flex-wrap gap-2">
+                        <DxButton Text="Saldo completo" RenderStyle="@BotonModo(ModoReparto.SaldoCompleto)"
+                                  RenderStyleMode="@ModoEstilo(ModoReparto.SaldoCompleto)"
+                                  Click="@(() => CambiarModo(ModoReparto.SaldoCompleto))" CssClass="btn-sm" />
+                        <DxButton Text="Monto disponible" RenderStyle="@BotonModo(ModoReparto.MontoDisponible)"
+                                  RenderStyleMode="@ModoEstilo(ModoReparto.MontoDisponible)"
+                                  Click="@(() => CambiarModo(ModoReparto.MontoDisponible))" CssClass="btn-sm" />
+                        <DxButton Text="A mano" RenderStyle="@BotonModo(ModoReparto.Manual)"
+                                  RenderStyleMode="@ModoEstilo(ModoReparto.Manual)"
+                                  Click="@(() => CambiarModo(ModoReparto.Manual))" CssClass="btn-sm" />
+                        @if (modo == ModoReparto.MontoDisponible)
+                        {
+                            <DxSpinEdit Value="@disponible" ValueChanged="@((decimal v) => OnDisponibleChanged(v))"
+                                        ValueExpression="@(() => disponible)" DisplayFormat="N2" MinValue="0"
+                                        Style="max-width:180px;" />
+                        }
+                    </div>
+                    @if (modo == ModoReparto.MontoDisponible)
+                    {
+                        <div class="form-text">Se aplica del más vencido al más nuevo; los compromisos, al no tener plazo, entran al final.</div>
+                    }
+                </div>
+
+                <div class="col-6 col-lg-3">
+                    <label class="form-label fw-semibold">Método</label>
+                    <DxComboBox Data="@metodos" Value="@metodo" ValueChanged="@((string v) => OnMetodoChanged(v))"
+                                ValueExpression="@(() => metodo)" CssClass="w-100" />
+                </div>
+                <div class="col-6 col-lg-3">
+                    <label class="form-label fw-semibold">Fecha</label>
+                    <DxDateEdit Date="@fecha" DateChanged="@((DateTime? d) => fecha = d)" CssClass="w-100" />
+                </div>
+
+                @if (EsBancario)
+                {
+                    <div class="col-6 col-lg-3">
+                        <label class="form-label fw-semibold">Banco <span class="text-danger">*</span></label>
+                        <DxComboBox Data="@bancos" Value="@bancoId" ValueChanged="@((long? v) => OnBancoChanged(v))"
+                                    ValueExpression="@(() => bancoId)"
+                                    ValueFieldName="@nameof(BancoItem.BancoId)" TextFieldName="@nameof(BancoItem.Nombre)"
+                                    NullText="Seleccione el banco..."
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                    </div>
+                    <div class="col-6 col-lg-3">
+                        <label class="form-label fw-semibold">Cuenta del banco <span class="text-danger">*</span></label>
+                        <DxComboBox Data="@CuentasDelBanco" Value="@bancoCuentaId"
+                                    ValueChanged="@((long? v) => bancoCuentaId = v)"
+                                    ValueExpression="@(() => bancoCuentaId)"
+                                    ValueFieldName="@nameof(CuentaBancariaLookupDto.BancoCuentaId)"
+                                    TextFieldName="@nameof(CuentaBancariaLookupDto.Display)"
+                                    NullText="@(bancoId is > 0 ? "Seleccione la cuenta..." : "Elija primero el banco")"
+                                    Enabled="@(bancoId is > 0)"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                    </div>
+                }
+                else
+                {
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold">Cuenta contable de contrapartida <span class="text-danger">*</span></label>
+                        <DxComboBox Data="@cuentasContables" Value="@cuentaContableId"
+                                    ValueChanged="@((long? v) => cuentaContableId = v)"
+                                    ValueExpression="@(() => cuentaContableId)"
+                                    ValueFieldName="@nameof(CompraCuentaContableLookupDto.AccountId)"
+                                    TextFieldName="@nameof(CompraCuentaContableLookupDto.Display)"
+                                    NullText="Caja / efectivo..." FilteringMode="DataGridFilteringMode.Contains"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                        <div class="form-text">La caja de donde sale el efectivo; el compromiso la usa como contrapartida de su partida.</div>
+                    </div>
+                }
+
+                @if (retencionesAplicables.Count > 0)
+                {
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold">
+                            Retenciones <span class="text-muted small fw-normal">(opcional)</span>
+                        </label>
+                        <div class="d-flex gap-2">
+                            <DxComboBox Data="@retencionesAplicables" TData="RetencionAplicableDto" TValue="int?"
+                                        Value="@retencionMasivaId" ValueChanged="@((int? v) => retencionMasivaId = v)"
+                                        ValueExpression="@(() => retencionMasivaId)"
+                                        ValueFieldName="@nameof(RetencionAplicableDto.RetencionId)"
+                                        TextFieldName="@nameof(RetencionAplicableDto.Display)"
+                                        NullText="Aplicar a todos los documentos..." FilteringMode="DataGridFilteringMode.Contains"
+                                        ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="flex-grow-1" />
+                            <DxButton IconCssClass="bi bi-plus-lg" Text="Aplicar" RenderStyle="ButtonRenderStyle.Secondary"
+                                      Enabled="@(retencionMasivaId.HasValue)" Click="AplicarRetencionATodos" />
+                        </div>
+                        <div class="form-text">
+                            Se calcula sobre lo que se aplica a cada documento. También puede cargarlas
+                            documento por documento con el botón de la columna <b>Retención</b>.
+                        </div>
+                        @if (!string.IsNullOrWhiteSpace(retencionAviso))
+                        {
+                            <div class="form-text text-warning"><i class="bi bi-exclamation-triangle me-1"></i>@retencionAviso</div>
+                        }
+                    </div>
+                }
+                else
+                {
+                    <div class="col-12 col-lg-6">
+                        <label class="form-label fw-semibold">Retenciones</label>
+                        <div class="alert alert-light border py-2 mb-0 small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            No hay retenciones disponibles: ninguna tiene cuenta contable configurada para esta
+                            empresa. Se define en <b>Mantenimientos → Retenciones</b>.
+                        </div>
+                    </div>
+                }
+
+                <div class="col-12">
+                    <label class="form-label fw-semibold">Observaciones</label>
+                    <DxTextBox @bind-Text="observaciones" MaxLength="300" NullText="Opcional" CssClass="w-100" />
+                </div>
+            </div>
+
+            <div class="mt-3">
+                @foreach (var grupo in Grupos)
+                {
+                    <div class="cxp-lote-prov mb-2">
+                        <div class="cxp-lote-head">
+                            <span class="fw-semibold">@grupo.Proveedor</span>
+                            <span class="small text-muted">@grupo.Codigo · @grupo.Documentos.Count documento(s)</span>
+                            <span class="ms-auto money fw-bold">@NetoDe(grupo.Documentos).ToString("N2")</span>
+                        </div>
+                        <div class="table-responsive">
+                            <table class="table table-sm align-middle mb-0">
+                                <thead>
+                                    <tr>
+                                        <th style="width:120px">Tipo</th><th>Documento</th>
+                                        <th class="text-end" style="width:120px">Saldo</th>
+                                        <th class="text-end" style="width:150px">Se aplica</th>
+                                        <th class="text-end" style="width:110px">Retención</th>
+                                        <th class="text-end" style="width:120px">Neto</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var d in grupo.Documentos)
+                                    {
+                                        var monto = MontoDe(d);
+                                        var ret = RetencionDe(d);
+                                        var lineas = RetencionesDe(d);
+                                        var abierto = docRetencionAbierto == d.ClaveGrid;
+                                        <tr @key="d.ClaveGrid">
+                                            <td><span class="cxp-chip @(d.EsCompra ? "fac" : "com")">@(d.EsCompra ? "Factura" : "Compromiso")</span></td>
+                                            <td>
+                                                <span class="font-monospace small">@d.NumeroDocumento</span>
+                                                <span class="small text-muted d-block">@d.Concepto</span>
+                                            </td>
+                                            <td class="text-end money">@d.Saldo.ToString("N2")</td>
+                                            <td class="text-end">
+                                                <DxSpinEdit Value="@monto" ValueChanged="@((decimal v) => OnMontoChanged(d, v))"
+                                                            ValueExpression="@(() => monto)" DisplayFormat="N2"
+                                                            MinValue="0" MaxValue="@d.Saldo" Style="max-width:140px;" />
+                                            </td>
+                                            <td class="text-end">
+                                                @if (retencionesAplicables.Count > 0)
+                                                {
+                                                    <button type="button" class="btn-icon @(abierto ? "btn-edit" : "")"
+                                                            title="Retenciones del documento"
+                                                            @onclick="@(() => AlternarEditorRetencion(d))">
+                                                        <i class="bi bi-percent"></i>
+                                                    </button>
+                                                }
+                                                <span class="money text-muted ms-1">@(ret == 0m ? "—" : ret.ToString("N2"))</span>
+                                                @if (lineas.Count > 1)
+                                                {
+                                                    <span class="small text-muted d-block">@lineas.Count líneas</span>
+                                                }
+                                            </td>
+                                            <td class="text-end money @(monto - ret <= 0m && monto > 0m ? "text-danger fw-bold" : "")">
+                                                @((monto - ret).ToString("N2"))
+                                            </td>
+                                        </tr>
+
+                                        @if (abierto)
+                                        {
+                                            <tr @key="@(d.ClaveGrid + "-ret")" class="cxp-ret-editor">
+                                                <td colspan="6">
+                                                    <div class="small fw-semibold mb-2">
+                                                        Retenciones de @d.NumeroDocumento
+                                                        <span class="text-muted fw-normal">· se aplican sobre @monto.ToString("N2")</span>
+                                                    </div>
+
+                                                    @if (lineas.Count > 0)
+                                                    {
+                                                        <table class="table table-sm align-middle mb-2">
+                                                            <thead>
+                                                                <tr>
+                                                                    <th>Retención</th>
+                                                                    <th class="text-end" style="width:130px">Base</th>
+                                                                    <th class="text-end" style="width:90px">%</th>
+                                                                    <th class="text-end" style="width:130px">Monto</th>
+                                                                    <th style="width:44px"></th>
+                                                                </tr>
+                                                            </thead>
+                                                            <tbody>
+                                                                @for (var i = 0; i < lineas.Count; i++)
+                                                                {
+                                                                    var idx = i;
+                                                                    var linea = lineas[idx];
+                                                                    <tr @key="@(d.ClaveGrid + "-" + idx)">
+                                                                        <td class="small">@linea.Nombre</td>
+                                                                        <td class="text-end">
+                                                                            <DxSpinEdit Value="@linea.Base"
+                                                                                        ValueChanged="@((decimal v) => OnBaseRetencionChanged(d, idx, v))"
+                                                                                        ValueExpression="@(() => linea.Base)"
+                                                                                        DisplayFormat="N2" MinValue="0" Style="max-width:120px;" />
+                                                                        </td>
+                                                                        <td class="text-end small text-muted">
+                                                                            @(linea.Porcentaje > 0m ? linea.Porcentaje.ToString("0.##") + "%" : "—")
+                                                                        </td>
+                                                                        <td class="text-end">
+                                                                            <DxSpinEdit Value="@linea.Monto"
+                                                                                        ValueChanged="@((decimal v) => OnMontoRetencionChanged(d, idx, v))"
+                                                                                        ValueExpression="@(() => linea.Monto)"
+                                                                                        DisplayFormat="N2" MinValue="0" Style="max-width:120px;" />
+                                                                        </td>
+                                                                        <td class="text-center">
+                                                                            <button type="button" class="btn-icon btn-delete" title="Quitar"
+                                                                                    @onclick="@(() => QuitarRetencion(d, idx))">
+                                                                                <i class="bi bi-x"></i>
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                }
+                                                            </tbody>
+                                                        </table>
+                                                    }
+
+                                                    <div class="d-flex gap-2 align-items-center flex-wrap">
+                                                        <DxComboBox Data="@retencionesAplicables" TData="RetencionAplicableDto" TValue="int?"
+                                                                    Value="@retencionNuevaId" ValueChanged="@((int? v) => retencionNuevaId = v)"
+                                                                    ValueExpression="@(() => retencionNuevaId)"
+                                                                    ValueFieldName="@nameof(RetencionAplicableDto.RetencionId)"
+                                                                    TextFieldName="@nameof(RetencionAplicableDto.Display)"
+                                                                    NullText="Agregar retención..." FilteringMode="DataGridFilteringMode.Contains"
+                                                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                                                    Style="min-width:260px;" />
+                                                        <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg"
+                                                                  RenderStyle="ButtonRenderStyle.Secondary"
+                                                                  Enabled="@(retencionNuevaId.HasValue)"
+                                                                  Click="@(() => AgregarRetencion(d))" />
+                                                        <span class="ms-auto small">
+                                                            Retenido <b class="money">@ret.ToString("N2")</b> ·
+                                                            neto <b class="money">@((monto - ret).ToString("N2"))</b>
+                                                        </span>
+                                                    </div>
+                                                    <div class="form-text">
+                                                        La base se calcula del monto a pagar según el tipo de retención; puede ajustar
+                                                        base y monto a mano (necesario cuando la retención no tiene tasa vigente).
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        }
+                                    }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                }
+            </div>
+
+            <div class="mt-3">
+                <div class="d-flex justify-content-between small text-muted"><span>Se aplica a la deuda (bruto)</span><span class="money">@TotalBruto.ToString("N2")</span></div>
+                <div class="d-flex justify-content-between small text-muted"><span>Retenido</span><span class="money">@(TotalRetenido == 0m ? "—" : "−" + TotalRetenido.ToString("N2"))</span></div>
+                <div class="d-flex justify-content-between fw-bold border-top pt-2 mt-1">
+                    <span>Sale @DestinoFondos — @DesembolsosPrevistos desembolso(s)</span>
+                    <span class="money">@TotalNeto.ToString("N2")</span>
+                </div>
+            </div>
+
+            @if (Excedido)
+            {
+                <div class="alert alert-warning py-2 mt-3 mb-0 small">
+                    <i class="bi bi-exclamation-triangle me-1"></i>Hay montos mayores que el saldo del documento. Corríjalos para poder registrar.
+                </div>
+            }
+            else if (Parciales > 0 || SinAplicar > 0)
+            {
+                <div class="alert alert-light border py-2 mt-3 mb-0 small">
+                    @if (Parciales > 0)
+                    {
+                        <text><b>@Parciales</b> documento(s) quedarán con saldo pendiente. </text>
+                    }
+                    @if (SinAplicar > 0)
+                    {
+                        <text><b>@SinAplicar</b> quedarán sin pago porque no alcanzó el monto disponible.</text>
+                    }
+                </div>
+            }
+
+            @if (EsCheque)
+            {
+                <div class="alert alert-info py-2 mt-2 mb-0 small">
+                    <i class="bi bi-info-circle me-1"></i>
+                    Con cheque se emite <b>un cheque por documento</b>, igual que en el pago individual.
+                    Para un solo cheque por proveedor, use transferencia o pague por separado.
+                </div>
+            }
+
+            <div class="d-flex justify-content-end gap-2 mt-3">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Enabled="@(!guardando)" Click="Cerrar" />
+                <DxButton Text="@TextoBotonRegistrar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@PuedeRegistrar" Click="RegistrarAsync" />
+            </div>
+
+            @if (!string.IsNullOrWhiteSpace(errorMessage))
+            {
+                <div class="alert alert-danger py-2 mt-2 mb-0 small">@errorMessage</div>
+            }
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+@code {
+    [Parameter] public EventCallback<CxpLoteResultadoDto> Pagado { get; set; }
+
+    private enum ModoReparto { SaldoCompleto, MontoDisponible, Manual }
+
+    private bool visible;
+    private bool guardando;
+    private string? errorMessage;
+
+    private List<CxpDocumentoDto> documentos = new();
+    private readonly Dictionary<string, decimal> montos = new();
+    private ModoReparto modo = ModoReparto.SaldoCompleto;
+    private decimal disponible;
+
+    private string metodo = MetodoPagoCompra.Transferencia;
+    private DateTime? fecha = DateTime.Today;
+    private long? bancoId;
+    private long? bancoCuentaId;
+    private long? cuentaContableId;
+    private string? observaciones;
+
+    // Retenciones POR DOCUMENTO (clave = ClaveGrid): cada documento lleva las suyas, que es como
+    // las recibe el backend y como se declaran ante la SAR.
+    private readonly Dictionary<string, List<RetLinea>> retencionesPorDoc = new();
+    private string? docRetencionAbierto;
+    private int? retencionMasivaId;
+    private int? retencionNuevaId;
+    private string? retencionAviso;
+    private decimal? tasaIsvGeneral;
+
+    /// <summary>Una retención cargada a un documento; base y monto se pueden ajustar a mano.</summary>
+    private sealed class RetLinea
+    {
+        public int RetencionId { get; set; }
+        public long CuentaId { get; set; }
+        public string Nombre { get; set; } = string.Empty;
+        public string? BaseCalculo { get; set; }
+        public decimal Porcentaje { get; set; }
+        public decimal Base { get; set; }
+        public decimal Monto { get; set; }
+
+        /// <summary>El usuario tocó base o monto: deja de recalcularse sola.</summary>
+        public bool Manual { get; set; }
+    }
+
+    private CxpLoteResultadoDto? resultado;
+
+    private List<CuentaBancariaLookupDto> cuentas = new();
+    private List<BancoItem> bancos = new();
+    private List<CompraCuentaContableLookupDto> cuentasContables = new();
+    private readonly List<RetencionAplicableDto> retencionesAplicables = new();
+    private bool lookupsCargados;
+
+    private static readonly string[] metodos = { MetodoPagoCompra.Transferencia, MetodoPagoCompra.Cheque, MetodoPagoCompra.Efectivo };
+
+    private sealed record BancoItem(long BancoId, string Nombre);
+
+    private sealed record GrupoProveedor(string Codigo, string Proveedor, List<CxpDocumentoDto> Documentos);
+
+    private bool EsBancario => MetodoPagoCompra.EsBancario(metodo);
+    private bool EsCheque => string.Equals(metodo, MetodoPagoCompra.Cheque, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>Las cuentas del banco elegido: la cascada del combo. Sin LINQ, por convención del repo.</summary>
+    private List<CuentaBancariaLookupDto> CuentasDelBanco
+    {
+        get
+        {
+            var lista = new List<CuentaBancariaLookupDto>();
+            foreach (var c in cuentas)
+            {
+                if ((c.BancoId ?? 0) == (bancoId ?? -1))
+                {
+                    lista.Add(c);
+                }
+            }
+
+            return lista;
+        }
+    }
+
+    private string Titulo => documentos.Count == 1
+        ? (documentos[0].EsCompra ? "Pago de factura de compra" : "Pago de compromiso")
+        : $"Pagar {documentos.Count} documentos";
+
+    private string Subtitulo
+    {
+        get
+        {
+            if (resultado is not null)
+            {
+                return $"{resultado.Pagos.Count} pago(s) · {resultado.Desembolsos} desembolso(s)";
+            }
+
+            if (documentos.Count == 1)
+            {
+                return documentos[0].Proveedor;
+            }
+
+            var facturas = 0;
+            foreach (var d in documentos)
+            {
+                if (d.EsCompra) facturas++;
+            }
+
+            return $"{facturas} factura(s) y {documentos.Count - facturas} compromiso(s) · {Grupos.Count} proveedor(es)";
+        }
+    }
+
+    /// <summary>Los documentos agrupados por proveedor: así se ve a quién se le paga qué.</summary>
+    private List<GrupoProveedor> Grupos
+    {
+        get
+        {
+            var porCodigo = new Dictionary<string, GrupoProveedor>(StringComparer.OrdinalIgnoreCase);
+            var orden = new List<GrupoProveedor>();
+
+            foreach (var d in documentos)
+            {
+                if (!porCodigo.TryGetValue(d.CodProveedor, out var grupo))
+                {
+                    grupo = new GrupoProveedor(d.CodProveedor, d.Proveedor, new List<CxpDocumentoDto>());
+                    porCodigo[d.CodProveedor] = grupo;
+                    orden.Add(grupo);
+                }
+
+                grupo.Documentos.Add(d);
+            }
+
+            orden.Sort((a, b) => string.Compare(a.Proveedor, b.Proveedor, StringComparison.OrdinalIgnoreCase));
+            return orden;
+        }
+    }
+
+    private RetencionAplicableDto? BuscarAplicable(int? id)
+    {
+        if (!id.HasValue) return null;
+
+        foreach (var r in retencionesAplicables)
+        {
+            if (r.RetencionId == id.Value) return r;
+        }
+
+        return null;
+    }
+
+    private decimal MontoDe(CxpDocumentoDto d) => montos.TryGetValue(d.ClaveGrid, out var m) ? m : 0m;
+
+    /// <summary>Las retenciones cargadas a un documento (lista viva, se edita en sitio).</summary>
+    private List<RetLinea> RetencionesDe(CxpDocumentoDto d)
+    {
+        if (!retencionesPorDoc.TryGetValue(d.ClaveGrid, out var lista))
+        {
+            lista = new List<RetLinea>();
+            retencionesPorDoc[d.ClaveGrid] = lista;
+        }
+
+        return lista;
+    }
+
+    private decimal RetencionDe(CxpDocumentoDto d)
+    {
+        var total = 0m;
+        foreach (var l in RetencionesDe(d)) total += l.Monto;
+        return total;
+    }
+
+    private decimal NetoDe(IReadOnlyList<CxpDocumentoDto> docs)
+    {
+        var total = 0m;
+        foreach (var d in docs) total += MontoDe(d) - RetencionDe(d);
+        return total;
+    }
+
+    private decimal TotalBruto
+    {
+        get
+        {
+            var total = 0m;
+            foreach (var d in documentos) total += MontoDe(d);
+            return total;
+        }
+    }
+
+    private decimal TotalRetenido
+    {
+        get
+        {
+            var total = 0m;
+            foreach (var d in documentos) total += RetencionDe(d);
+            return total;
+        }
+    }
+
+    private decimal TotalNeto => TotalBruto - TotalRetenido;
+
+    private bool Excedido
+    {
+        get
+        {
+            foreach (var d in documentos)
+            {
+                if (MontoDe(d) - d.Saldo > 0.01m) return true;
+            }
+
+            return false;
+        }
+    }
+
+    private int Parciales
+    {
+        get
+        {
+            var n = 0;
+            foreach (var d in documentos)
+            {
+                var m = MontoDe(d);
+                if (m > 0m && d.Saldo - m > 0.01m) n++;
+            }
+
+            return n;
+        }
+    }
+
+    private int SinAplicar
+    {
+        get
+        {
+            var n = 0;
+            foreach (var d in documentos)
+            {
+                if (MontoDe(d) <= 0m) n++;
+            }
+
+            return n;
+        }
+    }
+
+    /// <summary>Un desembolso por proveedor que realmente recibe dinero.</summary>
+    private int DesembolsosPrevistos
+    {
+        get
+        {
+            var codigos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var d in documentos)
+            {
+                if (MontoDe(d) > 0m) codigos.Add(d.CodProveedor);
+            }
+
+            return codigos.Count;
+        }
+    }
+
+    private string DestinoFondos
+    {
+        get
+        {
+            if (!EsBancario) return "de la caja";
+
+            foreach (var c in cuentas)
+            {
+                if (c.BancoCuentaId == bancoCuentaId) return $"de {c.Banco} · {c.NumeroCuenta}";
+            }
+
+            foreach (var b in bancos)
+            {
+                if (b.BancoId == bancoId) return $"de {b.Nombre}";
+            }
+
+            return "del banco";
+        }
+    }
+
+    private bool FormaPagoCompleta => EsBancario
+        ? bancoId is > 0 && bancoCuentaId is > 0
+        : cuentaContableId is > 0;
+
+    private bool PuedeRegistrar => !guardando && !Excedido && TotalBruto > 0m
+        && FormaPagoCompleta && !HayNetoInvalido;
+
+    /// <summary>
+    /// Un documento con retención tiene que dejar algo que pagar: si lo retenido se come el
+    /// monto, el backend lo rechaza igual, así que se corta aquí.
+    /// </summary>
+    private bool HayNetoInvalido
+    {
+        get
+        {
+            foreach (var d in documentos)
+            {
+                var monto = MontoDe(d);
+                if (monto > 0m && RetencionesDe(d).Count > 0 && monto - RetencionDe(d) <= 0m)
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+
+    private string TextoBotonRegistrar
+    {
+        get
+        {
+            var n = 0;
+            foreach (var d in documentos)
+            {
+                if (MontoDe(d) > 0m) n++;
+            }
+
+            return n == 1 ? "Registrar 1 pago" : $"Registrar {n} pagos";
+        }
+    }
+
+    /// <summary>Abre el popup para los documentos indicados (uno o varios).</summary>
+    public async Task MostrarAsync(IReadOnlyCollection<CxpDocumentoDto> docs)
+    {
+        if (docs is null || docs.Count == 0) return;
+
+        documentos = new List<CxpDocumentoDto>();
+        foreach (var d in docs)
+        {
+            if (d.Saldo > 0m) documentos.Add(d);
+        }
+
+        if (documentos.Count == 0) return;
+
+        resultado = null;
+        errorMessage = null;
+        guardando = false;
+        modo = ModoReparto.SaldoCompleto;
+        disponible = 0m;
+        foreach (var d in documentos) disponible += d.Saldo;
+
+        metodo = MetodoPagoCompra.Transferencia;
+        fecha = DateTime.Today;
+        bancoId = null;
+        bancoCuentaId = null;
+        cuentaContableId = null;
+        observaciones = null;
+        retencionesPorDoc.Clear();
+        docRetencionAbierto = null;
+        retencionMasivaId = null;
+        retencionNuevaId = null;
+        retencionAviso = null;
+        Repartir();
+
+        visible = true;
+        StateHasChanged();
+
+        await CargarLookupsAsync();
+    }
+
+    private async Task CargarLookupsAsync()
+    {
+        if (lookupsCargados) return;
+
+        try
+        {
+            cuentas = await PagosClient.ListarCuentasBancariasAsync();
+
+            // Un banco por cada cuenta distinta, para el primer combo de la cascada.
+            var vistos = new HashSet<long>();
+            bancos = new List<BancoItem>();
+            foreach (var c in cuentas)
+            {
+                var id = c.BancoId ?? 0;
+                if (vistos.Add(id))
+                {
+                    bancos.Add(new BancoItem(id, c.Banco ?? "Sin banco"));
+                }
+            }
+
+            bancos.Sort((a, b) => string.Compare(a.Nombre, b.Nombre, StringComparison.OrdinalIgnoreCase));
+        }
+        catch { cuentas = new(); bancos = new(); }
+
+        try { cuentasContables = await PagosClient.ListarCuentasContablesAsync(); }
+        catch { cuentasContables = new(); }
+
+        try
+        {
+            var apl = await PagosClient.GetRetencionesAplicablesAsync();
+            retencionesAplicables.Clear();
+            // Sin cuenta contable configurada la retención no se puede asentar: no se ofrece.
+            foreach (var r in apl.Retenciones)
+            {
+                if (r.CuentaConfigurada) retencionesAplicables.Add(r);
+            }
+
+            tasaIsvGeneral = apl.TasaIsvGeneral;
+        }
+        catch { /* sin catálogo de retención el pago funciona igual, sólo sin esa sección */ }
+
+        lookupsCargados = true;
+        StateHasChanged();
+    }
+
+    // ── Reparto del dinero ────────────────────────────────────────────────────
+
+    private void CambiarModo(ModoReparto nuevo)
+    {
+        modo = nuevo;
+        if (modo != ModoReparto.Manual)
+        {
+            Repartir();
+            RecalcularTodasLasRetenciones();
+        }
+    }
+
+    private void OnDisponibleChanged(decimal v)
+    {
+        disponible = v < 0m ? 0m : v;
+        Repartir();
+        RecalcularTodasLasRetenciones();
+    }
+
+    private void Repartir()
+    {
+        montos.Clear();
+
+        if (modo == ModoReparto.SaldoCompleto)
+        {
+            foreach (var d in documentos) montos[d.ClaveGrid] = d.Saldo;
+            return;
+        }
+
+        if (modo == ModoReparto.MontoDisponible)
+        {
+            // Del más vencido al más nuevo; los que no tienen plazo van al final, por fecha (D10).
+            var orden = new List<CxpDocumentoDto>(documentos);
+            orden.Sort((a, b) =>
+            {
+                var diasA = a.DiasVencido ?? int.MinValue;
+                var diasB = b.DiasVencido ?? int.MinValue;
+                return diasA != diasB ? diasB.CompareTo(diasA) : a.Fecha.CompareTo(b.Fecha);
+            });
+
+            var resto = disponible;
+            foreach (var d in orden)
+            {
+                var aplica = Math.Min(d.Saldo, Math.Max(0m, resto));
+                montos[d.ClaveGrid] = decimal.Round(aplica, 2);
+                resto -= aplica;
+            }
+        }
+    }
+
+    private void OnMontoChanged(CxpDocumentoDto d, decimal v)
+    {
+        montos[d.ClaveGrid] = v < 0m ? 0m : v;
+        modo = ModoReparto.Manual;
+        // Si cambia lo que se le paga, la retención calculada por tasa cambia con él.
+        RecalcularRetenciones(d);
+    }
+
+    // ── Retenciones ───────────────────────────────────────────────────────────
+
+    private void AlternarEditorRetencion(CxpDocumentoDto d)
+    {
+        docRetencionAbierto = docRetencionAbierto == d.ClaveGrid ? null : d.ClaveGrid;
+        retencionNuevaId = null;
+        retencionAviso = null;
+    }
+
+    private void AgregarRetencion(CxpDocumentoDto d)
+    {
+        var aplicable = BuscarAplicable(retencionNuevaId);
+        if (aplicable is null) return;
+
+        AgregarRetencionA(d, aplicable);
+        retencionNuevaId = null;
+    }
+
+    /// <summary>Carga la retención al documento, ya calculada sobre lo que se le está pagando.</summary>
+    private void AgregarRetencionA(CxpDocumentoDto d, RetencionAplicableDto aplicable)
+    {
+        var lineas = RetencionesDe(d);
+        foreach (var l in lineas)
+        {
+            if (l.RetencionId == aplicable.RetencionId) return;   // ya la tiene
+        }
+
+        if (aplicable.CuentaAccountId is not > 0)
+        {
+            retencionAviso = $"{aplicable.Codigo} no tiene cuenta contable configurada para la empresa.";
+            return;
+        }
+
+        var monto = MontoDe(d);
+        var baseCalculo = RetencionCalculator.CalcularBase(monto, aplicable.BaseCalculo, tasaIsvGeneral);
+        var porcentaje = aplicable.Porcentaje ?? 0m;
+
+        lineas.Add(new RetLinea
+        {
+            RetencionId = aplicable.RetencionId,
+            CuentaId = aplicable.CuentaAccountId.Value,
+            Nombre = $"{aplicable.Codigo} - {aplicable.Nombre}",
+            BaseCalculo = aplicable.BaseCalculo,
+            Porcentaje = porcentaje,
+            Base = baseCalculo,
+            Monto = porcentaje > 0m ? RetencionCalculator.MontoDesdeBase(baseCalculo, porcentaje) : 0m
+        });
+
+        if (porcentaje <= 0m)
+        {
+            retencionAviso = $"{aplicable.Codigo} no tiene tasa vigente: capture el monto a mano.";
+        }
+        else if (RetencionCalculator.RequiereTasaIsvYNoHay(aplicable.BaseCalculo, tasaIsvGeneral))
+        {
+            retencionAviso = "No hay tasa de ISV vigente: la base no se redujo. Ajústela si corresponde.";
+        }
+    }
+
+    private void AplicarRetencionATodos()
+    {
+        var aplicable = BuscarAplicable(retencionMasivaId);
+        if (aplicable is null) return;
+
+        retencionAviso = null;
+        foreach (var d in documentos)
+        {
+            if (MontoDe(d) > 0m)
+            {
+                AgregarRetencionA(d, aplicable);
+            }
+        }
+
+        retencionMasivaId = null;
+    }
+
+    private void QuitarRetencion(CxpDocumentoDto d, int indice)
+    {
+        var lineas = RetencionesDe(d);
+        if (indice >= 0 && indice < lineas.Count)
+        {
+            lineas.RemoveAt(indice);
+        }
+    }
+
+    private void OnBaseRetencionChanged(CxpDocumentoDto d, int indice, decimal v)
+    {
+        var lineas = RetencionesDe(d);
+        if (indice < 0 || indice >= lineas.Count) return;
+
+        var linea = lineas[indice];
+        linea.Base = v < 0m ? 0m : v;
+        linea.Manual = true;
+        // Con tasa vigente el monto sigue a la base; sin tasa, el monto lo pone el usuario.
+        if (linea.Porcentaje > 0m)
+        {
+            linea.Monto = RetencionCalculator.MontoDesdeBase(linea.Base, linea.Porcentaje);
+        }
+    }
+
+    private void OnMontoRetencionChanged(CxpDocumentoDto d, int indice, decimal v)
+    {
+        var lineas = RetencionesDe(d);
+        if (indice < 0 || indice >= lineas.Count) return;
+
+        lineas[indice].Monto = v < 0m ? 0m : v;
+        lineas[indice].Manual = true;
+    }
+
+    /// <summary>Rehace las retenciones calculadas por tasa; las tocadas a mano se respetan.</summary>
+    private void RecalcularRetenciones(CxpDocumentoDto d)
+    {
+        var monto = MontoDe(d);
+        foreach (var linea in RetencionesDe(d))
+        {
+            if (linea.Manual || linea.Porcentaje <= 0m) continue;
+
+            linea.Base = RetencionCalculator.CalcularBase(monto, linea.BaseCalculo, tasaIsvGeneral);
+            linea.Monto = RetencionCalculator.MontoDesdeBase(linea.Base, linea.Porcentaje);
+        }
+    }
+
+    private void RecalcularTodasLasRetenciones()
+    {
+        foreach (var d in documentos) RecalcularRetenciones(d);
+    }
+
+    private void OnMetodoChanged(string v)
+    {
+        metodo = string.IsNullOrWhiteSpace(v) ? MetodoPagoCompra.Efectivo : v;
+        // Al cambiar de método se vuelve a elegir el origen del dinero.
+        bancoId = null;
+        bancoCuentaId = null;
+        cuentaContableId = null;
+    }
+
+    private void OnBancoChanged(long? v)
+    {
+        bancoId = v;
+        bancoCuentaId = null;   // las cuentas son las del banco elegido
+    }
+
+    private ButtonRenderStyle BotonModo(ModoReparto m) =>
+        modo == m ? ButtonRenderStyle.Primary : ButtonRenderStyle.Secondary;
+
+    private ButtonRenderStyleMode ModoEstilo(ModoReparto m) =>
+        modo == m ? ButtonRenderStyleMode.Contained : ButtonRenderStyleMode.Outline;
+
+    // ── Registro ──────────────────────────────────────────────────────────────
+
+    private async Task RegistrarAsync()
+    {
+        errorMessage = null;
+        guardando = true;
+        try
+        {
+            var dto = new CxpLoteUpsertDto
+            {
+                MetodoPago = metodo,
+                BancoCuentaId = EsBancario ? bancoCuentaId : null,
+                CuentaContableId = EsBancario ? null : cuentaContableId,
+                Fecha = fecha.HasValue ? DateOnly.FromDateTime(fecha.Value) : DateOnly.FromDateTime(DateTime.Today),
+                Observaciones = observaciones
+            };
+
+            foreach (var d in documentos)
+            {
+                var monto = MontoDe(d);
+                if (monto <= 0m) continue;   // los que no alcanzaron monto disponible no se pagan
+
+                var linea = new CxpLoteLineaDto
+                {
+                    Origen = d.Origen,
+                    DocumentoId = d.DocumentoId,
+                    Monto = monto
+                };
+
+                // Cada retención cargada al documento viaja como su propia línea: el backend
+                // arma con ellas la partida y el registro fiscal.
+                foreach (var r in RetencionesDe(d))
+                {
+                    if (r.Monto <= 0m) continue;
+
+                    linea.Retenciones.Add(new RetencionAplicadaDto
+                    {
+                        RetencionId = r.RetencionId,
+                        CuentaId = r.CuentaId,
+                        Base = r.Base,
+                        Porcentaje = r.Porcentaje,
+                        Monto = r.Monto
+                    });
+                }
+
+                dto.Lineas.Add(linea);
+            }
+
+            resultado = await CxpClient.PagarLoteAsync(dto);
+        }
+        catch (Exception ex)
+        {
+            errorMessage = ex.Message;
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void Cerrar()
+    {
+        if (guardando) return;
+        visible = false;
+        documentos = new();
+        montos.Clear();
+    }
+
+    private async Task CerrarConResultado()
+    {
+        var r = resultado;
+        visible = false;
+        resultado = null;
+        documentos = new();
+        montos.Clear();
+
+        if (r is not null && Pagado.HasDelegate)
+        {
+            await Pagado.InvokeAsync(r);
+        }
+    }
+}

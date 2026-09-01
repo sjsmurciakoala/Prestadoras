@@ -1,6 +1,7 @@
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen
 @using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.Utilities
 
 <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
     <DataAnnotationsValidator />
@@ -35,7 +36,7 @@
                             ValueChanged="@((int? v) => OnUnidadMedidaChanged(v))"
                             ValueExpression="@(() => Model.UnidadMedidaId)"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
-                            TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
+                            TextFieldName="@nameof(UnidadMedidaLookupDto.Nombre)"
                             FilteringMode="DataGridFilteringMode.Contains"
                             NullText="Seleccione una unidad..."
                             ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
@@ -45,7 +46,7 @@
             <DxFormLayoutItem Caption="Unidad de almacenaje" ColSpanMd="12">
                 <DxComboBox Data="@UnidadesCompatibles" @bind-Value="Model.UnidadAlmacenajeId"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
-                            TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
+                            TextFieldName="@nameof(UnidadMedidaLookupDto.Nombre)"
                             FilteringMode="DataGridFilteringMode.Contains"
                             Enabled="@(CategoriaIdSeleccionada.HasValue)"
                             NullText="@(!CategoriaIdSeleccionada.HasValue ? "Elija primero la unidad de medida" : "Unidad de almacenaje...")"
@@ -56,7 +57,7 @@
             <DxFormLayoutItem Caption="Unidad de salidas" ColSpanMd="12">
                 <DxComboBox Data="@UnidadesCompatibles" @bind-Value="Model.UnidadSalidaId"
                             ValueFieldName="@nameof(UnidadMedidaLookupDto.Id)"
-                            TextFieldName="@nameof(UnidadMedidaLookupDto.Display)"
+                            TextFieldName="@nameof(UnidadMedidaLookupDto.Nombre)"
                             FilteringMode="DataGridFilteringMode.Contains"
                             Enabled="@(CategoriaIdSeleccionada.HasValue)"
                             NullText="@(!CategoriaIdSeleccionada.HasValue ? "Elija primero la unidad de medida" : "Unidad de salidas...")"
@@ -76,6 +77,40 @@
                 </DxFormLayoutItem>
             }
         </DxFormLayoutGroup>
+
+        @if (Model.Id.HasValue)
+        {
+            @* Caption arriba (Vertical): el valor ocupa todo el ancho de la columna y no se parte.
+               .costo-valor fuerza una sola línea y saca scroll horizontal si el número desborda. *@
+            <DxFormLayoutGroup Caption="Costos y valuación" ColSpanXs="12" CaptionPosition="CaptionPosition.Vertical">
+                <DxFormLayoutItem Caption="Costo promedio" ColSpanMd="4">
+                    <Template>
+                        <div class="costo-valor"><span class="fw-semibold text-dark fs-6">@Model.CostoPromedio.ToString("N4")</span></div>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Último costo" ColSpanMd="4">
+                    <Template>
+                        <div class="costo-valor"><span class="fw-semibold text-dark fs-6">@Model.UltimoCosto.ToString("N4")</span></div>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Valor total inventario" ColSpanMd="4">
+                    <Template>
+                        <div class="costo-valor"><span class="fw-bold text-primary fs-6">@Model.ValorTotal.ToString("N2")</span></div>
+                    </Template>
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="form-hint text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Valores calculados automáticamente por las compras y movimientos de inventario (solo lectura).
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayoutGroup>
+        }
 
         <DxFormLayoutGroup Caption="Clasificación" ColSpanXs="12">
             <DxFormLayoutItem Caption="Tipo de artículo *" ColSpanMd="6">
@@ -115,20 +150,59 @@
             }
         </DxFormLayoutGroup>
 
-        <DxFormLayoutGroup Caption="Contabilidad" ColSpanXs="12">
-            <DxFormLayoutItem Caption="Cuenta contable" ColSpanMd="12">
-                <DxComboBox Data="@CuentasContables"
-                            TData="CuentaContableLookupDto"
-                            TValue="string"
-                            @bind-Value="Model.CuentaContable"
-                            ValueFieldName="@nameof(CuentaContableLookupDto.Code)"
-                            TextFieldName="@nameof(CuentaContableLookupDto.Display)"
-                            FilteringMode="DataGridFilteringMode.Contains"
-                            NullText="Seleccione una cuenta contable..."
-                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
-                            Enabled="@(CuentasContables.Count > 0)" />
-                <ValidationMessage For="() => Model.CuentaContable" />
-            </DxFormLayoutItem>
+        @* La cuenta contable ya no es propia del artículo: se hereda del TIPO. Aquí solo se
+           muestran, en solo lectura, las cuentas configuradas en el tipo seleccionado. *@
+        <DxFormLayoutGroup Caption="Cuentas contables del tipo" ColSpanXs="12">
+            @if (TipoSeleccionado is null)
+            {
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="form-hint text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Elija un <strong>tipo de artículo</strong> para ver sus cuentas contables.
+                            El artículo hereda las cuentas de su tipo.
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            }
+            else if (!TipoTieneCuentas)
+            {
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="alert alert-warning py-2 px-3 mb-0 small">
+                            <i class="bi bi-exclamation-triangle-fill me-1"></i>
+                            El tipo <strong>@TipoSeleccionado.Nombre</strong> no tiene cuentas contables configuradas.
+                            Configúralas en el mantenimiento de <strong>Tipos de artículo</strong>.
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            }
+            else
+            {
+                <DxFormLayoutItem Caption="De inventario" ColSpanMd="6">
+                    <Template><div class="pt-2 fw-semibold">@CuentaDisplay(TipoSeleccionado.CuentaInventario)</div></Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="De costo de ventas" ColSpanMd="6">
+                    <Template><div class="pt-2 fw-semibold">@CuentaDisplay(TipoSeleccionado.CuentaCostoVentas)</div></Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="De ventas" ColSpanMd="6">
+                    <Template><div class="pt-2 fw-semibold">@CuentaDisplay(TipoSeleccionado.CuentaVentas)</div></Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="De ajustes" ColSpanMd="6">
+                    <Template><div class="pt-2 fw-semibold">@CuentaDisplay(TipoSeleccionado.CuentaAjustes)</div></Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="De devoluciones" ColSpanMd="6">
+                    <Template><div class="pt-2 fw-semibold">@CuentaDisplay(TipoSeleccionado.CuentaDevoluciones)</div></Template>
+                </DxFormLayoutItem>
+                <DxFormLayoutItem ColSpanMd="12">
+                    <Template>
+                        <div class="form-hint text-muted small">
+                            <i class="bi bi-info-circle me-1"></i>
+                            Estas cuentas se definen en el <strong>tipo de artículo</strong> y se muestran solo como referencia.
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            }
         </DxFormLayoutGroup>
 
                 </DxFormLayout>
@@ -231,6 +305,38 @@
     /// tipo_articulo_id es nullable). Es la misma regla que aplica ArticulosService.
     /// </summary>
     private bool ManejaInventario => TipoSeleccionado?.ManejaInventario ?? true;
+
+    // ── Cuentas contables del tipo (solo lectura) ───────────────────────────────
+    // El artículo ya no lleva cuenta contable propia: hereda las de su tipo. Aquí solo se
+    // muestran como referencia; se editan en el mantenimiento de Tipos de artículo.
+    private bool TipoTieneCuentas => TipoSeleccionado is not null &&
+        new[]
+        {
+            TipoSeleccionado.CuentaInventario,
+            TipoSeleccionado.CuentaCostoVentas,
+            TipoSeleccionado.CuentaVentas,
+            TipoSeleccionado.CuentaAjustes,
+            TipoSeleccionado.CuentaDevoluciones
+        }.Any(c => !string.IsNullOrWhiteSpace(c));
+
+    /// <summary>
+    /// Texto a mostrar para un código de cuenta: usa la descripción del plan
+    /// (CuentasContables, las mismas cuentas imputables/activas que ofrece el
+    /// mantenimiento del tipo); si el código no está en esa lista, cae al código con formato.
+    /// </summary>
+    private string CuentaDisplay(string? code)
+    {
+        if (string.IsNullOrWhiteSpace(code))
+        {
+            return "—";
+        }
+
+        var cuenta = CuentasContables.FirstOrDefault(c =>
+            string.Equals(AccountCodeFormatter.Normalize(c.Code), AccountCodeFormatter.Normalize(code),
+                StringComparison.OrdinalIgnoreCase));
+
+        return cuenta?.Display ?? AccountCodeFormatter.Format(code);
+    }
 
     private async Task HandleTipoArticuloChanged(int? value)
     {

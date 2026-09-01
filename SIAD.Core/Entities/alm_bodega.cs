@@ -12,6 +12,7 @@ public partial class alm_bodega : ICompanyScopedEntity
     public string? direccion { get; set; }
     public string? responsable { get; set; }
     public bool activo { get; set; }
+
     public string? usuariocreacion { get; set; }
     public DateTime? fechacreacion { get; set; }
     public string? usuariomodificacion { get; set; }

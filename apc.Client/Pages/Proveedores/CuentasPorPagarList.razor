@@ -1,0 +1,523 @@
+@page "/proveedores/cuentas-por-pagar"
+@attribute [Authorize(Policy = PermissionNames.Proveedores.View)]
+
+@using DevExpress.Blazor
+@using Microsoft.AspNetCore.Authorization
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Proveedores
+@using SIAD.Core.DTOs.Retenciones
+@using SIAD.Core.Retenciones
+@using apc.Client.Pages.Proveedores.Components
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+@using apc.Client.Services.Proveedores
+
+@inject CuentasPorPagarClient CxpClient
+@inject PagosCompraClient PagosClient
+@inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Cuentas por pagar</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="CxpToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div class="d-flex align-items-center gap-3">
+            <div class="bg-primary bg-opacity-10 text-primary rounded-circle d-flex align-items-center justify-content-center form-icon">
+                <i class="bi bi-cash-stack"></i>
+            </div>
+            <div>
+                <h2 class="page-title">Cuentas por pagar</h2>
+                <p class="page-subtitle">Facturas de compra y compromisos en una sola vista</p>
+            </div>
+        </div>
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="row g-3 mb-1">
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Saldo por pagar</div>
+                <div class="kpi-value">@resumen.SaldoTotal.ToString("N2")</div>
+                <div class="kpi-sub">@resumen.DocumentosPendientes documento(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label"><span class="cxp-dot fac"></span>Facturas de compra</div>
+                <div class="kpi-value">@resumen.SaldoCompras.ToString("N2")</div>
+                <div class="kpi-sub">@resumen.ComprasPendientes factura(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label"><span class="cxp-dot com"></span>Compromisos</div>
+                <div class="kpi-value">@resumen.SaldoCompromisos.ToString("N2")</div>
+                <div class="kpi-sub">@resumen.CompromisosPendientes compromiso(s)</div>
+            </div>
+        </div>
+        <div class="col-6 col-lg-3">
+            <div class="kpi-card">
+                <div class="kpi-label">Vencido</div>
+                <div class="kpi-value text-danger">@resumen.SaldoVencido.ToString("N2")</div>
+                <div class="kpi-sub">@resumen.DocumentosVencidos fuera de plazo</div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@documentos" KeyFieldName="@nameof(CxpDocumentoDto.ClaveGrid)"
+                    PageSize="15" PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    SelectionMode="GridSelectionMode.Multiple"
+                    SelectAllCheckboxMode="GridSelectAllCheckboxMode.AllPages"
+                    SelectedDataItems="@seleccionados"
+                    SelectedDataItemsChanged="OnSeleccionCambiada"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtro.Search" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtro.Search)"
+                                   Placeholder="Proveedor, documento o concepto..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+
+                        <DxComboBox Data="@tiposFiltro" Value="@filtro.Origen"
+                                    ValueChanged="@((short? v) => OnOrigenChanged(v))"
+                                    ValueExpression="@(() => filtro.Origen)"
+                                    ValueFieldName="@nameof(OrigenFiltroItem.Id)"
+                                    TextFieldName="@nameof(OrigenFiltroItem.Nombre)"
+                                    NullText="Facturas y compromisos"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 190px;" />
+
+                        <DxComboBox Data="@estadosFiltro" Value="@filtro.EstadoId"
+                                    ValueChanged="@((short? v) => OnEstadoChanged(v))"
+                                    ValueExpression="@(() => filtro.EstadoId)"
+                                    ValueFieldName="@nameof(EstadoFiltroItem.Id)"
+                                    TextFieldName="@nameof(EstadoFiltroItem.Nombre)"
+                                    NullText="Todos los estados"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                    Style="min-width: 160px;" />
+
+                        <DxCheckBox Checked="@filtro.SoloVencidos" CheckedChanged="@((bool v) => OnSoloVencidosChanged(v))"
+                                    CheckType="CheckType.Switch">Solo vencidos</DxCheckBox>
+
+                        <DxCheckBox Checked="@filtro.IncluirPagados" CheckedChanged="@((bool v) => OnIncluirPagadosChanged(v))"
+                                    CheckType="CheckType.Switch">Incluir pagados</DxCheckBox>
+
+                        <DxCheckBox Checked="@agruparPorTipo" CheckedChanged="@((bool v) => agruparPorTipo = v)"
+                                    CheckType="CheckType.Switch">Agrupar por tipo</DxCheckBox>
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Saldo en pantalla: <span class="fw-bold">@SaldoEnPantalla.ToString("N2")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridSelectionColumn Width="46px" />
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.OrigenDescripcion)" Caption="Tipo" Width="132px"
+                                      GroupIndex="@(agruparPorTipo ? 0 : -1)">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <span class="cxp-chip @(item.EsCompra ? "fac" : "com")">
+                                    @(item.EsCompra ? "Factura" : "Compromiso")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.NumeroDocumento)" Caption="Documento" Width="165px">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <span class="font-monospace small">@item.NumeroDocumento</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.Proveedor)" Caption="Proveedor / concepto" MinWidth="220">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <div class="d-flex flex-column">
+                                    <span class="text-dark fw-semibold">@item.Proveedor</span>
+                                    <span class="small text-muted">@item.CodProveedor · @item.Concepto</span>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.Fecha)" Caption="Fecha" Width="110px"
+                                      DisplayFormat="dd/MM/yyyy" />
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.FechaVencimiento)" Caption="Vence" Width="140px">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                @if (!item.TienePlazo)
+                                {
+                                    <span class="text-muted">—</span>
+                                    <span class="small text-muted d-block">sin plazo</span>
+                                }
+                                else
+                                {
+                                    <div class="d-flex flex-column">
+                                        <span>@item.FechaVencimiento!.Value.ToString("dd/MM/yyyy")</span>
+                                        <span class="small @VencClase(item)">@VencTexto(item)</span>
+                                    </div>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.Monto)" Caption="Total" Width="120px"
+                                      TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <span class="money">@item.Monto.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.Abonado)" Caption="Abonado" Width="115px"
+                                      TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <span class="money text-muted">@(item.Abonado == 0m ? "—" : item.Abonado.ToString("N2"))</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.Saldo)" Caption="Saldo" Width="125px"
+                                      TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <span class="money fw-bold">@item.Saldo.ToString("N2")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(CxpDocumentoDto.EstadoDescripcion)" Caption="Estado" Width="110px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <span class="badge-status @EstadoClase(item.EstadoId)">@item.EstadoDescripcion</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center"
+                                      AllowSort="false" AllowGroup="false">
+                        <CellDisplayTemplate>
+                            @if (context.DataItem is CxpDocumentoDto item)
+                            {
+                                <div class="d-flex justify-content-center align-items-center gap-2">
+                                    <DxButton Text="Pagar" IconCssClass="bi bi-cash" RenderStyle="ButtonRenderStyle.Primary"
+                                              RenderStyleMode="ButtonRenderStyleMode.Contained"
+                                              Enabled="@(item.Saldo > 0)" Click="@(() => AbrirPagoIndividual(item))"
+                                              CssClass="btn-sm" />
+                                    <button type="button" class="btn-icon" title="@(item.EsCompra ? "Ver pagos de la factura" : "Ver abonos del compromiso")"
+                                            @onclick="@(() => IrAlDetalle(item))">
+                                        <i class="bi bi-clock-history"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay cuentas por pagar para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+
+        @if (DocumentosSeleccionados.Count > 0)
+        {
+            <div class="cxp-selbar">
+                <div>
+                    <div class="fw-semibold">@DocumentosSeleccionados.Count documento(s)</div>
+                    <div class="small text-muted">
+                        @FacturasSeleccionadas factura(s) · @CompromisosSeleccionados compromiso(s)
+                    </div>
+                </div>
+                <div>
+                    <div class="money fw-bold fs-5">@SaldoSeleccionado.ToString("N2")</div>
+                    <div class="small text-muted text-uppercase">Saldo seleccionado</div>
+                </div>
+                <div class="@(ProveedoresSeleccionados > 1 ? "cxp-mix multi" : "cxp-mix")">
+                    <i class="bi @(ProveedoresSeleccionados > 1 ? "bi-exclamation-triangle" : "bi-check-circle")"></i>
+                    @if (ProveedoresSeleccionados > 1)
+                    {
+                        <span>@ProveedoresSeleccionados proveedores · saldrían @ProveedoresSeleccionados desembolsos</span>
+                    }
+                    else
+                    {
+                        <span>Un solo proveedor · sale 1 desembolso</span>
+                    }
+                </div>
+                <div class="ms-auto d-flex gap-2">
+                    <DxButton Text="Quitar selección" RenderStyle="ButtonRenderStyle.Secondary"
+                              RenderStyleMode="ButtonRenderStyleMode.Outline" Click="LimpiarSeleccion" />
+                    <DxButton Text="Pagar seleccionados" IconCssClass="bi bi-cash-coin"
+                              RenderStyle="ButtonRenderStyle.Primary" Click="AbrirPagoLote" />
+                </div>
+            </div>
+        }
+    </div>
+</div>
+
+<CxpPagoLotePopup @ref="pagoPopup" Pagado="OnLoteRegistrado" />
+
+@code {
+    private DxGrid? grid;
+    private CxpPagoLotePopup? pagoPopup;
+
+    private List<CxpDocumentoDto> documentos = new();
+    private CxpResumenDto resumen = new();
+    private readonly CxpUnificadaFilterDto filtro = new();
+    private IReadOnlyList<object> seleccionados = new List<object>();
+
+    private bool isLoading;
+    private bool agruparPorTipo;
+    private string? errorMessage;
+
+    /// <summary>Proveedor con el que llega la pantalla desde la ficha o el listado de proveedores.</summary>
+    [SupplyParameterFromQuery(Name = "proveedor")]
+    public string? ProveedorQuery { get; set; }
+
+    private const string GridLayoutStorageKey = "proveedores-cuentas-por-pagar-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e) => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e) => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    /// <summary>
+    /// Lo seleccionado que además se puede pagar. Sin LINQ, por convención del repo.
+    /// </summary>
+    private List<CxpDocumentoDto> DocumentosSeleccionados
+    {
+        get
+        {
+            var lista = new List<CxpDocumentoDto>();
+            foreach (var item in seleccionados)
+            {
+                if (item is CxpDocumentoDto d && d.Saldo > 0m)
+                {
+                    lista.Add(d);
+                }
+            }
+
+            return lista;
+        }
+    }
+
+    private decimal SaldoSeleccionado
+    {
+        get
+        {
+            var total = 0m;
+            foreach (var d in DocumentosSeleccionados) total += d.Saldo;
+            return total;
+        }
+    }
+
+    private decimal SaldoEnPantalla
+    {
+        get
+        {
+            var total = 0m;
+            foreach (var d in documentos) total += d.Saldo;
+            return total;
+        }
+    }
+
+    private int FacturasSeleccionadas
+    {
+        get
+        {
+            var n = 0;
+            foreach (var d in DocumentosSeleccionados)
+            {
+                if (d.EsCompra) n++;
+            }
+
+            return n;
+        }
+    }
+
+    private int CompromisosSeleccionados => DocumentosSeleccionados.Count - FacturasSeleccionadas;
+
+    private int ProveedoresSeleccionados
+    {
+        get
+        {
+            var codigos = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+            foreach (var d in DocumentosSeleccionados) codigos.Add(d.CodProveedor);
+            return codigos.Count;
+        }
+    }
+
+    private sealed class OrigenFiltroItem { public short Id { get; set; } public string Nombre { get; set; } = string.Empty; }
+    private static readonly OrigenFiltroItem[] tiposFiltro =
+    {
+        new() { Id = OrigenDocumentoProveedor.Compra, Nombre = "Solo facturas de compra" },
+        new() { Id = OrigenDocumentoProveedor.Compromiso, Nombre = "Solo compromisos" }
+    };
+
+    private sealed class EstadoFiltroItem { public short Id { get; set; } public string Nombre { get; set; } = string.Empty; }
+    private static readonly EstadoFiltroItem[] estadosFiltro =
+    {
+        new() { Id = EstadoCompraCxp.Pendiente, Nombre = "Pendiente" },
+        new() { Id = EstadoCompraCxp.Parcial, Nombre = "Parcial" },
+        new() { Id = EstadoCompraCxp.Pagada, Nombre = "Pagada" }
+    };
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var proveedor = string.IsNullOrWhiteSpace(ProveedorQuery) ? null : ProveedorQuery.Trim();
+        if (!string.Equals(filtro.CodProveedor, proveedor, StringComparison.OrdinalIgnoreCase))
+        {
+            filtro.CodProveedor = proveedor;
+        }
+
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+
+            // La selección guarda referencias a los objetos del listado anterior: al recargar
+            // apuntarían a filas que ya no existen, así que se limpia (lo advierte DevExpress).
+            seleccionados = new List<object>();
+
+            documentos = new List<CxpDocumentoDto>(await CxpClient.ListarAsync(filtro));
+            resumen = await CxpClient.ObtenerResumenAsync(filtro);
+        }
+        catch (Exception ex)
+        {
+            documentos = new List<CxpDocumentoDto>();
+            resumen = new CxpResumenDto();
+            errorMessage = $"No se pudieron cargar las cuentas por pagar: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void OnSeleccionCambiada(IReadOnlyList<object> nueva) => seleccionados = nueva;
+
+    private void LimpiarSeleccion()
+    {
+        seleccionados = new List<object>();
+        grid?.ClearSelection();
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtro.Search = v; await CargarAsync(); }
+    private async Task OnOrigenChanged(short? v) { filtro.Origen = v; await CargarAsync(); }
+    private async Task OnEstadoChanged(short? v) { filtro.EstadoId = v; await CargarAsync(); }
+    private async Task OnSoloVencidosChanged(bool v) { filtro.SoloVencidos = v; await CargarAsync(); }
+    private async Task OnIncluirPagadosChanged(bool v) { filtro.IncluirPagados = v; await CargarAsync(); }
+
+    /// <summary>
+    /// Pagar una sola fila es un lote de un documento: mismo popup, mismas validaciones y el
+    /// mismo endpoint, así no hay dos caminos de pago que mantener.
+    /// </summary>
+    private Task AbrirPagoIndividual(CxpDocumentoDto item)
+        => pagoPopup?.MostrarAsync(new List<CxpDocumentoDto> { item }) ?? Task.CompletedTask;
+
+    private Task AbrirPagoLote()
+    {
+        var docs = DocumentosSeleccionados;
+        if (docs.Count == 0)
+        {
+            Toast("Pago en lote", "Seleccione al menos un documento con saldo.", ToastRenderStyle.Warning);
+            return Task.CompletedTask;
+        }
+
+        return pagoPopup?.MostrarAsync(docs) ?? Task.CompletedTask;
+    }
+
+    /// <summary>El historial vive en la pantalla propia de cada tipo de documento.</summary>
+    private void IrAlDetalle(CxpDocumentoDto item)
+    {
+        var returnUrl = Uri.EscapeDataString(RutaActual());
+
+        if (item.EsCompromiso)
+        {
+            Navigation.NavigateTo($"/proveedores/compromisos-proveedor/{item.DocumentoId}/abonar?returnUrl={returnUrl}");
+            return;
+        }
+
+        Navigation.NavigateTo($"/almacen/compras/pagos?cxpId={item.DocumentoId}");
+    }
+
+    private string RutaActual()
+    {
+        var relativa = Navigation.ToBaseRelativePath(Navigation.Uri);
+        return string.IsNullOrWhiteSpace(relativa) ? "/proveedores/cuentas-por-pagar" : $"/{relativa}";
+    }
+
+    private async Task OnLoteRegistrado(CxpLoteResultadoDto resultado)
+    {
+        Toast("Pago registrado", resultado.Message ?? "Pago registrado.", ToastRenderStyle.Success);
+        await CargarAsync();
+    }
+
+    // ── Semáforo de vencimiento (los documentos sin plazo no entran aquí) ──────
+
+    private static string VencTexto(CxpDocumentoDto item)
+    {
+        if (item.EstadoId == EstadoCompraCxp.Pagada) return "pagada";
+        var d = item.DiasVencido ?? 0;
+        return d > 0 ? $"vencida {d} d" : d == 0 ? "vence hoy" : $"en {-d} d";
+    }
+
+    private static string VencClase(CxpDocumentoDto item)
+    {
+        if (item.EstadoId == EstadoCompraCxp.Pagada) return "text-muted";
+        var d = item.DiasVencido ?? 0;
+        return d > 0 ? "text-danger fw-semibold" : d <= 7 ? "text-warning" : "text-success";
+    }
+
+    private static string EstadoClase(short estado) => estado switch
+    {
+        EstadoCompraCxp.Pagada => "active",
+        EstadoCompraCxp.Parcial => "pendiente",
+        _ => "inactive"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "CxpToast" });
+}

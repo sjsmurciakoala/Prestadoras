@@ -1,0 +1,10 @@
+@page "/talento-humano/departamentos"
+@attribute [Authorize(Policy = PermissionNames.TalentoHumano.View)]
+@using apc.Client.Services.TalentoHumano
+
+<PageTitle>SIAD - Departamentos</PageTitle>
+
+<CatalogoThManager Recurso="@CatalogosThClient.Departamentos"
+                   Titulo="Departamentos"
+                   Subtitulo="Catálogo de departamentos de los empleados"
+                   Singular="departamento" />

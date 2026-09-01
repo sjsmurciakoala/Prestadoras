@@ -27,6 +27,7 @@ using apc.Client.Services.Maps;
 using apc.Client.Services.Informes;
 using apc.Client.Services.Caja;
 using apc.Client.Services.Cobranza;
+using apc.Client.Services.TalentoHumano;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 
@@ -54,6 +55,8 @@ namespace apc.Client
             services.AddScoped<FacturacionMiscelaneosClient>();
             services.AddScoped<NotasCreditoDebitoClient>();
             services.AddScoped<MantenimientosClient>();
+            services.AddScoped<FormatosFiscalesClient>();
+            services.AddScoped<FormatoFiscalState>();
             services.AddScoped<CobranzaClient>();
             services.AddScoped<CorteMasivoClient>();
             services.AddScoped<ClientesCobroClient>();
@@ -80,6 +83,13 @@ namespace apc.Client
             // Clientes HTTP para módulo de Clientes
             services.AddScoped<ClientesClient>();
             services.AddScoped<ProveedoresClient>();
+            services.AddScoped<ProveedorEstadoCuentaClient>();
+            services.AddScoped<AntiguedadSaldosProveedorClient>();
+            services.AddScoped<CuentasPorPagarClient>();
+            services.AddScoped<EvaluacionProveedorClient>();
+            services.AddScoped<RecepcionIncidenciaClient>();
+            services.AddScoped<EmpleadosClient>();
+            services.AddScoped<CatalogosThClient>();
             services.AddScoped<SolicitudesClient>();
             services.AddScoped<MedidoresClient>();
             services.AddScoped<CatalogosClient>();
@@ -87,19 +97,35 @@ namespace apc.Client
             services.AddScoped<ArticulosClient>();
             services.AddScoped<KardexClient>();
             services.AddScoped<ComprasClient>();
+            services.AddScoped<OrdenesCompraClient>();
+            services.AddScoped<RecepcionesCompraClient>();
             services.AddScoped<RequisicionesClient>();
             services.AddScoped<DescargosClient>();
             services.AddScoped<UnidadesMedidaClient>();
             services.AddScoped<CategoriasUnidadClient>();
+            services.AddScoped<TerminosPagoClient>();
+            services.AddScoped<PagosCompraClient>();
             services.AddScoped<TiposArticuloClient>();
+            services.AddScoped<TiposMovimientoClient>();
+            services.AddScoped<MovimientosAlmacenClient>();
+            services.AddScoped<TrasladosClient>();
+            services.AddScoped<RequisicionesDocumentoClient>();
+            services.AddScoped<DescargosDocumentoClient>();
+            services.AddScoped<IsvCompraConfigClient>();
             services.AddScoped<GruposClient>();
             services.AddScoped<BodegasClient>();
+            services.AddScoped<ExistenciasBodegaClient>();
+            services.AddScoped<ValuacionInventarioClient>();
+            // Carga inicial de existencias y ajustes de inventario (Fase 4).
+            services.AddScoped<CargaInicialClient>();
+            services.AddScoped<AjusteInventarioClient>();
             services.AddScoped<BitacoraMaestrosClient>();
             services.AddScoped<AuditoriaConfigClient>();
             services.AddScoped<CiclosClient>();
             services.AddScoped<InformesClient>();
             // presupuesto (de Combinacio_E_J_1.0; TarifasBase/TarifasContador retirados como legacy)
             services.AddScoped<ConfiguracionPresupuestoClient>();
+            services.AddScoped<PresupuestoEjecucionClient>();
             services.AddScoped<PresupuestoSelectionState>();
             services.AddScoped<OrdenesPagoDirectoClient>();
             services.AddScoped<LectoresCredencialClient>();
@@ -117,6 +143,16 @@ namespace apc.Client
 
             // impuestos y tasas con vigencia (catalogo global SAR; ISV Honduras)
             services.AddScoped<ImpuestosClient>();
+
+            // retenciones a proveedores: catalogo (concepto + tasas) + cuenta del pasivo por empresa (F1)
+            services.AddScoped<apc.Client.Services.Retenciones.RetencionesClient>();
+
+            // retenciones a proveedores: consulta del registro fiscal hdr/dtl (F4)
+            services.AddScoped<apc.Client.Services.Retenciones.RetencionRegistroClient>();
+
+            // correo y notificaciones por empresa: conexion (SendGrid) + areas de notificacion (F2)
+            services.AddScoped<apc.Client.Services.Configuracion.CorreoConfigClient>();
+            services.AddScoped<apc.Client.Services.Configuracion.AprobacionesConfigClient>();
 
             services.AddScoped<ITenantProvider, TenantProvider>();
             services.AddScoped<TenantState>();

@@ -1,0 +1,16 @@
+/* Sólo el chip del tipo de incidencia; el resto hereda el estándar de siad-grid.css. */
+
+.chip-tipo {
+    display: inline-block;
+    padding: 2px 9px;
+    border-radius: 20px;
+    font-size: 11.5px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.tipo-devolucion     { background: #f8d7da; color: #842029; }
+.tipo-dano           { background: #fff3cd; color: #664d03; }
+.tipo-especificacion { background: #cfe2ff; color: #084298; }
+.tipo-faltante       { background: #e2d9f3; color: #432874; }
+.tipo-otro           { background: #e9ecef; color: #495057; }

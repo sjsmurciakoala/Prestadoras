@@ -1,0 +1,106 @@
+/* Propio de esta pantalla. El estándar vive en apc/wwwroot/css/siad-grid.css. */
+
+.aviso-encendido {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+    margin: 4px 0 20px;
+    padding: 12px 16px;
+    border-left: 4px solid #4c7a9c;
+    border-radius: 0 6px 6px 0;
+    background: #f4f8fb;
+    font-size: .88rem;
+    color: #38505f;
+}
+
+.aviso-encendido i {
+    font-size: 1.15rem;
+    color: #4c7a9c;
+}
+
+.modulos {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(340px, 1fr));
+    gap: 16px;
+}
+
+.modulo-card {
+    border: 1px solid #e1e6ec;
+    border-radius: 8px;
+    padding: 16px 18px;
+    background: #fff;
+}
+
+.modulo-reservado {
+    background: #fafbfc;
+    opacity: .75;
+}
+
+.modulo-cabecera {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+
+.modulo-nombre {
+    font-weight: 600;
+    font-size: .98rem;
+    color: #2b3a45;
+}
+
+.modulo-detalle {
+    font-size: .82rem;
+    color: #6b7a86;
+    margin-top: 3px;
+}
+
+.modulo-nota {
+    font-size: .84rem;
+    color: #8894a0;
+    font-style: italic;
+}
+
+.modulo-controles {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+}
+
+.control-campo .form-text {
+    font-size: .78rem;
+    color: #78838d;
+}
+
+.control-acciones {
+    display: flex;
+    justify-content: flex-end;
+    border-top: 1px solid #eef1f4;
+    padding-top: 12px;
+}
+
+/* El modo se lee de un vistazo: apagado neutro, advertencia ámbar, bloqueo rojo. */
+.badge-modo {
+    flex: none;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: .76rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+.modo-0 {
+    background: #eef2f5;
+    color: #55636e;
+}
+
+.modo-1 {
+    background: #fdf0d5;
+    color: #8a6516;
+}
+
+.modo-2 {
+    background: #fbeceb;
+    color: #8c1d18;
+}

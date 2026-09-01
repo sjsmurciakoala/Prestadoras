@@ -56,4 +56,7 @@ public partial class prv_proveedore
     public string? email { get; set; }
 
     public int company_id { get; set; }
+
+    /// <summary>Término de pago habitual del proveedor (alm_termino_pago). Se precarga en la factura de compra.</summary>
+    public int? termino_pago_id { get; set; }
 }

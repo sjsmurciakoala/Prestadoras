@@ -17,6 +17,7 @@ public static class SidebarNavigationDefinition
         // ===== HOME (sin label de sección) =====
         new SidebarNavSection
         {
+            Id = "inicio",
             Label = "",
             Items =
             [
@@ -33,13 +34,13 @@ public static class SidebarNavigationDefinition
         // ===== 1. ADMINISTRACIÓN (operación comercial diaria) =====
         new SidebarNavSection
         {
+            Id = "administracion",
             Label = "Administración",
             Items =
             [
                 new SidebarNavItem
                 {
-                    Id = "adm-clientes",
-                    RequiredPermission = PermissionNames.Ventas.Clientes.View,
+                    Id = "adm-clientes", RequiredPermission = PermissionNames.Ventas.Clientes.View,
                     Text = "Clientes",
                     IconCssClass = "bi bi-people",
                     MatchPrefixes = ["/clientes", "/solicitudes", "/mi-app/facturas"],
@@ -52,8 +53,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "adm-caja",
-                    RequiredPermission = PermissionNames.Ventas.Caja.View,
+                    Id = "adm-caja", RequiredPermission = PermissionNames.Ventas.Caja.View,
                     Text = "Caja",
                     IconCssClass = "bi bi-cash-coin",
                     MatchPrefixes = ["/facturacion/caja", "/facturacion/cajas"],
@@ -68,8 +68,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "adm-facturacion",
-                    RequiredPermission = PermissionNames.Ventas.FacturacionMiscelaneos.View,
+                    Id = "adm-facturacion", RequiredPermission = PermissionNames.Ventas.FacturacionMiscelaneos.View,
                     Text = "Facturación",
                     IconCssClass = "bi bi-receipt-cutoff",
                     MatchPrefixes = ["/facturacion/miscelaneos", "/facturacion/notas", "/facturacion/calendario-facturacion", "/facturacion/periodos-comerciales"],
@@ -85,8 +84,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "adm-cobranza",
-                    RequiredPermission = PermissionNames.Ventas.Cobranza.View,
+                    Id = "adm-cobranza", RequiredPermission = PermissionNames.Ventas.Cobranza.View,
                     Text = "Cobranza",
                     IconCssClass = "bi bi-collection",
                     MatchPrefixes = ["/facturacion/cobranza"],
@@ -103,8 +101,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "adm-campo",
-                    RequiredPermission = PermissionNames.Ventas.View,
+                    Id = "adm-campo", RequiredPermission = PermissionNames.Ventas.View,
                     Text = "Órdenes y campo",
                     IconCssClass = "bi bi-geo",
                     MatchPrefixes = ["/ordenes", "/mapa"],
@@ -116,8 +113,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "adm-tarifario-operativo",
-                    RequiredPermission = PermissionNames.Ventas.View,
+                    Id = "adm-tarifario-operativo", RequiredPermission = PermissionNames.Ventas.View,
                     Text = "Tarifario operativo",
                     IconCssClass = "bi bi-calculator",
                     MatchPrefixes = ["/tarifario/cliente-servicio-v3", "/tarifario/conflictos-v3"],
@@ -129,8 +125,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "adm-informes",
-                    RequiredPermission = PermissionNames.Reporteria.View,
+                    Id = "adm-informes", RequiredPermission = PermissionNames.Reporteria.View,
                     Text = "Informes",
                     IconCssClass = "bi bi-bar-chart-line",
                     MatchPrefixes = ["/informes"],
@@ -146,6 +141,7 @@ public static class SidebarNavigationDefinition
         // ===== 2. BANCOS =====
         new SidebarNavSection
         {
+            Id = "bancos",
             Label = "Bancos",
             Items =
             [
@@ -161,13 +157,13 @@ public static class SidebarNavigationDefinition
         // ===== 3. CONTABILIDAD =====
         new SidebarNavSection
         {
+            Id = "contabilidad",
             Label = "Contabilidad",
             Items =
             [
                 new SidebarNavItem
                 {
-                    Id = "cont-partidas",
-                    RequiredPermission = PermissionNames.Contabilidad.View,
+                    Id = "cont-partidas", RequiredPermission = PermissionNames.Contabilidad.View,
                     Text = "Partidas",
                     IconCssClass = "bi bi-file-earmark-check",
                     MatchPrefixes = ["/contabilidad/partidas", "/contabilidad/polizas", "/contabilidad/partidas-facturacion", "/informes/partidas-contabilidad"],
@@ -180,8 +176,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "cont-catalogo",
-                    RequiredPermission = PermissionNames.Contabilidad.View,
+                    Id = "cont-catalogo", RequiredPermission = PermissionNames.Contabilidad.View,
                     Text = "Catálogo contable",
                     IconCssClass = "bi bi-diagram-3",
                     MatchPrefixes = ["/contabilidad/plan-cuentas", "/contabilidad/centros-costo", "/contabilidad/terceros", "/contabilidad/diarios", "/contabilidad/tipos-transaccion"],
@@ -196,8 +191,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "cb-periodos",
-                    RequiredPermission = PermissionNames.Contabilidad.View,
+                    Id = "cb-periodos", RequiredPermission = PermissionNames.Contabilidad.View,
                     Text = "Períodos contables",
                     NavigateUrl = "/contabilidad/periodos",
                     MatchPrefixes = ["/contabilidad/periodos"],
@@ -205,8 +199,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "cont-integracion",
-                    RequiredPermission = PermissionNames.Contabilidad.View,
+                    Id = "cont-integracion", RequiredPermission = PermissionNames.Contabilidad.View,
                     Text = "Integración",
                     IconCssClass = "bi bi-arrow-left-right",
                     MatchPrefixes = ["/contabilidad/empresas/integracion", "/contabilidad/empresas/configuracion"],
@@ -216,84 +209,137 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "cb-config-sistema", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Configuración Sistema", NavigateUrl = "/contabilidad/empresas/configuracion", MatchPrefixes = ["/contabilidad/empresas/configuracion"], IconCssClass = "bi bi-sliders" }
                     ]
                 },
-                new SidebarNavItem { Id = "presupuesto", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Presupuesto", NavigateUrl = "/presupuesto/configuraciones", MatchPrefixes = ["/presupuesto/configuraciones"], IconCssClass = "bi bi-cash-stack" }
+                new SidebarNavItem
+                {
+                    Id = "presupuesto", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Presupuesto", IconCssClass = "bi bi-cash-stack",
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "pst-configuraciones", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Configuración de presupuestos", NavigateUrl = "/presupuesto/configuraciones", MatchPrefixes = ["/presupuesto/configuraciones"], IconCssClass = "bi bi-cash-stack" },
+                        new SidebarNavItem { Id = "pst-ejecucion", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Ejecución presupuestaria", NavigateUrl = "/presupuesto/ejecucion", MatchPrefixes = ["/presupuesto/ejecucion"], IconCssClass = "bi bi-bar-chart-line" },
+                        new SidebarNavItem { Id = "pst-compromisos", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Compromisos pendientes", NavigateUrl = "/presupuesto/compromisos", MatchPrefixes = ["/presupuesto/compromisos"], IconCssClass = "bi bi-hourglass-split" },
+                        new SidebarNavItem { Id = "pst-control", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Control presupuestario", NavigateUrl = "/presupuesto/control", MatchPrefixes = ["/presupuesto/control"], IconCssClass = "bi bi-toggles" }
+                    ]
+                }
             ]
         },
 
         // ===== 4. INVENTARIO =====
         new SidebarNavSection
         {
+            Id = "inventario",
             Label = "Inventario",
             Items =
             [
                 new SidebarNavItem
                 {
-                    Id = "inv-almacen",
-                    RequiredPermission = PermissionNames.Inventario.View,
+                    Id = "inv-almacen", RequiredPermission = PermissionNames.Inventario.View,
                     Text = "Almacén",
                     IconCssClass = "bi bi-box-seam",
-                    MatchPrefixes = ["/almacen/articulos", "/almacen/kardex", "/almacen/alertas-stock", "/almacen/bodegas"],
+                    MatchPrefixes = ["/almacen/articulos", "/almacen/kardex", "/almacen/alertas-stock", "/almacen/existencias-bodega", "/almacen/kardex-bodega", "/almacen/valuacion-inventario"],
                     Children =
                     [
                         new SidebarNavItem { Id = "alm-articulos", RequiredPermission = PermissionNames.Inventario.View, Text = "Artículos", NavigateUrl = "/almacen/articulos", MatchPrefixes = ["/almacen/articulos"], IconCssClass = "bi bi-box-seam" },
-                        new SidebarNavItem { Id = "alm-kardex", RequiredPermission = PermissionNames.Inventario.View, Text = "Kardex", NavigateUrl = "/almacen/kardex", MatchPrefixes = ["/almacen/kardex"], IconCssClass = "bi bi-journal-arrow-down" },
-                        new SidebarNavItem { Id = "alm-alertas", RequiredPermission = PermissionNames.Inventario.View, Text = "Alertas de stock", NavigateUrl = "/almacen/alertas-stock", MatchPrefixes = ["/almacen/alertas-stock"], IconCssClass = "bi bi-exclamation-triangle" },
-                        new SidebarNavItem { Id = "alm-bodegas", RequiredPermission = PermissionNames.Inventario.View, Text = "Bodegas", NavigateUrl = "/almacen/bodegas", MatchPrefixes = ["/almacen/bodegas"], IconCssClass = "bi bi-building" }
+                        new SidebarNavItem { Id = "alm-kardex", RequiredPermission = PermissionNames.Inventario.View, Text = "Estado de cuenta de artículos", NavigateUrl = "/almacen/kardex", MatchPrefixes = ["/almacen/kardex"], MatchExact = true, IconCssClass = "bi bi-journal-arrow-down" },
+                        new SidebarNavItem { Id = "alm-existencias-bodega", RequiredPermission = PermissionNames.Inventario.View, Text = "Existencias por bodega", NavigateUrl = "/almacen/existencias-bodega", MatchPrefixes = ["/almacen/existencias-bodega"], IconCssClass = "bi bi-boxes" },
+                        new SidebarNavItem { Id = "alm-kardex-bodega", RequiredPermission = PermissionNames.Inventario.View, Text = "Movimientos por bodega", NavigateUrl = "/almacen/kardex-bodega", MatchPrefixes = ["/almacen/kardex-bodega"], IconCssClass = "bi bi-journal-text" },
+                        new SidebarNavItem { Id = "alm-valuacion", RequiredPermission = PermissionNames.Inventario.View, Text = "Valuación de inventario", NavigateUrl = "/almacen/valuacion-inventario", MatchPrefixes = ["/almacen/valuacion-inventario"], IconCssClass = "bi bi-cash-stack" },
+                        new SidebarNavItem { Id = "alm-alertas", RequiredPermission = PermissionNames.Inventario.View, Text = "Alertas de stock", NavigateUrl = "/almacen/alertas-stock", MatchPrefixes = ["/almacen/alertas-stock"], IconCssClass = "bi bi-exclamation-triangle" }
                     ]
                 },
                 new SidebarNavItem
                 {
-                    Id = "inv-movimientos",
-                    RequiredPermission = PermissionNames.Inventario.View,
+                    Id = "inv-movimientos", RequiredPermission = PermissionNames.Inventario.View,
                     Text = "Movimientos",
                     IconCssClass = "bi bi-arrow-left-right",
-                    MatchPrefixes = ["/almacen/compras", "/almacen/requisiciones", "/almacen/descargos"],
+                    MatchPrefixes = ["/almacen/movimientos", "/almacen/traslados", "/almacen/ordenes-compra", "/almacen/mis-aprobaciones", "/almacen/compras", "/almacen/carga-inicial", "/almacen/requisiciones", "/almacen/descargos"],
                     Children =
                     [
-                        new SidebarNavItem { Id = "alm-compras", RequiredPermission = PermissionNames.Compras.View, Text = "Compras", NavigateUrl = "/almacen/compras", MatchPrefixes = ["/almacen/compras"], IconCssClass = "bi bi-cart-plus" },
+                        new SidebarNavItem { Id = "alm-movimientos", RequiredPermission = PermissionNames.Inventario.View, Text = "Movimientos de almacén", NavigateUrl = "/almacen/movimientos", MatchPrefixes = ["/almacen/movimientos"], IconCssClass = "bi bi-arrow-left-right" },
+                        new SidebarNavItem { Id = "alm-traslados", RequiredPermission = PermissionNames.Inventario.View, Text = "Traslados entre bodegas", NavigateUrl = "/almacen/traslados", MatchPrefixes = ["/almacen/traslados"], IconCssClass = "bi bi-box-arrow-in-right" },
+                        new SidebarNavItem { Id = "alm-ordenes-compra", RequiredPermission = PermissionNames.Inventario.View, Text = "Órdenes de compra", NavigateUrl = "/almacen/ordenes-compra", MatchPrefixes = ["/almacen/ordenes-compra"], IconCssClass = "bi bi-file-earmark-text" },
+                        new SidebarNavItem { Id = "alm-mis-aprobaciones", RequiredPermission = PermissionNames.Inventario.View, Text = "Mis aprobaciones", NavigateUrl = "/almacen/mis-aprobaciones", MatchPrefixes = ["/almacen/mis-aprobaciones"], IconCssClass = "bi bi-pen" },
+                        new SidebarNavItem { Id = "alm-recepciones", RequiredPermission = PermissionNames.Inventario.View, Text = "Recepción de compras", NavigateUrl = "/almacen/compras/recepciones", MatchPrefixes = ["/almacen/compras/recepciones"], IconCssClass = "bi bi-box-arrow-in-down" },
+                        new SidebarNavItem { Id = "alm-compras", RequiredPermission = PermissionNames.Compras.View, Text = "Consulta de compras", NavigateUrl = "/almacen/compras", MatchPrefixes = ["/almacen/compras"], MatchExact = true, IconCssClass = "bi bi-cart-plus" },
+                        new SidebarNavItem { Id = "alm-carga-inicial", RequiredPermission = PermissionNames.Inventario.View, Text = "Carga inicial", NavigateUrl = "/almacen/carga-inicial", MatchPrefixes = ["/almacen/carga-inicial"], IconCssClass = "bi bi-flag" },
                         new SidebarNavItem { Id = "alm-requisiciones", RequiredPermission = PermissionNames.Inventario.View, Text = "Requisiciones", NavigateUrl = "/almacen/requisiciones", MatchPrefixes = ["/almacen/requisiciones"], IconCssClass = "bi bi-clipboard-check" },
                         new SidebarNavItem { Id = "alm-descargos", RequiredPermission = PermissionNames.Inventario.View, Text = "Descargos", NavigateUrl = "/almacen/descargos", MatchPrefixes = ["/almacen/descargos"], IconCssClass = "bi bi-box-arrow-up" }
                     ]
                 },
                 new SidebarNavItem
                 {
-                    Id = "proveedores",
-                    RequiredPermission = PermissionNames.Proveedores.View,
+                    Id = "proveedores", RequiredPermission = PermissionNames.Proveedores.View,
                     Text = "Proveedores",
                     IconCssClass = "bi bi-truck",
-                    NavigateUrl = "/proveedores",
-                    MatchPrefixes = ["/proveedores"]
+                    MatchPrefixes = ["/proveedores"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "prov-lista", RequiredPermission = PermissionNames.Proveedores.View, Text = "Proveedores", NavigateUrl = "/proveedores", MatchPrefixes = ["/proveedores"], MatchExact = true, IconCssClass = "bi bi-truck" },
+                        // Vista unificada: facturas de compra y compromisos se pagan desde aquí. La
+                        // ruta vieja (/almacen/compras/pagos) sigue existiendo y marca esta entrada.
+                        new SidebarNavItem { Id = "prov-cuentas-por-pagar", RequiredPermission = PermissionNames.Proveedores.View, Text = "Cuentas por pagar", NavigateUrl = "/proveedores/cuentas-por-pagar", MatchPrefixes = ["/proveedores/cuentas-por-pagar", "/almacen/compras/pagos"], IconCssClass = "bi bi-cash-stack" },
+                        new SidebarNavItem { Id = "prov-antiguedad-saldos", RequiredPermission = PermissionNames.Proveedores.View, Text = "Antigüedad de saldos", NavigateUrl = "/proveedores/antiguedad-saldos", MatchPrefixes = ["/proveedores/antiguedad-saldos"], MatchExact = true, IconCssClass = "bi bi-hourglass-split" },
+                        new SidebarNavItem { Id = "prov-retenciones", RequiredPermission = PermissionNames.Proveedores.View, Text = "Retenciones", NavigateUrl = "/proveedores/retenciones", MatchPrefixes = ["/proveedores/retenciones"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
+                        new SidebarNavItem { Id = "prov-retenciones-declaracion", RequiredPermission = PermissionNames.Proveedores.View, Text = "Declaración de retenciones", NavigateUrl = "/proveedores/retenciones/declaracion", MatchPrefixes = ["/proveedores/retenciones/declaracion"], IconCssClass = "bi bi-file-earmark-spreadsheet" },
+                        new SidebarNavItem { Id = "prov-evaluacion", RequiredPermission = PermissionNames.Proveedores.View, Text = "Evaluación", NavigateUrl = "/proveedores/evaluacion", MatchPrefixes = ["/proveedores/evaluacion"], IconCssClass = "bi bi-clipboard-data" },
+                        new SidebarNavItem { Id = "prov-incidencias", RequiredPermission = PermissionNames.Proveedores.View, Text = "Incidencias de recepción", NavigateUrl = "/proveedores/incidencias", MatchPrefixes = ["/proveedores/incidencias"], IconCssClass = "bi bi-exclamation-diamond" }
+                    ]
                 },
                 new SidebarNavItem
                 {
-                    Id = "inv-catalogos",
-                    RequiredPermission = PermissionNames.Inventario.View,
+                    Id = "inv-catalogos", RequiredPermission = PermissionNames.Inventario.View,
                     Text = "Catálogos de almacén",
                     IconCssClass = "bi bi-tags",
-                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida"],
+                    MatchPrefixes = ["/almacen/tipos-articulo", "/almacen/categorias-unidad", "/almacen/unidades-medida", "/almacen/conceptos-movimiento", "/almacen/isv-compras", "/almacen/terminos-pago", "/almacen/bodegas"],
                     Children =
                     [
                         new SidebarNavItem { Id = "alm-tipos-articulo", RequiredPermission = PermissionNames.Inventario.View, Text = "Tipos de artículos", NavigateUrl = "/almacen/tipos-articulo", MatchPrefixes = ["/almacen/tipos-articulo"], IconCssClass = "bi bi-tags" },
                         new SidebarNavItem { Id = "alm-categorias-unidad", RequiredPermission = PermissionNames.Inventario.View, Text = "Categorías por unidad", NavigateUrl = "/almacen/categorias-unidad", MatchPrefixes = ["/almacen/categorias-unidad"], IconCssClass = "bi bi-diagram-2" },
-                        new SidebarNavItem { Id = "alm-unidades", RequiredPermission = PermissionNames.Inventario.View, Text = "Unidades de medida", NavigateUrl = "/almacen/unidades-medida", MatchPrefixes = ["/almacen/unidades-medida"], IconCssClass = "bi bi-rulers" }
+                        new SidebarNavItem { Id = "alm-unidades", RequiredPermission = PermissionNames.Inventario.View, Text = "Unidades de medida", NavigateUrl = "/almacen/unidades-medida", MatchPrefixes = ["/almacen/unidades-medida"], IconCssClass = "bi bi-rulers" },
+                        new SidebarNavItem { Id = "alm-conceptos-movimiento", RequiredPermission = PermissionNames.Inventario.View, Text = "Conceptos de movimiento", NavigateUrl = "/almacen/conceptos-movimiento", MatchPrefixes = ["/almacen/conceptos-movimiento"], IconCssClass = "bi bi-arrow-left-right" },
+                        new SidebarNavItem { Id = "alm-terminos-pago", RequiredPermission = PermissionNames.Inventario.View, Text = "Términos de pago", NavigateUrl = "/almacen/terminos-pago", MatchPrefixes = ["/almacen/terminos-pago"], IconCssClass = "bi bi-calendar-check" },
+                        new SidebarNavItem { Id = "alm-isv-compras", RequiredPermission = PermissionNames.Inventario.View, Text = "ISV en compras", NavigateUrl = "/almacen/isv-compras", MatchPrefixes = ["/almacen/isv-compras"], IconCssClass = "bi bi-percent" },
+                        new SidebarNavItem { Id = "alm-bodegas", RequiredPermission = PermissionNames.Inventario.View, Text = "Bodegas", NavigateUrl = "/almacen/bodegas", MatchPrefixes = ["/almacen/bodegas"], IconCssClass = "bi bi-building" }
                     ]
                 }
             ]
         },
 
-        // ===== 5. CONFIGURACIÓN (al final, decisión del usuario 2026-08-05) (TODOS los mantenimientos + admin del sistema) =====
+        // ===== 5. TALENTO HUMANO (2026-08-19) =====
         new SidebarNavSection
         {
+            Id = "talento-humano",
+            Label = "Talento Humano",
+            Items =
+            [
+                new SidebarNavItem { Id = "th-empleados", RequiredPermission = PermissionNames.TalentoHumano.View, Text = "Empleados", NavigateUrl = "/talento-humano/empleados", MatchPrefixes = ["/talento-humano/empleados"], IconCssClass = "bi bi-person-badge" },
+                new SidebarNavItem
+                {
+                    Id = "th-catalogos",
+                    Text = "Catálogos",
+                    IconCssClass = "bi bi-tags",
+                    MatchPrefixes = ["/talento-humano/cargos", "/talento-humano/departamentos"],
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "th-cargos", RequiredPermission = PermissionNames.TalentoHumano.View, Text = "Cargos", NavigateUrl = "/talento-humano/cargos", MatchPrefixes = ["/talento-humano/cargos"], IconCssClass = "bi bi-person-workspace" },
+                        new SidebarNavItem { Id = "th-departamentos", RequiredPermission = PermissionNames.TalentoHumano.View, Text = "Departamentos", NavigateUrl = "/talento-humano/departamentos", MatchPrefixes = ["/talento-humano/departamentos"], IconCssClass = "bi bi-diagram-3" }
+                    ]
+                }
+            ]
+        },
+
+        // ===== 6. CONFIGURACIÓN (al final, decisión del usuario 2026-08-05) (TODOS los mantenimientos + admin del sistema) =====
+        new SidebarNavSection
+        {
+            Id = "configuracion",
             Label = "Configuración",
             Items =
             [
                 new SidebarNavItem
                 {
-                    Id = "cfg-catalogos-comerciales",
-                    RequiredPermission = PermissionNames.Configuracion.View,
+                    Id = "cfg-catalogos-comerciales", RequiredPermission = PermissionNames.Configuracion.View,
                     Text = "Catálogos comerciales",
                     IconCssClass = "bi bi-journal-bookmark",
-                    MatchPrefixes = ["/mantenimientos/barrios", "/ciclos", "/libretas", "/medidores", "/mantenimientos/clases-medidor", "/facturacion/condiciones-lectura", "/mantenimientos/codigo-cliente", "/abogados", "/tarifario/cai-offline"],
+                    MatchPrefixes = ["/mantenimientos/barrios", "/ciclos", "/libretas", "/medidores", "/mantenimientos/clases-medidor", "/facturacion/condiciones-lectura", "/mantenimientos/codigo-cliente", "/mantenimientos/formatos-fiscales", "/abogados", "/tarifario/cai-offline"],
                     Children =
                     [
                         new SidebarNavItem { Id = "mant-barrios", RequiredPermission = PermissionNames.Configuracion.View, Text = "Barrios", NavigateUrl = "/mantenimientos/barrios", MatchPrefixes = ["/mantenimientos/barrios"], IconCssClass = "bi bi-map-fill" },
@@ -303,14 +349,14 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "mant-clases-medidor", RequiredPermission = PermissionNames.Configuracion.View, Text = "Clases de medidor", NavigateUrl = "/mantenimientos/clases-medidor", MatchPrefixes = ["/mantenimientos/clases-medidor"], IconCssClass = "bi bi-speedometer" },
                         new SidebarNavItem { Id = "fact-condiciones-lectura", RequiredPermission = PermissionNames.Configuracion.View, Text = "Condiciones de lectura", NavigateUrl = "/facturacion/condiciones-lectura", MatchPrefixes = ["/facturacion/condiciones-lectura"], IconCssClass = "bi bi-list-check" },
                         new SidebarNavItem { Id = "mant-codigo-cliente", RequiredPermission = PermissionNames.Configuracion.View, Text = "Código de cliente", NavigateUrl = "/mantenimientos/codigo-cliente", MatchPrefixes = ["/mantenimientos/codigo-cliente"], IconCssClass = "bi bi-123" },
+                        new SidebarNavItem { Id = "mant-formatos-fiscales", RequiredPermission = PermissionNames.Configuracion.View, Text = "Formatos fiscales", NavigateUrl = "/mantenimientos/formatos-fiscales", MatchPrefixes = ["/mantenimientos/formatos-fiscales"], IconCssClass = "bi bi-input-cursor-text" },
                         new SidebarNavItem { Id = "abogados", RequiredPermission = PermissionNames.Configuracion.View, Text = "Abogados", NavigateUrl = "/abogados", MatchPrefixes = ["/abogados"], IconCssClass = "bi bi-briefcase" },
                         new SidebarNavItem { Id = "tarv3-cai-offline", RequiredPermission = PermissionNames.Configuracion.View, Text = "CAI offline", NavigateUrl = "/tarifario/cai-offline", MatchPrefixes = ["/tarifario/cai-offline"], IconCssClass = "bi bi-upc-scan" }
                     ]
                 },
                 new SidebarNavItem
                 {
-                    Id = "cfg-catalogos-cobranza",
-                    RequiredPermission = PermissionNames.Configuracion.View,
+                    Id = "cfg-catalogos-cobranza", RequiredPermission = PermissionNames.Configuracion.View,
                     Text = "Catálogos de cobranza",
                     IconCssClass = "bi bi-journal-check",
                     MatchPrefixes = ["/facturacion/notas/motivos", "/mantenimientos/acciones-cobranza", "/mantenimientos/observaciones-cobranza", "/mantenimientos/recargo-mora"],
@@ -324,8 +370,7 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "cfg-tarifario",
-                    RequiredPermission = PermissionNames.Configuracion.View,
+                    Id = "cfg-tarifario", RequiredPermission = PermissionNames.Configuracion.View,
                     Text = "Tarifario",
                     IconCssClass = "bi bi-calculator",
                     MatchPrefixes = ["/tarifario/cuadros", "/tarifario/maestro-servicios-v3", "/tarifario/desglose-abonos", "/mantenimientos/ajustes-tarifarios", "/mantenimientos/impuestos"],
@@ -340,24 +385,25 @@ public static class SidebarNavigationDefinition
                 },
                 new SidebarNavItem
                 {
-                    Id = "cfg-proveedores",
-                    RequiredPermission = PermissionNames.Configuracion.View,
+                    Id = "cfg-proveedores", RequiredPermission = PermissionNames.Configuracion.View,
                     Text = "Catálogos de proveedor",
                     IconCssClass = "bi bi-tag",
-                    MatchPrefixes = ["/mantenimientos/tipos-proveedor", "/mantenimientos/tipos-contacto"],
+                    MatchPrefixes = ["/mantenimientos/tipos-proveedor", "/mantenimientos/tipos-contacto", "/mantenimientos/retenciones"],
                     Children =
                     [
                         new SidebarNavItem { Id = "mant-tipos-proveedor", RequiredPermission = PermissionNames.Configuracion.View, Text = "Tipos de proveedor", NavigateUrl = "/mantenimientos/tipos-proveedor", MatchPrefixes = ["/mantenimientos/tipos-proveedor"], IconCssClass = "bi bi-tag" },
-                        new SidebarNavItem { Id = "mant-tipos-contacto", RequiredPermission = PermissionNames.Configuracion.View, Text = "Tipos de contacto", NavigateUrl = "/mantenimientos/tipos-contacto", MatchPrefixes = ["/mantenimientos/tipos-contacto"], IconCssClass = "bi bi-person-lines-fill" }
+                        new SidebarNavItem { Id = "mant-tipos-contacto", RequiredPermission = PermissionNames.Configuracion.View, Text = "Tipos de contacto", NavigateUrl = "/mantenimientos/tipos-contacto", MatchPrefixes = ["/mantenimientos/tipos-contacto"], IconCssClass = "bi bi-person-lines-fill" },
+                        // El catálogo de retenciones vive con los proveedores, que es a quienes se
+                        // les retiene; la consulta y la declaración están en la sección Proveedores.
+                        new SidebarNavItem { Id = "mant-retenciones", RequiredPermission = PermissionNames.Configuracion.View, Text = "Catálogo de retenciones", NavigateUrl = "/mantenimientos/retenciones", MatchPrefixes = ["/mantenimientos/retenciones"], IconCssClass = "bi bi-cash-coin" }
                     ]
                 },
                 new SidebarNavItem
                 {
-                    Id = "cfg-sistema",
-                    RequiredPermission = PermissionNames.Configuracion.View,
+                    Id = "cfg-sistema", RequiredPermission = PermissionNames.Configuracion.View,
                     Text = "Sistema",
                     IconCssClass = "bi bi-shield-lock",
-                    MatchPrefixes = ["/parametros", "/mi-app/usuarios", "/contabilidad/empresas", "/tipos-documento-fiscal", "/auditoria", "/informes/reportes", "/informes/datasets"],
+                    MatchPrefixes = ["/parametros", "/mi-app/usuarios", "/contabilidad/empresas", "/tipos-documento-fiscal", "/auditoria", "/informes/reportes", "/informes/datasets", "/configuracion/correo", "/configuracion/aprobaciones"],
                     Children =
                     [
                         new SidebarNavItem { Id = "param-usuarios", Text = "Usuarios", NavigateUrl = "/parametros/usuarios", MatchPrefixes = ["/parametros/usuarios"], IconCssClass = "bi bi-people-fill", SoloSuperAdmin = true },
@@ -367,6 +413,8 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "cb-crear-empresa", RequiredPermission = PermissionNames.Configuracion.View, Text = "Crear empresa", NavigateUrl = "/contabilidad/empresas/nueva", MatchPrefixes = ["/contabilidad/empresas/nueva"], IconCssClass = "bi bi-plus-circle" },
                         new SidebarNavItem { Id = "param-branding", Text = "Branding del Portal", NavigateUrl = "/parametros/branding", MatchPrefixes = ["/parametros/branding"], IconCssClass = "bi bi-palette", SoloSuperAdmin = true },
                         new SidebarNavItem { Id = "tipos-documento-fiscal", RequiredPermission = PermissionNames.Configuracion.View, Text = "Tipos de documento (SAR)", NavigateUrl = "/tipos-documento-fiscal", MatchPrefixes = ["/tipos-documento-fiscal"], IconCssClass = "bi bi-file-earmark-text" },
+                        new SidebarNavItem { Id = "cfg-correo", Text = "Correo y notificaciones", NavigateUrl = "/configuracion/correo", MatchPrefixes = ["/configuracion/correo"], IconCssClass = "bi bi-envelope-gear", SoloSuperAdmin = true },
+                        new SidebarNavItem { Id = "cfg-aprobaciones", RequiredPermission = PermissionNames.Configuracion.View, Text = "Aprobaciones", NavigateUrl = "/configuracion/aprobaciones", MatchPrefixes = ["/configuracion/aprobaciones"], IconCssClass = "bi bi-diagram-3" },
                         new SidebarNavItem { Id = "auditoria-config", Text = "Configuración de auditoría", NavigateUrl = "/auditoria/configuracion", MatchPrefixes = ["/auditoria/configuracion"], IconCssClass = "bi bi-sliders", SoloSuperAdmin = true },
                         new SidebarNavItem { Id = "auditoria-bitacora-maestros", RequiredPermission = PermissionNames.Configuracion.View, Text = "Bitácora de maestros", NavigateUrl = "/auditoria/bitacora-maestros", MatchPrefixes = ["/auditoria/bitacora-maestros"], IconCssClass = "bi bi-clock-history" },
                         new SidebarNavItem { Id = "informes-reportes", RequiredPermission = PermissionNames.Reporteria.View, Text = "Diseño Web (informes)", NavigateUrl = "/informes/reportes", MatchPrefixes = ["/informes/reportes"], IconCssClass = "bi bi-layout-text-window-reverse" },

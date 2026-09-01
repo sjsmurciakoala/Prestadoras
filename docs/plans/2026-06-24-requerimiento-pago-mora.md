@@ -11,7 +11,7 @@
 **Diseño aprobado:** `docs/plans/2026-06-24-requerimiento-pago-mora-design.md`.
 
 **Conexión mirror (tests/DDL, localhost):**
-`Host=localhost;Port=5432;Database=siad_v3_restore;Username=postgres;Password=Koala@2021;Timeout=10;SslMode=Prefer`
+`Host=localhost;Port=5432;Database=siad_v3_restore;Username=postgres;Password=<password>;Timeout=10;SslMode=Prefer`
 psql: `C:\Program Files\PostgreSQL\15\bin\psql.exe`.
 
 **Fuentes de datos del encabezado (verificadas en el mirror):**
@@ -37,7 +37,7 @@ ALTER TABLE cln_carta_cobro_hdr ADD COLUMN IF NOT EXISTS plazo_horas int;
 
 **Step 2: Aplicar en el mirror**
 
-Run: `$env:PGPASSWORD='Koala@2021'; & 'C:\Program Files\PostgreSQL\15\bin\psql.exe' -h localhost -U postgres -d siad_v3_restore -v ON_ERROR_STOP=1 -f Prestadoras/Database/2026-06-24_add_plazo_horas_carta_cobro.sql`
+Run: `$env:PGPASSWORD='<password>'; & 'C:\Program Files\PostgreSQL\15\bin\psql.exe' -h localhost -U postgres -d siad_v3_restore -v ON_ERROR_STOP=1 -f Prestadoras/Database/2026-06-24_add_plazo_horas_carta_cobro.sql`
 Expected: `ALTER TABLE`.
 
 **Step 3: Propiedad en la entidad** — en `cln_carta_cobro_hdr.cs`, tras `fechacreacion`:
@@ -106,7 +106,7 @@ public record CartaCobroClienteDto(
 
 **Step 2: Verificar que falla**
 
-Run: `$env:SIAD_TEST_DB='Host=localhost;Port=5432;Database=siad_v3_restore;Username=postgres;Password=Koala@2021;Timeout=10;SslMode=Prefer'; dotnet test Prestadoras/SIAD.Tests/SIAD.Tests.csproj --filter FullyQualifiedName~GenerarRequerimiento_PersistePlazoHoras --artifacts-path "$env:TEMP\req_b1"`
+Run: `$env:SIAD_TEST_DB='Host=localhost;Port=5432;Database=siad_v3_restore;Username=postgres;Password=<password>;Timeout=10;SslMode=Prefer'; dotnet test Prestadoras/SIAD.Tests/SIAD.Tests.csproj --filter FullyQualifiedName~GenerarRequerimiento_PersistePlazoHoras --artifacts-path "$env:TEMP\req_b1"`
 Expected: FAIL.
 
 **Step 3: Persistir el plazo** — en `GenerarCartasCobroAsync`, dentro del `new cln_carta_cobro_hdr { … }` agregar `plazo_horas = request.PlazoHoras,` y cambiar el `return` por:
@@ -413,7 +413,7 @@ Reemplazar **todo el método** `RenderCartasHtml` por:
 **Step 1:** `dotnet build Prestadoras/HODSOFT_DEVEXPRESS.sln` → 0 errores (app detenida o `--artifacts-path` aislado).
 
 **Step 2:** Tests:
-`$env:SIAD_TEST_DB='Host=localhost;Port=5432;Database=siad_v3_restore;Username=postgres;Password=Koala@2021;Timeout=10;SslMode=Prefer'; dotnet test Prestadoras/SIAD.Tests/SIAD.Tests.csproj --filter FullyQualifiedName~ClientesCobroTests`
+`$env:SIAD_TEST_DB='Host=localhost;Port=5432;Database=siad_v3_restore;Username=postgres;Password=<password>;Timeout=10;SslMode=Prefer'; dotnet test Prestadoras/SIAD.Tests/SIAD.Tests.csproj --filter FullyQualifiedName~ClientesCobroTests`
 Expected: verde. Aplicar `verification-before-completion`.
 
 **Step 3:** Verificación manual (skill `verify`): en *Clientes para cobros*, seleccionar 1+ clientes → "Generar requerimiento" → 48h → Generar → confirmar contra las imágenes: empresa centrada, "# 2", datos (Clave/Propietario/Dirección/Medidor/Ciclo/Libreta/Secuencia/Identidad), tabla SALDOS ANTERIORES/MES ACTUAL con Recargos 0.00, TOTAL mora, 3 párrafos legales con "48 HORAS", slogan, firmas, "Unidad de Cobranzas A.P.C." y "Observacion:". Imprimir → márgenes 0.5" carta. Verificar Libreta/Ciclo contra un cliente real.

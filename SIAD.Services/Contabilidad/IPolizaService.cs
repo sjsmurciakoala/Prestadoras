@@ -29,6 +29,15 @@ public interface IPolizaService
     /// <summary>Obtener póliza con todas sus líneas</summary>
     Task<PolizaConLineasDto> ObtenerAsync(long companyId, long polizaId, CancellationToken ct = default);
 
+    /// <summary>
+    /// Obtener la partida de un documento por su tripleta (module + document_type + document_id),
+    /// o <c>null</c> si el documento no generó asiento (módulo inactivo o partida encolada).
+    /// Prefiere la partida POSTEADA; si el documento fue anulado y solo queda la revertida,
+    /// devuelve esa (para imprimirla marcada como anulada).
+    /// </summary>
+    Task<PolizaConLineasDto?> ObtenerPorDocumentoAsync(
+        long companyId, string module, string documentType, long documentId, CancellationToken ct = default);
+
     /// <summary>Listar pólizas por período</summary>
     Task<List<PolizaListaDto>> ListarPorPeriodoAsync(long companyId, long periodId, int skip = 0, int take = 100, CancellationToken ct = default);
 

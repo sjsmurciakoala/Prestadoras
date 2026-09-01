@@ -29,7 +29,7 @@ Dato transversal verificado: ambos árboles están en **DevExpress 25.2.4 / .NET
 | Numeración mensual de partidas (commit `70a82cbe`) | **Compatible, no choca**: nuestra `fn_con_siguiente_poliza` (F3) se diseñó sobre su cambio; mismo advisory lock y convención `{company}-{AAAA-MM}-{NNNNNN}` |
 
 ### 🔴 NO tomar bajo ningún concepto
-- **`apc/appsettings.json` / `appsettings.Development.json`**: credenciales en claro (`Host=172.16.0.9;Username=postgres;Password=root`; `Koala@2021` comentado). Nuestro repo usa placeholder + `appsettings.Local.json`. **Además: esas credenciales están hoy en el remoto del repo padre — considerar rotarlas.**
+- **`apc/appsettings.json` / `appsettings.Development.json`**: credenciales en claro (`Host=172.16.0.9;Username=postgres;Password=<password>`; `<password>` comentado). Nuestro repo usa placeholder + `appsettings.Local.json`. **Además: esas credenciales están hoy en el remoto del repo padre — considerar rotarlas.**
 - **`DiagnosticoController.cs` / `UserRepairHelper` / `VerificadorUsuarios`**: endpoints sin `[Authorize]` (`confirmar-todos-usuarios`, `reparar-usuario/{email}`), solo protegidos por `IsDevelopment()` en el cuerpo.
 - **Migración EF `20260707173000_AddBitacoraMaestros.cs`**: contra la convención (el SIAD funcional no usa EF migrations); basta el DDL espejo.
 
@@ -80,7 +80,7 @@ Pipeline 00–03 (`stg_simafi_*` → `pst_config_presupuesto_hdr/dtl`, un presup
 ## 5. Riesgos operativos anotados
 
 1. **Repo padre**: NO hacer pull ni commit en GitHub Desktop sobre `HODSOFT_DEVEXPRESS` (7,508 archivos sucios en el working tree compartido). El fetch ya está hecho; el padre solo se usa como fuente de lectura (`git show origin/Modulo_Caja_1.0:...`).
-2. **Credenciales en el remoto del padre**: `postgres/root@172.16.0.9` y `Koala@2021` están commiteadas en la rama de Emilio. Rotar cuando sea viable.
+2. **Credenciales en el remoto del padre**: `postgres/<password>@172.16.0.9` y `<password>` están commiteadas en la rama de Emilio. Rotar cuando sea viable.
 3. **DDL perdido del repo** (preexistente, no culpa de Emilio): la creación de `rep_catalogo_informes`/`rep_catalogo_datasets`/`rep_reporte_layouts` (`2026-03-21_add_rep_*.sql`) ya no existe en ningún árbol — rescatar del historial para instalaciones limpias.
 4. **0.9 compartida**: sus migraciones de bancos/presupuesto y las nuestras (comercial 2 ciclos) escriben en la misma BD de pruebas `company_id=2`. Coordinar orden en el runbook.
 5. **CLAUDE.md desactualizado**: dice DevExpress 25.1.7; la solución real está en 25.2.4.

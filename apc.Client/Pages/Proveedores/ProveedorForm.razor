@@ -1,6 +1,7 @@
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Proveedores
 @using SIAD.Core.DTOs.Contabilidad
+@using SIAD.Core.DTOs.Almacen
 @using DevExpress.Blazor
 
 <EditForm Model="Model" OnValidSubmit="HandleValidSubmit" OnInvalidSubmit="HandleInvalidSubmit" Context="editContext">
@@ -195,6 +196,19 @@
                             Enabled="@(CuentasContables.Count > 0)" />
                 <ValidationMessage For="() => Model.CuentaContable" />
             </DxFormLayoutItem>
+            <DxFormLayoutItem Caption="Término de pago" ColSpanXs="12" ColSpanMd="4">
+                <DxComboBox Data="@TerminosPago"
+                            TData="TerminoPagoLookupDto"
+                            TValue="int?"
+                            @bind-Value="Model.TerminoPagoId"
+                            ValueFieldName="@nameof(TerminoPagoLookupDto.Id)"
+                            TextFieldName="@nameof(TerminoPagoLookupDto.Display)"
+                            NullText="Sin término (usa el global)"
+                            DropDownStyle="DropDownStyle.DropDownList"
+                            ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                            Enabled="@(!IsBusy)" />
+                <div class="form-text">Se propone al elegir este proveedor en la factura de compra.</div>
+            </DxFormLayoutItem>
         </DxFormLayoutGroup>
 
         <DxFormLayoutGroup Caption="Cuentas bancarias" ColSpanXs="12">
@@ -310,6 +324,9 @@
 
     [Parameter]
     public IReadOnlyList<TipoContactoLookupDto> TiposContacto { get; set; } = Array.Empty<TipoContactoLookupDto>();
+
+    [Parameter]
+    public IReadOnlyList<TerminoPagoLookupDto> TerminosPago { get; set; } = Array.Empty<TerminoPagoLookupDto>();
 
     [Parameter]
     public EventCallback OnValidSubmit { get; set; }

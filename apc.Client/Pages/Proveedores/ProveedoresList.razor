@@ -143,11 +143,15 @@
                                 }
                             </CellDisplayTemplate>
                         </DxGridDataColumn>
-                        <DxGridDataColumn Caption="Acciones" Width="210px">
+                        @* 250px: con el botón de estado de cuenta la fila puede llevar 5 acciones. *@
+                        <DxGridDataColumn Caption="Acciones" Width="250px">
                             <CellDisplayTemplate Context="cellContext">
                                 @if (cellContext.DataItem is ProveedorListItemDto item)
                                 {
                                     <div class="d-flex flex-wrap gap-2">
+                                        <button class="btn-icon btn-estado" title="Estado de cuenta" @onclick="@(() => AbrirEstadoCuenta(item.Codigo))">
+                                            <i class="bi bi-journal-text"></i>
+                                        </button>
                                         <AuthorizeView Policy="@PermissionNames.Contabilidad.View">
                                             <Authorized>
                                                 <button class="btn-icon btn-edit" title="Compromisos de proveedor" @onclick="@(() => AbrirCompromisosProveedorPorCodigo(item.Codigo))">
@@ -319,6 +323,13 @@
     {
         var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
         Navigation.NavigateTo($"/proveedores/compromisos-proveedor?originUrl={originUrl}");
+    }
+
+    private void AbrirEstadoCuenta(string codigo)
+    {
+        var safeCodigo = Uri.EscapeDataString(codigo);
+        var originUrl = Uri.EscapeDataString(GetCurrentRelativeUrl());
+        Navigation.NavigateTo($"/proveedores/{safeCodigo}/estado-cuenta?originUrl={originUrl}");
     }
 
     private void AbrirCompromisosProveedorPorCodigo(string codigo)

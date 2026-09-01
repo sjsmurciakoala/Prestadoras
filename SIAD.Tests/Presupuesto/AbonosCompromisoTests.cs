@@ -91,7 +91,8 @@ public class AbonosCompromisoTests : IntegrationTestBase
             httpAccessor,
             accountFormat,
             banTransacciones,
-            cheques);
+            cheques,
+            new PresupuestoCompromisoService(context, new TestCurrentCompanyService(CompanyId)));
     }
 
     // --- Siembra ---
@@ -273,6 +274,18 @@ SELECT partida_id FROM public.prv_compromiso_abono
         cmd.Parameters.AddWithValue("a", numeroAbono);
         var raw = await cmd.ExecuteScalarAsync();
         return raw is null or DBNull ? null : (long)raw;
+    }
+
+    /// <summary>Lee el status (0=borrador, 1=posteado) de una partida.</summary>
+    private async Task<short?> LeerStatusPartidaAsync(long partidaId)
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = "SELECT status FROM public.con_partida_hdr WHERE company_id=@c AND poliza_id=@p;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        cmd.Parameters.AddWithValue("p", partidaId);
+        var raw = await cmd.ExecuteScalarAsync();
+        return raw is null or DBNull ? null : Convert.ToInt16(raw);
     }
 
     /// <summary>Lee las lineas (account_id, debit_amount, credit_amount) de una partida (poliza_id).</summary>
@@ -575,5 +588,300 @@ SELECT account_id, debit_amount, credit_amount
         var totalHaber = lineas.Sum(l => l.Credit);
         Assert.Equal(totalDebe, totalHaber);
         Assert.Equal(400m, totalDebe);
+    }
+
+    // =====================================================================================
+    // F3 - Retencion en ABONOS (modelo GENERAL). El abono trae Lineas = [ origen{Credito=neto},
+    // retencion{Credito=monto} ] con CuentaContraId null: RegistrarAbonoAsync rutea al modelo GENERAL
+    // (BuildGeneralProcessingPartidaLineasAsync), agrega el proveedor al DEBE por el BRUTO (= Monto) y
+    // paga el NETO por banco. El SALDO baja por el BRUTO. Calca ProcesamientoRetencionesTests.
+    // =====================================================================================
+
+    // Proveedor real + 3 cuentas posting/ACTIVE distintas (origen contable, retencion pasivo, cuenta
+    // contable del banco) + una ban_cuenta de procesamiento sembrada + cuenta de gasto. Misma forma que
+    // ProcesamientoRetencionesTests.ResolveCuentasProcesoAsync (el tenant de prueba solo tiene ban_cuenta
+    // reales sin cont_account_id posteable, por eso se siembra una propia dentro de la transaccion).
+    private readonly record struct CuentasRetencion(
+        string CodProveedor,
+        long CuentaProveedorAccountId,
+        long CuentaContraAccountId,
+        long CuentaRetencionAccountId,
+        long CuentaBancoAccountId,
+        long BancoCuentaId,
+        string CuentaGastoCode);
+
+    private async Task<long> SeedCuentaBancariaProcesamientoAsync(int numeroOrden, long cuentaContableId)
+    {
+        var codigo = $"TSTPRC{numeroOrden}";
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = @"
+INSERT INTO public.ban_cuenta
+    (company_id, code, nombre, tipo, currency_code, numero_cuenta, cont_account_id, activo, estado)
+VALUES (@c, @code, 'Cuenta Procesamiento Test', 'CHEQUES', 'LPS', @numero, @cta, TRUE, 'ACTIVE')
+RETURNING banco_cuenta_id;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        cmd.Parameters.AddWithValue("code", codigo);
+        cmd.Parameters.AddWithValue("numero", codigo);
+        cmd.Parameters.AddWithValue("cta", cuentaContableId);
+        return (long)(await cmd.ExecuteScalarAsync())!;
+    }
+
+    private async Task<CuentasRetencion?> ResolveCuentasRetencionAsync(int numeroOrden)
+    {
+        string codProveedor;
+        long cuentaProveedorId;
+        await using (var cmd = Connection.CreateCommand())
+        {
+            cmd.Transaction = Transaction;
+            cmd.CommandText = @"
+SELECT p.cod_proveedor, c.account_id
+  FROM public.prv_proveedores p
+  JOIN public.con_plan_cuentas c
+    ON c.company_id = @c AND btrim(c.code) = btrim(p.cuenta_contable)
+ WHERE p.company_id = @c
+   AND c.allows_posting = TRUE AND c.status = 'ACTIVE'
+ ORDER BY p.cod_proveedor
+ LIMIT 1;";
+            cmd.Parameters.AddWithValue("c", CompanyId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            if (!await reader.ReadAsync())
+                return null;
+            codProveedor = reader.GetString(0);
+            cuentaProveedorId = reader.GetInt64(1);
+        }
+
+        // 3 cuentas posting/ACTIVE distintas de la del proveedor: origen contable, retencion, banco.
+        var otras = new List<long>();
+        await using (var cmd = Connection.CreateCommand())
+        {
+            cmd.Transaction = Transaction;
+            cmd.CommandText = @"
+SELECT account_id FROM public.con_plan_cuentas
+ WHERE company_id = @c AND allows_posting = TRUE AND status = 'ACTIVE'
+   AND account_id <> @prov
+ ORDER BY account_id
+ LIMIT 3;";
+            cmd.Parameters.AddWithValue("c", CompanyId);
+            cmd.Parameters.AddWithValue("prov", cuentaProveedorId);
+            await using var reader = await cmd.ExecuteReaderAsync();
+            while (await reader.ReadAsync())
+            {
+                otras.Add(reader.GetInt64(0));
+            }
+        }
+        if (otras.Count < 3)
+            return null;
+
+        var bancoCuentaId = await SeedCuentaBancariaProcesamientoAsync(numeroOrden, otras[2]);
+
+        await using var cmd3 = Connection.CreateCommand();
+        cmd3.Transaction = Transaction;
+        cmd3.CommandText = @"
+SELECT code FROM public.con_plan_cuentas
+ WHERE company_id = @c AND allows_posting = TRUE AND status = 'ACTIVE'
+   AND upper(account_type) IN ('GASTO','GASTOS','EGRESO','EGRESOS','COSTO','COSTOS','INGRESO','INGRESOS')
+ ORDER BY account_id LIMIT 1;";
+        cmd3.Parameters.AddWithValue("c", CompanyId);
+        var cuentaGasto = (string?)await cmd3.ExecuteScalarAsync();
+
+        return cuentaGasto is null
+            ? null
+            : new CuentasRetencion(
+                codProveedor, cuentaProveedorId, otras[0], otras[1], otras[2], bancoCuentaId, cuentaGasto);
+    }
+
+    private async Task<List<(decimal Monto, long BancoCuentaId)>> LeerMovimientosBancoAsync(long partidaId)
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = @"
+SELECT monto, banco_cuenta_id FROM public.ban_kardex
+ WHERE company_id = @c AND partida_cuenta_id = @p
+ ORDER BY ban_kardex_id;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        cmd.Parameters.AddWithValue("p", partidaId);
+
+        var movimientos = new List<(decimal, long)>();
+        await using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+        {
+            movimientos.Add((reader.GetDecimal(0), reader.GetInt64(1)));
+        }
+        return movimientos;
+    }
+
+    /// <summary>Lee el partida_reverso_id del abono (la contrapartida generada por AnularAbonoAsync).</summary>
+    private async Task<long?> LeerPartidaReversoIdAbonoAsync(int numeroOrden, int numeroAbono)
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = @"
+SELECT partida_reverso_id FROM public.prv_compromiso_abono
+ WHERE company_id = @c AND numero_orden = @n AND numero_abono = @a;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        cmd.Parameters.AddWithValue("n", numeroOrden);
+        cmd.Parameters.AddWithValue("a", numeroAbono);
+        var raw = await cmd.ExecuteScalarAsync();
+        return raw is null or DBNull ? null : (long)raw;
+    }
+
+    // Igual que CompromisoProveedorAbonar.razor con retenciones: Lineas = [ origen{Credito=neto},
+    // retencion{Credito=montoRetencion} ]; CuentaContraId null para rutear al modelo GENERAL. La linea de
+    // origen lleva BancoCuentaId solo cuando el pago es bancario (para registrar el movimiento por el neto).
+    private static AbonoCompromisoUpsertDto AbonoConRetencion(
+        decimal monto, decimal neto, long cuentaOrigenId, long? bancoCuentaId,
+        long cuentaRetencionId, decimal montoRetencion, string metodoPago) => new()
+    {
+        Monto = monto,
+        MetodoPago = metodoPago,
+        Usuario = "tester",
+        Fecha = DateTime.Now.Date,
+        Lineas = new List<PartidaLineaOrdenPagoDto>
+        {
+            new()
+            {
+                CuentaId = cuentaOrigenId,
+                BancoCuentaId = bancoCuentaId,
+                Descripcion = "pago neto",
+                Debito = 0m,
+                Credito = neto
+            },
+            new()
+            {
+                CuentaId = cuentaRetencionId,
+                Descripcion = "retencion ISR",
+                Debito = 0m,
+                Credito = montoRetencion
+            }
+        }
+    };
+
+    // (10) Abono CONTABLE con 1 retencion: proveedor al DEBE por el BRUTO, retencion al HABER, origen al
+    // HABER por el NETO; partida cuadra; y el SALDO baja por el BRUTO (no por el neto).
+    [SkippableFact]
+    public async Task AbonoConRetencion_Contable_ProveedorDebeBruto_RetencionHaber_OrigenNeto_SaldoBajaBruto()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        const int orden = OrdenBase + 10;
+        var cuentas = await ResolveCuentasRetencionAsync(orden);
+        Skip.If(cuentas is null, "No hay proveedor + 3 cuentas posting/ACTIVE distintas en el tenant de prueba.");
+
+        // Compromiso 2000, abono 1000, retencion 125 => neto 875. Con compromiso > abono el saldo restante
+        // (1000) delata si bajara por el neto (quedaria 1125) en vez de por el bruto.
+        await SeedCompromisoAsync(orden, 2000m, cuentas!.Value.CodProveedor, cuentas.Value.CuentaGastoCode);
+
+        await using var context = CreateContext();
+        var service = CreateService(context);
+
+        // Metodo CONTABLE (sin movimiento bancario): la linea de origen es una cuenta contable (sin
+        // BancoCuentaId) que va al HABER por el neto.
+        var dto = AbonoConRetencion(1000m, 875m, cuentas.Value.CuentaContraAccountId, bancoCuentaId: null,
+            cuentas.Value.CuentaRetencionAccountId, 125m, OrdenPagoDirectoMetodoPago.Contable);
+
+        var res = await service.RegistrarAbonoAsync(orden, dto, CancellationToken.None);
+        Assert.True(res.Success, res.Message);
+        Assert.Equal(1, res.NumeroAbono);
+
+        var partidaId = await LeerPartidaIdAbonoAsync(orden, res.NumeroAbono);
+        Assert.NotNull(partidaId);
+        var lineas = await LeerLineasPartidaAsync(partidaId!.Value);
+
+        var lineaProveedor = Assert.Single(lineas.Where(l => l.AccountId == cuentas.Value.CuentaProveedorAccountId));
+        Assert.Equal(1000m, lineaProveedor.Debit);
+        Assert.Equal(0m, lineaProveedor.Credit);
+
+        var lineaRetencion = Assert.Single(lineas.Where(l => l.AccountId == cuentas.Value.CuentaRetencionAccountId));
+        Assert.Equal(0m, lineaRetencion.Debit);
+        Assert.Equal(125m, lineaRetencion.Credit);
+
+        var lineaOrigen = Assert.Single(lineas.Where(l => l.AccountId == cuentas.Value.CuentaContraAccountId));
+        Assert.Equal(0m, lineaOrigen.Debit);
+        Assert.Equal(875m, lineaOrigen.Credit);
+
+        Assert.Equal(lineas.Sum(l => l.Debit), lineas.Sum(l => l.Credit));
+        Assert.Equal(1000m, lineas.Sum(l => l.Debit));
+
+        // El saldo baja por el BRUTO (1000): 2000 - 1000 = 1000.
+        var saldo = await service.GetSaldoConAbonosAsync(orden, CancellationToken.None);
+        Assert.Equal(1000m, saldo!.Abonado);
+        Assert.Equal(1000m, saldo.Saldo);
+        Assert.False(saldo.Pagado);
+    }
+
+    // (11) Abono por TRANSFERENCIA con 1 retencion: el movimiento bancario se registra por el NETO.
+    [SkippableFact]
+    public async Task AbonoConRetencion_Transferencia_MovimientoBancarioEsNeto()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        const int orden = OrdenBase + 11;
+        var cuentas = await ResolveCuentasRetencionAsync(orden);
+        Skip.If(cuentas is null, "No hay proveedor + 3 cuentas posting/ACTIVE distintas en el tenant de prueba.");
+
+        await SeedCompromisoAsync(orden, 2000m, cuentas!.Value.CodProveedor, cuentas.Value.CuentaGastoCode);
+
+        await using var context = CreateContext();
+        var service = CreateService(context);
+
+        // La linea de origen lleva BancoCuentaId (bancario) => el movimiento en ban_kardex va por el neto.
+        var dto = AbonoConRetencion(1000m, 875m, cuentas.Value.CuentaBancoAccountId, cuentas.Value.BancoCuentaId,
+            cuentas.Value.CuentaRetencionAccountId, 125m, OrdenPagoDirectoMetodoPago.Transferencia);
+
+        var res = await service.RegistrarAbonoAsync(orden, dto, CancellationToken.None);
+        Assert.True(res.Success, res.Message);
+
+        var partidaId = await LeerPartidaIdAbonoAsync(orden, res.NumeroAbono);
+        Assert.NotNull(partidaId);
+        var lineas = await LeerLineasPartidaAsync(partidaId!.Value);
+        Assert.Equal(lineas.Sum(l => l.Debit), lineas.Sum(l => l.Credit));
+        Assert.Equal(1000m, lineas.Sum(l => l.Debit));
+
+        // El movimiento bancario es por el NETO (875), no por el bruto (1000). sp_ban_kardex_registrar_movimiento
+        // normaliza el signo por entra_sale; lo relevante es la MAGNITUD.
+        var movimientos = await LeerMovimientosBancoAsync(partidaId.Value);
+        var movimiento = Assert.Single(movimientos);
+        Assert.Equal(875m, Math.Abs(movimiento.Monto));
+        Assert.Equal(cuentas.Value.BancoCuentaId, movimiento.BancoCuentaId);
+    }
+
+    // (12) Anular un abono con retencion: la contrapartida invierte TODAS las lineas (proveedor, retencion
+    // y origen) y el saldo se restaura por el bruto.
+    [SkippableFact]
+    public async Task AnularAbonoConRetencion_RevierteLaPartidaCompleta()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+        const int orden = OrdenBase + 12;
+        var cuentas = await ResolveCuentasRetencionAsync(orden);
+        Skip.If(cuentas is null, "No hay proveedor + 3 cuentas posting/ACTIVE distintas en el tenant de prueba.");
+
+        await SeedCompromisoAsync(orden, 2000m, cuentas!.Value.CodProveedor, cuentas.Value.CuentaGastoCode);
+
+        await using var context = CreateContext();
+        var service = CreateService(context);
+
+        var dto = AbonoConRetencion(1000m, 875m, cuentas.Value.CuentaContraAccountId, bancoCuentaId: null,
+            cuentas.Value.CuentaRetencionAccountId, 125m, OrdenPagoDirectoMetodoPago.Contable);
+        var reg = await service.RegistrarAbonoAsync(orden, dto, CancellationToken.None);
+        Assert.True(reg.Success, reg.Message);
+
+        var anu = await service.AnularAbonoAsync(
+            orden, numeroAbono: 1, new AnularOrdenPagoDirectoDto { Motivo = "prueba retencion" }, CancellationToken.None);
+        Assert.True(anu.Success, anu.Message);
+
+        // F0: el reverso lo hace el motor (RevertirComprobanteAsync → sp_con_revertir_poliza), que NO crea
+        // una contrapartida con líneas invertidas: revierte la póliza del PAGO a BORRADOR (status=0) y le
+        // resta el saldo del mayor. partida_reverso_id apunta a esa misma póliza (la reversada).
+        var polizaPago = await LeerPartidaIdAbonoAsync(orden, 1);
+        Assert.NotNull(polizaPago);
+        Assert.Equal((short)0, await LeerStatusPartidaAsync(polizaPago!.Value)); // el pago quedó fuera del mayor
+        var polizaReversoId = await LeerPartidaReversoIdAbonoAsync(orden, 1);
+        Assert.Equal(polizaPago, polizaReversoId);
+
+        // Saldo restaurado por el bruto: el abono anulado ya no cuenta => vuelve a 2000.
+        var saldo = await service.GetSaldoConAbonosAsync(orden, CancellationToken.None);
+        Assert.Equal(0m, saldo!.Abonado);
+        Assert.Equal(2000m, saldo.Saldo);
+        Assert.Equal(1, await ContarAbonosAsync(orden, "A"));
+        Assert.Equal(0, await ContarAbonosAsync(orden, "V"));
     }
 }

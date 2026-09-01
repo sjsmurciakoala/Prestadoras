@@ -51,14 +51,21 @@ public sealed class ArticuloEditDto
     [StringLength(80, ErrorMessage = "El diámetro no puede superar los 80 caracteres.")]
     public string? Diametro { get; set; }
 
-    [StringLength(20, ErrorMessage = "La cuenta contable no puede superar los 20 caracteres.")]
-    public string? CuentaContable { get; set; }
-
     [Range(0, 9_999_999_999_999d, ErrorMessage = "La existencia mínima no puede ser negativa.")]
     public decimal ExistenciaMinima { get; set; }
 
     [Range(0, 99_999_999d, ErrorMessage = "El valor unitario no puede ser negativo.")]
     public decimal ValorUnitario { get; set; }
+
+    /// <summary>Costo promedio unitario del artículo: ponderado real consolidado de las bodegas
+    /// activas (el mismo que el maestro y el kardex). Solo lectura en el form.</summary>
+    public decimal CostoPromedio { get; set; }
+
+    /// <summary>Último costo de compra / entrada registrado en sus ubicaciones activas.</summary>
+    public decimal UltimoCosto { get; set; }
+
+    /// <summary>Valor total de inventario (existencia física × costo promedio).</summary>
+    public decimal ValorTotal { get; set; }
 
     /// <summary>
     /// Existencia física. En edición es el rollup (suma de bodegas) y se conserva.

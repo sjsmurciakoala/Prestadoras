@@ -31,6 +31,15 @@ public partial class alm_tipo_articulo : ICompanyScopedEntity
     /// </summary>
     public bool maneja_inventario { get; set; } = true;
 
+    /// <summary>
+    /// Tasa de ISV (<see cref="cfg_impuesto_tasa"/>) que aplica a las COMPRAS de artículos
+    /// de este tipo. Una tasa GRAVADA hace que el ISV se registre y se sume al costo del
+    /// artículo; una tasa EXENTA —o NULL (sin asignar)— hace que no se registre ISV.
+    /// Reutiliza el porcentaje y la vigencia del catálogo global. Sin implicaciones
+    /// contables: el crédito fiscal queda fuera de alcance.
+    /// </summary>
+    public int? impuesto_tasa_id { get; set; }
+
     public bool activo { get; set; }
     public string? usuariocreacion { get; set; }
     public DateTime? fechacreacion { get; set; }
@@ -39,4 +48,7 @@ public partial class alm_tipo_articulo : ICompanyScopedEntity
 
     /// <summary>Categorías (alm_grupo) que cuelgan de este tipo (unificación 2026-07-16).</summary>
     public virtual ICollection<alm_grupo> grupos { get; set; } = new List<alm_grupo>();
+
+    /// <summary>Navegación a la tasa de ISV asignada (catálogo global). Null si el tipo no aplica ISV.</summary>
+    public virtual cfg_impuesto_tasa? impuesto_tasa { get; set; }
 }

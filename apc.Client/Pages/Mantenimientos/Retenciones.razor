@@ -1,0 +1,1108 @@
+@page "/mantenimientos/retenciones"
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Retenciones
+@using apc.Client.Services
+@using apc.Client.Services.Retenciones
+
+@inject RetencionesClient RetencionesClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Retenciones</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="RetencionesToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Retenciones a proveedores</h2>
+            <p class="page-subtitle">Catálogo de retenciones (SAR), sus tasas con vigencia y la cuenta del pasivo por empresa</p>
+        </div>
+        <DxButton Text="Nueva retención" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevaRetencion" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    @* ------------------------------------------------------------------ maestro *@
+    <div class="modern-card position-relative mb-3">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@retenciones" KeyFieldName="@nameof(RetencionListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    SelectionMode="GridSelectionMode.Single"
+                    AllowSelectRowByClick="true"
+                    SelectedDataItem="@retencionSeleccionada"
+                    SelectedDataItemChanged="@((object item) => OnRetencionSeleccionadaAsync(item as RetencionListItemDto))"
+                    HighlightRowOnHover="true"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving" LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChangedAsync(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar código o nombre..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <DxComboBox Data="@TiposImpuestoFiltro" TextFieldName="@nameof(OpcionCatalogo.Etiqueta)"
+                                    ValueFieldName="@nameof(OpcionCatalogo.Valor)"
+                                    Value="@filtroTipoImpuesto" ValueChanged="@((string? v) => OnTipoFiltroChangedAsync(v))"
+                                    ValueExpression="@(() => filtroTipoImpuesto)"
+                                    NullText="Todos los impuestos" CssClass="me-1" Style="min-width: 170px;"
+                                    ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChangedAsync(v))"
+                                        CheckType="CheckType.Switch">Solo activas</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@retenciones.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(RetencionListItemDto.Codigo)" Caption="Código" Width="130px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RetencionListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Codigo</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(RetencionListItemDto.Nombre)" Caption="Nombre" MinWidth="200" />
+                    <DxGridDataColumn FieldName="@nameof(RetencionListItemDto.TipoImpuesto)" Caption="Impuesto" Width="110px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RetencionListItemDto item)
+                            {
+                                <span class="badge @TipoImpuestoBadgeClass(item.TipoImpuesto)">@item.TipoImpuesto</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(RetencionListItemDto.BaseCalculo)" Caption="Base" Width="120px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RetencionListItemDto item)
+                            {
+                                <span class="text-muted">@BaseLabel(item.BaseCalculo)</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="% vigente" Width="110px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RetencionListItemDto item)
+                            {
+                                @if (item.PorcentajeVigente is decimal p)
+                                {
+                                    <span class="fw-semibold">@p.ToString("0.##")%</span>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle"
+                                          title="La retención no tiene una tasa vigente (pendiente de configurar)">sin tasa</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Cuenta (empresa)" MinWidth="200">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RetencionListItemDto item)
+                            {
+                                @if (item.CuentaConfigurada)
+                                {
+                                    <div class="text-truncate" title="@($"{item.CuentaCodigo} — {item.CuentaNombre}")">
+                                        <span class="fw-semibold">@item.CuentaCodigo</span>
+                                        <span class="text-muted"> — @item.CuentaNombre</span>
+                                    </div>
+                                }
+                                else
+                                {
+                                    <span class="badge bg-light text-dark border">sin configurar</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RetencionListItemDto item)
+                            {
+                                <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVA" : "INACTIVA")</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="170px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is RetencionListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarRetencionAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-estado" title="Configurar cuenta contable (empresa)"
+                                            @onclick="() => AbrirCuentaAsync(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-bank"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivarRetencion(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay retenciones para mostrar.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+
+    @* ------------------------------------------------------------------- detalle *@
+    <div class="modern-card position-relative">
+        @if (retencionSeleccionada is null)
+        {
+            <div class="p-4 text-center text-muted">
+                <i class="bi bi-arrow-up-circle me-1"></i>
+                Seleccione una retención arriba para ver y administrar sus tasas y su cuenta contable.
+            </div>
+        }
+        else
+        {
+            <DxLoadingPanel Visible="isLoadingTasas" IsContentBlocked="true" Text="Cargando tasas..." />
+
+            <div class="d-flex flex-wrap align-items-center gap-2 p-3 border-bottom">
+                <div>
+                    <div class="fw-bold">Tasas de @retencionSeleccionada.Codigo — @retencionSeleccionada.Nombre</div>
+                    <div class="small text-muted">Histórico completo: las tasas cerradas se conservan para reconstruir pagos pasados.</div>
+                </div>
+                <div class="ms-auto d-flex align-items-center gap-3">
+                    <div class="small">
+                        <span class="text-muted">Cuenta del pasivo (empresa):</span>
+                        @if (retencionSeleccionada.CuentaConfigurada)
+                        {
+                            <span class="fw-semibold ms-1" title="@retencionSeleccionada.CuentaNombre">@retencionSeleccionada.CuentaCodigo</span>
+                        }
+                        else
+                        {
+                            <span class="badge bg-light text-dark border ms-1">sin configurar</span>
+                        }
+                        <button type="button" class="btn btn-link btn-sm p-0 ms-2" @onclick="() => AbrirCuentaAsync(retencionSeleccionada)">
+                            Configurar
+                        </button>
+                    </div>
+                    <DxButton Text="Nueva tasa" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                              Click="AbrirNuevaTasa" />
+                </div>
+            </div>
+
+            <div class="alert alert-info m-3" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                <strong>Las tasas no se editan cuando cambian por decreto.</strong>
+                Si el SAR cambia el porcentaje de retención, no edite la tasa vigente: use
+                <em>«Cambiar tasa (nuevo decreto)»</em>. Esa acción cierra la vigencia de la tasa actual y crea
+                una nueva a partir del día siguiente. Edite una tasa <u>solo para corregir una errata</u>.
+            </div>
+
+            <div class="grid-wrapper">
+                <DxGrid Data="@tasas" KeyFieldName="@nameof(RetencionTasaDto.Id)" PageSize="5"
+                        PagerPosition="GridPagerPosition.Bottom"
+                        ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                        CustomizeElement="OnTasasCustomizeElement"
+                        ShowGroupPanel="false" CssClass="grid-solicitudes">
+                    <Columns>
+                        <DxGridDataColumn FieldName="@nameof(RetencionTasaDto.Porcentaje)" Caption="Porcentaje" Width="120px"
+                                          TextAlignment="GridTextAlignment.Right">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is RetencionTasaDto t)
+                                {
+                                    <span class="fw-semibold">@t.Porcentaje.ToString("0.##")%</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(RetencionTasaDto.VigenciaDesde)" Caption="Vigente desde" Width="140px"
+                                          TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is RetencionTasaDto t)
+                                {
+                                    <span>@t.VigenciaDesde.ToString("dd/MM/yyyy")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(RetencionTasaDto.VigenciaHasta)" Caption="Vigente hasta" Width="150px"
+                                          TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is RetencionTasaDto t)
+                                {
+                                    @if (t.VigenciaHasta is null)
+                                    {
+                                        <span class="badge-status active" title="Sigue rigiendo: no se ha cerrado por decreto">(vigente)</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="text-muted">@t.VigenciaHasta.Value.ToString("dd/MM/yyyy")</span>
+                                    }
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn FieldName="@nameof(RetencionTasaDto.Descripcion)" Caption="Descripción / decreto" MinWidth="200">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is RetencionTasaDto t)
+                                {
+                                    <span class="text-muted">@(string.IsNullOrWhiteSpace(t.Descripcion) ? "—" : t.Descripcion)</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is RetencionTasaDto t)
+                                {
+                                    <span class="badge-status @(t.Activo ? "active" : "inactive")">@(t.Activo ? "ACTIVA" : "INACTIVA")</span>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                        <DxGridDataColumn Caption="Acciones" Width="190px" TextAlignment="GridTextAlignment.Center">
+                            <CellDisplayTemplate Context="cell">
+                                @if (cell.DataItem is RetencionTasaDto t)
+                                {
+                                    <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                        @if (t.EsAbierta && t.Activo)
+                                        {
+                                            <button type="button" class="btn-icon btn-decreto" title="Cambiar tasa (nuevo decreto)"
+                                                    @onclick="() => AbrirCambiarTasa(t)" @onclick:stopPropagation="true">
+                                                <i class="bi bi-arrow-repeat"></i>
+                                            </button>
+                                        }
+                                        <button type="button" class="btn-icon btn-edit" title="Editar (solo para corregir erratas)"
+                                                @onclick="() => AbrirEditarTasa(t)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-pencil-square"></i>
+                                        </button>
+                                        <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                                disabled="@(!t.Activo)"
+                                                @onclick="() => ConfirmarDesactivarTasa(t)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-slash-circle"></i>
+                                        </button>
+                                    </div>
+                                }
+                            </CellDisplayTemplate>
+                        </DxGridDataColumn>
+                    </Columns>
+                    <EmptyDataAreaTemplate>
+                        <div class="p-4 text-center text-muted">Esta retención todavía no tiene tasa. Agregue una con «Nueva tasa».</div>
+                    </EmptyDataAreaTemplate>
+                </DxGrid>
+            </div>
+        }
+    </div>
+</div>
+
+@* =========================================================== modal: retención *@
+<DxPopup @bind-Visible="retencionFormVisible" Width="min(640px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-cash-coin"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">
+                    @(retencionModel.Id.HasValue ? "Editar retención" : "Nueva retención")
+                </div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    La retención es global: el porcentaje lo fija la ley, no la empresa.
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="popupCtx">
+        <EditForm Model="retencionModel" OnValidSubmit="GuardarRetencionAsync" Context="retCtx">
+            <DataAnnotationsValidator />
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Código *" ColSpanMd="4">
+                    <DxTextBox @bind-Text="retencionModel.Codigo" NullText="Ej. ISR-SERV" MaxLength="20" />
+                    <ValidationMessage For="() => retencionModel.Codigo" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Nombre *" ColSpanMd="8">
+                    <DxTextBox @bind-Text="retencionModel.Nombre" NullText="Ej. ISR 12.5% honorarios y servicios" MaxLength="80" />
+                    <ValidationMessage For="() => retencionModel.Nombre" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Impuesto *" ColSpanMd="6">
+                    <DxComboBox Data="@TiposImpuestoCatalogo" TextFieldName="@nameof(OpcionCatalogo.Etiqueta)"
+                                ValueFieldName="@nameof(OpcionCatalogo.Valor)"
+                                @bind-Value="retencionModel.TipoImpuesto"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+                    <div class="form-hint text-muted small mt-1">ISR = retención de renta. ISV = retención sobre ventas.</div>
+                    <ValidationMessage For="() => retencionModel.TipoImpuesto" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Base de cálculo *" ColSpanMd="6">
+                    <DxComboBox Data="@BasesCatalogo" TextFieldName="@nameof(OpcionCatalogo.Etiqueta)"
+                                ValueFieldName="@nameof(OpcionCatalogo.Valor)"
+                                @bind-Value="retencionModel.BaseCalculo"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Never" />
+                    <div class="form-hint text-muted small mt-1">ISR va sobre el subtotal (sin ISV).</div>
+                    <ValidationMessage For="() => retencionModel.BaseCalculo" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <DxTextBox @bind-Text="retencionModel.Descripcion" NullText="Base legal, notas..." MaxLength="250" />
+                    <ValidationMessage For="() => retencionModel.Descripcion" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Activa" ColSpanMd="12">
+                    <Template Context="tpl">
+                        <div class="pt-2">
+                            <DxCheckBox @bind-Checked="retencionModel.Activo" CheckType="CheckType.Switch" LabelText="Activa" />
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <ValidationSummary class="text-danger mb-3" />
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                          Text="Guardar" SubmitFormOnClick="true" Enabled="@(!isSaving)" />
+                <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!isSaving)" Click="CerrarRetencionForm" />
+            </div>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ================================================================ modal: tasa *@
+<DxPopup @bind-Visible="tasaFormVisible" Width="min(720px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-percent"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">
+                    @(tasaModel.Id.HasValue ? "Editar tasa" : "Nueva tasa")
+                </div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    @(retencionSeleccionada is null ? string.Empty : $"{retencionSeleccionada.Codigo} — {retencionSeleccionada.Nombre}")
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="popupCtx">
+        @if (tasaModel.Id.HasValue)
+        {
+            <div class="alert alert-warning" role="alert">
+                <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                Está editando una tasa existente. Esto es para <strong>corregir erratas</strong>.
+                Si el porcentaje cambió por decreto, <strong>cierre esta tasa y cree una nueva</strong> con
+                «Cambiar tasa (nuevo decreto)».
+            </div>
+        }
+
+        <EditForm Model="tasaModel" OnValidSubmit="GuardarTasaAsync" Context="tasaCtx">
+            <DataAnnotationsValidator />
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Porcentaje *" ColSpanMd="6">
+                    <DxSpinEdit @bind-Value="tasaModel.Porcentaje" DisplayFormat="N2" MinValue="0" MaxValue="100" CssClass="w-100" />
+                    <div class="form-hint text-muted small mt-1">Una retención siempre retiene algo: el porcentaje debe ser mayor que 0.</div>
+                    <ValidationMessage For="() => tasaModel.Porcentaje" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Vigente desde *" ColSpanMd="6">
+                    <DxDateEdit @bind-Date="tasaModel.VigenciaDesde" DisplayFormat="dd/MM/yyyy" CssClass="w-100" />
+                    <ValidationMessage For="() => tasaModel.VigenciaDesde" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Vigente hasta" ColSpanMd="6">
+                    <DxDateEdit @bind-Date="tasaModel.VigenciaHasta" DisplayFormat="dd/MM/yyyy"
+                                NullText="(vigente, sin cierre)"
+                                ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto" CssClass="w-100" />
+                    <div class="form-hint text-muted small mt-1">
+                        Vacío = sigue rigiendo. Normalmente se deja vacío y se cierra con «Cambiar tasa».
+                    </div>
+                    <ValidationMessage For="() => tasaModel.VigenciaHasta" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Descripción" ColSpanMd="12">
+                    <DxTextBox @bind-Text="tasaModel.Descripcion" NullText="Base legal, decreto, notas..." MaxLength="250" />
+                    <ValidationMessage For="() => tasaModel.Descripcion" />
+                </DxFormLayoutItem>
+
+                <DxFormLayoutItem Caption="Activa" ColSpanMd="12">
+                    <Template Context="tpl">
+                        <div class="pt-2">
+                            <DxCheckBox @bind-Checked="tasaModel.Activo" CheckType="CheckType.Switch" LabelText="Activa" />
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            <ValidationSummary class="text-danger mb-3" />
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                          Text="Guardar" SubmitFormOnClick="true" Enabled="@(!isSaving)" />
+                <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!isSaving)" Click="CerrarTasaForm" />
+            </div>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ====================================================== modal: cambiar tasa *@
+<DxPopup @bind-Visible="cambioVisible" Width="min(680px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-arrow-repeat"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Cambiar tasa (nuevo decreto)</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    Cierra la tasa vigente y abre la nueva. El histórico queda intacto.
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="popupCtx">
+        @if (tasaACambiar is not null)
+        {
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                Esto <strong>no edita</strong> la tasa actual: le pone fecha de cierre y crea una tasa nueva de la
+                misma retención, vigente a partir del día siguiente. Así, al reconstruir un pago viejo el sistema
+                sigue aplicando la tasa que regía ese día.
+            </div>
+
+            <EditForm Model="cambioModel" OnValidSubmit="CambiarTasaAsync" Context="cambioCtx">
+                <DataAnnotationsValidator />
+                <DxFormLayout>
+                    <DxFormLayoutItem Caption="Tasa actual" ColSpanMd="12">
+                        <Template Context="tpl">
+                            <div class="pt-2">
+                                <strong>@tasaACambiar.Porcentaje.ToString("0.##")%</strong>
+                                <span class="text-muted ms-2">
+                                    (vigente desde @tasaACambiar.VigenciaDesde.ToString("dd/MM/yyyy"))
+                                </span>
+                            </div>
+                        </Template>
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Último día de la tasa actual *" ColSpanMd="6">
+                        <DxDateEdit @bind-Date="cambioModel.VigenciaHasta" DisplayFormat="dd/MM/yyyy"
+                                    MinDate="@tasaACambiar.VigenciaDesde.ToDateTime(TimeOnly.MinValue)"
+                                    CssClass="w-100" />
+                        <div class="form-hint text-muted small mt-1">
+                            La tasa nueva empezará el <strong>@cambioModel.VigenciaHasta.AddDays(1).ToString("dd/MM/yyyy")</strong>.
+                        </div>
+                        <ValidationMessage For="() => cambioModel.VigenciaHasta" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Nuevo porcentaje *" ColSpanMd="6">
+                        <DxSpinEdit @bind-Value="cambioModel.NuevoPorcentaje" DisplayFormat="N2" MinValue="0" MaxValue="100" CssClass="w-100" />
+                        <ValidationMessage For="() => cambioModel.NuevoPorcentaje" />
+                    </DxFormLayoutItem>
+
+                    <DxFormLayoutItem Caption="Decreto / motivo" ColSpanMd="12">
+                        <DxTextBox @bind-Text="cambioModel.NuevaDescripcion" MaxLength="250"
+                                   NullText="Ej. Acuerdo 000-2026, vigente a partir de..." />
+                        <ValidationMessage For="() => cambioModel.NuevaDescripcion" />
+                    </DxFormLayoutItem>
+                </DxFormLayout>
+
+                @if (!string.IsNullOrWhiteSpace(cambioError))
+                {
+                    <div class="alert alert-danger" role="alert">@cambioError</div>
+                }
+
+                <ValidationSummary class="text-danger mb-3" />
+
+                <div class="d-flex justify-content-end gap-2">
+                    <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Warning"
+                              Text="Cerrar vigente y crear nueva" SubmitFormOnClick="true" Enabled="@(!isSaving)" />
+                    <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!isSaving)" Click="CerrarCambioForm" />
+                </div>
+            </EditForm>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ============================================================== modal: cuenta *@
+<DxPopup @bind-Visible="cuentaVisible" Width="min(640px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-success bg-opacity-10 text-success p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;">
+                <i class="bi bi-bank"></i>
+            </div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Cuenta contable del pasivo</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">
+                    @(cuentaRetencion is null ? string.Empty : $"{cuentaRetencion.Codigo} — {cuentaRetencion.Nombre} · esta empresa")
+                </div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate Context="popupCtx">
+        <div class="alert alert-info" role="alert">
+            <i class="bi bi-info-circle-fill me-2"></i>
+            La cuenta de "retenciones por pagar" es de <strong>cada empresa</strong>. Elija una cuenta
+            <strong>posteable</strong> del plan de cuentas. F2/F3 la usarán para asentar la retención.
+        </div>
+
+        <EditForm Model="cuentaModel" OnValidSubmit="GuardarCuentaAsync" Context="cuentaCtx">
+            <DataAnnotationsValidator />
+            <DxFormLayout>
+                <DxFormLayoutItem Caption="Cuenta contable (pasivo) *" ColSpanMd="12">
+                    <DxComboBox Data="@cuentasPosteables" TData="CuentaPosteableDto" TValue="long"
+                                TextFieldName="@nameof(CuentaPosteableDto.Display)"
+                                ValueFieldName="@nameof(CuentaPosteableDto.AccountId)"
+                                @bind-Value="cuentaModel.AccountId"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="Seleccione una cuenta posteable..." />
+                    <ValidationMessage For="() => cuentaModel.AccountId" />
+                </DxFormLayoutItem>
+                <DxFormLayoutItem Caption="Activa" ColSpanMd="12">
+                    <Template Context="tpl">
+                        <div class="pt-2">
+                            <DxCheckBox @bind-Checked="cuentaModel.Activo" CheckType="CheckType.Switch" LabelText="Activa" />
+                        </div>
+                    </Template>
+                </DxFormLayoutItem>
+            </DxFormLayout>
+
+            @if (!string.IsNullOrWhiteSpace(cuentaError))
+            {
+                <div class="alert alert-danger" role="alert">@cuentaError</div>
+            }
+
+            <ValidationSummary class="text-danger mb-3" />
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                          Text="Guardar" SubmitFormOnClick="true" Enabled="@(!isSaving)" />
+                <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!isSaving)" Click="CerrarCuentaForm" />
+            </div>
+        </EditForm>
+    </BodyContentTemplate>
+</DxPopup>
+
+@* ========================================================= modal: desactivar *@
+<DxPopup @bind-Visible="confirmVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">@confirmTitulo</h5>
+            <p class="text-muted">@confirmMensaje</p>
+            @if (!string.IsNullOrWhiteSpace(confirmDetalle))
+            {
+                <div class="fw-semibold">@confirmDetalle</div>
+            }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarConfirmacion"
+                          RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="EjecutarDesactivacionAsync"
+                          RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    // ------------------------------------------------------------ vocabulario UI
+    public sealed record OpcionCatalogo(string Valor, string Etiqueta);
+
+    private static readonly OpcionCatalogo[] TiposImpuestoCatalogo =
+    [
+        new(TipoImpuestoRetencion.Isr, "ISR (renta)"),
+        new(TipoImpuestoRetencion.Isv, "ISV (ventas)")
+    ];
+
+    private static readonly OpcionCatalogo[] TiposImpuestoFiltro = TiposImpuestoCatalogo;
+
+    private static readonly OpcionCatalogo[] BasesCatalogo =
+    [
+        new(BaseRetencion.SinIsv, "Sin ISV (subtotal)"),
+        new(BaseRetencion.Total, "Total (con ISV)")
+    ];
+
+    // ------------------------------------------------------------------ estado
+    private DxGrid? grid;
+    private List<RetencionListItemDto> retenciones = new();
+    private List<RetencionTasaDto> tasas = new();
+
+    private RetencionListItemDto? retencionSeleccionada;
+
+    private string filtroBusqueda = string.Empty;
+    private string? filtroTipoImpuesto;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private bool isLoadingTasas;
+    private bool isSaving;
+    private string? errorMessage;
+
+    private bool retencionFormVisible;
+    private RetencionEditDto retencionModel = new();
+
+    private bool tasaFormVisible;
+    private RetencionTasaDto tasaModel = new();
+
+    private bool cambioVisible;
+    private RetencionTasaDto? tasaACambiar;
+    private CambiarTasaDto cambioModel = new();
+    private string? cambioError;
+
+    private bool cuentaVisible;
+    private RetencionListItemDto? cuentaRetencion;
+    private RetencionCuentaDto cuentaModel = new();
+    private List<CuentaPosteableDto> cuentasPosteables = new();
+    private bool cuentasCargadas;
+    private string? cuentaError;
+
+    private bool confirmVisible;
+    private string confirmTitulo = string.Empty;
+    private string confirmMensaje = string.Empty;
+    private string? confirmDetalle;
+    private Func<Task>? confirmAccion;
+
+    private const string GridLayoutStorageKey = "mantenimientos-retenciones-grid-layout";
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    // ---------------------------------------------------------------- maestro
+    private RetencionFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Activo = soloActivos ? true : null,
+        TipoImpuesto = string.IsNullOrWhiteSpace(filtroTipoImpuesto) ? null : filtroTipoImpuesto
+    };
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            retenciones = await RetencionesClient.GetAsync(BuildFilter());
+
+            // Refrescar la selección si la retención sigue en la lista.
+            if (retencionSeleccionada is not null)
+            {
+                var vigente = retenciones.FirstOrDefault(r => r.Id == retencionSeleccionada.Id);
+                retencionSeleccionada = vigente;
+                if (vigente is null) tasas = new();
+                else await CargarTasasAsync(vigente.Id);
+            }
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las retenciones: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task OnBusquedaChangedAsync(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChangedAsync(bool v) { soloActivos = v; await CargarAsync(); }
+    private async Task OnTipoFiltroChangedAsync(string? v) { filtroTipoImpuesto = v; await CargarAsync(); }
+
+    private async Task OnRetencionSeleccionadaAsync(RetencionListItemDto? item)
+    {
+        retencionSeleccionada = item;
+        if (item is null) { tasas = new(); return; }
+        await CargarTasasAsync(item.Id);
+    }
+
+    private async Task CargarTasasAsync(int retencionId)
+    {
+        try
+        {
+            isLoadingTasas = true;
+            tasas = await RetencionesClient.GetTasasAsync(retencionId);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudieron cargar las tasas: {ex.Message}", ToastRenderStyle.Danger);
+            tasas = new();
+        }
+        finally
+        {
+            isLoadingTasas = false;
+        }
+    }
+
+    private void AbrirNuevaRetencion()
+    {
+        retencionModel = new RetencionEditDto();
+        retencionFormVisible = true;
+    }
+
+    private async Task AbrirEditarRetencionAsync(int id)
+    {
+        try
+        {
+            var d = await RetencionesClient.GetByIdAsync(id);
+            if (d is null) { Toast("Error", "No se encontró la retención.", ToastRenderStyle.Danger); return; }
+            retencionModel = d;
+            retencionFormVisible = true;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+    }
+
+    private void CerrarRetencionForm()
+    {
+        if (isSaving) return;
+        retencionFormVisible = false;
+        retencionModel = new();
+    }
+
+    private async Task GuardarRetencionAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (retencionModel.Id.HasValue)
+            {
+                await RetencionesClient.UpdateAsync(retencionModel.Id.Value, retencionModel);
+                Toast("Éxito", "Retención actualizada.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await RetencionesClient.CreateAsync(retencionModel);
+                Toast("Éxito", "Retención registrada.", ToastRenderStyle.Success);
+            }
+
+            retencionFormVisible = false;
+            retencionModel = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ------------------------------------------------------------------ tasas
+    private void AbrirNuevaTasa()
+    {
+        if (retencionSeleccionada is null) return;
+
+        tasaModel = new RetencionTasaDto
+        {
+            RetencionId = retencionSeleccionada.Id,
+            VigenciaDesde = DateOnly.FromDateTime(DateTime.Today),
+            Activo = true
+        };
+        tasaFormVisible = true;
+    }
+
+    private void AbrirEditarTasa(RetencionTasaDto t)
+    {
+        // Copia: no mutar la fila de la grilla si el usuario cancela.
+        tasaModel = new RetencionTasaDto
+        {
+            Id = t.Id,
+            RetencionId = t.RetencionId,
+            Porcentaje = t.Porcentaje,
+            VigenciaDesde = t.VigenciaDesde,
+            VigenciaHasta = t.VigenciaHasta,
+            Descripcion = t.Descripcion,
+            Activo = t.Activo
+        };
+        tasaFormVisible = true;
+    }
+
+    private void CerrarTasaForm()
+    {
+        if (isSaving) return;
+        tasaFormVisible = false;
+        tasaModel = new();
+    }
+
+    private async Task GuardarTasaAsync()
+    {
+        if (retencionSeleccionada is null) return;
+
+        isSaving = true;
+        try
+        {
+            if (tasaModel.Id.HasValue)
+            {
+                await RetencionesClient.UpdateTasaAsync(tasaModel.Id.Value, tasaModel);
+                Toast("Éxito", "Tasa actualizada.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                tasaModel.RetencionId = retencionSeleccionada.Id;
+                await RetencionesClient.CreateTasaAsync(tasaModel);
+                Toast("Éxito", "Tasa registrada.", ToastRenderStyle.Success);
+            }
+
+            tasaFormVisible = false;
+            tasaModel = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ---------------------------------------------------------- cambiar tasa
+    private void AbrirCambiarTasa(RetencionTasaDto t)
+    {
+        tasaACambiar = t;
+        cambioError = null;
+        cambioModel = new CambiarTasaDto
+        {
+            TasaId = t.Id ?? 0,
+            VigenciaHasta = DateOnly.FromDateTime(DateTime.Today),
+            NuevoPorcentaje = t.Porcentaje
+        };
+        cambioVisible = true;
+    }
+
+    private void CerrarCambioForm()
+    {
+        if (isSaving) return;
+        cambioVisible = false;
+        tasaACambiar = null;
+        cambioError = null;
+        cambioModel = new();
+    }
+
+    private async Task CambiarTasaAsync()
+    {
+        if (tasaACambiar is null) return;
+
+        if (cambioModel.NuevoPorcentaje <= 0)
+        {
+            cambioError = "El nuevo porcentaje debe ser mayor que cero.";
+            return;
+        }
+
+        if (cambioModel.VigenciaHasta < tasaACambiar.VigenciaDesde)
+        {
+            cambioError = $"El cierre no puede ser anterior al inicio de vigencia de la tasa actual " +
+                          $"({tasaACambiar.VigenciaDesde:dd/MM/yyyy}).";
+            return;
+        }
+
+        isSaving = true;
+        cambioError = null;
+        try
+        {
+            await RetencionesClient.CambiarTasaAsync(cambioModel);
+            Toast("Éxito", "Tasa cerrada y nueva tasa creada.", ToastRenderStyle.Success);
+
+            cambioVisible = false;
+            tasaACambiar = null;
+            cambioModel = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            // Se muestra dentro del modal: el usuario no debe perder lo que escribió.
+            cambioError = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // -------------------------------------------------- cuenta del pasivo (empresa)
+    private async Task AbrirCuentaAsync(RetencionListItemDto item)
+    {
+        cuentaRetencion = item;
+        cuentaError = null;
+        cuentaModel = new RetencionCuentaDto { RetencionId = item.Id, Activo = true };
+
+        try
+        {
+            if (!cuentasCargadas)
+            {
+                cuentasPosteables = await RetencionesClient.GetCuentasPosteablesAsync();
+                cuentasCargadas = true;
+            }
+
+            var actual = await RetencionesClient.GetCuentaAsync(item.Id);
+            if (actual is not null)
+            {
+                cuentaModel = new RetencionCuentaDto
+                {
+                    RetencionId = item.Id,
+                    AccountId = actual.AccountId,
+                    Activo = actual.Activo
+                };
+            }
+
+            cuentaVisible = true;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudo abrir la configuración de cuenta: {ex.Message}", ToastRenderStyle.Danger);
+        }
+    }
+
+    private void CerrarCuentaForm()
+    {
+        if (isSaving) return;
+        cuentaVisible = false;
+        cuentaRetencion = null;
+        cuentaError = null;
+        cuentaModel = new();
+    }
+
+    private async Task GuardarCuentaAsync()
+    {
+        if (cuentaRetencion is null) return;
+
+        if (cuentaModel.AccountId <= 0)
+        {
+            cuentaError = "Debe seleccionar una cuenta contable.";
+            return;
+        }
+
+        isSaving = true;
+        cuentaError = null;
+        try
+        {
+            await RetencionesClient.SetCuentaAsync(cuentaRetencion.Id, cuentaModel);
+            Toast("Éxito", "Cuenta contable configurada.", ToastRenderStyle.Success);
+
+            cuentaVisible = false;
+            cuentaRetencion = null;
+            cuentaModel = new();
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            cuentaError = ex.Message;
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    // ------------------------------------------------------------ desactivar
+    private void ConfirmarDesactivarRetencion(RetencionListItemDto r)
+    {
+        confirmTitulo = "¿Desactivar retención?";
+        confirmMensaje = "La retención quedará inactiva y no aparecerá en los selectores. Sus tasas se conservan.";
+        confirmDetalle = $"{r.Codigo} - {r.Nombre}";
+        confirmAccion = async () =>
+        {
+            var ok = await RetencionesClient.DeactivateAsync(r.Id);
+            if (!ok) Toast("Error", "No se pudo desactivar.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Retención desactivada.", ToastRenderStyle.Success); await CargarAsync(); }
+        };
+        confirmVisible = true;
+    }
+
+    private void ConfirmarDesactivarTasa(RetencionTasaDto t)
+    {
+        confirmTitulo = "¿Desactivar tasa?";
+        confirmMensaje = "La tasa deja de estar disponible para pagos nuevos. No se borra: el histórico se conserva.";
+        confirmDetalle = $"{t.Porcentaje:0.##}% (desde {t.VigenciaDesde:dd/MM/yyyy})";
+        confirmAccion = async () =>
+        {
+            if (t.Id is null) return;
+            var ok = await RetencionesClient.DeactivateTasaAsync(t.Id.Value);
+            if (!ok) Toast("Error", "No se pudo desactivar la tasa.", ToastRenderStyle.Danger);
+            else { Toast("Éxito", "Tasa desactivada.", ToastRenderStyle.Success); await CargarAsync(); }
+        };
+        confirmVisible = true;
+    }
+
+    private void CancelarConfirmacion()
+    {
+        confirmVisible = false;
+        confirmAccion = null;
+        confirmDetalle = null;
+    }
+
+    private async Task EjecutarDesactivacionAsync()
+    {
+        var accion = confirmAccion;
+        confirmVisible = false;
+        confirmAccion = null;
+
+        if (accion is null) return;
+
+        try { await accion(); }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { confirmDetalle = null; }
+    }
+
+    // ------------------------------------------------------- layout / estilos
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    /// <summary>Las tasas cerradas se atenúan: son histórico, no operan.</summary>
+    private void OnTasasCustomizeElement(GridCustomizeElementEventArgs e)
+    {
+        if (e.ElementType != GridElementType.DataRow) return;
+
+        if (e.Grid.GetDataItem(e.VisibleIndex) is RetencionTasaDto t && (!t.EsAbierta || !t.Activo))
+        {
+            e.CssClass = "tasa-cerrada";
+        }
+    }
+
+    private static string BaseLabel(string? baseCalculo) => baseCalculo switch
+    {
+        BaseRetencion.SinIsv => "Sin ISV",
+        BaseRetencion.Total => "Total",
+        _ => baseCalculo ?? "—"
+    };
+
+    private static string TipoImpuestoBadgeClass(string? tipo) => tipo switch
+    {
+        TipoImpuestoRetencion.Isr => "bg-primary",
+        TipoImpuestoRetencion.Isv => "bg-info text-dark",
+        _ => "bg-light text-dark border"
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "RetencionesToast"
+        });
+}

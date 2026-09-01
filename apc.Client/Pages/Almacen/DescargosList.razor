@@ -1,4 +1,6 @@
-@page "/almacen/descargos"
+@* Consulta del histórico plano migrado de SIMAFI. El flujo nuevo (documentos) vive en
+   /almacen/descargos (DescargosDocList). *@
+@page "/almacen/descargos/historico"
 @attribute [Authorize(Policy = PermissionNames.Inventario.View)]
 
 @using DevExpress.Blazor
@@ -10,14 +12,16 @@
 @inject NavigationManager Navigation
 @inject IJSRuntime JS
 
-<PageTitle>SIAD - Descargos de almacén</PageTitle>
+<PageTitle>SIAD - Descargos (histórico)</PageTitle>
 
 <div class="page-container">
     <div class="header-section">
         <div>
-            <h2 class="page-title">Descargos de almacén</h2>
-            <p class="page-subtitle">Salidas de materiales hacia departamentos</p>
+            <h2 class="page-title">Descargos — histórico</h2>
+            <p class="page-subtitle">Consulta del histórico migrado de SIMAFI. Las entregas nuevas se gestionan en «Descargos».</p>
         </div>
+        <DxButton Text="Ir a descargos" IconCssClass="bi bi-box-arrow-up" RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="@(() => Navigation.NavigateTo("/almacen/descargos"))" />
     </div>
 
     <div class="row g-3 mb-4">
@@ -176,7 +180,7 @@
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is DescargoListItemDto item && (item.ArticuloId.HasValue || !string.IsNullOrWhiteSpace(item.CodigoArticulo)))
                             {
-                                <button type="button" class="btn-icon btn-kardex" title="Ver kardex"
+                                <button type="button" class="btn-icon btn-kardex" title="Ver estado de cuenta"
                                         @onclick="() => VerKardex(item)" @onclick:stopPropagation="true">
                                     <i class="bi bi-journal-arrow-down"></i>
                                 </button>

@@ -1,4 +1,5 @@
 using System.ComponentModel.DataAnnotations;
+using SIAD.Core.DTOs.Retenciones;
 
 namespace SIAD.Core.DTOs.Presupuesto;
 
@@ -29,6 +30,13 @@ public sealed class AbonoCompromisoUpsertDto
 
     /// <summary>Distribucion de contracuentas del abono; si va vacia el servicio arma una linea con CuentaContraId.</summary>
     public List<PartidaLineaOrdenPagoDto> Lineas { get; set; } = new();
+
+    /// <summary>
+    /// Retenciones aplicadas en este abono, en paralelo a <see cref="Lineas"/> (F4). NO altera la
+    /// partida; el backend la usa para el registro fiscal hdr/dtl y valida que Σ Monto == Σ crédito
+    /// de las cuentas de retención en Lineas.
+    /// </summary>
+    public List<RetencionAplicadaDto> Retenciones { get; set; } = new();
 
     public DateTime? Fecha { get; set; }
 

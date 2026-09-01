@@ -74,6 +74,14 @@
                             }
                         </ContentTemplate>
                     </DxTabPage>
+                    <DxTabPage Text="Estado de cuenta">
+                        <ContentTemplate>
+                            @if (activeTabIndex == 1)
+                            {
+                                <ProveedorEstadoCuentaTab Codigo="@proveedor.Codigo" />
+                            }
+                        </ContentTemplate>
+                    </DxTabPage>
                 </DxTabs>
             }
         </DxScrollView>

@@ -602,5 +602,291 @@ public static class PermissionEndpointCatalog
             Route: "api/contabilidad/saldos/{companyId}/verificacion"),
     ];
 
-    public static IEnumerable<EndpointPermissionDefinition> All => [.. Ventas, .. Contabilidad];
+    /// <summary>
+    /// Carga inicial de existencias y ajustes de inventario (2026-07-30).
+    /// <para>
+    /// Los endpoints de <c>cerrar</c> y <c>reabrir</c> NO están aquí a propósito: van
+    /// protegidos con <c>[ModuleAuthorize(PermissionModules.Configuracion)]</c> <b>sin
+    /// recurso</b>, porque un sub-recurso dentro de <c>inventario</c> sería un
+    /// superconjunto de <c>module.inventario.*</c> y no restringiría a nadie. Sacarlos del
+    /// módulo es la única palanca que sí restringe con el <c>ModuleAuthorize</c> actual.
+    /// </para>
+    /// </summary>
+    public static readonly EndpointPermissionDefinition[] Inventario =
+    [
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.CargaInicial,
+            Resource: "carga_inicial__almacen_carga_inicial_pendientes",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/carga-inicial/pendientes"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.CargaInicial,
+            Resource: "carga_inicial__almacen_carga_inicial_simular",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/carga-inicial/simular"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.CargaInicial,
+            Resource: "carga_inicial__almacen_carga_inicial_ejecutar",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/carga-inicial/ejecutar"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.CargaInicial,
+            Resource: "carga_inicial__almacen_carga_inicial_costo_manual",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/carga-inicial/costo-manual"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Ajustes,
+            Resource: "ajustes__almacen_ajustes",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/ajustes"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Ajustes,
+            Resource: "ajustes__almacen_ajustes",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/ajustes"),
+
+        // Catálogo de conceptos de movimiento de almacén (2026-08-01).
+        // 'desactivar' es POST pero se cataloga como Edit: cambia el estado de un concepto
+        // existente, no crea uno nuevo (mismo criterio que la anulación de recepciones).
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.ConceptosMovimiento,
+            Resource: "conceptos_movimiento__almacen_conceptos_movimiento",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/conceptos-movimiento"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.ConceptosMovimiento,
+            Resource: "conceptos_movimiento__almacen_conceptos_movimiento",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/conceptos-movimiento"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.ConceptosMovimiento,
+            Resource: "conceptos_movimiento__almacen_conceptos_movimiento",
+            Action: PermissionAction.Edit,
+            HttpMethod: "PUT",
+            Route: "api/almacen/conceptos-movimiento/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.ConceptosMovimiento,
+            Resource: "conceptos_movimiento__almacen_conceptos_movimiento_desactivar",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/almacen/conceptos-movimiento/{id:int}/desactivar"),
+
+        // Documento de movimiento de almacén (2026-08-03).
+        // 'anular' es POST pero se cataloga como Edit: cambia el estado de un documento
+        // existente y postea su reversa; no crea uno nuevo.
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Movimientos,
+            Resource: "movimientos__almacen_movimientos",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/movimientos"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Movimientos,
+            Resource: "movimientos__almacen_movimientos_id",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/movimientos/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Movimientos,
+            Resource: "movimientos__almacen_movimientos",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/movimientos"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Movimientos,
+            Resource: "movimientos__almacen_movimientos_anular",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/almacen/movimientos/{id:int}/anular"),
+
+        // Traslado entre bodegas (2026-08-04, Fase 5). 'recibir' y 'anular' son POST pero se
+        // catalogan como Edit: cambian el estado de un traslado existente, no crean uno nuevo.
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Traslados,
+            Resource: "traslados__almacen_traslados",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/traslados"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Traslados,
+            Resource: "traslados__almacen_traslados_id",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/traslados/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Traslados,
+            Resource: "traslados__almacen_traslados",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/traslados"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Traslados,
+            Resource: "traslados__almacen_traslados_recibir",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/almacen/traslados/{id:int}/recibir"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Traslados,
+            Resource: "traslados__almacen_traslados_anular",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/almacen/traslados/{id:int}/anular"),
+
+        // Documento de requisición (2026-08-04, Fase 6). 'aprobar'/'rechazar' se catalogan como
+        // View: el permiso real de aprobar (module.inventario.requisiciones.aprobar) lo verifica el
+        // controller a partir de los claims (decisión: quien tenga el permiso, aprueba).
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/requisiciones/documentos"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos_id",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/requisiciones/documentos/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/requisiciones/documentos"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos_id",
+            Action: PermissionAction.Edit,
+            HttpMethod: "PUT",
+            Route: "api/almacen/requisiciones/documentos/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos_enviar",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/almacen/requisiciones/documentos/{id:int}/enviar"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos_aprobar",
+            Action: PermissionAction.View,
+            HttpMethod: "POST",
+            Route: "api/almacen/requisiciones/documentos/{id:int}/aprobar"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos_rechazar",
+            Action: PermissionAction.View,
+            HttpMethod: "POST",
+            Route: "api/almacen/requisiciones/documentos/{id:int}/rechazar"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Requisiciones,
+            Resource: "requisiciones__almacen_requisiciones_documentos_anular",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/almacen/requisiciones/documentos/{id:int}/anular"),
+
+        // Documento de descargo (2026-08-04, Fase 6): la entrega real (postea).
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Descargos,
+            Resource: "descargos__almacen_descargos_documentos",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/descargos/documentos"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Descargos,
+            Resource: "descargos__almacen_descargos_documentos_id",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/almacen/descargos/documentos/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Descargos,
+            Resource: "descargos__almacen_descargos_documentos",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/almacen/descargos/documentos"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Inventario,
+            Option: PermissionResources.Inventario.Descargos,
+            Resource: "descargos__almacen_descargos_documentos_anular",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/almacen/descargos/documentos/{id:int}/anular"),
+    ];
+
+    public static readonly EndpointPermissionDefinition[] Configuracion =
+    [
+        // Catálogo de formatos fiscales (2026-08-22): máscara del No. de factura (SAR) y del CAI
+        // que se transcriben del proveedor. 'desactivar' es POST pero se cataloga como Edit:
+        // cambia el estado de un formato existente, no crea uno nuevo (mismo criterio que los
+        // conceptos de movimiento). El endpoint 'lookup' NO se cataloga a propósito: vive en otro
+        // controlador con [Authorize] a secas, porque quien captura una recepción de compra puede
+        // no tener acceso al módulo Configuración y sin él no podría ni teclear la factura.
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/mantenimientos/formatos-fiscales"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/mantenimientos/formatos-fiscales"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales",
+            Action: PermissionAction.Edit,
+            HttpMethod: "PUT",
+            Route: "api/mantenimientos/formatos-fiscales/{id:int}"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Configuracion,
+            Option: PermissionResources.Configuracion.FormatosFiscales,
+            Resource: "formatos_fiscales__mantenimientos_formatos_fiscales_desactivar",
+            Action: PermissionAction.Edit,
+            HttpMethod: "POST",
+            Route: "api/mantenimientos/formatos-fiscales/{id:int}/desactivar"),
+    ];
+
+    public static IEnumerable<EndpointPermissionDefinition> All => [.. Ventas, .. Contabilidad, .. Inventario, .. Configuracion];
 }

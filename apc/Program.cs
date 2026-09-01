@@ -57,6 +57,39 @@ if (builder.Environment.IsDevelopment())
         .SetApplicationName("HODSOFT.Prestadoras.Development")
         .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 }
+else
+{
+    // Producción (IIS on-prem): el key-ring de DataProtection DEBE ser estable y sobrevivir a
+    // redeploys y reciclajes del App Pool. Con él se cifran secretos guardados en la BD —la API
+    // key de correo en cfg_correo (mantenimiento de SendGrid)—; si las llaves se regeneran, ese
+    // ciphertext deja de descifrarse y el envío se cae en silencio. Por defecto, ASP.NET Core en
+    // IIS guarda las llaves en un lugar NO garantizado entre máquinas ni deploys, así que aquí se
+    // fija de forma explícita:
+    //   - Carpeta FIJA fuera del publish (sobrevive a cada redeploy). Configurable con
+    //     DataProtection:KeysPath; por defecto %ProgramData%\HODSOFT\Prestadoras\DataProtectionKeys.
+    //     El identity del App Pool necesita permiso de escritura sobre esa carpeta.
+    //   - SetApplicationName estable: mismo discriminador entre redeploys del mismo entorno.
+    //   - DPAPI protege el key-ring EN REPOSO (Windows). protectToLocalMachine: true lo ata a la
+    //     máquina y no al perfil del App Pool, para que un cambio o recycle de identity no lo deje
+    //     indescifrable en este servidor dedicado on-prem.
+    var keysPath = builder.Configuration["DataProtection:KeysPath"];
+    if (string.IsNullOrWhiteSpace(keysPath))
+    {
+        keysPath = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.CommonApplicationData),
+            "HODSOFT", "Prestadoras", "DataProtectionKeys");
+    }
+    Directory.CreateDirectory(keysPath);
+
+    var dataProtection = builder.Services.AddDataProtection()
+        .SetApplicationName("HODSOFT.Prestadoras")
+        .PersistKeysToFileSystem(new DirectoryInfo(keysPath));
+
+    if (OperatingSystem.IsWindows())
+    {
+        dataProtection.ProtectKeysWithDpapi(protectToLocalMachine: true);
+    }
+}
 
 // Add services to the container.
 
@@ -187,7 +220,14 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddClaimsPrincipalFactory<apc.Security.SiadUserClaimsPrincipalFactory>()
     .AddDefaultTokenProviders();
 
-builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
+// Envío real de correos de Identity por SendGrid (reemplaza el No-Op). Scoped: resuelve la
+// configuración cifrada desde la BD vía ICorreoNotificador (que a su vez usa SiadDbContext).
+builder.Services.AddScoped<IEmailSender<ApplicationUser>, CorreoIdentityEmailSender>();
+
+// Resumen diario de alertas de stock por correo: barrido reutilizable + BackgroundService que lo
+// dispara a la hora configurada (Almacen:AlertasStock). Solo el portal lo corre (no los WS hosts).
+builder.Services.AddSingleton<apc.BackgroundServices.AlertasStockBarrido>();
+builder.Services.AddHostedService<apc.BackgroundServices.AlertasStockDiarioService>();
 
 // Wire SIAD layered services
 builder.Services.AddSiadServices();

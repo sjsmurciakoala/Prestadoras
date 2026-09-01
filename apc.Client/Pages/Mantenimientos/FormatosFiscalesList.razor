@@ -1,0 +1,496 @@
+@page "/mantenimientos/formatos-fiscales"
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
+
+@using System.Text.Json
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Auditoria
+@using SIAD.Core.DTOs.Mantenimientos
+@using apc.Client.Services
+@using apc.Client.Services.Auditoria
+@using apc.Client.Services.Mantenimientos
+
+@inject FormatosFiscalesClient FormatosClient
+@inject FormatoFiscalState FormatoFiscal
+@inject BitacoraMaestrosClient BitacoraClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Formatos fiscales</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="FormatosFiscalesToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Formatos fiscales</h2>
+            <p class="page-subtitle">
+                Máscara y validación del No. de factura (SAR) y del CAI que se transcriben del proveedor
+            </p>
+        </div>
+        <DxButton Text="Nuevo formato" IconCssClass="bi bi-plus-lg" RenderStyle="ButtonRenderStyle.Primary"
+                  CssClass="btn-modern" Click="AbrirNuevo" />
+    </div>
+
+    @if (!string.IsNullOrWhiteSpace(errorMessage))
+    {
+        <div class="alert alert-danger mb-3" role="alert">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@formatos" KeyFieldName="@nameof(FormatoFiscalListItemDto.Id)" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom" ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox Text="@filtroBusqueda" TextChanged="@((string v) => OnBusquedaChanged(v))"
+                                   TextExpression="@(() => filtroBusqueda)" Placeholder="Buscar campo..."
+                                   InputDelay="600" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   CssClass="me-1" Style="min-width: 240px;" />
+                        <div class="d-flex align-items-center me-2">
+                            <DxCheckBox Checked="@soloActivos" CheckedChanged="@((bool v) => OnSoloActivosChanged(v))"
+                                        CheckType="CheckType.Switch">Solo activos</DxCheckBox>
+                        </div>
+                        <DxButton Text="Recargar" IconCssClass="bi bi-arrow-clockwise"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" CssClass="me-1" />
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+                        <div class="ms-auto text-muted small">Total: <span class="fw-bold">@formatos.Count.ToString("N0")</span></div>
+                    </div>
+                </ToolbarTemplate>
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(FormatoFiscalListItemDto.Nombre)" Caption="Campo" MinWidth="190">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FormatoFiscalListItemDto item)
+                            {
+                                <span class="text-dark fw-semibold">@item.Nombre</span>
+                                <div class="text-muted small font-monospace">@item.Codigo</div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(FormatoFiscalListItemDto.Mascara)" Caption="Máscara" MinWidth="200">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FormatoFiscalListItemDto item)
+                            { <span class="font-monospace">@item.Mascara</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(FormatoFiscalListItemDto.Ejemplo)" Caption="Ejemplo" MinWidth="180">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FormatoFiscalListItemDto item)
+                            { <span class="font-monospace text-muted">@item.Ejemplo</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Validación" Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FormatoFiscalListItemDto item)
+                            {
+                                <span class="badge-status @ClaseModo(item.ModoValidacion)">@item.ModoValidacionDescripcion</span>
+                                @if (item.Obligatorio)
+                                {
+                                    <div class="text-muted small mt-1">Obligatorio</div>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Estado" Width="110px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FormatoFiscalListItemDto item)
+                            { <span class="badge-status @(item.Activo ? "active" : "inactive")">@(item.Activo ? "ACTIVO" : "INACTIVO")</span> }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is FormatoFiscalListItemDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2 flex-wrap">
+                                    <button type="button" class="btn-icon btn-edit" title="Editar"
+                                            @onclick="() => AbrirEditarAsync(item.Id)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-pencil-square"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-estado" title="Historial de cambios"
+                                            @onclick="() => AbrirHistorialAsync(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-clock-history"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Desactivar"
+                                            disabled="@(!item.Activo)"
+                                            @onclick="() => ConfirmarDesactivar(item)" @onclick:stopPropagation="true">
+                                        <i class="bi bi-slash-circle"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        Todavía no hay formatos configurados. Mientras no los haya, el No. de factura (SAR) y el CAI
+                        se capturan como texto libre.
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="formVisible" Width="min(720px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="false">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="@PopupIconWrapperClass" style="width: 38px; height: 38px;"><i class="@PopupIcon"></i></div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">@PopupTitle</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@PopupSubtitle</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (formLoading)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:80px"></div></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(formError))
+        {
+            <div class="p-3"><div class="alert alert-danger" role="alert">@formError</div></div>
+        }
+        else
+        {
+            <FormatoFiscalForm Model="formModel" OnValidSubmit="GuardarAsync" OnCancel="CerrarForm" IsBusy="isSaving" />
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="historialVisible" Width="min(760px, 95vw)" Height="auto" MaxHeight="90vh"
+         Scrollable="true" CssClass="custom-popup" CloseOnOutsideClick="true">
+    <HeaderContentTemplate>
+        <div class="d-flex align-items-center gap-2">
+            <div class="bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center"
+                 style="width: 38px; height: 38px;"><i class="bi bi-clock-history"></i></div>
+            <div>
+                <div class="fw-bold fs-6 text-dark" style="line-height:1.1;">Historial de cambios</div>
+                <div class="small text-muted" style="font-weight: normal; font-size: 0.8rem;">@(historialDe?.Nombre ?? "")</div>
+            </div>
+        </div>
+    </HeaderContentTemplate>
+    <BodyContentTemplate>
+        @if (historialCargando)
+        {
+            <div class="text-center p-4"><DxLoadingPanel Visible="true" Text="Cargando..." /><div style="height:80px"></div></div>
+        }
+        else if (!string.IsNullOrWhiteSpace(historialError))
+        {
+            <div class="p-3"><div class="alert alert-warning" role="alert">@historialError</div></div>
+        }
+        else if (historial.Count == 0)
+        {
+            <div class="p-3">
+                <div class="alert alert-secondary mb-0" role="alert">
+                    Sin cambios registrados en el último año para este formato.
+                </div>
+            </div>
+        }
+        else
+        {
+            <div class="p-1">
+                @foreach (var mov in historial)
+                {
+                    <div class="historial-fila">
+                        <div class="historial-meta">
+                            <div class="fw-semibold">@mov.Fecha.ToString("dd/MM/yyyy HH:mm")</div>
+                            <div class="text-muted small">@mov.Usuario</div>
+                        </div>
+                        <div class="flex-grow-1">
+                            <span class="badge-status @ClaseAccion(mov.Accion)">@TextoAccion(mov.Accion)</span>
+                            @{
+                                var cambios = ConstruirCambios(mov);
+                            }
+                            @if (cambios.Count == 0)
+                            {
+                                <div class="text-muted small mt-1">Sin detalle de campos.</div>
+                            }
+                            else
+                            {
+                                <div class="mt-2">
+                                    @foreach (var c in cambios)
+                                    {
+                                        <div class="historial-cambio">
+                                            <span class="text-muted">@EtiquetaCampo(c.Campo)</span>
+                                            <span class="font-monospace text-decoration-line-through text-muted">@c.Anterior</span>
+                                            <i class="bi bi-arrow-right text-muted"></i>
+                                            <span class="font-monospace">@c.Nuevo</span>
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    </div>
+                }
+            </div>
+        }
+    </BodyContentTemplate>
+</DxPopup>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(440px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-4">
+            <div class="mb-3 text-warning"><i class="bi bi-exclamation-triangle-fill" style="font-size: 3rem;"></i></div>
+            <h5 class="fw-bold">¿Desactivar el formato?</h5>
+            <p class="text-muted">El campo vuelve a capturarse como texto libre, sin máscara ni validación.</p>
+            @if (paraDesactivar is not null) { <div class="fw-semibold">@paraDesactivar.Nombre</div> }
+            <div class="d-flex justify-content-center gap-3 mt-4">
+                <DxButton Text="Cancelar" Click="CancelarDesactivar" RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline" />
+                <DxButton Text="Sí, desactivar" Click="DesactivarConfirmadoAsync" RenderStyle="ButtonRenderStyle.Danger" IconCssClass="bi bi-slash-circle" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+    private List<FormatoFiscalListItemDto> formatos = new();
+
+    private string filtroBusqueda = string.Empty;
+    private bool soloActivos = true;
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool formVisible, formLoading, isSaving;
+    private string? formError;
+    private FormatoFiscalEditDto formModel = new();
+
+    private bool confirmVisible;
+    private FormatoFiscalListItemDto? paraDesactivar;
+
+    private bool historialVisible, historialCargando;
+    private string? historialError;
+    private FormatoFiscalListItemDto? historialDe;
+    private List<BitacoraMaestroListItemDto> historial = new();
+
+    private const string GridLayoutStorageKey = "mantenimientos-formatos-fiscales-grid-layout";
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private string PopupTitle => formModel.Id.HasValue ? "Editar formato" : "Nuevo formato";
+    private string PopupSubtitle => formModel.Id.HasValue ? formModel.Nombre : "Configure la máscara de un campo fiscal";
+    private string PopupIcon => formModel.Id.HasValue ? "bi bi-pencil-square" : "bi bi-input-cursor-text";
+    private string PopupIconWrapperClass => formModel.Id.HasValue
+        ? "bg-warning bg-opacity-10 text-warning p-2 rounded-circle d-flex justify-content-center align-items-center"
+        : "bg-primary bg-opacity-10 text-primary p-2 rounded-circle d-flex justify-content-center align-items-center";
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private FormatoFiscalFilterDto BuildFilter() => new()
+    {
+        Search = string.IsNullOrWhiteSpace(filtroBusqueda) ? null : filtroBusqueda,
+        Activo = soloActivos ? true : null
+    };
+
+    private async Task CargarAsync()
+    {
+        try { isLoading = true; errorMessage = null; formatos = await FormatosClient.GetAsync(BuildFilter()); }
+        catch (Exception ex) { errorMessage = $"No se pudieron cargar los formatos: {ex.Message}"; }
+        finally { isLoading = false; }
+    }
+
+    private async Task OnBusquedaChanged(string v) { filtroBusqueda = v; await CargarAsync(); }
+    private async Task OnSoloActivosChanged(bool v) { soloActivos = v; await CargarAsync(); }
+
+    private void AbrirNuevo() { formError = null; formModel = new FormatoFiscalEditDto(); formVisible = true; }
+
+    private async Task AbrirEditarAsync(int id)
+    {
+        formError = null; formLoading = true; formVisible = true;
+        try
+        {
+            var d = await FormatosClient.GetByIdAsync(id);
+            if (d is null) { formError = "No se encontró el formato."; formModel = new(); return; }
+            formModel = d;
+        }
+        catch (Exception ex) { formError = $"Error al cargar: {ex.Message}"; }
+        finally { formLoading = false; }
+    }
+
+    private void CerrarForm() { if (isSaving) return; formVisible = false; formError = null; formModel = new(); }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            if (formModel.Id.HasValue)
+            {
+                await FormatosClient.UpdateAsync(formModel.Id.Value, formModel);
+                Toast("Éxito", "Formato actualizado.", ToastRenderStyle.Success);
+            }
+            else
+            {
+                await FormatosClient.CreateAsync(formModel);
+                Toast("Éxito", "Formato registrado.", ToastRenderStyle.Success);
+            }
+
+            // Las vistas que capturan el dato leen el formato de este estado: sin invalidar,
+            // seguirían con la máscara vieja hasta refrescar el circuito.
+            FormatoFiscal.Invalidar();
+
+            formVisible = false; formModel = new(); await CargarAsync();
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { isSaving = false; }
+    }
+
+    private void ConfirmarDesactivar(FormatoFiscalListItemDto f) { paraDesactivar = f; confirmVisible = true; }
+    private void CancelarDesactivar() { confirmVisible = false; paraDesactivar = null; }
+
+    private async Task DesactivarConfirmadoAsync()
+    {
+        if (paraDesactivar is null) { confirmVisible = false; return; }
+        try
+        {
+            var ok = await FormatosClient.DeactivateAsync(paraDesactivar.Id);
+            if (!ok) Toast("Error", "No se pudo desactivar.", ToastRenderStyle.Danger);
+            else
+            {
+                Toast("Éxito", "Formato desactivado.", ToastRenderStyle.Success);
+                FormatoFiscal.Invalidar();
+                await CargarAsync();
+            }
+        }
+        catch (Exception ex) { Toast("Error", ex.Message, ToastRenderStyle.Danger); }
+        finally { confirmVisible = false; paraDesactivar = null; }
+    }
+
+    private async Task AbrirHistorialAsync(FormatoFiscalListItemDto item)
+    {
+        historialDe = item;
+        historialError = null;
+        historial = new();
+        historialCargando = true;
+        historialVisible = true;
+
+        try
+        {
+            var filtro = new BitacoraMaestroFilterDto
+            {
+                Desde = DateTime.Today.AddYears(-1),
+                Hasta = DateTime.Today,
+                Tabla = TablaAuditada
+            };
+            var movimientos = await BitacoraClient.BuscarAsync(filtro);
+
+            // La bitácora no filtra por registro: se acota aquí a la fila abierta.
+            var id = item.Id.ToString();
+            var propios = new List<BitacoraMaestroListItemDto>();
+            foreach (var m in movimientos)
+            {
+                if (string.Equals(m.RegistroId, id, StringComparison.OrdinalIgnoreCase))
+                {
+                    propios.Add(m);
+                }
+            }
+            historial = propios;
+        }
+        catch (Exception ex)
+        {
+            historialError = $"No se pudo consultar el historial: {ex.Message}";
+        }
+        finally
+        {
+            historialCargando = false;
+        }
+    }
+
+    private const string TablaAuditada = "cfg_formato_fiscal";
+
+    private sealed record CambioDetalle(string Campo, string Anterior, string Nuevo);
+
+    private static List<CambioDetalle> ConstruirCambios(BitacoraMaestroListItemDto item)
+    {
+        var ant = Deserializar(item.ValoresAnteriores);
+        var nue = Deserializar(item.ValoresNuevos);
+
+        var claves = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var k in ant.Keys) claves.Add(k);
+        foreach (var k in nue.Keys) claves.Add(k);
+
+        var lista = new List<CambioDetalle>();
+        foreach (var k in claves)
+        {
+            if (EsCampoDeAuditoria(k)) continue;
+            var a = ant.TryGetValue(k, out var av) ? FormatValor(av) : "—";
+            var n = nue.TryGetValue(k, out var nv) ? FormatValor(nv) : "—";
+            lista.Add(new CambioDetalle(k, a, n));
+        }
+        return lista;
+    }
+
+    /// <summary>Quién y cuándo ya se muestran en la fila: repetirlos como cambio es ruido.</summary>
+    private static bool EsCampoDeAuditoria(string campo) => campo is
+        "usuariocreacion" or "fechacreacion" or "usuariomodificacion" or "fechamodificacion" or "id" or "company_id";
+
+    private static Dictionary<string, JsonElement> Deserializar(string? json)
+    {
+        if (string.IsNullOrWhiteSpace(json)) return new();
+        try { return JsonSerializer.Deserialize<Dictionary<string, JsonElement>>(json) ?? new(); }
+        catch { return new(); }
+    }
+
+    private static string FormatValor(JsonElement el) => el.ValueKind switch
+    {
+        JsonValueKind.Null or JsonValueKind.Undefined => "—",
+        JsonValueKind.String => string.IsNullOrEmpty(el.GetString()) ? "—" : el.GetString()!,
+        JsonValueKind.True => "Sí",
+        JsonValueKind.False => "No",
+        _ => el.ToString()
+    };
+
+    /// <summary>El usuario no tiene por qué leer nombres de columna.</summary>
+    private static string EtiquetaCampo(string campo) => campo switch
+    {
+        "codigo" => "Campo",
+        "nombre" => "Nombre visible",
+        "mascara" => "Máscara",
+        "patron" => "Patrón",
+        "modo_validacion" => "Al validar",
+        "obligatorio" => "Obligatorio",
+        "normalizar" => "Guardar sin separadores",
+        "mayusculas" => "Mayúsculas",
+        "activo" => "Activo",
+        _ => campo
+    };
+
+    private static string ClaseModo(short modo) => modo switch
+    {
+        ModoValidacionFormatoFiscal.Bloquea => "bloquea",
+        ModoValidacionFormatoFiscal.Advierte => "warning",
+        _ => "inactive"
+    };
+
+    private static string ClaseAccion(string accion) => accion switch
+    {
+        AccionesBitacora.Creacion => "active",
+        AccionesBitacora.Eliminacion => "bloquea",
+        _ => "warning"
+    };
+
+    private static string TextoAccion(string accion) => accion switch
+    {
+        AccionesBitacora.Creacion => "Creación",
+        AccionesBitacora.Actualizacion => "Actualización",
+        AccionesBitacora.Eliminacion => "Desactivación",
+        _ => accion
+    };
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions { Title = title, Text = text, RenderStyle = style, ProviderName = "FormatosFiscalesToast" });
+}

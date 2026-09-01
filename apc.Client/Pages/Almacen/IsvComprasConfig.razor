@@ -1,0 +1,116 @@
+@page "/almacen/isv-compras"
+@attribute [Authorize(Policy = PermissionNames.Inventario.View)]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Almacen
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject IsvCompraConfigClient Client
+@inject IToastNotificationService ToastService
+
+<PageTitle>SIAD - ISV en compras</PageTitle>
+
+<div class="page-container">
+    <DxToastProvider Name="IsvComprasToast" MaxToastCount="4" StickToViewport="true" />
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">ISV en compras</h2>
+            <p class="page-subtitle">Qué hace la empresa con el ISV que paga al comprar: lo lleva al costo o lo registra como impuesto fiscal</p>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative" style="max-width: 760px;">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="p-3">
+            <div class="alert alert-info" role="alert">
+                <i class="bi bi-info-circle-fill me-2"></i>
+                Configuración de <strong>toda la empresa</strong>. Decide qué se hace con el ISV de las
+                compras <strong>gravadas</strong>. Qué artículos están gravados o exentos se define aparte,
+                por <strong>tipo de artículo</strong>. No tiene efecto contable.
+            </div>
+
+            <div class="form-check p-3 border rounded mb-2 @(model.Tratamiento == TratamientoIsvCompra.Costo ? "border-primary bg-light" : "")">
+                <input class="form-check-input" type="radio" name="tratamiento-isv" id="trat-costo"
+                       checked="@(model.Tratamiento == TratamientoIsvCompra.Costo)"
+                       @onchange="@(() => model.Tratamiento = TratamientoIsvCompra.Costo)" />
+                <label class="form-check-label w-100" for="trat-costo" style="cursor:pointer;">
+                    <span class="fw-bold">Al costo</span>
+                    <div class="text-muted small">
+                        El ISV pagado aumenta el valor del material. El artículo entra a su precio con el
+                        impuesto incluido.
+                    </div>
+                </label>
+            </div>
+
+            <div class="form-check p-3 border rounded mb-3 @(model.Tratamiento == TratamientoIsvCompra.Fiscal ? "border-primary bg-light" : "")">
+                <input class="form-check-input" type="radio" name="tratamiento-isv" id="trat-fiscal"
+                       checked="@(model.Tratamiento == TratamientoIsvCompra.Fiscal)"
+                       @onchange="@(() => model.Tratamiento = TratamientoIsvCompra.Fiscal)" />
+                <label class="form-check-label w-100" for="trat-fiscal" style="cursor:pointer;">
+                    <span class="fw-bold">Impuesto fiscal</span>
+                    <div class="text-muted small">
+                        El ISV pagado se registra como impuesto, separado del costo. El artículo entra a su
+                        valor neto (sin impuesto).
+                    </div>
+                </label>
+            </div>
+
+            <div class="d-flex justify-content-end gap-2">
+                <DxButton Text="Guardar" IconCssClass="bi bi-check-lg" RenderStyle="ButtonRenderStyle.Primary"
+                          Click="GuardarAsync" Enabled="@(!isSaving && !isLoading)" />
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    private IsvCompraConfigDto model = new();
+    private bool isLoading = true;
+    private bool isSaving;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            model = await Client.ObtenerAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", $"No se pudo cargar la configuración: {ex.Message}", ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        isSaving = true;
+        try
+        {
+            model = await Client.GuardarAsync(model);
+            Toast("Éxito", "Configuración guardada.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            isSaving = false;
+        }
+    }
+
+    private void Toast(string title, string text, ToastRenderStyle style)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            Title = title,
+            Text = text,
+            RenderStyle = style,
+            ProviderName = "IsvComprasToast"
+        });
+}

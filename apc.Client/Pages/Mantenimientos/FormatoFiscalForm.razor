@@ -1,0 +1,209 @@
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Mantenimientos
+@using SIAD.Core.Utilities
+
+<EditForm Model="Model" OnValidSubmit="HandleValidSubmit" Context="EditFormContext">
+    <DataAnnotationsValidator />
+
+    @if (EditFormContext.GetValidationMessages().Any())
+    {
+        <div class="alert alert-danger mb-3 shadow-sm">
+            <h6 class="alert-heading"><i class="bi bi-exclamation-circle-fill me-2"></i>Atención</h6>
+            <ValidationSummary />
+        </div>
+    }
+
+    <DxFormLayout>
+        <DxFormLayoutItem Caption="Campo *" ColSpanMd="5">
+            @if (EsEdicion)
+            {
+                <div class="valor-solo-lectura font-monospace">@Model.Codigo</div>
+                <div class="form-text">El código identifica el campo en las pantallas: no se cambia.</div>
+            }
+            else
+            {
+                <DxTextBox @bind-Text="Model.Codigo" NullText="NUMERO_SAR" MaxLength="30" />
+                <div class="form-text">Ej. NUMERO_SAR, CAI. Se guarda en mayúsculas y sin espacios.</div>
+                <ValidationMessage For="() => Model.Codigo" />
+            }
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Nombre visible *" ColSpanMd="7">
+            <DxTextBox @bind-Text="Model.Nombre" NullText="No. factura (SAR)" MaxLength="60" />
+            <ValidationMessage For="() => Model.Nombre" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Máscara de captura *" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Mascara" BindValueMode="BindValueMode.OnInput"
+                       NullText="###-###-##-########" MaxLength="80" CssClass="font-monospace" />
+            <div class="form-text">
+                <span class="font-monospace">#</span> dígito ·
+                <span class="font-monospace">X</span> letra o dígito ·
+                <span class="font-monospace">H</span> hexadecimal ·
+                cualquier otro carácter es literal.
+            </div>
+            <ValidationMessage For="() => Model.Mascara" />
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Al validar *" ColSpanMd="6">
+            <DxComboBox Data="@modos" Value="@ModoSeleccionado"
+                        ValueChanged="@((ModoOpcion? m) => OnModoChanged(m))"
+                        ValueExpression="@(() => ModoSeleccionado)"
+                        TextFieldName="@nameof(ModoOpcion.Texto)"
+                        NullText="Elija cómo debe validarse" CssClass="w-100" />
+            <div class="form-text">@AyudaModo</div>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Obligatorio" ColSpanMd="6">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.Obligatorio" CheckType="CheckType.Switch"
+                                LabelText="Exigir el dato para guardar el documento" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Cómo se guarda" ColSpanMd="6">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.Normalizar" CheckType="CheckType.Switch"
+                                LabelText="Guardar sin separadores" />
+                    <DxCheckBox @bind-Checked="Model.Mayusculas" CheckType="CheckType.Switch"
+                                LabelText="Convertir a mayúsculas" CssClass="mt-1" />
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Activo" ColSpanMd="6">
+            <Template>
+                <div class="pt-2">
+                    <DxCheckBox @bind-Checked="Model.Activo" CheckType="CheckType.Switch"
+                                LabelText="Aplicar este formato en las pantallas" />
+                    <div class="form-text">Inactivo = el campo vuelve a ser texto libre.</div>
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Vista previa" ColSpanMd="12">
+            <Template>
+                <div class="preview-formato">
+                    <div class="row g-2">
+                        <div class="col-12 col-md-5">
+                            <div class="preview-label">Ejemplo</div>
+                            <div class="font-monospace">@(string.IsNullOrEmpty(Ejemplo) ? "—" : Ejemplo)</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="preview-label">Posiciones</div>
+                            <div class="font-monospace">@Posiciones</div>
+                        </div>
+                        <div class="col-6 col-md-4">
+                            <div class="preview-label">Se guarda como</div>
+                            <div class="font-monospace">@(Model.Normalizar ? "Sin separadores" : "Tal cual")</div>
+                        </div>
+                    </div>
+
+                    <div class="d-flex gap-2 align-items-center flex-wrap mt-3">
+                        <DxTextBox Text="@valorPrueba" TextChanged="@((string v) => valorPrueba = v)"
+                                   TextExpression="@(() => valorPrueba)"
+                                   BindValueMode="BindValueMode.OnInput"
+                                   NullText="Escriba un valor para probarlo"
+                                   CssClass="font-monospace flex-grow-1" Style="min-width:220px;" />
+                        <span class="small @ClaseResultado">@TextoResultado</span>
+                    </div>
+                </div>
+            </Template>
+        </DxFormLayoutItem>
+
+        <DxFormLayoutItem Caption="Patrón de validación (avanzado)" ColSpanMd="12">
+            <DxTextBox @bind-Text="Model.Patron" NullText="@PatronDerivado" MaxLength="200"
+                       CssClass="font-monospace" />
+            <div class="form-text">
+                Déjelo vacío y se deriva de la máscara. Solo se toca para casos que la máscara no cubre.
+            </div>
+            <ValidationMessage For="() => Model.Patron" />
+        </DxFormLayoutItem>
+    </DxFormLayout>
+
+    <ValidationSummary class="text-danger mb-3" />
+
+    <div class="d-flex justify-content-end gap-2">
+        <DxButton ButtonType="ButtonType.Submit" RenderStyle="ButtonRenderStyle.Primary"
+                  Text="Guardar" SubmitFormOnClick="true" Enabled="@(!IsBusy)" />
+        <DxButton ButtonType="ButtonType.Normal" Text="Cancelar" Enabled="@(!IsBusy)" Click="Cancel" />
+    </div>
+</EditForm>
+
+@code {
+    [Parameter, EditorRequired] public FormatoFiscalEditDto Model { get; set; } = default!;
+    [Parameter] public EventCallback OnValidSubmit { get; set; }
+    [Parameter] public EventCallback OnCancel { get; set; }
+    [Parameter] public bool IsBusy { get; set; }
+
+    private string valorPrueba = string.Empty;
+
+    public sealed record ModoOpcion(short Valor, string Texto);
+
+    private readonly List<ModoOpcion> modos =
+    [
+        new(ModoValidacionFormatoFiscal.Bloquea,  "Bloquea el guardado"),
+        new(ModoValidacionFormatoFiscal.Advierte, "Advierte y deja guardar"),
+        new(ModoValidacionFormatoFiscal.Libre,    "No valida")
+    ];
+
+    private bool EsEdicion => Model.Id.HasValue;
+
+    // Se bindea el objeto, no el short: un Value nullable contra un ValueFieldName no nullable
+    // deja el circuito en bucle de reconexión (lección de DxComboBox del repo).
+    private ModoOpcion? ModoSeleccionado => modos.FirstOrDefault(m => m.Valor == Model.ModoValidacion);
+
+    private void OnModoChanged(ModoOpcion? m)
+    {
+        if (m is not null) Model.ModoValidacion = m.Valor;
+    }
+
+    private string AyudaModo => Model.ModoValidacion switch
+    {
+        ModoValidacionFormatoFiscal.Bloquea => "No deja guardar hasta que el valor cumpla el formato.",
+        ModoValidacionFormatoFiscal.Advierte => "Avisa que no cumple, pero permite guardar.",
+        _ => "La máscara guía al teclear, pero nunca se valida."
+    };
+
+    private string Ejemplo => FiscalCodeFormatter.Ejemplo(Model.Mascara);
+    private int Posiciones => FiscalCodeFormatter.Longitud(Model.Mascara);
+    private string PatronDerivado => FiscalCodeFormatter.ToRegex(Model.Mascara);
+
+    private bool PruebaCumple => FiscalCodeFormatter.EsValido(valorPrueba, Model.Mascara, Model.Patron, Model.Mayusculas);
+
+    private string TextoResultado
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(valorPrueba)) return "Escriba un valor para probarlo";
+            if (PruebaCumple) return $"Cumple: se vería {FiscalCodeFormatter.Formatear(valorPrueba, Model.Mascara, Model.Mayusculas)}";
+            return Model.ModoValidacion switch
+            {
+                ModoValidacionFormatoFiscal.Bloquea => "No cumple — el guardado se bloquea",
+                ModoValidacionFormatoFiscal.Advierte => "No cumple — avisa y deja guardar",
+                _ => "No cumple — se guarda sin avisar"
+            };
+        }
+    }
+
+    private string ClaseResultado
+    {
+        get
+        {
+            if (string.IsNullOrWhiteSpace(valorPrueba)) return "text-muted";
+            if (PruebaCumple) return "text-success";
+            return Model.ModoValidacion switch
+            {
+                ModoValidacionFormatoFiscal.Bloquea => "text-danger",
+                ModoValidacionFormatoFiscal.Advierte => "text-warning",
+                _ => "text-muted"
+            };
+        }
+    }
+
+    private async Task HandleValidSubmit() { if (OnValidSubmit.HasDelegate) await OnValidSubmit.InvokeAsync(); }
+    private async Task Cancel() { if (OnCancel.HasDelegate) await OnCancel.InvokeAsync(); }
+}

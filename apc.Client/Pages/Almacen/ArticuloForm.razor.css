@@ -1,0 +1,10 @@
+/* Panel "Costos y valuación": el valor va DEBAJO del label (CaptionPosition.Vertical del grupo),
+   con más espacio horizontal para números grandes como el valor total de inventario.
+   - white-space: nowrap  → el número nunca se parte en dos líneas.
+   - overflow-x: auto      → si aun así desborda a lo ancho, aparece una barra de scroll horizontal
+                             en vez de recortar o empujar el layout. */
+.costo-valor {
+    margin-top: 2px;
+    white-space: nowrap;
+    overflow-x: auto;
+}
