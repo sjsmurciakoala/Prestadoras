@@ -30,7 +30,10 @@ public sealed class AprobacionConfiguracionDto
     public List<string> Advertencias { get; set; } = new();
 }
 
-/// <summary>Un escalón de la escalera, con sus aprobadores.</summary>
+/// <summary>
+/// Un tramo de autorización con sus aprobadores. La aprobación NO es en cascada: el tramo dice
+/// CUÁNTO puede autorizar quien esté en él, no en qué orden hay que firmar.
+/// </summary>
 public sealed class AprobacionNivelConfigDto
 {
     public int Id { get; set; }
@@ -43,18 +46,24 @@ public sealed class AprobacionNivelConfigDto
     public string Descripcion { get; set; } = string.Empty;
 
     /// <summary>
-    /// Umbral inclusivo: el nivel se exige cuando el total del documento lo alcanza. La escalera
-    /// es acumulativa, así que no hay tope: un documento grande pasa por todos los niveles.
+    /// Monto MÁXIMO que este tramo puede autorizar. <c>null</c> = sin tope.
+    /// <para>
+    /// No es un umbral de entrada: quien pertenece a este tramo aprueba <b>directamente</b>
+    /// cualquier documento cuyo total no lo supere, sin que los tramos inferiores firmen antes.
+    /// </para>
     /// </summary>
-    [Range(0, 999999999999.99, ErrorMessage = "El monto no puede ser negativo.")]
-    public decimal MontoDesde { get; set; }
+    [Range(0, 999999999999.99, ErrorMessage = "El límite no puede ser negativo.")]
+    public decimal? MontoHasta { get; set; }
+
+    /// <summary>Etiqueta del límite para la pantalla: el monto, o «sin tope».</summary>
+    public string LimiteDescripcion => MontoHasta.HasValue ? MontoHasta.Value.ToString("N2") : "Sin tope";
 
     public bool Activo { get; set; } = true;
 
     public List<AprobacionAprobadorConfigDto> Aprobadores { get; set; } = new();
 }
 
-/// <summary>Quién puede firmar un nivel: una persona o un rol completo (D3).</summary>
+/// <summary>Quién puede autorizar dentro de un tramo: una persona o un rol completo (D3).</summary>
 public sealed class AprobacionAprobadorConfigDto
 {
     public int Id { get; set; }

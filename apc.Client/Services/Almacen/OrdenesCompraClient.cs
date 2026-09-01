@@ -178,14 +178,17 @@ public sealed class OrdenesCompraClient
                ?? new AprobacionConfigVista();
     }
 
-    /// <summary>Progreso de las órdenes en la escalera, para el badge del listado.</summary>
-    public async Task<List<ProgresoAprobacionDto>> ObtenerProgresoAprobacionAsync(CancellationToken ct = default)
+    /// <summary>
+    /// Por cada orden en aprobación, si hay alguien con límite suficiente. Alimenta el aviso del
+    /// listado cuando nadie puede autorizarla.
+    /// </summary>
+    public async Task<List<CapacidadAprobacionDto>> ObtenerCapacidadAprobacionAsync(CancellationToken ct = default)
     {
-        var response = await _http.GetAsync($"{BaseUrl}/aprobacion-progreso", ct);
-        if (!response.IsSuccessStatusCode) return new List<ProgresoAprobacionDto>();
+        var response = await _http.GetAsync($"{BaseUrl}/aprobacion-capacidad", ct);
+        if (!response.IsSuccessStatusCode) return new List<CapacidadAprobacionDto>();
 
-        return await response.ReadFromJsonAsyncWithAuthCheck<List<ProgresoAprobacionDto>>(ct)
-               ?? new List<ProgresoAprobacionDto>();
+        return await response.ReadFromJsonAsyncWithAuthCheck<List<CapacidadAprobacionDto>>(ct)
+               ?? new List<CapacidadAprobacionDto>();
     }
 
     /// <summary>Bandeja: órdenes esperando mi firma. Vacío si no tengo el permiso de aprobar.</summary>

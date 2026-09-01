@@ -162,7 +162,7 @@ public sealed class OrdenesCompraController : ControllerBase
     [ModuleAuthorize(PermissionModules.Compras, PermissionAction.Edit)]
     public async Task<IActionResult> Aprobar(int id, CancellationToken ct)
     {
-        if (await EscaleraEncendidaAsync(ct) && !PuedeAprobar)
+        if (await ControlEncendidoAsync(ct) && !PuedeAprobar)
         {
             return SinPermisoParaFirmar();
         }
@@ -230,7 +230,15 @@ public sealed class OrdenesCompraController : ControllerBase
     /// <summary>Estado de la escalera de una orden: niveles, firmas y si el usuario puede firmar.</summary>
     [HttpGet("{id:int}/aprobaciones")]
     public async Task<IActionResult> Aprobaciones(int id, CancellationToken ct)
-        => Ok(await _aprobacion.ObtenerEstadoAsync(DocumentosAprobacion.OrdenCompra, id, ct));
+    {
+        // El monto sale de la orden guardada, nunca del cliente: es el que decide quién puede
+        // autorizarla.
+        var orden = await _service.GetByIdAsync(id, ct);
+        if (orden is null) return NotFound();
+
+        return Ok(await _aprobacion.ObtenerEstadoAsync(
+            DocumentosAprobacion.OrdenCompra, id, orden.Total, ct));
+    }
 
     /// <summary>Bandeja "Mis aprobaciones": órdenes esperando la firma del usuario de la sesión.</summary>
     [HttpGet("pendientes-aprobacion")]
@@ -248,14 +256,17 @@ public sealed class OrdenesCompraController : ControllerBase
     public async Task<IActionResult> AprobacionConfig(CancellationToken ct)
         => Ok(new
         {
-            Encendido = await EscaleraEncendidaAsync(ct),
+            Encendido = await ControlEncendidoAsync(ct),
             PuedoFirmar = PuedeAprobar
         });
 
-    /// <summary>Progreso de las órdenes en la escalera, para el badge del listado.</summary>
-    [HttpGet("aprobacion-progreso")]
-    public async Task<IActionResult> AprobacionProgreso(CancellationToken ct)
-        => Ok(await _aprobacion.ProgresoOrdenesCompraAsync(ct));
+    /// <summary>
+    /// Por cada orden en aprobación, si existe alguien con límite suficiente. Alimenta el aviso
+    /// del listado cuando NADIE puede autorizarla.
+    /// </summary>
+    [HttpGet("aprobacion-capacidad")]
+    public async Task<IActionResult> AprobacionCapacidad(CancellationToken ct)
+        => Ok(await _aprobacion.CapacidadOrdenesCompraAsync(ct));
 
     /// <summary>Comentario opcional de la firma.</summary>
     public sealed class ComentarioDto
@@ -281,7 +292,7 @@ public sealed class OrdenesCompraController : ControllerBase
     /// quienes hoy lo hacen con <c>compras.edit</c>. El endurecimiento llega con el control
     /// encendido, que es cuando la empresa ya está configurando quién firma qué.
     /// </summary>
-    private Task<bool> EscaleraEncendidaAsync(CancellationToken ct)
+    private Task<bool> ControlEncendidoAsync(CancellationToken ct)
         => _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.OrdenCompra, ct);
 
     [HttpPost("{id:int}/anular")]

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
@@ -118,7 +118,8 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
         Assert.True(await _ordenes!.EnviarAAprobacionAsync(id, Creador));
 
         Assert.Equal(EstadoOrdenCompra.EnAprobacion, await EstadoAsync(id));
-        Assert.Equal(2, await ContarFlujoAsync(id));   // 75,000 exige dos niveles
+        // No se reservan escalones: la orden espera UNA autorización de quien alcance el monto.
+        Assert.Equal(0, await ContarFlujoAsync(id));
     }
 
     [SkippableFact]
@@ -138,7 +139,7 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task La_primera_firma_marca_el_compromiso_y_la_ultima_aprueba_la_orden()
+    public async Task Quien_alcanza_el_monto_aprueba_la_orden_en_un_solo_paso()
     {
         Skip.IfNot(Fixture.Available);
         await EncenderEscaleraAsync();
@@ -146,23 +147,21 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
         var id = await CrearOrdenAsync(EstadoOrdenCompra.Borrador);
         await _ordenes!.EnviarAAprobacionAsync(id, Creador);
 
-        // Primera firma: reserva presupuesto (D2) y la orden sigue en aprobación.
+        // Aprobador1 llega a 10,000: la orden de 75,000 le queda grande.
         _usuario.Establecer(Aprobador1);
-        var primera = await _ordenes.FirmarAprobacionAsync(id, "De acuerdo", Aprobador1);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _ordenes.FirmarAprobacionAsync(id, null, Aprobador1));
 
-        Assert.NotNull(primera);
-        Assert.True(primera!.ComprometioPresupuesto);
-        Assert.False(primera.FlujoCompleto);
-        Assert.Equal((short)2, primera.NivelPendiente);
         Assert.Equal(EstadoOrdenCompra.EnAprobacion, await EstadoAsync(id));
 
-        // Segunda y última: aprueba la orden y sella al firmante FINAL.
+        // Aprobador2 llega a 100,000: aprueba directamente, sin que el otro haya firmado.
         _usuario.Establecer(Aprobador2);
-        var segunda = await _ordenes.FirmarAprobacionAsync(id, null, Aprobador2);
+        var firma = await _ordenes.FirmarAprobacionAsync(id, "De acuerdo", Aprobador2);
 
-        Assert.NotNull(segunda);
-        Assert.False(segunda!.ComprometioPresupuesto);
-        Assert.True(segunda.FlujoCompleto);
+        Assert.NotNull(firma);
+        Assert.True(firma!.ComprometioPresupuesto);
+        Assert.Equal(100000m, firma.LimiteUtilizado);
+        Assert.Equal(TotalOrden, firma.MontoAprobado);
         Assert.Equal(EstadoOrdenCompra.Aprobada, await EstadoAsync(id));
         Assert.Equal(Aprobador2, await AprobadoPorAsync(id));
     }
@@ -190,8 +189,8 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
         var id = await CrearOrdenAsync(EstadoOrdenCompra.Borrador);
         await _ordenes!.EnviarAAprobacionAsync(id, Creador);
 
-        _usuario.Establecer(Aprobador1);
-        Assert.True(await _ordenes.RechazarAsync(id, "Proveedor no calificado", Aprobador1));
+        _usuario.Establecer(Aprobador2);
+        Assert.True(await _ordenes.RechazarAsync(id, "Proveedor no calificado", Aprobador2));
 
         Assert.Equal(EstadoOrdenCompra.Rechazada, await EstadoAsync(id));
         Assert.Equal(1, await ContarBitacoraAsync(id, AccionAprobacion.Rechazada));
@@ -206,13 +205,12 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
         var id = await CrearOrdenAsync(EstadoOrdenCompra.Borrador);
         await _ordenes!.EnviarAAprobacionAsync(id, Creador);
 
-        _usuario.Establecer(Aprobador1);
-        await _ordenes.FirmarAprobacionAsync(id, null, Aprobador1);
-
+        // Devolver actúa MIENTRAS la orden espera autorización. Una vez autorizada ya está
+        // aprobada —la autorización y la aprobación son el mismo acto—, y de ahí se sale
+        // anulando o cancelando, no devolviendo.
         _usuario.Establecer(Creador);
         Assert.True(await _ordenes.DevolverABorradorAsync(id, "Faltó un renglón", Creador));
 
-        // D4: vuelve a Borrador, sin firmas, y la bitácora conserva lo que pasó.
         Assert.Equal(EstadoOrdenCompra.Borrador, await EstadoAsync(id));
         Assert.Equal(0, await ContarFlujoAsync(id));
         Assert.Equal(1, await ContarBitacoraAsync(id, AccionAprobacion.Devuelta));
@@ -220,6 +218,28 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
         // Y se puede volver a enviar desde cero.
         Assert.True(await _ordenes.EnviarAAprobacionAsync(id, Creador));
         Assert.Equal(EstadoOrdenCompra.EnAprobacion, await EstadoAsync(id));
+    }
+
+    [SkippableFact]
+    public async Task Una_orden_ya_aprobada_no_se_devuelve_a_borrador()
+    {
+        Skip.IfNot(Fixture.Available);
+        await EncenderEscaleraAsync();
+
+        var id = await CrearOrdenAsync(EstadoOrdenCompra.Borrador);
+        await _ordenes!.EnviarAAprobacionAsync(id, Creador);
+
+        _usuario.Establecer(Aprobador2);
+        await _ordenes.FirmarAprobacionAsync(id, null, Aprobador2);
+
+        // Ya aprobada: devolverla reabriría un documento que puede tener presupuesto reservado y
+        // una recepción en camino. La salida es anular o cancelar.
+        _usuario.Establecer(Creador);
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _ordenes.DevolverABorradorAsync(id, "Me equivoqué", Creador));
+
+        Assert.Contains("en aprobación", error.Message);
+        Assert.Equal(EstadoOrdenCompra.Aprobada, await EstadoAsync(id));
     }
 
     [SkippableFact]
@@ -240,27 +260,23 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
     // ── avisos por correo (F6) ───────────────────────────────────────────────
 
     [SkippableFact]
-    public async Task Cada_paso_avisa_a_quien_le_toca()
+    public async Task Al_enviar_se_avisa_a_quien_puede_autorizar_y_al_aprobar_al_comprador()
     {
         Skip.IfNot(Fixture.Available);
         await EncenderEscaleraAsync();
 
         var id = await CrearOrdenAsync(EstadoOrdenCompra.Borrador);
 
-        // Al enviar: se avisa al primer nivel.
+        // Al enviar: se avisa al tramo más bajo que cubre el monto (no al nivel 1 por ser el 1).
         await _ordenes!.EnviarAAprobacionAsync(id, Creador);
-        Assert.Equal(new[] { "Jefatura" }, avisos.Pendientes);
-
-        // Al firmar el primero: se avisa al segundo, y todavía no hay desenlace que contar.
-        _usuario.Establecer(Aprobador1);
-        await _ordenes.FirmarAprobacionAsync(id, null, Aprobador1);
-        Assert.Equal(new[] { "Jefatura", "Gerencia" }, avisos.Pendientes);
+        Assert.Equal(new[] { "Gerencia" }, avisos.Pendientes);
         Assert.Empty(avisos.Resueltas);
 
-        // Al firmar el último: se le avisa al comprador que su orden quedó aprobada.
+        // Al autorizar: se le avisa al comprador, y no hay ningún "siguiente nivel" que anunciar.
         _usuario.Establecer(Aprobador2);
         await _ordenes.FirmarAprobacionAsync(id, null, Aprobador2);
         Assert.Equal(new[] { "aprobada" }, avisos.Resueltas);
+        Assert.Single(avisos.Pendientes);
     }
 
     [SkippableFact]
@@ -271,8 +287,8 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
 
         var rechazada = await CrearOrdenAsync(EstadoOrdenCompra.Borrador);
         await _ordenes!.EnviarAAprobacionAsync(rechazada, Creador);
-        _usuario.Establecer(Aprobador1);
-        await _ordenes.RechazarAsync(rechazada, "Precio fuera de mercado", Aprobador1);
+        _usuario.Establecer(Aprobador2);
+        await _ordenes.RechazarAsync(rechazada, "Precio fuera de mercado", Aprobador2);
 
         var devuelta = await CrearOrdenAsync(EstadoOrdenCompra.Borrador);
         await _ordenes.EnviarAAprobacionAsync(devuelta, Creador);
@@ -296,8 +312,8 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
               ON CONFLICT (company_id, documento) DO UPDATE SET modo = 1, permite_autoaprobacion = false;",
             new { c = CompanyId, d = DocumentosAprobacion.OrdenCompra }, Transaction);
 
-        var nivel1 = await CrearNivelAsync(1, "Jefatura", 0m);
-        var nivel2 = await CrearNivelAsync(2, "Gerencia", 10000.01m);
+        var nivel1 = await CrearNivelAsync(1, "Jefatura", 10000m);      // no llega a 75,000
+        var nivel2 = await CrearNivelAsync(2, "Gerencia", 100000m);     // sí llega
 
         await Connection.ExecuteAsync(
             "INSERT INTO public.cfg_aprobacion_aprobador (company_id, nivel_id, tipo, valor) VALUES (@c, @n, 1, @v);",
@@ -308,11 +324,11 @@ public class OrdenCompraAprobacionTests : IntegrationTestBase, IAsyncLifetime
             }, Transaction);
     }
 
-    private Task<int> CrearNivelAsync(short nivel, string descripcion, decimal desde)
+    private Task<int> CrearNivelAsync(short nivel, string descripcion, decimal hasta)
         => Connection.ExecuteScalarAsync<int>(
-            @"INSERT INTO public.cfg_aprobacion_nivel (company_id, documento, nivel, descripcion, monto_desde, activo)
-              VALUES (@c, @d, @n, @desc, @desde, true) RETURNING id;",
-            new { c = CompanyId, d = DocumentosAprobacion.OrdenCompra, n = nivel, desc = descripcion, desde },
+            @"INSERT INTO public.cfg_aprobacion_nivel (company_id, documento, nivel, descripcion, monto_hasta, activo)
+              VALUES (@c, @d, @n, @desc, @hasta, true) RETURNING id;",
+            new { c = CompanyId, d = DocumentosAprobacion.OrdenCompra, n = nivel, desc = descripcion, hasta },
             Transaction);
 
     /// <summary>Orden con un renglón, creada por SQL: lo que se prueba es la máquina de estados.</summary>

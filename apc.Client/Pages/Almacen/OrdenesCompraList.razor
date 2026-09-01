@@ -194,17 +194,17 @@
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is OrdenCompraListItemDto item)
                             {
-                                @* El progreso va en su propia línea, no dentro de la píldora: así el
-                                   badge mide siempre lo mismo y no se corta cuando la escalera tiene
-                                   varios niveles (mismo patrón de dos líneas que la columna Proveedor). *@
+                                @* La nota va en su propia línea, no dentro de la píldora: así el
+                                   badge mide siempre lo mismo y no se corta (mismo patrón de dos
+                                   líneas que la columna Proveedor). *@
                                 <div class="d-flex flex-column align-items-center gap-1">
                                     <span class="badge-estado-oc @ClaseEstado(item.Estado)">@item.EstadoDescripcion</span>
                                     @{
-                                        var firmas = ProgresoFirmas(item);
+                                        var nota = NotaAprobacion(item);
                                     }
-                                    @if (firmas is not null)
+                                    @if (nota is not null)
                                     {
-                                        <span class="text-muted small">@firmas</span>
+                                        <span class="@(SinAprobador(item) ? "text-danger small fw-semibold" : "text-muted small")">@nota</span>
                                     }
                                 </div>
                             }
@@ -452,8 +452,8 @@
         AccionOrden.Anular   => "La orden quedará anulada. Sólo se puede anular si no tiene recepciones.",
         AccionOrden.Rechazar => "La orden quedará rechazada y no podrá aprobarse.",
         AccionOrden.Cancelar => "Lo pedido y no recibido ya no se recibirá. Si había presupuesto comprometido, el saldo pendiente se libera.",
-        AccionOrden.EnviarAprobacion => "Dejará de ser editable y pasará por los niveles de aprobación que exija su monto.",
-        AccionOrden.Firmar   => "Firmará el nivel que le corresponde. Si es el último, la orden quedará aprobada.",
+        AccionOrden.EnviarAprobacion => "Dejará de ser editable. La aprueba, de una sola firma, quien tenga un límite de autorización que alcance su monto.",
+        AccionOrden.Firmar   => "La orden quedará aprobada con su nivel de autorización, en un solo paso.",
         AccionOrden.Devolver => "Se borrarán las firmas y volverá a ser editable. Si había presupuesto reservado, se libera.",
         _                    => "Se da por suficiente lo recibido. Si había presupuesto comprometido, el saldo pendiente se libera."
     };
@@ -478,11 +478,17 @@
     /// </summary>
     private OrdenesCompraClient.AprobacionConfigVista aprobacion = new();
 
-    /// <summary>Progreso por orden en la escalera, para el badge. Vacío con el control apagado.</summary>
-    private Dictionary<long, ProgresoAprobacionDto> progresoAprobacion = new();
+    /// <summary>
+    /// Por orden en aprobación, si existe alguien con límite suficiente. Vacío con el control
+    /// apagado.
+    /// </summary>
+    private Dictionary<long, CapacidadAprobacionDto> capacidadAprobacion = new();
 
-    /// <summary>Mensaje que deja la firma para el toast (lo arma FirmarAsync).</summary>
+    /// <summary>Mensaje que deja la autorización para el toast (lo arma FirmarAsync).</summary>
     private string mensajeFirma = string.Empty;
+
+    private static string DescribirLimite(decimal? limite)
+        => limite.HasValue ? limite.Value.ToString("N2") : "sin tope";
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
@@ -532,13 +538,13 @@
             errorMessage = null;
             ordenes = await OrdenesClient.GetAsync(BuildFilter());
 
-            // Solo hay progreso que pintar si la empresa exige escalera.
+            // Solo hay capacidad que consultar si la empresa exige autorización.
             if (aprobacion.Encendido)
             {
-                progresoAprobacion = new Dictionary<long, ProgresoAprobacionDto>();
-                foreach (var fila in await OrdenesClient.ObtenerProgresoAprobacionAsync())
+                capacidadAprobacion = new Dictionary<long, CapacidadAprobacionDto>();
+                foreach (var fila in await OrdenesClient.ObtenerCapacidadAprobacionAsync())
                 {
-                    progresoAprobacion[fila.DocumentoId] = fila;
+                    capacidadAprobacion[fila.DocumentoId] = fila;
                 }
             }
         }
@@ -590,35 +596,37 @@
         var resultado = await OrdenesClient.FirmarAsync(id);
         if (resultado is null) return false;
 
-        mensajeFirma = resultado.FlujoCompleto
-            ? "Firmada la última aprobación: la orden quedó aprobada."
-            : $"Nivel {resultado.NivelFirmado} firmado. Pasa a «{resultado.DescripcionPendiente}».";
-
-        if (resultado.ComprometioPresupuesto)
-        {
-            mensajeFirma += " Se reservó el presupuesto de la orden.";
-        }
+        // Una sola autorización resuelve la orden: no hay siguiente nivel que anunciar.
+        mensajeFirma = $"Orden aprobada con el nivel «{resultado.DescripcionNivel}» " +
+                       $"(límite {DescribirLimite(resultado.LimiteUtilizado)}). Se reservó el presupuesto.";
 
         return true;
     }
 
-    /// <summary>Etiqueta del estado; en la escalera muestra el avance real («2 de 3»).</summary>
     /// <summary>
-    /// Cuántas firmas lleva la orden, para la línea bajo el badge. <c>null</c> cuando no aplica
-    /// (la orden no está en la escalera, o todavía no se conoce su progreso).
+    /// Quién puede autorizar la orden, para la línea bajo el badge. <c>null</c> cuando no aplica
+    /// (no está en aprobación, o todavía no se conoce su capacidad).
     /// <para>
-    /// Va aparte del texto del badge a propósito: metido dentro, «En aprobación (0 de 2)» no cabía
-    /// en la columna y la píldora se cortaba sin el paréntesis de cierre.
+    /// Va aparte del texto del badge a propósito: metido dentro, el texto no cabía en la columna y
+    /// la píldora se cortaba.
     /// </para>
     /// </summary>
-    private string? ProgresoFirmas(OrdenCompraListItemDto item)
+    private string? NotaAprobacion(OrdenCompraListItemDto item)
     {
         if (item.Estado != EstadoOrdenCompra.EnAprobacion) return null;
+        if (!capacidadAprobacion.TryGetValue(item.Id, out var capacidad)) return null;
 
-        return progresoAprobacion.TryGetValue(item.Id, out var progreso) && progreso.Total > 0
-            ? $"{progreso.Firmados} de {progreso.Total} firmas"
-            : null;
+        // Que NADIE alcance el monto es un estado real del documento —espera a que se configure a
+        // alguien—, así que se ve en la lista en vez de descubrirse al intentar aprobar.
+        return capacidad.HayAprobadorCapaz
+            ? $"Autoriza: {capacidad.TramoMinimo}"
+            : "Sin aprobador con límite suficiente";
     }
+
+    private bool SinAprobador(OrdenCompraListItemDto item)
+        => item.Estado == EstadoOrdenCompra.EnAprobacion
+        && capacidadAprobacion.TryGetValue(item.Id, out var capacidad)
+        && !capacidad.HayAprobadorCapaz;
 
     private void PedirConfirmacion(OrdenCompraListItemDto item, AccionOrden cual)
     {

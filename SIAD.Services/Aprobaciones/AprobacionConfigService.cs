@@ -54,7 +54,7 @@ public sealed class AprobacionConfigService : IAprobacionConfigService
 
         var niveles = (await conn.QueryAsync<AprobacionNivelConfigDto>(new CommandDefinition(
             @"SELECT id AS Id, nivel AS Nivel, descripcion AS Descripcion,
-                     monto_desde AS MontoDesde, activo AS Activo
+                     monto_hasta AS MontoHasta, activo AS Activo
                 FROM public.cfg_aprobacion_nivel
                WHERE company_id = @companyId::bigint AND documento = @documento::varchar
                ORDER BY nivel;",
@@ -155,30 +155,30 @@ public sealed class AprobacionConfigService : IAprobacionConfigService
         {
             throw new InvalidOperationException("El nivel debe estar entre 1 y 9.");
         }
-        if (dto.MontoDesde < 0)
+        if (dto.MontoHasta is < 0)
         {
-            throw new InvalidOperationException("El monto desde no puede ser negativo.");
+            throw new InvalidOperationException("El límite de aprobación no puede ser negativo.");
         }
 
         var (conn, tx) = Conexion();
         var companyId = EmpresaActual();
         var descripcion = dto.Descripcion.Trim();
 
-        await ValidarEscaleraCrecienteAsync(conn, tx, companyId, documento, dto, ct);
+        await ValidarLimitesCrecientesAsync(conn, tx, companyId, documento, dto, ct);
 
         if (dto.Id > 0)
         {
             var filas = await conn.ExecuteAsync(new CommandDefinition(
                 @"UPDATE public.cfg_aprobacion_nivel
                      SET nivel = @nivel::smallint, descripcion = @descripcion::varchar,
-                         monto_desde = @monto::numeric, activo = @activo,
+                         monto_hasta = @monto::numeric, activo = @activo,
                          usuariomodificacion = @usuario::varchar,
                          fechamodificacion = (now() AT TIME ZONE 'utc')
                    WHERE company_id = @companyId::bigint AND id = @id::int;",
                 new
                 {
                     companyId, id = dto.Id, nivel = dto.Nivel, descripcion,
-                    monto = dto.MontoDesde, activo = dto.Activo, usuario = UsuarioAuditoria()
+                    monto = dto.MontoHasta, activo = dto.Activo, usuario = UsuarioAuditoria()
                 }, tx, cancellationToken: ct));
 
             if (filas == 0) throw new InvalidOperationException("El nivel ya no existe.");
@@ -187,14 +187,14 @@ public sealed class AprobacionConfigService : IAprobacionConfigService
         {
             dto.Id = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
                 @"INSERT INTO public.cfg_aprobacion_nivel
-                         (company_id, documento, nivel, descripcion, monto_desde, activo, usuariocreacion)
+                         (company_id, documento, nivel, descripcion, monto_hasta, activo, usuariocreacion)
                   VALUES (@companyId::bigint, @documento::varchar, @nivel::smallint,
                           @descripcion::varchar, @monto::numeric, @activo, @usuario::varchar)
                   RETURNING id;",
                 new
                 {
                     companyId, documento, nivel = dto.Nivel, descripcion,
-                    monto = dto.MontoDesde, activo = dto.Activo, usuario = UsuarioAuditoria()
+                    monto = dto.MontoHasta, activo = dto.Activo, usuario = UsuarioAuditoria()
                 }, tx, cancellationToken: ct));
         }
 
@@ -292,17 +292,21 @@ public sealed class AprobacionConfigService : IAprobacionConfigService
     // ---------------------------------------------------------------------------------------
 
     /// <summary>
-    /// La escalera es acumulativa: el umbral tiene que crecer con el nivel. Si el nivel 2 pidiera
-    /// menos que el 1, habría montos que exigen el 2 pero no el 1, y el motor —que firma en
-    /// orden— nunca llegaría a habilitarlo.
+    /// Los límites crecen con el número de tramo: el tramo 1 es el de menor capacidad.
+    /// <para>
+    /// No es cosmético. Es lo que da sentido a «el tramo más bajo que cubre este monto», que es
+    /// lo que la pantalla muestra y lo que se registra como límite utilizado; con tramos
+    /// desordenados, ese mínimo dejaría de ser el que el usuario espera.
+    /// </para>
+    /// <para><c>null</c> es «sin tope», o sea el límite más alto posible.</para>
     /// </summary>
-    private async Task ValidarEscaleraCrecienteAsync(
+    private async Task ValidarLimitesCrecientesAsync(
         DbConnection conn, DbTransaction? tx, long companyId, string documento,
         AprobacionNivelConfigDto dto, CancellationToken ct)
     {
         // Dapper no mapea ValueTuple por nombre de columna: hace falta un tipo con propiedades.
         var otros = await conn.QueryAsync<NivelUmbralRow>(new CommandDefinition(
-            @"SELECT nivel AS Nivel, monto_desde AS MontoDesde
+            @"SELECT nivel AS Nivel, monto_hasta AS MontoHasta
                 FROM public.cfg_aprobacion_nivel
                WHERE company_id = @companyId::bigint AND documento = @documento::varchar
                  AND id <> @id::int
@@ -315,20 +319,35 @@ public sealed class AprobacionConfigService : IAprobacionConfigService
             {
                 throw new InvalidOperationException($"Ya existe un nivel {dto.Nivel} para este documento.");
             }
-            if (otro.Nivel < dto.Nivel && otro.MontoDesde > dto.MontoDesde)
+
+            var mio = dto.MontoHasta;
+            var suyo = otro.MontoHasta;
+
+            if (otro.Nivel < dto.Nivel && EsMayor(suyo, mio))
             {
                 throw new InvalidOperationException(
-                    $"El nivel {dto.Nivel} no puede pedir un monto menor que el nivel {otro.Nivel} " +
-                    $"({otro.MontoDesde:N2}): la escalera va de menor a mayor.");
+                    $"El nivel {dto.Nivel} no puede autorizar menos que el nivel {otro.Nivel} " +
+                    $"({Describir(suyo)}): los límites crecen con el nivel.");
             }
-            if (otro.Nivel > dto.Nivel && otro.MontoDesde < dto.MontoDesde)
+            if (otro.Nivel > dto.Nivel && EsMayor(mio, suyo))
             {
                 throw new InvalidOperationException(
-                    $"El nivel {dto.Nivel} no puede pedir un monto mayor que el nivel {otro.Nivel} " +
-                    $"({otro.MontoDesde:N2}): la escalera va de menor a mayor.");
+                    $"El nivel {dto.Nivel} no puede autorizar más que el nivel {otro.Nivel} " +
+                    $"({Describir(suyo)}): los límites crecen con el nivel.");
             }
         }
     }
+
+    /// <summary>Compara dos límites tratando <c>null</c> (sin tope) como el mayor posible.</summary>
+    private static bool EsMayor(decimal? a, decimal? b)
+    {
+        if (a is null) return b is not null;   // sin tope > cualquier monto
+        if (b is null) return false;
+        return a.Value > b.Value;
+    }
+
+    private static string Describir(decimal? limite)
+        => limite.HasValue ? limite.Value.ToString("N2") : "sin tope";
 
     private static string DescribirDocumento(string documento) => documento switch
     {
@@ -383,10 +402,10 @@ public sealed class AprobacionConfigService : IAprobacionConfigService
         public bool PermiteAutoaprobacion { get; set; }
     }
 
-    /// <summary>Umbral de los otros niveles, para validar que la escalera sea creciente.</summary>
+    /// <summary>Límite de los otros tramos, para validar que crezcan con el nivel.</summary>
     private sealed class NivelUmbralRow
     {
         public short Nivel { get; set; }
-        public decimal MontoDesde { get; set; }
+        public decimal? MontoHasta { get; set; }
     }
 }

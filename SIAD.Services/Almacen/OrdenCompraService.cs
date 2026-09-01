@@ -198,17 +198,17 @@ public sealed class OrdenCompraService : IOrdenCompraService
 
         // Las firmas reales de la escalera, si la orden pasó por ella. Sin flujo (control apagado)
         // la lista queda vacía y el comprobante imprime el bloque de firmas de siempre.
-        var flujo = await _aprobacion.ObtenerEstadoAsync(DocumentosAprobacion.OrdenCompra, id, ct);
-        foreach (var nivel in flujo.Niveles)
-        {
-            if (nivel.Estado != EstadoAprobacionNivel.Aprobado) continue;
+        var aprobacion = await _aprobacion.ObtenerEstadoAsync(
+            DocumentosAprobacion.OrdenCompra, id, doc.Total, ct);
 
+        if (aprobacion.Firma is { Estado: EstadoAprobacionNivel.Aprobado } autorizacion)
+        {
             impresion.Firmas.Add(new FirmaAprobacionImpresionDto
             {
-                Nivel = nivel.Nivel,
-                Descripcion = nivel.Descripcion,
-                Usuario = nivel.UsuarioFirma,
-                Fecha = nivel.FechaFirma
+                Nivel = autorizacion.Nivel,
+                Descripcion = autorizacion.Descripcion,
+                Usuario = autorizacion.UsuarioFirma,
+                Fecha = autorizacion.FechaFirma
             });
         }
 
@@ -374,18 +374,19 @@ public sealed class OrdenCompraService : IOrdenCompraService
 
         await _aprobacion.IniciarAsync(
             DocumentosAprobacion.OrdenCompra, entity.id, entity.numero.ToString("00000"),
-            entity.total, entity.usuariocreacion ?? usuario, ct);
+            entity.total, entity.usuariocreacion ?? usuario,
+            EstadoOrdenCompra.Borrador, EstadoOrdenCompra.EnAprobacion, ct);
 
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
 
-        // Ya está guardado: se avisa al primer nivel. Si el correo falla, la orden sigue enviada.
-        var flujo = await _aprobacion.ObtenerEstadoAsync(DocumentosAprobacion.OrdenCompra, entity.id, ct);
-        foreach (var nivel in flujo.Niveles)
-        {
-            if (nivel.Estado != EstadoAprobacionNivel.Pendiente) continue;
+        // Ya está guardado: se avisa a quienes PUEDEN autorizar este monto. Si nadie alcanza, no
+        // hay a quién escribirle y la orden queda esperando; la pantalla lo dice.
+        var estadoAprobacion = await _aprobacion.ObtenerEstadoAsync(
+            DocumentosAprobacion.OrdenCompra, entity.id, entity.total, ct);
 
-            await NotificarPendienteAsync(entity, nivel.Descripcion, ct);
-            break;
+        if (estadoAprobacion.HayAprobadorCapaz)
+        {
+            await NotificarPendienteAsync(entity, estadoAprobacion.TramoMinimo ?? string.Empty, ct);
         }
 
         return true;
@@ -429,35 +430,33 @@ public sealed class OrdenCompraService : IOrdenCompraService
 
         await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
 
-        // El motor valida elegibilidad, secuencia, autoaprobación y doble firma. Quién firma sale
-        // de la sesión, no del parámetro `user`.
-        var firma = await _aprobacion.FirmarAsync(DocumentosAprobacion.OrdenCompra, id, comentario, ct);
+        // El motor valida que nadie la haya resuelto ya, que el límite del usuario alcance el
+        // total y que no sea su propia orden. Quién autoriza sale de la sesión, no del parámetro.
+        // NO hay cascada: esta única autorización resuelve la orden.
+        var firma = await _aprobacion.AutorizarAsync(
+            DocumentosAprobacion.OrdenCompra, id, entity.total, comentario,
+            EstadoOrdenCompra.EnAprobacion, EstadoOrdenCompra.Aprobada, ct);
 
         var resultado = new OrdenCompraAprobacionResultadoDto
         {
-            NivelFirmado = firma.NivelFirmado,
-            FlujoCompleto = firma.FlujoCompleto,
-            NivelPendiente = firma.NivelPendiente,
-            DescripcionPendiente = firma.DescripcionPendiente,
-            ComprometioPresupuesto = firma.EsPrimeraFirma
+            Nivel = firma.Nivel,
+            DescripcionNivel = firma.DescripcionNivel,
+            LimiteUtilizado = firma.LimiteUtilizado,
+            MontoAprobado = firma.MontoAprobado,
+            ComprometioPresupuesto = true
         };
 
-        // D2: la reserva nace con la PRIMERA firma, no al completar la escalera. Así el disponible
-        // queda tomado mientras la orden circula, en vez de descubrirse ocupado al final.
-        if (firma.EsPrimeraFirma)
-        {
-            _avisosPresupuesto = await _presupuesto.ComprometerOrdenCompraAsync(
-                entity.id,
-                entity.numero.ToString("00000"),
-                entity.fecha ?? DateOnly.FromDateTime(DateTime.Today),
-                usuario,
-                usuario,
-                ct);
+        // D2: la autorización reserva el presupuesto en el mismo acto en que aprueba la orden.
+        _avisosPresupuesto = await _presupuesto.ComprometerOrdenCompraAsync(
+            entity.id,
+            entity.numero.ToString("00000"),
+            entity.fecha ?? DateOnly.FromDateTime(DateTime.Today),
+            usuario,
+            usuario,
+            ct);
 
-            resultado.Avisos = _avisosPresupuesto;
-        }
+        resultado.Avisos = _avisosPresupuesto;
 
-        if (firma.FlujoCompleto)
         {
             // `aprobado_por` guarda al firmante FINAL: es lo que muestran el PDF y los listados.
             // El detalle nivel por nivel vive en alm_orden_compra_aprobacion.
@@ -471,18 +470,10 @@ public sealed class OrdenCompraService : IOrdenCompraService
 
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
 
-        // Avisos posteriores al commit: al siguiente aprobador si la escalera sigue, o al
-        // comprador si su orden ya quedó aprobada.
-        if (firma.FlujoCompleto)
-        {
-            await _avisos.NotificarResueltaOrdenCompraAsync(
-                entity.usuariocreacion, entity.numero.ToString("00000"), entity.cod_proveedor,
-                entity.total, "aprobada", null, ct);
-        }
-        else if (!string.IsNullOrWhiteSpace(firma.DescripcionPendiente))
-        {
-            await NotificarPendienteAsync(entity, firma.DescripcionPendiente!, ct);
-        }
+        // Aviso posterior al commit: la orden quedó aprobada en este mismo acto.
+        await _avisos.NotificarResueltaOrdenCompraAsync(
+            entity.usuariocreacion, entity.numero.ToString("00000"), entity.cod_proveedor,
+            entity.total, "aprobada", null, ct);
 
         return resultado;
     }
@@ -511,7 +502,9 @@ public sealed class OrdenCompraService : IOrdenCompraService
 
         await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
 
-        await _aprobacion.ReiniciarAsync(DocumentosAprobacion.OrdenCompra, id, motivo, ct);
+        await _aprobacion.ReiniciarAsync(
+            DocumentosAprobacion.OrdenCompra, id, motivo,
+            EstadoOrdenCompra.EnAprobacion, EstadoOrdenCompra.Borrador, ct);
 
         entity.estado = EstadoOrdenCompra.Borrador;
         entity.observaciones = AnexarMotivo(entity.observaciones, motivo, user);
@@ -620,7 +613,8 @@ public sealed class OrdenCompraService : IOrdenCompraService
         {
             await _aprobacion.RegistrarEventoAsync(
                 DocumentosAprobacion.OrdenCompra, entity.id, entity.numero.ToString("00000"),
-                AccionAprobacion.Anulada, "Orden anulada durante la aprobación", ct);
+                AccionAprobacion.Anulada, "Orden anulada durante la aprobación",
+                EstadoOrdenCompra.EnAprobacion, EstadoOrdenCompra.Anulada, ct);
         }
 
         // Devuelve al presupuesto lo comprometido y no consumido. No-op si el control está apagado
@@ -723,7 +717,9 @@ public sealed class OrdenCompraService : IOrdenCompraService
         {
             // El motor valida que quien rechaza sea aprobador del nivel pendiente y deja el
             // rastro en la bitácora.
-            await _aprobacion.RechazarAsync(DocumentosAprobacion.OrdenCompra, id, motivo, ct);
+            await _aprobacion.RechazarAsync(
+                DocumentosAprobacion.OrdenCompra, id, entity.total, motivo,
+                EstadoOrdenCompra.EnAprobacion, EstadoOrdenCompra.Rechazada, ct);
         }
 
         entity.estado = EstadoOrdenCompra.Rechazada;

@@ -314,14 +314,14 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         SellarModificacion(hdr, user);
         await _context.SaveChangesAsync(ct);
 
-        // Con la aprobación por niveles encendida, "en revisión" ya no es un solo escalón: se abre
-        // la escalera que exija el total referencial de la requisición. Apagada, el flujo es el
-        // histórico y esto no hace nada.
+        // Con la aprobación por monto encendida, "en revisión" queda esperando UNA autorización
+        // de quien tenga límite suficiente. Apagada, el flujo es el histórico y esto no hace nada.
         if (await _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.Requisicion, ct))
         {
             await _aprobacion.IniciarAsync(
                 DocumentosAprobacion.Requisicion, hdr.id, hdr.numero.ToString("00000"),
-                hdr.total, hdr.usuario_solicita, ct);
+                hdr.total, hdr.usuario_solicita,
+                EstadoRequisicionHdr.Borrador, EstadoRequisicionHdr.EnRevision, ct);
         }
 
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
@@ -339,19 +339,14 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         var usuario = ClasificacionNormalizer.Usuario(user);
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
-        // Con escalera, aprobar es FIRMAR el nivel pendiente: la requisición solo queda aprobada
-        // cuando firma el último. El motor valida elegibilidad, secuencia y autoaprobación.
+        // Con el control encendido, aprobar es AUTORIZAR por monto: el motor exige que el límite
+        // del usuario cubra el total y que no sea su propia requisición. NO hay cascada, así que
+        // esa única autorización la deja aprobada.
         if (await _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.Requisicion, ct))
         {
-            var firma = await _aprobacion.FirmarAsync(DocumentosAprobacion.Requisicion, id, null, ct);
-            if (!firma.FlujoCompleto)
-            {
-                hdr.usuariomodificacion = usuario;
-                hdr.fechamodificacion = ahora;
-                await _context.SaveChangesAsync(ct);
-                await TransaccionAmbiente.ConfirmarAsync(tx, ct);
-                return (await GetByIdAsync(id, ct))!;
-            }
+            await _aprobacion.AutorizarAsync(
+                DocumentosAprobacion.Requisicion, id, hdr.total, null,
+                EstadoRequisicionHdr.EnRevision, EstadoRequisicionHdr.Aprobada, ct);
         }
 
         hdr.estado = EstadoRequisicionHdr.Aprobada;
@@ -379,11 +374,13 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         var usuario = ClasificacionNormalizer.Usuario(user);
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
-        // El motor valida que quien rechaza sea aprobador del nivel pendiente y lo deja en la
-        // bitácora; sin escalera, el rechazo es el de siempre.
+        // Rechazar exige la misma capacidad que aprobar: quien no podría autorizar el monto
+        // tampoco puede tumbar la requisición. Sin el control encendido, el rechazo es el de siempre.
         if (await _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.Requisicion, ct))
         {
-            await _aprobacion.RechazarAsync(DocumentosAprobacion.Requisicion, id, motivoR, ct);
+            await _aprobacion.RechazarAsync(
+                DocumentosAprobacion.Requisicion, id, hdr.total, motivoR,
+                EstadoRequisicionHdr.EnRevision, EstadoRequisicionHdr.Rechazada, ct);
         }
 
         hdr.estado = EstadoRequisicionHdr.Rechazada;
