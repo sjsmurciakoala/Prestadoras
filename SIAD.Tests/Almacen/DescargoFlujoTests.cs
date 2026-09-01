@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -9,6 +9,7 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Services.Aprobaciones;
 using SIAD.Services.Almacen;
 using SIAD.Data;
 using SIAD.Tests.Infrastructure;
@@ -41,7 +42,8 @@ public class DescargoFlujoTests : IntegrationTestBase, IAsyncLifetime
             _context.Database.UseTransaction(Transaction);
             var rollup = new ArticuloRollupService(_context);
             var motor = new InventarioPostingService(_context, company, rollup);
-            _req = new RequisicionDocumentoService(_context, company);
+            _req = new RequisicionDocumentoService(_context, company,
+                new AprobacionService(_context, company, new TestCurrentUserService()));
             _desc = new DescargoDocumentoService(_context, company, motor, rollup, Substitute.For<IAlertasStockNotificador>());
         }
     }

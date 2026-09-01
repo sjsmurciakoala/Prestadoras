@@ -16,6 +16,21 @@ public interface ICorreoNotificador
     Task<CorreoEnvioResultado> NotificarAreaAsync(string tipo, string asunto, string htmlBody, CancellationToken ct = default);
 
     /// <summary>
+    /// Envía a <b>destinatarios concretos</b> usando la conexión y el remitente del área
+    /// <paramref name="tipo"/> de la empresa actual, y dejando en copia a los destinatarios fijos
+    /// del área.
+    /// <para>
+    /// Existe para las notificaciones dirigidas a una persona por su papel en un documento —el
+    /// aprobador al que le toca firmar, el comprador cuya orden fue rechazada—, que
+    /// <see cref="NotificarAreaAsync"/> no cubre: aquel reparte a una lista fija de configuración.
+    /// </para>
+    /// <para>Sin destinatarios devuelve <c>Omitido</c>; nunca lanza por falta de configuración.</para>
+    /// </summary>
+    Task<CorreoEnvioResultado> NotificarDestinatariosAsync(
+        string tipo, IReadOnlyCollection<string> destinatarios, string asunto, string htmlBody,
+        CancellationToken ct = default);
+
+    /// <summary>
     /// Envía un correo de SISTEMA (Identity: confirmación, reseteo) a una dirección concreta, usando
     /// la conexión de la empresa configurada en <c>Correo:CompanyIdSistema</c>. Devuelve <c>Omitido</c>
     /// si esa empresa no tiene conexión activa con API key y remitente.

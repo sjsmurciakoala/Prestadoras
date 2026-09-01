@@ -1,0 +1,383 @@
+@page "/presupuesto/ejecucion"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.DTOs.Presupuesto
+@using apc.Client.Services
+@using apc.Client.Services.Presupuesto
+
+@inject PresupuestoEjecucionClient EjecucionClient
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Ejecución presupuestaria</PageTitle>
+
+<DxToastProvider Name="PresupuestoEjecucionToast" MaxToastCount="4" StickToViewport="true" />
+
+<div class="page-container">
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Ejecución presupuestaria</h2>
+            <p class="page-subtitle">Cuánto se comprometió, cuánto se ejecutó y cuánto queda por partida</p>
+        </div>
+    </div>
+
+    <div class="modern-card summary-card">
+        <div class="summary-item">
+            <div class="summary-label">Presupuesto</div>
+            <div class="summary-value">@datos.Sum(d => d.Presupuesto).ToString("N2")</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Comprometido</div>
+            <div class="summary-value">@datos.Sum(d => d.Comprometido).ToString("N2")</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Ejecutado</div>
+            <div class="summary-value">@datos.Sum(d => d.Ejecutado).ToString("N2")</div>
+        </div>
+        <div class="summary-item">
+            <div class="summary-label">Disponible</div>
+            <div class="summary-value">@datos.Sum(d => d.Disponible).ToString("N2")</div>
+        </div>
+    </div>
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="cargando" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@datos" KeyFieldName="Clave" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <DxTextBox @bind-Text="busqueda" NullText="Buscar cuenta o descripción"
+                                   CssClass="filtro-texto" ClearButtonDisplayMode="DataEditorClearButtonDisplayMode.Auto"
+                                   BindValueMode="BindValueMode.OnDelayedInput" />
+
+                        <DxCheckBox @bind-Checked="soloPresupuestables" CssClass="ms-1">Solo cuentas controladas</DxCheckBox>
+                        <DxCheckBox @bind-Checked="soloConMovimiento" CssClass="ms-1">Solo con movimiento</DxCheckBox>
+
+                        <DxButton Text="Filtrar" IconCssClass="bi bi-funnel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="CargarAsync" />
+
+                        <DxButton Text="PDF" IconCssClass="bi bi-file-earmark-pdf"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirPdf" />
+
+                        <DxButton Text="Excel" IconCssClass="bi bi-file-earmark-excel"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="AbrirExcel" />
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser" CssClass="me-1" />
+
+                        <div class="ms-auto text-muted small">
+                            Partidas: <span class="fw-bold">@datos.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.IdPresupuesto)" Caption="Presupuesto" Width="120px" />
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.ConCuentaCode)" Caption="Partida" Width="170px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoEjecucionItemDto item)
+                            {
+                                <span class="font-monospace">@item.ConCuentaCode</span>
+                                @if (!item.CuentaPresupuestable)
+                                {
+                                    <span class="badge-no-controlada" title="La cuenta no está marcada como presupuestable: el control no la mira">No controlada</span>
+                                }
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.CuentaNombre)" Caption="Descripción" MinWidth="180" />
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.Presupuesto)" Caption="Presupuesto"
+                                      Width="130px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.Comprometido)" Caption="Comprometido"
+                                      Width="130px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.Ejecutado)" Caption="Ejecutado"
+                                      Width="130px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.Pagado)" Caption="Pagado"
+                                      Width="130px" DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" Visible="false" />
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.Disponible)" Caption="Disponible"
+                                      Width="130px" TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoEjecucionItemDto item)
+                            {
+                                <span class="@(item.Disponible <= 0 ? "text-danger fw-bold" : "fw-semibold")">
+                                    @item.Disponible.ToString("N2")
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn FieldName="@nameof(PresupuestoEjecucionItemDto.PctUtilizado)" Caption="Utilizado"
+                                      Width="120px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoEjecucionItemDto item && item.PctUtilizado.HasValue)
+                            {
+                                <span class="badge-uso @ClaseUso(item.PctUtilizado.Value)">@item.PctUtilizado.Value.ToString("N1")%</span>
+                            }
+                            else
+                            {
+                                <span class="text-muted">—</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+
+                    <DxGridDataColumn Caption="" Width="60px" TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PresupuestoEjecucionItemDto item)
+                            {
+                                <button type="button" class="btn-icon btn-edit" title="Ver el historial de la partida"
+                                        @onclick="() => AbrirKardexAsync(item)">
+                                    <i class="bi bi-clock-history"></i>
+                                </button>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">No hay partidas presupuestarias para los filtros seleccionados.</div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@* ── Kardex de la partida ─────────────────────────────────────────────────────
+   El drill-down es lo que vuelve auditable el saldo: responde "por que esta
+   cuenta esta al 90%" documento por documento.                              *@
+<DxPopup @bind-Visible="kardexVisible" Width="min(1100px, 95vw)" ShowFooter="false"
+         HeaderText="@($"Historial de la partida {partidaAbierta?.ConCuentaCode}")">
+    <BodyTemplate>
+        <div class="p-3">
+            @if (partidaAbierta is not null)
+            {
+                <div class="kardex-encabezado">
+                    <div>
+                        <span class="text-muted small">Presupuesto</span>
+                        <div class="fw-semibold">@partidaAbierta.IdPresupuesto</div>
+                    </div>
+                    <div>
+                        <span class="text-muted small">Cuenta</span>
+                        <div class="fw-semibold font-monospace">@partidaAbierta.ConCuentaCode</div>
+                    </div>
+                    <div>
+                        <span class="text-muted small">Descripción</span>
+                        <div class="fw-semibold">@(partidaAbierta.CuentaNombre ?? "—")</div>
+                    </div>
+                    <div class="text-end">
+                        <span class="text-muted small">Disponible</span>
+                        <div class="fw-semibold">@partidaAbierta.Disponible.ToString("N2")</div>
+                    </div>
+                </div>
+            }
+
+            @if (cargandoKardex)
+            {
+                <div class="p-4 text-center text-muted">Cargando el historial...</div>
+            }
+            else if (movimientos.Count == 0)
+            {
+                <div class="p-4 text-center text-muted">
+                    Esta partida todavía no tiene movimientos registrados.
+                </div>
+            }
+            else
+            {
+                <div class="table-responsive kardex-tabla">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th>Fecha</th>
+                                <th>Movimiento</th>
+                                <th>Documento</th>
+                                <th class="text-end">Monto</th>
+                                <th class="text-end">Comprometido</th>
+                                <th class="text-end">Ejecutado</th>
+                                <th class="text-end">Disponible</th>
+                                <th>Usuario</th>
+                                <th>Observación</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var m in movimientos)
+                            {
+                                <tr class="@(m.Estado == 9 ? "movimiento-reversado" : string.Empty)">
+                                    <td>@m.Fecha.ToString("dd/MM/yyyy")</td>
+                                    <td>
+                                        @m.TipoMovimientoNombre
+                                        @if (m.Excedio)
+                                        {
+                                            <span class="badge-excedio" title="Pasó excediendo el disponible, en modo advertencia">Sobregiro</span>
+                                        }
+                                        @if (m.Estado == 9)
+                                        {
+                                            <span class="badge-no-controlada">Reversado</span>
+                                        }
+                                    </td>
+                                    <td>
+                                        <span class="text-muted small">@DocumentoLegible(m.DocumentoTipo)</span>
+                                        <span class="font-monospace">@(m.DocumentoNumero ?? m.DocumentoId.ToString())</span>
+                                        @if (!string.IsNullOrWhiteSpace(m.Proveedor))
+                                        {
+                                            <div class="text-muted small">@m.Proveedor</div>
+                                        }
+                                    </td>
+                                    <td class="text-end">@m.Monto.ToString("N2")</td>
+                                    <td class="text-end">@m.ComprometidoAnterior.ToString("N2") → <b>@m.ComprometidoPosterior.ToString("N2")</b></td>
+                                    <td class="text-end">@m.EjecutadoAnterior.ToString("N2") → <b>@m.EjecutadoPosterior.ToString("N2")</b></td>
+                                    <td class="text-end">@m.DisponibleAnterior.ToString("N2") → <b>@m.DisponiblePosterior.ToString("N2")</b></td>
+                                    <td class="small">@m.Usuario</td>
+                                    <td class="small text-muted">@m.Observacion</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+
+            <div class="d-flex justify-content-end mt-3">
+                <DxButton Text="Cerrar" RenderStyle="ButtonRenderStyle.Secondary"
+                          RenderStyleMode="ButtonRenderStyleMode.Outline"
+                          Click="@(() => kardexVisible = false)" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+<PdfPreviewPopup @ref="pdfPopup" />
+
+@code {
+    private DxGrid? grid;
+    private PdfPreviewPopup? pdfPopup;
+    private const string GridLayoutStorageKey = "presupuesto-ejecucion-grid-layout";
+
+    private List<PresupuestoEjecucionItemDto> datos = new();
+    private bool cargando = true;
+
+    private string? busqueda;
+    private bool soloPresupuestables;
+    private bool soloConMovimiento;
+
+    private bool kardexVisible;
+    private bool cargandoKardex;
+    private PresupuestoEjecucionItemDto? partidaAbierta;
+    private List<PresupuestoMovimientoDto> movimientos = new();
+
+    protected override async Task OnInitializedAsync() => await CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            datos = await EjecucionClient.ListarEjecucionAsync(new PresupuestoEjecucionFilterDto
+            {
+                Search = busqueda,
+                SoloPresupuestables = soloPresupuestables,
+                SoloConMovimiento = soloConMovimiento
+            });
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task AbrirKardexAsync(PresupuestoEjecucionItemDto item)
+    {
+        partidaAbierta = item;
+        movimientos = new List<PresupuestoMovimientoDto>();
+        kardexVisible = true;
+        cargandoKardex = true;
+
+        try
+        {
+            movimientos = await EjecucionClient.ListarMovimientosAsync(item.IdPresupuesto, item.ConCuentaCode);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargandoKardex = false;
+        }
+    }
+
+    /// <summary>Los códigos de documento no llegan al usuario: se traducen.</summary>
+    private static string DocumentoLegible(string documentoTipo) => documentoTipo switch
+    {
+        "ORDEN_COMPRA" => "O/C",
+        "FACTURA_COMPRA" => "Factura",
+        "ABONO_CXP" => "Pago",
+        "PRESUPUESTO" => "Presupuesto",
+        _ => documentoTipo
+    };
+
+    private static string ClaseUso(decimal pct) => pct switch
+    {
+        >= 100m => "uso-critico",
+        >= 85m => "uso-alto",
+        _ => "uso-normal"
+    };
+
+    /// <summary>
+    /// El PDF y el Excel salen del MISMO reporte de servidor, con los filtros que hay en pantalla,
+    /// no de lo que el grid tenga paginado. El PDF se ve embebido; el Excel se descarga.
+    /// </summary>
+    private PresupuestoEjecucionFilterDto FiltroActual() => new()
+    {
+        Search = busqueda,
+        SoloPresupuestables = soloPresupuestables,
+        SoloConMovimiento = soloConMovimiento
+    };
+
+    private void AbrirPdf()
+        => pdfPopup?.Mostrar(PresupuestoEjecucionClient.GetEjecucionPdfUrl(FiltroActual()),
+                             "Ejecución presupuestaria");
+
+    /// <summary>
+    /// Descarga el Excel con <c>siad.downloadFromUrl</c> (crea un &lt;a&gt; y lo pulsa), NO con
+    /// <c>window.open</c>: bajo InteractiveServer la llamada viaja por SignalR, pierde el gesto
+    /// del usuario y el bloqueador de pop-ups la descarta en silencio — el botón no hacía nada.
+    /// Es el mismo motivo por el que existe PdfPreviewPopup.
+    /// </summary>
+    private async Task AbrirExcel()
+        => await JS.InvokeVoidAsync("siad.downloadFromUrl",
+               PresupuestoEjecucionClient.GetEjecucionExcelUrl(FiltroActual()),
+               $"ejecucion_presupuestaria_{DateTime.Now:yyyyMMdd_HHmm}.xlsx");
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void Toast(string titulo, string texto, ToastRenderStyle estilo)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "PresupuestoEjecucionToast",
+            Title = titulo,
+            Text = texto,
+            RenderStyle = estilo
+        });
+}

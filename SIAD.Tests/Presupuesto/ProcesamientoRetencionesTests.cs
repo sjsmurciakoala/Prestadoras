@@ -71,7 +71,8 @@ public class ProcesamientoRetencionesTests : IntegrationTestBase
             httpAccessor,
             accountFormat,
             banTransacciones,
-            cheques);
+            cheques,
+            new PresupuestoCompromisoService(context, new TestCurrentCompanyService(CompanyId)));
     }
 
     // --- Siembra (misma forma que AbonosCompromisoTests.SeedCompromisoAsync) ---

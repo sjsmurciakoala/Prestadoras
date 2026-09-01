@@ -167,7 +167,41 @@ public static class EstadoOrdenCompra
     public const short Aprobada        = 2;
     public const short RecibidaParcial = 3;
     public const short Cerrada         = 4;
+
+    /// <summary>Rechazada desde Borrador. No llega a comprometer presupuesto.</summary>
+    public const short Rechazada       = 5;
+
+    /// <summary>
+    /// Cancelada con recepciones parciales: lo pedido y no recibido ya no se va a recibir.
+    /// Libera el saldo comprometido pendiente. Distinta de <see cref="Anulada"/>, que exige
+    /// que no se haya recibido nada.
+    /// </summary>
+    public const short Cancelada       = 6;
+
+    /// <summary>
+    /// En aprobación: la orden salió de Borrador (ya NO es editable) pero todavía le faltan
+    /// firmas de la escalera. Solo existe con la aprobación por niveles encendida
+    /// (<c>cfg_aprobacion_control.modo = 1</c>); con el control apagado, Borrador pasa
+    /// directo a <see cref="Aprobada"/> como siempre.
+    /// </summary>
+    public const short EnAprobacion    = 7;
+
     public const short Anulada         = 9;
+}
+
+// Nivel de la escalera de aprobación (alm_orden_compra_aprobacion.estado).
+// CHECK en BD: estado IN (1,2,3,4). El nivel N solo pasa a Pendiente cuando el N-1 quedó
+// Aprobado: la secuencia la impone el motor, no la base.
+public static class EstadoAprobacionNivel
+{
+    /// <summary>Todavía no le toca: espera a que firme el nivel anterior.</summary>
+    public const short Bloqueado = 1;
+
+    /// <summary>Firmable ahora por cualquiera de sus aprobadores.</summary>
+    public const short Pendiente = 2;
+
+    public const short Aprobado  = 3;
+    public const short Rechazado = 4;
 }
 
 // Recepción de compra (alm_compra_hdr.estado). CHECK en BD: estado IN (1,9).

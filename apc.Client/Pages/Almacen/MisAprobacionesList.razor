@@ -1,0 +1,288 @@
+@page "/almacen/mis-aprobaciones"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Aprobaciones
+@using apc.Client.Services
+@using apc.Client.Services.Almacen
+
+@inject OrdenesCompraClient OrdenesClient
+@inject NavigationManager Navigation
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Mis aprobaciones</PageTitle>
+
+<DxToastProvider Name="MisAprobacionesToast" MaxToastCount="4" StickToViewport="true" />
+
+<div class="page-container">
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Mis aprobaciones</h2>
+            <p class="page-subtitle">Órdenes de compra esperando su firma</p>
+        </div>
+        <DxButton Text="Actualizar" IconCssClass="bi bi-arrow-clockwise"
+                  RenderStyle="ButtonRenderStyle.Secondary" CssClass="btn-modern"
+                  Enabled="@(!isLoading)" Click="CargarAsync" />
+    </div>
+
+    @if (!string.IsNullOrEmpty(errorMessage))
+    {
+        <div class="alert alert-danger">@errorMessage</div>
+    }
+
+    <div class="modern-card position-relative">
+        <DxLoadingPanel Visible="isLoading" IsContentBlocked="true" Text="Cargando..." />
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@pendientes" KeyFieldName="DocumentoId" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <span class="text-muted small">
+                            Solo aparecen las órdenes que usted puede firmar ahora mismo.
+                        </span>
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser"
+                                  CssClass="ms-auto me-1" />
+
+                        <div class="text-muted small">
+                            Pendientes: <span class="fw-bold">@pendientes.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="@nameof(PendienteAprobacionDto.Numero)" Caption="No." Width="100px" />
+                    <DxGridDataColumn FieldName="@nameof(PendienteAprobacionDto.Fecha)" Caption="Fecha" Width="120px"
+                                      DisplayFormat="dd/MM/yyyy" />
+                    <DxGridDataColumn FieldName="@nameof(PendienteAprobacionDto.Contraparte)" Caption="Proveedor" MinWidth="180" />
+                    <DxGridDataColumn FieldName="@nameof(PendienteAprobacionDto.Total)" Caption="Total" Width="140px"
+                                      DisplayFormat="N2" TextAlignment="GridTextAlignment.Right" />
+                    <DxGridDataColumn FieldName="@nameof(PendienteAprobacionDto.DescripcionNivel)" Caption="Nivel" Width="160px">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PendienteAprobacionDto item)
+                            {
+                                <span class="badge-status badge-pendiente">@item.DescripcionNivel</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="@nameof(PendienteAprobacionDto.CreadoPor)" Caption="Creada por" Width="180px" />
+                    <DxGridDataColumn FieldName="@nameof(PendienteAprobacionDto.DiasEnEspera)" Caption="Días" Width="90px"
+                                      TextAlignment="GridTextAlignment.Center">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PendienteAprobacionDto item)
+                            {
+                                @* Lo que lleva detenida es el dato que hace útil la bandeja. *@
+                                <span class="@(item.DiasEnEspera >= 3 ? "text-danger fw-bold" : "text-muted")">
+                                    @item.DiasEnEspera
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="Acciones" Width="150px" TextAlignment="GridTextAlignment.Center" AllowSort="false">
+                        <CellDisplayTemplate Context="cell">
+                            @if (cell.DataItem is PendienteAprobacionDto item)
+                            {
+                                <div class="d-flex justify-content-center gap-2">
+                                    <button type="button" class="btn-icon btn-edit" title="Ver la orden"
+                                            @onclick="() => Abrir(item.DocumentoId)">
+                                        <i class="bi bi-eye"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-edit" title="Firmar"
+                                            @onclick="() => PedirConfirmacion(item, true)">
+                                        <i class="bi bi-pen"></i>
+                                    </button>
+                                    <button type="button" class="btn-icon btn-delete" title="Rechazar"
+                                            @onclick="() => PedirConfirmacion(item, false)">
+                                        <i class="bi bi-hand-thumbs-down"></i>
+                                    </button>
+                                </div>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        No tiene órdenes esperando su firma.
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+<DxPopup @bind-Visible="confirmVisible" Width="min(460px, 90vw)"
+         HeaderText="@(firmando ? "Firmar la orden" : "Rechazar la orden")" ShowFooter="false">
+    <BodyTemplate>
+        <div class="text-center p-3">
+            <div class="mb-3 @(firmando ? "text-success" : "text-danger")">
+                <i class="@(firmando ? "bi bi-pen" : "bi bi-hand-thumbs-down")" style="font-size: 3rem;"></i>
+            </div>
+            <p class="text-muted">
+                @(firmando
+                    ? "Firmará el nivel que le corresponde. Si es el último, la orden quedará aprobada."
+                    : "La orden quedará rechazada y no podrá aprobarse. Si había presupuesto reservado, se libera.")
+            </p>
+            @if (seleccionada is not null)
+            {
+                <div class="fw-semibold mb-3">
+                    O/C @seleccionada.Numero — @seleccionada.Contraparte
+                    <div class="text-muted small">@seleccionada.Total.ToString("N2")</div>
+                </div>
+            }
+
+            <div class="text-start">
+                <label class="form-label small fw-semibold">
+                    @(firmando ? "Comentario (opcional)" : "Motivo")
+                </label>
+                <DxMemo @bind-Text="comentario" Rows="2" CssClass="w-100"
+                        NullText="@(firmando ? "Una nota para el expediente" : "Por qué se rechaza")" />
+                @if (!firmando)
+                {
+                    @* Escribir el motivo sabiendo quién lo va a leer mejora lo que se escribe. *@
+                    <div class="form-text">Obligatorio: queda en la bitácora y se le envía al comprador.</div>
+                }
+            </div>
+
+            <div class="d-flex justify-content-end gap-2 mt-4">
+                <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                          Click="() => confirmVisible = false" />
+                <DxButton Text="@(firmando ? "Sí, firmar" : "Sí, rechazar")"
+                          RenderStyle="@(firmando ? ButtonRenderStyle.Success : ButtonRenderStyle.Danger)"
+                          Enabled="@(!procesando)" Click="EjecutarAsync" />
+            </div>
+        </div>
+    </BodyTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+
+    private const string GridLayoutStorageKey = "almacen-mis-aprobaciones-grid-layout";
+
+    private List<PendienteAprobacionDto> pendientes = new();
+    private bool isLoading;
+    private string? errorMessage;
+
+    private bool confirmVisible;
+    private bool firmando = true;
+    private bool procesando;
+    private string comentario = string.Empty;
+    private PendienteAprobacionDto? seleccionada;
+
+    protected override Task OnInitializedAsync() => CargarAsync();
+
+    private async Task CargarAsync()
+    {
+        try
+        {
+            isLoading = true;
+            errorMessage = null;
+            pendientes = await OrdenesClient.PendientesAprobacionAsync();
+        }
+        catch (Exception ex)
+        {
+            errorMessage = $"No se pudieron cargar las aprobaciones pendientes: {ex.Message}";
+        }
+        finally
+        {
+            isLoading = false;
+        }
+    }
+
+    private void Abrir(long id) => Navigation.NavigateTo($"/almacen/ordenes-compra/{id}/editar");
+
+    private void PedirConfirmacion(PendienteAprobacionDto item, bool esFirma)
+    {
+        seleccionada = item;
+        firmando = esFirma;
+        comentario = string.Empty;
+        confirmVisible = true;
+    }
+
+    private async Task EjecutarAsync()
+    {
+        if (seleccionada is null) { confirmVisible = false; return; }
+
+        var texto = comentario.Trim();
+        if (!firmando && string.IsNullOrWhiteSpace(texto))
+        {
+            Toast("Validación", "Indique el motivo del rechazo.", ToastRenderStyle.Warning);
+            return;
+        }
+
+        procesando = true;
+        try
+        {
+            var id = (int)seleccionada.DocumentoId;
+
+            if (firmando)
+            {
+                var resultado = await OrdenesClient.FirmarAsync(id, string.IsNullOrWhiteSpace(texto) ? null : texto);
+
+                if (resultado is null)
+                {
+                    Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+                }
+                else
+                {
+                    var mensaje = resultado.FlujoCompleto
+                        ? "Firmada la última aprobación: la orden quedó aprobada."
+                        : $"Nivel {resultado.NivelFirmado} firmado. Pasa a «{resultado.DescripcionPendiente}».";
+
+                    if (resultado.ComprometioPresupuesto)
+                    {
+                        mensaje += " Se reservó el presupuesto de la orden.";
+                    }
+
+                    Toast("Firmada", mensaje, ToastRenderStyle.Success);
+                }
+            }
+            else
+            {
+                await OrdenesClient.RechazarAsync(id, texto);
+                Toast("Rechazada", "La orden quedó rechazada.", ToastRenderStyle.Success);
+            }
+
+            await CargarAsync();
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            procesando = false;
+            confirmVisible = false;
+            seleccionada = null;
+        }
+    }
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void Toast(string titulo, string texto, ToastRenderStyle estilo)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "MisAprobacionesToast",
+            Title = titulo,
+            Text = texto,
+            RenderStyle = estilo
+        });
+}

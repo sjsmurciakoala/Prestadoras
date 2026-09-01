@@ -1,0 +1,582 @@
+@page "/configuracion/aprobaciones"
+@attribute [Authorize]
+
+@using DevExpress.Blazor
+@using SIAD.Core.Constants
+@using SIAD.Core.DTOs.Aprobaciones
+@using apc.Client.Services
+@using apc.Client.Services.Configuracion
+
+@inject AprobacionesConfigClient Client
+@inject IToastNotificationService ToastService
+@inject IJSRuntime JS
+
+<PageTitle>SIAD - Aprobaciones</PageTitle>
+
+<DxToastProvider Name="AprobacionesConfigToast" MaxToastCount="4" StickToViewport="true" />
+
+<div class="page-container">
+
+    <div class="header-section">
+        <div>
+            <h2 class="page-title">Aprobaciones</h2>
+            <p class="page-subtitle">Quién autoriza cada documento y a partir de qué monto</p>
+        </div>
+        <DxButton Text="Nuevo nivel" IconCssClass="bi bi-plus-lg"
+                  RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                  Enabled="@(!cargando)" Click="NuevoNivel" />
+    </div>
+
+    <div class="modern-card position-relative mb-3">
+        <DxLoadingPanel Visible="cargando" IsContentBlocked="true" Text="Cargando..." />
+
+        <div class="control-fila">
+            <div class="control-campo">
+                <label class="form-label small fw-semibold">Documento</label>
+                <DxComboBox Data="@documentos" @bind-Value="documentoSeleccionado"
+                            TextFieldName="@nameof(AprobacionesConfigClient.DocumentoAprobacionOpcion.Descripcion)"
+                            ValueFieldName="@nameof(AprobacionesConfigClient.DocumentoAprobacionOpcion.Codigo)"
+                            CssClass="w-100" />
+                <div class="form-text">
+                    La orden de compra y la requisición ya están enganchadas al motor; la factura de compra
+                    y el pago a proveedor quedan listos para cuando lo estén.
+                </div>
+            </div>
+
+            <div class="control-campo">
+                <label class="form-label small fw-semibold">Estado del control</label>
+                <DxComboBox Data="@modos" @bind-Value="modoSeleccionado"
+                            TextFieldName="@nameof(ModoOpcion.Etiqueta)"
+                            ValueFieldName="@nameof(ModoOpcion.Codigo)"
+                            CssClass="w-100" />
+                <div class="form-text">
+                    @(modoSeleccionado == ModoAprobacion.Encendido
+                        ? "El documento pasa por la escalera de firmas antes de aprobarse."
+                        : "El documento se aprueba de un solo paso, como hasta ahora.")
+                </div>
+            </div>
+
+            <div class="control-campo">
+                <DxCheckBox @bind-Checked="permiteAutoaprobacion">
+                    Permitir que el creador firme su propio documento
+                </DxCheckBox>
+                <div class="form-text">
+                    Desmarcado (recomendado), quien captura el documento no puede aprobarlo, aunque sea aprobador del nivel.
+                </div>
+            </div>
+
+            <div class="control-acciones">
+                <DxButton Text="Guardar" IconCssClass="bi bi-check-lg"
+                          RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
+                          Enabled="@(!guardando)" Click="GuardarControl" />
+            </div>
+        </div>
+
+        @if (config?.Advertencias.Count > 0)
+        {
+            <div class="aviso-config">
+                <i class="bi bi-exclamation-triangle"></i>
+                <div>
+                    @foreach (var advertencia in config.Advertencias)
+                    {
+                        <div>@advertencia</div>
+                    }
+                </div>
+            </div>
+        }
+    </div>
+
+    <div class="modern-card position-relative">
+        <div class="grid-wrapper">
+            <DxGrid @ref="grid" Data="@niveles" KeyFieldName="Id" PageSize="15"
+                    PageSizeSelectorVisible="true"
+                    PageSizeSelectorItems="new int[] { 5, 10, 15, 25, 50, 100 }"
+                    PagerPosition="GridPagerPosition.Bottom"
+                    ColumnResizeMode="GridColumnResizeMode.ColumnsContainer"
+                    ShowGroupPanel="false" CssClass="grid-solicitudes"
+                    LayoutAutoSaving="OnLayoutAutoSaving"
+                    LayoutAutoLoading="OnLayoutAutoLoading">
+
+                <ToolbarTemplate>
+                    <div class="d-flex flex-wrap gap-2 align-items-center w-100">
+                        <span class="text-muted small">
+                            Se exigen todos los niveles cuyo monto sea menor o igual al total del documento.
+                        </span>
+
+                        <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
+                                  RenderStyle="ButtonRenderStyle.Secondary" Click="MostrarColumnChooser"
+                                  CssClass="ms-auto me-1" />
+
+                        <div class="text-muted small">
+                            Niveles: <span class="fw-bold">@niveles.Count.ToString("N0")</span>
+                        </div>
+                    </div>
+                </ToolbarTemplate>
+
+                <Columns>
+                    <DxGridDataColumn FieldName="Nivel" Caption="Nivel" Width="90px" />
+                    <DxGridDataColumn FieldName="Descripcion" Caption="Descripción" MinWidth="180" />
+                    <DxGridDataColumn FieldName="MontoDesde" Caption="Desde" Width="140px"
+                                      DisplayFormat="N2" />
+                    <DxGridDataColumn FieldName="Id" Caption="Aprobadores" Width="220px" AllowSort="false">
+                        <CellDisplayTemplate>
+                            @{
+                                var fila = (AprobacionNivelConfigDto)context.DataItem;
+                            }
+                            @if (fila.Aprobadores.Count == 0)
+                            {
+                                <span class="badge-status badge-pendiente">Sin aprobadores</span>
+                            }
+                            else
+                            {
+                                <span class="text-truncate d-inline-block" style="max-width: 190px;"
+                                      title="@DescribirAprobadores(fila)">
+                                    @DescribirAprobadores(fila)
+                                </span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn FieldName="Activo" Caption="Activo" Width="90px">
+                        <CellDisplayTemplate>
+                            @{
+                                var fila = (AprobacionNivelConfigDto)context.DataItem;
+                            }
+                            <span class="badge-status @(fila.Activo ? "badge-aprobada" : "badge-anulada")">
+                                @(fila.Activo ? "Sí" : "No")
+                            </span>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                    <DxGridDataColumn Caption="" Width="140px" AllowSort="false">
+                        <CellDisplayTemplate>
+                            @{
+                                var fila = (AprobacionNivelConfigDto)context.DataItem;
+                            }
+                            <button type="button" class="btn-icon btn-edit" title="Aprobadores"
+                                    @onclick="() => AbrirAprobadores(fila)">
+                                <i class="bi bi-people"></i>
+                            </button>
+                            <button type="button" class="btn-icon btn-edit" title="Editar nivel"
+                                    @onclick="() => EditarNivel(fila)">
+                                <i class="bi bi-pencil"></i>
+                            </button>
+                            <button type="button" class="btn-icon btn-delete" title="Eliminar nivel"
+                                    @onclick="() => ConfirmarEliminar(fila)">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
+                </Columns>
+
+                <EmptyDataAreaTemplate>
+                    <div class="p-4 text-center text-muted">
+                        Todavía no hay niveles. Con el control encendido y sin niveles, ningún documento
+                        podrá enviarse a aprobación.
+                    </div>
+                </EmptyDataAreaTemplate>
+            </DxGrid>
+        </div>
+    </div>
+</div>
+
+@* ── Popup: alta/edición de nivel ────────────────────────────────────────── *@
+<DxPopup @bind-Visible="popupNivelVisible" HeaderText="@(nivelEdit.Id > 0 ? "Editar nivel" : "Nuevo nivel")"
+         Width="480px" ShowFooter="true" CloseOnEscape="true">
+    <BodyTemplate>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">Nivel</label>
+            <DxSpinEdit T="short" @bind-Value="nivelEdit.Nivel"
+                        MinValue="1" MaxValue="9" CssClass="w-100" />
+            <div class="form-text">Orden de firma. El nivel 2 no se habilita hasta que firma el 1.</div>
+        </div>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">Descripción</label>
+            <DxTextBox @bind-Text="nivelEdit.Descripcion" NullText="Jefatura, Gerencia…" CssClass="w-100" />
+        </div>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">Monto desde</label>
+            <DxSpinEdit T="decimal" @bind-Value="nivelEdit.MontoDesde"
+                        MinValue="0" DisplayFormat="N2" CssClass="w-100" />
+            <div class="form-text">
+                Se exige este nivel cuando el total del documento alcanza este monto. El primer nivel
+                normalmente va en 0 para que toda compra pase por él.
+            </div>
+        </div>
+        <DxCheckBox @bind-Checked="nivelEdit.Activo">Activo</DxCheckBox>
+    </BodyTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="() => popupNivelVisible = false" />
+        <DxButton Text="Guardar" RenderStyle="ButtonRenderStyle.Primary"
+                  IconCssClass="bi bi-check-lg" Enabled="@(!guardando)" Click="GuardarNivel" />
+    </FooterContentTemplate>
+</DxPopup>
+
+@* ── Popup: aprobadores de un nivel ──────────────────────────────────────── *@
+<DxPopup @bind-Visible="popupAprobadoresVisible" HeaderText="@($"Aprobadores · {nivelAprobadores?.Descripcion}")"
+         Width="620px" ShowFooter="true" CloseOnEscape="true">
+    <BodyTemplate>
+        <div class="aprobador-alta">
+            <div>
+                <label class="form-label small fw-semibold">Autorizar por</label>
+                <DxComboBox Data="@tiposAprobador" @bind-Value="tipoNuevo"
+                            TextFieldName="@nameof(TipoOpcion.Etiqueta)"
+                            ValueFieldName="@nameof(TipoOpcion.Codigo)"
+                            CssClass="w-100" />
+            </div>
+            <div class="flex-grow-1">
+                <label class="form-label small fw-semibold">
+                    @(tipoNuevo == TipoAprobador.Usuario ? "Usuario" : "Rol")
+                </label>
+                @if (tipoNuevo == TipoAprobador.Usuario)
+                {
+                    <DxComboBox Data="@usuarios" @bind-Value="valorNuevo"
+                                TextFieldName="@nameof(AprobadorUsuarioLookupDto.UserName)"
+                                ValueFieldName="@nameof(AprobadorUsuarioLookupDto.UserName)"
+                                FilteringMode="DataGridFilteringMode.Contains"
+                                NullText="Elija un usuario…" CssClass="w-100" />
+                }
+                else
+                {
+                    <DxComboBox Data="@roles" @bind-Value="valorNuevo"
+                                NullText="Elija un rol…" CssClass="w-100" />
+                }
+            </div>
+            <div class="align-self-end">
+                <DxButton Text="Agregar" IconCssClass="bi bi-plus-lg"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Enabled="@(!guardando && !string.IsNullOrWhiteSpace(valorNuevo))"
+                          Click="AgregarAprobador" />
+            </div>
+        </div>
+
+        @if (nivelAprobadores?.Aprobadores.Count > 0)
+        {
+            <ul class="lista-aprobadores">
+                @foreach (var aprobador in nivelAprobadores.Aprobadores)
+                {
+                    <li>
+                        <span class="badge-status badge-borrador">@aprobador.TipoDescripcion</span>
+                        <span class="flex-grow-1">@aprobador.Valor</span>
+                        <button type="button" class="btn-icon btn-delete" title="Quitar"
+                                @onclick="() => QuitarAprobador(aprobador)">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </li>
+                }
+            </ul>
+        }
+        else
+        {
+            <div class="p-3 text-center text-muted">
+                Este nivel no tiene aprobadores: ningún documento que lo exija podrá enviarse a aprobación.
+            </div>
+        }
+
+        <div class="form-text mt-2">
+            Dentro de un nivel firma <strong>cualquiera</strong> de sus aprobadores. Conviene dejar al
+            menos dos, para que una ausencia no detenga las compras.
+        </div>
+    </BodyTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Cerrar" RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="CerrarAprobadores" />
+    </FooterContentTemplate>
+</DxPopup>
+
+@* ── Popup: confirmación de borrado ──────────────────────────────────────── *@
+<DxPopup @bind-Visible="popupEliminarVisible" HeaderText="Eliminar nivel" Width="440px"
+         ShowFooter="true" CloseOnEscape="true">
+    <BodyTemplate>
+        <div class="mb-3 text-warning">
+            <i class="bi bi-exclamation-triangle" style="font-size: 3rem;"></i>
+        </div>
+        <p>
+            Se eliminará el nivel <strong>@nivelAEliminar?.Descripcion</strong> y sus aprobadores.
+        </p>
+        <p class="text-muted small mb-0">
+            Los documentos que ya están circulando no se ven afectados: conservan los niveles con los
+            que salieron.
+        </p>
+    </BodyTemplate>
+    <FooterContentTemplate>
+        <DxButton Text="Cancelar" RenderStyle="ButtonRenderStyle.Secondary"
+                  Click="() => popupEliminarVisible = false" />
+        <DxButton Text="Sí, eliminar" RenderStyle="ButtonRenderStyle.Danger"
+                  IconCssClass="bi bi-trash" Enabled="@(!guardando)" Click="EliminarNivel" />
+    </FooterContentTemplate>
+</DxPopup>
+
+@code {
+    private DxGrid? grid;
+
+    private const string GridLayoutStorageKey = "configuracion-aprobaciones-niveles-grid-layout";
+
+    private bool cargando = true;
+    private bool guardando;
+
+    private List<AprobacionesConfigClient.DocumentoAprobacionOpcion> documentos = new();
+    private string documentoSeleccionado = DocumentosAprobacion.OrdenCompra;
+
+    private AprobacionConfiguracionDto? config;
+    private List<AprobacionNivelConfigDto> niveles = new();
+
+    private short modoSeleccionado = ModoAprobacion.Apagado;
+    private bool permiteAutoaprobacion;
+
+    private readonly ModoOpcion[] modos =
+    {
+        new(ModoAprobacion.Apagado, "Apagado"),
+        new(ModoAprobacion.Encendido, "Encendido")
+    };
+
+    private readonly TipoOpcion[] tiposAprobador =
+    {
+        new(TipoAprobador.Usuario, "Usuario"),
+        new(TipoAprobador.Rol, "Rol")
+    };
+
+    // popups
+    private bool popupNivelVisible;
+    private bool popupAprobadoresVisible;
+    private bool popupEliminarVisible;
+
+    private AprobacionNivelConfigDto nivelEdit = new();
+    private AprobacionNivelConfigDto? nivelAprobadores;
+    private AprobacionNivelConfigDto? nivelAEliminar;
+
+    private List<AprobadorUsuarioLookupDto> usuarios = new();
+    private List<string> roles = new();
+    private short tipoNuevo = TipoAprobador.Usuario;
+    private string? valorNuevo;
+
+    protected override async Task OnInitializedAsync()
+    {
+        documentos = await Client.ListarDocumentosAsync();
+        await CargarAsync();
+    }
+
+    private async Task CargarAsync()
+    {
+        cargando = true;
+        try
+        {
+            config = await Client.ObtenerAsync(documentoSeleccionado);
+            niveles = config.Niveles;
+            modoSeleccionado = config.Modo;
+            permiteAutoaprobacion = config.PermiteAutoaprobacion;
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            cargando = false;
+        }
+    }
+
+    private async Task GuardarControl()
+    {
+        guardando = true;
+        try
+        {
+            config = await Client.GuardarControlAsync(documentoSeleccionado, modoSeleccionado, permiteAutoaprobacion);
+            niveles = config.Niveles;
+            Toast("Guardado", "La configuración quedó actualizada.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+            // Lo mostrado dejaría de reflejar lo guardado.
+            await CargarAsync();
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void NuevoNivel()
+    {
+        // Sugiere el siguiente número libre para no chocar con un nivel existente.
+        short siguiente = 1;
+        foreach (var nivel in niveles)
+        {
+            if (nivel.Nivel >= siguiente) siguiente = (short)(nivel.Nivel + 1);
+        }
+
+        nivelEdit = new AprobacionNivelConfigDto { Nivel = siguiente > 9 ? (short)9 : siguiente, Activo = true };
+        popupNivelVisible = true;
+    }
+
+    private void EditarNivel(AprobacionNivelConfigDto fila)
+    {
+        nivelEdit = new AprobacionNivelConfigDto
+        {
+            Id = fila.Id,
+            Nivel = fila.Nivel,
+            Descripcion = fila.Descripcion,
+            MontoDesde = fila.MontoDesde,
+            Activo = fila.Activo
+        };
+        popupNivelVisible = true;
+    }
+
+    private async Task GuardarNivel()
+    {
+        guardando = true;
+        try
+        {
+            await Client.GuardarNivelAsync(documentoSeleccionado, nivelEdit);
+            popupNivelVisible = false;
+            await CargarAsync();
+            Toast("Guardado", "El nivel quedó guardado.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private void ConfirmarEliminar(AprobacionNivelConfigDto fila)
+    {
+        nivelAEliminar = fila;
+        popupEliminarVisible = true;
+    }
+
+    private async Task EliminarNivel()
+    {
+        if (nivelAEliminar is null) return;
+
+        guardando = true;
+        try
+        {
+            await Client.EliminarNivelAsync(nivelAEliminar.Id);
+            popupEliminarVisible = false;
+            await CargarAsync();
+            Toast("Eliminado", "El nivel se eliminó.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private async Task AbrirAprobadores(AprobacionNivelConfigDto fila)
+    {
+        nivelAprobadores = fila;
+        valorNuevo = null;
+        tipoNuevo = TipoAprobador.Usuario;
+        popupAprobadoresVisible = true;
+
+        // Los catálogos se piden una sola vez por visita a la pantalla.
+        if (usuarios.Count == 0) usuarios = await Client.ListarUsuariosAsync();
+        if (roles.Count == 0) roles = await Client.ListarRolesAsync();
+    }
+
+    private async Task AgregarAprobador()
+    {
+        if (nivelAprobadores is null || string.IsNullOrWhiteSpace(valorNuevo)) return;
+
+        guardando = true;
+        try
+        {
+            await Client.AgregarAprobadorAsync(nivelAprobadores.Id, new AprobacionAprobadorConfigDto
+            {
+                NivelId = nivelAprobadores.Id,
+                Tipo = tipoNuevo,
+                Valor = valorNuevo!
+            });
+
+            valorNuevo = null;
+            await RecargarConservandoPopupAsync();
+            Toast("Agregado", "El aprobador quedó asignado al nivel.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    private async Task QuitarAprobador(AprobacionAprobadorConfigDto aprobador)
+    {
+        guardando = true;
+        try
+        {
+            await Client.EliminarAprobadorAsync(aprobador.Id);
+            await RecargarConservandoPopupAsync();
+            Toast("Quitado", "El aprobador ya no firma este nivel.", ToastRenderStyle.Success);
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    /// <summary>
+    /// Recarga desde el servidor sin cerrar el popup: hay que volver a apuntar a la instancia
+    /// nueva del nivel, o la lista seguiría mostrando la copia vieja.
+    /// </summary>
+    private async Task RecargarConservandoPopupAsync()
+    {
+        var idAbierto = nivelAprobadores?.Id ?? 0;
+        await CargarAsync();
+
+        foreach (var nivel in niveles)
+        {
+            if (nivel.Id == idAbierto) { nivelAprobadores = nivel; return; }
+        }
+
+        // El nivel desapareció (lo borró otra sesión): cerrar el popup en vez de dejarlo vacío.
+        CerrarAprobadores();
+    }
+
+    private void CerrarAprobadores()
+    {
+        popupAprobadoresVisible = false;
+        nivelAprobadores = null;
+    }
+
+    private static string DescribirAprobadores(AprobacionNivelConfigDto nivel)
+    {
+        var partes = new List<string>();
+        foreach (var aprobador in nivel.Aprobadores) partes.Add(aprobador.Valor);
+        return string.Join(", ", partes);
+    }
+
+    private Task OnLayoutAutoSaving(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.SaveAsync(JS, GridLayoutStorageKey, e);
+
+    private Task OnLayoutAutoLoading(GridPersistentLayoutEventArgs e)
+        => GridLayoutStorage.LoadAsync(JS, GridLayoutStorageKey, e);
+
+    private void MostrarColumnChooser() => grid?.ShowColumnChooser();
+
+    private void Toast(string titulo, string texto, ToastRenderStyle estilo)
+        => ToastService.ShowToast(new ToastOptions
+        {
+            ProviderName = "AprobacionesConfigToast",
+            Title = titulo,
+            Text = texto,
+            RenderStyle = estilo
+        });
+
+    private sealed record ModoOpcion(short Codigo, string Etiqueta);
+    private sealed record TipoOpcion(short Codigo, string Etiqueta);
+}

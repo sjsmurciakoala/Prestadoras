@@ -187,7 +187,38 @@ public static class OrdenCompraEstados
         EstadoOrdenCompra.Aprobada        => "Aprobada",
         EstadoOrdenCompra.RecibidaParcial => "Recibida parcial",
         EstadoOrdenCompra.Cerrada         => "Cerrada",
+        EstadoOrdenCompra.Rechazada       => "Rechazada",
+        EstadoOrdenCompra.Cancelada       => "Cancelada",
+        EstadoOrdenCompra.EnAprobacion    => "En aprobación",
         EstadoOrdenCompra.Anulada         => "Anulada",
         _ => "—"
     };
+}
+
+/// <summary>
+/// Qué pasó al firmar un nivel de la escalera de aprobación de una orden.
+/// <para>
+/// Lo consume la pantalla para saber si mostrar «Firmado el nivel 1 de 3, pasa a Gerencia» o
+/// «Orden aprobada», y para enseñar los avisos presupuestarios de la reserva.
+/// </para>
+/// </summary>
+public sealed class OrdenCompraAprobacionResultadoDto
+{
+    public short NivelFirmado { get; set; }
+    public string DescripcionNivel { get; set; } = string.Empty;
+
+    /// <summary>No quedan niveles: la orden pasó a Aprobada.</summary>
+    public bool FlujoCompleto { get; set; }
+
+    public short? NivelPendiente { get; set; }
+    public string? DescripcionPendiente { get; set; }
+
+    /// <summary>
+    /// Si esta firma fue la que reservó presupuesto (D2: se compromete en la PRIMERA firma).
+    /// </summary>
+    public bool ComprometioPresupuesto { get; set; }
+
+    /// <summary>Avisos del compromiso en modo Advertencia. Vacío si no aplicó o si entró holgado.</summary>
+    public IReadOnlyList<Presupuesto.PresupuestoAvisoDto> Avisos { get; set; }
+        = Array.Empty<Presupuesto.PresupuestoAvisoDto>();
 }

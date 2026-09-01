@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,6 +8,7 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Services.Aprobaciones;
 using SIAD.Services.Almacen;
 using SIAD.Data;
 using SIAD.Tests.Infrastructure;
@@ -36,7 +37,8 @@ public class RequisicionFlujoTests : IntegrationTestBase, IAsyncLifetime
             var company = new TestCurrentCompanyService(CompanyId);
             _context = new SiadDbContext(options, company);
             _context.Database.UseTransaction(Transaction);
-            _service = new RequisicionDocumentoService(_context, company);
+            _service = new RequisicionDocumentoService(_context, company,
+                new AprobacionService(_context, company, new TestCurrentUserService()));
         }
     }
 

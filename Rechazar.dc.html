@@ -1,0 +1,70 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+  <style>
+    body { margin: 0; font-family: 'Inter', Helvetica, Arial, sans-serif; }
+    a { color: #0d6efd; } a:hover { color: #0a58ca; }
+  </style>
+</helmet>
+
+<div style="width: 100%; height: 100%; background: #f8f9fa; display: flex; align-items: center; justify-content: center; padding: 40px; box-sizing: border-box;">
+
+  <div style="width: 460px; background: #ffffff; border-radius: 6px; box-shadow: 0 12px 40px rgba(0,0,0,0.18); overflow: hidden;">
+
+    <div style="display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 16px; background: #f8f9fa; border-bottom: 1px solid #dee2e6;">
+      <div style="font-size: 15px; font-weight: 600; color: #2c3e50;">Rechazar la orden</div>
+      <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="#6c757d" stroke-width="1.6" stroke-linecap="round">
+        <path d="M3.5 3.5l9 9M12.5 3.5l-9 9"></path>
+      </svg>
+    </div>
+
+    <div style="padding: 20px 16px;">
+
+      <div style="display: flex; justify-content: center; margin-bottom: 12px;">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#dc3545" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="12" cy="12" r="9.4"></circle>
+          <path d="M8.4 8.4l7.2 7.2M15.6 8.4l-7.2 7.2"></path>
+        </svg>
+      </div>
+
+      <p style="margin: 0 0 16px; font-size: 13px; color: #6c757d; line-height: 1.5; text-align: center;">
+        La orden quedará rechazada y no podrá aprobarse. Si había presupuesto reservado, se libera.
+      </p>
+
+      <div style="text-align: center; margin-bottom: 20px;">
+        <div style="font-size: 14px; font-weight: 600; color: #212529;">O/C 00001 — AGENCIA LA MUNDIAL</div>
+        <div style="font-size: 13px; color: #6c757d; font-variant-numeric: tabular-nums; margin-top: 2px;">805.92</div>
+      </div>
+
+      <label style="display: block; font-size: 13px; font-weight: 600; color: #212529; margin-bottom: 4px;">Motivo</label>
+      <div style="min-height: 60px; padding: 8px 10px; border: 1px solid #ced4da; border-radius: 6px; background: #fff;">
+        <span style="font-size: 14px; color: #adb5bd;">Por qué se rechaza</span>
+      </div>
+      <div style="font-size: 12px; color: #6c757d; margin-top: 4px; line-height: 1.4;">
+        Obligatorio: queda en la bitácora y se le envía al comprador.
+      </div>
+
+      <div style="display: flex; justify-content: flex-end; gap: 8px; margin-top: 24px;">
+        <button style="font-family: inherit; font-size: 13px; font-weight: 500; color: #212529; background: #f8f9fa; border: 1px solid #ced4da; border-radius: 6px; padding: 6px 14px; cursor: pointer;">Cancelar</button>
+        <button style="font-family: inherit; display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #ffffff; background: #dc3545; border: 1px solid #dc3545; border-radius: 6px; padding: 6px 14px; cursor: pointer;">
+          <svg width="13" height="13" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+            <path d="M4 4l8 8M12 4l-8 8"></path>
+          </svg>
+          Sí, rechazar
+        </button>
+      </div>
+
+    </div>
+
+  </div>
+</div>
+</x-dc>
+</body>
+</html>

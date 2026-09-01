@@ -14,6 +14,7 @@ using SIAD.Core.Utilities;
 using SIAD.Data;
 using SIAD.Services.Bancos;
 using SIAD.Services.Contabilidad;
+using SIAD.Services.Presupuesto;
 
 namespace SIAD.Services.Almacen;
 
@@ -480,7 +481,7 @@ public sealed class CompraCxpService : ICompraCxpService
                 }
             }
 
-            await InsertarAbonoAsync(connection, tx, companyId, cxpId, numeroAbono, fecha, dto.Monto, retenido,
+            var abonoId = await InsertarAbonoAsync(connection, tx, companyId, cxpId, numeroAbono, fecha, dto.Monto, retenido,
                 metodo, dto.BancoCuentaId, numeroCheque?.ToString("0"), banKardexId, dto.Observaciones, usuario, ct);
 
             var nuevoSaldo = cxp.Saldo - dto.Monto;
@@ -503,6 +504,12 @@ public sealed class CompraCxpService : ICompraCxpService
                 await PersistRetencionesCompraAsync(connection, tx, companyId, cxpId, numeroAbono, fecha,
                     cxp.CodProveedor, dto.Monto, partidaId, retenciones, usuario, ct);
             }
+
+            // F3 del control presupuestario: el pago suma a valor_pagado (informativo, NO toca el
+            // disponible). Va en la transacción del abono. No-op si el control está apagado.
+            await PresupuestoPagoSql.RegistrarAsync(
+                connection, tx, companyId, abonoId, numeroAbono.ToString("00000"),
+                cxp.CompraHdrId, fecha, dto.Monto, usuario, ct);
 
             if (ownsTx) await tx.CommitAsync(ct);
 
@@ -605,6 +612,10 @@ public sealed class CompraCxpService : ICompraCxpService
             var estado = nuevoSaldo >= cxp.Monto - 0.01m ? EstadoCompraCxp.Pendiente : EstadoCompraCxp.Parcial;
             await ActualizarCxpAsync(connection, tx, companyId, cxpId, nuevoSaldo, estado, usuario, ct);
 
+            // F3: quita del kardex presupuestario lo que este abono habia sumado a valor_pagado.
+            await PresupuestoPagoSql.RevertirAsync(
+                connection, tx, companyId, abono.Id, motivoNorm, usuario, ct);
+
             if (ownsTx) await tx.CommitAsync(ct);
             return true;
         }
@@ -621,7 +632,7 @@ public sealed class CompraCxpService : ICompraCxpService
 
     // ── Helpers de datos (SQL directo, en la transacción del pago) ───────────────
 
-    private sealed record CxpLock(decimal Saldo, short EstadoId, decimal Monto, string CodProveedor, string? Proveedor, string? NumeroFacturaSar, int Numero);
+    private sealed record CxpLock(decimal Saldo, short EstadoId, decimal Monto, string CodProveedor, string? Proveedor, string? NumeroFacturaSar, int Numero, int CompraHdrId);
 
     private async Task<CxpLock?> BloquearCxpAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, CancellationToken ct)
     {
@@ -629,7 +640,7 @@ public sealed class CompraCxpService : ICompraCxpService
         cmd.Transaction = tx;
         cmd.CommandText = @"
 SELECT c.saldo, c.estado_id, c.monto, c.cod_proveedor, c.proveedor, c.numero_factura_sar,
-       COALESCE(h.numero, 0)
+       COALESCE(h.numero, 0), c.compra_hdr_id
   FROM public.alm_compra_cxp c
   LEFT JOIN public.alm_compra_hdr h ON h.company_id = c.company_id AND h.id = c.compra_hdr_id
  WHERE c.company_id = @c AND c.id = @id
@@ -641,7 +652,8 @@ SELECT c.saldo, c.estado_id, c.monto, c.cod_proveedor, c.proveedor, c.numero_fac
         if (!await r.ReadAsync(ct)) return null;
         return new CxpLock(
             r.GetDecimal(0), r.GetInt16(1), r.GetDecimal(2), r.GetString(3),
-            r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5), r.GetInt32(6));
+            r.IsDBNull(4) ? null : r.GetString(4), r.IsDBNull(5) ? null : r.GetString(5), r.GetInt32(6),
+            r.GetInt32(7));
     }
 
     private static async Task<int> SiguienteNumeroAbonoAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, CancellationToken ct)
@@ -713,7 +725,11 @@ SELECT c.saldo, c.estado_id, c.monto, c.cod_proveedor, c.proveedor, c.numero_fac
         return kardexId;
     }
 
-    private static async Task InsertarAbonoAsync(
+    /// <summary>
+    /// Inserta el abono y devuelve su id. El id importa: es el documento con el que se identifica el
+    /// movimiento presupuestario del pago, y de el depende su idempotencia.
+    /// </summary>
+    private static async Task<long> InsertarAbonoAsync(
         NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, int numeroAbono, DateOnly fecha,
         decimal monto, decimal retenido, string metodo, long? bancoCuentaId, string? numCheque, long? banKardexId,
         string? observaciones, string usuario, CancellationToken ct)
@@ -724,7 +740,8 @@ SELECT c.saldo, c.estado_id, c.monto, c.cod_proveedor, c.proveedor, c.numero_fac
 INSERT INTO public.alm_compra_cxp_abono
     (company_id, cxp_id, numero_abono, fecha, monto, retenido, metodo_pago, banco_cuenta_id, num_cheque,
      ban_kardex_id, estado, observaciones, usuariocreacion)
-VALUES (@c, @cxp, @num, @fecha, @monto, @retenido, @metodo, @banco, @cheque, @kardex, 'V', @obs, @user)";
+VALUES (@c, @cxp, @num, @fecha, @monto, @retenido, @metodo, @banco, @cheque, @kardex, 'V', @obs, @user)
+RETURNING id";
         cmd.Parameters.AddWithValue("c", NpgsqlDbType.Bigint, companyId);
         cmd.Parameters.AddWithValue("cxp", NpgsqlDbType.Integer, cxpId);
         cmd.Parameters.AddWithValue("num", NpgsqlDbType.Integer, numeroAbono);
@@ -737,7 +754,7 @@ VALUES (@c, @cxp, @num, @fecha, @monto, @retenido, @metodo, @banco, @cheque, @ka
         cmd.Parameters.Add(new NpgsqlParameter("kardex", NpgsqlDbType.Bigint) { Value = banKardexId.HasValue ? banKardexId.Value : DBNull.Value });
         cmd.Parameters.Add(new NpgsqlParameter("obs", NpgsqlDbType.Varchar) { Value = (object?)observaciones ?? DBNull.Value });
         cmd.Parameters.AddWithValue("user", NpgsqlDbType.Varchar, usuario);
-        await cmd.ExecuteNonQueryAsync(ct);
+        return (long)(await cmd.ExecuteScalarAsync(ct))!;
     }
 
     private static async Task ActualizarCxpAsync(
@@ -758,14 +775,14 @@ UPDATE public.alm_compra_cxp
         await cmd.ExecuteNonQueryAsync(ct);
     }
 
-    private sealed record AbonoLock(string Estado, decimal Monto, long? BancoCuentaId, long? BanKardexId, long? PartidaId);
+    private sealed record AbonoLock(long Id, string Estado, decimal Monto, long? BancoCuentaId, long? BanKardexId, long? PartidaId);
 
     private static async Task<AbonoLock?> BloquearAbonoAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, int numeroAbono, CancellationToken ct)
     {
         await using var cmd = cn.CreateCommand();
         cmd.Transaction = tx;
         cmd.CommandText = @"
-SELECT estado, monto, banco_cuenta_id, ban_kardex_id, partida_id
+SELECT id, estado, monto, banco_cuenta_id, ban_kardex_id, partida_id
   FROM public.alm_compra_cxp_abono
  WHERE company_id = @c AND cxp_id = @cxp AND numero_abono = @num
  FOR UPDATE";
@@ -775,9 +792,9 @@ SELECT estado, monto, banco_cuenta_id, ban_kardex_id, partida_id
         await using var r = await cmd.ExecuteReaderAsync(ct);
         if (!await r.ReadAsync(ct)) return null;
         return new AbonoLock(
-            r.GetString(0), r.GetDecimal(1),
-            r.IsDBNull(2) ? null : r.GetInt64(2), r.IsDBNull(3) ? null : r.GetInt64(3),
-            r.IsDBNull(4) ? null : r.GetInt64(4));
+            r.GetInt64(0), r.GetString(1), r.GetDecimal(2),
+            r.IsDBNull(3) ? null : r.GetInt64(3), r.IsDBNull(4) ? null : r.GetInt64(4),
+            r.IsDBNull(5) ? null : r.GetInt64(5));
     }
 
     private static async Task<int> UltimoAbonoVigenteAsync(NpgsqlConnection cn, NpgsqlTransaction tx, long companyId, int cxpId, CancellationToken ct)

@@ -61,10 +61,11 @@ public sealed class DescargoDocumentoService : IDescargoDocumentoService
         if (!string.IsNullOrWhiteSpace(f.Search))
         {
             var s = f.Search.Trim();
+            var numero = ClasificacionNormalizer.NumeroBuscado(f.Search);
             query = query.Where(x =>
                 (x.h.motivo != null && EF.Functions.ILike(x.h.motivo, $"%{s}%"))
                 || (x.h.recibido_por != null && EF.Functions.ILike(x.h.recibido_por, $"%{s}%"))
-                || x.h.numero.ToString().Contains(s));
+                || x.h.numero.ToString().Contains(numero));
         }
 
         return await query

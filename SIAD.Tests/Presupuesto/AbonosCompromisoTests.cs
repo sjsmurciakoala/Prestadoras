@@ -91,7 +91,8 @@ public class AbonosCompromisoTests : IntegrationTestBase
             httpAccessor,
             accountFormat,
             banTransacciones,
-            cheques);
+            cheques,
+            new PresupuestoCompromisoService(context, new TestCurrentCompanyService(CompanyId)));
     }
 
     // --- Siembra ---

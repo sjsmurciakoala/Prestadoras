@@ -61,10 +61,11 @@ public sealed class TrasladoAlmacenService : ITrasladoAlmacenService
         if (!string.IsNullOrWhiteSpace(f.Search))
         {
             var s = f.Search.Trim();
+            var numero = ClasificacionNormalizer.NumeroBuscado(f.Search);
             query = query.Where(x =>
                 EF.Functions.ILike(x.h.motivo, $"%{s}%")
                 || (x.h.documento_referencia != null && EF.Functions.ILike(x.h.documento_referencia, $"%{s}%"))
-                || x.h.numero.ToString().Contains(s));
+                || x.h.numero.ToString().Contains(numero));
         }
 
         var rows = await query

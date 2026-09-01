@@ -1,7 +1,10 @@
 ﻿using Microsoft.Extensions.DependencyInjection;
 using SIAD.Core.Entities;
+using SIAD.Core.Security;
 using SIAD.Core.Tenancy;
 using SIAD.Services;
+using SIAD.Services.Aprobaciones;
+using SIAD.Services.Security;
 using SIAD.Services.Clientes;
 using SIAD.Services.Cobros;
 using SIAD.Services.Proveedores;
@@ -43,12 +46,23 @@ public static class ServiceRegistration
         SIAD.Services.Infrastructure.DapperTypeHandlers.EnsureRegistered();
 
         services.AddScoped<ICurrentCompanyService, CurrentCompanyService>();
+        // Identidad de la sesión para los servicios de dominio (quién firma y con qué roles).
+        // Lo consume el motor de aprobación por niveles; ver SIAD.Core/Security/ICurrentUserService.cs.
+        services.AddScoped<ICurrentUserService, CurrentUserService>();
         services.AddScoped<ITenantCompanyService, TenantCompanyService>();
+        // Motor de aprobación por niveles (2026-08-31_apr_niveles_*). Nace APAGADO por empresa:
+        // con cfg_aprobacion_control.modo = 0 ningún documento cambia de comportamiento.
+        services.AddScoped<IAprobacionService, AprobacionService>();
+        services.AddScoped<IAprobacionConfigService, AprobacionConfigService>();
+        services.AddScoped<IAprobacionNotificador, AprobacionNotificador>();
         services.AddScoped<IClientesService, ClientesService>();
         services.AddScoped<IProveedoresService, ProveedoresService>();
         services.AddScoped<IProveedorEstadoCuentaService, ProveedorEstadoCuentaService>();
         // Antigüedad de saldos (2026-08-14_prv_antiguedad_saldos.sql, F1). Aging de CxP por tramo.
         services.AddScoped<IAntiguedadSaldosProveedorService, AntiguedadSaldosProveedorService>();
+        // Cuentas por pagar unificadas (2026-08-22_prv_cxp_unificada.sql): facturas de compra y
+        // compromisos en un solo listado, y el pago en lote que los envuelve en una transacción.
+        services.AddScoped<ICuentasPorPagarService, CuentasPorPagarService>();
         // Scorecard de proveedores (2026-08-14_prv_evaluacion.sql, F1).
         services.AddScoped<IEvaluacionProveedorService, EvaluacionProveedorService>();
         // Incidencias de recepción (F4): alimentan el criterio CALIDAD del scorecard.
@@ -192,6 +206,11 @@ public static class ServiceRegistration
 
         // presupuesto (de Combinacio_E_J_1.0; mantengo legacy retirado de Letras/Tarifas)
         services.AddScoped<IConfiguracionPresupuestoService, ConfiguracionPresupuestoService>();
+        // Control presupuestario de compras (F2): compromete al aprobar la O/C y libera al anularla.
+        // Apagado por defecto — cfg_presupuesto_control.modo = 0.
+        services.AddScoped<IPresupuestoCompromisoService, PresupuestoCompromisoService>();
+        // Consultas del control (ejecución, compromisos, kardex) y su interruptor.
+        services.AddScoped<IPresupuestoEjecucionService, PresupuestoEjecucionService>();
         services.AddScoped<IOrdenesPagoDirectoService, OrdenesPagoDirectoService>();
 
         // app lectores V3: mantenimiento de credenciales (adm_lector_credencial, bcrypt).

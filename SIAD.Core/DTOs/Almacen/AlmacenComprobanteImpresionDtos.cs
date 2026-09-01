@@ -185,6 +185,24 @@ public sealed class OrdenCompraImpresionDto : ComprobanteAlmacenImpresionBase
 
     /// <summary>Total de la orden en letras (sin sufijo "LEMPIRAS", lo agrega el reporte).</summary>
     public string MontoEnLetras { get; set; } = string.Empty;
+
+    /// <summary>
+    /// Firmas de la escalera de aprobación, en orden de nivel. Vacío cuando la orden no pasó por
+    /// ella (control apagado): en ese caso el comprobante imprime el bloque de firmas de siempre.
+    /// </summary>
+    public List<FirmaAprobacionImpresionDto> Firmas { get; set; } = new();
+}
+
+/// <summary>Un nivel firmado, tal como sale impreso en el comprobante.</summary>
+public sealed class FirmaAprobacionImpresionDto
+{
+    public short Nivel { get; set; }
+
+    /// <summary>Etiqueta del nivel ("Jefatura", "Gerencia"), que es el título de la columna.</summary>
+    public string Descripcion { get; set; } = string.Empty;
+
+    public string? Usuario { get; set; }
+    public DateTime? Fecha { get; set; }
 }
 
 /// <summary>

@@ -85,6 +85,7 @@ namespace apc.Client
             services.AddScoped<ProveedoresClient>();
             services.AddScoped<ProveedorEstadoCuentaClient>();
             services.AddScoped<AntiguedadSaldosProveedorClient>();
+            services.AddScoped<CuentasPorPagarClient>();
             services.AddScoped<EvaluacionProveedorClient>();
             services.AddScoped<RecepcionIncidenciaClient>();
             services.AddScoped<EmpleadosClient>();
@@ -124,6 +125,7 @@ namespace apc.Client
             services.AddScoped<InformesClient>();
             // presupuesto (de Combinacio_E_J_1.0; TarifasBase/TarifasContador retirados como legacy)
             services.AddScoped<ConfiguracionPresupuestoClient>();
+            services.AddScoped<PresupuestoEjecucionClient>();
             services.AddScoped<PresupuestoSelectionState>();
             services.AddScoped<OrdenesPagoDirectoClient>();
             services.AddScoped<LectoresCredencialClient>();
@@ -150,6 +152,7 @@ namespace apc.Client
 
             // correo y notificaciones por empresa: conexion (SendGrid) + areas de notificacion (F2)
             services.AddScoped<apc.Client.Services.Configuracion.CorreoConfigClient>();
+            services.AddScoped<apc.Client.Services.Configuracion.AprobacionesConfigClient>();
 
             services.AddScoped<ITenantProvider, TenantProvider>();
             services.AddScoped<TenantState>();

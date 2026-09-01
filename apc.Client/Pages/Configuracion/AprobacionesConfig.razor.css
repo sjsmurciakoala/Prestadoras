@@ -1,0 +1,70 @@
+/* Solo lo propio de esta pantalla: el estándar (page-container, modern-card, grid-solicitudes,
+   badge-status, btn-icon…) vive en apc/wwwroot/css/siad-grid.css y no se duplica aquí. */
+
+.control-fila {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.25rem;
+    align-items: flex-start;
+}
+
+.control-campo {
+    flex: 1 1 240px;
+    min-width: 220px;
+}
+
+.control-acciones {
+    flex: 0 0 auto;
+    align-self: center;
+    padding-top: 1.35rem;
+}
+
+/* Aviso de configuración incompleta: no bloquea guardar, pero sí operar. */
+.aviso-config {
+    display: flex;
+    gap: .75rem;
+    margin-top: 1rem;
+    padding: .75rem 1rem;
+    border-left: 4px solid #e0a800;
+    border-radius: 6px;
+    background: rgba(224, 168, 0, .08);
+    font-size: .875rem;
+    line-height: 1.45;
+}
+
+.aviso-config i {
+    color: #e0a800;
+    font-size: 1.1rem;
+    line-height: 1.3;
+}
+
+/* Alta de aprobador dentro del popup. */
+.aprobador-alta {
+    display: flex;
+    gap: .75rem;
+    align-items: flex-start;
+    margin-bottom: 1rem;
+}
+
+.aprobador-alta > div:first-child {
+    flex: 0 0 150px;
+}
+
+.lista-aprobadores {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    border: 1px solid var(--bs-border-color, #dee2e6);
+    border-radius: 6px;
+}
+
+.lista-aprobadores li {
+    display: flex;
+    align-items: center;
+    gap: .75rem;
+    padding: .5rem .75rem;
+}
+
+.lista-aprobadores li + li {
+    border-top: 1px solid var(--bs-border-color, #dee2e6);
+}

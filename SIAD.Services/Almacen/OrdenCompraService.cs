@@ -1,10 +1,13 @@
 using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
+using SIAD.Core.DTOs.Presupuesto;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Aprobaciones;
+using SIAD.Services.Presupuesto;
 
 namespace SIAD.Services.Almacen;
 
@@ -18,14 +21,48 @@ public sealed class OrdenCompraService : IOrdenCompraService
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _company;
     private readonly ITasaIsvArticuloResolver _tasas;
+    private readonly IPresupuestoCompromisoService _presupuesto;
+    private readonly IAprobacionService _aprobacion;
+    private readonly IAprobacionNotificador _avisos;
+
+    /// <summary>Avisos del último Aprobar/Anular en modo Advertencia. Ver <see cref="UltimosAvisosPresupuesto"/>.</summary>
+    private IReadOnlyList<PresupuestoAvisoDto> _avisosPresupuesto = Array.Empty<PresupuestoAvisoDto>();
 
     public OrdenCompraService(
-        SiadDbContext context, ICurrentCompanyService company, ITasaIsvArticuloResolver tasas)
+        SiadDbContext context, ICurrentCompanyService company, ITasaIsvArticuloResolver tasas,
+        IPresupuestoCompromisoService presupuesto, IAprobacionService aprobacion,
+        IAprobacionNotificador avisos)
     {
         _context = context;
         _company = company;
         _tasas = tasas;
+        _presupuesto = presupuesto;
+        _aprobacion = aprobacion;
+        _avisos = avisos;
     }
+
+    /// <summary>
+    /// Avisa al nivel que quedó esperando firma. Va <b>fuera</b> de la transacción del documento y
+    /// no propaga errores: el aviso es un servicio, no una condición para que la orden avance.
+    /// </summary>
+    private Task NotificarPendienteAsync(alm_orden_compra entity, string nivel, CancellationToken ct)
+        => _avisos.NotificarPendienteOrdenCompraAsync(
+            entity.id, entity.numero.ToString("00000"), entity.cod_proveedor, entity.total, nivel, ct);
+
+    /// <summary>
+    /// Si esta empresa exige la escalera de firmas para sus órdenes de compra. Con el control
+    /// apagado —el estado de fábrica— toda la máquina de estados es la histórica: Borrador se
+    /// aprueba de un clic y el estado 7 no existe en la práctica.
+    /// </summary>
+    private Task<bool> RequiereEscaleraAsync(CancellationToken ct)
+        => _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.OrdenCompra, ct);
+
+    /// <summary>
+    /// Avisos presupuestarios de la última aprobación, cuando el control corre en modo Advertencia
+    /// (excedió pero se dejó pasar). Vacío en modo Apagado y en modo Bloqueo — ahí el exceso no
+    /// pasa, lanza. El controlador los devuelve para que la pantalla los muestre sin bloquear.
+    /// </summary>
+    public IReadOnlyList<PresupuestoAvisoDto> UltimosAvisosPresupuesto => _avisosPresupuesto;
 
     public async Task<IReadOnlyList<OrdenCompraListItemDto>> GetAsync(OrdenCompraFilterDto? filtro, CancellationToken ct = default)
     {
@@ -53,10 +90,11 @@ public sealed class OrdenCompraService : IOrdenCompraService
         if (!string.IsNullOrWhiteSpace(filtro.Search))
         {
             var like = $"%{filtro.Search.Trim()}%";
+            var numero = ClasificacionNormalizer.NumeroBuscado(filtro.Search);
             query = query.Where(o =>
                 EF.Functions.ILike(o.cod_proveedor, like) ||
                 EF.Functions.ILike(o.observaciones ?? string.Empty, like) ||
-                o.numero.ToString().Contains(filtro.Search.Trim()));
+                o.numero.ToString().Contains(numero));
         }
 
         var filas = await query
@@ -143,7 +181,8 @@ public sealed class OrdenCompraService : IOrdenCompraService
         if (doc is null) return null;
 
         var empresa = await CargarEmpresaAsync(ct);
-        return new OrdenCompraImpresionDto
+
+        var impresion = new OrdenCompraImpresionDto
         {
             EmpresaNombre = empresa?.commercial_name ?? string.Empty,
             EmpresaRazonSocial = empresa?.legal_name,
@@ -156,6 +195,24 @@ public sealed class OrdenCompraService : IOrdenCompraService
             Documento = doc,
             MontoEnLetras = doc.Total > 0m ? NumerosALetras.Convertir(doc.Total) : string.Empty
         };
+
+        // Las firmas reales de la escalera, si la orden pasó por ella. Sin flujo (control apagado)
+        // la lista queda vacía y el comprobante imprime el bloque de firmas de siempre.
+        var flujo = await _aprobacion.ObtenerEstadoAsync(DocumentosAprobacion.OrdenCompra, id, ct);
+        foreach (var nivel in flujo.Niveles)
+        {
+            if (nivel.Estado != EstadoAprobacionNivel.Aprobado) continue;
+
+            impresion.Firmas.Add(new FirmaAprobacionImpresionDto
+            {
+                Nivel = nivel.Nivel,
+                Descripcion = nivel.Descripcion,
+                Usuario = nivel.UsuarioFirma,
+                Fecha = nivel.FechaFirma
+            });
+        }
+
+        return impresion;
     }
 
     private async Task<cfg_company?> CargarEmpresaAsync(CancellationToken ct)
@@ -268,12 +325,230 @@ public sealed class OrdenCompraService : IOrdenCompraService
         return (await GetByIdAsync(entity.id, ct))!;
     }
 
+    /// <summary>
+    /// Aprueba la orden y, si el control presupuestario está encendido, <b>compromete el
+    /// presupuesto en la misma transacción</b>. Si alguna partida no alcanza, el compromiso lanza,
+    /// la transacción se revierte entera y la orden se queda en Borrador: no existe el estado
+    /// intermedio "aprobada pero sin comprometer".
+    /// </summary>
+    /// <summary>
+    /// Envía una orden en Borrador a la escalera de firmas: la deja En aprobación (7), ya no
+    /// editable, y materializa los niveles que exige su monto.
+    /// <para>
+    /// Solo existe con el control encendido. <b>No compromete presupuesto</b>: eso pasa en la
+    /// primera firma (D2).
+    /// </para>
+    /// </summary>
+    public async Task<bool> EnviarAAprobacionAsync(int id, string user, CancellationToken ct = default)
+    {
+        if (!await RequiereEscaleraAsync(ct))
+        {
+            throw new InvalidOperationException(
+                "La aprobación por niveles no está activada para las órdenes de compra.");
+        }
+
+        var entity = await _context.alm_orden_compras.FirstOrDefaultAsync(x => x.id == id, ct);
+        if (entity is null) return false;
+        if (entity.estado == EstadoOrdenCompra.EnAprobacion) return true;
+
+        if (entity.estado != EstadoOrdenCompra.Borrador)
+        {
+            throw new InvalidOperationException("Solo se puede enviar a aprobación una orden en Borrador.");
+        }
+        if (!await _context.alm_orden_compra_detalles.AsNoTracking().AnyAsync(d => d.orden_compra_id == id, ct))
+        {
+            throw new InvalidOperationException("No se puede enviar a aprobación una orden sin renglones.");
+        }
+
+        var usuario = ClasificacionNormalizer.Usuario(user);
+        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        // El flujo y el cambio de estado van juntos: si la escalera no se puede abrir (sin niveles
+        // para el monto, o un nivel sin aprobadores), la orden se queda en Borrador.
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
+
+        entity.estado = EstadoOrdenCompra.EnAprobacion;
+        entity.usuariomodificacion = usuario;
+        entity.fechamodificacion = ahora;
+        await _context.SaveChangesAsync(ct);
+
+        await _aprobacion.IniciarAsync(
+            DocumentosAprobacion.OrdenCompra, entity.id, entity.numero.ToString("00000"),
+            entity.total, entity.usuariocreacion ?? usuario, ct);
+
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+
+        // Ya está guardado: se avisa al primer nivel. Si el correo falla, la orden sigue enviada.
+        var flujo = await _aprobacion.ObtenerEstadoAsync(DocumentosAprobacion.OrdenCompra, entity.id, ct);
+        foreach (var nivel in flujo.Niveles)
+        {
+            if (nivel.Estado != EstadoAprobacionNivel.Pendiente) continue;
+
+            await NotificarPendienteAsync(entity, nivel.Descripcion, ct);
+            break;
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Firma el nivel pendiente de una orden En aprobación. Si era la primera firma, <b>compromete
+    /// el presupuesto</b> (D2); si era la última, la orden pasa a Aprobada.
+    /// <para>
+    /// Todo ocurre en una sola transacción: si el presupuesto no alcanza en modo Bloqueo, la firma
+    /// se revierte con él y la orden sigue esperando esa misma firma.
+    /// </para>
+    /// </summary>
+    public async Task<OrdenCompraAprobacionResultadoDto?> FirmarAprobacionAsync(
+        int id, string? comentario, string user, CancellationToken ct = default)
+    {
+        _avisosPresupuesto = Array.Empty<PresupuestoAvisoDto>();
+
+        if (!await RequiereEscaleraAsync(ct))
+        {
+            throw new InvalidOperationException(
+                "La aprobación por niveles no está activada para las órdenes de compra.");
+        }
+
+        var entity = await _context.alm_orden_compras.FirstOrDefaultAsync(x => x.id == id, ct);
+        if (entity is null) return null;
+
+        if (entity.estado != EstadoOrdenCompra.EnAprobacion)
+        {
+            throw new InvalidOperationException(entity.estado switch
+            {
+                EstadoOrdenCompra.Borrador => "La orden debe enviarse a aprobación antes de poder firmarse.",
+                EstadoOrdenCompra.Aprobada => "La orden ya está aprobada.",
+                EstadoOrdenCompra.Rechazada => "La orden fue rechazada.",
+                _ => "Solo se puede firmar una orden que esté en aprobación."
+            });
+        }
+
+        var usuario = ClasificacionNormalizer.Usuario(user);
+        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
+
+        // El motor valida elegibilidad, secuencia, autoaprobación y doble firma. Quién firma sale
+        // de la sesión, no del parámetro `user`.
+        var firma = await _aprobacion.FirmarAsync(DocumentosAprobacion.OrdenCompra, id, comentario, ct);
+
+        var resultado = new OrdenCompraAprobacionResultadoDto
+        {
+            NivelFirmado = firma.NivelFirmado,
+            FlujoCompleto = firma.FlujoCompleto,
+            NivelPendiente = firma.NivelPendiente,
+            DescripcionPendiente = firma.DescripcionPendiente,
+            ComprometioPresupuesto = firma.EsPrimeraFirma
+        };
+
+        // D2: la reserva nace con la PRIMERA firma, no al completar la escalera. Así el disponible
+        // queda tomado mientras la orden circula, en vez de descubrirse ocupado al final.
+        if (firma.EsPrimeraFirma)
+        {
+            _avisosPresupuesto = await _presupuesto.ComprometerOrdenCompraAsync(
+                entity.id,
+                entity.numero.ToString("00000"),
+                entity.fecha ?? DateOnly.FromDateTime(DateTime.Today),
+                usuario,
+                usuario,
+                ct);
+
+            resultado.Avisos = _avisosPresupuesto;
+        }
+
+        if (firma.FlujoCompleto)
+        {
+            // `aprobado_por` guarda al firmante FINAL: es lo que muestran el PDF y los listados.
+            // El detalle nivel por nivel vive en alm_orden_compra_aprobacion.
+            entity.estado = EstadoOrdenCompra.Aprobada;
+            entity.aprobado_por = usuario;
+            entity.fecha_aprobacion = ahora;
+            entity.usuariomodificacion = usuario;
+            entity.fechamodificacion = ahora;
+            await _context.SaveChangesAsync(ct);
+        }
+
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+
+        // Avisos posteriores al commit: al siguiente aprobador si la escalera sigue, o al
+        // comprador si su orden ya quedó aprobada.
+        if (firma.FlujoCompleto)
+        {
+            await _avisos.NotificarResueltaOrdenCompraAsync(
+                entity.usuariocreacion, entity.numero.ToString("00000"), entity.cod_proveedor,
+                entity.total, "aprobada", null, ct);
+        }
+        else if (!string.IsNullOrWhiteSpace(firma.DescripcionPendiente))
+        {
+            await NotificarPendienteAsync(entity, firma.DescripcionPendiente!, ct);
+        }
+
+        return resultado;
+    }
+
+    /// <summary>
+    /// Devuelve a Borrador una orden que está en la escalera: <b>borra todas las firmas</b> (D4) y
+    /// libera el presupuesto reservado. Vuelve a ser editable y hay que reenviarla desde cero.
+    /// </summary>
+    public async Task<bool> DevolverABorradorAsync(int id, string motivo, string user, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(motivo))
+        {
+            throw new InvalidOperationException("Indique el motivo de la devolución.");
+        }
+
+        var entity = await _context.alm_orden_compras.FirstOrDefaultAsync(x => x.id == id, ct);
+        if (entity is null) return false;
+        if (entity.estado == EstadoOrdenCompra.Borrador) return true;
+
+        if (entity.estado != EstadoOrdenCompra.EnAprobacion)
+        {
+            throw new InvalidOperationException("Solo se puede devolver a Borrador una orden en aprobación.");
+        }
+
+        var usuario = ClasificacionNormalizer.Usuario(user);
+
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
+
+        await _aprobacion.ReiniciarAsync(DocumentosAprobacion.OrdenCompra, id, motivo, ct);
+
+        entity.estado = EstadoOrdenCompra.Borrador;
+        entity.observaciones = AnexarMotivo(entity.observaciones, motivo, user);
+        entity.usuariomodificacion = usuario;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        await _context.SaveChangesAsync(ct);
+
+        // Si alguien ya había firmado, había presupuesto reservado: se devuelve. No-op si el
+        // control presupuestario está apagado o si nadie llegó a firmar.
+        await _presupuesto.LiberarOrdenCompraAsync(id, "Orden devuelta a borrador", usuario, ct);
+
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+
+        await _avisos.NotificarResueltaOrdenCompraAsync(
+            entity.usuariocreacion, entity.numero.ToString("00000"), entity.cod_proveedor,
+            entity.total, "devuelta a borrador", motivo, ct);
+
+        return true;
+    }
+
     public async Task<bool> AprobarAsync(int id, string user, CancellationToken ct = default)
     {
+        _avisosPresupuesto = Array.Empty<PresupuestoAvisoDto>();
+
         var entity = await _context.alm_orden_compras.FirstOrDefaultAsync(x => x.id == id, ct);
         if (entity is null) return false;
 
         if (entity.estado == EstadoOrdenCompra.Aprobada) return true;
+
+        // Con la escalera encendida, "aprobar" es firmar el nivel que toca: el mismo botón sirve
+        // para las dos configuraciones y la pantalla no tiene que saber cuál está activa.
+        if (await RequiereEscaleraAsync(ct))
+        {
+            await FirmarAprobacionAsync(id, null, user, ct);
+            return true;
+        }
+
         if (entity.estado != EstadoOrdenCompra.Borrador)
         {
             throw new InvalidOperationException("Solo se puede aprobar una orden en Borrador.");
@@ -283,12 +558,32 @@ public sealed class OrdenCompraService : IOrdenCompraService
             throw new InvalidOperationException("No se puede aprobar una orden sin renglones.");
         }
 
+        var aprobadoPor = ClasificacionNormalizer.Usuario(user);
+        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        // Transacción propia: hasta ahora aprobar era un simple cambio de estado, pero el
+        // compromiso presupuestario tiene que ser atómico con él. TransaccionAmbiente reusa la
+        // transacción del test (BEGIN … ROLLBACK) en vez de anidar.
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
+
         entity.estado = EstadoOrdenCompra.Aprobada;
-        entity.aprobado_por = ClasificacionNormalizer.Usuario(user);
-        entity.fecha_aprobacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
-        entity.usuariomodificacion = entity.aprobado_por;
-        entity.fechamodificacion = entity.fecha_aprobacion;
+        entity.aprobado_por = aprobadoPor;
+        entity.fecha_aprobacion = ahora;
+        entity.usuariomodificacion = aprobadoPor;
+        entity.fechamodificacion = ahora;
         await _context.SaveChangesAsync(ct);
+
+        // El compromiso va DESPUÉS del SaveChanges para que la distribución lea los renglones ya
+        // materializados, y ANTES del commit para que un rechazo revierta también la aprobación.
+        _avisosPresupuesto = await _presupuesto.ComprometerOrdenCompraAsync(
+            entity.id,
+            entity.numero.ToString("00000"),
+            entity.fecha ?? DateOnly.FromDateTime(DateTime.Today),
+            aprobadoPor,
+            aprobadoPor,
+            ct);
+
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
         return true;
     }
 
@@ -307,11 +602,182 @@ public sealed class OrdenCompraService : IOrdenCompraService
             throw new InvalidOperationException("No se puede anular una orden con renglones ya recibidos.");
         }
 
+        var usuario = ClasificacionNormalizer.Usuario(user);
+        var enAprobacion = entity.estado == EstadoOrdenCompra.EnAprobacion;
+
+        // Misma transacción que la anulación: si la liberación falla, la orden no queda anulada
+        // reteniendo presupuesto comprometido que ya nadie va a consumir.
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
+
         entity.estado = EstadoOrdenCompra.Anulada;
-        entity.usuariomodificacion = ClasificacionNormalizer.Usuario(user);
+        entity.usuariomodificacion = usuario;
         entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
         await _context.SaveChangesAsync(ct);
+
+        // Anular una orden que estaba circulando por la escalera tiene que dejar rastro: las
+        // firmas se conservan, pero la bitácora explica por qué el flujo se cortó.
+        if (enAprobacion)
+        {
+            await _aprobacion.RegistrarEventoAsync(
+                DocumentosAprobacion.OrdenCompra, entity.id, entity.numero.ToString("00000"),
+                AccionAprobacion.Anulada, "Orden anulada durante la aprobación", ct);
+        }
+
+        // Devuelve al presupuesto lo comprometido y no consumido. No-op si el control está apagado
+        // o si la orden nunca llegó a comprometer (se anuló estando en Borrador).
+        await _presupuesto.LiberarOrdenCompraAsync(entity.id, "Orden de compra anulada", usuario, ct);
+
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
         return true;
+    }
+
+    /// <summary>
+    /// Cancela una orden que ya recibió parte de lo pedido y cuyo saldo <b>ya no se va a recibir</b>.
+    /// Libera únicamente el saldo comprometido pendiente: una orden de 100,000 con 60,000 recibidos
+    /// libera 40,000, no 100,000.
+    /// <para>
+    /// Es la operación que faltaba: <see cref="AnularAsync"/> prohíbe —con razón— anular una orden
+    /// con recepciones, porque el kardex y la CxP de esas facturas siguen vivos.
+    /// </para>
+    /// </summary>
+    public async Task<bool> CancelarAsync(int id, string motivo, string user, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(motivo))
+        {
+            throw new InvalidOperationException("Indique el motivo de la cancelación.");
+        }
+
+        var entity = await _context.alm_orden_compras.FirstOrDefaultAsync(x => x.id == id, ct);
+        if (entity is null) return false;
+        if (entity.estado == EstadoOrdenCompra.Cancelada) return true;
+
+        if (entity.estado is not (EstadoOrdenCompra.Aprobada or EstadoOrdenCompra.RecibidaParcial))
+        {
+            throw new InvalidOperationException(entity.estado switch
+            {
+                EstadoOrdenCompra.Borrador => "Una orden en Borrador se rechaza o se anula, no se cancela.",
+                EstadoOrdenCompra.Cerrada => "La orden ya fue recibida por completo.",
+                EstadoOrdenCompra.Anulada => "La orden está anulada.",
+                _ => "Solo se puede cancelar una orden aprobada o recibida parcialmente."
+            });
+        }
+
+        return await CerrarConLiberacionAsync(entity, EstadoOrdenCompra.Cancelada, motivo, user, ct);
+    }
+
+    /// <summary>
+    /// Cierra manualmente una orden recibida en parte, dando por terminado lo pendiente. Libera el
+    /// saldo comprometido igual que la cancelación; se distingue de ella solo en la intención —aquí
+    /// lo recibido se da por suficiente— y en el estado que queda (Cerrada, no Cancelada).
+    /// </summary>
+    public async Task<bool> CerrarAsync(int id, string motivo, string user, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(motivo))
+        {
+            throw new InvalidOperationException("Indique el motivo del cierre anticipado.");
+        }
+
+        var entity = await _context.alm_orden_compras.FirstOrDefaultAsync(x => x.id == id, ct);
+        if (entity is null) return false;
+        if (entity.estado == EstadoOrdenCompra.Cerrada) return true;
+
+        if (entity.estado != EstadoOrdenCompra.RecibidaParcial)
+        {
+            throw new InvalidOperationException(
+                "Solo se puede cerrar anticipadamente una orden recibida parcialmente.");
+        }
+
+        return await CerrarConLiberacionAsync(entity, EstadoOrdenCompra.Cerrada, motivo, user, ct);
+    }
+
+    /// <summary>
+    /// Rechaza una orden en Borrador o en aprobación.
+    /// <para>
+    /// <b>Desde Borrador</b> no hay nada que liberar. <b>Desde En aprobación</b> sí: con la
+    /// escalera encendida el presupuesto se reserva en la primera firma (D2), así que rechazar
+    /// tiene que devolverlo — antes de este cambio, rechazar nunca liberaba nada porque solo se
+    /// podía rechazar un Borrador, que jamás llegó a comprometer.
+    /// </para>
+    /// </summary>
+    public async Task<bool> RechazarAsync(int id, string motivo, string user, CancellationToken ct = default)
+    {
+        if (string.IsNullOrWhiteSpace(motivo))
+        {
+            throw new InvalidOperationException("Indique el motivo del rechazo.");
+        }
+
+        var entity = await _context.alm_orden_compras.FirstOrDefaultAsync(x => x.id == id, ct);
+        if (entity is null) return false;
+        if (entity.estado == EstadoOrdenCompra.Rechazada) return true;
+        if (entity.estado is not (EstadoOrdenCompra.Borrador or EstadoOrdenCompra.EnAprobacion))
+        {
+            throw new InvalidOperationException("Solo se puede rechazar una orden en Borrador o en aprobación.");
+        }
+
+        var usuario = ClasificacionNormalizer.Usuario(user);
+        var enAprobacion = entity.estado == EstadoOrdenCompra.EnAprobacion;
+
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
+
+        if (enAprobacion && await RequiereEscaleraAsync(ct))
+        {
+            // El motor valida que quien rechaza sea aprobador del nivel pendiente y deja el
+            // rastro en la bitácora.
+            await _aprobacion.RechazarAsync(DocumentosAprobacion.OrdenCompra, id, motivo, ct);
+        }
+
+        entity.estado = EstadoOrdenCompra.Rechazada;
+        entity.observaciones = AnexarMotivo(entity.observaciones, motivo, user);
+        entity.usuariomodificacion = usuario;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        await _context.SaveChangesAsync(ct);
+
+        if (enAprobacion)
+        {
+            // Devuelve lo reservado por las firmas que hubo. No-op si nadie firmó todavía o si el
+            // control presupuestario está apagado.
+            await _presupuesto.LiberarOrdenCompraAsync(id, "Orden de compra rechazada", usuario, ct);
+        }
+
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+
+        if (enAprobacion)
+        {
+            // El comprador tiene que enterarse de que su orden se cayó, y por qué.
+            await _avisos.NotificarResueltaOrdenCompraAsync(
+                entity.usuariocreacion, entity.numero.ToString("00000"), entity.cod_proveedor,
+                entity.total, "rechazada", motivo, ct);
+        }
+
+        return true;
+    }
+
+    /// <summary>Cambio de estado + liberación del saldo, en una sola transacción.</summary>
+    private async Task<bool> CerrarConLiberacionAsync(
+        alm_orden_compra entity, short estadoDestino, string motivo, string user, CancellationToken ct)
+    {
+        var usuario = ClasificacionNormalizer.Usuario(user);
+
+        await using var tx = await TransaccionAmbiente.IniciarAsync(_context, ct);
+
+        entity.estado = estadoDestino;
+        entity.observaciones = AnexarMotivo(entity.observaciones, motivo, user);
+        entity.usuariomodificacion = usuario;
+        entity.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+        await _context.SaveChangesAsync(ct);
+
+        await _presupuesto.LiberarOrdenCompraAsync(entity.id, motivo.Trim(), usuario, ct);
+
+        await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+        return true;
+    }
+
+    /// <summary>Deja el motivo en las observaciones, sin perder lo que ya había.</summary>
+    private static string AnexarMotivo(string? observaciones, string motivo, string user)
+    {
+        var linea = $"[{DateTime.Today:yyyy-MM-dd} · {ClasificacionNormalizer.Usuario(user)}] {motivo.Trim()}";
+        var texto = string.IsNullOrWhiteSpace(observaciones) ? linea : $"{observaciones}\n{linea}";
+        return texto.Length > 1000 ? texto[^1000..] : texto;
     }
 
     public async Task<IReadOnlyList<OrdenCompraArticuloLookupDto>> BuscarArticulosProveedorAsync(
@@ -426,12 +892,19 @@ public sealed class OrdenCompraService : IOrdenCompraService
         alm_orden_compra entity, OrdenCompraDto dto, IReadOnlyDictionary<int, string> upcs,
         IReadOnlyDictionary<int, TasaIsvArticulo> tasas)
     {
+        // El descuento de cabecera es un porcentaje sobre todo el documento, así que rebaja la
+        // base imponible de CADA renglón: el ISV se calcula sobre el renglón ya descontado.
+        // Gravar el bruto infla impuesto, total, compromiso presupuestario y CxP —y el ISV
+        // hondureño se aplica sobre el valor neto tras descuentos—.
+        // ValidarCabecera acota el descuento a 0..100, de modo que el factor va de 1 a 0.
+        var factorNeto = (100m - entity.descuento) / 100m;
+
         decimal subTotal = 0m, impuesto = 0m;
         foreach (var d in dto.Detalles)
         {
             var totalRenglon = Redondear2(d.CantidadPedida * d.CostoUnitario);
             var pct = entity.calcula_isv && tasas.TryGetValue(d.ArticuloId, out var t) ? t.Porcentaje : 0m;
-            var isvRenglon = Redondear2(totalRenglon * pct / 100m);
+            var isvRenglon = Redondear2(Redondear2(totalRenglon * factorNeto) * pct / 100m);
             ExigirMonto(totalRenglon, "El total de un renglón");
             ExigirMonto(isvRenglon, "El impuesto de un renglón");
             subTotal += totalRenglon;
@@ -455,8 +928,9 @@ public sealed class OrdenCompraService : IOrdenCompraService
             });
         }
 
-        // descuento está acotado a 0..100 por ValidarCabecera, así que el total no puede
-        // salir negativo por esta vía.
+        // El subtotal se reporta BRUTO y el descuento se ve en el total: es lo que espera el
+        // comprobante, que imprime las tres líneas por separado. Acotado a 0..100 por
+        // ValidarCabecera, así que el total no puede salir negativo por esta vía.
         var montoDescuento = Redondear2(subTotal * entity.descuento / 100m);
         entity.sub_total = Redondear2(subTotal);
         entity.impuesto = Redondear2(impuesto);

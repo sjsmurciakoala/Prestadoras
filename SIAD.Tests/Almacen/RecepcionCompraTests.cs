@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,7 +8,9 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Services.Aprobaciones;
 using SIAD.Services.Almacen;
+using SIAD.Services.Presupuesto;
 using SIAD.Data;
 using SIAD.Tests.Infrastructure;
 
@@ -50,6 +52,12 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
     {
         await base.InitializeAsync();
 
+        // Estos tests prueban la MECÁNICA de compras (kardex, CxP, correlativo, anulación),
+        // no el presupuesto. cfg_presupuesto_control es estado GLOBAL de la base de prueba:
+        // si quedó encendido por una demo o un piloto, estas pruebas fallarían con
+        // «excede el presupuesto disponible» sin tener nada que ver con eso.
+        await DesactivarControlPresupuestarioAsync();
+
         if (!Fixture.Available)
         {
             return;
@@ -64,8 +72,12 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
         _context.Database.UseTransaction(Transaction);
 
         _motor = new InventarioPostingService(_context, company, new ArticuloRollupService(_context));
-        _service = new RecepcionCompraService(_context, company, _motor, new TasaIsvArticuloResolver(_context));
-        _ordenes = new OrdenCompraService(_context, company, new TasaIsvArticuloResolver(_context));
+        _service = new RecepcionCompraService(_context, company, _motor, new TasaIsvArticuloResolver(_context),
+            new PresupuestoCompromisoService(_context, company));
+        _ordenes = new OrdenCompraService(_context, company, new TasaIsvArticuloResolver(_context),
+            new PresupuestoCompromisoService(_context, company),
+            new AprobacionService(_context, company, new TestCurrentUserService()),
+            new AprobacionNotificadorNoop());
 
         _codProveedor = await _context.prv_proveedores.AsNoTracking()
             .Where(p => p.company_id == CompanyId && (p.status == null || p.status == true))
@@ -471,6 +483,33 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(100m, par.costo_promedio);
     }
 
+    /// <summary>
+    /// Con descuento de cabecera el ISV grava la base NETA, y el costo que se capitaliza al
+    /// kardex hereda ese ISV menor: si se paga menos impuesto, menos impuesto entra al costo.
+    /// </summary>
+    [SkippableFact]
+    public async Task Crear_ConDescuento_ElIsvVaSobreLaBaseDescontada()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        // 10 × 100 = 1,000 bruto · descuento 10% = 100 · base imponible 900.
+        var dto = NuevaFactura(cantidad: 10m, costo: 100m, descuento: 10m);
+        dto.DetallarIsv = false;      // capitaliza, para ver el efecto en el kardex
+
+        var r = await _service!.CrearAsync(dto, "tester");
+
+        Assert.Equal(1000m, r.SubTotal);          // el subtotal sigue siendo el bruto
+        Assert.Equal(135m, r.Impuesto);           // 900 × 15% = 135 (no 150)
+        Assert.Equal(1035m, r.Total);             // 1000 − 100 + 135
+        Assert.Equal(113.50m, r.Detalles[0].CostoPosteado);   // 100 + 13.50 de ISV por unidad
+
+        var par = await _context!.alm_articulo_bodegas.AsNoTracking()
+            .FirstAsync(u => u.articulo_id == _articuloA && u.bodega_id == _bodegaId);
+        Assert.Equal(113.50m, par.ultimo_costo);
+    }
+
     [SkippableFact]
     public async Task Crear_ArticuloSinTasa_NoLlevaIsv()
     {
@@ -746,12 +785,14 @@ public class RecepcionCompraTests : IntegrationTestBase, IAsyncLifetime
     }
 
     private RecepcionCompraDto NuevaFactura(
-        decimal cantidad = 10m, decimal costo = 25m, string? sar = null) => new()
+        decimal cantidad = 10m, decimal costo = 25m, string? sar = null,
+        decimal descuento = 0m) => new()
     {
         CodProveedor = _codProveedor,
         Fecha = DateOnly.FromDateTime(DateTime.Today),
         FechaFactura = DateOnly.FromDateTime(DateTime.Today),
         NumeroFacturaSar = sar,
+        Descuento = descuento,
         BodegaId = _bodegaId,
         Moneda = MonedaCompra.Lempira,
         TasaCambio = 1m,

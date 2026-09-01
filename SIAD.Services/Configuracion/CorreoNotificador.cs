@@ -44,6 +44,44 @@ public sealed class CorreoNotificador : ICorreoNotificador
         }, ct);
     }
 
+    public async Task<CorreoEnvioResultado> NotificarDestinatariosAsync(
+        string tipo, IReadOnlyCollection<string> destinatarios, string asunto, string htmlBody,
+        CancellationToken ct = default)
+    {
+        // Sin nadie a quien escribirle no hay nada que hacer: se corta antes de resolver la
+        // conexión, para no gastar una consulta en un envío que no va a salir.
+        var para = new List<string>();
+        if (destinatarios is not null)
+        {
+            foreach (var destinatario in destinatarios)
+            {
+                if (!string.IsNullOrWhiteSpace(destinatario)) para.Add(destinatario.Trim());
+            }
+        }
+
+        if (para.Count == 0)
+            return CorreoEnvioResultado.Skip("Sin destinatarios.");
+
+        var envio = await _resolver.ResolverEnvioAsync(tipo, ct);
+        if (envio is null)
+            return CorreoEnvioResultado.Skip("Envío apagado o área no configurada/activa.");
+        if (string.IsNullOrEmpty(envio.ApiKey))
+            return CorreoEnvioResultado.Skip("La conexión no tiene API key.");
+
+        return await _transport.EnviarAsync(new CorreoMensaje
+        {
+            ApiKey = envio.ApiKey!,
+            FromEmail = envio.RemitenteEmail,
+            FromName = envio.RemitenteNombre,
+            Para = para,
+            // El área queda en copia: así el buzón del departamento ve el flujo sin ser el
+            // destinatario principal, que es la persona que tiene que actuar.
+            ConCopia = envio.ConCopia,
+            Asunto = asunto,
+            HtmlBody = htmlBody
+        }, ct);
+    }
+
     public async Task<CorreoEnvioResultado> EnviarSistemaAsync(string destinatario, string asunto, string htmlBody, CancellationToken ct = default)
     {
         if (_companyIdSistema <= 0)

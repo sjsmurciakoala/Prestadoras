@@ -1,0 +1,35 @@
+/* Propio de esta pantalla. El estándar vive en apc/wwwroot/css/siad-grid.css. */
+
+.filtro-texto {
+    min-width: 260px;
+}
+
+.filtro-dias {
+    max-width: 150px;
+}
+
+/* Un saldo retenido mucho tiempo es candidato a cerrarse: el color lo hace evidente. */
+.badge-antiguedad {
+    display: inline-block;
+    min-width: 58px;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: .78rem;
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+}
+
+.antiguedad-normal {
+    background: #eef2f5;
+    color: #55636e;
+}
+
+.antiguedad-alta {
+    background: #fdf0d5;
+    color: #8a6516;
+}
+
+.antiguedad-critica {
+    background: #fbeceb;
+    color: #8c1d18;
+}

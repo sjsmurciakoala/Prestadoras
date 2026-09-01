@@ -41,6 +41,29 @@ public abstract class IntegrationTestBase : IAsyncLifetime
         await cmd.ExecuteNonQueryAsync();
     }
 
+    /// <summary>
+    /// Apaga el control presupuestario de la empresa de prueba, dentro de la transacción del test.
+    /// <para>
+    /// <b>Por qué hace falta:</b> <c>cfg_presupuesto_control</c> es estado GLOBAL de la base de
+    /// prueba, no del test. Si alguien deja el control encendido en el mirror —por una demo, un
+    /// piloto o una corrida manual—, cualquier test que registre una factura o apruebe una orden
+    /// contra una cuenta presupuestada empieza a fallar con «excede el presupuesto disponible»,
+    /// aunque no tenga nada que ver con presupuesto.
+    /// </para>
+    /// <para>
+    /// Lo llaman los tests que ejercitan la MECÁNICA de compras (kardex, CxP, correlativo,
+    /// anulación). Los que sí prueban el control lo encienden ellos mismos después.
+    /// </para>
+    /// </summary>
+    protected async Task DesactivarControlPresupuestarioAsync()
+    {
+        await using var cmd = Connection.CreateCommand();
+        cmd.Transaction = Transaction;
+        cmd.CommandText = "UPDATE public.cfg_presupuesto_control SET modo = 0 WHERE company_id = @c;";
+        cmd.Parameters.AddWithValue("c", CompanyId);
+        await cmd.ExecuteNonQueryAsync();
+    }
+
     public async Task DisposeAsync()
     {
         if (Transaction is not null)

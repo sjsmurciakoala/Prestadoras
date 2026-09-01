@@ -67,7 +67,8 @@ public class PrvContabilidadTests : IntegrationTestBase
 
         return new OrdenesPagoDirectoService(
             context, proveedores, new TestCurrentCompanyService(CompanyId),
-            httpAccessor, accountFormat, banTransacciones, cheques);
+            httpAccessor, accountFormat, banTransacciones, cheques,
+            new PresupuestoCompromisoService(context, new TestCurrentCompanyService(CompanyId)));
     }
 
     // --- Siembra ---

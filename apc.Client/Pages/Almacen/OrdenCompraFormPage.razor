@@ -5,6 +5,8 @@
 @using DevExpress.Blazor
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Aprobaciones
+@using SIAD.Core.DTOs.Presupuesto
 @using SIAD.Core.DTOs.Proveedores
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
@@ -12,6 +14,7 @@
 
 @inject OrdenesCompraClient OrdenesClient
 @inject ProveedoresClient ProveedoresClient
+@inject IsvCompraConfigClient IsvComprasClient
 @inject IToastNotificationService ToastService
 @inject NavigationManager Navigation
 
@@ -126,10 +129,20 @@
                 <div class="col-12">
                     <DxCheckBox Checked="modelo.CalculaIsv"
                                 CheckedExpression="@(() => modelo.CalculaIsv)"
-                                CheckedChanged="@((bool v) => { modelo.CalculaIsv = v; })"
+                                CheckedChanged="@((bool v) => OnCalculaIsvChanged(v))"
                                 Enabled="@(!SoloLectura)">
                         Calcula ISV
                     </DxCheckBox>
+                    @* La empresa capitaliza el ISV al costo: la factura lo va a cobrar y a reservar
+                       presupuesto igual, así que una orden sin ISV pide menos de lo que gastará. *@
+                    @if (!SoloLectura && empresaCapitalizaIsv && !modelo.CalculaIsv)
+                    {
+                        <div class="form-text text-warning-emphasis mt-1">
+                            <i class="bi bi-exclamation-triangle me-1"></i>
+                            Esta empresa suma el ISV al costo de la compra. Sin calcularlo, la orden
+                            reservará menos presupuesto del que la factura va a consumir.
+                        </div>
+                    }
                 </div>
             </div>
         </div>
@@ -373,18 +386,152 @@
                         <span>@Total.ToString("N2") <small class="text-muted">HNL</small></span>
                     </div>
 
+                    @* Disponibilidad presupuestaria ANTES de aprobar: ver el tope después del
+                       rechazo es la peor forma de enterarse. Solo aparece si el control está
+                       encendido para la empresa. *@
+                    @if (presupuesto is not null && presupuesto.Activo && presupuesto.Partidas.Count > 0)
+                    {
+                        <div class="panel-presupuesto mt-3 @(presupuesto.TieneFaltantes ? "panel-presupuesto-falta" : string.Empty)">
+                            <div class="panel-presupuesto-titulo">
+                                <i class="bi @(presupuesto.TieneFaltantes ? "bi-exclamation-triangle-fill" : "bi-wallet2")"></i>
+                                Presupuesto
+                                @if (presupuesto.Modo == 1)
+                                {
+                                    <span class="badge-modo">Solo advertencia</span>
+                                }
+                            </div>
+
+                            <table class="tabla-presupuesto">
+                                <thead>
+                                    <tr>
+                                        <th>Partida</th>
+                                        <th class="text-end">Requiere</th>
+                                        <th class="text-end">Disponible</th>
+                                        <th class="text-end">Quedaría</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    @foreach (var p in presupuesto.Partidas)
+                                    {
+                                        <tr class="@(p.Falta ? "fila-falta" : string.Empty)">
+                                            <td>
+                                                @if (p.SinCuenta)
+                                                {
+                                                    <span class="text-danger">Renglón sin cuenta presupuestaria</span>
+                                                }
+                                                else
+                                                {
+                                                    <span class="font-monospace">@p.CuentaCode</span>
+                                                    @if (!string.IsNullOrWhiteSpace(p.CuentaNombre))
+                                                    {
+                                                        <span class="text-muted small ms-2">@p.CuentaNombre</span>
+                                                    }
+                                                    @if (!p.Presupuestable)
+                                                    {
+                                                        <span class="badge-no-controlada">No controlada</span>
+                                                    }
+                                                }
+                                            </td>
+                                            <td class="text-end">@p.Requerido.ToString("N2")</td>
+                                            <td class="text-end">
+                                                @(p.Disponible.HasValue ? p.Disponible.Value.ToString("N2") : "Sin presupuesto")
+                                            </td>
+                                            <td class="text-end fw-semibold">
+                                                @(p.Restante.HasValue ? p.Restante.Value.ToString("N2") : "—")
+                                            </td>
+                                        </tr>
+                                    }
+                                </tbody>
+                            </table>
+
+                            @if (presupuesto.TieneFaltantes)
+                            {
+                                <div class="panel-presupuesto-aviso">
+                                    @if (presupuesto.Modo == 2)
+                                    {
+                                        <text>No alcanza el presupuesto: la aprobación será rechazada.</text>
+                                    }
+                                    else
+                                    {
+                                        <text>No alcanza el presupuesto, pero el control está en modo advertencia: la orden se aprobará y el sobregiro quedará registrado.</text>
+                                    }
+                                </div>
+                            }
+                        </div>
+                    }
+
+                    @* Escalera de firmas. Solo aparece si la orden ya entró en ella. *@
+                    @if (aprobacionEstado is not null && aprobacionEstado.Total > 0)
+                    {
+                        <div class="panel-aprobacion mt-3">
+                            <div class="panel-aprobacion-titulo">
+                                <i class="bi bi-diagram-3"></i>
+                                Aprobación
+                                <span class="ms-auto text-muted small">
+                                    @aprobacionEstado.Firmados de @aprobacionEstado.Total
+                                </span>
+                            </div>
+
+                            <ol class="linea-firmas">
+                                @foreach (var nivel in aprobacionEstado.Niveles)
+                                {
+                                    <li class="firma-estado-@nivel.Estado">
+                                        <div class="firma-marca">
+                                            <i class="@IconoFirma(nivel.Estado)"></i>
+                                        </div>
+                                        <div class="firma-detalle">
+                                            <div class="fw-semibold">@nivel.Descripcion</div>
+                                            @if (nivel.FechaFirma.HasValue)
+                                            {
+                                                <div class="text-muted small">
+                                                    @nivel.UsuarioFirma · @nivel.FechaFirma.Value.ToString("dd/MM/yyyy HH:mm")
+                                                </div>
+                                            }
+                                            else
+                                            {
+                                                <div class="text-muted small">@nivel.EstadoDescripcion</div>
+                                            }
+                                            @if (!string.IsNullOrWhiteSpace(nivel.Comentario))
+                                            {
+                                                <div class="text-muted small fst-italic">@nivel.Comentario</div>
+                                            }
+                                        </div>
+                                    </li>
+                                }
+                            </ol>
+                        </div>
+                    }
+
                     @if (!SoloLectura)
                     {
                         <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
                             <DxButton Text="Guardar borrador" IconCssClass="bi bi-save"
                                       RenderStyle="ButtonRenderStyle.Secondary"
                                       Enabled="@(!guardando)" Click="GuardarAsync" />
-                            @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.Borrador)
+
+                            @* Con la escalera encendida el borrador se ENVÍA; sin ella se aprueba directo. *@
+                            @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.Borrador && !aprobacionConfig.Encendido)
                             {
                                 <DxButton Text="Aprobar" IconCssClass="bi bi-check-lg"
                                           RenderStyle="ButtonRenderStyle.Primary"
                                           Enabled="@(!guardando)" Click="AprobarAsync" />
                             }
+                            @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.Borrador && aprobacionConfig.Encendido)
+                            {
+                                <DxButton Text="Enviar a aprobación" IconCssClass="bi bi-send"
+                                          RenderStyle="ButtonRenderStyle.Primary"
+                                          Enabled="@(!guardando)" Click="EnviarAAprobacionAsync" />
+                            }
+                        </div>
+                    }
+
+                    @* En aprobación la orden no es editable, pero sí firmable por quien corresponda. *@
+                    @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.EnAprobacion && PuedoFirmarAhora)
+                    {
+                        <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
+                            <DxButton Text="Firmar" IconCssClass="bi bi-pen"
+                                      RenderStyle="ButtonRenderStyle.Primary"
+                                      Enabled="@(!guardando)" Click="FirmarAsync" />
                         </div>
                     }
                 </div>
@@ -432,6 +579,12 @@
         => d.FechaEntregaPactada = v.HasValue ? DateOnly.FromDateTime(v.Value) : null;
 
     private bool cargando = true;
+
+    /// <summary>
+    /// ¿La empresa suma el ISV al costo de la compra (<c>cfg_compra_isv</c> = COSTO)? Decide con
+    /// qué valor nace «Calcula ISV» y si desmarcarlo merece un aviso de presupuesto.
+    /// </summary>
+    private bool empresaCapitalizaIsv = true;
     private bool guardando;
     private string? errorCarga;
 
@@ -456,13 +609,21 @@
     /// <summary>
     /// ISV del renglón. Editando se calcula desde la tasa del tipo (el servidor hace lo mismo y
     /// es el autoritativo); en solo lectura se respeta el ISV que quedó guardado.
+    /// <para>
+    /// El descuento de cabecera rebaja la base imponible del renglón, así que el ISV va sobre
+    /// el renglón ya descontado —mismo cálculo que <c>OrdenCompraService</c>—. Si esta fórmula
+    /// se desviara de la del servidor, el importe saltaría al guardar.
+    /// </para>
     /// </summary>
     private decimal IsvRenglon(OrdenCompraDetalleDto d)
     {
         if (!modelo.CalculaIsv) return 0m;
-        return SoloLectura
-            ? d.Impuesto
-            : Math.Round(TotalRenglon(d) * d.TasaIsv / 100m, 2, MidpointRounding.AwayFromZero);
+        if (SoloLectura) return d.Impuesto;
+
+        // El campo de descuento está acotado a 0..100, de modo que el factor va de 1 a 0.
+        var factorNeto = (100m - modelo.Descuento) / 100m;
+        var baseNeta = Math.Round(TotalRenglon(d) * factorNeto, 2, MidpointRounding.AwayFromZero);
+        return Math.Round(baseNeta * d.TasaIsv / 100m, 2, MidpointRounding.AwayFromZero);
     }
 
     /// <summary>Texto del aviso "sin ISV configurado", para el toast al agregar y el tooltip del renglón.</summary>
@@ -478,16 +639,69 @@
     {
         await CargarProveedoresAsync();
 
+        // Decide si el borrador se aprueba de un clic o se envía a la escalera.
+        aprobacionConfig = await OrdenesClient.ObtenerAprobacionConfigAsync();
+
+        await CargarPoliticaIsvAsync();
+
         if (EsEdicion)
         {
             await CargarOrdenAsync(Id!.Value);
+            await RefrescarPresupuestoAsync();
+            await RefrescarAprobacionAsync();
         }
         else
         {
-            modelo = new OrdenCompraDto { Fecha = DateOnly.FromDateTime(DateTime.Today) };
+            // La orden nace calculando ISV si la empresa lo capitaliza al costo: es lo que la
+            // factura hará después, y así el presupuesto que se compromete coincide con el que
+            // se devenga. Si el ISV va aparte (crédito fiscal), no infla el costo de la compra.
+            modelo = new OrdenCompraDto
+            {
+                Fecha = DateOnly.FromDateTime(DateTime.Today),
+                CalculaIsv = empresaCapitalizaIsv
+            };
         }
 
         cargando = false;
+    }
+
+    /// <summary>
+    /// Política de ISV en compras de la empresa (<c>cfg_compra_isv</c>): COSTO capitaliza el
+    /// impuesto, FISCAL lo lleva aparte. Es la misma cascada que resuelve la factura al recibir.
+    /// <para>
+    /// Si la consulta falla —por ejemplo, un comprador sin permiso de Inventario— se conserva el
+    /// valor de fábrica (capitaliza) en vez de dejar la pantalla rota: es el tratamiento por
+    /// defecto del propio servidor.
+    /// </para>
+    /// </summary>
+    private async Task CargarPoliticaIsvAsync()
+    {
+        try
+        {
+            var cfg = await IsvComprasClient.ObtenerAsync();
+            empresaCapitalizaIsv = string.Equals(
+                cfg.Tratamiento?.Trim(), "COSTO", StringComparison.OrdinalIgnoreCase);
+        }
+        catch
+        {
+            empresaCapitalizaIsv = true;
+        }
+    }
+
+    /// <summary>
+    /// Desmarcar el ISV en una empresa que lo capitaliza deja la orden pidiendo menos presupuesto
+    /// del que la factura consumirá. Se permite —hay compras exentas— pero se avisa.
+    /// </summary>
+    private void OnCalculaIsvChanged(bool valor)
+    {
+        modelo.CalculaIsv = valor;
+
+        if (!valor && empresaCapitalizaIsv)
+        {
+            Toast("Ojo con el presupuesto",
+                  "Esta empresa suma el ISV al costo. Sin calcularlo, la orden reservará menos de lo que la factura va a consumir.",
+                  ToastRenderStyle.Warning);
+        }
     }
 
     private async Task CargarProveedoresAsync()
@@ -642,6 +856,9 @@
             var eraNueva = !EsEdicion;
             modelo = guardada;
 
+            // El panel mira los renglones PERSISTIDOS, así que se refresca después de guardar.
+            await RefrescarPresupuestoAsync();
+
             if (eraNueva)
             {
                 // Ya tiene número e id: se pasa al modo edición para poder aprobarla.
@@ -698,6 +915,90 @@
             : null;
     }
 
+    /// <summary>
+    /// Disponibilidad presupuestaria de la orden. Null mientras no se consulta; con Modo = 0 (control
+    /// apagado) el panel no se dibuja.
+    /// </summary>
+    private PresupuestoPrevioDto? presupuesto;
+
+    /// <summary>Escalera de la orden. Null si aún no se consultó o si no hay flujo abierto.</summary>
+    private AprobacionEstadoDto? aprobacionEstado;
+
+    /// <summary>Si la empresa exige escalera y si este usuario tiene el permiso de firmar.</summary>
+    private OrdenesCompraClient.AprobacionConfigVista aprobacionConfig = new();
+
+    /// <summary>
+    /// Si el usuario puede firmar el nivel que está esperando. Lo resuelve el servidor con las
+    /// cuatro reglas (elegibilidad, secuencia, autoaprobación y una firma por documento); aquí
+    /// solo se lee el nivel pendiente del flujo.
+    /// </summary>
+    private bool PuedoFirmarAhora
+    {
+        get
+        {
+            if (aprobacionEstado is null) return false;
+
+            foreach (var nivel in aprobacionEstado.Niveles)
+            {
+                if (nivel.Estado == EstadoAprobacionNivel.Pendiente) return nivel.PuedoFirmar;
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Trae la escalera de la orden guardada. Nunca lanza: como el panel de presupuesto, es
+    /// información de apoyo y su falla no debe impedir trabajar con la orden.
+    /// </summary>
+    private async Task RefrescarAprobacionAsync()
+    {
+        if (!EsEdicion)
+        {
+            aprobacionEstado = null;
+            return;
+        }
+
+        try
+        {
+            aprobacionEstado = await OrdenesClient.ObtenerAprobacionesAsync(Id!.Value);
+        }
+        catch
+        {
+            aprobacionEstado = null;
+        }
+    }
+
+    private static string IconoFirma(short estado) => estado switch
+    {
+        EstadoAprobacionNivel.Aprobado  => "bi bi-check-circle-fill",
+        EstadoAprobacionNivel.Rechazado => "bi bi-x-circle-fill",
+        EstadoAprobacionNivel.Pendiente => "bi bi-hourglass-split",
+        _ => "bi bi-lock"
+    };
+
+    /// <summary>
+    /// Refresca el panel. Solo tiene sentido sobre una orden ya guardada y en Borrador: el previo se
+    /// calcula en la base a partir de los renglones persistidos, no de los que estan en pantalla sin
+    /// guardar. Nunca lanza: el panel es una ayuda, no un requisito para operar.
+    /// </summary>
+    private async Task RefrescarPresupuestoAsync()
+    {
+        if (!EsEdicion || modelo.Estado != EstadoOrdenCompra.Borrador)
+        {
+            presupuesto = null;
+            return;
+        }
+
+        try
+        {
+            presupuesto = await OrdenesClient.ObtenerPresupuestoAsync(Id!.Value);
+        }
+        catch
+        {
+            presupuesto = null;
+        }
+    }
+
     private async Task AprobarAsync()
     {
         if (!ValidarEntregaPactada())
@@ -712,6 +1013,10 @@
             VolcarFechas();
             modelo = await OrdenesClient.ActualizarAsync(Id!.Value, modelo);
 
+            // El panel se refresca con lo recien guardado: si el rechazo llega, el usuario ve en
+            // pantalla exactamente contra que cifras se decidio.
+            await RefrescarPresupuestoAsync();
+
             if (await OrdenesClient.AprobarAsync(Id!.Value))
             {
                 Toast("Éxito", "Orden aprobada.", ToastRenderStyle.Success);
@@ -720,6 +1025,84 @@
             else
             {
                 Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    /// <summary>
+    /// Envía el borrador a la escalera. Guarda primero, por la misma razón que aprobar: lo que
+    /// entra a firmarse tiene que ser exactamente lo que está en pantalla.
+    /// </summary>
+    private async Task EnviarAAprobacionAsync()
+    {
+        if (!ValidarEntregaPactada())
+        {
+            return;
+        }
+
+        guardando = true;
+        try
+        {
+            VolcarFechas();
+            modelo = await OrdenesClient.ActualizarAsync(Id!.Value, modelo);
+
+            if (await OrdenesClient.EnviarAAprobacionAsync(Id!.Value))
+            {
+                Toast("Enviada", "La orden entró en la escalera de aprobación.", ToastRenderStyle.Success);
+                Navigation.NavigateTo("/almacen/ordenes-compra");
+            }
+            else
+            {
+                Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+        }
+        catch (Exception ex)
+        {
+            Toast("Error", ex.Message, ToastRenderStyle.Danger);
+        }
+        finally
+        {
+            guardando = false;
+        }
+    }
+
+    /// <summary>Firma el nivel pendiente y se queda en la orden, para ver la línea de tiempo al día.</summary>
+    private async Task FirmarAsync()
+    {
+        guardando = true;
+        try
+        {
+            var resultado = await OrdenesClient.FirmarAsync(Id!.Value);
+
+            if (resultado is null)
+            {
+                Toast("Error", "La orden ya no existe.", ToastRenderStyle.Danger);
+            }
+            else
+            {
+                var mensaje = resultado.FlujoCompleto
+                    ? "Firmada la última aprobación: la orden quedó aprobada."
+                    : $"Nivel {resultado.NivelFirmado} firmado. Pasa a «{resultado.DescripcionPendiente}».";
+
+                if (resultado.ComprometioPresupuesto)
+                {
+                    mensaje += " Se reservó el presupuesto de la orden.";
+                }
+
+                Toast("Firmada", mensaje, ToastRenderStyle.Success);
+
+                // La orden cambió de estado y la escalera avanzó: se recarga todo.
+                var recargada = await OrdenesClient.GetByIdAsync(Id!.Value);
+                if (recargada is not null) modelo = recargada;
+                await RefrescarAprobacionAsync();
             }
         }
         catch (Exception ex)

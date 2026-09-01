@@ -115,6 +115,13 @@ public static class PermissionResources
         public const string Descargos = "descargos";
     }
 
+    public static class Compras
+    {
+        // Orden de compra (2026-08-31): recurso propio para separar FIRMAR de editar. Hasta ahora
+        // aprobar una O/C solo exigía module.compras.edit, es decir que quien capturaba aprobaba.
+        public const string Ordenes = "ordenes";
+    }
+
     public static class Configuracion
     {
         // Catálogo de retenciones a proveedores (2026-08-06, F1): mantenimiento del vocabulario
@@ -134,6 +141,10 @@ public static class PermissionResources
         // y del CAI que se transcriben del proveedor. Recurso propio porque cambiar la máscara puede
         // trabar la captura de facturas: no todo usuario de configuración debe poder tocarla.
         public const string FormatosFiscales = "formatos_fiscales";
+
+        // Aprobación por niveles (2026-08-31): interruptor por documento, escalera de montos y
+        // quién firma cada nivel. Recurso propio: decide quién autoriza compras y por cuánto.
+        public const string Aprobaciones = "aprobaciones";
     }
 
     public static class Proveedores
@@ -238,6 +249,20 @@ public static class PermissionNames
         public const string Create = "module.compras.create";
         public const string Edit = "module.compras.edit";
         public const string Delete = "module.compras.delete";
+
+        /// <summary>
+        /// Orden de compra (2026-08-31, aprobación por niveles). <c>Aprobar</c> = firmar un nivel,
+        /// rechazar y devolver a borrador. Es un permiso <b>aparte</b> de <c>Edit</c>: hasta ahora
+        /// aprobar una orden solo exigía editar compras, o sea que quien la capturaba la aprobaba.
+        /// <para>
+        /// El permiso abre la bandeja y habilita el botón; <b>quién puede firmar qué nivel</b> lo
+        /// decide <c>cfg_aprobacion_aprobador</c>, que se configura sin desplegar código.
+        /// </para>
+        /// </summary>
+        public static class Ordenes
+        {
+            public const string Aprobar = "module.compras.ordenes.aprobar";
+        }
     }
 
     public static class Proveedores
@@ -460,6 +485,21 @@ public static class PermissionNames
         }
 
         /// <summary>
+        /// Configuración de la aprobación por niveles (2026-08-31): el interruptor por documento,
+        /// la escalera de montos y quién firma cada nivel. Sin <c>Create</c>/<c>Delete</c>: es un
+        /// upsert de configuración, igual que Correo.
+        /// <para>
+        /// Es la pantalla que decide <b>quién puede autorizar compras y por cuánto</b>, así que
+        /// merece recurso propio: no todo usuario de configuración debe poder tocarla.
+        /// </para>
+        /// </summary>
+        public static class Aprobaciones
+        {
+            public const string View = "module.configuracion.aprobaciones.view";
+            public const string Edit = "module.configuracion.aprobaciones.edit";
+        }
+
+        /// <summary>
         /// Catálogo de formatos fiscales (2026-08-22): máscara del No. de factura (SAR) y del CAI.
         /// Sin <c>Delete</c>: un formato no se borra, se desactiva — borrarlo dejaría sin explicación
         /// los valores ya guardados con esa máscara.
@@ -577,6 +617,7 @@ public static class PermissionNames
             Inventario.Requisiciones.Create,
             Inventario.Requisiciones.Edit,
             Inventario.Requisiciones.Aprobar,
+            Compras.Ordenes.Aprobar,
             Inventario.Descargos.View,
             Inventario.Descargos.Create,
             Inventario.Descargos.Edit,
@@ -587,6 +628,8 @@ public static class PermissionNames
 
             Configuracion.Correo.View,
             Configuracion.Correo.Edit,
+            Configuracion.Aprobaciones.View,
+            Configuracion.Aprobaciones.Edit,
             Configuracion.FormatosFiscales.View,
             Configuracion.FormatosFiscales.Create,
             Configuracion.FormatosFiscales.Edit,
@@ -715,6 +758,9 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Inventario.Requisiciones.Edit, [Inventario.Requisiciones.Edit, Inventario.Edit]),
         // Aprobar: SIN fallback a Create/Inventario.Create — quien captura no aprueba por defecto.
         new PermissionPolicyDefinition(Inventario.Requisiciones.Aprobar, [Inventario.Requisiciones.Aprobar]),
+        // Firmar una orden de compra (2026-08-31). Mismo criterio que la requisición: SIN fallback
+        // a Compras.Edit, o el permiso no separaría nada de lo que separa hoy.
+        new PermissionPolicyDefinition(Compras.Ordenes.Aprobar, [Compras.Ordenes.Aprobar]),
         // Descargo (la salida real). Sin Delete: se anula con reversa.
         new PermissionPolicyDefinition(Inventario.Descargos.View, [Inventario.Descargos.View, Inventario.View, Legacy.Inventario]),
         new PermissionPolicyDefinition(Inventario.Descargos.Create, [Inventario.Descargos.Create, Inventario.Create]),
@@ -731,6 +777,9 @@ public static class PermissionNames
         // de módulo bastan, así que no restringe a quien ya tiene module.configuracion.*.
         new PermissionPolicyDefinition(Configuracion.Correo.View, [Configuracion.Correo.View, Configuracion.View, Legacy.Configuracion]),
         new PermissionPolicyDefinition(Configuracion.Correo.Edit, [Configuracion.Correo.Edit, Configuracion.Edit]),
+        // Configuración de la aprobación por niveles (2026-08-31).
+        new PermissionPolicyDefinition(Configuracion.Aprobaciones.View, [Configuracion.Aprobaciones.View, Configuracion.View, Legacy.Configuracion]),
+        new PermissionPolicyDefinition(Configuracion.Aprobaciones.Edit, [Configuracion.Aprobaciones.Edit, Configuracion.Edit]),
         new PermissionPolicyDefinition(Configuracion.FormatosFiscales.View, [Configuracion.FormatosFiscales.View, Configuracion.View, Legacy.Configuracion]),
         new PermissionPolicyDefinition(Configuracion.FormatosFiscales.Create, [Configuracion.FormatosFiscales.Create, Configuracion.Create]),
         new PermissionPolicyDefinition(Configuracion.FormatosFiscales.Edit, [Configuracion.FormatosFiscales.Edit, Configuracion.Edit]),

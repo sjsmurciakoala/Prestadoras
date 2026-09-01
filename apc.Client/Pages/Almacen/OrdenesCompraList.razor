@@ -4,6 +4,7 @@
 @using DevExpress.Blazor
 @using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Almacen
+@using SIAD.Core.DTOs.Aprobaciones
 @using SIAD.Core.DTOs.Proveedores
 @using apc.Client.Services
 @using apc.Client.Services.Almacen
@@ -193,7 +194,19 @@
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is OrdenCompraListItemDto item)
                             {
-                                <span class="badge-estado-oc @ClaseEstado(item.Estado)">@item.EstadoDescripcion</span>
+                                @* El progreso va en su propia línea, no dentro de la píldora: así el
+                                   badge mide siempre lo mismo y no se corta cuando la escalera tiene
+                                   varios niveles (mismo patrón de dos líneas que la columna Proveedor). *@
+                                <div class="d-flex flex-column align-items-center gap-1">
+                                    <span class="badge-estado-oc @ClaseEstado(item.Estado)">@item.EstadoDescripcion</span>
+                                    @{
+                                        var firmas = ProgresoFirmas(item);
+                                    }
+                                    @if (firmas is not null)
+                                    {
+                                        <span class="text-muted small">@firmas</span>
+                                    }
+                                </div>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -209,7 +222,9 @@
                                         <i class="@(item.Estado == EstadoOrdenCompra.Borrador ? "bi bi-pencil-square" : "bi bi-eye")"></i>
                                     </button>
 
-                                    @if (item.Estado == EstadoOrdenCompra.Borrador)
+                                    @* Con la escalera encendida, un borrador se ENVÍA a aprobación;
+                                       sin ella se aprueba de un clic, como siempre. *@
+                                    @if (item.Estado == EstadoOrdenCompra.Borrador && !aprobacion.Encendido)
                                     {
                                         <button type="button" class="btn-icon btn-edit" title="Aprobar"
                                                 @onclick="() => ConfirmarAprobar(item)" @onclick:stopPropagation="true">
@@ -217,7 +232,53 @@
                                         </button>
                                     }
 
-                                    @if (item.Estado is EstadoOrdenCompra.Borrador or EstadoOrdenCompra.Aprobada)
+                                    @if (item.Estado == EstadoOrdenCompra.Borrador && aprobacion.Encendido)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Enviar a aprobación"
+                                                @onclick="() => ConfirmarEnviarAprobacion(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-send"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado == EstadoOrdenCompra.EnAprobacion && aprobacion.PuedoFirmar)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Firmar"
+                                                @onclick="() => ConfirmarFirmar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-pen"></i>
+                                        </button>
+                                        <button type="button" class="btn-icon btn-edit" title="Devolver a borrador"
+                                                @onclick="() => ConfirmarDevolver(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-arrow-counterclockwise"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado is EstadoOrdenCompra.Borrador or EstadoOrdenCompra.EnAprobacion)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Rechazar"
+                                                @onclick="() => ConfirmarRechazar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-hand-thumbs-down"></i>
+                                        </button>
+                                    }
+
+                                    @* Cancelar y cerrar existen porque anular exige que NO haya
+                                       recepciones: son la salida para una orden ya recibida en parte. *@
+                                    @if (item.Estado is EstadoOrdenCompra.Aprobada or EstadoOrdenCompra.RecibidaParcial)
+                                    {
+                                        <button type="button" class="btn-icon btn-delete" title="Cancelar lo pendiente"
+                                                @onclick="() => ConfirmarCancelar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-slash-circle"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado == EstadoOrdenCompra.RecibidaParcial)
+                                    {
+                                        <button type="button" class="btn-icon btn-edit" title="Cerrar anticipadamente"
+                                                @onclick="() => ConfirmarCerrar(item)" @onclick:stopPropagation="true">
+                                            <i class="bi bi-check2-square"></i>
+                                        </button>
+                                    }
+
+                                    @if (item.Estado is EstadoOrdenCompra.Borrador or EstadoOrdenCompra.EnAprobacion or EstadoOrdenCompra.Aprobada)
                                     {
                                         <button type="button" class="btn-icon btn-delete" title="Anular"
                                                 @onclick="() => ConfirmarAnular(item)" @onclick:stopPropagation="true">
@@ -241,29 +302,42 @@
 <DxPopup @bind-Visible="confirmVisible" Width="min(430px, 90vw)" HeaderText="Confirmar acción" ShowFooter="false">
     <BodyTemplate>
         <div class="text-center p-4">
-            <div class="mb-3 @(accionEsAprobar ? "text-success" : "text-warning")">
-                <i class="@(accionEsAprobar ? "bi bi-check-circle" : "bi bi-x-circle")" style="font-size: 3rem;"></i>
+            @* Código de color de las acciones: VERDE la orden avanza · ROJO se detiene (rechazo,
+               anulación) · ÁMBAR se da por terminada sin rechazarla (cancelar, cerrar, devolver).
+               Con una sola condición, "enviar a aprobación" salía con un aspa que asusta sin motivo. *@
+            <div class="mb-3 @ClaseTextoAccion">
+                <i class="@IconoAccion" style="font-size: 3rem;"></i>
             </div>
-            <h5 class="fw-bold">@(accionEsAprobar ? "¿Aprobar la orden?" : "¿Anular la orden?")</h5>
-            <p class="text-muted">
-                @(accionEsAprobar
-                    ? "Una vez aprobada ya no se puede editar. Quedará lista para recibirse."
-                    : "La orden quedará anulada. Sólo se puede anular si no tiene recepciones.")
-            </p>
+            <h5 class="fw-bold">@TituloAccion</h5>
+            <p class="text-muted">@DetalleAccion</p>
             @if (ordenAccion is not null)
             {
                 <div class="fw-semibold">
                     O/C @ordenAccion.Numero.ToString("00000") — @(string.IsNullOrWhiteSpace(ordenAccion.ProveedorNombre) ? ordenAccion.CodProveedor : ordenAccion.ProveedorNombre)
                 </div>
             }
+
+            @if (AccionExigeMotivo)
+            {
+                <div class="mt-3 text-start">
+                    <label class="form-label small fw-semibold">Motivo</label>
+                    <DxMemo @bind-Text="motivoAccion" Rows="2" CssClass="w-100"
+                            NullText="@PlaceholderMotivo" />
+                    @if (accion is AccionOrden.Rechazar or AccionOrden.Devolver)
+                    {
+                        <div class="form-text">Obligatorio: queda en la bitácora y se le envía al comprador.</div>
+                    }
+                </div>
+            }
+
             <div class="d-flex justify-content-center gap-3 mt-4">
-                <DxButton Text="Cancelar" Click="CancelarAccion"
+                <DxButton Text="Volver" Click="CancelarAccion"
                           RenderStyle="ButtonRenderStyle.Secondary" RenderStyleMode="ButtonRenderStyleMode.Outline"
                           Enabled="@(!procesando)" />
-                <DxButton Text="@(accionEsAprobar ? "Sí, aprobar" : "Sí, anular")"
+                <DxButton Text="@BotonAccion"
                           Click="EjecutarAccionAsync" Enabled="@(!procesando)"
-                          RenderStyle="@(accionEsAprobar ? ButtonRenderStyle.Success : ButtonRenderStyle.Warning)"
-                          IconCssClass="@(accionEsAprobar ? "bi bi-check-lg" : "bi bi-x-circle")" />
+                          RenderStyle="@EstiloBotonAccion"
+                          IconCssClass="@IconoBotonAccion" />
             </div>
         </div>
     </BodyTemplate>
@@ -293,9 +367,12 @@
     private readonly List<EstadoOpcion> estadosFiltro = new()
     {
         new EstadoOpcion { Codigo = EstadoOrdenCompra.Borrador,        Etiqueta = "Borrador" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.EnAprobacion,    Etiqueta = "En aprobación" },
         new EstadoOpcion { Codigo = EstadoOrdenCompra.Aprobada,        Etiqueta = "Aprobada" },
         new EstadoOpcion { Codigo = EstadoOrdenCompra.RecibidaParcial, Etiqueta = "Recibida parcial" },
         new EstadoOpcion { Codigo = EstadoOrdenCompra.Cerrada,         Etiqueta = "Cerrada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Rechazada,       Etiqueta = "Rechazada" },
+        new EstadoOpcion { Codigo = EstadoOrdenCompra.Cancelada,       Etiqueta = "Cancelada" },
         new EstadoOpcion { Codigo = EstadoOrdenCompra.Anulada,         Etiqueta = "Anulada" }
     };
 
@@ -309,9 +386,103 @@
     private string? errorMessage;
 
     private bool confirmVisible;
-    private bool accionEsAprobar;
+    /// <summary>Transiciones que la fila ofrece. Cancelar y cerrar exigen motivo.</summary>
+    private enum AccionOrden { Aprobar, Anular, Rechazar, Cancelar, Cerrar, EnviarAprobacion, Firmar, Devolver }
+
+    private AccionOrden accion = AccionOrden.Aprobar;
+    private string motivoAccion = string.Empty;
+
+    /// <summary>Rechazar, cancelar y cerrar cierran la orden antes de tiempo: hay que justificarlas.</summary>
+    /// <summary>
+    /// Acciones que hacen AVANZAR la orden. Deciden el color y el icono del diálogo: no es lo
+    /// mismo confirmar un envío a aprobación que confirmar una anulación.
+    /// </summary>
+    private bool AccionEsPositiva
+        => accion is AccionOrden.Aprobar or AccionOrden.EnviarAprobacion or AccionOrden.Firmar;
+
+    /// <summary>
+    /// Acciones que DETIENEN la orden para siempre. Cancelar y cerrar no entran: dan por terminado
+    /// lo pendiente de una orden legítima, y pintarlas de rojo alarmaría sin razón.
+    /// </summary>
+    private bool AccionEsRechazo
+        => accion is AccionOrden.Rechazar or AccionOrden.Anular;
+
+    private string ClaseTextoAccion
+        => AccionEsPositiva ? "text-success" : AccionEsRechazo ? "text-danger" : "text-warning";
+
+    private string IconoAccion
+        => AccionEsPositiva ? "bi bi-check-circle" : "bi bi-x-circle";
+
+    private ButtonRenderStyle EstiloBotonAccion
+        => AccionEsPositiva ? ButtonRenderStyle.Success
+         : AccionEsRechazo ? ButtonRenderStyle.Danger
+         : ButtonRenderStyle.Warning;
+
+    private string IconoBotonAccion
+        => AccionEsPositiva ? "bi bi-check-lg" : "bi bi-x-circle";
+
+    /// <summary>El motivo se pide por razones distintas según la acción; el ejemplo lo dice.</summary>
+    private string PlaceholderMotivo => accion switch
+    {
+        AccionOrden.Rechazar => "Por qué se rechaza",
+        AccionOrden.Devolver => "Qué hay que corregir",
+        AccionOrden.Cancelar => "Por qué ya no se va a recibir",
+        _                    => "Por qué se cierra la orden antes de tiempo"
+    };
+
+    private bool AccionExigeMotivo
+        => accion is AccionOrden.Rechazar or AccionOrden.Cancelar or AccionOrden.Cerrar
+                  or AccionOrden.Devolver;
+
+    private string TituloAccion => accion switch
+    {
+        AccionOrden.Aprobar  => "¿Aprobar la orden?",
+        AccionOrden.Anular   => "¿Anular la orden?",
+        AccionOrden.Rechazar => "¿Rechazar la orden?",
+        AccionOrden.Cancelar => "¿Cancelar la orden?",
+        AccionOrden.EnviarAprobacion => "¿Enviar la orden a aprobación?",
+        AccionOrden.Firmar   => "¿Firmar la orden?",
+        AccionOrden.Devolver => "¿Devolver la orden a borrador?",
+        _                    => "¿Cerrar la orden?"
+    };
+
+    private string DetalleAccion => accion switch
+    {
+        AccionOrden.Aprobar  => "Una vez aprobada ya no se puede editar. Quedará lista para recibirse.",
+        AccionOrden.Anular   => "La orden quedará anulada. Sólo se puede anular si no tiene recepciones.",
+        AccionOrden.Rechazar => "La orden quedará rechazada y no podrá aprobarse.",
+        AccionOrden.Cancelar => "Lo pedido y no recibido ya no se recibirá. Si había presupuesto comprometido, el saldo pendiente se libera.",
+        AccionOrden.EnviarAprobacion => "Dejará de ser editable y pasará por los niveles de aprobación que exija su monto.",
+        AccionOrden.Firmar   => "Firmará el nivel que le corresponde. Si es el último, la orden quedará aprobada.",
+        AccionOrden.Devolver => "Se borrarán las firmas y volverá a ser editable. Si había presupuesto reservado, se libera.",
+        _                    => "Se da por suficiente lo recibido. Si había presupuesto comprometido, el saldo pendiente se libera."
+    };
+
+    private string BotonAccion => accion switch
+    {
+        AccionOrden.Aprobar  => "Sí, aprobar",
+        AccionOrden.Anular   => "Sí, anular",
+        AccionOrden.Rechazar => "Sí, rechazar",
+        AccionOrden.Cancelar => "Sí, cancelar",
+        AccionOrden.EnviarAprobacion => "Sí, enviar",
+        AccionOrden.Firmar   => "Sí, firmar",
+        AccionOrden.Devolver => "Sí, devolver",
+        _                    => "Sí, cerrar"
+    };
     private bool procesando;
     private OrdenCompraListItemDto? ordenAccion;
+
+    /// <summary>
+    /// Qué ofrece la pantalla según el control de la empresa. Se consulta una vez por carga; si
+    /// falla queda apagado, que es el comportamiento histórico.
+    /// </summary>
+    private OrdenesCompraClient.AprobacionConfigVista aprobacion = new();
+
+    /// <summary>Progreso por orden en la escalera, para el badge. Vacío con el control apagado.</summary>
+    private Dictionary<long, ProgresoAprobacionDto> progresoAprobacion = new();
+
+    /// <summary>Mensaje que deja la firma para el toast (lo arma FirmarAsync).</summary>
+    private string mensajeFirma = string.Empty;
 
     private void MostrarColumnChooser() => grid?.ShowColumnChooser();
 
@@ -323,6 +494,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        aprobacion = await OrdenesClient.ObtenerAprobacionConfigAsync();
         await CargarProveedoresAsync();
         await CargarAsync();
     }
@@ -359,6 +531,16 @@
             isLoading = true;
             errorMessage = null;
             ordenes = await OrdenesClient.GetAsync(BuildFilter());
+
+            // Solo hay progreso que pintar si la empresa exige escalera.
+            if (aprobacion.Encendido)
+            {
+                progresoAprobacion = new Dictionary<long, ProgresoAprobacionDto>();
+                foreach (var fila in await OrdenesClient.ObtenerProgresoAprobacionAsync())
+                {
+                    progresoAprobacion[fila.DocumentoId] = fila;
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -390,17 +572,59 @@
 
     private void Abrir(int id) => Navigation.NavigateTo($"/almacen/ordenes-compra/{id}/editar");
 
-    private void ConfirmarAprobar(OrdenCompraListItemDto item)
+    private void ConfirmarAprobar(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Aprobar);
+    private void ConfirmarAnular(OrdenCompraListItemDto item)  => PedirConfirmacion(item, AccionOrden.Anular);
+    private void ConfirmarRechazar(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Rechazar);
+    private void ConfirmarCancelar(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Cancelar);
+    private void ConfirmarCerrar(OrdenCompraListItemDto item)   => PedirConfirmacion(item, AccionOrden.Cerrar);
+    private void ConfirmarEnviarAprobacion(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.EnviarAprobacion);
+    private void ConfirmarFirmar(OrdenCompraListItemDto item)   => PedirConfirmacion(item, AccionOrden.Firmar);
+    private void ConfirmarDevolver(OrdenCompraListItemDto item) => PedirConfirmacion(item, AccionOrden.Devolver);
+
+    /// <summary>
+    /// Firma y arma el mensaje del toast con lo que realmente pasó: no es lo mismo cerrar la
+    /// escalera que dejarla esperando al siguiente nivel.
+    /// </summary>
+    private async Task<bool> FirmarAsync(int id)
     {
-        ordenAccion = item;
-        accionEsAprobar = true;
-        confirmVisible = true;
+        var resultado = await OrdenesClient.FirmarAsync(id);
+        if (resultado is null) return false;
+
+        mensajeFirma = resultado.FlujoCompleto
+            ? "Firmada la última aprobación: la orden quedó aprobada."
+            : $"Nivel {resultado.NivelFirmado} firmado. Pasa a «{resultado.DescripcionPendiente}».";
+
+        if (resultado.ComprometioPresupuesto)
+        {
+            mensajeFirma += " Se reservó el presupuesto de la orden.";
+        }
+
+        return true;
     }
 
-    private void ConfirmarAnular(OrdenCompraListItemDto item)
+    /// <summary>Etiqueta del estado; en la escalera muestra el avance real («2 de 3»).</summary>
+    /// <summary>
+    /// Cuántas firmas lleva la orden, para la línea bajo el badge. <c>null</c> cuando no aplica
+    /// (la orden no está en la escalera, o todavía no se conoce su progreso).
+    /// <para>
+    /// Va aparte del texto del badge a propósito: metido dentro, «En aprobación (0 de 2)» no cabía
+    /// en la columna y la píldora se cortaba sin el paréntesis de cierre.
+    /// </para>
+    /// </summary>
+    private string? ProgresoFirmas(OrdenCompraListItemDto item)
+    {
+        if (item.Estado != EstadoOrdenCompra.EnAprobacion) return null;
+
+        return progresoAprobacion.TryGetValue(item.Id, out var progreso) && progreso.Total > 0
+            ? $"{progreso.Firmados} de {progreso.Total} firmas"
+            : null;
+    }
+
+    private void PedirConfirmacion(OrdenCompraListItemDto item, AccionOrden cual)
     {
         ordenAccion = item;
-        accionEsAprobar = false;
+        accion = cual;
+        motivoAccion = string.Empty;
         confirmVisible = true;
     }
 
@@ -415,12 +639,27 @@
     {
         if (ordenAccion is null) { confirmVisible = false; return; }
 
+        var motivo = motivoAccion.Trim();
+        if (AccionExigeMotivo && string.IsNullOrWhiteSpace(motivo))
+        {
+            Toast("Validación", "Indique el motivo.", ToastRenderStyle.Warning);
+            return;
+        }
+
         procesando = true;
         try
         {
-            var ok = accionEsAprobar
-                ? await OrdenesClient.AprobarAsync(ordenAccion.Id)
-                : await OrdenesClient.AnularAsync(ordenAccion.Id);
+            var ok = accion switch
+            {
+                AccionOrden.Aprobar  => await OrdenesClient.AprobarAsync(ordenAccion.Id),
+                AccionOrden.Anular   => await OrdenesClient.AnularAsync(ordenAccion.Id),
+                AccionOrden.Rechazar => await OrdenesClient.RechazarAsync(ordenAccion.Id, motivo),
+                AccionOrden.Cancelar => await OrdenesClient.CancelarAsync(ordenAccion.Id, motivo),
+                AccionOrden.EnviarAprobacion => await OrdenesClient.EnviarAAprobacionAsync(ordenAccion.Id),
+                AccionOrden.Devolver => await OrdenesClient.DevolverAsync(ordenAccion.Id, motivo),
+                AccionOrden.Firmar   => await FirmarAsync(ordenAccion.Id),
+                _                    => await OrdenesClient.CerrarAsync(ordenAccion.Id, motivo)
+            };
 
             if (!ok)
             {
@@ -428,7 +667,17 @@
             }
             else
             {
-                Toast("Éxito", accionEsAprobar ? "Orden aprobada." : "Orden anulada.", ToastRenderStyle.Success);
+                Toast("Éxito", accion switch
+                {
+                    AccionOrden.Aprobar  => "Orden aprobada.",
+                    AccionOrden.Anular   => "Orden anulada.",
+                    AccionOrden.Rechazar => "Orden rechazada.",
+                    AccionOrden.Cancelar => "Orden cancelada. Se liberó el presupuesto pendiente.",
+                    AccionOrden.EnviarAprobacion => "Orden enviada a aprobación.",
+                    AccionOrden.Devolver => "Orden devuelta a borrador. Se borraron las firmas.",
+                    AccionOrden.Firmar   => mensajeFirma,
+                    _                    => "Orden cerrada. Se liberó el presupuesto pendiente."
+                }, ToastRenderStyle.Success);
                 await CargarAsync();
             }
         }
@@ -459,6 +708,9 @@
         EstadoOrdenCompra.Aprobada        => "estado-aprobada",
         EstadoOrdenCompra.RecibidaParcial => "estado-parcial",
         EstadoOrdenCompra.Cerrada         => "estado-cerrada",
+        EstadoOrdenCompra.EnAprobacion    => "estado-aprobacion",
+        EstadoOrdenCompra.Rechazada       => "estado-anulada",
+        EstadoOrdenCompra.Cancelada       => "estado-anulada",
         EstadoOrdenCompra.Anulada         => "estado-anulada",
         _ => "estado-borrador"
     };

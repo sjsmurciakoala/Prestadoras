@@ -10,6 +10,7 @@ using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.DTOs.Retenciones;
 using SIAD.Core.Entities;
 using SIAD.Services.Almacen;
+using SIAD.Services.Presupuesto;
 using SIAD.Services.Bancos;
 using SIAD.Services.Contabilidad;
 using SIAD.Services.Retenciones;
@@ -42,6 +43,12 @@ public class CompraCxpTests : IntegrationTestBase, IAsyncLifetime
     public new async Task InitializeAsync()
     {
         await base.InitializeAsync();
+
+        // Estos tests prueban la MECÁNICA de compras (kardex, CxP, correlativo, anulación),
+        // no el presupuesto. cfg_presupuesto_control es estado GLOBAL de la base de prueba:
+        // si quedó encendido por una demo o un piloto, estas pruebas fallarían con
+        // «excede el presupuesto disponible» sin tener nada que ver con eso.
+        await DesactivarControlPresupuestarioAsync();
         if (!Fixture.Available) return;
 
         var options = new DbContextOptionsBuilder<SiadDbContext>().UseNpgsql(Connection).Options;
@@ -50,7 +57,8 @@ public class CompraCxpTests : IntegrationTestBase, IAsyncLifetime
         _context.Database.UseTransaction(Transaction);
 
         var motor = new InventarioPostingService(_context, company, new ArticuloRollupService(_context));
-        _recepciones = new RecepcionCompraService(_context, company, motor, new TasaIsvArticuloResolver(_context));
+        _recepciones = new RecepcionCompraService(_context, company, motor, new TasaIsvArticuloResolver(_context),
+            new PresupuestoCompromisoService(_context, company));
         var cheques = new ChequesService(_context, company, Substitute.For<IAccountFormatService>());
         _service = new CompraCxpService(_context, company, cheques);
 

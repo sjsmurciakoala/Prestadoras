@@ -62,14 +62,47 @@ public sealed class Rpt_Dev_Comprobante_OrdenCompra : ComprobanteAlmacenReportBa
         y = BuildTabla(band, doc, y);
         y = BuildTotales(band, datos, y);
         y = BuildObservacion(band, doc, y);
-        y = BuildFirmas(band, y,
-        [
-            ("ELABORADO POR", null),
-            ("APROBADO POR", doc.AprobadoPor),
-            ("RECIBIDO POR (PROVEEDOR)", null)
-        ]);
+        y = BuildFirmas(band, y, ColumnasFirma(datos));
 
         return y;
+    }
+
+    /// <summary>
+    /// Columnas del bloque de firmas. Cuando la orden pasó por la escalera de aprobación se
+    /// imprime <b>una columna por nivel firmado</b>, con su etiqueta real ("Jefatura",
+    /// "Gerencia") y quién firmó; sin escalera se mantiene el bloque histórico de tres columnas.
+    /// <para>
+    /// Se limitan a tres columnas porque es lo que cabe en el ancho del comprobante
+    /// (<c>BuildFirmas</c> reparte 250 puntos por columna). Con escaleras más largas se imprimen
+    /// los tres últimos niveles firmados, que son los que autorizan el monto.
+    /// </para>
+    /// </summary>
+    private static (string Titulo, string? Nombre)[] ColumnasFirma(OrdenCompraImpresionDto datos)
+    {
+        if (datos.Firmas.Count == 0)
+        {
+            return
+            [
+                ("ELABORADO POR", null),
+                ("APROBADO POR", datos.Documento.AprobadoPor),
+                ("RECIBIDO POR (PROVEEDOR)", null)
+            ];
+        }
+
+        var desde = Math.Max(0, datos.Firmas.Count - 3);
+        var columnas = new List<(string, string?)>();
+
+        for (var i = desde; i < datos.Firmas.Count; i++)
+        {
+            var firma = datos.Firmas[i];
+            var nombre = firma.Fecha.HasValue
+                ? $"{firma.Usuario}  ({firma.Fecha.Value.ToString("dd/MM/yyyy", EsHn)})"
+                : firma.Usuario;
+
+            columnas.Add((firma.Descripcion.ToUpperInvariant(), nombre));
+        }
+
+        return columnas.ToArray();
     }
 
     private static float BuildDatos(Band band, OrdenCompraDto doc, float y)

@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -8,7 +8,9 @@ using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
+using SIAD.Services.Aprobaciones;
 using SIAD.Services.Almacen;
+using SIAD.Services.Presupuesto;
 using SIAD.Data;
 using SIAD.Tests.Infrastructure;
 
@@ -49,14 +51,26 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
             return;
         }
 
+        // Esta clase prueba la MECÁNICA de la orden (correlativo, totales, máquina de estados),
+        // no el presupuesto. Sin este aislamiento, aprobar falla con «excede el presupuesto
+        // disponible» en cuanto alguien deja cfg_presupuesto_control encendido en la base de
+        // prueba —que es justo el estado del mirror hoy (COMPRAS_OC en modo 2)—. El compromiso
+        // tiene su propia cobertura en Presupuesto/CompromisoOrdenCompraTests, que enciende el
+        // control por su cuenta. Mismo criterio que CompraCxpTests y RecepcionCompraTests.
+        await DesactivarControlPresupuestarioAsync();
+
         var options = new DbContextOptionsBuilder<SiadDbContext>()
             .UseNpgsql(Connection)
             .Options;
 
         _context = new SiadDbContext(options, new TestCurrentCompanyService(CompanyId));
         _context.Database.UseTransaction(Transaction);
+        var empresa = new TestCurrentCompanyService(CompanyId);
         _service = new OrdenCompraService(
-            _context, new TestCurrentCompanyService(CompanyId), new TasaIsvArticuloResolver(_context));
+            _context, empresa, new TasaIsvArticuloResolver(_context),
+            new PresupuestoCompromisoService(_context, empresa),
+            new AprobacionService(_context, empresa, new TestCurrentUserService()),
+            new AprobacionNotificadorNoop());
 
         // Proveedor activo cualquiera de la empresa de pruebas.
         _codProveedor = await _context.prv_proveedores.AsNoTracking()
@@ -103,13 +117,44 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal(EstadoOrdenCompra.Borrador, creada.Estado);
         Assert.Single(creada.Detalles);
 
-        // 10 × 25.50 = 255.00 · descuento 10% = 25.50 · ISV 15% = 38.25
+        // 10 × 25.50 = 255.00 · descuento 10% = 25.50 · base imponible 229.50
+        // El ISV va sobre la base YA DESCONTADA: 229.50 × 15% = 34.43 (no 38.25).
         Assert.Equal(255.00m, creada.SubTotal);
-        Assert.Equal(38.25m, creada.Impuesto);
-        Assert.Equal(38.25m, creada.Detalles.Single().Impuesto);
+        Assert.Equal(34.43m, creada.Impuesto);
+        Assert.Equal(34.43m, creada.Detalles.Single().Impuesto);
         Assert.Equal(15m, creada.Detalles.Single().TasaIsv);
         Assert.True(creada.Detalles.Single().IsvConfigurado);
-        Assert.Equal(267.75m, creada.Total);   // 255 − 25.50 + 38.25
+        Assert.Equal(263.93m, creada.Total);   // 255 − 25.50 + 34.43
+    }
+
+    /// <summary>
+    /// El ISV se calcula sobre la base NETA de descuento, no sobre el bruto. Cobrar impuesto
+    /// sobre mercadería descontada infla el total del documento, el compromiso presupuestario
+    /// y la cuenta por pagar; en Honduras el ISV grava el valor neto tras descuentos.
+    /// </summary>
+    [SkippableTheory]
+    [InlineData(0, 255.00, 38.25, 293.25)]    // sin descuento: el bruto ES la base
+    [InlineData(10, 229.50, 34.43, 263.93)]   // 229.50 × 15% = 34.425 → 34.43
+    [InlineData(50, 127.50, 19.13, 146.63)]   // 127.50 × 15% = 19.125 → 19.13
+    [InlineData(100, 0.00, 0.00, 0.00)]       // todo descontado: no hay nada que gravar
+    public async Task Crear_ElIsvSeCalculaSobreLaBaseDescontada(
+        double descuento, double baseEsperada, double isvEsperado, double totalEsperado)
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await SembrarIsvDelArticuloAsync(_articuloA, 15m);
+
+        var creada = await _service!.CrearAsync(NuevaOrden(descuento: (decimal)descuento), "tester");
+
+        // El subtotal siempre es el bruto: el descuento se ve en el total, no en la base.
+        Assert.Equal(255.00m, creada.SubTotal);
+        Assert.Equal((decimal)isvEsperado, creada.Impuesto);
+        Assert.Equal((decimal)isvEsperado, creada.Detalles.Single().Impuesto);
+        Assert.Equal((decimal)totalEsperado, creada.Total);
+
+        // La base imponible que justifica ese ISV.
+        var montoDescuento = Math.Round(255.00m * (decimal)descuento / 100m, 2, MidpointRounding.AwayFromZero);
+        Assert.Equal((decimal)baseEsperada, creada.SubTotal - montoDescuento);
     }
 
     [SkippableFact]
@@ -419,6 +464,46 @@ public class OrdenCompraTests : IntegrationTestBase, IAsyncLifetime
 
         Assert.Contains(soloAprobadas, o => o.Id == aprobada.Id);
         Assert.DoesNotContain(soloAprobadas, o => o.Id == borrador.Id);
+    }
+
+    /// <summary>
+    /// El listado pinta el correlativo con relleno de ceros («00052») y eso es lo que la gente
+    /// teclea o copia; el buscador tiene que encontrarlo tanto así como sin los ceros. Antes solo
+    /// funcionaba la forma corta y el buscador parecía roto justo con el dato que se muestra.
+    /// </summary>
+    [SkippableFact]
+    public async Task Get_BuscaPorNumeroConYSinCerosALaIzquierda()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        var creada = await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var comoSeMuestra = creada.Numero.ToString("00000");   // 52 -> "00052"
+        var comoSeGuarda = creada.Numero.ToString();           // 52 -> "52"
+
+        var porFormato = await _service.GetAsync(new OrdenCompraFilterDto { Search = comoSeMuestra });
+        var porEntero = await _service.GetAsync(new OrdenCompraFilterDto { Search = comoSeGuarda });
+
+        Assert.Contains(porFormato, o => o.Id == creada.Id);
+        Assert.Contains(porEntero, o => o.Id == creada.Id);
+    }
+
+    /// <summary>
+    /// Un término de solo ceros no puede colapsar a cadena vacía: <c>Contains("")</c> devolvería
+    /// TODAS las órdenes, convirtiendo un filtro en un listado completo.
+    /// </summary>
+    [SkippableFact]
+    public async Task Get_BuscarSoloCeros_NoDevuelveTodo()
+    {
+        Skip.IfNot(Fixture.Available, "SIAD_TEST_DB no configurado");
+
+        await _service!.CrearAsync(NuevaOrden(), "tester");
+
+        var todas = await _service.GetAsync(new OrdenCompraFilterDto());
+        var ceros = await _service.GetAsync(new OrdenCompraFilterDto { Search = "000" });
+
+        // "000" busca el dígito 0 dentro del número, no "cualquier cosa".
+        Assert.True(ceros.Count < todas.Count || todas.All(o => o.Numero.ToString().Contains('0')));
     }
 
     // ── Fecha de entrega pactada ─────────────────────────────────────────────

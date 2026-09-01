@@ -5,6 +5,7 @@ using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Aprobaciones;
 
 namespace SIAD.Services.Almacen;
 
@@ -21,11 +22,14 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
 {
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _company;
+    private readonly IAprobacionService _aprobacion;
 
-    public RequisicionDocumentoService(SiadDbContext context, ICurrentCompanyService company)
+    public RequisicionDocumentoService(
+        SiadDbContext context, ICurrentCompanyService company, IAprobacionService aprobacion)
     {
         _context = context;
         _company = company;
+        _aprobacion = aprobacion;
     }
 
     // ─────────────────────────────────────────────────────────────────────────
@@ -49,11 +53,12 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         if (!string.IsNullOrWhiteSpace(f.Search))
         {
             var s = f.Search.Trim();
+            var numero = ClasificacionNormalizer.NumeroBuscado(f.Search);
             query = query.Where(x =>
                 EF.Functions.ILike(x.h.solicitante, $"%{s}%")
                 || (x.h.departamento != null && EF.Functions.ILike(x.h.departamento, $"%{s}%"))
                 || (x.h.observacion != null && EF.Functions.ILike(x.h.observacion, $"%{s}%"))
-                || x.h.numero.ToString().Contains(s));
+                || x.h.numero.ToString().Contains(numero));
         }
 
         var rows = await query
@@ -308,6 +313,17 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
         hdr.estado = EstadoRequisicionHdr.EnRevision;
         SellarModificacion(hdr, user);
         await _context.SaveChangesAsync(ct);
+
+        // Con la aprobación por niveles encendida, "en revisión" ya no es un solo escalón: se abre
+        // la escalera que exija el total referencial de la requisición. Apagada, el flujo es el
+        // histórico y esto no hace nada.
+        if (await _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.Requisicion, ct))
+        {
+            await _aprobacion.IniciarAsync(
+                DocumentosAprobacion.Requisicion, hdr.id, hdr.numero.ToString("00000"),
+                hdr.total, hdr.usuario_solicita, ct);
+        }
+
         await TransaccionAmbiente.ConfirmarAsync(tx, ct);
         return (await GetByIdAsync(id, ct))!;
     }
@@ -322,6 +338,22 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
 
         var usuario = ClasificacionNormalizer.Usuario(user);
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        // Con escalera, aprobar es FIRMAR el nivel pendiente: la requisición solo queda aprobada
+        // cuando firma el último. El motor valida elegibilidad, secuencia y autoaprobación.
+        if (await _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.Requisicion, ct))
+        {
+            var firma = await _aprobacion.FirmarAsync(DocumentosAprobacion.Requisicion, id, null, ct);
+            if (!firma.FlujoCompleto)
+            {
+                hdr.usuariomodificacion = usuario;
+                hdr.fechamodificacion = ahora;
+                await _context.SaveChangesAsync(ct);
+                await TransaccionAmbiente.ConfirmarAsync(tx, ct);
+                return (await GetByIdAsync(id, ct))!;
+            }
+        }
+
         hdr.estado = EstadoRequisicionHdr.Aprobada;
         hdr.aprobado_por = usuario;
         hdr.fecha_aprobacion = ahora;
@@ -346,6 +378,14 @@ public sealed class RequisicionDocumentoService : IRequisicionDocumentoService
 
         var usuario = ClasificacionNormalizer.Usuario(user);
         var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        // El motor valida que quien rechaza sea aprobador del nivel pendiente y lo deja en la
+        // bitácora; sin escalera, el rechazo es el de siempre.
+        if (await _aprobacion.RequiereAprobacionAsync(DocumentosAprobacion.Requisicion, ct))
+        {
+            await _aprobacion.RechazarAsync(DocumentosAprobacion.Requisicion, id, motivoR, ct);
+        }
+
         hdr.estado = EstadoRequisicionHdr.Rechazada;
         hdr.rechazado_por = usuario;
         hdr.fecha_rechazo = ahora;

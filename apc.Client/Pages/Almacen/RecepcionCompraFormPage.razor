@@ -1078,6 +1078,17 @@
             var registrada = await RecepcionesClient.CrearAsync(modelo);
 
             Toast("Éxito", $"Factura {registrada.Numero:00000} registrada: el inventario ya está actualizado.", ToastRenderStyle.Success);
+
+            // El modelo se reemplaza SIEMPRE por el del servidor (trae número, ISV, total y el
+            // costo con que cada renglón entró al kardex). Es indispensable hacerlo ANTES de
+            // navegar: al pasar de /nueva a /{id} Blazor REUSA esta misma instancia del
+            // componente, así que OnInitializedAsync no vuelve a correr y la pantalla se
+            // quedaría con el modelo del formulario, informando número 00000, total 0.00 y
+            // costo de kardex 0.0000 sobre una factura que sí se registró bien. Quien lea eso
+            // anula y vuelve a capturar, duplicando inventario, partida y CxP.
+            modelo = registrada;
+            compraDirecta = !modelo.OrdenCompraId.HasValue;
+
             Navigation.NavigateTo($"/almacen/compras/recepciones/{registrada.Id}");
         }
         catch (Exception ex)

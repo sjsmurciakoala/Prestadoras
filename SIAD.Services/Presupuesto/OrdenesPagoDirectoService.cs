@@ -32,6 +32,9 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
     private readonly IBanTransaccionesService _banTransaccionesService;
     private readonly IChequesService _cheques;
 
+    /// <summary>Motor compartido del presupuesto (lock, validación y kardex). Ver ApplyCompromisoPresupuestoAsync.</summary>
+    private readonly IPresupuestoCompromisoService _presupuesto;
+
     public OrdenesPagoDirectoService(
         SiadDbContext context,
         IProveedoresService proveedoresService,
@@ -39,7 +42,8 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
         IHttpContextAccessor httpContextAccessor,
         IAccountFormatService accountFormatService,
         IBanTransaccionesService banTransaccionesService,
-        IChequesService cheques)
+        IChequesService cheques,
+        IPresupuestoCompromisoService presupuesto)
     {
         _context = context;
         _proveedoresService = proveedoresService;
@@ -48,6 +52,7 @@ public sealed class OrdenesPagoDirectoService : IOrdenesPagoDirectoService
         _accountFormatService = accountFormatService;
         _banTransaccionesService = banTransaccionesService;
         _cheques = cheques;
+        _presupuesto = presupuesto;
     }
 
     public async Task<IReadOnlyList<OrdenPagoDirectoListItemDto>> GetAsync(
@@ -500,6 +505,7 @@ ORDER BY a.numero_abono;";
         bool? statusTransacc = null;
 
         await ApplyCompromisoPresupuestoAsync(
+            numeroOrden,
             preparedOrder.FechaCompromiso,
             BuildPresupuestoAfectacionLineas(preparedOrder.Detalles),
             direction: 1,
@@ -569,12 +575,14 @@ ORDER BY a.numero_abono;";
         var correlativoProveedor = await ResolveCorrelativoProveedorForUpdateAsync(numeroOrden, preparedOrder.CodigoProveedor, ct);
 
         await ApplyCompromisoPresupuestoAsync(
+            numeroOrden,
             snapshot.FechaCompromiso,
             BuildPresupuestoAfectacionLineas(snapshot.Detalles),
             direction: -1,
             ct);
 
         await ApplyCompromisoPresupuestoAsync(
+            numeroOrden,
             preparedOrder.FechaCompromiso,
             BuildPresupuestoAfectacionLineas(preparedOrder.Detalles),
             direction: 1,
@@ -641,6 +649,7 @@ ORDER BY a.numero_abono;";
         var snapshot = await LoadCompromisoPresupuestoSnapshotAsync(numeroOrden, ct);
 
         await ApplyCompromisoPresupuestoAsync(
+            numeroOrden,
             snapshot.FechaCompromiso,
             BuildPresupuestoAfectacionLineas(snapshot.Detalles),
             direction: -1,
@@ -3167,6 +3176,7 @@ LIMIT 1;";
         var snapshot = await LoadCompromisoPresupuestoSnapshotAsync(numeroOrden, ct);
 
         await ApplyCompromisoPresupuestoAsync(
+            numeroOrden,
             snapshot.FechaCompromiso,
             BuildPresupuestoAfectacionLineas(snapshot.Detalles),
             direction: -1,
@@ -4034,7 +4044,32 @@ SELECT EXISTS (
             .ToList();
     }
 
-    private async Task ApplyCompromisoPresupuestoAsync(
+    /// <summary>
+    /// Afecta el presupuesto del compromiso. Desde 2026-08-27 delega en el motor compartido
+    /// (<c>sp_pst_afectar_valor_real</c>) en vez de leer y mutar entidades de EF.
+    /// <para>
+    /// <b>Qué gana el compromiso con el cambio:</b>
+    /// </para>
+    /// <list type="number">
+    ///   <item><b>Lock.</b> Antes no tomaba ninguno sobre <c>pst_config_presupuesto_dtl</c>: se
+    ///   apoyaba en <c>IsolationLevel.Serializable</c> y el <c>40001</c> resultante no se manejaba,
+    ///   así que dos usuarios simultáneos contra la misma cuenta producían un 500 crudo. El motor
+    ///   bloquea la fila con <c>FOR UPDATE</c>.</item>
+    ///   <item><b>Kardex.</b> Antes movía <c>valor_real</c> sin dejar rastro. Ahora cada afectación
+    ///   queda en <c>pst_movimiento</c> con usuario, fecha, documento y saldos antes/después.</item>
+    ///   <item><b>Cabecera bien calculada.</b> <c>RecalculateBudgetHeadersAsync</c> la recalculaba
+    ///   con <c>valor_global − Σ valor_real</c>, ignorando el comprometido de las órdenes de compra
+    ///   y dejándola inflada. Por eso desapareció: la recalcula el motor.</item>
+    /// </list>
+    /// <para>
+    /// La <b>validación no cambia</b> mientras el módulo PROVEEDORES esté apagado —que es como
+    /// nace—: sigue midiendo contra <c>proyección − ejecutado</c>. Encenderlo hace que también
+    /// descuente lo comprometido por compras, que es lo correcto pero puede rechazar operaciones
+    /// que hoy pasan.
+    /// </para>
+    /// </summary>
+    private Task ApplyCompromisoPresupuestoAsync(
+        int numeroOrden,
         DateTime fechaCompromiso,
         IReadOnlyCollection<PresupuestoAfectacionLinea> lineas,
         int direction,
@@ -4042,60 +4077,34 @@ SELECT EXISTS (
     {
         if (lineas.Count == 0)
         {
-            return;
+            return Task.CompletedTask;
         }
 
-        var fechaPresupuesto = DateOnly.FromDateTime(fechaCompromiso);
-        var affectedBudgetIds = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
-        var cuentasPresupuestables = await LoadBudgetEnabledAccountCodesAsync(ct);
-        var format = await _accountFormatService.GetFormatAsync(ct);
+        var afectacion = lineas
+            .Where(l => !string.IsNullOrWhiteSpace(l.CuentaContable) && l.Monto > 0m)
+            .Select(l => (Cuenta: l.CuentaContable.Trim(), l.Monto))
+            .ToList();
 
-        foreach (var linea in lineas)
+        if (afectacion.Count == 0)
         {
-            var cuentaContable = linea.CuentaContable.Trim();
-            var delta = direction * linea.Monto;
-
-            if (string.IsNullOrWhiteSpace(cuentaContable) || delta == 0m)
-            {
-                continue;
-            }
-
-            if (!cuentasPresupuestables.Contains(cuentaContable))
-            {
-                continue;
-            }
-
-            var budgetRow = await FindBudgetDetailForCompromisoAsync(
-                cuentaContable,
-                fechaPresupuesto,
-                requireApproved: delta > 0m,
-                ct);
-
-            if (budgetRow is null)
-            {
-                throw new InvalidOperationException(
-                    delta > 0m
-                        ? $"No existe un presupuesto aprobado y vigente para la cuenta contable {format.Format(cuentaContable)} en la fecha {fechaPresupuesto:yyyy-MM-dd}."
-                        : $"No se encontro el presupuesto a liberar para la cuenta contable {format.Format(cuentaContable)} en la fecha {fechaPresupuesto:yyyy-MM-dd}.");
-            }
-
-            var nuevoValorReal = budgetRow.Detail.valor_real + delta;
-            if (delta > 0m && nuevoValorReal > budgetRow.Detail.valor_proyeccion)
-            {
-                var disponibleCuenta = Math.Max(budgetRow.Detail.valor_proyeccion - budgetRow.Detail.valor_real, 0m);
-                throw new InvalidOperationException(
-                    $"El compromiso excede el presupuesto disponible para la cuenta contable {format.Format(cuentaContable)}. Disponible: {disponibleCuenta:N2}.");
-            }
-
-            budgetRow.Detail.valor_real = nuevoValorReal < 0m ? 0m : nuevoValorReal;
-            budgetRow.Detail.valor_disponible = Math.Max(
-                budgetRow.Detail.valor_proyeccion - budgetRow.Detail.valor_real,
-                0m);
-            affectedBudgetIds.Add(budgetRow.Header.id_presupuesto);
+            return Task.CompletedTask;
         }
 
-        await RecalculateBudgetHeadersAsync(affectedBudgetIds, ct);
+        return _presupuesto.AfectarEjecutadoAsync(
+            PresupuestoControlModulos.Proveedores,
+            DocumentoTipoCompromiso,
+            numeroOrden,
+            numeroOrden.ToString("00000"),
+            DateOnly.FromDateTime(fechaCompromiso),
+            GetCurrentUser(),
+            (short)(direction >= 0 ? 1 : -1),
+            exigeAprobado: true,
+            afectacion,
+            ct);
     }
+
+    /// <summary>Tipo de documento del compromiso a proveedor en el kardex presupuestario.</summary>
+    private const string DocumentoTipoCompromiso = "COMPROMISO_PRV";
 
     private async Task<HashSet<string>> LoadBudgetEnabledAccountCodesAsync(CancellationToken ct)
     {

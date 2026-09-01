@@ -10,6 +10,11 @@
     font-weight: 600;
     line-height: 1.4;
     white-space: nowrap;
+    /* Si una descripción no cabe en la columna, que se recorte con puntos suspensivos en vez de
+       desbordar en silencio: un badge cortado a media palabra parece un dato incompleto. */
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 
 .badge-estado-oc.estado-borrador {
@@ -36,4 +41,12 @@
     background-color: rgba(220, 53, 69, 0.15);
     color: #b02a37;
     text-decoration: line-through;
+}
+
+/* Estado "En aprobación" (7): la orden salió de borrador pero aún le faltan firmas.
+   Ámbar, para distinguirla de la aprobada (verde) sin confundirla con anulada (rojo). */
+.badge-estado-oc.estado-aprobacion {
+    background: rgba(224, 168, 0, .14);
+    color: #8a6100;
+    border: 1px solid rgba(224, 168, 0, .35);
 }

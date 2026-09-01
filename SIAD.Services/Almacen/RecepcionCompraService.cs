@@ -2,10 +2,12 @@ using Microsoft.EntityFrameworkCore;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Almacen;
 using SIAD.Core.DTOs.Mantenimientos;
+using SIAD.Core.DTOs.Presupuesto;
 using SIAD.Core.Entities;
 using SIAD.Core.Tenancy;
 using SIAD.Core.Utilities;
 using SIAD.Data;
+using SIAD.Services.Presupuesto;
 
 namespace SIAD.Services.Almacen;
 
@@ -24,15 +26,31 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
     private readonly IInventarioPostingService _motor;
     private readonly ITasaIsvArticuloResolver _tasas;
 
+    private readonly IPresupuestoCompromisoService _presupuesto;
+
+    /// <summary>Avisos del último alta, cuando el control presupuestario corre en modo Advertencia.</summary>
+    private IReadOnlyList<PresupuestoAvisoDto> _avisosPresupuesto = Array.Empty<PresupuestoAvisoDto>();
+
     public RecepcionCompraService(
         SiadDbContext context, ICurrentCompanyService company, IInventarioPostingService motor,
-        ITasaIsvArticuloResolver tasas)
+        ITasaIsvArticuloResolver tasas, IPresupuestoCompromisoService presupuesto)
     {
         _context = context;
         _company = company;
         _motor = motor;
         _tasas = tasas;
+        _presupuesto = presupuesto;
     }
+
+    /// <summary>
+    /// Avisos presupuestarios de la última factura registrada en modo Advertencia (excedió pero se
+    /// dejó pasar). Vacío en modo Apagado y en modo Bloqueo, donde el exceso lanza en vez de pasar.
+    /// </summary>
+    public IReadOnlyList<PresupuestoAvisoDto> UltimosAvisosPresupuesto => _avisosPresupuesto;
+
+    /// <summary>Motivo que se registra en el kardex presupuestario al anular la factura.</summary>
+    private static string MotivoDeAnulacion(string? motivo)
+        => string.IsNullOrWhiteSpace(motivo) ? "Factura de compra anulada" : motivo.Trim();
 
     // ── Consultas ────────────────────────────────────────────────────────────
 
@@ -68,12 +86,13 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         {
             var termino = filtro.Search.Trim();
             var like = $"%{termino}%";
+            var numero = ClasificacionNormalizer.NumeroBuscado(termino);
             query = query.Where(h =>
                 EF.Functions.ILike(h.cod_proveedor, like) ||
                 EF.Functions.ILike(h.proveedor ?? string.Empty, like) ||
                 EF.Functions.ILike(h.numero_factura_sar ?? string.Empty, like) ||
                 EF.Functions.ILike(h.observaciones ?? string.Empty, like) ||
-                h.numero.ToString().Contains(termino));
+                h.numero.ToString().Contains(numero));
         }
 
         var filas = await query
@@ -484,6 +503,16 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         // vista unificada.
         GenerarCxp(cabecera);
 
+        // F3 del control presupuestario: DEVENGA la factura. Con orden de compra consume el
+        // compromiso que dejó la aprobación (el disponible NO cambia); sin orden, consume disponible
+        // directamente según permite_devengo_sin_oc. No-op si el control está apagado.
+        //
+        // Va aquí —después de la CxP y antes del asiento— porque la cabecera y las líneas ya tienen
+        // id y totales, y porque fallar en este punto revierte TODO: kardex, CxP, correlativo,
+        // descarga de la orden y asiento.
+        _avisosPresupuesto = await _presupuesto.DevengarFacturaAsync(
+            cabecera.id, cabecera.numero.ToString("00000"), cabecera.orden_compra_id, fecha, usuario, ct);
+
         // Fase 2: asiento contable de la compra (DEBE inventario / HABER proveedor), módulo COMPRAS,
         // gated por activo_compras (Compras es su propio módulo contable). No-op si el módulo COMPRAS
         // está inactivo (el comportamiento de hoy).
@@ -606,6 +635,12 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         // Fase 2: revierte el asiento contable de la compra (no-op si el flag estaba apagado al crearla).
         await CompraContabilidad.RevertirFacturaAsync(_context, companyId, cabecera.id, usuario, ct);
 
+        // F3 del control presupuestario: revierte el devengo con la fecha ORIGINAL de la factura.
+        // Si la orden sigue abierta, el compromiso se restituye y se puede volver a recibir; si ya
+        // está cerrada o cancelada, el importe vuelve al disponible. No-op si nunca devengó.
+        await _presupuesto.RevertirDevengoFacturaAsync(
+            cabecera.id, MotivoDeAnulacion(motivo), usuario, ct);
+
         cabecera.estado = EstadoRecepcionCompra.Anulada;
         cabecera.observaciones = AnexarMotivo(cabecera.observaciones, motivo, usuario);
         cabecera.usuariomodificacion = usuario;
@@ -671,13 +706,24 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
             renglon.cantidad_aplicada = Math.Max(0m, renglon.cantidad_aplicada - linea.cantidad);
         }
 
+        orden.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
+
+        // Cancelada y Anulada son decisiones TERMINALES de un usuario: anular una factura devuelve
+        // la cantidad aplicada (eso es un hecho), pero no resucita la orden. Sin esta guarda, anular
+        // la factura de una orden cancelada la dejaría en Aprobada y receptible —pero con su
+        // presupuesto ya liberado—, así que se podría volver a recibir contra un compromiso que ya
+        // no existe.
+        if (orden.estado is EstadoOrdenCompra.Cancelada or EstadoOrdenCompra.Anulada)
+        {
+            return;
+        }
+
         var algoAplicado = renglones.Exists(r => r.cantidad_aplicada > 0m);
         var todoCubierto = renglones.TrueForAll(r => r.cantidad_aplicada >= r.cantidad_pedida);
 
         orden.estado = todoCubierto ? EstadoOrdenCompra.Cerrada
             : algoAplicado ? EstadoOrdenCompra.RecibidaParcial
             : EstadoOrdenCompra.Aprobada;
-        orden.fechamodificacion = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
     }
 
     /// <summary>
@@ -832,11 +878,18 @@ public sealed class RecepcionCompraService : IRecepcionCompraService
         var resultado = new List<(alm_compra, decimal)>();
         decimal subTotal = 0m, impuestoTotal = 0m;
 
+        // El descuento de cabecera rebaja la base imponible de CADA renglón, así que el ISV se
+        // calcula sobre el renglón ya descontado (el ISV hondureño grava el valor neto tras
+        // descuentos). Como el costo capitalizado incluye ese ISV, un descuento también abarata
+        // lo que entra al kardex: se paga menos impuesto, entra menos impuesto al costo.
+        // ValidarCabecera acota el descuento a 0..100, de modo que el factor va de 1 a 0.
+        var factorNeto = (100m - cabecera.descuento) / 100m;
+
         foreach (var d in dto.Detalles)
         {
             var totalRenglon = Redondear2(d.Cantidad * d.CostoUnitario);
             var porcentaje = tasas.TryGetValue(d.ArticuloId, out var t) ? t.Porcentaje : 0m;
-            var isvRenglon = Redondear2(totalRenglon * porcentaje / 100m);
+            var isvRenglon = Redondear2(Redondear2(totalRenglon * factorNeto) * porcentaje / 100m);
 
             ExigirMonto(totalRenglon, "El total de un renglón");
             ExigirMonto(isvRenglon, "El impuesto de un renglón");

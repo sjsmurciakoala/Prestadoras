@@ -1,4 +1,4 @@
-namespace apc.Client.Layout.Navigation;
+﻿namespace apc.Client.Layout.Navigation;
 
 /// <summary>
 /// Menú lateral reorganizado en 5 secciones (decisión del usuario, 2026-08-05):
@@ -207,7 +207,17 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "cb-config-sistema", Text = "Configuración Sistema", NavigateUrl = "/contabilidad/empresas/configuracion", MatchPrefixes = ["/contabilidad/empresas/configuracion"], IconCssClass = "bi bi-sliders" }
                     ]
                 },
-                new SidebarNavItem { Id = "presupuesto", Text = "Presupuesto", NavigateUrl = "/presupuesto/configuraciones", MatchPrefixes = ["/presupuesto/configuraciones"], IconCssClass = "bi bi-cash-stack" }
+                new SidebarNavItem
+                {
+                    Id = "presupuesto", Text = "Presupuesto", IconCssClass = "bi bi-cash-stack",
+                    Children =
+                    [
+                        new SidebarNavItem { Id = "pst-configuraciones", Text = "Configuración de presupuestos", NavigateUrl = "/presupuesto/configuraciones", MatchPrefixes = ["/presupuesto/configuraciones"], IconCssClass = "bi bi-cash-stack" },
+                        new SidebarNavItem { Id = "pst-ejecucion", Text = "Ejecución presupuestaria", NavigateUrl = "/presupuesto/ejecucion", MatchPrefixes = ["/presupuesto/ejecucion"], IconCssClass = "bi bi-bar-chart-line" },
+                        new SidebarNavItem { Id = "pst-compromisos", Text = "Compromisos pendientes", NavigateUrl = "/presupuesto/compromisos", MatchPrefixes = ["/presupuesto/compromisos"], IconCssClass = "bi bi-hourglass-split" },
+                        new SidebarNavItem { Id = "pst-control", Text = "Control presupuestario", NavigateUrl = "/presupuesto/control", MatchPrefixes = ["/presupuesto/control"], IconCssClass = "bi bi-toggles" }
+                    ]
+                }
             ]
         },
 
@@ -239,14 +249,14 @@ public static class SidebarNavigationDefinition
                     Id = "inv-movimientos",
                     Text = "Movimientos",
                     IconCssClass = "bi bi-arrow-left-right",
-                    MatchPrefixes = ["/almacen/movimientos", "/almacen/traslados", "/almacen/ordenes-compra", "/almacen/compras", "/almacen/carga-inicial", "/almacen/requisiciones", "/almacen/descargos"],
+                    MatchPrefixes = ["/almacen/movimientos", "/almacen/traslados", "/almacen/ordenes-compra", "/almacen/mis-aprobaciones", "/almacen/compras", "/almacen/carga-inicial", "/almacen/requisiciones", "/almacen/descargos"],
                     Children =
                     [
                         new SidebarNavItem { Id = "alm-movimientos", Text = "Movimientos de almacén", NavigateUrl = "/almacen/movimientos", MatchPrefixes = ["/almacen/movimientos"], IconCssClass = "bi bi-arrow-left-right" },
                         new SidebarNavItem { Id = "alm-traslados", Text = "Traslados entre bodegas", NavigateUrl = "/almacen/traslados", MatchPrefixes = ["/almacen/traslados"], IconCssClass = "bi bi-box-arrow-in-right" },
                         new SidebarNavItem { Id = "alm-ordenes-compra", Text = "Órdenes de compra", NavigateUrl = "/almacen/ordenes-compra", MatchPrefixes = ["/almacen/ordenes-compra"], IconCssClass = "bi bi-file-earmark-text" },
+                        new SidebarNavItem { Id = "alm-mis-aprobaciones", Text = "Mis aprobaciones", NavigateUrl = "/almacen/mis-aprobaciones", MatchPrefixes = ["/almacen/mis-aprobaciones"], IconCssClass = "bi bi-pen" },
                         new SidebarNavItem { Id = "alm-recepciones", Text = "Recepción de compras", NavigateUrl = "/almacen/compras/recepciones", MatchPrefixes = ["/almacen/compras/recepciones"], IconCssClass = "bi bi-box-arrow-in-down" },
-                        new SidebarNavItem { Id = "alm-pagos-compra", Text = "Pagos a proveedores", NavigateUrl = "/almacen/compras/pagos", MatchPrefixes = ["/almacen/compras/pagos"], IconCssClass = "bi bi-cash-stack" },
                         new SidebarNavItem { Id = "alm-compras", Text = "Consulta de compras", NavigateUrl = "/almacen/compras", MatchPrefixes = ["/almacen/compras"], MatchExact = true, IconCssClass = "bi bi-cart-plus" },
                         new SidebarNavItem { Id = "alm-carga-inicial", Text = "Carga inicial", NavigateUrl = "/almacen/carga-inicial", MatchPrefixes = ["/almacen/carga-inicial"], IconCssClass = "bi bi-flag" },
                         new SidebarNavItem { Id = "alm-requisiciones", Text = "Requisiciones", NavigateUrl = "/almacen/requisiciones", MatchPrefixes = ["/almacen/requisiciones"], IconCssClass = "bi bi-clipboard-check" },
@@ -262,6 +272,9 @@ public static class SidebarNavigationDefinition
                     Children =
                     [
                         new SidebarNavItem { Id = "prov-lista", Text = "Proveedores", NavigateUrl = "/proveedores", MatchPrefixes = ["/proveedores"], MatchExact = true, IconCssClass = "bi bi-truck" },
+                        // Vista unificada: facturas de compra y compromisos se pagan desde aquí. La
+                        // ruta vieja (/almacen/compras/pagos) sigue existiendo y marca esta entrada.
+                        new SidebarNavItem { Id = "prov-cuentas-por-pagar", Text = "Cuentas por pagar", NavigateUrl = "/proveedores/cuentas-por-pagar", MatchPrefixes = ["/proveedores/cuentas-por-pagar", "/almacen/compras/pagos"], IconCssClass = "bi bi-cash-stack" },
                         new SidebarNavItem { Id = "prov-antiguedad-saldos", Text = "Antigüedad de saldos", NavigateUrl = "/proveedores/antiguedad-saldos", MatchPrefixes = ["/proveedores/antiguedad-saldos"], MatchExact = true, IconCssClass = "bi bi-hourglass-split" },
                         new SidebarNavItem { Id = "prov-retenciones", Text = "Retenciones", NavigateUrl = "/proveedores/retenciones", MatchPrefixes = ["/proveedores/retenciones"], MatchExact = true, IconCssClass = "bi bi-cash-coin" },
                         new SidebarNavItem { Id = "prov-retenciones-declaracion", Text = "Declaración de retenciones", NavigateUrl = "/proveedores/retenciones/declaracion", MatchPrefixes = ["/proveedores/retenciones/declaracion"], IconCssClass = "bi bi-file-earmark-spreadsheet" },
@@ -358,15 +371,14 @@ public static class SidebarNavigationDefinition
                     Id = "cfg-tarifario",
                     Text = "Tarifario",
                     IconCssClass = "bi bi-calculator",
-                    MatchPrefixes = ["/tarifario/cuadros", "/tarifario/maestro-servicios-v3", "/tarifario/desglose-abonos", "/mantenimientos/ajustes-tarifarios", "/mantenimientos/impuestos", "/mantenimientos/retenciones"],
+                    MatchPrefixes = ["/tarifario/cuadros", "/tarifario/maestro-servicios-v3", "/tarifario/desglose-abonos", "/mantenimientos/ajustes-tarifarios", "/mantenimientos/impuestos"],
                     Children =
                     [
                         new SidebarNavItem { Id = "tarv3-cuadros", Text = "Cuadros tarifarios", NavigateUrl = "/tarifario/cuadros", MatchPrefixes = ["/tarifario/cuadros"], IconCssClass = "bi bi-table" },
                         new SidebarNavItem { Id = "tarv3-maestro-servicios", Text = "Maestro servicios", NavigateUrl = "/tarifario/maestro-servicios-v3", MatchPrefixes = ["/tarifario/maestro-servicios-v3"], IconCssClass = "bi bi-list-ul" },
                         new SidebarNavItem { Id = "tarv3-desglose-abonos", Text = "Distribución de abonos", NavigateUrl = "/tarifario/desglose-abonos", MatchPrefixes = ["/tarifario/desglose-abonos"], IconCssClass = "bi bi-percent" },
                         new SidebarNavItem { Id = "mant-ajustes-tarifarios", Text = "Ajustes tarifarios", NavigateUrl = "/mantenimientos/ajustes-tarifarios", MatchPrefixes = ["/mantenimientos/ajustes-tarifarios"], IconCssClass = "bi bi-percent" },
-                        new SidebarNavItem { Id = "mant-impuestos", Text = "Impuestos", NavigateUrl = "/mantenimientos/impuestos", MatchPrefixes = ["/mantenimientos/impuestos"], IconCssClass = "bi bi-receipt" },
-                        new SidebarNavItem { Id = "mant-retenciones", Text = "Retenciones", NavigateUrl = "/mantenimientos/retenciones", MatchPrefixes = ["/mantenimientos/retenciones"], IconCssClass = "bi bi-cash-coin" }
+                        new SidebarNavItem { Id = "mant-impuestos", Text = "Impuestos", NavigateUrl = "/mantenimientos/impuestos", MatchPrefixes = ["/mantenimientos/impuestos"], IconCssClass = "bi bi-receipt" }
                     ]
                 },
                 new SidebarNavItem
@@ -374,11 +386,14 @@ public static class SidebarNavigationDefinition
                     Id = "cfg-proveedores",
                     Text = "Catálogos de proveedor",
                     IconCssClass = "bi bi-tag",
-                    MatchPrefixes = ["/mantenimientos/tipos-proveedor", "/mantenimientos/tipos-contacto"],
+                    MatchPrefixes = ["/mantenimientos/tipos-proveedor", "/mantenimientos/tipos-contacto", "/mantenimientos/retenciones"],
                     Children =
                     [
                         new SidebarNavItem { Id = "mant-tipos-proveedor", Text = "Tipos de proveedor", NavigateUrl = "/mantenimientos/tipos-proveedor", MatchPrefixes = ["/mantenimientos/tipos-proveedor"], IconCssClass = "bi bi-tag" },
-                        new SidebarNavItem { Id = "mant-tipos-contacto", Text = "Tipos de contacto", NavigateUrl = "/mantenimientos/tipos-contacto", MatchPrefixes = ["/mantenimientos/tipos-contacto"], IconCssClass = "bi bi-person-lines-fill" }
+                        new SidebarNavItem { Id = "mant-tipos-contacto", Text = "Tipos de contacto", NavigateUrl = "/mantenimientos/tipos-contacto", MatchPrefixes = ["/mantenimientos/tipos-contacto"], IconCssClass = "bi bi-person-lines-fill" },
+                        // El catálogo de retenciones vive con los proveedores, que es a quienes se
+                        // les retiene; la consulta y la declaración están en la sección Proveedores.
+                        new SidebarNavItem { Id = "mant-retenciones", Text = "Catálogo de retenciones", NavigateUrl = "/mantenimientos/retenciones", MatchPrefixes = ["/mantenimientos/retenciones"], IconCssClass = "bi bi-cash-coin" }
                     ]
                 },
                 new SidebarNavItem
@@ -386,7 +401,7 @@ public static class SidebarNavigationDefinition
                     Id = "cfg-sistema",
                     Text = "Sistema",
                     IconCssClass = "bi bi-shield-lock",
-                    MatchPrefixes = ["/parametros", "/mi-app/usuarios", "/contabilidad/empresas", "/tipos-documento-fiscal", "/auditoria", "/informes/reportes", "/informes/datasets", "/configuracion/correo"],
+                    MatchPrefixes = ["/parametros", "/mi-app/usuarios", "/contabilidad/empresas", "/tipos-documento-fiscal", "/auditoria", "/informes/reportes", "/informes/datasets", "/configuracion/correo", "/configuracion/aprobaciones"],
                     Children =
                     [
                         new SidebarNavItem { Id = "param-usuarios", Text = "Usuarios", NavigateUrl = "/parametros/usuarios", MatchPrefixes = ["/parametros/usuarios"], IconCssClass = "bi bi-people-fill", SoloSuperAdmin = true },
@@ -397,6 +412,7 @@ public static class SidebarNavigationDefinition
                         new SidebarNavItem { Id = "param-branding", Text = "Branding del Portal", NavigateUrl = "/parametros/branding", MatchPrefixes = ["/parametros/branding"], IconCssClass = "bi bi-palette", SoloSuperAdmin = true },
                         new SidebarNavItem { Id = "tipos-documento-fiscal", Text = "Tipos de documento (SAR)", NavigateUrl = "/tipos-documento-fiscal", MatchPrefixes = ["/tipos-documento-fiscal"], IconCssClass = "bi bi-file-earmark-text" },
                         new SidebarNavItem { Id = "cfg-correo", Text = "Correo y notificaciones", NavigateUrl = "/configuracion/correo", MatchPrefixes = ["/configuracion/correo"], IconCssClass = "bi bi-envelope-gear", SoloSuperAdmin = true },
+                        new SidebarNavItem { Id = "cfg-aprobaciones", Text = "Aprobaciones", NavigateUrl = "/configuracion/aprobaciones", MatchPrefixes = ["/configuracion/aprobaciones"], IconCssClass = "bi bi-diagram-3" },
                         new SidebarNavItem { Id = "auditoria-config", Text = "Configuración de auditoría", NavigateUrl = "/auditoria/configuracion", MatchPrefixes = ["/auditoria/configuracion"], IconCssClass = "bi bi-sliders", SoloSuperAdmin = true },
                         new SidebarNavItem { Id = "auditoria-bitacora-maestros", Text = "Bitácora de maestros", NavigateUrl = "/auditoria/bitacora-maestros", MatchPrefixes = ["/auditoria/bitacora-maestros"], IconCssClass = "bi bi-clock-history" },
                         new SidebarNavItem { Id = "informes-reportes", Text = "Diseño Web (informes)", NavigateUrl = "/informes/reportes", MatchPrefixes = ["/informes/reportes"], IconCssClass = "bi bi-layout-text-window-reverse" },
