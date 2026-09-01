@@ -1,4 +1,4 @@
-@using Microsoft.AspNetCore.Components.Routing
+﻿@using Microsoft.AspNetCore.Components.Routing
 @using Microsoft.AspNetCore.Components.Authorization
 @using apc.Client.Layout.Navigation
 @using apc.Client.Services.Bancos
@@ -7,6 +7,7 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject TenantCompanyContextClient TenantCompanyContextClient
 @inject ChequeEmisionState ChequeEmision
+@inject IAuthorizationService AuthorizationService
 @implements IDisposable
 
 <nav class="sidebar-nav @(IsCollapsed ? "sidebar-nav--collapsed" : "") @(IsMobile ? "sidebar-nav--mobile" : "")">
@@ -62,14 +63,12 @@
         var user = authState.User;
         esSuperAdmin = user.IsInRole(SIAD.Core.Constants.RoleNames.SuperAdministrador);
 
+        usuarioActual = user;
+
         var sections = new List<SidebarNavSection>();
         foreach (var section in SidebarNavigationDefinition.Sections)
         {
-            if (string.IsNullOrEmpty(section.RequiredPolicy))
-            {
-                sections.Add(section);
-            }
-            else if (user.IsInRole(SIAD.Core.Constants.RoleNames.SuperAdministrador))
+            if (await TienePermisoAsync(section.RequiredPolicy))
             {
                 sections.Add(section);
             }
@@ -93,23 +92,27 @@
             }
         }
 
-        visibleSections = FiltrarPorCapacidades(sections);
+        visibleSections = await FiltrarAsync(sections);
     }
 
-    // Ítems condicionados a la configuración de la empresa (hoy solo el cheque manual).
-    private IReadOnlyList<SidebarNavSection> FiltrarPorCapacidades(IEnumerable<SidebarNavSection> sections)
+    // Filtra por permiso del usuario, por capacidad de la empresa y por el flag de Super Admin.
+    private async Task<IReadOnlyList<SidebarNavSection>> FiltrarAsync(IEnumerable<SidebarNavSection> sections)
     {
         var resultado = new List<SidebarNavSection>();
 
         foreach (var section in sections)
         {
-            var items = section.Items
-                .Select(FiltrarItemPorCapacidades)
-                .Where(item => item is not null)
-                .Cast<SidebarNavItem>()
-                .ToArray();
+            var items = new List<SidebarNavItem>();
+            foreach (var item in section.Items)
+            {
+                var filtrado = await FiltrarItemAsync(item);
+                if (filtrado is not null)
+                {
+                    items.Add(filtrado);
+                }
+            }
 
-            if (items.Length == 0)
+            if (items.Count == 0)
             {
                 continue;
             }
@@ -126,8 +129,31 @@
     }
 
     private bool esSuperAdmin;
+    private System.Security.Claims.ClaimsPrincipal usuarioActual = new(new System.Security.Claims.ClaimsIdentity());
 
-    private SidebarNavItem? FiltrarItemPorCapacidades(SidebarNavItem item)
+    /// <summary>
+    /// Evalúa la policy del permiso. Cada policy de <c>PermissionNames.Policies</c> ya incluye la
+    /// cascada endpoint → opción → módulo → legacy, así que el menú oculta exactamente lo mismo
+    /// que la API rechaza, sin duplicar la lógica aquí.
+    /// </summary>
+    private async Task<bool> TienePermisoAsync(string? policy)
+    {
+        if (string.IsNullOrEmpty(policy))
+        {
+            return true;
+        }
+
+        // Las policies ya contemplan el bypass, pero cortar antes evita ~100 evaluaciones por render.
+        if (esSuperAdmin)
+        {
+            return true;
+        }
+
+        var resultado = await AuthorizationService.AuthorizeAsync(usuarioActual, policy);
+        return resultado.Succeeded;
+    }
+
+    private async Task<SidebarNavItem?> FiltrarItemAsync(SidebarNavItem item)
     {
         if (item.SoloSuperAdmin && !esSuperAdmin)
         {
@@ -139,26 +165,36 @@
             return null;
         }
 
+        if (!await TienePermisoAsync(item.RequiredPermission))
+        {
+            return null;
+        }
+
         if (!item.HasChildren)
         {
             return item;
         }
 
-        var children = item.Children
-            .Select(FiltrarItemPorCapacidades)
-            .Where(child => child is not null)
-            .Cast<SidebarNavItem>()
-            .ToArray();
-
-        if (children.Length == item.Children.Count)
+        var children = new List<SidebarNavItem>();
+        foreach (var child in item.Children)
         {
-            return item;
+            var filtrado = await FiltrarItemAsync(child);
+            if (filtrado is not null)
+            {
+                children.Add(filtrado);
+            }
         }
 
-        // Un padre sin hijos visibles y sin ruta propia deja de tener sentido.
-        if (children.Length == 0 && string.IsNullOrWhiteSpace(item.NavigateUrl))
+        // Un grupo cuyos hijos quedaron todos ocultos no tiene nada que abrir: se oculta el grupo.
+        // (Los grupos no navegan por sí mismos; su NavigateUrl, cuando existe, apunta al primer hijo.)
+        if (children.Count == 0)
         {
             return null;
+        }
+
+        if (children.Count == item.Children.Count)
+        {
+            return item;
         }
 
         return new SidebarNavItem
@@ -171,6 +207,7 @@
             Children = children,
             MatchExact = item.MatchExact,
             RequiredCapability = item.RequiredCapability,
+            RequiredPermission = item.RequiredPermission,
             SoloSuperAdmin = item.SoloSuperAdmin
         };
     }
@@ -277,7 +314,9 @@
             MatchPrefixes = filteredPrefixes,
             Children = filteredChildren,
             MatchExact = item.MatchExact,
-            RequiredCapability = item.RequiredCapability
+            RequiredCapability = item.RequiredCapability,
+            RequiredPermission = item.RequiredPermission,
+            SoloSuperAdmin = item.SoloSuperAdmin
         };
     }
 

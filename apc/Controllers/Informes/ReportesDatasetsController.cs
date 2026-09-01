@@ -1,4 +1,5 @@
 using System.Security.Claims;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
 using SIAD.Core.DTOs.Informes;
@@ -16,12 +17,16 @@ public sealed class ReportesDatasetsController : ControllerBase
     private readonly IReportesDatasetService _service;
     private readonly ICurrentCompanyService _currentCompany;
 
+    private readonly IAuthorizationService _authorizationService;
+
     public ReportesDatasetsController(
         IReportesDatasetService service,
-        ICurrentCompanyService currentCompany)
+        ICurrentCompanyService currentCompany,
+        IAuthorizationService authorizationService)
     {
         _service = service;
         _currentCompany = currentCompany;
+        _authorizationService = authorizationService;
     }
 
     [HttpGet]
@@ -52,7 +57,7 @@ public sealed class ReportesDatasetsController : ControllerBase
         try
         {
             var companyId = _currentCompany.GetCompanyId();
-            var result = await _service.CrearAsync(companyId, dto, ResolveActor(), AllowSql(), ct);
+            var result = await _service.CrearAsync(companyId, dto, ResolveActor(), await AllowSqlAsync(), ct);
             return CreatedAtAction(nameof(GetDetalle), new { codigo = result.Codigo }, result);
         }
         catch (ArgumentException ex)
@@ -72,7 +77,7 @@ public sealed class ReportesDatasetsController : ControllerBase
         try
         {
             var companyId = _currentCompany.GetCompanyId();
-            var result = await _service.ActualizarAsync(companyId, codigo, dto, ResolveActor(), AllowSql(), ct);
+            var result = await _service.ActualizarAsync(companyId, codigo, dto, ResolveActor(), await AllowSqlAsync(), ct);
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -111,7 +116,7 @@ public sealed class ReportesDatasetsController : ControllerBase
         try
         {
             var companyId = _currentCompany.GetCompanyId();
-            var result = await _service.ProbarAsync(companyId, codigo, request, AllowSql(), ct);
+            var result = await _service.ProbarAsync(companyId, codigo, request, await AllowSqlAsync(), ct);
             return Ok(result);
         }
         catch (ArgumentException ex)
@@ -124,8 +129,13 @@ public sealed class ReportesDatasetsController : ControllerBase
         }
     }
 
-    private bool AllowSql()
-        => User.IsInRole(RoleNames.Admin) || User.IsInRole(RoleNames.SuperAdministrador);
+    // El SQL libre deja escribir consultas arbitrarias: permiso propio, no rol.
+    private async Task<bool> AllowSqlAsync()
+    {
+        var resultado = await _authorizationService.AuthorizeAsync(
+            User, PermissionNames.Reporteria.SqlPersonalizado);
+        return resultado.Succeeded;
+    }
 
     private string ResolveActor()
         => User.Identity?.Name

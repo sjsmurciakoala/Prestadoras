@@ -1,5 +1,5 @@
 ﻿@page "/ordenes"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 @inject apc.Client.Services.Ordenes.OrdenesClient OrdenesClient
 @inject AuthenticationStateProvider AuthenticationStateProvider
 @inject IToastNotificationService ToastService

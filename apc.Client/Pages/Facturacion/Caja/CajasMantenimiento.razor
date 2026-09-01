@@ -1,4 +1,6 @@
-@page "/facturacion/cajas"
+﻿@page "/facturacion/cajas"
+@attribute [Authorize(Policy = PermissionNames.Ventas.Caja.View)]
+@using SIAD.Core.Constants
 @using SIAD.Core.DTOs.Caja
 @using SIAD.Core.DTOs.Usuarios
 @using apc.Client.Services.Caja
@@ -121,6 +123,13 @@
     <BodyContentTemplate>
         <div class="p-3">
             <label class="form-label small text-muted fw-bold">USUARIO DEL PORTAL</label>
+            @if (_usuariosNoDisponibles)
+            {
+                <div class="alert alert-warning py-2 small mb-3">
+                    No puedes ver la lista de usuarios del portal, así que no puedes asignar el
+                    cajero desde aquí. Pídeselo a un administrador.
+                </div>
+            }
             <DxComboBox TData="UsuarioPortalDto" TValue="string" Data="@_usuarios"
                         TextFieldName="@nameof(UsuarioPortalDto.Email)"
                         ValueFieldName="@nameof(UsuarioPortalDto.Email)"
@@ -144,6 +153,7 @@
     private bool _cargando = true;
     private IReadOnlyList<CajaAdminDto> _cajas = [];
     private IReadOnlyList<UsuarioPortalDto> _usuarios = [];
+    private bool _usuariosNoDisponibles;
 
     private bool _edicionVisible;
     private int? _edicionId;
@@ -158,7 +168,6 @@
     protected override async Task OnInitializedAsync()
     {
         await TenantState.EnsureCompanyAsync();
-        _usuarios = await UsuariosHttp.ListarAsync();
         await CargarAsync();
         _cargando = false;
     }
@@ -186,11 +195,32 @@
         }
     }
 
-    private void AbrirAsignacion(CajaAdminDto caja)
+    private async Task AbrirAsignacion(CajaAdminDto caja)
     {
         _asignacionCaja = caja;
         _asignacionUsuario = null;
         _asignacionVisible = true;
+        await CargarUsuariosAsync();
+    }
+
+    // La lista de usuarios del portal solo hace falta para asignar cajero, y leerla exige
+    // permisos de administracion que un usuario de caja no tiene. Por eso se pide al abrir el
+    // popup y no al cargar la pantalla: sin ella se pueden seguir viendo y editando las cajas.
+    private async Task CargarUsuariosAsync()
+    {
+        if (_usuarios.Count > 0 || _usuariosNoDisponibles)
+        {
+            return;
+        }
+
+        try
+        {
+            _usuarios = await UsuariosHttp.ListarAsync();
+        }
+        catch (UnauthorizedAccessException)
+        {
+            _usuariosNoDisponibles = true;
+        }
     }
 
     private async Task AsignarCajero()

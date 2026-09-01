@@ -2,6 +2,8 @@ using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.DTOs.Mantenimientos;
 using SIAD.Services.Mantenimientos;
+using SIAD.Core.Constants;
+using apc.Security;
 
 namespace apc.Controllers;
 
@@ -21,6 +23,9 @@ public class MantenimientosController : ControllerBase
     public async Task<IActionResult> ObtenerRecargoMora(CancellationToken ct)
         => Ok(await _service.ObtenerRecargoMoraAsync(ct));
 
+    // Escribir configuracion exige permiso; los GET quedan abiertos a cualquier autenticado
+    // porque Clientes y Cobranza los consumen para poblar sus formularios.
+    [ModuleAuthorize(PermissionModules.Configuracion, PermissionAction.Edit)]
     [HttpPost("recargo-mora")]
     public async Task<IActionResult> GuardarRecargoMora([FromBody] RecargoMoraDto dto, CancellationToken ct)
     {
@@ -32,6 +37,7 @@ public class MantenimientosController : ControllerBase
     public async Task<IActionResult> ListarAjustesTarifarios(CancellationToken ct)
         => Ok(await _service.ListarAjustesTarifariosAsync(ct));
 
+    [ModuleAuthorize(PermissionModules.Configuracion, PermissionAction.Edit)]
     [HttpPost("ajustes-tarifarios")]
     public async Task<IActionResult> GuardarAjusteTarifario([FromBody] AjusteTarifarioSaveRequestDto dto, CancellationToken ct)
     {

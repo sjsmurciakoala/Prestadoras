@@ -12,6 +12,8 @@ namespace apc.Controllers.Contabilidad;
 /// </summary>
 [ApiController]
 [Route("api/contabilidad/formato-cuentas")]
+// Solo lectura, y la consumen tambien Bancos y Presupuesto para formatear codigos de
+// cuenta: cerrarla con [ModuleAuthorize(contabilidad)] romperia esas pantallas.
 [Authorize]
 public sealed class AccountFormatController : ControllerBase
 {

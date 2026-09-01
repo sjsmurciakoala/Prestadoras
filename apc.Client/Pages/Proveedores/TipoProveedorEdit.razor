@@ -1,6 +1,6 @@
 ﻿@page "/mantenimientos/tipos-proveedor/nuevo"
 @page "/mantenimientos/tipos-proveedor/{id:int}/editar"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.Edit)]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject ILogger<TipoProveedorEdit> Logger

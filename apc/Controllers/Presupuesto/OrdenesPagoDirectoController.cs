@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using SIAD.Core.Constants;
+using apc.Security;
 using SIAD.Core.DTOs.Presupuesto;
 using SIAD.Reports;
 using SIAD.Services.Presupuesto;
@@ -9,7 +10,7 @@ namespace apc.Controllers.Presupuesto;
 
 [ApiController]
 [Route("api/presupuesto/ordenes-pago-directo")]
-[Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+[ModuleAuthorize(PermissionModules.Contabilidad)]
 public sealed class OrdenesPagoDirectoController : ControllerBase
 {
     private readonly IOrdenesPagoDirectoService _service;

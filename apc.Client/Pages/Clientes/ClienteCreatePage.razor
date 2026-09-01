@@ -1,5 +1,5 @@
 @page "/clientes/nuevo"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Clientes.Create)]
 @using SIAD.Core.DTOs.Clientes
 @using SIAD.Core.DTOs.Solicitudes
 @using apc.Client.Services.Clientes

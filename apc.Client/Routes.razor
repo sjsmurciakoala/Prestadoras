@@ -6,8 +6,17 @@
 <Router AppAssembly="typeof(Program).Assembly" OnNavigateAsync="HandleNavigationAsync">
     <Found Context="routeData">
         <AuthorizeRouteView RouteData="routeData" DefaultLayout="typeof(Layout.MainLayout)">
-            <NotAuthorized>
-                <RedirectToLogin />
+            <NotAuthorized Context="estadoAuth">
+                @* Sin sesión -> al login. Con sesión pero sin permiso -> explicarlo,
+                   en vez de devolver al login a alguien que ya inició sesión. *@
+                @if (estadoAuth.User.Identity?.IsAuthenticated == true)
+                {
+                    <AccesoDenegado />
+                }
+                else
+                {
+                    <RedirectToLogin />
+                }
             </NotAuthorized>
         </AuthorizeRouteView>
     </Found>

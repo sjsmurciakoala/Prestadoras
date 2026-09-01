@@ -1,5 +1,5 @@
 @page "/tarifario/desglose-abonos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization

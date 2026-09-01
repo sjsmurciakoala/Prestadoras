@@ -1,5 +1,5 @@
 @page "/proveedores/compromisos-proveedor/{NumeroOrden:int}/abonar"
-@attribute [Authorize(Policy = AuthorizationPolicies.Contabilidad)]
+@attribute [Authorize(Policy = PermissionNames.Contabilidad.View)]
 
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Authorization

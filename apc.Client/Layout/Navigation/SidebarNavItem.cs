@@ -1,4 +1,4 @@
-namespace apc.Client.Layout.Navigation;
+﻿namespace apc.Client.Layout.Navigation;
 
 public sealed class SidebarNavItem
 {
@@ -16,6 +16,14 @@ public sealed class SidebarNavItem
     /// empresa, no por rol.
     /// </summary>
     public string? RequiredCapability { get; init; }
+
+    /// <summary>
+    /// Permiso necesario para ver el item. Null = visible para cualquier autenticado.
+    /// El valor debe ser una policy registrada (ver <c>PermissionNames.Policies</c>): cada una ya
+    /// trae su cascada endpoint -> opcion -> modulo -> legacy y el bypass de Super Administrador,
+    /// asi que el menu, la pagina y el controlador coinciden sin repetir logica.
+    /// </summary>
+    public string? RequiredPermission { get; init; }
 
     /// <summary>
     /// Reorganización 2026-08-05 (5 secciones): las opciones que antes vivían

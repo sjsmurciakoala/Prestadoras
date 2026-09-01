@@ -1,6 +1,6 @@
 ﻿@page "/proveedores/nuevo"
 @page "/proveedores/{codigo}/editar"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Proveedores.Create)]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject ILogger<ProveedorEdit> Logger

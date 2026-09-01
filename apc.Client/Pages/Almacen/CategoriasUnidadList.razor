@@ -1,5 +1,5 @@
 @page "/almacen/categorias-unidad"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Inventario.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen

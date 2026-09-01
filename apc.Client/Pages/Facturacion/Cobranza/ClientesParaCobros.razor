@@ -1,5 +1,5 @@
 @page "/facturacion/cobranza/clientes-cobros"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Cobranza.View)]
 @using System.Linq
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza

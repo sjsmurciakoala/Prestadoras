@@ -1,5 +1,5 @@
 @page "/mantenimientos/acciones-cobranza"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza
 @using apc.Client.Services.Facturacion

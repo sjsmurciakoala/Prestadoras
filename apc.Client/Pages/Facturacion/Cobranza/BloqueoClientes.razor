@@ -1,5 +1,5 @@
 @page "/facturacion/cobranza/bloqueo-clientes"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Cobranza.View)]
 @using SIAD.Core.DTOs.Cobranza
 @using SIAD.Core.DTOs.CaptacionPagos
 @using apc.Client.Services.Cobros

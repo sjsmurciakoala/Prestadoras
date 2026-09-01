@@ -1,5 +1,5 @@
 ﻿@page "/facturacion/cobranza"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Cobranza.View)]
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Cobranza
 @using SIAD.Core.DTOs.CaptacionPagos

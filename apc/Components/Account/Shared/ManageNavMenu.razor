@@ -27,12 +27,12 @@
         hasExternalLogins = (await SignInManager.GetExternalAuthenticationSchemesAsync()).Any();
 
         tabs = [
-            new("Profile", "Account/Manage", "icon-profile"),
-            new("Email", "Account/Manage/Email", "icon-email"),
-            new("Password", "Account/Manage/ChangePassword", "icon-password"),
-            new("External login", "Account/Manage/ExternalLogins", "icon-external") { Visible = hasExternalLogins },
-            new("Two-factor authentication", "Account/Manage/TwoFactorAuthentication", "icon-two-factor"),
-            new("Personal Data", "Account/Manage/PersonalData", "icon-personal")
+            new("Perfil", "Account/Manage", "icon-profile"),
+            new("Correo", "Account/Manage/Email", "icon-email"),
+            new("Contraseña", "Account/Manage/ChangePassword", "icon-password"),
+            new("Inicio de sesión externo", "Account/Manage/ExternalLogins", "icon-external") { Visible = hasExternalLogins },
+            new("Verificación en dos pasos", "Account/Manage/TwoFactorAuthentication", "icon-two-factor"),
+            new("Datos personales", "Account/Manage/PersonalData", "icon-personal")
         ];
     }
 

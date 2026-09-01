@@ -1,5 +1,5 @@
 @page "/mapa"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 @implements IDisposable
 
 @using System.Globalization

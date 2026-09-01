@@ -1,5 +1,5 @@
 ﻿@page "/proveedores/bancos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Proveedores.View)]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS

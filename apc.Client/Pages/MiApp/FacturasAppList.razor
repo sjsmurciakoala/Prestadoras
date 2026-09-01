@@ -1,5 +1,5 @@
 @page "/mi-app/facturas"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.AppLectores

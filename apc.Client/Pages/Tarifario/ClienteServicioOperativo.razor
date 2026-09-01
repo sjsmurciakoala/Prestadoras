@@ -1,5 +1,5 @@
 ﻿@page "/tarifario/cliente-servicio-v3"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 
 @using DevExpress.Blazor
 @using Microsoft.AspNetCore.Components

@@ -1,5 +1,5 @@
 ﻿@page "/abogados"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Abogados

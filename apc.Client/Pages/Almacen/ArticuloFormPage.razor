@@ -1,6 +1,6 @@
 @page "/almacen/articulos/nuevo"
 @page "/almacen/articulos/{Id:int}/editar"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Inventario.Create)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Almacen

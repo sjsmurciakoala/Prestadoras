@@ -1,5 +1,4 @@
 ﻿using apc.Client;
-using apc.Client.Pages;
 using apc.Components;
 using apc.Components.Account;
 using apc.Data;
@@ -143,25 +142,19 @@ builder.Services.AddCascadingAuthenticationState();
 builder.Services.AddScoped<IdentityUserAccessor>();
 builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingServerAuthenticationStateProvider>();
-builder.Services.AddScoped<IClaimsTransformation, TenantCompanyClaimTransformation>();
+builder.Services.AddMemoryCache();
+builder.Services.AddScoped<apc.Security.RolePermissionCache>();
+builder.Services.AddScoped<TenantCompanyClaimTransformation>();
+// Una sola IClaimsTransformation: repone los permisos (que no viajan en la cookie) y encadena
+// la validación de empresa. Ver PermissionsClaimsTransformation.
+builder.Services.AddScoped<IClaimsTransformation, apc.Security.PermissionsClaimsTransformation>();
 builder.Services.AddScoped<ICompanyAccessValidator, CompanyAccessValidator>();
 
 builder.Services.AddAuthorization(options =>
 {
-    options.AddPolicy(AuthorizationPolicies.Contabilidad,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Contabilidad));
-    options.AddPolicy(AuthorizationPolicies.PresupuestoAprobacion,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Contabilidad));
-    options.AddPolicy(AuthorizationPolicies.Compras,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Compras));
-    options.AddPolicy(AuthorizationPolicies.Ventas,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Ventas));
-    options.AddPolicy(AuthorizationPolicies.Facturacion,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Ventas, RoleNames.Facturacion));
-    options.AddPolicy(AuthorizationPolicies.Bancos,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Bancos));
-    options.AddPolicy(AuthorizationPolicies.Configuracion,
-        policy => policy.RequireRole(RoleNames.Admin, RoleNames.Configuracion));
+    // Un solo camino: toda autorizacion se decide por el claim 'permission'.
+    // Las antiguas policies por rol (CanContabilidad, CanBancos, ...) se retiraron el
+    // 2026-09-01; los roles pasaron a ser solo contenedores de permisos.
     foreach (var policyDefinition in PermissionNames.Policies)
     {
         options.AddPolicy(policyDefinition.Policy,
@@ -191,6 +184,7 @@ builder.Services.AddIdentityCore<ApplicationUser>(options => options.SignIn.Requ
     .AddRoles<IdentityRole>()
     .AddEntityFrameworkStores<ApplicationDbContext>()
     .AddSignInManager()
+    .AddClaimsPrincipalFactory<apc.Security.SiadUserClaimsPrincipalFactory>()
     .AddDefaultTokenProviders();
 
 builder.Services.AddSingleton<IEmailSender<ApplicationUser>, IdentityNoOpEmailSender>();
@@ -238,7 +232,7 @@ app.UseDevExpressBlazorReporting();
 app.MapStaticAssets();
 app.MapRazorComponents<App>()
     .AddInteractiveServerRenderMode()
-    .AddAdditionalAssemblies(typeof(Counter).Assembly)
+    .AddAdditionalAssemblies(typeof(apc.Client.Routes).Assembly)
     .AllowAnonymous();
 
 app.MapAdditionalIdentityEndpoints();

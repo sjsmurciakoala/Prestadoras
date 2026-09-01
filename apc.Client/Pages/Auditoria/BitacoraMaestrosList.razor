@@ -1,5 +1,5 @@
 @page "/auditoria/bitacora-maestros"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using System.Text.Json
 @using DevExpress.Blazor

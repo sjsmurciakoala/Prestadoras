@@ -35,19 +35,18 @@ public class CobranzaController : ControllerBase
     private readonly ICobranzaService _service;
 
     private readonly UserManager<ApplicationUser> _userManager;
+    private readonly IAuthorizationService _authorizationService;
 
 
 
     public CobranzaController(
         ICobranzaService service,
-        UserManager<ApplicationUser> userManager)
-
+        UserManager<ApplicationUser> userManager,
+        IAuthorizationService authorizationService)
     {
-
         _service = service;
-
         _userManager = userManager;
-
+        _authorizationService = authorizationService;
     }
 
 
@@ -284,10 +283,12 @@ public class CobranzaController : ControllerBase
         if (user is null)
             return Unauthorized();
 
-        var tieneRolCobranzas = await _userManager.IsInRoleAsync(user, RoleNames.Cobranzas);
-        var esSuperAdmin = await _userManager.IsInRoleAsync(user, RoleNames.SuperAdministrador);
-        if (!tieneRolCobranzas && !esSuperAdmin)
-            return StatusCode(StatusCodes.Status403Forbidden, new { message = "El usuario debe tener rol de Cobranzas para bloquear o desbloquear clientes." });
+        // Bloquear/desbloquear se autoriza por permiso, no por rol: el [ModuleAuthorize] de la
+        // clase ya cubre el acceso, y aqui se exige ademas poder EDITAR cobranza.
+        var autorizacion = await _authorizationService.AuthorizeAsync(
+            User, PermissionNames.Ventas.Cobranza.Edit);
+        if (!autorizacion.Succeeded)
+            return StatusCode(StatusCodes.Status403Forbidden, new { message = "No tiene permiso para bloquear o desbloquear clientes." });
 
         var passwordValida = await _userManager.CheckPasswordAsync(user, request.Password);
         if (!passwordValida)

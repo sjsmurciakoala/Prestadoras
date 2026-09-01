@@ -1,5 +1,5 @@
 @page "/mantenimientos/impuestos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.Constants

@@ -1,5 +1,5 @@
 ﻿@page "/clientes/{Id:int}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.Clientes.View)]
 
 @using Microsoft.AspNetCore.Components
 @using SIAD.Core.DTOs.Clientes

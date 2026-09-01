@@ -1,5 +1,5 @@
 @page "/ordenes/{Id:int}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.View)]
 @inject apc.Client.Services.Ordenes.OrdenesClient OrdenesClient
 @inject NavigationManager NavigationManager
 

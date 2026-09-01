@@ -1,6 +1,6 @@
 @page "/mi-app/usuarios"
 @page "/mi-app/lectores"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.AppLectores

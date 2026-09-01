@@ -1,6 +1,6 @@
 ﻿@page "/contabilidad/empresas/nueva"
 @page "/contabilidad/empresas/editar/{EmpresaId:long}"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using System.Linq
 @using Microsoft.AspNetCore.Components.Forms

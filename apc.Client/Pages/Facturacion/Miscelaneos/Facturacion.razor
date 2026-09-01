@@ -1,5 +1,5 @@
 ﻿@page "/facturacion/miscelaneos"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.FacturacionMiscelaneos.View)]
 @using System.Text.Json
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Common

@@ -1,5 +1,5 @@
 @page "/mantenimientos/tipos-contacto"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 @inject ProveedoresClient ProveedoresClient
 @inject NavigationManager Navigation
 @inject IJSRuntime JS

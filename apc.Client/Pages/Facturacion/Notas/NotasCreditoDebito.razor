@@ -1,5 +1,5 @@
 ﻿@page "/facturacion/notas"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Ventas.NotasCreditoDebito.View)]
 
 @using DevExpress.Blazor
 @using SIAD.Core.DTOs.Common

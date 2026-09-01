@@ -1,5 +1,5 @@
 ﻿@page "/contabilidad/empresas"
-@attribute [Authorize]
+@attribute [Authorize(Policy = PermissionNames.Configuracion.View)]
 
 @using SIAD.Core.DTOs.Tenant
 @using DevExpress.Blazor

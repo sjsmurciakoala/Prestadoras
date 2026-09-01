@@ -1,4 +1,4 @@
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 
 namespace SIAD.Core.Constants;
@@ -63,6 +63,17 @@ public static class PermissionResources
         // Reconciliación del caché oficial de saldos (F6): solo lectura,
         // pero con recurso propio para poder acotarla desde administración.
         public const string Saldos = "saldos";
+
+        // Presupuesto: aprobar compromete fondos, así que no basta con poder
+        // editar contabilidad. Sustituye a la policy por rol CanPresupuestoAprobacion.
+        public const string Presupuesto = "presupuesto";
+    }
+
+    public static class Reporteria
+    {
+        // SQL libre en el diseñador de informes: consulta arbitraria contra la BD.
+        // Sustituye al chequeo por rol Admin de ReportesDatasetsController.
+        public const string SqlPersonalizado = "sql_personalizado";
     }
 }
 
@@ -164,6 +175,12 @@ public static class PermissionNames
         public const string Create = "module.contabilidad.create";
         public const string Edit = "module.contabilidad.edit";
         public const string Delete = "module.contabilidad.delete";
+
+        public static class Presupuesto
+        {
+            /// <summary>Aprobar un presupuesto compromete fondos: permiso aparte de Edit.</summary>
+            public const string Aprobar = "module.contabilidad.presupuesto.aprobar";
+        }
     }
 
     public static class Reporteria
@@ -172,6 +189,9 @@ public static class PermissionNames
         public const string Create = "module.reporteria.create";
         public const string Edit = "module.reporteria.edit";
         public const string Delete = "module.reporteria.delete";
+
+        /// <summary>Permite escribir SQL a mano en el diseñador de informes.</summary>
+        public const string SqlPersonalizado = "module.reporteria.sql_personalizado.edit";
     }
 
     public static class Configuracion
@@ -228,6 +248,8 @@ public static class PermissionNames
             Reporteria.Create,
             Reporteria.Edit,
             Reporteria.Delete,
+            Reporteria.SqlPersonalizado,
+            Contabilidad.Presupuesto.Aprobar,
             Configuracion.View,
             Configuracion.Create,
             Configuracion.Edit,
@@ -332,7 +354,11 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Ventas.Caja.Create, [Ventas.Caja.Create, Ventas.Create]),
         new PermissionPolicyDefinition(Ventas.Caja.Edit, [Ventas.Caja.Edit, Ventas.Edit]),
         new PermissionPolicyDefinition(Ventas.Caja.Delete, [Ventas.Caja.Delete, Ventas.Delete]),
-        new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create])
+        new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create]),
+
+        // Sustituyen a los dos ultimos chequeos por rol del sistema.
+        new PermissionPolicyDefinition(Contabilidad.Presupuesto.Aprobar, [Contabilidad.Presupuesto.Aprobar]),
+        new PermissionPolicyDefinition(Reporteria.SqlPersonalizado, [Reporteria.SqlPersonalizado])
         };
 
         foreach (var endpoint in PermissionEndpointCatalog.All)
