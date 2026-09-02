@@ -20,7 +20,7 @@
     <div class="header-section">
         <div>
             <h2 class="page-title">Aprobaciones</h2>
-            <p class="page-subtitle">Quién autoriza cada documento y a partir de qué monto</p>
+            <p class="page-subtitle">Quién autoriza cada documento y hasta qué monto</p>
         </div>
         <DxButton Text="Nuevo nivel" IconCssClass="bi bi-plus-lg"
                   RenderStyle="ButtonRenderStyle.Primary" CssClass="btn-modern"
@@ -51,7 +51,7 @@
                             CssClass="w-100" />
                 <div class="form-text">
                     @(modoSeleccionado == ModoAprobacion.Encendido
-                        ? "El documento pasa por la escalera de firmas antes de aprobarse."
+                        ? "El documento espera la autorización de alguien cuyo límite cubra su monto."
                         : "El documento se aprueba de un solo paso, como hasta ahora.")
                 </div>
             </div>
@@ -100,7 +100,8 @@
                 <ToolbarTemplate>
                     <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                         <span class="text-muted small">
-                            Se exigen todos los niveles cuyo monto sea menor o igual al total del documento.
+                            Cada nivel autoriza <strong>hasta</strong> su límite. La aprobación no es en cascada:
+                            quien alcanza el monto aprueba directamente, sin esperar a los niveles menores.
                         </span>
 
                         <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
@@ -116,8 +117,22 @@
                 <Columns>
                     <DxGridDataColumn FieldName="Nivel" Caption="Nivel" Width="90px" />
                     <DxGridDataColumn FieldName="Descripcion" Caption="Descripción" MinWidth="180" />
-                    <DxGridDataColumn FieldName="MontoDesde" Caption="Desde" Width="140px"
-                                      DisplayFormat="N2" />
+                    <DxGridDataColumn FieldName="MontoHasta" Caption="Autoriza hasta" Width="150px"
+                                      TextAlignment="GridTextAlignment.Right">
+                        <CellDisplayTemplate>
+                            @{
+                                var fila = (AprobacionNivelConfigDto)context.DataItem;
+                            }
+                            @if (fila.MontoHasta.HasValue)
+                            {
+                                <span class="fw-semibold">@fila.MontoHasta.Value.ToString("N2")</span>
+                            }
+                            else
+                            {
+                                <span class="badge-status badge-aprobada">Sin tope</span>
+                            }
+                        </CellDisplayTemplate>
+                    </DxGridDataColumn>
                     <DxGridDataColumn FieldName="Id" Caption="Aprobadores" Width="220px" AllowSort="false">
                         <CellDisplayTemplate>
                             @{
@@ -170,7 +185,7 @@
                 <EmptyDataAreaTemplate>
                     <div class="p-4 text-center text-muted">
                         Todavía no hay niveles. Con el control encendido y sin niveles, ningún documento
-                        podrá enviarse a aprobación.
+                        tendrá quién lo autorice.
                     </div>
                 </EmptyDataAreaTemplate>
             </DxGrid>
@@ -186,19 +201,25 @@
             <label class="form-label small fw-semibold">Nivel</label>
             <DxSpinEdit T="short" @bind-Value="nivelEdit.Nivel"
                         MinValue="1" MaxValue="9" CssClass="w-100" />
-            <div class="form-text">Orden de firma. El nivel 2 no se habilita hasta que firma el 1.</div>
+            <div class="form-text">
+                Orden del tramo, de menor a mayor capacidad. No impone secuencia: es solo para
+                ordenarlos y saber cuál es el más bajo que cubre un monto.
+            </div>
         </div>
         <div class="mb-3">
             <label class="form-label small fw-semibold">Descripción</label>
             <DxTextBox @bind-Text="nivelEdit.Descripcion" NullText="Jefatura, Gerencia…" CssClass="w-100" />
         </div>
         <div class="mb-3">
-            <label class="form-label small fw-semibold">Monto desde</label>
-            <DxSpinEdit T="decimal" @bind-Value="nivelEdit.MontoDesde"
+            <DxCheckBox @bind-Checked="sinTope">Sin tope: autoriza cualquier monto</DxCheckBox>
+        </div>
+        <div class="mb-3">
+            <label class="form-label small fw-semibold">Autoriza hasta</label>
+            <DxSpinEdit T="decimal" @bind-Value="limiteEdit" Enabled="@(!sinTope)"
                         MinValue="0" DisplayFormat="N2" CssClass="w-100" />
             <div class="form-text">
-                Se exige este nivel cuando el total del documento alcanza este monto. El primer nivel
-                normalmente va en 0 para que toda compra pase por él.
+                Monto máximo que este nivel puede aprobar. Quien esté aquí aprueba directamente
+                cualquier documento que no lo supere, sin esperar a otro nivel.
             </div>
         </div>
         <DxCheckBox @bind-Checked="nivelEdit.Activo">Activo</DxCheckBox>
@@ -273,8 +294,8 @@
         }
 
         <div class="form-text mt-2">
-            Dentro de un nivel firma <strong>cualquiera</strong> de sus aprobadores. Conviene dejar al
-            menos dos, para que una ausencia no detenga las compras.
+            Cualquiera de ellos autoriza <strong>hasta el límite del nivel</strong>, sin esperar a nadie.
+            Conviene dejar al menos dos, para que una ausencia no detenga las compras.
         </div>
     </BodyTemplate>
     <FooterContentTemplate>
@@ -294,8 +315,8 @@
             Se eliminará el nivel <strong>@nivelAEliminar?.Descripcion</strong> y sus aprobadores.
         </p>
         <p class="text-muted small mb-0">
-            Los documentos que ya están circulando no se ven afectados: conservan los niveles con los
-            que salieron.
+            Las órdenes ya aprobadas no se tocan. Las que están esperando autorización pierden este
+            tramo: si ningún otro nivel alcanza su monto, quedarán pendientes hasta que configure uno.
         </p>
     </BodyTemplate>
     <FooterContentTemplate>
@@ -341,6 +362,15 @@
     private bool popupEliminarVisible;
 
     private AprobacionNivelConfigDto nivelEdit = new();
+
+    /// <summary>
+    /// El límite se captura en dos controles —una casilla y un monto— en vez de un número que
+    /// admita vacío: un spin edit anulable es justo el patrón que ya tumbó el circuito en otra
+    /// pantalla, y "sin tope" se lee mejor que un campo en blanco.
+    /// </summary>
+    private bool sinTope;
+
+    private decimal limiteEdit;
     private AprobacionNivelConfigDto? nivelAprobadores;
     private AprobacionNivelConfigDto? nivelAEliminar;
 
@@ -406,6 +436,8 @@
         }
 
         nivelEdit = new AprobacionNivelConfigDto { Nivel = siguiente > 9 ? (short)9 : siguiente, Activo = true };
+        sinTope = false;
+        limiteEdit = 0m;
         popupNivelVisible = true;
     }
 
@@ -416,9 +448,11 @@
             Id = fila.Id,
             Nivel = fila.Nivel,
             Descripcion = fila.Descripcion,
-            MontoDesde = fila.MontoDesde,
+            MontoHasta = fila.MontoHasta,
             Activo = fila.Activo
         };
+        sinTope = !fila.MontoHasta.HasValue;
+        limiteEdit = fila.MontoHasta ?? 0m;
         popupNivelVisible = true;
     }
 
@@ -427,6 +461,7 @@
         guardando = true;
         try
         {
+            nivelEdit.MontoHasta = sinTope ? null : limiteEdit;
             await Client.GuardarNivelAsync(documentoSeleccionado, nivelEdit);
             popupNivelVisible = false;
             await CargarAsync();

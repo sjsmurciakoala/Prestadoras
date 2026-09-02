@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Threading.Tasks;
 using Dapper;
 using Microsoft.EntityFrameworkCore;
@@ -81,29 +81,36 @@ public class RequisicionAprobacionTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task Con_escalera_la_requisicion_junta_firmas_antes_de_aprobarse()
+    public async Task Quien_alcanza_el_monto_aprueba_la_requisicion_en_un_solo_paso()
     {
         Skip.IfNot(Fixture.Available);
         await EncenderEscaleraAsync();
 
         var id = await CrearRequisicionAsync(EstadoRequisicionHdr.Borrador, 75000m);
 
-        // Enviar a revisión abre la escalera: 75,000 exige los dos niveles.
+        // Enviar a revisión no reserva escalones: espera UNA autorización.
         var enviada = await _requisiciones!.EnviarARevisionAsync(id, Solicitante);
         Assert.Equal(EstadoRequisicionHdr.EnRevision, enviada.Estado);
-        Assert.Equal(2, await ContarFlujoAsync(id));
+        Assert.Equal(0, await ContarFlujoAsync(id));
 
-        // La primera firma NO aprueba: la requisición sigue en revisión.
+        // Aprobador1 llega a 10,000: no alcanza los 75,000.
         _usuario.Establecer(Aprobador1);
-        var tras1 = await _requisiciones.AprobarAsync(id, Aprobador1);
-        Assert.Equal(EstadoRequisicionHdr.EnRevision, tras1.Estado);
+        await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _requisiciones.AprobarAsync(id, Aprobador1));
+        Assert.Equal(EstadoRequisicionHdr.EnRevision, await EstadoAsync(id));
 
-        // La última sí.
+        // Aprobador2 llega a 100,000: aprueba directamente, sin que el otro firme antes.
         _usuario.Establecer(Aprobador2);
-        var tras2 = await _requisiciones.AprobarAsync(id, Aprobador2);
-        Assert.Equal(EstadoRequisicionHdr.Aprobada, tras2.Estado);
-        Assert.Equal(Aprobador2, tras2.AprobadoPor);
+        var aprobada = await _requisiciones.AprobarAsync(id, Aprobador2);
+        Assert.Equal(EstadoRequisicionHdr.Aprobada, aprobada.Estado);
+        Assert.Equal(Aprobador2, aprobada.AprobadoPor);
+        Assert.Equal(1, await ContarFlujoAsync(id));
     }
+
+    private Task<short> EstadoAsync(int id)
+        => Connection.ExecuteScalarAsync<short>(
+            "SELECT estado FROM public.alm_requisicion_hdr WHERE company_id = @c AND id = @id;",
+            new { c = CompanyId, id }, Transaction);
 
     [SkippableFact]
     public async Task Quien_no_es_aprobador_no_puede_firmar_la_requisicion()
@@ -147,8 +154,8 @@ public class RequisicionAprobacionTests : IntegrationTestBase, IAsyncLifetime
         var id = await CrearRequisicionAsync(EstadoRequisicionHdr.Borrador, 75000m);
         await _requisiciones!.EnviarARevisionAsync(id, Solicitante);
 
-        _usuario.Establecer(Aprobador1);
-        var rechazada = await _requisiciones.RechazarAsync(id, "No hay presupuesto", Aprobador1);
+        _usuario.Establecer(Aprobador2);
+        var rechazada = await _requisiciones.RechazarAsync(id, "No hay presupuesto", Aprobador2);
 
         Assert.Equal(EstadoRequisicionHdr.Rechazada, rechazada.Estado);
 
@@ -171,8 +178,8 @@ public class RequisicionAprobacionTests : IntegrationTestBase, IAsyncLifetime
               ON CONFLICT (company_id, documento) DO UPDATE SET modo = 1, permite_autoaprobacion = false;",
             new { c = CompanyId, d = DocumentosAprobacion.Requisicion }, Transaction);
 
-        var nivel1 = await CrearNivelAsync(1, "Jefatura", 0m);
-        var nivel2 = await CrearNivelAsync(2, "Gerencia", 10000.01m);
+        var nivel1 = await CrearNivelAsync(1, "Jefatura", 10000m);      // no llega a 75,000
+        var nivel2 = await CrearNivelAsync(2, "Gerencia", 100000m);     // sí llega
 
         await Connection.ExecuteAsync(
             "INSERT INTO public.cfg_aprobacion_aprobador (company_id, nivel_id, tipo, valor) VALUES (@c, @n, 1, @v);",
@@ -183,11 +190,11 @@ public class RequisicionAprobacionTests : IntegrationTestBase, IAsyncLifetime
             }, Transaction);
     }
 
-    private Task<int> CrearNivelAsync(short nivel, string descripcion, decimal desde)
+    private Task<int> CrearNivelAsync(short nivel, string descripcion, decimal hasta)
         => Connection.ExecuteScalarAsync<int>(
-            @"INSERT INTO public.cfg_aprobacion_nivel (company_id, documento, nivel, descripcion, monto_desde, activo)
-              VALUES (@c, @d, @n, @desc, @desde, true) RETURNING id;",
-            new { c = CompanyId, d = DocumentosAprobacion.Requisicion, n = nivel, desc = descripcion, desde },
+            @"INSERT INTO public.cfg_aprobacion_nivel (company_id, documento, nivel, descripcion, monto_hasta, activo)
+              VALUES (@c, @d, @n, @desc, @hasta, true) RETURNING id;",
+            new { c = CompanyId, d = DocumentosAprobacion.Requisicion, n = nivel, desc = descripcion, hasta },
             Transaction);
 
     /// <summary>

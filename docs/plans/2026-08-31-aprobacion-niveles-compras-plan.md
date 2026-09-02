@@ -441,3 +441,47 @@ propia, con su diseño, su decisión de negocio y su impacto en cierres contable
 antes de que salga el dinero es exactamente lo que un control de este tipo debe frenar. La factura
 es un registro de algo que ya ocurrió (la mercadería llegó), así que aprobarla después de recibirla
 aporta bastante menos.
+
+---
+
+## 15. Cambio de regla (2026-09-01): la aprobación NO es en cascada
+
+El usuario pidió reemplazar la escalera acumulativa por **autorización por límite**. Es un cambio
+de negocio, no un ajuste: **revierte D1 y D1b**.
+
+### Antes (D1) y ahora
+
+| | Escalera acumulativa (hasta 2026-08-31) | Límite de autorización (desde 2026-09-01) |
+|---|---|---|
+| Qué declara el nivel | `monto_desde`: **a partir de** qué monto se exige | `monto_hasta`: **hasta** cuánto puede autorizar |
+| Una orden de 75,000 | Exige firmas de los niveles 1, 2 y 3, **en orden** | La aprueba **de una firma** quien llegue a 75,000 |
+| Si el nivel 1 no ha firmado | El 2 está bloqueado | Irrelevante: no hay secuencia |
+| Reparto del monto | — | No se reparte: una sola persona lo autoriza entero |
+| Nadie alcanza el monto | No podía pasar (el nivel más bajo siempre entraba) | El documento **queda pendiente** y la pantalla lo dice |
+
+### Decisiones de esta vuelta
+
+- **D6 — Sin cascada.** Un tramo es una capacidad, no un escalón. Quien pertenece a un tramo cuyo
+  límite cubre el total aprueba directamente. El `nivel` (1..9) solo ordena los tramos de menor a
+  mayor capacidad, para poder decir cuál es el más bajo que cubre un monto.
+- **D7 — `NULL` = sin tope**, para el tramo que autoriza cualquier monto sin escribir 999,999,999.
+- **D8 — Los límites crecen con el nivel**, validado al guardar: es lo que da sentido a «el tramo
+  más bajo que cubre este monto», que es lo que se muestra y lo que se registra.
+- **D9 — Rechazar exige la misma capacidad que aprobar.** Quien no podría autorizar el monto
+  tampoco puede tumbar el documento.
+- **D10 — Sin aprobador capaz no se bloquea el envío.** El documento entra igual y se queda
+  esperando, con el aviso a la vista en el listado y en la ficha. Bloquear escondería el problema.
+- **D11 — Devolver a borrador solo mientras espera.** Como autorizar y aprobar son el mismo acto,
+  una vez aprobado se sale anulando o cancelando, no devolviendo.
+
+### Registro de la autorización (lo que pidió el requerimiento)
+
+Queda en `apr_bitacora` y en la tabla de flujo del documento: **usuario** que autorizó, **tramo y
+límite utilizados**, **monto aprobado**, **fecha y hora**, **estado anterior y nuevo** y la
+**observación** cuando la hay.
+
+### Qué NO cambió
+
+El interruptor por empresa y documento, los aprobadores por usuario o por rol, D2 (el presupuesto
+se compromete al autorizar), D4 (devolver borra la autorización), D5 (nadie autoriza lo suyo, con
+su interruptor), los correos, el PDF y el permiso propio de aprobar.

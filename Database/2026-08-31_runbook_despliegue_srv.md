@@ -109,8 +109,13 @@ SELECT pg_get_constraintdef(oid) FROM pg_constraint WHERE conname = 'ck_alm_orde
 | 1 | `2026-08-31_apr_niveles_01_estructura.sql` | Aditivo (5 tablas, 8 índices, 1 semilla) + 1 CHECK ampliado | Sí | Paso 1 de la tanda `2026-08-27` (ver la advertencia de cabecera) |
 | 2 | `2026-08-31_apr_niveles_02_funciones.sql` | Objetos (3 funciones de solo lectura) | Sí | Paso 1 |
 | 3 | `2026-08-31_apr_niveles_03_requisicion.sql` | Aditivo (1 tabla, 2 índices) | Sí | Paso 1 |
+| 4 | `2026-09-01_apr_niveles_04_limite_por_aprobador.sql` | **Cambio de modelo**: 1 rename + 1 columna anulable + 1 CHECK + 5 columnas nuevas + 5 funciones | Sí | Pasos 1, 2 y 3 |
 
-Los tres traen su propio `BEGIN … COMMIT`.
+Los cuatro traen su propio `BEGIN … COMMIT`.
+
+> ⚠️ **El paso 4 cambia la regla de negocio.** La aprobación deja de ser en cascada: cada nivel
+> declara **hasta cuánto** autoriza y quien alcanza el monto aprueba **de una sola firma**. Sin él,
+> el código nuevo no funciona (busca `monto_hasta`, que solo existe después de aplicarlo).
 
 ## 5. Detalle por paso
 
@@ -228,6 +233,47 @@ SELECT estado, count(*) FROM public.alm_requisicion_hdr GROUP BY estado ORDER BY
 **No-regresión:** con `cfg_aprobacion_control.modo = 0` para `ALMACEN_REQUISICION`, aprobar una
 requisición sigue siendo de un clic para quien tenga `module.inventario.requisiciones.aprobar`.
 
+### Paso 4 — Límite de autorización (`2026-09-01_apr_niveles_04_limite_por_aprobador.sql`)
+
+Convierte el umbral de entrada de cada nivel en un **límite máximo de autorización**, agrega el
+registro que exige el requerimiento (con qué límite se autorizó, y el cambio de estado) y rehace
+las funciones con la regla nueva.
+
+```bash
+psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-09-01_apr_niveles_04_limite_por_aprobador.sql
+```
+
+**¿Ya aplicado?**
+
+```sql
+SELECT column_name FROM information_schema.columns
+ WHERE table_name = 'cfg_aprobacion_nivel' AND column_name IN ('monto_desde', 'monto_hasta');
+```
+
+Esperado: `monto_hasta`. Si devuelve `monto_desde`, falta aplicarlo.
+
+**Verificación:**
+
+```sql
+-- a) La columna admite NULL (= sin tope)
+SELECT is_nullable FROM information_schema.columns
+ WHERE table_name = 'cfg_aprobacion_nivel' AND column_name = 'monto_hasta';   -- YES
+
+-- b) Las cinco funciones de la regla nueva, y ninguna de la vieja
+SELECT proname FROM pg_proc WHERE proname LIKE 'fn_apr%' ORDER BY proname;
+-- esperado: fn_apr_autorizadores, fn_apr_oc_capacidad, fn_apr_oc_pendientes,
+--           fn_apr_puede_autorizar, fn_apr_tramo_de   (5, y NO fn_apr_escalera)
+
+-- c) El registro nuevo de la bitácora
+SELECT column_name FROM information_schema.columns
+ WHERE table_name = 'apr_bitacora'
+   AND column_name IN ('estado_anterior', 'estado_nuevo', 'limite_utilizado')
+ ORDER BY column_name;   -- 3 filas
+```
+
+**No-regresión:** con el control en modo 0 nada de esto interviene y los documentos se aprueban de
+un clic, como siempre.
+
 ## 6. Después de aplicar — cómo se enciende (NO hacerlo todavía)
 
 ⚠️ **Al 2026-08-31 están F1, F2 y F3 (base, motor y API). Faltan F4 y F5: la pantalla de
@@ -253,8 +299,8 @@ explícito de configuración, por diseño: nunca aprobación automática silenci
 
 | Base | Estado |
 |---|---|
-| `siad_v3_restore` (mirror, localhost) | ✅ **APLICADOS LOS TRES PASOS** el 2026-08-31, exit 0. El paso 3 quedó verificado: tabla vacía, FK compuesta a la requisición y las 43 requisiciones existentes intactas. Paso 1 verificado: control con 4 filas en modo 0 y `permite_autoaprobacion = false` (empresa 2), CHECK en `(1,2,3,4,5,6,7,9)`, 0 órdenes fuera del CHECK, las otras 4 tablas vacías. Paso 2 verificado: las 3 funciones existen y devuelven vacío sin escalera configurada |
-| `siad_v4` @ 172.16.0.9 (SRV) | ⏳ **Pendiente los dos** — los aplica el usuario |
+| `siad_v3_restore` (mirror, localhost) | ✅ **APLICADOS LOS CUATRO PASOS** (los tres primeros el 2026-08-31, el cuarto el 2026-09-01), exit 0. Paso 4 verificado: `monto_hasta` anulable, 5 funciones nuevas y ninguna `fn_apr_escalera`, y las 3 columnas de registro en la bitácora. El paso 3 quedó verificado: tabla vacía, FK compuesta a la requisición y las 43 requisiciones existentes intactas. Paso 1 verificado: control con 4 filas en modo 0 y `permite_autoaprobacion = false` (empresa 2), CHECK en `(1,2,3,4,5,6,7,9)`, 0 órdenes fuera del CHECK, las otras 4 tablas vacías. Paso 2 verificado: las 3 funciones existen y devuelven vacío sin escalera configurada |
+| `siad_v4` @ 172.16.0.9 (SRV) | ⏳ **Pendientes los cuatro** — los aplica el usuario, en orden 01 → 02 → 03 → 04 |
 
 En el mirror se corrió además una batería de 14 pruebas de constraints dentro de `BEGIN … ROLLBACK`
 (usuario con mayúsculas rechazado, rol duplicado case-insensitive rechazado, aprobador vacío
@@ -274,6 +320,7 @@ Archivos nuevos, **untracked** al 2026-08-31:
 
 - `Database/2026-08-31_apr_niveles_01_estructura.sql`
 - `Database/2026-08-31_apr_niveles_02_funciones.sql`
+- `Database/2026-09-01_apr_niveles_04_limite_por_aprobador.sql`
 - `Database/2026-08-31_runbook_despliegue_srv.md`
 - `docs/plans/2026-08-31-aprobacion-niveles-compras-plan.md`
 - `SIAD.Core/Constants/AprobacionConstants.cs`, `SIAD.Core/DTOs/Aprobaciones/`,

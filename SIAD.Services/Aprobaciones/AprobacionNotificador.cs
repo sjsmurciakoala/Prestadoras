@@ -33,14 +33,16 @@ public sealed class AprobacionNotificador : IAprobacionNotificador
     {
         try
         {
-            var destinatarios = await _aprobacion.CorreosNivelPendienteAsync(
-                DocumentosAprobacion.OrdenCompra, ordenCompraId, ct);
+            // A quienes PUEDEN autorizar este monto, no a un escalón concreto: la aprobación no
+            // es en cascada, así que el aviso va a todos los capaces a la vez.
+            var destinatarios = await _aprobacion.CorreosAutorizadoresAsync(
+                DocumentosAprobacion.OrdenCompra, total, ct);
 
             if (destinatarios.Count == 0)
             {
-                // Pasa cuando el nivel autoriza por ROL: los miembros viven en Identity y no se
+                // Pasa cuando quien autoriza es un ROL: sus miembros viven en Identity y no se
                 // resuelven desde aquí. El área queda enterada por su propia copia.
-                return CorreoEnvioResultado.Skip("El nivel pendiente no tiene aprobadores con correo.");
+                return CorreoEnvioResultado.Skip("No hay aprobadores con correo para este monto.");
             }
 
             var asunto = $"Orden de compra {numero} espera su aprobación";

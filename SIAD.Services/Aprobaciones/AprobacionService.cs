@@ -12,23 +12,21 @@ using SIAD.Services.Infrastructure;
 namespace SIAD.Services.Aprobaciones;
 
 /// <summary>
-/// Implementación de <see cref="IAprobacionService"/>. Ver la interfaz para el contrato.
+/// Implementación de <see cref="IAprobacionService"/>. Ver la interfaz para el contrato y para la
+/// regla de negocio (autorización por monto, sin cascada).
 /// <para>
-/// <b>Por qué toma la conexión del <see cref="SiadDbContext"/> y no abre la suya:</b> abrir y
-/// cerrar el flujo tiene que ser atómico con el cambio de estado del documento. Con una conexión
-/// propia, un fallo posterior dejaría firmas vivas sobre un documento que se quedó en Borrador.
-/// Es el mismo patrón de <c>PresupuestoCompromisoService</c> y <c>CompraContabilidad</c>.
-/// </para>
-/// <para>
-/// <b>Sin LINQ</b> (regla <c>hodsoft-sin-linq</c>): la escalera y la elegibilidad viven en
-/// <c>fn_apr_escalera</c> / <c>fn_apr_es_aprobador</c>; aquí solo hay SQL explícito y las reglas
-/// de secuencia, que son de flujo y no de datos.
+/// <b>Por qué toma la conexión del <see cref="SiadDbContext"/> y no abre la suya:</b> autorizar
+/// tiene que ser atómico con el cambio de estado del documento. Con una conexión propia, un fallo
+/// posterior dejaría una autorización viva sobre un documento que se quedó en Borrador.
 /// </para>
 /// <para>
 /// <b>Un documento, una tabla de flujo.</b> Cada documento enganchado tiene su tabla gemela
-/// (<c>alm_orden_compra_aprobacion</c>, <c>alm_requisicion_aprobacion</c>), y el motor la resuelve
-/// desde <c>Mapa</c>. Los documentos que aún no están enganchados lanzan
-/// <see cref="NotSupportedException"/> en vez de escribir en la tabla equivocada.
+/// (<c>alm_orden_compra_aprobacion</c>, <c>alm_requisicion_aprobacion</c>), resuelta desde
+/// <c>Mapa</c>. Los que aún no están enganchados lanzan <see cref="NotSupportedException"/>.
+/// </para>
+/// <para>
+/// <b>Sin LINQ</b> (regla <c>hodsoft-sin-linq</c>): la capacidad y la elegibilidad viven en las
+/// funciones <c>fn_apr_*</c>; aquí solo hay SQL explícito y las reglas de negocio.
 /// </para>
 /// </summary>
 public sealed class AprobacionService : IAprobacionService
@@ -50,9 +48,8 @@ public sealed class AprobacionService : IAprobacionService
 
     // ---------------------------------------------------------------------------------------
     // Consultas. Los alias explícitos NO son adorno: Dapper mapea por nombre exacto y este
-    // proyecto no activa MatchNamesWithUnderscores, así que `documento_id` no llegaría a
-    // `DocumentoId`. Los casts ::bigint/::varchar/::numeric evitan que Npgsql infiera text y
-    // Postgres no resuelva la firma de la función (42883).
+    // proyecto no activa MatchNamesWithUnderscores. Los casts ::bigint/::varchar/::numeric evitan
+    // que Npgsql infiera text y Postgres no resuelva la firma de la función (42883).
     // ---------------------------------------------------------------------------------------
 
     private const string SqlControl = @"
@@ -63,42 +60,23 @@ SELECT documento              AS Documento,
  WHERE company_id = @companyId::bigint
    AND documento  = @documento::varchar;";
 
-    private const string SqlEscalera = @"
+    private const string SqlAutorizadores = @"
 SELECT nivel             AS Nivel,
        descripcion       AS Descripcion,
-       monto_desde       AS MontoDesde,
+       monto_hasta       AS MontoHasta,
        tiene_aprobadores AS TieneAprobadores
-  FROM public.fn_apr_escalera(@companyId::bigint, @documento::varchar, @total::numeric);";
+  FROM public.fn_apr_autorizadores(@companyId::bigint, @documento::varchar, @total::numeric);";
 
-    // Las consultas del flujo se arman con el nombre de tabla/columna del documento (ver Mapa):
-    // son valores de una lista fija del código, no entrada del usuario.
-    private static string SqlFlujo(MapaDocumento m) => $@"
-SELECT nivel           AS Nivel,
-       descripcion     AS Descripcion,
-       estado          AS Estado,
-       usuario_firma   AS UsuarioFirma,
-       fecha_firma     AS FechaFirma,
-       comentario      AS Comentario,
-       total_documento AS TotalDocumento
-  FROM {m.TablaFlujo}
- WHERE company_id          = @companyId::bigint
-   AND {m.ColumnaDocumento} = @documentoId::int
- ORDER BY nivel;";
+    private const string SqlPuedeAutorizar = @"
+SELECT public.fn_apr_puede_autorizar(
+       @companyId::bigint, @documento::varchar, @total::numeric, @usuario::varchar, @roles::varchar[]);";
 
-    // FOR UPDATE: dos aprobadores del mismo nivel pulsando a la vez tienen que serializarse aquí,
-    // o los dos leerían "pendiente" y el segundo firmaría un nivel ya cerrado.
-    private static string SqlNivelPendienteBloqueado(MapaDocumento m) => $@"
-SELECT id, nivel, descripcion, total_documento
-  FROM {m.TablaFlujo}
- WHERE company_id          = @companyId::bigint
-   AND {m.ColumnaDocumento} = @documentoId::int
-   AND estado              = 2
- ORDER BY nivel
- FOR UPDATE;";
-
-    private const string SqlEsAprobador = @"
-SELECT public.fn_apr_es_aprobador(
-       @companyId::bigint, @documento::varchar, @nivel::smallint, @usuario::varchar, @roles::varchar[]);";
+    private const string SqlTramoDe = @"
+SELECT nivel       AS Nivel,
+       descripcion AS Descripcion,
+       monto_hasta AS MontoHasta
+  FROM public.fn_apr_tramo_de(
+       @companyId::bigint, @documento::varchar, @total::numeric, @usuario::varchar, @roles::varchar[]);";
 
     private const string SqlPendientes = @"
 SELECT documento_id      AS DocumentoId,
@@ -112,11 +90,20 @@ SELECT documento_id      AS DocumentoId,
        dias_en_espera    AS DiasEnEspera
   FROM public.fn_apr_oc_pendientes(@companyId::bigint, @usuario::varchar, @roles::varchar[]);";
 
+    private const string SqlCapacidad = @"
+SELECT documento_id             AS DocumentoId,
+       hay_aprobador_capaz      AS HayAprobadorCapaz,
+       limite_minimo_suficiente AS LimiteMinimoSuficiente,
+       tramo_minimo             AS TramoMinimo
+  FROM public.fn_apr_oc_capacidad(@companyId::bigint);";
+
     private const string SqlBitacora = @"
 INSERT INTO public.apr_bitacora
-       (company_id, documento, documento_id, documento_numero, nivel, accion, usuario, comentario, total_documento)
+       (company_id, documento, documento_id, documento_numero, nivel, accion, usuario, comentario,
+        total_documento, limite_utilizado, estado_anterior, estado_nuevo)
 VALUES (@companyId::bigint, @documento::varchar, @documentoId::bigint, @numero::varchar,
-        @nivel::smallint, @accion::varchar, @usuario::varchar, @comentario::varchar, @total::numeric);";
+        @nivel::smallint, @accion::varchar, @usuario::varchar, @comentario::varchar,
+        @total::numeric, @limite::numeric, @estadoAnterior::smallint, @estadoNuevo::smallint);";
 
     // ---------------------------------------------------------------------------------------
 
@@ -130,8 +117,8 @@ VALUES (@companyId::bigint, @documento::varchar, @documentoId::bigint, @numero::
             new CommandDefinition(SqlControl,
                 new { companyId = EmpresaActual(), documento }, tx, cancellationToken: ct));
 
-        // Empresa sin fila de configuración = control apagado. Es lo mismo que decidió el
-        // control presupuestario: la ausencia de configuración nunca enciende nada.
+        // Empresa sin fila de configuración = control apagado. La ausencia de configuración nunca
+        // enciende nada.
         return control ?? new AprobacionControlDto
         {
             Documento = documento,
@@ -143,27 +130,27 @@ VALUES (@companyId::bigint, @documento::varchar, @documentoId::bigint, @numero::
     public async Task<bool> RequiereAprobacionAsync(string documento, CancellationToken ct = default)
         => (await ObtenerControlAsync(documento, ct)).Encendido;
 
-    public async Task<IReadOnlyList<NivelExigidoDto>> ResolverEscaleraAsync(
+    public async Task<IReadOnlyList<TramoAutorizacionDto>> ResolverAutorizadoresAsync(
         string documento, decimal total, CancellationToken ct = default)
     {
         ValidarDocumento(documento);
 
         if (!await RequiereAprobacionAsync(documento, ct))
         {
-            return Array.Empty<NivelExigidoDto>();
+            return Array.Empty<TramoAutorizacionDto>();
         }
 
         var (conn, tx) = Conexion();
-        var niveles = await conn.QueryAsync<NivelExigidoDto>(
-            new CommandDefinition(SqlEscalera,
+        var tramos = await conn.QueryAsync<TramoAutorizacionDto>(
+            new CommandDefinition(SqlAutorizadores,
                 new { companyId = EmpresaActual(), documento, total }, tx, cancellationToken: ct));
 
-        return niveles.AsList();
+        return tramos.AsList();
     }
 
     public async Task IniciarAsync(
         string documento, long documentoId, string? numero, decimal total, string creadoPor,
-        CancellationToken ct = default)
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default)
     {
         ValidarDocumento(documento);
         var mapa = Ubicar(documento);
@@ -176,80 +163,31 @@ VALUES (@companyId::bigint, @documento::varchar, @documentoId::bigint, @numero::
         }
 
         var (conn, tx) = Conexion();
-        var companyId = EmpresaActual();
 
-        var abiertos = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
+        // Un documento ya autorizado o rechazado no se reenvía sin devolverlo antes a borrador.
+        var resuelto = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
             $"SELECT count(*) FROM {mapa.TablaFlujo} " +
             $"WHERE company_id = @companyId::bigint AND {mapa.ColumnaDocumento} = @documentoId::int;",
-            new { companyId, documentoId }, tx, cancellationToken: ct));
+            new { companyId = EmpresaActual(), documentoId }, tx, cancellationToken: ct));
 
-        if (abiertos > 0)
+        if (resuelto > 0)
         {
             throw new InvalidOperationException("El documento ya está en proceso de aprobación.");
         }
 
-        var escalera = await ResolverEscaleraAsync(documento, total, ct);
-
-        if (escalera.Count == 0)
-        {
-            throw new InvalidOperationException(
-                "No hay niveles de aprobación configurados para este monto. " +
-                "Configure la escalera en Configuración → Aprobaciones antes de enviar el documento.");
-        }
-
-        // Un nivel exigido sin aprobadores deja el documento detenido para siempre. Se detecta
-        // ANTES de abrir el flujo, no cuando alguien intenta firmarlo.
-        // (Sin LINQ, regla hodsoft-sin-linq: también aplica a filtrar colecciones en memoria.)
-        foreach (var candidato in escalera)
-        {
-            if (!candidato.TieneAprobadores)
-            {
-                throw new InvalidOperationException(
-                    $"El nivel «{candidato.Descripcion}» no tiene aprobadores asignados: nadie podría firmarlo. " +
-                    "Asigne al menos uno en Configuración → Aprobaciones.");
-            }
-        }
-
-        // El primer nivel nace Pendiente; el resto, Bloqueado. La secuencia es del motor.
-        var primero = true;
-        foreach (var nivel in escalera)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(
-                $@"INSERT INTO {mapa.TablaFlujo}
-                         (company_id, {mapa.ColumnaDocumento}, nivel, descripcion, estado, total_documento, usuariocreacion)
-                  VALUES (@companyId::bigint, @documentoId::int, @nivel::smallint, @descripcion::varchar,
-                          @estado::smallint, @total::numeric, @usuario::varchar);",
-                new
-                {
-                    companyId,
-                    documentoId,
-                    nivel = nivel.Nivel,
-                    descripcion = nivel.Descripcion,
-                    estado = primero ? EstadoAprobacionNivel.Pendiente : EstadoAprobacionNivel.Bloqueado,
-                    total,
-                    usuario = UsuarioActual()
-                }, tx, cancellationToken: ct));
-
-            primero = false;
-        }
-
+        // No se materializa ningún escalón: el documento queda esperando UNA autorización de
+        // quien tenga capacidad. Si hoy nadie la tiene, la pantalla lo dice y el documento espera.
         await RegistrarBitacoraAsync(
             conn, tx, documento, documentoId, numero, null, AccionAprobacion.Enviada,
-            $"Enviada a aprobación por {creadoPor}", total, ct);
+            $"Enviada a aprobación por {creadoPor}", total, null, estadoAnterior, estadoNuevo, ct);
     }
 
-    public async Task<FirmaResultadoDto> FirmarAsync(
-        string documento, long documentoId, string? comentario, CancellationToken ct = default)
+    public async Task<FirmaResultadoDto> AutorizarAsync(
+        string documento, long documentoId, decimal total, string? comentario,
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default)
     {
-        ValidarDocumento(documento);
         var mapa = Ubicar(documento);
-
-        var control = await ObtenerControlAsync(documento, ct);
-        if (!control.Encendido)
-        {
-            throw new InvalidOperationException(
-                "La aprobación por niveles no está activada para este documento.");
-        }
+        var control = await ExigirControlEncendidoAsync(documento, ct);
 
         var (conn, tx) = Conexion();
         var companyId = EmpresaActual();
@@ -257,114 +195,62 @@ VALUES (@companyId::bigint, @documento::varchar, @documentoId::bigint, @numero::
 
         if (string.IsNullOrWhiteSpace(usuario))
         {
-            throw new InvalidOperationException("No se pudo identificar al usuario que firma.");
+            throw new InvalidOperationException("No se pudo identificar al usuario que autoriza.");
         }
 
-        var pendiente = await conn.QueryFirstOrDefaultAsync<NivelPendienteRow>(
-            new CommandDefinition(SqlNivelPendienteBloqueado(mapa),
-                new { companyId, documentoId }, tx, cancellationToken: ct));
+        await ExigirSinResolverAsync(conn, tx, mapa, companyId, documentoId, ct);
+        await ExigirNoEsSuyoAsync(conn, tx, mapa, control, companyId, documentoId, usuario, ct);
 
-        if (pendiente is null)
+        // La única pregunta que decide: ¿su tramo alcanza el monto? No hay secuencia que respetar.
+        var tramo = await ResolverTramoAsync(conn, tx, documento, total, usuario, ct);
+        if (tramo is null)
         {
             throw new InvalidOperationException(
-                "El documento no tiene ningún nivel pendiente de firma.");
+                $"Su límite de aprobación no alcanza el monto de este documento ({total:N2}).");
         }
 
-        // D5: nadie firma lo suyo, salvo que la empresa lo permita.
-        if (!control.PermiteAutoaprobacion)
-        {
-            var creador = await conn.ExecuteScalarAsync<string?>(new CommandDefinition(
-                $"SELECT lower(btrim(coalesce({mapa.ColumnaCreador}, ''))) FROM {mapa.TablaDocumento} " +
-                "WHERE company_id = @companyId::bigint AND id = @documentoId::int;",
-                new { companyId, documentoId }, tx, cancellationToken: ct));
-
-            if (!string.IsNullOrEmpty(creador) &&
-                string.Equals(creador, usuario, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new InvalidOperationException(
-                    "No puede aprobar un documento que usted mismo creó.");
-            }
-        }
-
-        // Separación de funciones: una firma por persona y documento, aunque sea elegible en
-        // varios niveles.
-        var yaFirmo = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
-            $"SELECT count(*) FROM {mapa.TablaFlujo} " +
-            $"WHERE company_id = @companyId::bigint AND {mapa.ColumnaDocumento} = @documentoId::int " +
-            "  AND lower(coalesce(usuario_firma, '')) = @usuario::varchar;",
-            new { companyId, documentoId, usuario }, tx, cancellationToken: ct));
-
-        if (yaFirmo > 0)
-        {
-            throw new InvalidOperationException(
-                "Usted ya firmó otro nivel de este documento: un mismo usuario no puede aprobar dos veces.");
-        }
-
-        var elegible = await conn.ExecuteScalarAsync<bool>(new CommandDefinition(SqlEsAprobador,
-            new { companyId, documento, nivel = pendiente.Nivel, usuario, roles = RolesActuales() },
-            tx, cancellationToken: ct));
-
-        if (!elegible)
-        {
-            throw new InvalidOperationException(
-                $"No está autorizado para aprobar el nivel «{pendiente.Descripcion}».");
-        }
-
-        // ¿Es la primera firma del documento? Se mide ANTES de escribir la propia. Es el dato
-        // con el que el enganche decide comprometer presupuesto (D2).
-        var firmasPrevias = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
-            $"SELECT count(*) FROM {mapa.TablaFlujo} " +
-            $"WHERE company_id = @companyId::bigint AND {mapa.ColumnaDocumento} = @documentoId::int AND estado = 3;",
-            new { companyId, documentoId }, tx, cancellationToken: ct));
+        var ahora = DateTime.SpecifyKind(DateTime.UtcNow, DateTimeKind.Unspecified);
 
         await conn.ExecuteAsync(new CommandDefinition(
-            $@"UPDATE {mapa.TablaFlujo}
-                 SET estado        = @aprobado::smallint,
-                     usuario_firma = @usuario::varchar,
-                     fecha_firma   = (now() AT TIME ZONE 'utc'),
-                     comentario    = @comentario::varchar
-               WHERE id = @id::int;",
+            $@"INSERT INTO {mapa.TablaFlujo}
+                     (company_id, {mapa.ColumnaDocumento}, nivel, descripcion, estado,
+                      usuario_firma, fecha_firma, comentario, total_documento, limite_utilizado,
+                      usuariocreacion)
+              VALUES (@companyId::bigint, @documentoId::int, @nivel::smallint, @descripcion::varchar,
+                      @estado::smallint, @usuario::varchar, @fecha, @comentario::varchar,
+                      @total::numeric, @limite::numeric, @usuario::varchar);",
             new
             {
-                id = pendiente.Id,
-                aprobado = EstadoAprobacionNivel.Aprobado,
+                companyId, documentoId,
+                nivel = tramo.Nivel,
+                descripcion = tramo.Descripcion,
+                estado = EstadoAprobacionNivel.Aprobado,
                 usuario,
-                comentario = Recortar(comentario, 500)
+                fecha = ahora,
+                comentario = Recortar(comentario, 500),
+                total,
+                limite = tramo.MontoHasta
             }, tx, cancellationToken: ct));
 
-        // Habilita el siguiente escalón, si queda alguno.
-        var siguiente = await conn.QueryFirstOrDefaultAsync<NivelPendienteRow>(new CommandDefinition(
-            $"SELECT id, nivel, descripcion, total_documento FROM {mapa.TablaFlujo} " +
-            $"WHERE company_id = @companyId::bigint AND {mapa.ColumnaDocumento} = @documentoId::int AND estado = 1 " +
-            "ORDER BY nivel LIMIT 1;",
-            new { companyId, documentoId }, tx, cancellationToken: ct));
-
-        if (siguiente is not null)
-        {
-            await conn.ExecuteAsync(new CommandDefinition(
-                $"UPDATE {mapa.TablaFlujo} SET estado = @pendiente::smallint WHERE id = @id::int;",
-                new { id = siguiente.Id, pendiente = EstadoAprobacionNivel.Pendiente },
-                tx, cancellationToken: ct));
-        }
-
         await RegistrarBitacoraAsync(
-            conn, tx, documento, documentoId, null, pendiente.Nivel, AccionAprobacion.Aprobada,
-            comentario, pendiente.TotalDocumento, ct);
+            conn, tx, documento, documentoId, null, tramo.Nivel, AccionAprobacion.Aprobada,
+            comentario, total, tramo.MontoHasta, estadoAnterior, estadoNuevo, ct);
 
         return new FirmaResultadoDto
         {
-            NivelFirmado = pendiente.Nivel,
-            EsPrimeraFirma = firmasPrevias == 0,
-            FlujoCompleto = siguiente is null,
-            NivelPendiente = siguiente?.Nivel,
-            DescripcionPendiente = siguiente?.Descripcion
+            Nivel = tramo.Nivel,
+            DescripcionNivel = tramo.Descripcion,
+            LimiteUtilizado = tramo.MontoHasta,
+            MontoAprobado = total,
+            EstadoAnterior = estadoAnterior,
+            EstadoNuevo = estadoNuevo
         };
     }
 
     public async Task RechazarAsync(
-        string documento, long documentoId, string motivo, CancellationToken ct = default)
+        string documento, long documentoId, decimal total, string motivo,
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default)
     {
-        ValidarDocumento(documento);
         var mapa = Ubicar(documento);
 
         if (string.IsNullOrWhiteSpace(motivo))
@@ -372,54 +258,53 @@ VALUES (@companyId::bigint, @documento::varchar, @documentoId::bigint, @numero::
             throw new InvalidOperationException("El motivo del rechazo es obligatorio.");
         }
 
+        var control = await ExigirControlEncendidoAsync(documento, ct);
+
         var (conn, tx) = Conexion();
         var companyId = EmpresaActual();
         var usuario = UsuarioActual();
 
-        var pendiente = await conn.QueryFirstOrDefaultAsync<NivelPendienteRow>(
-            new CommandDefinition(SqlNivelPendienteBloqueado(mapa),
-                new { companyId, documentoId }, tx, cancellationToken: ct));
+        await ExigirSinResolverAsync(conn, tx, mapa, companyId, documentoId, ct);
+        await ExigirNoEsSuyoAsync(conn, tx, mapa, control, companyId, documentoId, usuario, ct);
 
-        if (pendiente is null)
+        // Rechazar exige la misma capacidad que aprobar: quien no podría autorizar el monto
+        // tampoco puede tumbar el documento.
+        var tramo = await ResolverTramoAsync(conn, tx, documento, total, usuario, ct);
+        if (tramo is null)
         {
             throw new InvalidOperationException(
-                "El documento no tiene ningún nivel pendiente de firma.");
-        }
-
-        var elegible = await conn.ExecuteScalarAsync<bool>(new CommandDefinition(SqlEsAprobador,
-            new { companyId, documento, nivel = pendiente.Nivel, usuario, roles = RolesActuales() },
-            tx, cancellationToken: ct));
-
-        if (!elegible)
-        {
-            throw new InvalidOperationException(
-                $"No está autorizado para rechazar el nivel «{pendiente.Descripcion}».");
+                $"Su límite de aprobación no alcanza el monto de este documento ({total:N2}).");
         }
 
         await conn.ExecuteAsync(new CommandDefinition(
-            $@"UPDATE {mapa.TablaFlujo}
-                 SET estado        = @rechazado::smallint,
-                     usuario_firma = @usuario::varchar,
-                     fecha_firma   = (now() AT TIME ZONE 'utc'),
-                     comentario    = @motivo::varchar
-               WHERE id = @id::int;",
+            $@"INSERT INTO {mapa.TablaFlujo}
+                     (company_id, {mapa.ColumnaDocumento}, nivel, descripcion, estado,
+                      usuario_firma, fecha_firma, comentario, total_documento, limite_utilizado,
+                      usuariocreacion)
+              VALUES (@companyId::bigint, @documentoId::int, @nivel::smallint, @descripcion::varchar,
+                      @estado::smallint, @usuario::varchar, (now() AT TIME ZONE 'utc'),
+                      @motivo::varchar, @total::numeric, @limite::numeric, @usuario::varchar);",
             new
             {
-                id = pendiente.Id,
-                rechazado = EstadoAprobacionNivel.Rechazado,
+                companyId, documentoId,
+                nivel = tramo.Nivel,
+                descripcion = tramo.Descripcion,
+                estado = EstadoAprobacionNivel.Rechazado,
                 usuario,
-                motivo = Recortar(motivo, 500)
+                motivo = Recortar(motivo, 500),
+                total,
+                limite = tramo.MontoHasta
             }, tx, cancellationToken: ct));
 
         await RegistrarBitacoraAsync(
-            conn, tx, documento, documentoId, null, pendiente.Nivel, AccionAprobacion.Rechazada,
-            motivo, pendiente.TotalDocumento, ct);
+            conn, tx, documento, documentoId, null, tramo.Nivel, AccionAprobacion.Rechazada,
+            motivo, total, tramo.MontoHasta, estadoAnterior, estadoNuevo, ct);
     }
 
     public async Task ReiniciarAsync(
-        string documento, long documentoId, string motivo, CancellationToken ct = default)
+        string documento, long documentoId, string motivo,
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default)
     {
-        ValidarDocumento(documento);
         var mapa = Ubicar(documento);
 
         if (string.IsNullOrWhiteSpace(motivo))
@@ -430,142 +315,109 @@ VALUES (@companyId::bigint, @documento::varchar, @documentoId::bigint, @numero::
         var (conn, tx) = Conexion();
         var companyId = EmpresaActual();
 
-        // D4: la devolución borra TODAS las firmas, sin comparar montos ni preguntar. Lo borrado
-        // sobrevive en la bitácora, que es append-only.
-        var borradas = await conn.ExecuteAsync(new CommandDefinition(
+        // Devolver borra la autorización si la hubo; lo borrado sobrevive en la bitácora, que es
+        // append-only.
+        await conn.ExecuteAsync(new CommandDefinition(
             $"DELETE FROM {mapa.TablaFlujo} " +
             $"WHERE company_id = @companyId::bigint AND {mapa.ColumnaDocumento} = @documentoId::int;",
             new { companyId, documentoId }, tx, cancellationToken: ct));
 
-        if (borradas == 0)
-        {
-            throw new InvalidOperationException("El documento no está en proceso de aprobación.");
-        }
-
         await RegistrarBitacoraAsync(
-            conn, tx, documento, documentoId, null, null, AccionAprobacion.Devuelta, motivo, null, ct);
+            conn, tx, documento, documentoId, null, null, AccionAprobacion.Devuelta, motivo,
+            null, null, estadoAnterior, estadoNuevo, ct);
     }
 
     public async Task RegistrarEventoAsync(
         string documento, long documentoId, string? numero, string accion, string? comentario,
-        CancellationToken ct = default)
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default)
     {
         ValidarDocumento(documento);
         var (conn, tx) = Conexion();
-        await RegistrarBitacoraAsync(conn, tx, documento, documentoId, numero, null, accion, comentario, null, ct);
+        await RegistrarBitacoraAsync(conn, tx, documento, documentoId, numero, null, accion,
+            comentario, null, null, estadoAnterior, estadoNuevo, ct);
     }
 
     public async Task<AprobacionEstadoDto> ObtenerEstadoAsync(
-        string documento, long documentoId, CancellationToken ct = default)
+        string documento, long documentoId, decimal total, CancellationToken ct = default)
     {
-        ValidarDocumento(documento);
         var mapa = Ubicar(documento);
-
         var control = await ObtenerControlAsync(documento, ct);
         var (conn, tx) = Conexion();
         var companyId = EmpresaActual();
 
-        var filas = (await conn.QueryAsync<FlujoNivelDto>(
-            new CommandDefinition(SqlFlujo(mapa),
-                new { companyId, documentoId }, tx, cancellationToken: ct))).AsList();
-
-        // Sin LINQ (regla hodsoft-sin-linq): el conteo y la búsqueda del pendiente van en un
-        // solo recorrido, que además aprovecha para poner la etiqueta legible de cada estado.
-        var firmados = 0;
-        FlujoNivelDto? pendiente = null;
-
-        foreach (var fila in filas)
-        {
-            fila.EstadoDescripcion = DescribirEstado(fila.Estado);
-
-            if (fila.Estado == EstadoAprobacionNivel.Aprobado) firmados++;
-            if (fila.Estado == EstadoAprobacionNivel.Pendiente) pendiente ??= fila;
-        }
-
         var estado = new AprobacionEstadoDto
         {
             ControlEncendido = control.Encendido,
-            Niveles = filas,
-            Total = filas.Count,
-            Firmados = firmados
+            MontoRequerido = total
         };
 
-        if (pendiente is null)
+        estado.Firma = await conn.QueryFirstOrDefaultAsync<FirmaAprobacionDto>(new CommandDefinition(
+            $@"SELECT nivel            AS Nivel,
+                      descripcion      AS Descripcion,
+                      estado           AS Estado,
+                      usuario_firma    AS UsuarioFirma,
+                      fecha_firma      AS FechaFirma,
+                      comentario       AS Comentario,
+                      total_documento  AS TotalDocumento,
+                      limite_utilizado AS LimiteUtilizado
+                 FROM {mapa.TablaFlujo}
+                WHERE company_id = @companyId::bigint
+                  AND {mapa.ColumnaDocumento} = @documentoId::int
+                ORDER BY id DESC
+                LIMIT 1;",
+            new { companyId, documentoId }, tx, cancellationToken: ct));
+
+        if (estado.Firma is not null)
         {
-            return estado;
+            estado.Firma.EstadoDescripcion = DescribirEstado(estado.Firma.Estado);
+            return estado;   // ya resuelto: no hay nada que autorizar
         }
 
-        estado.NivelPendiente = pendiente.Nivel;
+        if (!control.Encendido) return estado;
 
-        // Puede firmar quien sea elegible, no sea el creador (salvo autoaprobación) y no haya
-        // firmado ya. Se resuelve con la MISMA función que la bandeja, para que la pantalla y la
-        // lista nunca discrepen.
-        foreach (var candidato in await PendientesOrdenCompraAsync(ct))
+        // Sin autorización todavía: quién puede darla y si este usuario es uno de ellos.
+        foreach (var tramo in await ResolverAutorizadoresAsync(documento, total, ct))
         {
-            if (candidato.DocumentoId == documentoId)
-            {
-                pendiente.PuedoFirmar = true;
-                break;
-            }
+            if (!tramo.TieneAprobadores) continue;
+
+            estado.HayAprobadorCapaz = true;
+            estado.TramoMinimo = tramo.Descripcion;
+            break;
         }
+
+        estado.PuedoAutorizar = await PuedeAutorizarAsync(conn, tx, documento, total, UsuarioActual(), ct)
+            && await NoEsSuyoAsync(conn, tx, mapa, control, companyId, documentoId, UsuarioActual(), ct);
 
         return estado;
     }
 
-    public async Task<IReadOnlyList<string>> CorreosNivelPendienteAsync(
-        string documento, long documentoId, CancellationToken ct = default)
+    public async Task<IReadOnlyList<string>> CorreosAutorizadoresAsync(
+        string documento, decimal total, CancellationToken ct = default)
     {
         ValidarDocumento(documento);
-        var mapa = Ubicar(documento);
+        Ubicar(documento);
 
         var (conn, tx) = Conexion();
 
-        // El nivel pendiente sale del flujo del documento; los correos, de la configuración de ese
-        // mismo nivel. Solo tipo 1 (usuario): un rol no sabe a qué buzón escribir.
-        var sql = $@"
+        // Los aprobadores tipo 1 (usuario) de cualquier tramo capaz. Los de tipo 2 (rol) viven en
+        // Identity y no se resuelven desde aquí: a ellos les llega por la copia al área.
+        const string sql = @"
 SELECT DISTINCT a.valor
-  FROM {mapa.TablaFlujo} f
-  JOIN public.cfg_aprobacion_nivel n
-    ON n.company_id = f.company_id
-   AND n.documento  = @documento::varchar
-   AND n.nivel      = f.nivel
-   AND n.activo
+  FROM public.cfg_aprobacion_nivel n
   JOIN public.cfg_aprobacion_aprobador a
     ON a.company_id = n.company_id
    AND a.nivel_id   = n.id
    AND a.activo
    AND a.tipo       = 1
- WHERE f.company_id          = @companyId::bigint
-   AND f.{mapa.ColumnaDocumento} = @documentoId::int
-   AND f.estado              = 2;";
+ WHERE n.company_id = @companyId::bigint
+   AND n.documento  = @documento::varchar
+   AND n.activo
+   AND (n.monto_hasta IS NULL OR n.monto_hasta >= @total::numeric);";
 
         var correos = await conn.QueryAsync<string>(new CommandDefinition(
-            sql, new { companyId = EmpresaActual(), documento, documentoId }, tx, cancellationToken: ct));
+            sql, new { companyId = EmpresaActual(), documento, total }, tx, cancellationToken: ct));
 
         return correos.AsList();
-    }
-
-    public async Task<IReadOnlyList<ProgresoAprobacionDto>> ProgresoOrdenesCompraAsync(
-        CancellationToken ct = default)
-    {
-        var (conn, tx) = Conexion();
-
-        // El nivel pendiente sale del mismo agregado con un MIN condicional: no hace falta una
-        // segunda consulta ni un LATERAL para saber en qué escalón está detenida cada orden.
-        const string sql = @"
-SELECT f.orden_compra_id                                        AS DocumentoId,
-       count(*) FILTER (WHERE f.estado = 3)::int                AS Firmados,
-       count(*)::int                                            AS Total,
-       min(f.nivel) FILTER (WHERE f.estado = 2)                 AS NivelPendiente,
-       min(f.descripcion) FILTER (WHERE f.estado = 2)           AS DescripcionPendiente
-  FROM public.alm_orden_compra_aprobacion f
- WHERE f.company_id = @companyId::bigint
- GROUP BY f.orden_compra_id;";
-
-        var filas = await conn.QueryAsync<ProgresoAprobacionDto>(
-            new CommandDefinition(sql, new { companyId = EmpresaActual() }, tx, cancellationToken: ct));
-
-        return filas.AsList();
     }
 
     public async Task<IReadOnlyList<PendienteAprobacionDto>> PendientesOrdenCompraAsync(
@@ -587,11 +439,94 @@ SELECT f.orden_compra_id                                        AS DocumentoId,
         return lista;
     }
 
+    public async Task<IReadOnlyList<CapacidadAprobacionDto>> CapacidadOrdenesCompraAsync(
+        CancellationToken ct = default)
+    {
+        var (conn, tx) = Conexion();
+
+        var filas = await conn.QueryAsync<CapacidadAprobacionDto>(
+            new CommandDefinition(SqlCapacidad, new { companyId = EmpresaActual() },
+                tx, cancellationToken: ct));
+
+        return filas.AsList();
+    }
+
     // ---------------------------------------------------------------------------------------
+
+    private async Task<AprobacionControlDto> ExigirControlEncendidoAsync(
+        string documento, CancellationToken ct)
+    {
+        var control = await ObtenerControlAsync(documento, ct);
+        if (!control.Encendido)
+        {
+            throw new InvalidOperationException(
+                "La aprobación por niveles no está activada para este documento.");
+        }
+        return control;
+    }
+
+    /// <summary>Un documento ya autorizado o rechazado no se vuelve a resolver.</summary>
+    private static async Task ExigirSinResolverAsync(
+        DbConnection conn, DbTransaction? tx, MapaDocumento mapa, long companyId, long documentoId,
+        CancellationToken ct)
+    {
+        var resuelto = await conn.ExecuteScalarAsync<int>(new CommandDefinition(
+            $"SELECT count(*) FROM {mapa.TablaFlujo} " +
+            $"WHERE company_id = @companyId::bigint AND {mapa.ColumnaDocumento} = @documentoId::int;",
+            new { companyId, documentoId }, tx, cancellationToken: ct));
+
+        if (resuelto > 0)
+        {
+            throw new InvalidOperationException("Este documento ya fue resuelto.");
+        }
+    }
+
+    private async Task ExigirNoEsSuyoAsync(
+        DbConnection conn, DbTransaction? tx, MapaDocumento mapa, AprobacionControlDto control,
+        long companyId, long documentoId, string usuario, CancellationToken ct)
+    {
+        if (await NoEsSuyoAsync(conn, tx, mapa, control, companyId, documentoId, usuario, ct)) return;
+
+        throw new InvalidOperationException("No puede aprobar un documento que usted mismo creó.");
+    }
+
+    /// <summary>D5: nadie autoriza lo suyo, salvo que la empresa lo permita.</summary>
+    private static async Task<bool> NoEsSuyoAsync(
+        DbConnection conn, DbTransaction? tx, MapaDocumento mapa, AprobacionControlDto control,
+        long companyId, long documentoId, string usuario, CancellationToken ct)
+    {
+        if (control.PermiteAutoaprobacion) return true;
+
+        var creador = await conn.ExecuteScalarAsync<string?>(new CommandDefinition(
+            $"SELECT lower(btrim(coalesce({mapa.ColumnaCreador}, ''))) FROM {mapa.TablaDocumento} " +
+            "WHERE company_id = @companyId::bigint AND id = @documentoId::int;",
+            new { companyId, documentoId }, tx, cancellationToken: ct));
+
+        return string.IsNullOrEmpty(creador)
+            || !string.Equals(creador, usuario, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private Task<bool> PuedeAutorizarAsync(
+        DbConnection conn, DbTransaction? tx, string documento, decimal total, string usuario,
+        CancellationToken ct)
+        => conn.ExecuteScalarAsync<bool>(new CommandDefinition(SqlPuedeAutorizar, new
+        {
+            companyId = EmpresaActual(), documento, total, usuario, roles = RolesActuales()
+        }, tx, cancellationToken: ct));
+
+    /// <summary>El tramo más bajo con el que este usuario autorizaría el monto; null si no llega.</summary>
+    private Task<TramoAutorizacionDto?> ResolverTramoAsync(
+        DbConnection conn, DbTransaction? tx, string documento, decimal total, string usuario,
+        CancellationToken ct)
+        => conn.QueryFirstOrDefaultAsync<TramoAutorizacionDto>(new CommandDefinition(SqlTramoDe, new
+        {
+            companyId = EmpresaActual(), documento, total, usuario, roles = RolesActuales()
+        }, tx, cancellationToken: ct));
 
     private Task RegistrarBitacoraAsync(
         DbConnection conn, DbTransaction? tx, string documento, long documentoId, string? numero,
-        short? nivel, string accion, string? comentario, decimal? total, CancellationToken ct)
+        short? nivel, string accion, string? comentario, decimal? total, decimal? limite,
+        short estadoAnterior, short estadoNuevo, CancellationToken ct)
         => conn.ExecuteAsync(new CommandDefinition(SqlBitacora, new
         {
             companyId = EmpresaActual(),
@@ -602,7 +537,10 @@ SELECT f.orden_compra_id                                        AS DocumentoId,
             accion,
             usuario = UsuarioActual(),
             comentario = Recortar(comentario, 500),
-            total
+            total,
+            limite,
+            estadoAnterior,
+            estadoNuevo
         }, tx, cancellationToken: ct));
 
     private static string DescribirEstado(short estado) => estado switch
@@ -623,14 +561,10 @@ SELECT f.orden_compra_id                                        AS DocumentoId,
     }
 
     /// <summary>
-    /// Dónde vive el flujo de cada documento y cómo se llama a su creador.
-    /// <para>
-    /// Cada documento tiene su <b>tabla gemela</b> de flujo, para conservar la FK compuesta
-    /// tenant-safe y el <c>ON DELETE CASCADE</c> —que una tabla única no podría tener, porque
-    /// apuntaría a documentos distintos—. El motor es genérico: lo único que cambia por documento
-    /// son estos cuatro nombres, y salen de una lista fija del código, nunca de una entrada del
-    /// usuario.
-    /// </para>
+    /// Dónde vive el flujo de cada documento y cómo se llama a su creador. Cada documento tiene su
+    /// tabla gemela para conservar la FK compuesta tenant-safe y el <c>ON DELETE CASCADE</c>; el
+    /// motor es genérico y solo cambian estos cuatro nombres, que salen de una lista fija del
+    /// código, nunca de una entrada del usuario.
     /// </summary>
     private sealed record MapaDocumento(
         string TablaFlujo, string ColumnaDocumento, string TablaDocumento, string ColumnaCreador);
@@ -641,19 +575,17 @@ SELECT f.orden_compra_id                                        AS DocumentoId,
             "public.alm_orden_compra_aprobacion", "orden_compra_id",
             "public.alm_orden_compra", "usuariocreacion"),
 
-        // La requisición identifica a su autor por `usuario_solicita` (el login), no por
-        // usuariocreacion: es el campo que el módulo trata como dueño del documento.
+        // La requisición identifica a su autor por `usuario_solicita` (el login), que es el campo
+        // que el módulo trata como dueño del documento.
         [DocumentosAprobacion.Requisicion] = new(
             "public.alm_requisicion_aprobacion", "requisicion_id",
             "public.alm_requisicion_hdr", "usuario_solicita")
     };
 
-    /// <summary>
-    /// Resuelve dónde escribir el flujo del documento. Si no está enganchado, falla con un
-    /// mensaje que dice exactamente qué falta, en vez de escribir en la tabla equivocada.
-    /// </summary>
     private static MapaDocumento Ubicar(string documento)
     {
+        ValidarDocumento(documento);
+
         if (!Mapa.TryGetValue(documento, out var mapa))
         {
             throw new NotSupportedException(
@@ -701,13 +633,4 @@ SELECT f.orden_compra_id                                        AS DocumentoId,
 
     private (DbConnection Conn, DbTransaction? Tx) Conexion()
         => (_context.Database.GetDbConnection(), _context.Database.CurrentTransaction?.GetDbTransaction());
-
-    /// <summary>Fila del flujo que se bloquea para firmar. Interna: no cruza la frontera del servicio.</summary>
-    private sealed class NivelPendienteRow
-    {
-        public int Id { get; set; }
-        public short Nivel { get; set; }
-        public string Descripcion { get; set; } = string.Empty;
-        public decimal TotalDocumento { get; set; }
-    }
 }

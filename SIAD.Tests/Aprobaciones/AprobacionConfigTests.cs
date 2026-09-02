@@ -106,13 +106,13 @@ public class AprobacionConfigTests : IntegrationTestBase, IAsyncLifetime
         Assert.Equal("Jefatura", creado.Descripcion);   // se recorta al guardar
 
         creado.Descripcion = "Jefatura de compras";
-        creado.MontoDesde = 500m;
+        creado.MontoHasta = 500m;
         await _config.GuardarNivelAsync(Doc, creado);
 
         var config = await _config.ObtenerAsync(Doc);
         var nivel = Assert.Single(config.Niveles);
         Assert.Equal("Jefatura de compras", nivel.Descripcion);
-        Assert.Equal(500m, nivel.MontoDesde);
+        Assert.Equal(500m, nivel.MontoHasta);
     }
 
     [SkippableFact]
@@ -129,23 +129,42 @@ public class AprobacionConfigTests : IntegrationTestBase, IAsyncLifetime
     }
 
     [SkippableFact]
-    public async Task La_escalera_no_puede_ir_de_mayor_a_menor()
+    public async Task Los_limites_tienen_que_crecer_con_el_nivel()
     {
         Skip.IfNot(Fixture.Available);
 
         await _config!.GuardarNivelAsync(Doc, Nivel(1, "Jefatura", 5000m));
 
-        // Un nivel 2 más barato que el 1 dejaría montos que exigen el 2 pero no el 1, y el motor
-        // —que firma en orden— nunca llegaría a habilitarlo.
+        // Un nivel 2 que autoriza MENOS que el 1 rompe la lectura de "el tramo más bajo que cubre
+        // este monto", que es lo que la pantalla muestra y lo que se registra al autorizar.
         var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _config.GuardarNivelAsync(Doc, Nivel(2, "Gerencia", 1000m)));
 
-        Assert.Contains("de menor a mayor", error.Message);
+        Assert.Contains("crecen con el nivel", error.Message);
 
-        // Y al revés: un nivel 1 más caro que el 2 existente.
+        // Y al revés: un nivel 1 que autoriza más que el 2 existente.
         await _config.GuardarNivelAsync(Doc, Nivel(3, "Dirección", 9000m));
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _config.GuardarNivelAsync(Doc, Nivel(2, "Gerencia", 99000m)));
+    }
+
+    [SkippableFact]
+    public async Task El_nivel_sin_tope_es_el_mas_alto_de_todos()
+    {
+        Skip.IfNot(Fixture.Available);
+
+        await _config!.GuardarNivelAsync(Doc, Nivel(1, "Jefatura", 10000m));
+        await _config.GuardarNivelAsync(Doc, Nivel(2, "Dirección", null));
+
+        var config = await _config.ObtenerAsync(Doc);
+        Assert.Null(config.Niveles[1].MontoHasta);
+        Assert.Equal("Sin tope", config.Niveles[1].LimiteDescripcion);
+
+        // Un nivel 3 con tope no puede ir por encima de uno sin tope.
+        var error = await Assert.ThrowsAsync<InvalidOperationException>(() =>
+            _config.GuardarNivelAsync(Doc, Nivel(3, "Junta", 50000m)));
+
+        Assert.Contains("crecen con el nivel", error.Message);
     }
 
     [SkippableFact]
@@ -157,7 +176,7 @@ public class AprobacionConfigTests : IntegrationTestBase, IAsyncLifetime
             _config!.GuardarNivelAsync(Doc, Nivel(1, "   ", 0m)));
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
-            _config!.GuardarNivelAsync(Doc, Nivel(1, "Jefatura", -1m)));
+            _config!.GuardarNivelAsync(Doc, Nivel(1, "Jefatura", -1m)));   // límite negativo
 
         await Assert.ThrowsAsync<InvalidOperationException>(() =>
             _config!.GuardarNivelAsync(Doc, Nivel(0, "Jefatura", 0m)));
@@ -299,8 +318,8 @@ public class AprobacionConfigTests : IntegrationTestBase, IAsyncLifetime
 
     // ── helpers ──────────────────────────────────────────────────────────────
 
-    private static AprobacionNivelConfigDto Nivel(short nivel, string descripcion, decimal desde)
-        => new() { Nivel = nivel, Descripcion = descripcion, MontoDesde = desde, Activo = true };
+    private static AprobacionNivelConfigDto Nivel(short nivel, string descripcion, decimal? hasta)
+        => new() { Nivel = nivel, Descripcion = descripcion, MontoHasta = hasta, Activo = true };
 
     private static AprobacionAprobadorConfigDto Aprobador(short tipo, string valor)
         => new() { Tipo = tipo, Valor = valor };

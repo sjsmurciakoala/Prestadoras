@@ -460,45 +460,62 @@
                         </div>
                     }
 
-                    @* Escalera de firmas. Solo aparece si la orden ya entró en ella. *@
-                    @if (aprobacionEstado is not null && aprobacionEstado.Total > 0)
+                    @* Autorización del documento. La aprobación NO es en cascada: una sola firma
+                       de quien tenga límite suficiente resuelve la orden. *@
+                    @if (aprobacionEstado is not null && aprobacionEstado.ControlEncendido
+                         && modelo.Estado != EstadoOrdenCompra.Borrador)
                     {
                         <div class="panel-aprobacion mt-3">
                             <div class="panel-aprobacion-titulo">
-                                <i class="bi bi-diagram-3"></i>
-                                Aprobación
-                                <span class="ms-auto text-muted small">
-                                    @aprobacionEstado.Firmados de @aprobacionEstado.Total
-                                </span>
+                                <i class="bi bi-shield-check"></i>
+                                Autorización
                             </div>
 
-                            <ol class="linea-firmas">
-                                @foreach (var nivel in aprobacionEstado.Niveles)
-                                {
-                                    <li class="firma-estado-@nivel.Estado">
-                                        <div class="firma-marca">
-                                            <i class="@IconoFirma(nivel.Estado)"></i>
-                                        </div>
-                                        <div class="firma-detalle">
-                                            <div class="fw-semibold">@nivel.Descripcion</div>
-                                            @if (nivel.FechaFirma.HasValue)
+                            @if (aprobacionEstado.Firma is not null)
+                            {
+                                <div class="firma-otorgada">
+                                    <div class="firma-marca firma-ok">
+                                        <i class="@IconoFirma(aprobacionEstado.Firma.Estado)"></i>
+                                    </div>
+                                    <div class="firma-detalle">
+                                        <div class="fw-semibold">@aprobacionEstado.Firma.Descripcion</div>
+                                        <div class="text-muted small">
+                                            @aprobacionEstado.Firma.UsuarioFirma
+                                            @if (aprobacionEstado.Firma.FechaFirma.HasValue)
                                             {
-                                                <div class="text-muted small">
-                                                    @nivel.UsuarioFirma · @nivel.FechaFirma.Value.ToString("dd/MM/yyyy HH:mm")
-                                                </div>
-                                            }
-                                            else
-                                            {
-                                                <div class="text-muted small">@nivel.EstadoDescripcion</div>
-                                            }
-                                            @if (!string.IsNullOrWhiteSpace(nivel.Comentario))
-                                            {
-                                                <div class="text-muted small fst-italic">@nivel.Comentario</div>
+                                                <text> · @aprobacionEstado.Firma.FechaFirma.Value.ToString("dd/MM/yyyy HH:mm")</text>
                                             }
                                         </div>
-                                    </li>
-                                }
-                            </ol>
+                                        <div class="text-muted small">
+                                            Monto autorizado @aprobacionEstado.Firma.TotalDocumento.ToString("N2")
+                                            · límite @DescribirLimite(aprobacionEstado.Firma.LimiteUtilizado)
+                                        </div>
+                                        @if (!string.IsNullOrWhiteSpace(aprobacionEstado.Firma.Comentario))
+                                        {
+                                            <div class="text-muted small fst-italic">@aprobacionEstado.Firma.Comentario</div>
+                                        }
+                                    </div>
+                                </div>
+                            }
+                            else if (aprobacionEstado.HayAprobadorCapaz)
+                            {
+                                <div class="text-muted small">
+                                    Esperando autorización de <strong>@aprobacionEstado.TramoMinimo</strong>
+                                    o de cualquier nivel superior. No hace falta que firme nadie antes.
+                                </div>
+                            }
+                            else
+                            {
+                                @* Que nadie alcance el monto es un estado real: hay que verlo aquí. *@
+                                <div class="aviso-sin-aprobador">
+                                    <i class="bi bi-exclamation-triangle"></i>
+                                    <div>
+                                        Ningún nivel configurado autoriza @aprobacionEstado.MontoRequerido.ToString("N2").
+                                        La orden queda esperando: suba el límite de un nivel o asígnele aprobadores
+                                        en Configuración → Aprobaciones.
+                                    </div>
+                                </div>
+                            }
                         </div>
                     }
 
@@ -526,10 +543,11 @@
                     }
 
                     @* En aprobación la orden no es editable, pero sí firmable por quien corresponda. *@
-                    @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.EnAprobacion && PuedoFirmarAhora)
+                    @if (EsEdicion && modelo.Estado == EstadoOrdenCompra.EnAprobacion
+                         && aprobacionEstado?.PuedoAutorizar == true)
                     {
                         <div class="d-flex justify-content-end gap-2 mt-3 flex-wrap">
-                            <DxButton Text="Firmar" IconCssClass="bi bi-pen"
+                            <DxButton Text="Autorizar" IconCssClass="bi bi-shield-check"
                                       RenderStyle="ButtonRenderStyle.Primary"
                                       Enabled="@(!guardando)" Click="FirmarAsync" />
                         </div>
@@ -921,30 +939,14 @@
     /// </summary>
     private PresupuestoPrevioDto? presupuesto;
 
-    /// <summary>Escalera de la orden. Null si aún no se consultó o si no hay flujo abierto.</summary>
+    /// <summary>Autorización de la orden. Null si aún no se consultó.</summary>
     private AprobacionEstadoDto? aprobacionEstado;
 
     /// <summary>Si la empresa exige escalera y si este usuario tiene el permiso de firmar.</summary>
     private OrdenesCompraClient.AprobacionConfigVista aprobacionConfig = new();
 
-    /// <summary>
-    /// Si el usuario puede firmar el nivel que está esperando. Lo resuelve el servidor con las
-    /// cuatro reglas (elegibilidad, secuencia, autoaprobación y una firma por documento); aquí
-    /// solo se lee el nivel pendiente del flujo.
-    /// </summary>
-    private bool PuedoFirmarAhora
-    {
-        get
-        {
-            if (aprobacionEstado is null) return false;
-
-            foreach (var nivel in aprobacionEstado.Niveles)
-            {
-                if (nivel.Estado == EstadoAprobacionNivel.Pendiente) return nivel.PuedoFirmar;
-            }
-            return false;
-        }
-    }
+    private static string DescribirLimite(decimal? limite)
+        => limite.HasValue ? limite.Value.ToString("N2") : "sin tope";
 
     /// <summary>
     /// Trae la escalera de la orden guardada. Nunca lanza: como el panel de presupuesto, es
@@ -1056,7 +1058,7 @@
 
             if (await OrdenesClient.EnviarAAprobacionAsync(Id!.Value))
             {
-                Toast("Enviada", "La orden entró en la escalera de aprobación.", ToastRenderStyle.Success);
+                Toast("Enviada", "La orden espera la autorización de quien alcance su monto.", ToastRenderStyle.Success);
                 Navigation.NavigateTo("/almacen/ordenes-compra");
             }
             else
@@ -1088,16 +1090,10 @@
             }
             else
             {
-                var mensaje = resultado.FlujoCompleto
-                    ? "Firmada la última aprobación: la orden quedó aprobada."
-                    : $"Nivel {resultado.NivelFirmado} firmado. Pasa a «{resultado.DescripcionPendiente}».";
-
-                if (resultado.ComprometioPresupuesto)
-                {
-                    mensaje += " Se reservó el presupuesto de la orden.";
-                }
-
-                Toast("Firmada", mensaje, ToastRenderStyle.Success);
+                Toast("Aprobada",
+                    $"Orden aprobada con el nivel «{resultado.DescripcionNivel}» " +
+                    $"(límite {DescribirLimite(resultado.LimiteUtilizado)}). Se reservó el presupuesto.",
+                    ToastRenderStyle.Success);
 
                 // La orden cambió de estado y la escalera avanzó: se recarga todo.
                 var recargada = await OrdenesClient.GetByIdAsync(Id!.Value);

@@ -204,17 +204,20 @@ public static class OrdenCompraEstados
 /// </summary>
 public sealed class OrdenCompraAprobacionResultadoDto
 {
-    public short NivelFirmado { get; set; }
+    /// <summary>Tramo con el que se autorizó.</summary>
+    public short Nivel { get; set; }
+
     public string DescripcionNivel { get; set; } = string.Empty;
 
-    /// <summary>No quedan niveles: la orden pasó a Aprobada.</summary>
-    public bool FlujoCompleto { get; set; }
+    /// <summary>Límite del tramo usado. <c>null</c> = tramo sin tope.</summary>
+    public decimal? LimiteUtilizado { get; set; }
 
-    public short? NivelPendiente { get; set; }
-    public string? DescripcionPendiente { get; set; }
+    /// <summary>Monto autorizado.</summary>
+    public decimal MontoAprobado { get; set; }
 
     /// <summary>
-    /// Si esta firma fue la que reservó presupuesto (D2: se compromete en la PRIMERA firma).
+    /// La autorización reservó el presupuesto. Siempre cierto en este modelo: autorizar y aprobar
+    /// son el mismo acto, así que la reserva ocurre ahí.
     /// </summary>
     public bool ComprometioPresupuesto { get; set; }
 

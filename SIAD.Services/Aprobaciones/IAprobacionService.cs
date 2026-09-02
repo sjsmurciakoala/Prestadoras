@@ -3,128 +3,115 @@ using SIAD.Core.DTOs.Aprobaciones;
 namespace SIAD.Services.Aprobaciones;
 
 /// <summary>
-/// Motor de aprobación por niveles, transversal a los documentos (<c>DocumentosAprobacion</c>).
-/// La orden de compra es el primer consumidor; factura, pago a proveedor y requisición se
-/// enganchan después sin tocar este contrato.
+/// Motor de autorización por monto, transversal a los documentos (<c>DocumentosAprobacion</c>).
+/// La orden de compra y la requisición son sus consumidores.
+/// <para>
+/// <b>La aprobación NO es en cascada</b> (regla del usuario, 2026-09-01). Cada tramo declara
+/// CUÁNTO puede autorizar quien pertenece a él; un documento lo aprueba, de <b>una sola firma</b>,
+/// cualquiera cuyo tramo cubra su total — aunque existan tramos más bajos que no han firmado.
+/// Una orden de 75,000 la autoriza directamente quien llegue a 75,000. El monto <b>no</b> se
+/// reparte entre varios aprobadores.
+/// </para>
 /// <para>
 /// <b>Quién firma no es un parámetro.</b> La identidad sale de <c>ICurrentUserService</c>, no de
-/// un <c>string user</c> del llamador: una firma es un acto de autorización y no debe poder
-/// atribuirse a un tercero pasando otro nombre. El documento sigue sellando <c>usuariomodificacion</c>
-/// por su cuenta.
+/// un <c>string user</c> del llamador: una autorización no debe poder atribuirse a un tercero.
 /// </para>
 /// <para>
-/// <b>Apagado por defecto.</b> Si <c>cfg_aprobacion_control.modo = 0</c> para la empresa y el
-/// documento, <see cref="RequiereAprobacionAsync"/> devuelve false y el documento se aprueba como
-/// siempre, de un clic. Encenderlo es una decisión deliberada por empresa.
-/// </para>
-/// <para>
-/// <b>Sin LINQ</b> (regla <c>hodsoft-sin-linq</c>): todo el acceso a datos va por las funciones
-/// <c>fn_apr_*</c> y por SQL explícito sobre las tablas <c>cfg_aprobacion_*</c>.
+/// <b>Apagado por defecto.</b> Con <c>cfg_aprobacion_control.modo = 0</c> el documento se aprueba
+/// como siempre, de un clic, y nada de esto interviene.
 /// </para>
 /// </summary>
 public interface IAprobacionService
 {
-    /// <summary>Configuración vigente del documento en la empresa actual (modo y autoaprobación).</summary>
+    /// <summary>Configuración vigente del documento en la empresa actual.</summary>
     Task<AprobacionControlDto> ObtenerControlAsync(string documento, CancellationToken ct = default);
 
-    /// <summary>
-    /// Si este documento debe pasar por la escalera. Atajo de <see cref="ObtenerControlAsync"/>
-    /// para el enganche, que lo consulta en cada transición.
-    /// </summary>
+    /// <summary>Si este documento exige autorización antes de aprobarse.</summary>
     Task<bool> RequiereAprobacionAsync(string documento, CancellationToken ct = default);
 
     /// <summary>
-    /// Niveles que exige un monto (D1, acumulativa). Lista vacía si el control está apagado.
-    /// Cada nivel informa si tiene aprobadores activos.
+    /// Tramos capaces de autorizar un monto, del límite más bajo al más alto (el sin tope al
+    /// final). El primero es el <b>tramo mínimo suficiente</b>. Lista vacía = nadie puede
+    /// autorizar ese monto.
     /// </summary>
-    Task<IReadOnlyList<NivelExigidoDto>> ResolverEscaleraAsync(
+    Task<IReadOnlyList<TramoAutorizacionDto>> ResolverAutorizadoresAsync(
         string documento, decimal total, CancellationToken ct = default);
 
     /// <summary>
-    /// Abre el flujo: materializa un renglón por nivel exigido (el primero Pendiente, el resto
-    /// Bloqueados) y registra <c>ENVIADA</c> en la bitácora.
-    /// <para>Debe invocarse <b>dentro de la transacción</b> que cambia el estado del documento.</para>
+    /// Abre el trámite: deja el documento esperando UNA autorización y lo registra en la bitácora.
+    /// <para>
+    /// <b>No exige que exista un aprobador capaz.</b> Si ningún tramo cubre el monto, el documento
+    /// queda pendiente y la pantalla lo dice; bloquear el envío escondería el problema en vez de
+    /// mostrarlo.
+    /// </para>
+    /// <para>Debe invocarse dentro de la transacción que cambia el estado del documento.</para>
     /// </summary>
-    /// <exception cref="InvalidOperationException">
-    /// Si el control está apagado, si ya hay un flujo abierto, si la escalera no exige ningún
-    /// nivel para ese monto, o si algún nivel exigido se quedó sin aprobadores activos. El
-    /// mensaje está redactado para el usuario final.
-    /// </exception>
     Task IniciarAsync(
         string documento, long documentoId, string? numero, decimal total, string creadoPor,
-        CancellationToken ct = default);
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default);
 
     /// <summary>
-    /// Firma el nivel pendiente en nombre del usuario de la sesión.
+    /// Autoriza el documento en nombre del usuario de la sesión, en un solo acto.
     /// <para>
-    /// Valida, en este orden: que haya flujo abierto, que el nivel esté pendiente, que el usuario
-    /// sea aprobador elegible (usuario o rol), que no sea el creador —salvo
-    /// <c>permite_autoaprobacion</c>— y que no haya firmado ya otro nivel del mismo documento.
+    /// Valida que no esté ya resuelto, que el usuario tenga un tramo cuyo límite cubra el total y
+    /// que no sea el creador (salvo <c>permite_autoaprobacion</c>). Registra quién autorizó, con
+    /// qué límite, sobre qué monto, cuándo y el cambio de estado.
     /// </para>
     /// </summary>
-    /// <returns>
-    /// Qué pasó: el nivel firmado, si fue la <b>primera</b> firma (la que compromete presupuesto,
-    /// D2), si el flujo quedó completo y cuál nivel sigue.
-    /// </returns>
-    /// <exception cref="InvalidOperationException">Cuando alguna de las validaciones falla.</exception>
-    Task<FirmaResultadoDto> FirmarAsync(
-        string documento, long documentoId, string? comentario, CancellationToken ct = default);
+    /// <exception cref="InvalidOperationException">
+    /// Si el documento ya fue resuelto, si el usuario no alcanza el monto o si es su propio
+    /// documento. El mensaje está redactado para el usuario final.
+    /// </exception>
+    Task<FirmaResultadoDto> AutorizarAsync(
+        string documento, long documentoId, decimal total, string? comentario,
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default);
 
     /// <summary>
-    /// Rechaza el documento desde el nivel pendiente. Marca ese nivel como Rechazado, deja el
-    /// resto como está y registra <c>RECHAZADA</c>. El documento queda terminal: quien lo cambie
-    /// de estado es el enganche, que además libera el presupuesto comprometido.
+    /// Rechaza el documento. Exige la misma capacidad que autorizarlo: quien no podría aprobar el
+    /// monto tampoco puede tumbarlo.
     /// </summary>
     Task RechazarAsync(
-        string documento, long documentoId, string motivo, CancellationToken ct = default);
+        string documento, long documentoId, decimal total, string motivo,
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default);
 
     /// <summary>
-    /// Devuelve el documento a borrador: <b>borra todas las firmas</b> (D4, sin excepción) y
-    /// registra <c>DEVUELTA</c>. Lo borrado sobrevive en la bitácora.
+    /// Devuelve el documento a borrador: borra la autorización si la hubo y lo registra. Lo
+    /// borrado sobrevive en la bitácora.
     /// </summary>
     Task ReiniciarAsync(
-        string documento, long documentoId, string motivo, CancellationToken ct = default);
+        string documento, long documentoId, string motivo,
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default);
 
     /// <summary>
-    /// Registra un evento suelto en la bitácora (hoy: <c>ANULADA</c>), sin tocar el flujo.
-    /// Para que anular un documento en aprobación deje rastro.
+    /// Registra un evento suelto en la bitácora (hoy: <c>ANULADA</c>), sin tocar la autorización.
     /// </summary>
     Task RegistrarEventoAsync(
         string documento, long documentoId, string? numero, string accion, string? comentario,
-        CancellationToken ct = default);
+        short estadoAnterior, short estadoNuevo, CancellationToken ct = default);
 
     /// <summary>
-    /// Estado del flujo de un documento para la pantalla: los niveles con su firma, cuál está
-    /// pendiente, cuántos van y si el usuario de la sesión puede firmar ahora.
+    /// Estado de la autorización para la pantalla: si ya la dieron, si el usuario de la sesión
+    /// puede darla, y —si nadie puede— que no hay aprobador con límite suficiente.
     /// </summary>
     Task<AprobacionEstadoDto> ObtenerEstadoAsync(
-        string documento, long documentoId, CancellationToken ct = default);
+        string documento, long documentoId, decimal total, CancellationToken ct = default);
 
     /// <summary>
-    /// Órdenes de compra esperando la firma del usuario de la sesión, más antiguas primero.
+    /// Correos de quienes pueden autorizar este monto. Solo los aprobadores declarados como
+    /// <b>usuario</b>: los de un rol viven en Identity y no se resuelven desde aquí.
+    /// </summary>
+    Task<IReadOnlyList<string>> CorreosAutorizadoresAsync(
+        string documento, decimal total, CancellationToken ct = default);
+
+    /// <summary>
+    /// Órdenes de compra que el usuario de la sesión puede autorizar, más antiguas primero.
     /// Es la bandeja "Mis aprobaciones".
     /// </summary>
     Task<IReadOnlyList<PendienteAprobacionDto>> PendientesOrdenCompraAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// Correos de los aprobadores del nivel que está esperando firma en un documento.
-    /// <para>
-    /// Solo devuelve los aprobadores declarados como <b>usuario</b> (su valor es el user_name, que
-    /// en este portal es el correo). Los declarados por <b>rol</b> no se pueden resolver desde
-    /// aquí: los miembros de un rol viven en ASP.NET Identity, en otro contexto. Para esos, el
-    /// aviso queda en la copia al área.
-    /// </para>
+    /// Por cada orden en aprobación, si existe alguien capaz de autorizarla. Una sola consulta
+    /// para todo el listado, en vez de una por fila.
     /// </summary>
-    Task<IReadOnlyList<string>> CorreosNivelPendienteAsync(
-        string documento, long documentoId, CancellationToken ct = default);
-
-    /// <summary>
-    /// Progreso de las órdenes que están en la escalera: cuántos niveles firmaron y cuántos
-    /// exige cada una. Una sola consulta para todo el listado, en vez de una por fila.
-    /// <para>
-    /// Solo devuelve las que tienen flujo abierto, que son pocas: el listado compone con esto el
-    /// badge «En aprobación (2 de 3)» y deja el resto de filas como están.
-    /// </para>
-    /// </summary>
-    Task<IReadOnlyList<ProgresoAprobacionDto>> ProgresoOrdenesCompraAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<CapacidadAprobacionDto>> CapacidadOrdenesCompraAsync(CancellationToken ct = default);
 }

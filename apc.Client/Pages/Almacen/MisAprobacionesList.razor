@@ -48,7 +48,7 @@
                 <ToolbarTemplate>
                     <div class="d-flex flex-wrap gap-2 align-items-center w-100">
                         <span class="text-muted small">
-                            Solo aparecen las órdenes que usted puede firmar ahora mismo.
+                            Solo aparecen las órdenes que su límite de autorización cubre. No espera a nadie más.
                         </span>
 
                         <DxButton Text="Columnas" IconCssClass="bi bi-layout-three-columns"
@@ -72,7 +72,7 @@
                         <CellDisplayTemplate Context="cell">
                             @if (cell.DataItem is PendienteAprobacionDto item)
                             {
-                                <span class="badge-status badge-pendiente">@item.DescripcionNivel</span>
+                                <span class="badge-status badge-pendiente" title="Nivel con el que usted la autorizaría">@item.DescripcionNivel</span>
                             }
                         </CellDisplayTemplate>
                     </DxGridDataColumn>
@@ -131,7 +131,7 @@
             </div>
             <p class="text-muted">
                 @(firmando
-                    ? "Firmará el nivel que le corresponde. Si es el último, la orden quedará aprobada."
+                    ? "La orden quedará aprobada con su nivel de autorización, en un solo paso."
                     : "La orden quedará rechazada y no podrá aprobarse. Si había presupuesto reservado, se libera.")
             </p>
             @if (seleccionada is not null)
@@ -237,16 +237,13 @@
                 }
                 else
                 {
-                    var mensaje = resultado.FlujoCompleto
-                        ? "Firmada la última aprobación: la orden quedó aprobada."
-                        : $"Nivel {resultado.NivelFirmado} firmado. Pasa a «{resultado.DescripcionPendiente}».";
+                    var limite = resultado.LimiteUtilizado.HasValue
+                        ? resultado.LimiteUtilizado.Value.ToString("N2") : "sin tope";
 
-                    if (resultado.ComprometioPresupuesto)
-                    {
-                        mensaje += " Se reservó el presupuesto de la orden.";
-                    }
-
-                    Toast("Firmada", mensaje, ToastRenderStyle.Success);
+                    Toast("Aprobada",
+                        $"Orden aprobada con el nivel «{resultado.DescripcionNivel}» (límite {limite}). " +
+                        "Se reservó el presupuesto.",
+                        ToastRenderStyle.Success);
                 }
             }
             else
