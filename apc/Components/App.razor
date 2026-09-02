@@ -15,6 +15,14 @@
     <link rel="apple-touch-icon" href=@AppendVersion("images/favicon.png") />
     @DxResourceManager.RegisterTheme(ThemesService.ActiveTheme)
     @DxResourceManager.RegisterScripts()
+    @* El tipo de letra de los iconos se declara con font-display:block, asi que hasta que llega
+       los glifos son INVISIBLES: el menu y las pantallas se pintan sin iconos. Se precarga para
+       acortar esa ventana. Igual con la letra del cuerpo, que gobierna el primer pintado. *@
+    <link rel="preload" as="font" type="font/woff2" crossorigin
+          href=@AppendVersion("lib/bootstrap-icons/font/fonts/bootstrap-icons.woff2") />
+    <link rel="preload" as="font" type="font/ttf" crossorigin
+          href=@AppendVersion("fonts/Inter.ttf") />
+
     <link href=@AppendVersion("css/site.css") rel="stylesheet" />
     @* Estándar visual de las vistas con grid. Va antes de apc.styles.css (CSS aislado),
        que lo pisa cuando una página declara sus propias reglas. *@

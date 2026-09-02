@@ -2,6 +2,11 @@
 .sidebar-nav {
     display: flex;
     flex-direction: column;
+    /* Llena el panel del drawer. Sin esto el menú se ajustaba a su contenido: al entrar, con
+       todas las secciones plegadas, quedaba angosto (171 px dentro de un panel de 280 px) y
+       se "arreglaba" al desplegar una sección, que es el salto que se veía al hacer clic. */
+    width: 100%;
+    min-width: 0;
     height: 100%;
     overflow-y: auto;
     overflow-x: hidden;

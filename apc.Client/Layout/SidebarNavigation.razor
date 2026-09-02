@@ -115,9 +115,15 @@
     protected override async Task OnInitializedAsync()
     {
         // Capacidades que dependen de la configuración de la empresa (no de permisos).
+        // Primero se arma el menú con lo único que ya está en memoria: los permisos del
+        // usuario. Antes se esperaba a dos llamadas HTTP (capacidades de la empresa y contexto
+        // de tenant) y, al reconectar el circuito, el menú quedaba EN BLANCO medio segundo —
+        // medido en el navegador. Después se cargan esas dos cosas y se refresca.
+        await ConstruirSeccionesAsync(consultarEmpresa: false);
+
         await ChequeEmision.EnsureLoadedAsync();
         await CargarMarcaAsync();
-        await ConstruirSeccionesAsync();
+        await ConstruirSeccionesAsync(consultarEmpresa: true);
     }
 
     // ===== Acordeón =====
@@ -246,7 +252,7 @@
 
     // ===== Armado de secciones =====
 
-    private async Task ConstruirSeccionesAsync()
+    private async Task ConstruirSeccionesAsync(bool consultarEmpresa = true)
     {
         var authState = await AuthStateProvider.GetAuthenticationStateAsync();
         var user = authState.User;
@@ -263,7 +269,7 @@
             }
         }
 
-        if (user.Identity?.IsAuthenticated == true)
+        if (consultarEmpresa && user.Identity?.IsAuthenticated == true)
         {
             try
             {
