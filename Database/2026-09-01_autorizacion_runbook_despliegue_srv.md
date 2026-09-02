@@ -50,9 +50,31 @@ Hazlo seguido y en horario de bajo uso.
 
 ## 3. Aplicar
 
+### Estado: parcialmente aplicado el 2026-09-02
+
+Se adelantó lo que **no** arriesga nada con el binario viejo todavía desplegado, para poder
+probar el filtrado por rol antes del despliegue:
+
+| Rol | Estado |
+|---|---|
+| Contabilidad (8), Bancos (6), Compras (15), Configuracion (5), Presupuesto (4), Compromisos (5) | ✅ aplicado 2026-09-02 |
+| `aguasdepuertocortesfacturacion@gmail.com`: `User` → `Ventas` | ✅ aplicado 2026-09-02 |
+| **Admin (234)** y **Super Administrador (234)** | ⏳ **pendientes hasta desplegar el binario** |
+
+Los dos pendientes son los únicos con el catálogo completo. Con el binario viejo, sus permisos
+viajan dentro de la cookie y la llevan por encima del límite de 32 KB de Kestrel → **HTTP 431**.
+No cuesta nada esperar: los tres usuarios con esos roles tienen además Super Administrador, que
+salta toda comprobación de permiso.
+
+Respaldo previo de las 194 filas: `scratchpad/respaldo_roles_siad_v4.txt`.
+
+### Al desplegar, completar
+
 ```bash
 export SRV="postgresql://USUARIO:CLAVE@172.16.0.9:5432/siad_v4"
 
+# Idempotente: vuelve a pasar por los seis roles ya aplicados sin duplicar nada,
+# y agrega Admin y Super Administrador, que es lo que falta.
 psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-09-01_permisos_por_rol.sql
 psql "$SRV" -v ON_ERROR_STOP=1 -f Database/2026-09-01_usuario_facturacion_rol_ventas.sql
 ```
@@ -69,8 +91,9 @@ LEFT JOIN identity."AspNetRoleClaims" c
 GROUP BY 1 ORDER BY 2 DESC;
 ```
 
-Si `Contabilidad`, `Bancos`, `Compras`, `Configuracion`, `Presupuesto` y `Compromisos` están
-en 0, el paso 1 falta.
+Tras lo aplicado el 2026-09-02, `Contabilidad`, `Bancos`, `Compras`, `Configuracion`,
+`Presupuesto` y `Compromisos` ya NO están en 0. Lo que falta se reconoce porque **`Admin`
+sigue en 0** y `Super Administrador` no llega al total del catálogo.
 
 ---
 
