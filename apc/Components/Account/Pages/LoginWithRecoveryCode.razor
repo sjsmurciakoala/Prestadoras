@@ -9,26 +9,23 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<LoginWithRecoveryCode> Logger
 
-<PageTitle>Recovery code verification</PageTitle>
+<PageTitle>Verificación con código de recuperación</PageTitle>
 <div class="main-content">
     <div class="block-content">
         <div class="title">
-            <div class="title-header-text">Recovery code verification</div>
-            <div class="title-content-text-secondary">
-                You have requested to log in with a recovery code. This login will not be remembered until you provide
-                an authenticator app code at log in or disable 2FA and log in again.
-            </div>
+            <div class="title-header-text">Verificación con código de recuperación</div>
+            <div class="title-content-text-secondary">Pidió iniciar sesión con un código de recuperación. Este inicio de sesión no se recordará hasta que use un código de la aplicación de autenticación o desactive la verificación en dos pasos y vuelva a entrar.</div>
         </div>
         <StatusMessage Message="@message" />
-        <EditForm Model="Input" FormName="login-with-2fa" OnValidSubmit="OnValidSubmitAsync" method="post" Context="LoginWithFA">
+        <EditForm Model="Input" FormName="login-with-recovery-code" OnValidSubmit="OnValidSubmitAsync" method="post" Context="LoginWithRecovery">
             <DataAnnotationsValidator />
             <ValidationSummary class="text-danger" role="alert" />
             <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
-                <DxFormLayoutItem Caption="Authenticator code" ColSpanMd="12" BeginRow="true">
+                <DxFormLayoutItem Caption="Código de autenticación" ColSpanMd="12" BeginRow="true">
                     <InteractiveServerTextBox Name="Input.RecoveryCode" CssClass="large-input" Value="@Input.RecoveryCode" />
                 </DxFormLayoutItem>
                 <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Log in"></DxButton>
+                    <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Iniciar sesión"></DxButton>
                 </DxFormLayoutItem>
             </DxFormLayout>
         </EditForm>
@@ -80,7 +77,7 @@
     private sealed class InputModel {
         [Required]
         [DataType(DataType.Text)]
-        [Display(Name = "Recovery Code")]
+        [Display(Name = "Código de recuperación")]
         public string RecoveryCode { get; set; } = "";
     }
 }

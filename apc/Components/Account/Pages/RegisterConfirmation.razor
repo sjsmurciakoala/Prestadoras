@@ -10,26 +10,25 @@
 @inject NavigationManager NavigationManager
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Register confirmation</PageTitle>
+<PageTitle>Confirmación de registro</PageTitle>
 
 <div class="main-content">
     <div class="block-content">
         <div class="title">
-            <div class="title-header-text">Register confirmation</div>
+            <div class="title-header-text">Confirmación de registro</div>
         </div>
         <StatusMessage Message="@statusMessage" />
         @if(emailConfirmationLink is not null) {
             <div>
-                This app does not currently have a real email sender registered, see <a href="https://aka.ms/aspaccountconf">these docs</a> for how to configure a real email sender.
-                Normally this would be emailed.
+                Esta aplicación no tiene configurado un envío de correo real; consulte <a href="https://aka.ms/aspaccountconf">these docs</a> para configurarlo. Normalmente esto se enviaría por correo.
             </div>
             <div>
                 <NavLink href="@emailConfirmationLink" class="button-link confirm-button">
-                    <DxButton CssClass="w-100" Text="Confirm your account"></DxButton>
+                    <DxButton CssClass="w-100" Text="Confirmar su cuenta"></DxButton>
                 </NavLink>
             </div>
         } else {
-            <p>Please check your email to confirm your account.</p>
+            <p>Revise su correo para confirmar su cuenta.</p>
         }
     </div>
 </div>

@@ -10,15 +10,13 @@
 @inject IUserStore<ApplicationUser> UserStore
 @inject IdentityRedirectManager RedirectManager
 
-<PageTitle>Manage your external logins</PageTitle>
+<PageTitle>Inicios de sesión externos</PageTitle>
 
 <StatusMessage />
 <div class="block-content">
     @if(currentLogins?.Count > 0) {
         <div class="title title-secondary">
-            <div class="title-content-text-secondary">
-                Registered Logins
-            </div>
+            <div class="title-content-text-secondary">Servicios registrados</div>
         </div>
         <div class="current-logins">
             @foreach(var login in currentLogins) {
@@ -41,9 +39,7 @@
     }
     @if(otherLogins?.Count > 0) {
         <div class="title title-secondary">
-            <div class="title-content-text-secondary">
-                Add another service to log in.
-            </div>
+            <div class="title-content-text-secondary">Agregue otro servicio para iniciar sesión.</div>
         </div>
         <form class="button-group" action="Account/Manage/LinkExternalLogin" method="post">
             <AntiforgeryToken />

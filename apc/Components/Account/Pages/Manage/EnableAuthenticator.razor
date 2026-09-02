@@ -13,17 +13,17 @@
 @inject IdentityRedirectManager RedirectManager
 @inject ILogger<EnableAuthenticator> Logger
 
-<PageTitle>Configure authenticator app</PageTitle>
+<PageTitle>Configurar la aplicación de autenticación</PageTitle>
 
 @if(recoveryCodes is not null) {
     <ShowRecoveryCodes RecoveryCodes="recoveryCodes.ToArray()" StatusMessage="@message" />
 } else {
     <StatusMessage Message="@message" />
     <div class="title title-secondary">
-        <div class="title-content-text-secondary">Configure authenticator app</div>
+        <div class="title-content-text-secondary">Configurar la aplicación de autenticación</div>
     </div>
     <div class="twofactor-content">
-        <span>To use an authenticator app go through the following steps:</span>
+        <span>Para usar una aplicación de autenticación siga estos pasos:</span>
         <ol class="list">
             <li>
                 <span>
@@ -36,15 +36,14 @@
                 </span>
             </li>
             <li>
-                <span>Scan the QR Code or enter this key <kbd>@sharedKey</kbd> into your two factor authenticator app. Spaces and casing do not matter.</span>
+                <span>Escanee el código QR o escriba esta clave <kbd>@sharedKey</kbd> en su aplicación de autenticación. Los espacios y las mayúsculas no importan.</span>
                 <div class="info-message">
                     <span>Learn how to <a href="https://go.microsoft.com/fwlink/?Linkid=852423">enable QR code generation</a>.</span>
                 </div>
             </li>
             <li>
                 <span>
-                    Once you have scanned the QR code or input the key above, your two factor authentication app will provide you
-                    with a unique code. Enter the code in the confirmation box below.
+                    Una vez escaneado el código QR o escrita la clave, la aplicación le mostrará un código. Escríbalo abajo para confirmar.
                 </span>
             </li>
         </ol>
@@ -53,11 +52,11 @@
                 <DataAnnotationsValidator />
                 <ValidationSummary class="text-danger" role="alert" />
                 <DxFormLayout CaptionPosition=@CaptionPosition.Vertical>
-                    <DxFormLayoutItem Caption="Verification Code" ColSpanMd="12" BeginRow="true">
+                    <DxFormLayoutItem Caption="Código de verificación" ColSpanMd="12" BeginRow="true">
                         <InteractiveServerTextBox Name="Input.Code" Value="@Input.Code" />
                     </DxFormLayoutItem>
                     <DxFormLayoutItem ColSpanMd="12" BeginRow="true">
-                        <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Verify"></DxButton>
+                        <DxButton CssClass="w-100" SubmitFormOnClick="true" Text="Verificar"></DxButton>
                     </DxFormLayoutItem>
                 </DxFormLayout>
             </EditForm>
@@ -152,7 +151,7 @@
         [Required]
         [StringLength(7, ErrorMessage = "The {0} must be at least {2} and at max {1} characters long.", MinimumLength = 6)]
         [DataType(DataType.Text)]
-        [Display(Name = "Verification Code")]
+        [Display(Name = "Código de verificación")]
         public string Code { get; set; } = "";
     }
 }
