@@ -447,6 +447,13 @@ public static class PermissionNames
 
         public static class Presupuesto
         {
+            /// <summary>
+            /// Ver el presupuesto sin abrir el resto de la contabilidad. Existe porque el rol
+            /// Presupuesto colgaba de <see cref="Contabilidad.View"/>, y con eso veía también
+            /// partidas, plan de cuentas e integración contable, que no le tocan.
+            /// </summary>
+            public const string View = "module.contabilidad.presupuesto.view";
+
             /// <summary>Aprobar un presupuesto compromete fondos: permiso aparte de Edit.</summary>
             public const string Aprobar = "module.contabilidad.presupuesto.aprobar";
         }
@@ -579,6 +586,7 @@ public static class PermissionNames
             Reporteria.Edit,
             Reporteria.Delete,
             Reporteria.SqlPersonalizado,
+            Contabilidad.Presupuesto.View,
             Contabilidad.Presupuesto.Aprobar,
             Configuracion.View,
             Configuracion.Create,
@@ -756,6 +764,8 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create]),
 
         // Sustituyen a los dos ultimos chequeos por rol del sistema.
+        new PermissionPolicyDefinition(Contabilidad.Presupuesto.View,
+            [Contabilidad.Presupuesto.View, Contabilidad.View, Legacy.Contabilidad]),
         new PermissionPolicyDefinition(Contabilidad.Presupuesto.Aprobar, [Contabilidad.Presupuesto.Aprobar]),
         new PermissionPolicyDefinition(Reporteria.SqlPersonalizado, [Reporteria.SqlPersonalizado]),
 

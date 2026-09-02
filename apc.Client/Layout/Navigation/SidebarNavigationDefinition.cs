@@ -153,11 +153,11 @@ public static class SidebarNavigationDefinition
             Items =
             [
                 new SidebarNavItem { Id = "bn-gestion", RequiredPermission = PermissionNames.Bancos.View, Text = "Gestión de bancos", NavigateUrl = "/contabilidad/bancos", MatchPrefixes = ["/contabilidad/bancos"], IconCssClass = "bi bi-building" },
-                new SidebarNavItem { Id = "bn-transacciones", RequiredPermission = PermissionNames.Bancos.View, Text = "Config. transacciones", NavigateUrl = "/bancos/configuracion_transacciones", MatchPrefixes = ["/bancos/configuracion_transacciones"], IconCssClass = "bi bi-sliders" },
+                new SidebarNavItem { Id = "bn-transacciones", RequiredPermission = PermissionNames.Bancos.Edit, Text = "Config. transacciones", NavigateUrl = "/bancos/configuracion_transacciones", MatchPrefixes = ["/bancos/configuracion_transacciones"], IconCssClass = "bi bi-sliders" },
                 // MatchExact: sin esto /bancos/cheques/manual encendería también "Cheques emitidos".
                 new SidebarNavItem { Id = "bn-cheques", RequiredPermission = PermissionNames.Bancos.View, Text = "Cheques emitidos", NavigateUrl = "/bancos/cheques", MatchPrefixes = ["/bancos/cheques"], MatchExact = true, IconCssClass = "bi bi-card-checklist" },
-                new SidebarNavItem { Id = "bn-cheque-manual", RequiredPermission = PermissionNames.Bancos.View, Text = "Nuevo cheque manual", NavigateUrl = "/bancos/cheques/manual", MatchPrefixes = ["/bancos/cheques/manual"], IconCssClass = "bi bi-cash-stack", RequiredCapability = SidebarCapabilities.ChequeManual },
-                new SidebarNavItem { Id = "bn-config", RequiredPermission = PermissionNames.Bancos.View, Text = "Configuración", NavigateUrl = "/bancos/configuracion", MatchPrefixes = ["/bancos/configuracion"], IconCssClass = "bi bi-gear" }
+                new SidebarNavItem { Id = "bn-cheque-manual", RequiredPermission = PermissionNames.Bancos.Create, Text = "Nuevo cheque manual", NavigateUrl = "/bancos/cheques/manual", MatchPrefixes = ["/bancos/cheques/manual"], IconCssClass = "bi bi-cash-stack", RequiredCapability = SidebarCapabilities.ChequeManual },
+                new SidebarNavItem { Id = "bn-config", RequiredPermission = PermissionNames.Bancos.Edit, Text = "Configuración", NavigateUrl = "/bancos/configuracion", MatchPrefixes = ["/bancos/configuracion"], IconCssClass = "bi bi-gear" }
             ]
         },
 
@@ -210,17 +210,20 @@ public static class SidebarNavigationDefinition
                 new SidebarNavItem
                 {
                     Id = "cont-integracion",
-                    RequiredPermission = PermissionNames.Contabilidad.View,
+                    // Configurar la integración contable cambia cómo asienta todo el sistema:
+                    // exige poder EDITAR contabilidad, no solo verla. Así los roles de consulta
+                    // (Presupuesto, Compromisos) dejan de verla.
+                    RequiredPermission = PermissionNames.Contabilidad.Edit,
                     Text = "Integración",
                     IconCssClass = "bi bi-arrow-left-right",
                     MatchPrefixes = ["/contabilidad/empresas/integracion", "/contabilidad/empresas/configuracion"],
                     Children =
                     [
-                        new SidebarNavItem { Id = "cb-integracion", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Integración Contable", NavigateUrl = "/contabilidad/empresas/integracion", MatchPrefixes = ["/contabilidad/empresas/integracion"], IconCssClass = "bi bi-arrow-left-right" },
-                        new SidebarNavItem { Id = "cb-config-sistema", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Configuración Sistema", NavigateUrl = "/contabilidad/empresas/configuracion", MatchPrefixes = ["/contabilidad/empresas/configuracion"], IconCssClass = "bi bi-sliders" }
+                        new SidebarNavItem { Id = "cb-integracion", RequiredPermission = PermissionNames.Contabilidad.Edit, Text = "Integración Contable", NavigateUrl = "/contabilidad/empresas/integracion", MatchPrefixes = ["/contabilidad/empresas/integracion"], IconCssClass = "bi bi-arrow-left-right" },
+                        new SidebarNavItem { Id = "cb-config-sistema", RequiredPermission = PermissionNames.Contabilidad.Edit, Text = "Configuración Sistema", NavigateUrl = "/contabilidad/empresas/configuracion", MatchPrefixes = ["/contabilidad/empresas/configuracion"], IconCssClass = "bi bi-sliders" }
                     ]
                 },
-                new SidebarNavItem { Id = "presupuesto", RequiredPermission = PermissionNames.Contabilidad.View, Text = "Presupuesto", NavigateUrl = "/presupuesto/configuraciones", MatchPrefixes = ["/presupuesto/configuraciones"], IconCssClass = "bi bi-cash-stack" }
+                new SidebarNavItem { Id = "presupuesto", RequiredPermission = PermissionNames.Contabilidad.Presupuesto.View, Text = "Presupuesto", NavigateUrl = "/presupuesto/configuraciones", MatchPrefixes = ["/presupuesto/configuraciones"], IconCssClass = "bi bi-cash-stack" }
             ]
         },
 

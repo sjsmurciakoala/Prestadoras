@@ -1,11 +1,27 @@
 -- Permisos por rol: reemplaza a las policies por rol (CanContabilidad, CanBancos, ...).
 -- Regenerado sobre el catalogo YA FUSIONADO con feat/almacen-integracion-contable
--- (234 permisos: ventas, inventario, compras, proveedores, talento humano, ...).
+-- (235 permisos: ventas, inventario, compras, proveedores, talento humano, ...).
 -- Idempotente: se puede re-ejecutar. Solo AGREGA permisos; no quita los existentes.
 -- Aplica sobre el esquema identity. Requiere que los roles ya existan.
 BEGIN;
 
--- Admin: 234 permisos
+-- Presupuesto: retira 2 permiso(s) que ya no le corresponden
+DELETE FROM identity."AspNetRoleClaims" c
+USING identity."AspNetRoles" r
+WHERE c."RoleId" = r."Id"
+  AND c."ClaimType" = 'permission'
+  AND r."Name" = 'Presupuesto'
+  AND c."ClaimValue" IN ('module.contabilidad', 'module.contabilidad.view');
+
+-- Compromisos: retira 2 permiso(s) que ya no le corresponden
+DELETE FROM identity."AspNetRoleClaims" c
+USING identity."AspNetRoles" r
+WHERE c."RoleId" = r."Id"
+  AND c."ClaimType" = 'permission'
+  AND r."Name" = 'Compromisos'
+  AND c."ClaimValue" IN ('module.contabilidad', 'module.contabilidad.view');
+
+-- Admin: 235 permisos
 INSERT INTO identity."AspNetRoleClaims" ("RoleId", "ClaimType", "ClaimValue")
 SELECT r."Id", 'permission', v.permiso
 FROM identity."AspNetRoles" r
@@ -56,6 +72,7 @@ CROSS JOIN (VALUES
         ('module.contabilidad.lotefacturacion.create'),
         ('module.contabilidad.lotefacturacion.view'),
         ('module.contabilidad.presupuesto.aprobar'),
+        ('module.contabilidad.presupuesto.view'),
         ('module.contabilidad.saldos.view'),
         ('module.contabilidad.saldos__contabilidad_saldos_companyid_verificacion.view'),
         ('module.contabilidad.view'),
@@ -251,7 +268,7 @@ WHERE r."Name" = 'Admin'
       WHERE c."RoleId" = r."Id" AND c."ClaimType" = 'permission' AND c."ClaimValue" = v.permiso
   );
 
--- Super Administrador: 234 permisos
+-- Super Administrador: 235 permisos
 INSERT INTO identity."AspNetRoleClaims" ("RoleId", "ClaimType", "ClaimValue")
 SELECT r."Id", 'permission', v.permiso
 FROM identity."AspNetRoles" r
@@ -302,6 +319,7 @@ CROSS JOIN (VALUES
         ('module.contabilidad.lotefacturacion.create'),
         ('module.contabilidad.lotefacturacion.view'),
         ('module.contabilidad.presupuesto.aprobar'),
+        ('module.contabilidad.presupuesto.view'),
         ('module.contabilidad.saldos.view'),
         ('module.contabilidad.saldos__contabilidad_saldos_companyid_verificacion.view'),
         ('module.contabilidad.view'),
@@ -579,14 +597,13 @@ WHERE r."Name" = 'Configuracion'
       WHERE c."RoleId" = r."Id" AND c."ClaimType" = 'permission' AND c."ClaimValue" = v.permiso
   );
 
--- Presupuesto: 4 permisos
+-- Presupuesto: 3 permisos
 INSERT INTO identity."AspNetRoleClaims" ("RoleId", "ClaimType", "ClaimValue")
 SELECT r."Id", 'permission', v.permiso
 FROM identity."AspNetRoles" r
 CROSS JOIN (VALUES
-        ('module.contabilidad'),
         ('module.contabilidad.presupuesto.aprobar'),
-        ('module.contabilidad.view'),
+        ('module.contabilidad.presupuesto.view'),
         ('module.reporteria.view')
      ) AS v(permiso)
 WHERE r."Name" = 'Presupuesto'
@@ -595,12 +612,11 @@ WHERE r."Name" = 'Presupuesto'
       WHERE c."RoleId" = r."Id" AND c."ClaimType" = 'permission' AND c."ClaimValue" = v.permiso
   );
 
--- Compromisos: 5 permisos
+-- Compromisos: 4 permisos
 INSERT INTO identity."AspNetRoleClaims" ("RoleId", "ClaimType", "ClaimValue")
 SELECT r."Id", 'permission', v.permiso
 FROM identity."AspNetRoles" r
 CROSS JOIN (VALUES
-        ('module.contabilidad.view'),
         ('module.proveedores'),
         ('module.proveedores.create'),
         ('module.proveedores.edit'),
