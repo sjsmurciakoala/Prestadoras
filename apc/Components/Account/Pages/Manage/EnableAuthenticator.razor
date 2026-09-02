@@ -8,6 +8,7 @@
 @using apc.Data
 
 @inject UserManager<ApplicationUser> UserManager
+@inject apc.Security.CodigoQrService CodigoQr
 @inject IdentityUserAccessor UserAccessor
 @inject UrlEncoder UrlEncoder
 @inject IdentityRedirectManager RedirectManager
@@ -27,19 +28,23 @@
         <ol class="list">
             <li>
                 <span>
-                    Download a two-factor authenticator app like Microsoft Authenticator for
-                    <a href="https://go.microsoft.com/fwlink/?Linkid=825072">Android</a> and
-                    <a href="https://go.microsoft.com/fwlink/?Linkid=825073">iOS</a> or
-                    Google Authenticator for
-                    <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&amp;hl=en">Android</a> and
+                    Instale una aplicación de autenticación, por ejemplo Microsoft Authenticator para
+                    <a href="https://go.microsoft.com/fwlink/?Linkid=825072">Android</a> o
+                    <a href="https://go.microsoft.com/fwlink/?Linkid=825073">iOS</a>, o
+                    Google Authenticator para
+                    <a href="https://play.google.com/store/apps/details?id=com.google.android.apps.authenticator2&amp;hl=es">Android</a> o
                     <a href="https://itunes.apple.com/us/app/google-authenticator/id388497605?mt=8">iOS</a>.
                 </span>
             </li>
             <li>
                 <span>Escanee el código QR o escriba esta clave <kbd>@sharedKey</kbd> en su aplicación de autenticación. Los espacios y las mayúsculas no importan.</span>
-                <div class="info-message">
-                    <span>Learn how to <a href="https://go.microsoft.com/fwlink/?Linkid=852423">enable QR code generation</a>.</span>
-                </div>
+                @if (qrDataUri is not null)
+                {
+                    <div class="qr-autenticador">
+                        <img src="@qrDataUri" width="200" height="200"
+                             alt="Código QR para configurar la aplicación de autenticación" />
+                    </div>
+                }
             </li>
             <li>
                 <span>
@@ -67,10 +72,17 @@
 @code {
     private const string AuthenticatorUriFormat = "otpauth://totp/{0}:{1}?secret={2}&issuer={0}&digits=6";
 
+    /// <summary>
+    /// Nombre que la aplicación de autenticación muestra junto al código. La plantilla traía
+    /// "Microsoft.AspNetCore.Identity.UI", que no le dice nada a nadie.
+    /// </summary>
+    private const string Emisor = "SIAD";
+
     private string? message;
     private ApplicationUser user = default!;
     private string? sharedKey;
     private string? authenticatorUri;
+    private string? qrDataUri;
     private IEnumerable<string>? recoveryCodes;
 
     [CascadingParameter]
@@ -122,6 +134,7 @@
 
         var email = await UserManager.GetEmailAsync(user);
         authenticatorUri = GenerateQrCodeUri(email!, unformattedKey!);
+        qrDataUri = CodigoQr.GenerarDataUri(authenticatorUri);
     }
 
     private string FormatKey(string unformattedKey) {
@@ -142,7 +155,7 @@
         return string.Format(
             CultureInfo.InvariantCulture,
             AuthenticatorUriFormat,
-            UrlEncoder.Encode("Microsoft.AspNetCore.Identity.UI"),
+            UrlEncoder.Encode(Emisor),
             UrlEncoder.Encode(email),
             unformattedKey);
     }

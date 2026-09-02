@@ -184,6 +184,7 @@ builder.Services.AddScoped<IdentityRedirectManager>();
 builder.Services.AddScoped<AuthenticationStateProvider, PersistingServerAuthenticationStateProvider>();
 builder.Services.AddMemoryCache();
 builder.Services.AddScoped<apc.Security.RolePermissionCache>();
+builder.Services.AddSingleton<apc.Security.CodigoQrService>();
 builder.Services.AddScoped<TenantCompanyClaimTransformation>();
 // Una sola IClaimsTransformation: repone los permisos (que no viajan en la cookie) y encadena
 // la validación de empresa. Ver PermissionsClaimsTransformation.

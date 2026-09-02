@@ -9,7 +9,11 @@
    desfase comercial-contable. Carga una vez por circuito; si el endpoint
    falla (p. ej. usuario sin empresa) el banner simplemente no se muestra. *@
 
-@if (!descartado && avisos.Count > 0)
+@* En el área de cuenta (/Account/*) la página se renderiza en modo ESTÁTICO: no hay circuito,
+   así que ningún @onclick responde y la X de descartar no cerraría nada. Antes que dejar un
+   aviso que no se puede quitar, no se muestra: son avisos de períodos comerciales, que no
+   pintan nada mientras alguien cambia su contraseña. *@
+@if (RendererInfo.IsInteractive && !descartado && avisos.Count > 0)
 {
     <div class="alert @(HayWarnings ? "alert-warning" : "alert-info") d-flex align-items-start gap-2 py-2 px-3 mb-2 avisos-periodos-banner" role="alert">
         <i class="bi @(HayWarnings ? "bi-exclamation-triangle-fill" : "bi-info-circle-fill") fs-5 mt-1"></i>
