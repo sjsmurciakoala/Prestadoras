@@ -671,6 +671,13 @@ public static class PermissionNames
 
         list.AddRange(PermissionEndpointCatalog.All.Select(e => e.Permission));
 
+        // Escalón intermedio de la cascada. Cada policy de endpoint admite además el permiso de
+        // su OPCIÓN (module.<modulo>.<opcion>.<accion>), pero ese escalón no estaba en el
+        // catálogo: se referenciaba y no existía, así que no se podía conceder desde la pantalla
+        // de roles y quedaba muerto. Se deriva del catálogo para que no vuelva a faltar.
+        list.AddRange(PermissionEndpointCatalog.All.Select(
+            e => PermissionKeyBuilder.BuildPermission(e.Module, e.Option, e.Action)));
+
         return list.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
     }
 
@@ -852,6 +859,38 @@ public static class PermissionNames
 
             var distinct = permissions.Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             policies.Add(new PermissionPolicyDefinition(endpoint.Permission, distinct));
+        }
+
+        // El permiso de OPCIÓN también necesita su policy: es el escalón que permite conceder
+        // una opción completa sin abrir el módulo entero. Se derivan igual que las de endpoint y
+        // solo se agregan las que no estén definidas a mano más arriba.
+        var yaDefinidas = policies
+            .Select(p => p.Policy)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+        foreach (var endpoint in PermissionEndpointCatalog.All)
+        {
+            var opcion = PermissionKeyBuilder.BuildPermission(
+                endpoint.Module, endpoint.Option, endpoint.Action);
+
+            if (!yaDefinidas.Add(opcion))
+            {
+                continue;
+            }
+
+            var permisosOpcion = new List<string>
+            {
+                opcion,
+                PermissionKeyBuilder.BuildModulePermission(endpoint.Module, endpoint.Action)
+            };
+
+            if (endpoint.Action == PermissionAction.View)
+            {
+                permisosOpcion.Add($"module.{endpoint.Module}");
+            }
+
+            policies.Add(new PermissionPolicyDefinition(
+                opcion, permisosOpcion.Distinct(StringComparer.OrdinalIgnoreCase).ToArray()));
         }
 
         return policies.ToArray();

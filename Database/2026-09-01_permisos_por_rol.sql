@@ -1,11 +1,11 @@
 -- Permisos por rol: reemplaza a las policies por rol (CanContabilidad, CanBancos, ...).
 -- Regenerado sobre el catalogo YA FUSIONADO con feat/almacen-integracion-contable
--- (223 permisos: ventas, inventario, compras, proveedores, talento humano, ...).
+-- (234 permisos: ventas, inventario, compras, proveedores, talento humano, ...).
 -- Idempotente: se puede re-ejecutar. Solo AGREGA permisos; no quita los existentes.
 -- Aplica sobre el esquema identity. Requiere que los roles ya existan.
 BEGIN;
 
--- Admin: 223 permisos
+-- Admin: 234 permisos
 INSERT INTO identity."AspNetRoleClaims" ("RoleId", "ClaimType", "ClaimValue")
 SELECT r."Id", 'permission', v.permiso
 FROM identity."AspNetRoles" r
@@ -40,6 +40,8 @@ CROSS JOIN (VALUES
         ('module.contabilidad.create'),
         ('module.contabilidad.delete'),
         ('module.contabilidad.edit'),
+        ('module.contabilidad.integracion.create'),
+        ('module.contabilidad.integracion.view'),
         ('module.contabilidad.integracion__contabilidad_integracion_categorias.view'),
         ('module.contabilidad.integracion__contabilidad_integracion_companyid.create'),
         ('module.contabilidad.integracion__contabilidad_integracion_companyid.view'),
@@ -51,7 +53,10 @@ CROSS JOIN (VALUES
         ('module.contabilidad.integracion__contabilidad_lote_facturacion_companyid_historial.view'),
         ('module.contabilidad.integracion__contabilidad_lote_facturacion_companyid_pendientes.view'),
         ('module.contabilidad.integracion__contabilidad_lote_facturacion_companyid_preview.view'),
+        ('module.contabilidad.lotefacturacion.create'),
+        ('module.contabilidad.lotefacturacion.view'),
         ('module.contabilidad.presupuesto.aprobar'),
+        ('module.contabilidad.saldos.view'),
         ('module.contabilidad.saldos__contabilidad_saldos_companyid_verificacion.view'),
         ('module.contabilidad.view'),
         ('module.inventario.ajustes.create'),
@@ -139,6 +144,8 @@ CROSS JOIN (VALUES
         ('module.ventas.caja.delete'),
         ('module.ventas.caja.edit'),
         ('module.ventas.caja.view'),
+        ('module.ventas.calendario_facturacion.create'),
+        ('module.ventas.calendario_facturacion.view'),
         ('module.ventas.calendario_facturacion__ventas_calendario_facturacion_companyid_anio.create'),
         ('module.ventas.calendario_facturacion__ventas_calendario_facturacion_companyid_anio.view'),
         ('module.ventas.calendario_facturacion__ventas_calendario_facturacion_companyid_anios.view'),
@@ -198,6 +205,8 @@ CROSS JOIN (VALUES
         ('module.ventas.cobranza__cobranza_planes.view'),
         ('module.ventas.cobranza__cobranza_planes_calcular.view'),
         ('module.ventas.cobranza__cobranza_planes_correlativo.view'),
+        ('module.ventas.condiciones_lectura.create'),
+        ('module.ventas.condiciones_lectura.view'),
         ('module.ventas.condiciones_lectura__ventas_condiciones_lectura_companyid.create'),
         ('module.ventas.condiciones_lectura__ventas_condiciones_lectura_companyid.view'),
         ('module.ventas.create'),
@@ -222,6 +231,8 @@ CROSS JOIN (VALUES
         ('module.ventas.notas_credito_debito__facturacion_notas_clientes_clave_configuracion.view'),
         ('module.ventas.notas_credito_debito__facturacion_notas_motivos.view'),
         ('module.ventas.notas_credito_debito__facturacion_notas_motivos_id.view'),
+        ('module.ventas.periodos_comerciales.create'),
+        ('module.ventas.periodos_comerciales.view'),
         ('module.ventas.periodos_comerciales__ventas_periodos_comerciales_companyid.view'),
         ('module.ventas.periodos_comerciales__ventas_periodos_comerciales_companyid_abrir.create'),
         ('module.ventas.periodos_comerciales__ventas_periodos_comerciales_companyid_abrir_preview.view'),
@@ -240,7 +251,7 @@ WHERE r."Name" = 'Admin'
       WHERE c."RoleId" = r."Id" AND c."ClaimType" = 'permission' AND c."ClaimValue" = v.permiso
   );
 
--- Super Administrador: 223 permisos
+-- Super Administrador: 234 permisos
 INSERT INTO identity."AspNetRoleClaims" ("RoleId", "ClaimType", "ClaimValue")
 SELECT r."Id", 'permission', v.permiso
 FROM identity."AspNetRoles" r
@@ -275,6 +286,8 @@ CROSS JOIN (VALUES
         ('module.contabilidad.create'),
         ('module.contabilidad.delete'),
         ('module.contabilidad.edit'),
+        ('module.contabilidad.integracion.create'),
+        ('module.contabilidad.integracion.view'),
         ('module.contabilidad.integracion__contabilidad_integracion_categorias.view'),
         ('module.contabilidad.integracion__contabilidad_integracion_companyid.create'),
         ('module.contabilidad.integracion__contabilidad_integracion_companyid.view'),
@@ -286,7 +299,10 @@ CROSS JOIN (VALUES
         ('module.contabilidad.integracion__contabilidad_lote_facturacion_companyid_historial.view'),
         ('module.contabilidad.integracion__contabilidad_lote_facturacion_companyid_pendientes.view'),
         ('module.contabilidad.integracion__contabilidad_lote_facturacion_companyid_preview.view'),
+        ('module.contabilidad.lotefacturacion.create'),
+        ('module.contabilidad.lotefacturacion.view'),
         ('module.contabilidad.presupuesto.aprobar'),
+        ('module.contabilidad.saldos.view'),
         ('module.contabilidad.saldos__contabilidad_saldos_companyid_verificacion.view'),
         ('module.contabilidad.view'),
         ('module.inventario.ajustes.create'),
@@ -374,6 +390,8 @@ CROSS JOIN (VALUES
         ('module.ventas.caja.delete'),
         ('module.ventas.caja.edit'),
         ('module.ventas.caja.view'),
+        ('module.ventas.calendario_facturacion.create'),
+        ('module.ventas.calendario_facturacion.view'),
         ('module.ventas.calendario_facturacion__ventas_calendario_facturacion_companyid_anio.create'),
         ('module.ventas.calendario_facturacion__ventas_calendario_facturacion_companyid_anio.view'),
         ('module.ventas.calendario_facturacion__ventas_calendario_facturacion_companyid_anios.view'),
@@ -433,6 +451,8 @@ CROSS JOIN (VALUES
         ('module.ventas.cobranza__cobranza_planes.view'),
         ('module.ventas.cobranza__cobranza_planes_calcular.view'),
         ('module.ventas.cobranza__cobranza_planes_correlativo.view'),
+        ('module.ventas.condiciones_lectura.create'),
+        ('module.ventas.condiciones_lectura.view'),
         ('module.ventas.condiciones_lectura__ventas_condiciones_lectura_companyid.create'),
         ('module.ventas.condiciones_lectura__ventas_condiciones_lectura_companyid.view'),
         ('module.ventas.create'),
@@ -457,6 +477,8 @@ CROSS JOIN (VALUES
         ('module.ventas.notas_credito_debito__facturacion_notas_clientes_clave_configuracion.view'),
         ('module.ventas.notas_credito_debito__facturacion_notas_motivos.view'),
         ('module.ventas.notas_credito_debito__facturacion_notas_motivos_id.view'),
+        ('module.ventas.periodos_comerciales.create'),
+        ('module.ventas.periodos_comerciales.view'),
         ('module.ventas.periodos_comerciales__ventas_periodos_comerciales_companyid.view'),
         ('module.ventas.periodos_comerciales__ventas_periodos_comerciales_companyid_abrir.create'),
         ('module.ventas.periodos_comerciales__ventas_periodos_comerciales_companyid_abrir_preview.view'),
