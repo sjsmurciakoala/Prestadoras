@@ -346,6 +346,23 @@
             </div>
 
         }
+        else
+        {
+            @* El cliente no existe: se dice, en vez de dejar la pantalla vacía. Antes de esto
+               un id inexistente devolvía HTTP 500; ahora la consulta devuelve null y aquí se
+               explica, con la salida a mano. *@
+            <div class="modern-card text-center p-5">
+                <i class="bi bi-person-x" style="font-size: 2.5rem; color: #adb5bd;"></i>
+                <h3 style="margin-top: 1rem; font-size: 1.15rem;">No encontramos ese cliente</h3>
+                <p style="color: #6c757d; margin-bottom: 1.5rem;">
+                    No existe un cliente con el código @Id. Puede que lo hayan eliminado o que el
+                    enlace esté equivocado.
+                </p>
+                <DxButton Text="Volver al listado"
+                          RenderStyle="ButtonRenderStyle.Primary"
+                          Click="@(() => Navigation.NavigateTo("/clientes"))" />
+            </div>
+        }
     </div>
 
 </div>
