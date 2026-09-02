@@ -38,6 +38,15 @@
     flex-shrink: 0;
 }
 
+.sidebar-brand__logo--img {
+    width: 1.75rem;
+    height: 1.75rem;
+    object-fit: contain;
+    border-radius: 4px;
+    background: rgba(255, 255, 255, 0.14);
+    padding: 2px;
+}
+
 .sidebar-brand__text {
     font-weight: 700;
     font-size: 1.05rem;
@@ -265,6 +274,11 @@
 
 .sidebar-nav--collapsed .sidebar-brand__logo {
     font-size: 1.6rem;
+}
+
+.sidebar-nav--collapsed .sidebar-brand__logo--img {
+    width: 2rem;
+    height: 2rem;
 }
 
 .sidebar-nav--collapsed ::deep .nav-section__label {

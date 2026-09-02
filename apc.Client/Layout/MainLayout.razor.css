@@ -94,6 +94,18 @@
     color: #fff;
 }
 
+/* El ancho del panel lo aplica el JS de DevExpress, que lee data-dx-style al inicializarse.
+   Entre el prerenderizado y la conexion del circuito el panel se queda SIN ancho y el menu se
+   ve angosto hasta que navegas. Estas reglas fijan el ancho de cada estado para ese intervalo;
+   en cuanto el componente arranca, su estilo en linea manda sobre estas. */
+::deep .app-drawer--open .dxbl-drawer-panel {
+    width: 280px;
+}
+
+::deep .app-drawer--mini .dxbl-drawer-panel {
+    width: 64px;
+}
+
 ::deep .app-drawer .dxbl-drawer-panel > .dxbl-drawer-header {
     border-bottom: 1px solid rgba(255, 255, 255, 0.15);
     padding: 1rem 0.75rem;
@@ -159,6 +171,10 @@
 }
 
 @media (max-width: 768px) {
+    ::deep .app-drawer--open .dxbl-drawer-panel {
+        width: 80%;
+    }
+
     .content {
         padding: 1rem 0.75rem;
     }
