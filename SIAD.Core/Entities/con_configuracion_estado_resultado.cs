@@ -3,7 +3,7 @@ using SIAD.Core.Tenancy;
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Líneas del Estado de Resultados configurables
+/// LÃ­neas del Estado de Resultados configurables
 /// </summary>
 public class con_configuracion_estado_resultado : ICompanyScopedEntity
 {

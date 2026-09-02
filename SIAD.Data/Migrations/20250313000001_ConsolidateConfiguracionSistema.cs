@@ -207,7 +207,7 @@ namespace SIAD.Data.Migrations
                 nullable: false,
                 defaultValue: "CUENTAS ORDEN");
 
-            // Crear Ìndices para las claves for·neas
+            // Crear √≠ndices para las claves for√°neas
             migrationBuilder.CreateIndex(
                 name: "IX_con_configuracion_sistema_cuenta_util_acumulada_historica",
                 table: "con_configuracion_sistema",
@@ -313,7 +313,7 @@ namespace SIAD.Data.Migrations
                 table: "con_configuracion_sistema",
                 column: "sobrevaluaciones");
 
-            // Agregar restricciones de clave for·nea
+            // Agregar restricciones de clave for√°nea
             migrationBuilder.AddForeignKey(
                 name: "FK_con_configuracion_sistema_con_plan_cuentas_util_acum_hist",
                 table: "con_configuracion_sistema",
@@ -486,7 +486,7 @@ namespace SIAD.Data.Migrations
         /// <inheritdoc />
         protected override void Down(MigrationBuilder migrationBuilder)
         {
-            // Eliminar restricciones de clave for·nea
+            // Eliminar restricciones de clave for√°nea
             migrationBuilder.DropForeignKey(
                 name: "FK_con_configuracion_sistema_con_plan_cuentas_util_acum_hist",
                 table: "con_configuracion_sistema");
@@ -571,7 +571,7 @@ namespace SIAD.Data.Migrations
                 name: "FK_con_configuracion_sistema_con_plan_cuentas_sobre",
                 table: "con_configuracion_sistema");
 
-            // Eliminar Ìndices
+            // Eliminar √≠ndices
             migrationBuilder.DropIndex(
                 name: "IX_con_configuracion_sistema_cuenta_util_acumulada_historica",
                 table: "con_configuracion_sistema");

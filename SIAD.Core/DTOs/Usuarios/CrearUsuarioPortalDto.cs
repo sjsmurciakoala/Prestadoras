@@ -5,12 +5,12 @@ namespace SIAD.Core.DTOs.Usuarios;
 public sealed class CrearUsuarioPortalDto
 {
     [Required(ErrorMessage = "El correo es obligatorio.")]
-    [EmailAddress(ErrorMessage = "El correo no tiene un formato v·lido.")]
+    [EmailAddress(ErrorMessage = "El correo no tiene un formato v√°lido.")]
     [StringLength(256, ErrorMessage = "El correo no puede superar los 256 caracteres.")]
     public string Email { get; set; } = string.Empty;
 
-    [Required(ErrorMessage = "La contraseÒa es obligatoria.")]
-    [StringLength(100, MinimumLength = 6, ErrorMessage = "La contraseÒa debe tener entre 6 y 100 caracteres.")]
+    [Required(ErrorMessage = "La contrase√±a es obligatoria.")]
+    [StringLength(100, MinimumLength = 6, ErrorMessage = "La contrase√±a debe tener entre 6 y 100 caracteres.")]
     public string Password { get; set; } = string.Empty;
 
     [Required(ErrorMessage = "La empresa es obligatoria.")]

@@ -60,7 +60,7 @@ public sealed class AbogadosClient
         var result = await response.ReadFromJsonAsyncWithAuthCheck<AbogadoEditDto>(ct);
         if (result is null)
         {
-            throw new InvalidOperationException("El servicio devolvió una respuesta vacía.");
+            throw new InvalidOperationException("El servicio devolviÃ³ una respuesta vacÃ­a.");
         }
 
         return result;
@@ -72,14 +72,14 @@ public sealed class AbogadosClient
 
         if (id <= 0)
         {
-            throw new ArgumentException("El ID del abogado debe ser válido.", nameof(id));
+            throw new ArgumentException("El ID del abogado debe ser vÃ¡lido.", nameof(id));
         }
 
         var response = await _http.PutAsJsonAsync($"api/abogados/{id}", dto, ct);
         var result = await response.ReadFromJsonAsyncWithAuthCheck<AbogadoEditDto>(ct);
         if (result is null)
         {
-            throw new InvalidOperationException("El servicio devolvió una respuesta vacía.");
+            throw new InvalidOperationException("El servicio devolviÃ³ una respuesta vacÃ­a.");
         }
 
         return result;
@@ -89,7 +89,7 @@ public sealed class AbogadosClient
     {
         if (id <= 0)
         {
-            throw new ArgumentException("El ID del abogado debe ser válido.", nameof(id));
+            throw new ArgumentException("El ID del abogado debe ser vÃ¡lido.", nameof(id));
         }
 
         var response = await _http.PostAsync($"api/abogados/{id}/desactivar", null, ct);

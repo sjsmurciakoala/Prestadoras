@@ -50,7 +50,7 @@ namespace apc.Controllers
                 await DatabaseInitializer.SeedAsync(_userManager, _roleManager, _siadDbContext);
                 _logger.LogInformation("Seed completado exitosamente");
                 
-                return Ok(new { message = "Seed ejecutado exitosamente. Usuario: admin@siad-demo.com, Contraseña: Admin123@" });
+                return Ok(new { message = "Seed ejecutado exitosamente. Usuario: admin@siad-demo.com, ContraseÃ±a: Admin123@" });
             }
             catch (Exception ex)
             {

@@ -43,7 +43,7 @@ public sealed class MedidoresClient
     /// Obtiene el detalle completo de un medidor por su ID.
     /// </summary>
     public async Task<MedidorDetailDto?> ObtenerPorIdAsync(int id, CancellationToken ct = default)
-        => await http.GetFromJsonAsync<MedidorDetailDto?>($"api/medidores/{id}", ct);
+        => await http.GetOrDefaultFromJsonAsyncWithAuthCheck<MedidorDetailDto>($"api/medidores/{id}", ct);
 
     public async Task<PagedResult<MedidorListItemDto>?> GetPagedAsync(
         MedidorFilterDto? filtro,

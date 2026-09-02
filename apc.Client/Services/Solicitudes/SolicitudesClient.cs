@@ -30,7 +30,7 @@ public sealed class SolicitudesClient
     /// Obtiene el detalle completo de una solicitud por su ID.
     /// </summary>
     public async Task<SolicitudDetailDto?> ObtenerPorIdAsync(int id, CancellationToken ct = default)
-        => await http.GetFromJsonAsync<SolicitudDetailDto?>($"api/solicitudes/{id}", cancellationToken: ct);
+        => await http.GetOrDefaultFromJsonAsyncWithAuthCheck<SolicitudDetailDto>($"api/solicitudes/{id}", ct);
 
     /// <summary>
     /// Obtiene todas las categorías de solicitud activas.

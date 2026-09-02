@@ -46,6 +46,13 @@ var builder = WebApplication.CreateBuilder(args);
 // usan los valores de appsettings.json / appsettings.{Environment}.json.
 builder.Configuration.AddJsonFile("appsettings.Local.json", optional: true, reloadOnChange: true);
 
+// Se vuelven a aplicar DESPUES del archivo local para que conserven la ultima palabra: en el
+// orden por defecto de .NET las variables de entorno mandan sobre los JSON, y al agregar
+// appsettings.Local.json aqui se les adelantaba. Sin esto no se puede apuntar una instancia a
+// otra base (pruebas, otro entorno) sin editar el archivo.
+builder.Configuration.AddEnvironmentVariables();
+builder.Configuration.AddCommandLine(args);
+
 if (builder.Environment.IsDevelopment())
 {
     builder.Logging.ClearProviders();

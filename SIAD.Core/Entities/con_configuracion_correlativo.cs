@@ -3,7 +3,7 @@ using SIAD.Core.Tenancy;
 namespace SIAD.Core.Entities;
 
 /// <summary>
-/// Configuración de correlativos/numeradores para documentos
+/// ConfiguraciÃ³n de correlativos/numeradores para documentos
 /// </summary>
 public class con_configuracion_correlativo : ICompanyScopedEntity
 {

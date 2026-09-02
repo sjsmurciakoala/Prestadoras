@@ -153,7 +153,7 @@ namespace SIAD.Data.Migrations
                         onDelete: ReferentialAction.SetNull);
                 });
 
-            // Crear índices
+            // Crear Ã­ndices
             migrationBuilder.CreateIndex(
                 name: "IX_con_saldo_cuenta_company_id_periodo_id_codigo_cuenta_mes_tipo_transaccion",
                 schema: "public",

@@ -77,6 +77,26 @@ public static class HttpClientExtensions
     }
 
     /// <summary>
+    /// GET de un recurso que puede no existir: un 404 devuelve <c>null</c> en vez de lanzar.
+    /// Para las consultas «por id», donde no encontrarlo es un resultado válido y no un error;
+    /// con <see cref="GetFromJsonAsyncWithAuthCheck"/> la pantalla se caía con HTTP 500.
+    /// </summary>
+    public static async Task<T?> GetOrDefaultFromJsonAsyncWithAuthCheck<T>(
+        this HttpClient httpClient,
+        string requestUri,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await httpClient.GetAsync(requestUri, cancellationToken);
+
+        if (response.StatusCode == System.Net.HttpStatusCode.NotFound)
+        {
+            return default;
+        }
+
+        return await response.ReadFromJsonAsyncWithAuthCheck<T>(cancellationToken);
+    }
+
+    /// <summary>
     /// POST con manejo automático de autenticación expirada.
     /// </summary>
     public static async Task<HttpResponseMessage> PostAsJsonAsyncWithAuthCheck<T>(
