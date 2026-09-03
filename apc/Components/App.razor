@@ -28,6 +28,10 @@
        que lo pisa cuando una página declara sus propias reglas. *@
     <link href=@AppendVersion("css/siad-grid.css") rel="stylesheet" />
     <link href=@AppendVersion("apc.styles.css") rel="stylesheet" />
+    @* CSS aislado de apc.Client: el menu, el layout y casi todas las paginas. No se fusiona
+       en apc.styles.css porque el cliente es una app WASM y no una libreria; lo copia al
+       wwwroot el target CopiarCssAisladoDelCliente de apc.csproj. *@
+    <link href=@AppendVersion("apc.Client.styles.css") rel="stylesheet" />
     <link href=@AppendVersion("lib/bootstrap-icons/font/bootstrap-icons.min.css") rel="stylesheet" />
 
     @if (ThemesService.IsFluentActive)
