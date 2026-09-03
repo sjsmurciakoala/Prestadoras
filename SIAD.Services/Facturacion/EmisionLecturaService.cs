@@ -36,6 +36,15 @@ public class EmisionLecturaService : IEmisionLecturaService
 
     private const int FoliosPorBloque = 250;
 
+    /// <summary>
+    /// El motor V3 sólo sabe facturar a un abonado que tenga sus servicios dados de alta. El
+    /// mensaje del SP nombra la tabla, que a quien captura no le dice nada; este lo sustituye y
+    /// apunta a la pantalla donde se arregla.
+    /// </summary>
+    private const string SinServicios =
+        "El abonado {0} no tiene servicios dados de alta, así que todavía no se le puede facturar. " +
+        "Se configuran en Tarifario operativo → Cliente servicio (/tarifario/cliente-servicio-v3).";
+
     private readonly SiadDbContext _context;
     private readonly ICurrentCompanyService _currentCompany;
     private readonly ILogger<EmisionLecturaService> _log;
@@ -91,6 +100,19 @@ public class EmisionLecturaService : IEmisionLecturaService
 
         var vigente = await FacturaVigenteDelPeriodoAsync(conn, companyId, cliente.ClienteClave,
             request.Anio, request.Mes, ct);
+
+        if (!await TieneServiciosAsync(conn, companyId, cliente.ClienteId, ct))
+        {
+            return new PreviewFacturaLecturaDto
+            {
+                Encontrado = false,
+                ClienteId = cliente.ClienteId,
+                ClienteClave = cliente.ClienteClave,
+                ClienteNombre = cliente.ClienteNombre,
+                FacturaVigente = vigente?.NumeroFactura,
+                Mensaje = string.Format(SinServicios, cliente.ClienteClave),
+            };
+        }
 
         // Mismo SP que usa la emisión: lo que se ve aquí es lo que va a salir impreso. Se pasa
         // sin folio (NULL en los tres parámetros CAI) porque previsualizar no consume nada.
@@ -248,6 +270,11 @@ public class EmisionLecturaService : IEmisionLecturaService
             return Fallo("FACTURA_YA_EMITIDA",
                 $"El abonado ya tiene la factura {vigente.NumeroFactura} en {request.Mes:00}/{request.Anio}. " +
                 "Anúlela con una nota de crédito antes de volver a facturar.");
+        }
+
+        if (!await TieneServiciosAsync(conn, companyId, cliente.ClienteId, ct))
+        {
+            return Fallo("CLIENTE_SIN_SERVICIOS", string.Format(SinServicios, cliente.ClienteClave));
         }
 
         var bloque = await ObtenerBloqueAsync(conn, companyId, usuario, ct);
@@ -526,6 +553,27 @@ public class EmisionLecturaService : IEmisionLecturaService
             new CommandDefinition(sql, new { CompanyId = companyId, Clave = clave }, cancellationToken: ct));
     }
 
+    /// <summary>
+    /// ¿El abonado tiene servicios base vigentes? Sin esto <c>sp_adm_calcular_factura_lectura</c>
+    /// aborta, y conviene saberlo ANTES de gastar un folio.
+    /// </summary>
+    private static async Task<bool> TieneServiciosAsync(
+        DbConnection conn, long companyId, long clienteId, CancellationToken ct)
+    {
+        // Misma condición que el SP: alta cumplida y sin baja a la fecha.
+        const string sql = @"
+            select exists (
+                select 1 from public.adm_cliente_servicio
+                where company_id = @CompanyId
+                  and cliente_id = @ClienteId
+                  and coalesce(status_id, 1) = 1
+                  and (fecha_alta is null or fecha_alta <= current_date)
+                  and (fecha_baja is null or fecha_baja > current_date));";
+
+        return await conn.ExecuteScalarAsync<bool>(new CommandDefinition(sql,
+            new { CompanyId = companyId, ClienteId = clienteId }, cancellationToken: ct));
+    }
+
     private static async Task<FacturaVigente?> FacturaVigenteDelPeriodoAsync(
         DbConnection conn, long companyId, string clave, int anio, int mes, CancellationToken ct)
     {
@@ -582,6 +630,12 @@ public class EmisionLecturaService : IEmisionLecturaService
                 codigo = prefijo;
                 mensaje = mensaje[(separador + 1)..].Trim();
             }
+        }
+
+        // El SP nombra adm_cliente_servicio; se sustituye por algo accionable.
+        if (mensaje.Contains("adm_cliente_servicio", StringComparison.OrdinalIgnoreCase))
+        {
+            return Fallo("CLIENTE_SIN_SERVICIOS", string.Format(SinServicios, "indicado"));
         }
 
         return Fallo(codigo, mensaje);
