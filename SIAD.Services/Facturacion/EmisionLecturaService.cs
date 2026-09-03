@@ -41,6 +41,16 @@ public class EmisionLecturaService : IEmisionLecturaService
     /// mensaje del SP nombra la tabla, que a quien captura no le dice nada; este lo sustituye y
     /// apunta a la pantalla donde se arregla.
     /// </summary>
+    /// <summary>
+    /// El servicio existe pero no tiene cuadro tarifario vigente a la fecha. El SP lo reporta con
+    /// ids internos (<c>cliente_servicio_id</c>, <c>servicio_id</c>) que no significan nada para
+    /// quien captura.
+    /// </summary>
+    private const string SinCuadroTarifario =
+        "Uno de los servicios del abonado {0} no tiene cuadro tarifario vigente para esta fecha, " +
+        "así que no se puede calcular la factura. Revíselo en Tarifario operativo → Cliente servicio " +
+        "(/tarifario/cliente-servicio-v3).";
+
     private const string SinServicios =
         "El abonado {0} no tiene servicios dados de alta, así que todavía no se le puede facturar. " +
         "Se configuran en Tarifario operativo → Cliente servicio (/tarifario/cliente-servicio-v3).";
@@ -162,8 +172,9 @@ public class EmisionLecturaService : IEmisionLecturaService
         }
         catch (Npgsql.PostgresException ex)
         {
-            // Período cerrado, cliente sin servicios, CAI vencido… son condiciones que la
+            // Período cerrado, cuadro tarifario ausente, CAI vencido… son condiciones que la
             // pantalla debe explicar, no un 500.
+            var crudo = ex.MessageText ?? ex.Message;
             return new PreviewFacturaLecturaDto
             {
                 Encontrado = false,
@@ -171,7 +182,9 @@ public class EmisionLecturaService : IEmisionLecturaService
                 ClienteClave = cliente.ClienteClave,
                 ClienteNombre = cliente.ClienteNombre,
                 FacturaVigente = vigente?.NumeroFactura,
-                Mensaje = ex.MessageText ?? ex.Message,
+                Mensaje = crudo.Contains("cuadro tarifario", StringComparison.OrdinalIgnoreCase)
+                    ? string.Format(SinCuadroTarifario, cliente.ClienteClave)
+                    : crudo,
             };
         }
 
@@ -632,10 +645,15 @@ public class EmisionLecturaService : IEmisionLecturaService
             }
         }
 
-        // El SP nombra adm_cliente_servicio; se sustituye por algo accionable.
+        // Los dos RAISE que nombran tablas o ids internos se sustituyen por algo accionable.
         if (mensaje.Contains("adm_cliente_servicio", StringComparison.OrdinalIgnoreCase))
         {
             return Fallo("CLIENTE_SIN_SERVICIOS", string.Format(SinServicios, "indicado"));
+        }
+
+        if (mensaje.Contains("cuadro tarifario", StringComparison.OrdinalIgnoreCase))
+        {
+            return Fallo("SIN_CUADRO_TARIFARIO", string.Format(SinCuadroTarifario, "indicado"));
         }
 
         return Fallo(codigo, mensaje);
