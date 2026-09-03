@@ -132,7 +132,39 @@ subir.
 
 ---
 
-## 7. Lo que sigue pendiente y NO se resuelve con SQL
+## 7. Añadido el mismo día: el permiso de la emisión de factura de lectura
+
+`Database/2026-09-03_permiso_emision_lectura.sql` — **APLICADO Y VERIFICADO**.
+
+El permiso `module.ventas.emision_lectura.*` nació después de
+`2026-09-01_permisos_por_rol.sql`, así que ningún rol lo tenía: la pantalla quedaba inalcanzable
+salvo para el Super Administrador, que la ve por el bypass global.
+
+Se concede `view` + `create` a **Ventas** y a **Super Administrador**. Deliberadamente NO a
+Cobranzas ni a Comercial, que sobre ventas solo tienen consulta.
+
+Ninguno de los dos permisos hereda de `module.ventas.*`, a diferencia del resto de recursos del
+módulo: la pantalla no tiene nada que consultar —solo emite— y cada emisión consume un
+correlativo CAI. Si `view` cayera a `module.ventas.view`, los roles de solo lectura verían una
+opción que al pulsar «Emitir» les respondería denegado.
+
+Verificado con usuarios desechables, en los tres niveles:
+
+| Rol | Abre la pantalla | Calcular | Emitir |
+|---|---|---|---|
+| Ventas | sí | permitido | permitido |
+| Cobranzas | no | denegado | denegado |
+| Comercial | no | denegado | denegado |
+| Contabilidad | no | denegado | denegado |
+| Bancos | no | denegado | denegado |
+| Compras | no | denegado | denegado |
+
+> ⚠️ `RolePermissionCache` guarda los permisos de rol 10 minutos: tras aplicar el script hay que
+> **reiniciar el portal** para que el cambio se vea de inmediato.
+
+---
+
+## 8. Lo que sigue pendiente y NO se resuelve con SQL
 
 **Los CAI de nota de crédito y débito son de prueba.**
 

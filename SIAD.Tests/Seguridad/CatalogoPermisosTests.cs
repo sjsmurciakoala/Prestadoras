@@ -83,26 +83,104 @@ public class CatalogoPermisosTests
             + $"No lo hacen: {string.Join(", ", rotas)}");
     }
 
+    /// <summary>
+    /// Opciones de Ventas que a propósito NO heredan de <c>module.ventas.view</c>.
+    ///
+    /// La lista es corta y tiene que seguir siéndolo: cada entrada es una pantalla que un rol de
+    /// solo consulta NO debe ni ver. Si se agrega una sin motivo, la cascada deja de servir para
+    /// lo que existe —dar acceso por módulo sin enumerar cada pantalla— y hay que volver a
+    /// conceder permiso pantalla por pantalla.
+    /// </summary>
+    private static readonly (string Policy, string Motivo)[] VistasSinCascadaJustificadas =
+    [
+        (PermissionNames.Ventas.EmisionLectura.View,
+         "Emitir factura de lectura no tiene nada que consultar: solo emite, y cada emisión " +
+         "consume un correlativo CAI. Si heredara, un rol de consulta vería una opción que al " +
+         "pulsar Emitir le respondería denegado."),
+    ];
+
     [Fact]
     public void El_permiso_de_modulo_alcanza_para_las_opciones_de_ese_modulo()
     {
         // La cascada es lo que permite dar acceso por módulo sin enumerar cada pantalla:
         // el rol Ventas tiene module.ventas.view y con eso ve Clientes, Caja y Cobranza.
-        var vistaDeOpcion = PermissionNames.Policies
-            .Where(p => p.Policy.StartsWith("module.ventas.", StringComparison.Ordinal)
-                        && p.Policy.EndsWith(".view", StringComparison.Ordinal)
-                        && p.Policy != PermissionNames.Ventas.View)
-            .ToArray();
+        var justificadas = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (policy, _) in VistasSinCascadaJustificadas)
+        {
+            justificadas.Add(policy);
+        }
 
-        Assert.NotEmpty(vistaDeOpcion);
+        var evaluadas = 0;
+        var sinCascada = new List<string>();
 
-        var sinCascada = vistaDeOpcion
-            .Where(p => !p.Permissions.Contains(PermissionNames.Ventas.View, StringComparer.Ordinal))
-            .Select(p => p.Policy)
-            .ToArray();
+        foreach (var definicion in PermissionNames.Policies)
+        {
+            if (!definicion.Policy.StartsWith("module.ventas.", StringComparison.Ordinal)
+                || !definicion.Policy.EndsWith(".view", StringComparison.Ordinal)
+                || definicion.Policy == PermissionNames.Ventas.View)
+            {
+                continue;
+            }
 
-        Assert.True(sinCascada.Length == 0,
-            $"Estas opciones de Ventas no las cubre module.ventas.view: {string.Join(", ", sinCascada)}");
+            evaluadas++;
+
+            if (justificadas.Contains(definicion.Policy))
+            {
+                continue;
+            }
+
+            var hereda = false;
+            foreach (var permiso in definicion.Permissions)
+            {
+                if (string.Equals(permiso, PermissionNames.Ventas.View, StringComparison.Ordinal))
+                {
+                    hereda = true;
+                    break;
+                }
+            }
+
+            if (!hereda)
+            {
+                sinCascada.Add(definicion.Policy);
+            }
+        }
+
+        Assert.True(evaluadas > 0, "No se evaluó ninguna opción de Ventas.");
+        Assert.True(sinCascada.Count == 0,
+            "Estas opciones de Ventas no las cubre module.ventas.view: " +
+            string.Join(", ", sinCascada) +
+            ". Si es a propósito, agréguela a VistasSinCascadaJustificadas con su motivo.");
+    }
+
+    [Fact]
+    public void Las_excepciones_a_la_cascada_siguen_existiendo_y_siguen_sin_heredar()
+    {
+        // Si una excepción deja de ser necesaria —porque la policy volvió a heredar, o porque la
+        // pantalla desapareció— hay que quitarla de la lista, no dejarla acumulando polvo.
+        foreach (var (policy, motivo) in VistasSinCascadaJustificadas)
+        {
+            Assert.False(string.IsNullOrWhiteSpace(motivo),
+                $"La excepción {policy} no explica por qué no hereda.");
+
+            PermissionNames.PermissionPolicyDefinition? encontrada = null;
+            foreach (var definicion in PermissionNames.Policies)
+            {
+                if (string.Equals(definicion.Policy, policy, StringComparison.Ordinal))
+                {
+                    encontrada = definicion;
+                    break;
+                }
+            }
+
+            Assert.True(encontrada is not null,
+                $"La excepción {policy} ya no existe en el catálogo: quítela de la lista.");
+
+            foreach (var permiso in encontrada!.Permissions)
+            {
+                Assert.False(string.Equals(permiso, PermissionNames.Ventas.View, StringComparison.Ordinal),
+                    $"{policy} ya hereda de module.ventas.view: sobra en la lista de excepciones.");
+            }
+        }
     }
 
     [Fact]

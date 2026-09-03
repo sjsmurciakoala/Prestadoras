@@ -774,11 +774,12 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Ventas.Caja.Delete, [Ventas.Caja.Delete, Ventas.Delete]),
         new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create]),
 
-        // Emisión de factura de lectura. View sigue el patrón del resto de recursos, pero
-        // Create va SIN fallback a Ventas.Create a propósito: consume un correlativo CAI y
-        // deja un documento fiscal, así que se concede explícitamente o no se tiene.
+        // Emisión de factura de lectura. NINGUNA de las dos hereda de module.ventas: la pantalla
+        // no tiene nada que consultar —solo emite—, y consume un correlativo CAI que deja un
+        // documento fiscal. Si View cayera a Ventas.View, los roles de solo lectura verían una
+        // opción que al pulsar Emitir les respondería 403: mirar sin poder actuar.
         new PermissionPolicyDefinition(Ventas.EmisionLectura.View,
-            [Ventas.EmisionLectura.View, Ventas.View, Legacy.Ventas]),
+            [Ventas.EmisionLectura.View, Ventas.EmisionLectura.Create]),
         new PermissionPolicyDefinition(Ventas.EmisionLectura.Create, [Ventas.EmisionLectura.Create]),
 
         // Sustituyen a los dos ultimos chequeos por rol del sistema.
