@@ -9,7 +9,6 @@
 @inject AuthenticationStateProvider AuthStateProvider
 @inject TenantCompanyContextClient TenantCompanyContextClient
 @inject ChequeEmisionState ChequeEmision
-@inject BrandingClient Branding
 @inject IAuthorizationService AuthorizationService
 @inject IJSRuntime JS
 @implements IDisposable
@@ -19,15 +18,7 @@
 @if (!IsMobile)
 {
     <div class="sidebar-brand">
-        @if (logoEmpresa is not null)
-        {
-            <img src="@logoEmpresa" alt="" class="sidebar-brand__logo sidebar-brand__logo--img" />
-        }
-        else
-        {
-            <i class="bi bi-building sidebar-brand__logo" aria-hidden="true"></i>
-        }
-        <span class="sidebar-brand__text" title="@nombreEmpresa">@marcaEmpresa</span>
+        <span class="sidebar-brand__text">SIAD</span>
     </div>
 }
 
@@ -122,7 +113,6 @@
         await ConstruirSeccionesAsync(consultarEmpresa: false);
 
         await ChequeEmision.EnsureLoadedAsync();
-        await CargarMarcaAsync();
         await ConstruirSeccionesAsync(consultarEmpresa: true);
     }
 
@@ -329,12 +319,6 @@
         return resultado;
     }
 
-    // La marca es de la EMPRESA, no del fabricante: el portal es multiempresa y el usuario
-    // debe reconocer la suya. Si no hay branding cargado se cae al nombre del producto.
-    private string nombreEmpresa = "SIAD";
-    private string marcaEmpresa = "SIAD";
-    private string? logoEmpresa;
-
     private bool esSuperAdmin;
     private System.Security.Claims.ClaimsPrincipal usuarioActual = new(new System.Security.Claims.ClaimsIdentity());
 
@@ -343,41 +327,6 @@
     /// cascada endpoint → opción → módulo → legacy, así que el menú oculta exactamente lo mismo
     /// que la API rechaza, sin duplicar la lógica aquí.
     /// </summary>
-    private async Task CargarMarcaAsync()
-    {
-        try
-        {
-            var marca = await Branding.GetBrandingAsync();
-            if (marca is null)
-            {
-                return;
-            }
-
-            if (!string.IsNullOrWhiteSpace(marca.CompanyName))
-            {
-                nombreEmpresa = marca.CompanyName;
-                marcaEmpresa = marca.CompanyName;
-            }
-
-            if (!string.IsNullOrWhiteSpace(marca.CompanyShortName))
-            {
-                marcaEmpresa = marca.CompanyShortName;
-            }
-
-            if (!string.IsNullOrWhiteSpace(marca.LogoBase64) && !string.IsNullOrWhiteSpace(marca.LogoMime))
-            {
-                logoEmpresa = $"data:{marca.LogoMime};base64,{marca.LogoBase64}";
-            }
-        }
-        catch (UnauthorizedAccessException)
-        {
-            // Sin marca el menu sigue siendo usable: se queda el respaldo.
-        }
-        catch (HttpRequestException)
-        {
-        }
-    }
-
     private async Task<bool> TienePermisoAsync(string? policy)
     {
         if (string.IsNullOrEmpty(policy))

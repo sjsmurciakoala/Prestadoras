@@ -2,7 +2,6 @@
 @using DevExpress.Blazor
 @using apc.Client.Services.Layout
 @inject SidebarStateService SidebarState
-@inject apc.Client.Services.BrandingClient Branding
 @implements IDisposable
 <DxLayoutBreakpoint DeviceSize="DeviceSize.XSmall"
                     IsActive="@isXSmall"
@@ -24,7 +23,7 @@
                     <button type="button" class="mobile-toggle" @onclick="ToggleDrawer" aria-label="Abrir navegación">
                         <i class="bi bi-list"></i>
                     </button>
-                    <span class="mobile-topbar__title">@marcaEmpresa</span>
+                    <span class="mobile-topbar__title">SIAD</span>
                 </div>
             }
 
@@ -97,39 +96,9 @@
 @code {
     private bool isXSmall;
 
-    // La barra movil muestra la empresa, no al fabricante. Ver SidebarNavigation, que hace
-    // lo mismo con el logo; BrandingClient cachea la respuesta asi que no es una segunda ida.
-    private string marcaEmpresa = "SIAD";
-
     protected override void OnInitialized()
     {
         SidebarState.Changed += HandleSidebarStateChanged;
-    }
-
-    protected override async Task OnInitializedAsync()
-    {
-        try
-        {
-            var marca = await Branding.GetBrandingAsync();
-            if (marca is not null)
-            {
-                if (!string.IsNullOrWhiteSpace(marca.CompanyName))
-                {
-                    marcaEmpresa = marca.CompanyName;
-                }
-
-                if (!string.IsNullOrWhiteSpace(marca.CompanyShortName))
-                {
-                    marcaEmpresa = marca.CompanyShortName;
-                }
-            }
-        }
-        catch (UnauthorizedAccessException)
-        {
-        }
-        catch (HttpRequestException)
-        {
-        }
     }
 
     private bool IsOpen => SidebarState.IsOpen;
