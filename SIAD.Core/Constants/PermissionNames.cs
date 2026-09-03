@@ -41,6 +41,11 @@ public static class PermissionResources
         public const string Cobranza = "cobranza";
         public const string FacturacionMiscelaneos = "facturacion_miscelaneos";
         public const string NotasCreditoDebito = "notas_credito_debito";
+
+        // Emisión de la factura de una lectura desde el portal: el mismo acto que hace el
+        // lector en campo. Recurso propio porque emite un documento fiscal con folio CAI,
+        // que no es lo mismo que consultar facturación.
+        public const string EmisionLectura = "emision_lectura";
         public const string Caja = "caja";
 
         // Períodos comerciales F7: abrir mes / cerrar ciclo / cerrar mes son
@@ -226,6 +231,12 @@ public static class PermissionNames
             public const string Create = "module.ventas.facturacion_miscelaneos.create";
             public const string Edit = "module.ventas.facturacion_miscelaneos.edit";
             public const string Delete = "module.ventas.facturacion_miscelaneos.delete";
+        }
+
+        public static class EmisionLectura
+        {
+            public const string View = "module.ventas.emision_lectura.view";
+            public const string Create = "module.ventas.emision_lectura.create";
         }
 
         public static class NotasCreditoDebito
@@ -762,6 +773,13 @@ public static class PermissionNames
         new PermissionPolicyDefinition(Ventas.Caja.Edit, [Ventas.Caja.Edit, Ventas.Edit]),
         new PermissionPolicyDefinition(Ventas.Caja.Delete, [Ventas.Caja.Delete, Ventas.Delete]),
         new PermissionPolicyDefinition(Ventas.Caja.AbonoBanco, [Ventas.Caja.AbonoBanco, Ventas.Caja.Create]),
+
+        // Emisión de factura de lectura. View sigue el patrón del resto de recursos, pero
+        // Create va SIN fallback a Ventas.Create a propósito: consume un correlativo CAI y
+        // deja un documento fiscal, así que se concede explícitamente o no se tiene.
+        new PermissionPolicyDefinition(Ventas.EmisionLectura.View,
+            [Ventas.EmisionLectura.View, Ventas.View, Legacy.Ventas]),
+        new PermissionPolicyDefinition(Ventas.EmisionLectura.Create, [Ventas.EmisionLectura.Create]),
 
         // Sustituyen a los dos ultimos chequeos por rol del sistema.
         new PermissionPolicyDefinition(Contabilidad.Presupuesto.View,

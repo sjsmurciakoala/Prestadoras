@@ -124,6 +124,7 @@ public static class ServiceRegistration
         services.AddScoped<PeriodosComerciales.IPeriodoComercialService, PeriodosComerciales.PeriodoComercialService>();
         services.AddScoped<CondicionesLectura.ICondicionesLecturaService, CondicionesLectura.CondicionesLecturaService>();
         services.AddScoped<Facturacion.ICalendarioFacturacionService, Facturacion.CalendarioFacturacionService>();
+        services.AddScoped<Facturacion.IEmisionLecturaService, Facturacion.EmisionLecturaService>();
         services.AddScoped<ISaldosService, SaldosService>();
         services.AddScoped<IPolizaService, PolizaService>();
         services.AddScoped<ITerceroService, TerceroService>();

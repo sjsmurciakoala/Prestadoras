@@ -74,9 +74,10 @@ public static class SidebarNavigationDefinition
                     RequiredPermission = PermissionNames.Ventas.FacturacionMiscelaneos.View,
                     Text = "Facturación",
                     IconCssClass = "bi bi-receipt-cutoff",
-                    MatchPrefixes = ["/facturacion/miscelaneos", "/facturacion/notas", "/facturacion/calendario-facturacion", "/facturacion/periodos-comerciales"],
+                    MatchPrefixes = ["/facturacion/miscelaneos", "/facturacion/notas", "/facturacion/emision-lectura", "/facturacion/calendario-facturacion", "/facturacion/periodos-comerciales"],
                     Children =
                     [
+                        new SidebarNavItem { Id = "fact-emision-lectura", RequiredPermission = PermissionNames.Ventas.EmisionLectura.View, Text = "Emitir factura de lectura", NavigateUrl = "/facturacion/emision-lectura", MatchPrefixes = ["/facturacion/emision-lectura"], IconCssClass = "bi bi-speedometer2" },
                         new SidebarNavItem { Id = "fact-miscelaneos", RequiredPermission = PermissionNames.Ventas.FacturacionMiscelaneos.View, Text = "Misceláneos", NavigateUrl = "/facturacion/miscelaneos", MatchPrefixes = ["/facturacion/miscelaneos"], MatchExact = true, IconCssClass = "bi bi-receipt" },
                         new SidebarNavItem { Id = "fact-consulta-misc", RequiredPermission = PermissionNames.Ventas.FacturacionMiscelaneos.View, Text = "Consulta misceláneos", NavigateUrl = "/facturacion/miscelaneos/consulta", MatchPrefixes = ["/facturacion/miscelaneos/consulta"], IconCssClass = "bi bi-search" },
                         new SidebarNavItem { Id = "fact-catalogo-misc", RequiredPermission = PermissionNames.Ventas.FacturacionMiscelaneos.View, Text = "Catálogo misceláneos", NavigateUrl = "/facturacion/miscelaneos/catalogo", MatchPrefixes = ["/facturacion/miscelaneos/catalogo"], IconCssClass = "bi bi-journal-bookmark" },

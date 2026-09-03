@@ -20,6 +20,27 @@ public static class PermissionEndpointCatalog
     [
         new EndpointPermissionDefinition(
             Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.EmisionLectura,
+            Resource: "emision_lectura__facturacion_emision_lectura_bloque",
+            Action: PermissionAction.View,
+            HttpMethod: "GET",
+            Route: "api/facturacion/emision-lectura/bloque"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.EmisionLectura,
+            Resource: "emision_lectura__facturacion_emision_lectura",
+            Action: PermissionAction.Create,
+            HttpMethod: "POST",
+            Route: "api/facturacion/emision-lectura"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
+            Option: PermissionResources.Ventas.EmisionLectura,
+            Resource: "emision_lectura__facturacion_emision_lectura_preview",
+            Action: PermissionAction.View,
+            HttpMethod: "POST",
+            Route: "api/facturacion/emision-lectura/preview"),
+        new EndpointPermissionDefinition(
+            Module: PermissionModules.Ventas,
             Option: PermissionResources.Ventas.CaptacionPagos,
             Resource: "captacion_pagos__captacionpagos",
             Action: PermissionAction.Create,
