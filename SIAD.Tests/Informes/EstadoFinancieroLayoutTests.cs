@@ -1,5 +1,6 @@
 using DevExpress.XtraPrinting;
 using DevExpress.XtraReports.UI;
+using DevExpress.XtraReports.UI.CrossTab;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using SIAD.Core.Tenancy;
@@ -210,6 +211,33 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
         Assert.Contains(textos, t => t.Contains("VARIACION", StringComparison.Ordinal));
 
         GuardarPdfSiSePide(report, "balance-general.pdf");
+    }
+
+    [SkippableFact]
+    public void El_patrimonio_se_imprime_como_matriz()
+    {
+        using var report = ConstruirReporte("estado-cambios-patrimonio", "Estado de cambios en el patrimonio");
+
+        XRCrossTab? matriz = null;
+        foreach (Band banda in report.Bands)
+        {
+            foreach (var control in TodosLosControles(banda))
+            {
+                if (control is XRCrossTab encontrada)
+                {
+                    matriz = encontrada;
+                }
+            }
+        }
+
+        Assert.True(matriz is not null,
+            "El patrimonio debe imprimirse como matriz: una fila por movimiento y una columna por componente.");
+
+        // Las columnas son los componentes que configura cada empresa, no una lista fija.
+        Assert.Contains(matriz!.ColumnFields.Cast<CrossTabColumnField>(),
+            c => c.FieldName == "componente");
+
+        GuardarPdfSiSePide(report, "estado-cambios-patrimonio.pdf");
     }
 
     [SkippableFact]

@@ -8,6 +8,7 @@ using DevExpress.Drawing;
 using DevExpress.XtraPrinting;
 using DevExpress.XtraReports.Parameters;
 using DevExpress.XtraReports.UI;
+using DevExpress.XtraReports.UI.CrossTab;
 using Microsoft.Extensions.Configuration;
 using SIAD.Core.Constants;
 using SIAD.Core.Entities;
@@ -2527,7 +2528,11 @@ public sealed class ReportTemplateFactory
     {
         var report = CreateBaseReport(reportCode, displayName);
         report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
-        report.Margins = new DXMargins(50, 50, 35, 35);
+
+        // Apaisado: la matriz lleva una columna por componente del patrimonio mas el total, y en
+        // vertical no caben con cifras de nueve digitos.
+        report.Landscape = true;
+        report.Margins = new DXMargins(40, 40, 78, 58);
         report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
 
         foreach (var parameter in dataset.Parameters)
@@ -2543,122 +2548,151 @@ public sealed class ReportTemplateFactory
         report.DataSource = dataSource;
         report.DataMember = queryName;
 
-        const float contentWidth = 750f;
-        const float componentWidth = 270f;
-        const float amountWidth = 120f;
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
 
-        var reportHeader = new ReportHeaderBand { HeightF = 92f };
-        var pageHeader = new PageHeaderBand { HeightF = 30f };
-        var detailBand = new DetailBand { HeightF = 24f };
-        var pageFooter = new PageFooterBand { HeightF = 24f };
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("ESTADO DE CAMBIOS EN EL PATRIMONIO");
 
-        var companyLabel = new XRLabel
+        // Una tabla de referencias cruzadas y no una tabla normal: las columnas son los
+        // componentes del patrimonio, que salen de la configuracion contable de cada empresa.
+        // Fijarlas en el codigo obligaria a tocarlo cada vez que una empresa configure los suyos.
+        var matriz = new XRCrossTab
         {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 20f),
-            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        companyLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_nombre]"));
-
-        var titleLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 24f, contentWidth, 24f),
-            Font = new DXFont("Arial", 12f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        titleLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('ESTADO DE CAMBIOS EN EL PATRIMONIO DEL {0:dd/MM/yyyy} AL {1:dd/MM/yyyy}', ?FechaDesde, ?FechaHasta)"));
-
-        var infoLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 50f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        infoLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "FormatString('{0} | RTN: {1} | Tel: {2} | Email: {3}', [empresa_nombre_legal], [empresa_rtn], [empresa_telefono], [empresa_email])"));
-
-        var addressLabel = new XRLabel
-        {
-            BoundsF = new RectangleF(0f, 66f, contentWidth, 16f),
-            Font = new DXFont("Arial", 8f),
-            ForeColor = Color.DimGray,
-            TextAlignment = TextAlignment.MiddleLeft
-        };
-        addressLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[empresa_direccion]"));
-
-        reportHeader.Controls.AddRange([companyLabel, titleLabel, infoLabel, addressLabel]);
-
-        var headerTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 28f),
-            BorderWidth = 0f,
-            BackColor = Color.Gainsboro,
-            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
-            TextAlignment = TextAlignment.MiddleCenter
-        };
-        var headerRow = new XRTableRow();
-        headerRow.Cells.AddRange(
-        [
-            new XRTableCell { Text = "Componente", WidthF = componentWidth, Weight = componentWidth, TextAlignment = TextAlignment.MiddleLeft, Padding = new PaddingInfo(6, 0, 0, 0) },
-            new XRTableCell { Text = "Saldo Inicial", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Aumentos", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Disminuciones", WidthF = amountWidth, Weight = amountWidth },
-            new XRTableCell { Text = "Saldo Final", WidthF = amountWidth, Weight = amountWidth }
-        ]);
-        headerTable.Rows.Add(headerRow);
-        pageHeader.Controls.Add(headerTable);
-
-        var detailTable = new XRTable
-        {
-            BoundsF = new RectangleF(0f, 0f, contentWidth, 24f),
-            BorderWidth = 0f,
+            BoundsF = new RectangleF(0f, 110f, 980f, 20f),
+            DataSource = dataSource,
+            DataMember = queryName,
             Font = new DXFont("Arial", 8.5f)
         };
-        var detailRow = new XRTableRow();
-        detailRow.Cells.AddRange(
-        [
-            new XRTableCell
-            {
-                WidthF = componentWidth,
-                Weight = componentWidth,
-                Padding = new PaddingInfo(0, 8, 0, 0),
-                TextAlignment = TextAlignment.MiddleLeft
-            },
-            CreateFinancialStatementAmountCell("[saldo_inicial]", amountWidth),
-            CreateFinancialStatementAmountCell("[aumentos]", amountWidth),
-            CreateFinancialStatementAmountCell("[disminuciones]", amountWidth),
-            CreateFinancialStatementAmountCell("[saldo_final]", amountWidth)
-        ]);
-        detailRow.Cells[0].ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[componente]"));
-        foreach (XRTableCell cell in detailRow.Cells)
+
+        // La tabla trae su propia hoja de estilos y pisa la fuente del control: sin esto sale con
+        // la serif por defecto, que no es la del resto del juego. Los estilos se ASIGNAN
+        // completos; mutarles una propiedad no tiene efecto.
+        matriz.CrossTabStyles.GeneralStyle = new XRControlStyle
         {
-            cell.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Font.Bold", "[es_total]"));
+            Name = "PatrimonioGeneral",
+            Font = new DXFont("Arial", 8.5f),
+            Padding = new PaddingInfo(4, 4, 1, 1),
+        };
+        matriz.CrossTabStyles.HeaderAreaStyle = new XRControlStyle
+        {
+            Name = "PatrimonioEncabezado",
+            Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
+        };
+        matriz.CrossTabStyles.DataAreaStyle = new XRControlStyle
+        {
+            Name = "PatrimonioDatos",
+            Font = new DXFont("Arial", 8.5f),
+            TextAlignment = TextAlignment.MiddleRight,
+        };
+        matriz.CrossTabStyles.TotalAreaStyle = new XRControlStyle
+        {
+            Name = "PatrimonioTotales",
+            Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleRight,
+        };
+
+        // Sin orden propio: las filas se imprimen en el orden en que las entrega la consulta, que
+        // es el del estado -saldo de apertura, movimientos, saldo de cierre-. Ordenadas por
+        // nombre saldrian alfabeticas, que no significa nada en un estado financiero.
+        matriz.RowFields.Add(new CrossTabRowField
+        {
+            FieldName = "fila_nombre",
+            SortOrder = XRColumnSortOrder.None
+        });
+        matriz.ColumnFields.Add(new CrossTabColumnField { FieldName = "componente" });
+        matriz.DataFields.Add(new CrossTabDataField { FieldName = "monto" });
+
+        // Un estilo solo surte efecto si esta registrado en la hoja del reporte; asignarlo a la
+        // matriz sin registrarlo lo deja sin aplicar y todo sale con la serif por defecto.
+        report.StyleSheet.AddRange(
+        [
+            matriz.CrossTabStyles.GeneralStyle,
+            matriz.CrossTabStyles.HeaderAreaStyle,
+            matriz.CrossTabStyles.DataAreaStyle,
+            matriz.CrossTabStyles.TotalAreaStyle,
+        ]);
+
+        // Los encabezados se repiten si la matriz parte de pagina.
+        matriz.PrintOptions.RepeatColumnHeaders = true;
+        matriz.PrintOptions.RepeatRowHeaders = true;
+
+        matriz.GenerateLayout();
+
+        // Retoques sobre las celdas ya generadas:
+        //
+        //  - la esquina superior izquierda trae el nombre del campo, que no le dice nada a nadie;
+        //  - el total de COLUMNA es el patrimonio total y merece su nombre;
+        //  - el total de FILA suma saldos con movimientos y no significa nada, asi que se oculta.
+        var filaTotalGeneral = -1;
+        foreach (var celda in matriz.Cells)
+        {
+            if (celda is XRCrossTabCell c
+                && c.ColumnIndex == 0
+                && string.Equals(c.Text?.Trim(), "Grand Total", StringComparison.OrdinalIgnoreCase))
+            {
+                filaTotalGeneral = c.RowIndex;
+            }
         }
 
-        detailTable.Rows.Add(detailRow);
-        detailBand.Controls.Add(detailTable);
-
-        pageFooter.Controls.AddRange(
-        [
-            new XRPageInfo
+        foreach (var celda in matriz.Cells)
+        {
+            if (celda is not XRCrossTabCell c)
             {
-                BoundsF = new RectangleF(0f, 0f, 260f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.DateTime,
-                TextAlignment = TextAlignment.MiddleLeft,
-                TextFormatString = "Generado: {0:dd/MM/yyyy HH:mm}"
-            },
-            new XRPageInfo
-            {
-                BoundsF = new RectangleF(550f, 0f, 200f, 20f),
-                Font = new DXFont("Arial", 8f),
-                PageInfo = PageInfo.NumberOfTotal,
-                TextAlignment = TextAlignment.MiddleRight,
-                TextFormatString = "Pagina {0} de {1}"
+                continue;
             }
-        ]);
 
-        report.Bands.AddRange([reportHeader, pageHeader, detailBand, pageFooter]);
+            // La fuente se pone en la celda y no solo en el estilo: registrado o no, el estilo de
+            // la matriz no llega a las celdas ya generadas y todo salia con la serif por defecto.
+            c.Font = c.RowIndex == 0 || c.ColumnIndex == 0
+                ? new DXFont("Arial", 8.5f, DXFontStyle.Bold)
+                : new DXFont("Arial", 8.5f);
+
+            if (c.RowIndex == 0 && c.ColumnIndex == 0)
+            {
+                c.Text = string.Empty;
+            }
+            else if (filaTotalGeneral >= 0 && c.RowIndex == filaTotalGeneral)
+            {
+                c.Visible = false;
+            }
+            else if (string.Equals(c.Text?.Trim(), "Grand Total", StringComparison.OrdinalIgnoreCase))
+            {
+                c.Text = "Total patrimonio";
+            }
+        }
+
+        // Los negativos entre parentesis y sin decimales, igual que el resto del juego.
+        foreach (var celda in matriz.Cells)
+        {
+            if (celda is XRCrossTabCell dato && dato.DataLevel >= 0)
+            {
+                dato.TextFormatString = EstadoFinancieroLayout.FormatoMonto;
+            }
+        }
+
+        // La matriz va en el ENCABEZADO, no en el detalle. El detalle se imprime una vez por
+        // fila del origen y la matriz ya resume todas: puesta ahi, el estado salia repetido
+        // tantas veces como filas tuviera la consulta.
+        // La primera columna lleva los nombres de los movimientos -"Saldo al 31/12/2024"- y con el
+        // ancho por defecto salen cortados.
+        var primera = true;
+        foreach (var columna in matriz.ColumnDefinitions)
+        {
+            // La primera lleva los nombres de los movimientos -"Saldo al 31/12/2024"- y con el
+            // ancho por defecto salen cortados; las demas crecen segun la cifra.
+            if (primera)
+            {
+                columna.Width = 190;
+                primera = false;
+                continue;
+            }
+
+            columna.AutoWidthMode = AutoSizeMode.GrowOnly;
+        }
+
+        reportHeader.HeightF = 110f + matriz.HeightF + 20f;
+        reportHeader.Controls.Add(matriz);
+
+        report.Bands.Add(reportHeader);
         return report;
     }
 
