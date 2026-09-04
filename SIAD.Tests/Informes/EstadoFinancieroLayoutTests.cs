@@ -157,6 +157,62 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
     }
 
     [SkippableFact]
+    public void El_estado_de_resultados_compara_los_dos_ejercicios()
+    {
+        using var report = ConstruirReporte("estado-resultados", "Estado de resultados");
+
+        var cabecera = Banda<PageHeaderBand>(report);
+        Assert.NotNull(cabecera);
+
+        var textos = new List<string>();
+        var expresiones = new List<string>();
+
+        foreach (var control in TodosLosControles(cabecera!))
+        {
+            if (control is not XRLabel etiqueta)
+            {
+                continue;
+            }
+
+            textos.Add(etiqueta.Text ?? string.Empty);
+            foreach (ExpressionBinding enlace in etiqueta.ExpressionBindings)
+            {
+                expresiones.Add(enlace.Expression ?? string.Empty);
+            }
+        }
+
+        // La cabecera va en dos niveles: el corte y la variación.
+        Assert.Contains(textos, t => t.Contains("AL 31 DE DICIEMBRE", StringComparison.Ordinal));
+        Assert.Contains(textos, t => t.Contains("VARIACION", StringComparison.Ordinal));
+        Assert.Contains(expresiones, e => e.Contains("AddYears", StringComparison.Ordinal));
+
+        GuardarPdfSiSePide(report, "estado-resultados.pdf");
+    }
+
+    [SkippableFact]
+    public void El_balance_general_compara_los_dos_ejercicios()
+    {
+        using var report = ConstruirReporte("estado-situacion-financiera", "Estado de situacion financiera");
+
+        var textos = new List<string>();
+        foreach (Band banda in report.Bands)
+        {
+            foreach (var control in TodosLosControles(banda))
+            {
+                if (control is XRLabel etiqueta)
+                {
+                    textos.Add(etiqueta.Text ?? string.Empty);
+                }
+            }
+        }
+
+        Assert.Contains(textos, t => t.Contains("BALANCE GENERAL", StringComparison.Ordinal));
+        Assert.Contains(textos, t => t.Contains("VARIACION", StringComparison.Ordinal));
+
+        GuardarPdfSiSePide(report, "balance-general.pdf");
+    }
+
+    [SkippableFact]
     public void El_pie_lleva_el_numero_de_pagina_y_nada_mas()
     {
         using var report = ConstruirReporte("estado-flujo-efectivo", "Estado de flujos de efectivo");

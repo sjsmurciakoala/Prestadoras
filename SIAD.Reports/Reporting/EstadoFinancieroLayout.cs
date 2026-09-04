@@ -190,6 +190,73 @@ internal static class EstadoFinancieroLayout
         return banda;
     }
 
+    /// <summary>
+    /// Cabecera de dos niveles: un rótulo que abarca varias columnas —«AL 31 DE DICIEMBRE»,
+    /// «VARIACIÓN»— y debajo el de cada una.
+    ///
+    /// Cada grupo es el título y las expresiones de sus columnas. Se dibuja con etiquetas y no
+    /// con una tabla de celdas combinadas porque el ancho de cada columna tiene que coincidir al
+    /// pixel con el de las cifras del detalle, y una tabla lo reparte por peso.
+    /// </summary>
+    public static PageHeaderBand CrearCabeceraAgrupada(
+        float anchoDescripcion, float anchoImporte,
+        params (string Titulo, string[] Columnas)[] grupos)
+    {
+        var banda = new PageHeaderBand { HeightF = 34f };
+
+        var x = anchoDescripcion;
+        foreach (var (titulo, columnas) in grupos)
+        {
+            var anchoGrupo = anchoImporte * columnas.Length;
+
+            if (!string.IsNullOrWhiteSpace(titulo))
+            {
+                banda.Controls.Add(new XRLabel
+                {
+                    BoundsF = new RectangleF(x, 0f, anchoGrupo, 15f),
+                    Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+                    Text = titulo,
+                    TextAlignment = TextAlignment.MiddleCenter,
+                });
+            }
+
+            var xColumna = x;
+            foreach (var expresion in columnas)
+            {
+                var etiqueta = new XRLabel
+                {
+                    BoundsF = new RectangleF(xColumna, 16f, anchoImporte, 15f),
+                    Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
+                    TextAlignment = TextAlignment.MiddleRight,
+                    Padding = new PaddingInfo(0, 6, 0, 0),
+                };
+                etiqueta.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", expresion));
+
+                banda.Controls.Add(etiqueta);
+                xColumna += anchoImporte;
+            }
+
+            x += anchoGrupo;
+        }
+
+        return banda;
+    }
+
+    /// <summary>
+    /// Variación entre los dos ejercicios. Se calcula en el reporte y no en la base: los dos
+    /// importes ya vienen en la misma fila, así que pedirle a la consulta que reste sería
+    /// duplicar la regla en dos sitios.
+    /// </summary>
+    public static string ExpresionVariacionRelativa(string actual, string anterior)
+        => $"{actual} - {anterior}";
+
+    /// <summary>
+    /// La variación en porcentaje. Con el ejercicio anterior en cero no hay porcentaje que
+    /// calcular —sería una división por cero—, y el estado lo deja vacío.
+    /// </summary>
+    public static string ExpresionVariacionPorcentual(string actual, string anterior)
+        => $"Iif({anterior} == 0, null, Round((({actual} - {anterior}) / {anterior}) * 100))";
+
     // -------------------------------------------------------------------------
     // Celdas
     // -------------------------------------------------------------------------
@@ -204,6 +271,22 @@ internal static class EstadoFinancieroLayout
             TextAlignment = TextAlignment.MiddleRight,
             Padding = new PaddingInfo(0, 6, 0, 0),
             TextFormatString = FormatoMonto,
+        };
+
+        celda.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", expresion));
+        return celda;
+    }
+
+    /// <summary>Celda de porcentaje: entero y sin separador de miles, como en el juego impreso.</summary>
+    public static XRTableCell CeldaPorcentaje(string expresion, float peso)
+    {
+        var celda = new XRTableCell
+        {
+            Weight = peso,
+            Borders = BorderSide.None,
+            TextAlignment = TextAlignment.MiddleRight,
+            Padding = new PaddingInfo(0, 6, 0, 0),
+            TextFormatString = "{0:0;(0);}",
         };
 
         celda.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", expresion));
