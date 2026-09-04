@@ -276,6 +276,39 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
         GuardarPdfSiSePide(report, "presupuesto-comparativo.pdf");
     }
 
+    /// <summary>
+    /// Vuelca el layout XML de cada estado, que es lo que el visor guarda en rep_reporte_layout.
+    ///
+    /// Hace falta porque el visor NO usa la fabrica cuando hay un layout publicado: lo toma de la
+    /// base y solo cae al codigo si no existe ninguno. Cambiar la fabrica sin regenerar el layout
+    /// no cambia nada de lo que ve el usuario.
+    /// </summary>
+    [SkippableFact]
+    public void Vuelca_los_layouts_para_regenerar_los_publicados()
+    {
+        var carpeta = Environment.GetEnvironmentVariable("SIAD_TEST_LAYOUT_DIR");
+        Skip.If(string.IsNullOrWhiteSpace(carpeta), "Sin SIAD_TEST_LAYOUT_DIR no hay nada que volcar.");
+
+        Directory.CreateDirectory(carpeta!);
+
+        var estados = new (string Codigo, string Nombre)[]
+        {
+            ("estado-situacion-financiera", "Estado de situacion financiera"),
+            ("estado-resultados", "Estado de resultados"),
+            ("estado-flujo-efectivo", "Estado de flujos de efectivo"),
+            ("estado-cambios-patrimonio", "Estado de cambios en el patrimonio"),
+        };
+
+        foreach (var (codigo, nombre) in estados)
+        {
+            using var report = ConstruirReporte(codigo, nombre);
+            using var memoria = new MemoryStream();
+            report.SaveLayoutToXml(memoria);
+
+            File.WriteAllBytes(Path.Combine(carpeta!, codigo + ".xml"), memoria.ToArray());
+        }
+    }
+
     [SkippableFact]
     public void El_pie_lleva_el_numero_de_pagina_y_nada_mas()
     {
