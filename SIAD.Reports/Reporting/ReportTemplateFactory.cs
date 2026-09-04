@@ -97,6 +97,14 @@ public sealed class ReportTemplateFactory
             return CreateBalanceComprobacionTemplate(reportCode, displayName, description, dataset);
         }
 
+        if (IsPresupuestoComparativoTemplate(reportCode, dataset) &&
+            dataset.SourceType is ReportesWebConstants.DatasetSourceType.StoredProcedure
+                or ReportesWebConstants.DatasetSourceType.View
+                or ReportesWebConstants.DatasetSourceType.Sql)
+        {
+            return CreatePresupuestoComparativoTemplate(reportCode, displayName, description, dataset);
+        }
+
         if (IsEstadoSituacionFinancieraTemplate(reportCode, dataset) &&
             dataset.SourceType is ReportesWebConstants.DatasetSourceType.StoredProcedure
                 or ReportesWebConstants.DatasetSourceType.View
@@ -1660,6 +1668,168 @@ public sealed class ReportTemplateFactory
     private static bool IsEstadoFlujoEfectivoTemplate(string reportCode, DatasetDefinition dataset)
         => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteEstadoFlujoEfectivo, StringComparison.OrdinalIgnoreCase)
            || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetEstadoFlujoEfectivo, StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Comparativo de presupuesto: por cada cuenta, lo presupuestado y lo ejecutado del ejercicio
+    /// y lo presupuestado del siguiente, con sus diferencias.
+    ///
+    /// Las diferencias y los porcentajes se calculan aqui y no en la consulta: los tres importes
+    /// ya vienen en la misma fila, asi que pedirle a la base que reste seria tener la misma regla
+    /// escrita en dos sitios.
+    /// </summary>
+    private XtraReport CreatePresupuestoComparativoTemplate(string reportCode, string displayName, string? description, DatasetDefinition dataset)
+    {
+        var report = CreateBaseReport(reportCode, displayName);
+        report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
+
+        // Apaisado: son siete columnas de cifras y en vertical no caben.
+        report.Landscape = true;
+        report.Margins = new DXMargins(40, 40, 78, 58);
+        report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
+
+        foreach (var parameter in dataset.Parameters)
+        {
+            var reportParameter = CreateReportParameter(parameter);
+            ApplyPresupuestoComparativoTemplateDefaults(reportParameter);
+            report.Parameters.Add(reportParameter);
+        }
+
+        var queryName = string.IsNullOrWhiteSpace(dataset.Code) ? "MainQuery" : dataset.Code.Replace('-', '_');
+        var dataSource = CreateRelationalDataSource(dataset, queryName);
+        report.ComponentStorage.AddRange([dataSource]);
+        report.DataSource = dataSource;
+        report.DataMember = queryName;
+
+        EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
+
+        const float contentWidth = 980f;
+        const float descriptionWidth = 320f;
+        const float amountWidth = 110f;
+        const float percentWidth = 60f;
+
+        var reportHeader = EstadoFinancieroLayout.CrearEncabezado("PRESUPUESTO");
+
+        // Cabecera en dos niveles: el ejercicio en curso -presupuestado, ejecutado y su
+        // diferencia- y el siguiente.
+        var pageHeader = new PageHeaderBand { HeightF = 34f };
+        var x = descriptionWidth;
+
+        foreach (var (titulo, ancho) in new (string, float)[]
+        {
+            ("Presupuestado", amountWidth),
+            ("Ejecutado", amountWidth),
+            ("DIFERENCIA", amountWidth),
+            ("%", percentWidth),
+            ("Presupuestado", amountWidth),
+            ("DIFERENCIA", amountWidth),
+            ("%", percentWidth),
+        })
+        {
+            pageHeader.Controls.Add(new XRLabel
+            {
+                BoundsF = new RectangleF(x, 0f, ancho, 15f),
+                Font = new DXFont("Arial", 8.5f, DXFontStyle.Bold),
+                Text = titulo,
+                TextAlignment = TextAlignment.MiddleRight,
+                Padding = new PaddingInfo(0, 6, 0, 0),
+            });
+            x += ancho;
+        }
+
+        // Debajo del rotulo, el anio al que pertenece cada bloque.
+        var anioBase = new XRLabel
+        {
+            BoundsF = new RectangleF(descriptionWidth, 16f, amountWidth * 3 + percentWidth, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold | DXFontStyle.Underline),
+            TextAlignment = TextAlignment.MiddleCenter,
+        };
+        anioBase.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[anio_base]"));
+
+        var anioSiguiente = new XRLabel
+        {
+            BoundsF = new RectangleF(descriptionWidth + amountWidth * 3 + percentWidth, 16f,
+                                     amountWidth * 2 + percentWidth, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold | DXFontStyle.Underline),
+            TextAlignment = TextAlignment.MiddleCenter,
+        };
+        anioSiguiente.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[anio_siguiente]"));
+
+        pageHeader.Controls.AddRange([anioBase, anioSiguiente]);
+
+        var groupHeader = new GroupHeaderBand { HeightF = 20f, RepeatEveryPage = true };
+        groupHeader.GroupFields.Add(new GroupField("seccion_orden"));
+        groupHeader.GroupFields.Add(new GroupField("seccion_nombre"));
+
+        var sectionLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 5f, contentWidth, 15f),
+            Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        sectionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[seccion_nombre]"));
+        groupHeader.Controls.Add(sectionLabel);
+
+        var detailBand = new DetailBand { HeightF = 15f };
+        var detailTable = new XRTable
+        {
+            BoundsF = new RectangleF(0f, 2f, contentWidth, 13f),
+            BorderWidth = 0f,
+            Borders = BorderSide.None,
+            Font = new DXFont("Arial", 8.5f)
+        };
+
+        const string diferenciaBase = "[ejecutado_base] - [presupuestado_base]";
+        const string diferenciaSiguiente = "[presupuestado_siguiente] - [presupuestado_base]";
+
+        var detailRow = new XRTableRow();
+        detailRow.Cells.AddRange(
+        [
+            EstadoFinancieroLayout.CeldaConcepto("[cuenta_nombre]", descriptionWidth),
+            EstadoFinancieroLayout.CeldaImporte("[presupuestado_base]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[ejecutado_base]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte(diferenciaBase, amountWidth),
+            EstadoFinancieroLayout.CeldaPorcentaje(
+                EstadoFinancieroLayout.ExpresionVariacionPorcentual("[ejecutado_base]", "[presupuestado_base]"),
+                percentWidth),
+            EstadoFinancieroLayout.CeldaImporte("[presupuestado_siguiente]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte(diferenciaSiguiente, amountWidth),
+            EstadoFinancieroLayout.CeldaPorcentaje(
+                EstadoFinancieroLayout.ExpresionVariacionPorcentual("[presupuestado_siguiente]", "[presupuestado_base]"),
+                percentWidth)
+        ]);
+        detailTable.Rows.Add(detailRow);
+        detailBand.Controls.Add(detailTable);
+
+        // Cada seccion cierra con su suma; el reporte la calcula agrupando.
+        var groupFooter = EstadoFinancieroLayout.CrearPieDeGrupo(
+            "'Suman los ' + Lower([seccion_nombre])",
+            descriptionWidth, amountWidth, conVariacion: false,
+            "[presupuestado_base]", "[ejecutado_base]");
+
+        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand, groupFooter]);
+        return report;
+    }
+
+    /// <summary>
+    /// Sin anio, el comparativo sale en blanco: el parametro llega en cero y no hay ejercicio que
+    /// buscar. Por defecto, el anio en curso.
+    /// </summary>
+    private static void ApplyPresupuestoComparativoTemplateDefaults(Parameter parameter)
+    {
+        if (parameter is null)
+        {
+            return;
+        }
+
+        if (string.Equals(parameter.Name, "AnioBase", StringComparison.OrdinalIgnoreCase))
+        {
+            parameter.Value = (long)DateTime.Today.Year;
+        }
+    }
+
+    private static bool IsPresupuestoComparativoTemplate(string reportCode, DatasetDefinition dataset)
+        => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReportePresupuestoComparativo, StringComparison.OrdinalIgnoreCase)
+           || string.Equals(dataset.Code, ReportesWebConstants.CodigoDatasetPresupuestoComparativo, StringComparison.OrdinalIgnoreCase);
 
     private static bool IsEstadoCambiosPatrimonioTemplate(string reportCode, DatasetDefinition dataset)
         => string.Equals(ReportesWebConstants.NormalizeCode(reportCode), ReportesWebConstants.CodigoReporteEstadoCambiosPatrimonio, StringComparison.OrdinalIgnoreCase)

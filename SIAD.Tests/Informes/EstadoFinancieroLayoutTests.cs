@@ -241,6 +241,42 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
     }
 
     [SkippableFact]
+    public void El_comparativo_de_presupuesto_enfrenta_los_dos_ejercicios()
+    {
+        using var report = ConstruirReporte("presupuesto-comparativo", "Comparativo de presupuesto");
+
+        var textos = new List<string>();
+        var expresiones = new List<string>();
+
+        foreach (Band banda in report.Bands)
+        {
+            foreach (var control in TodosLosControles(banda))
+            {
+                if (control is not XRLabel etiqueta)
+                {
+                    continue;
+                }
+
+                textos.Add(etiqueta.Text ?? string.Empty);
+                foreach (ExpressionBinding enlace in etiqueta.ExpressionBindings)
+                {
+                    expresiones.Add(enlace.Expression ?? string.Empty);
+                }
+            }
+        }
+
+        Assert.Contains(textos, t => t.Contains("PRESUPUESTO", StringComparison.Ordinal));
+        Assert.Contains(textos, t => t.Contains("Ejecutado", StringComparison.Ordinal));
+        Assert.Contains(textos, t => t.Contains("DIFERENCIA", StringComparison.Ordinal));
+
+        // Los anios de las cabeceras salen del dato, no de constantes.
+        Assert.Contains(expresiones, e => e.Contains("anio_base", StringComparison.Ordinal));
+        Assert.Contains(expresiones, e => e.Contains("anio_siguiente", StringComparison.Ordinal));
+
+        GuardarPdfSiSePide(report, "presupuesto-comparativo.pdf");
+    }
+
+    [SkippableFact]
     public void El_pie_lleva_el_numero_de_pagina_y_nada_mas()
     {
         using var report = ConstruirReporte("estado-flujo-efectivo", "Estado de flujos de efectivo");
