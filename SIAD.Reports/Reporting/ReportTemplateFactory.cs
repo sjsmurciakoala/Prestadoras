@@ -2254,28 +2254,50 @@ public sealed class ReportTemplateFactory
              ]),
             ("VARIACION", ["'RELATIVA'", "'PORCENTUAL'"]));
 
-        var groupHeader = new GroupHeaderBand { HeightF = 22f, RepeatEveryPage = true };
-        var detailBand = new DetailBand { HeightF = 15f };
+        // Dos niveles de agrupacion, como el juego impreso: la seccion (ACTIVO, PASIVO,
+        // PATRIMONIO) y dentro de ella la clase (corriente / no corriente). Cada uno cierra con
+        // su suma, que calcula el propio reporte: el SP entrega cuentas, no lineas de total.
+        // Level 0 es el grupo mas CERCANO al detalle: la seccion, que es la externa, lleva el mayor.
+        var seccionHeader = new GroupHeaderBand { HeightF = 20f, RepeatEveryPage = true, Level = 1 };
+        seccionHeader.GroupFields.Add(new GroupField("seccion_orden"));
+        seccionHeader.GroupFields.Add(new GroupField("seccion_nombre"));
 
-        groupHeader.GroupFields.Add(new GroupField("seccion_orden"));
-        groupHeader.GroupFields.Add(new GroupField("seccion_nombre"));
-
-        var sectionLabel = new XRLabel
+        var seccionLabel = new XRLabel
         {
-            BoundsF = new RectangleF(0f, 6f, contentWidth, 15f),
-            Font = new DXFont("Arial", 9.5f, DXFontStyle.Bold),
+            BoundsF = new RectangleF(0f, 5f, contentWidth, 15f),
+            Font = new DXFont("Arial", 10f, DXFontStyle.Bold),
             Padding = new PaddingInfo(0, 0, 0, 0),
             TextAlignment = TextAlignment.MiddleLeft
         };
-        sectionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[seccion_nombre]"));
-        groupHeader.Controls.Add(sectionLabel);
+        seccionLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[seccion_nombre]"));
+        seccionHeader.Controls.Add(seccionLabel);
 
-        // El balance no trae una bandera de subtotal: las lineas de suma son las de nivel 1 del
-        // plan de cuentas, que es lo que el propio SP usa para agrupar.
-        const string esTotal = "[nivel_cuenta] <= 1";
+        var claseHeader = new GroupHeaderBand { HeightF = 18f, RepeatEveryPage = true, Level = 0 };
+        claseHeader.GroupFields.Add(new GroupField("clase"));
 
-        detailBand.Controls.Add(EstadoFinancieroLayout.LineaSobreTotal(
-            descriptionWidth, amountWidth, 4, esTotal));
+        var claseLabel = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 3f, contentWidth, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+            Padding = new PaddingInfo(8, 0, 0, 0),
+            TextAlignment = TextAlignment.MiddleLeft
+        };
+        claseLabel.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", "[clase_nombre]"));
+        claseHeader.Controls.Add(claseLabel);
+
+        var detailBand = new DetailBand { HeightF = 15f };
+
+        // "Suma el activo corriente" y luego "Suma el activo": el rotulo sale del nombre que da
+        // la base, no de una lista escrita aqui.
+        var claseFooter = EstadoFinancieroLayout.CrearPieDeGrupo(
+            "'Suma el ' + Lower([clase_nombre])",
+            descriptionWidth, amountWidth, conVariacion: true, "[monto]", "[monto_anterior]");
+        claseFooter.Level = 0;
+
+        var seccionFooter = EstadoFinancieroLayout.CrearPieDeGrupo(
+            "'Suma el ' + Lower([seccion_nombre])",
+            descriptionWidth, amountWidth, conVariacion: true, "[monto]", "[monto_anterior]");
+        seccionFooter.Level = 1;
 
         var detailTable = new XRTable
         {
@@ -2296,11 +2318,16 @@ public sealed class ReportTemplateFactory
             EstadoFinancieroLayout.CeldaPorcentaje(
                 EstadoFinancieroLayout.ExpresionVariacionPorcentual("[monto]", "[monto_anterior]"), amountWidth)
         ]);
-        EstadoFinancieroLayout.MarcarComoTotal(detailRow, esTotal);
         detailTable.Rows.Add(detailRow);
         detailBand.Controls.Add(detailTable);
 
-        report.Bands.AddRange([reportHeader, pageHeader, groupHeader, detailBand]);
+        report.Bands.AddRange(
+        [
+            reportHeader, pageHeader,
+            seccionHeader, claseHeader,
+            detailBand,
+            claseFooter, seccionFooter
+        ]);
         return report;
     }
 

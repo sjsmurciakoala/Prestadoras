@@ -350,6 +350,100 @@ internal static class EstadoFinancieroLayout
         return linea;
     }
 
+    /// <summary>
+    /// Pie de grupo con la fila de suma: el rótulo a la izquierda y los totales alineados con
+    /// sus columnas, en negrita y con línea encima.
+    ///
+    /// Las sumas las calcula el propio reporte con <c>XRSummary</c> sobre el grupo. Es lo que
+    /// permite tener subtotales sin que la consulta devuelva filas de total: la base entrega
+    /// cuentas y el reporte las suma por donde las agrupa.
+    /// </summary>
+    public static GroupFooterBand CrearPieDeGrupo(
+        string expresionRotulo,
+        float anchoDescripcion,
+        float anchoImporte,
+        bool conVariacion,
+        params string[] camposASumar)
+    {
+        var banda = new GroupFooterBand { HeightF = 20f };
+
+        var columnas = conVariacion ? camposASumar.Length + 1 : camposASumar.Length;
+        banda.Controls.Add(LineaSobreTotal(anchoDescripcion, anchoImporte, columnas, "true"));
+
+        var rotulo = new XRLabel
+        {
+            BoundsF = new RectangleF(0f, 3f, anchoDescripcion, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+            Padding = new PaddingInfo(8, 0, 0, 0),
+            TextAlignment = TextAlignment.MiddleLeft,
+        };
+        rotulo.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", expresionRotulo));
+        banda.Controls.Add(rotulo);
+
+        var x = anchoDescripcion;
+        foreach (var campo in camposASumar)
+        {
+            var celda = new XRLabel
+            {
+                BoundsF = new RectangleF(x, 3f, anchoImporte, 15f),
+                Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+                TextAlignment = TextAlignment.MiddleRight,
+                Padding = new PaddingInfo(0, 6, 0, 0),
+                TextFormatString = FormatoMonto,
+            };
+
+            celda.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", $"sumSum({campo})"));
+            celda.Summary = new XRSummary
+            {
+                Running = SummaryRunning.Group,
+                Func = SummaryFunc.Sum,
+                IgnoreNullValues = true,
+            };
+
+            banda.Controls.Add(celda);
+            x += anchoImporte;
+        }
+
+        // La variacion de la fila de suma se expresa como SUMA DE DIFERENCIAS y no como resta de
+        // sumas. El resultado es identico -sumar (a-b) es lo mismo que restar las sumas- pero el
+        // motor solo resuelve el agregado cuando la celda tiene su XRSummary, y ese mecanismo
+        // trabaja sobre UNA expresion: restar dos sumSum sueltos deja la celda en blanco.
+        //
+        // Por eso la columna porcentual no se pone aqui: es el cociente de dos totales, y eso no
+        // cabe en un solo agregado. Antes que imprimir un porcentaje calculado de otra manera
+        // -que no cuadraria con el de las lineas- la fila de suma lo deja vacio.
+        if (conVariacion && camposASumar.Length == 2)
+        {
+            banda.Controls.Add(CeldaSumada(
+                x, anchoImporte, $"{camposASumar[0]} - {camposASumar[1]}", FormatoMonto));
+        }
+
+        return banda;
+    }
+
+    /// <summary>Etiqueta cuyo valor es la suma del grupo sobre la expresion indicada.</summary>
+    private static XRLabel CeldaSumada(float x, float ancho, string expresion, string formato)
+    {
+        var etiqueta = new XRLabel
+        {
+            BoundsF = new RectangleF(x, 3f, ancho, 15f),
+            Font = new DXFont("Arial", 9f, DXFontStyle.Bold),
+            TextAlignment = TextAlignment.MiddleRight,
+            Padding = new PaddingInfo(0, 6, 0, 0),
+            TextFormatString = formato,
+        };
+
+        etiqueta.ExpressionBindings.Add(new ExpressionBinding("BeforePrint", "Text", $"sumSum({expresion})"));
+        etiqueta.Summary = new XRSummary
+        {
+            Running = SummaryRunning.Group,
+            Func = SummaryFunc.Sum,
+            IgnoreNullValues = true,
+        };
+
+        return etiqueta;
+    }
+
     // -------------------------------------------------------------------------
     // Utilidades
     // -------------------------------------------------------------------------
