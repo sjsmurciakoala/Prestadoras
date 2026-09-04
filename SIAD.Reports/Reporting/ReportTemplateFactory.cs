@@ -2350,10 +2350,8 @@ public sealed class ReportTemplateFactory
         var report = CreateBaseReport(reportCode, displayName);
         report.PaperKind = DevExpress.Drawing.Printing.DXPaperKind.Letter;
 
-        // Apaisado: son siete columnas de cifras -saldo anterior, movimientos y saldo actual,
-        // cada uno con su deudor y acreedor- y en vertical no caben.
-        report.Landscape = true;
-
+        // Vertical, como el resto del juego: sin el desglose deudor/acreedor quedan cuatro
+        // columnas de cifras y caben de sobra.
         // Los margenes superior e inferior los ocupa el membrete.
         report.Margins = new DXMargins(40, 40, 78, 58);
         report.RequestParameters = dataset.Parameters.Any(x => x.Source == ReportesWebConstants.DatasetParameterValueSource.Report && x.Visible);
@@ -2373,20 +2371,22 @@ public sealed class ReportTemplateFactory
 
         EstadoFinancieroLayout.AplicarMembrete(report, ResolveCurrentCompany());
 
-        const float contentWidth = 980f;
-        const float codeWidth = 110f;
-        const float descriptionWidth = 240f;
-        const float amountWidth = 105f;
+        const float contentWidth = EstadoFinancieroLayout.AnchoContenido;
+        const float codeWidth = 95f;
+        const float descriptionWidth = 255f;
+
+        // 100 y no 90: con 90 el rotulo "Saldo anterior" parte en dos lineas.
+        const float amountWidth = 100f;
 
         var reportHeader = EstadoFinancieroLayout.CrearEncabezado("BALANCE DE COMPROBACION");
 
-        // Cabecera de tres bloques, cada uno con su deudor y su acreedor.
-        var pageHeader = EstadoFinancieroLayout.CrearCabeceraAgrupada(
+        // Cuatro columnas y una sola fila de rotulos: el saldo de apertura, el movimiento del
+        // periodo en debe y haber, y el saldo de cierre. Sin el desglose deudor/acreedor, que
+        // duplicaba cada saldo en dos columnas de las que una siempre iba vacia.
+        var pageHeader = EstadoFinancieroLayout.CrearCabeceraColumnas(
             codeWidth + descriptionWidth,
             amountWidth,
-            ("SALDO ANTERIOR", ["'Deudor'", "'Acreedor'"]),
-            ("MOVIMIENTOS DEL PERIODO", ["'Debitos'", "'Creditos'"]),
-            ("SALDO ACTUAL", ["'Deudor'", "'Acreedor'"]));
+            "'Saldo anterior'", "'Debe'", "'Haber'", "'Saldo actual'");
 
         var groupHeader = new GroupHeaderBand { HeightF = 22f, RepeatEveryPage = true };
         groupHeader.GroupFields.Add(new GroupField("rubro_orden"));
@@ -2407,7 +2407,7 @@ public sealed class ReportTemplateFactory
 
         var detailBand = new DetailBand { HeightF = 15f };
         detailBand.Controls.Add(EstadoFinancieroLayout.LineaSobreTotal(
-            codeWidth + descriptionWidth, amountWidth, 6, esCuentaMayor));
+            codeWidth + descriptionWidth, amountWidth, 4, esCuentaMayor));
 
         var detailTable = new XRTable
         {
@@ -2424,12 +2424,10 @@ public sealed class ReportTemplateFactory
         [
             codigoCell,
             EstadoFinancieroLayout.CeldaConcepto("[cuenta_nombre_mostrar]", descriptionWidth, "[nivel] - 1"),
-            EstadoFinancieroLayout.CeldaImporte("[saldo_anterior_deudor]", amountWidth),
-            EstadoFinancieroLayout.CeldaImporte("[saldo_anterior_acreedor]", amountWidth),
+            EstadoFinancieroLayout.CeldaImporte("[saldo_anterior]", amountWidth),
             EstadoFinancieroLayout.CeldaImporte("[debitos_periodo]", amountWidth),
             EstadoFinancieroLayout.CeldaImporte("[creditos_periodo]", amountWidth),
-            EstadoFinancieroLayout.CeldaImporte("[saldo_actual_deudor]", amountWidth),
-            EstadoFinancieroLayout.CeldaImporte("[saldo_actual_acreedor]", amountWidth)
+            EstadoFinancieroLayout.CeldaImporte("[saldo_actual]", amountWidth)
         ]);
 
         EstadoFinancieroLayout.MarcarComoTotal(detailRow, esCuentaMayor);

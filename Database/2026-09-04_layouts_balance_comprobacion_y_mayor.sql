@@ -40,7 +40,7 @@ SELECT i.company_id,
                   WHERE v.informe_id = i.informe_id), 0) + 1,
        'PUBLISHED',
        '﻿<?xml version="1.0" encoding="utf-8"?>
-<XtraReportsLayoutSerializer SerializerVersion="25.2.4.0" Ref="1" ControlType="DevExpress.XtraReports.UI.XtraReport, DevExpress.XtraReports.v25.2, Version=25.2.4.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a" Name="balance-comprobacion" DisplayName="Balance de comprobacion" Landscape="true" Margins="40, 40, 78, 58" PageWidthF="1100" PageHeightF="850" Version="25.2" DataMember="balance_comprobacion" DataSource="#Ref-0">
+<XtraReportsLayoutSerializer SerializerVersion="25.2.4.0" Ref="1" ControlType="DevExpress.XtraReports.UI.XtraReport, DevExpress.XtraReports.v25.2, Version=25.2.4.0, Culture=neutral, PublicKeyToken=b88d1754d700e49a" Name="balance-comprobacion" DisplayName="Balance de comprobacion" Margins="40, 40, 78, 58" PageWidthF="850" PageHeightF="1100" Version="25.2" DataMember="balance_comprobacion" DataSource="#Ref-0">
   <Parameters>
     <Item1 Ref="3" Visible="false" Description="Empresa del encabezado" ValueInfo="Empresa de Agua y Saneamiento S.A de C.V" AllowNull="true" Name="HeaderCompanyName" />
     <Item2 Ref="4" Visible="false" Description="Datos fiscales/contacto del encabezado" ValueInfo="RTN: R.T.N-05069999182490 | Tel: +504 26271450 / 26271451 | administracion@aguasdepuertocortes.com" AllowNull="true" Name="HeaderCompanyInfoLine" />
@@ -94,116 +94,91 @@ SELECT i.company_id,
         <Item5 Ref="33" ControlType="XRLabel" Text="(Expresado en lempiras)" TextAlignment="MiddleCenter" SizeF="750,15" LocationFloat="0,60" Font="Arial, 9pt, style=Bold" />
       </Controls>
     </Item3>
-    <Item4 Ref="34" ControlType="PageHeaderBand" HeightF="34">
+    <Item4 Ref="34" ControlType="PageHeaderBand" HeightF="22">
       <Controls>
-        <Item1 Ref="35" ControlType="XRLabel" Text="SALDO ANTERIOR" TextAlignment="MiddleCenter" SizeF="210,15" LocationFloat="350,0" Font="Arial, 9pt, style=Bold" />
-        <Item2 Ref="36" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="350,16" Font="Arial, 8.5pt, style=Bold" Padding="0,6,0,0,100">
+        <Item1 Ref="35" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="100,16" LocationFloat="350,2" Font="Arial, 9.5pt, style=Bold, Underline" Padding="0,6,0,0,100">
           <ExpressionBindings>
-            <Item1 Ref="37" EventName="BeforePrint" PropertyName="Text" Expression="''Deudor''" />
+            <Item1 Ref="36" EventName="BeforePrint" PropertyName="Text" Expression="''Saldo anterior''" />
+          </ExpressionBindings>
+        </Item1>
+        <Item2 Ref="37" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="100,16" LocationFloat="450,2" Font="Arial, 9.5pt, style=Bold, Underline" Padding="0,6,0,0,100">
+          <ExpressionBindings>
+            <Item1 Ref="38" EventName="BeforePrint" PropertyName="Text" Expression="''Debe''" />
           </ExpressionBindings>
         </Item2>
-        <Item3 Ref="38" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="455,16" Font="Arial, 8.5pt, style=Bold" Padding="0,6,0,0,100">
+        <Item3 Ref="39" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="100,16" LocationFloat="550,2" Font="Arial, 9.5pt, style=Bold, Underline" Padding="0,6,0,0,100">
           <ExpressionBindings>
-            <Item1 Ref="39" EventName="BeforePrint" PropertyName="Text" Expression="''Acreedor''" />
+            <Item1 Ref="40" EventName="BeforePrint" PropertyName="Text" Expression="''Haber''" />
           </ExpressionBindings>
         </Item3>
-        <Item4 Ref="40" ControlType="XRLabel" Text="MOVIMIENTOS DEL PERIODO" TextAlignment="MiddleCenter" SizeF="210,15" LocationFloat="560,0" Font="Arial, 9pt, style=Bold" />
-        <Item5 Ref="41" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="560,16" Font="Arial, 8.5pt, style=Bold" Padding="0,6,0,0,100">
+        <Item4 Ref="41" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="100,16" LocationFloat="650,2" Font="Arial, 9.5pt, style=Bold, Underline" Padding="0,6,0,0,100">
           <ExpressionBindings>
-            <Item1 Ref="42" EventName="BeforePrint" PropertyName="Text" Expression="''Debitos''" />
+            <Item1 Ref="42" EventName="BeforePrint" PropertyName="Text" Expression="''Saldo actual''" />
           </ExpressionBindings>
-        </Item5>
-        <Item6 Ref="43" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="665,16" Font="Arial, 8.5pt, style=Bold" Padding="0,6,0,0,100">
-          <ExpressionBindings>
-            <Item1 Ref="44" EventName="BeforePrint" PropertyName="Text" Expression="''Creditos''" />
-          </ExpressionBindings>
-        </Item6>
-        <Item7 Ref="45" ControlType="XRLabel" Text="SALDO ACTUAL" TextAlignment="MiddleCenter" SizeF="210,15" LocationFloat="770,0" Font="Arial, 9pt, style=Bold" />
-        <Item8 Ref="46" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="770,16" Font="Arial, 8.5pt, style=Bold" Padding="0,6,0,0,100">
-          <ExpressionBindings>
-            <Item1 Ref="47" EventName="BeforePrint" PropertyName="Text" Expression="''Deudor''" />
-          </ExpressionBindings>
-        </Item8>
-        <Item9 Ref="48" ControlType="XRLabel" TextAlignment="MiddleRight" SizeF="105,15" LocationFloat="875,16" Font="Arial, 8.5pt, style=Bold" Padding="0,6,0,0,100">
-          <ExpressionBindings>
-            <Item1 Ref="49" EventName="BeforePrint" PropertyName="Text" Expression="''Acreedor''" />
-          </ExpressionBindings>
-        </Item9>
+        </Item4>
       </Controls>
     </Item4>
-    <Item5 Ref="50" ControlType="GroupHeaderBand" RepeatEveryPage="true" HeightF="22">
+    <Item5 Ref="43" ControlType="GroupHeaderBand" RepeatEveryPage="true" HeightF="22">
       <GroupFields>
-        <Item1 Ref="51" FieldName="rubro_orden" />
-        <Item2 Ref="52" FieldName="rubro_nombre" />
+        <Item1 Ref="44" FieldName="rubro_orden" />
+        <Item2 Ref="45" FieldName="rubro_nombre" />
       </GroupFields>
       <Controls>
-        <Item1 Ref="53" ControlType="XRLabel" TextAlignment="MiddleLeft" SizeF="980,15" LocationFloat="0,6" Font="Arial, 9.5pt, style=Bold">
+        <Item1 Ref="46" ControlType="XRLabel" TextAlignment="MiddleLeft" SizeF="750,15" LocationFloat="0,6" Font="Arial, 9.5pt, style=Bold">
           <ExpressionBindings>
-            <Item1 Ref="54" EventName="BeforePrint" PropertyName="Text" Expression="[rubro_nombre]" />
+            <Item1 Ref="47" EventName="BeforePrint" PropertyName="Text" Expression="[rubro_nombre]" />
           </ExpressionBindings>
         </Item1>
       </Controls>
     </Item5>
-    <Item6 Ref="55" ControlType="DetailBand" HeightF="15">
+    <Item6 Ref="48" ControlType="DetailBand" HeightF="15">
       <Controls>
-        <Item1 Ref="56" ControlType="XRLine" SizeF="630,2" LocationFloat="350,0" ForeColor="255,70,70,70">
+        <Item1 Ref="49" ControlType="XRLine" SizeF="400,2" LocationFloat="350,0" ForeColor="255,70,70,70">
           <ExpressionBindings>
-            <Item1 Ref="57" EventName="BeforePrint" PropertyName="Visible" Expression="[tiene_hijos]" />
+            <Item1 Ref="50" EventName="BeforePrint" PropertyName="Visible" Expression="[tiene_hijos]" />
           </ExpressionBindings>
         </Item1>
-        <Item2 Ref="58" ControlType="XRTable" SizeF="980,13" LocationFloat="0,2" Font="Arial, 8.5pt" Borders="None" BorderWidth="0">
+        <Item2 Ref="51" ControlType="XRTable" SizeF="750,13" LocationFloat="0,2" Font="Arial, 8.5pt" Borders="None" BorderWidth="0">
           <Rows>
-            <Item1 Ref="59" ControlType="XRTableRow" Weight="1.7692307692307692">
+            <Item1 Ref="52" ControlType="XRTableRow" Weight="1.7692307692307692">
               <Cells>
-                <Item1 Ref="60" ControlType="XRTableCell" Weight="110" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
+                <Item1 Ref="53" ControlType="XRTableCell" Weight="95" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="61" EventName="BeforePrint" PropertyName="Text" Expression="[cuenta_codigo]" />
-                    <Item2 Ref="62" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
+                    <Item1 Ref="54" EventName="BeforePrint" PropertyName="Text" Expression="[cuenta_codigo]" />
+                    <Item2 Ref="55" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
                   </ExpressionBindings>
                 </Item1>
-                <Item2 Ref="63" ControlType="XRTableCell" Weight="240" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
+                <Item2 Ref="56" ControlType="XRTableCell" Weight="255" TextAlignment="MiddleLeft" Padding="0,8,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="64" EventName="BeforePrint" PropertyName="Text" Expression="[cuenta_nombre_mostrar]" />
-                    <Item2 Ref="65" EventName="BeforePrint" PropertyName="Padding" Expression="Padding(8 + ([nivel] - 1) * 12, 6, 0, 0, 100)" />
-                    <Item3 Ref="66" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
+                    <Item1 Ref="57" EventName="BeforePrint" PropertyName="Text" Expression="[cuenta_nombre_mostrar]" />
+                    <Item2 Ref="58" EventName="BeforePrint" PropertyName="Padding" Expression="Padding(8 + ([nivel] - 1) * 12, 6, 0, 0, 100)" />
+                    <Item3 Ref="59" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
                   </ExpressionBindings>
                 </Item2>
-                <Item3 Ref="67" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
+                <Item3 Ref="60" ControlType="XRTableCell" Weight="100" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="68" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_anterior_deudor]" />
-                    <Item2 Ref="69" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
+                    <Item1 Ref="61" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_anterior]" />
+                    <Item2 Ref="62" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
                   </ExpressionBindings>
                 </Item3>
-                <Item4 Ref="70" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
+                <Item4 Ref="63" ControlType="XRTableCell" Weight="100" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="71" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_anterior_acreedor]" />
-                    <Item2 Ref="72" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
+                    <Item1 Ref="64" EventName="BeforePrint" PropertyName="Text" Expression="[debitos_periodo]" />
+                    <Item2 Ref="65" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
                   </ExpressionBindings>
                 </Item4>
-                <Item5 Ref="73" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
+                <Item5 Ref="66" ControlType="XRTableCell" Weight="100" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="74" EventName="BeforePrint" PropertyName="Text" Expression="[debitos_periodo]" />
-                    <Item2 Ref="75" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
+                    <Item1 Ref="67" EventName="BeforePrint" PropertyName="Text" Expression="[creditos_periodo]" />
+                    <Item2 Ref="68" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
                   </ExpressionBindings>
                 </Item5>
-                <Item6 Ref="76" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
+                <Item6 Ref="69" ControlType="XRTableCell" Weight="100" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
                   <ExpressionBindings>
-                    <Item1 Ref="77" EventName="BeforePrint" PropertyName="Text" Expression="[creditos_periodo]" />
-                    <Item2 Ref="78" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
+                    <Item1 Ref="70" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_actual]" />
+                    <Item2 Ref="71" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
                   </ExpressionBindings>
                 </Item6>
-                <Item7 Ref="79" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
-                  <ExpressionBindings>
-                    <Item1 Ref="80" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_actual_deudor]" />
-                    <Item2 Ref="81" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
-                  </ExpressionBindings>
-                </Item7>
-                <Item8 Ref="82" ControlType="XRTableCell" Weight="105" TextFormatString="{0:#,##0;(#,##0);-}" TextAlignment="MiddleRight" Padding="0,6,0,0,96" Borders="None">
-                  <ExpressionBindings>
-                    <Item1 Ref="83" EventName="BeforePrint" PropertyName="Text" Expression="[saldo_actual_acreedor]" />
-                    <Item2 Ref="84" EventName="BeforePrint" PropertyName="Font.Bold" Expression="[tiene_hijos]" />
-                  </ExpressionBindings>
-                </Item8>
               </Cells>
             </Item1>
           </Rows>

@@ -338,7 +338,14 @@ public sealed class EstadoFinancieroLayoutTests : IntegrationTestBase
         }
 
         Assert.Contains(textos, t => t.Contains("BALANCE DE COMPROBACION", StringComparison.Ordinal));
-        Assert.Contains(textos, t => t.Contains("SALDO ANTERIOR", StringComparison.Ordinal));
+
+        // Cuatro columnas: apertura, movimiento en debe y haber, y cierre. El desglose
+        // deudor/acreedor se retiro a peticion del usuario -duplicaba cada saldo en dos columnas
+        // de las que una siempre iba vacia-, asi que no debe volver por descuido.
+        Assert.Contains(expresiones, e => e.Contains("'Debe'", StringComparison.Ordinal));
+        Assert.Contains(expresiones, e => e.Contains("'Haber'", StringComparison.Ordinal));
+        Assert.DoesNotContain(expresiones, e => e.Contains("Deudor", StringComparison.OrdinalIgnoreCase));
+        Assert.DoesNotContain(expresiones, e => e.Contains("Acreedor", StringComparison.OrdinalIgnoreCase));
 
         // Las cuentas mayores van en negrita, y la senal es tener cuentas colgando -no un nivel
         // fijo-, porque cada empresa arma su plan con la profundidad que quiere.
